@@ -172,15 +172,26 @@
               <a-form-item label="抽样方式">
                 <a-radio-group
                   v-model:value="form.sampling_method"
-                  :disabled="saving || refreshRequired"
+                  :disabled="saving || refreshRequired || rangeMode === 'refs'"
                 >
                   <a-radio value="all">全部</a-radio>
                   <a-radio value="count">按数量</a-radio>
                   <a-radio value="percentage">按比例</a-radio>
+                  <a-radio value="department_count">每科室定额</a-radio>
+                  <a-radio value="department_ratio">每科室比例</a-radio>
                 </a-radio-group>
               </a-form-item>
-              <template v-if="form.sampling_method === 'count'">
-                <a-form-item label="抽样数量" required>
+              <template
+                v-if="
+                  form.sampling_method === 'count' || form.sampling_method === 'department_count'
+                "
+              >
+                <a-form-item
+                  :label="
+                    form.sampling_method === 'department_count' ? '每科室固定份数' : '抽样数量'
+                  "
+                  required
+                >
                   <a-input-number
                     v-model:value="form.total"
                     :min="1"
@@ -189,7 +200,7 @@
                     style="width: 100%"
                   />
                 </a-form-item>
-                <a-form-item>
+                <a-form-item v-if="form.sampling_method === 'count'">
                   <a-checkbox
                     v-model:checked="form.by_department"
                     :disabled="saving || refreshRequired"
@@ -198,7 +209,12 @@
                   </a-checkbox>
                 </a-form-item>
               </template>
-              <template v-else-if="form.sampling_method === 'percentage'">
+              <template
+                v-else-if="
+                  form.sampling_method === 'percentage' ||
+                  form.sampling_method === 'department_ratio'
+                "
+              >
                 <a-form-item label="抽样比例" required>
                   <a-slider
                     v-model:value="form.percentage"
@@ -208,7 +224,20 @@
                   />
                   <p class="sampling-value">{{ form.percentage }}%</p>
                 </a-form-item>
-                <a-form-item label="分组依据">
+                <a-form-item
+                  v-if="form.sampling_method === 'department_ratio'"
+                  label="每科室最多份数"
+                  required
+                >
+                  <a-input-number
+                    v-model:value="form.max_per_group"
+                    :min="1"
+                    :max="10000"
+                    :disabled="saving || refreshRequired"
+                    style="width: 100%"
+                  />
+                </a-form-item>
+                <a-form-item v-else label="分组依据">
                   <a-select
                     v-model:value="form.group_by"
                     allow-clear
@@ -319,6 +348,7 @@ const form = reactive({
   total: 1,
   percentage: 10,
   by_department: false,
+  max_per_group: 50,
   group_by: undefined as 'department' | undefined,
   assign_method: null as TaskEditableAssignMethod | null,
   fallback: undefined as 'by_ratio' | 'reject' | undefined,
@@ -375,6 +405,7 @@ function resetForm() {
   form.total = 1
   form.percentage = 10
   form.by_department = false
+  form.max_per_group = 50
   form.group_by = undefined
   form.assign_method = null
   form.fallback = undefined
@@ -405,6 +436,10 @@ function fillForm(value: TaskEditDetail) {
   form.percentage =
     typeof value.sampling_config?.percentage === 'number' ? value.sampling_config.percentage : 10
   form.by_department = value.sampling_config?.by_department === true
+  form.max_per_group =
+    typeof value.sampling_config?.max_per_group === 'number'
+      ? value.sampling_config.max_per_group
+      : 50
   form.group_by = value.sampling_config?.group_by === 'department' ? 'department' : undefined
   form.assign_method =
     value.assign_method === 'by_ratio' ||
@@ -417,6 +452,7 @@ function fillForm(value: TaskEditDetail) {
       ? value.assignee_config.fallback
       : undefined
   rangeMode.value = value.record_refs?.length ? 'refs' : 'date'
+  if (rangeMode.value === 'refs') form.sampling_method = 'all'
   recordRefs.value = value.record_refs?.length
     ? value.record_refs.map((item) => ({ ...item }))
     : [blankRecordRef()]
@@ -511,20 +547,38 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
   delete samplingConfig.by_department
   delete samplingConfig.percentage
   delete samplingConfig.group_by
-  if (form.sampling_method === 'count') {
+  delete samplingConfig.max_per_group
+  if (
+    rangeMode.value !== 'refs' &&
+    (form.sampling_method === 'count' || form.sampling_method === 'department_count')
+  ) {
     if (!Number.isInteger(form.total) || form.total < 1 || form.total > 10000) {
       message.warning('抽样数量须为 1 至 10000 的整数')
       return null
     }
     samplingConfig.total = form.total
-    samplingConfig.by_department = form.by_department
-  } else if (form.sampling_method === 'percentage') {
+    if (form.sampling_method === 'count') samplingConfig.by_department = form.by_department
+  } else if (
+    rangeMode.value !== 'refs' &&
+    (form.sampling_method === 'percentage' || form.sampling_method === 'department_ratio')
+  ) {
     if (!Number.isFinite(form.percentage) || form.percentage < 1 || form.percentage > 100) {
       message.warning('抽样比例须在 1% 至 100% 之间')
       return null
     }
     samplingConfig.percentage = form.percentage
-    samplingConfig.group_by = form.group_by ?? null
+    if (form.sampling_method === 'percentage') samplingConfig.group_by = form.group_by ?? null
+    else {
+      if (
+        !Number.isInteger(form.max_per_group) ||
+        form.max_per_group < 1 ||
+        form.max_per_group > 10000
+      ) {
+        message.warning('每科室最多份数须为 1 至 10000 的整数')
+        return null
+      }
+      samplingConfig.max_per_group = form.max_per_group
+    }
   }
   if (!form.assign_method) {
     message.warning('请选择可用的分配方式')
@@ -571,7 +625,7 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
         ? [...new Set(form.department_filter.map((item) => item.trim()).filter(Boolean))]
         : [],
     record_refs: refs,
-    sampling_method: form.sampling_method,
+    sampling_method: rangeMode.value === 'refs' ? 'all' : form.sampling_method,
     sampling_config: samplingConfig,
     assign_method: form.assign_method,
     assignee_config: (() => {
@@ -632,6 +686,7 @@ function planningFingerprint(): string {
     total: form.total,
     percentage: form.percentage,
     byDepartment: form.by_department,
+    maxPerGroup: form.max_per_group,
     groupBy: form.group_by ?? null,
     assignMethod: form.assign_method,
     fallback: form.fallback ?? null,
@@ -746,6 +801,9 @@ function closeDrawer() {
   emit('update:open', false)
 }
 
+watch(rangeMode, (mode) => {
+  if (mode === 'refs') form.sampling_method = 'all'
+})
 watch(
   [() => props.open, () => props.taskId, () => authStore.user?.id],
   ([open, taskId]) => {

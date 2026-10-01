@@ -9,7 +9,7 @@ export const TASK_SCHEDULE_TIMEZONE = 'Asia/Shanghai' as const
 export type TaskScheduleState = 'active' | 'paused' | 'ended' | 'cancelled'
 export type TaskScheduleRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 export type TaskScheduleTriggerType = 'scheduled' | 'manual'
-export type TaskScheduleSamplingMethod = 'all' | 'count' | 'percentage'
+export type TaskScheduleSamplingMethod = import('./tasks').SamplingMethod
 export type TaskScheduleAssignMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
 
 export interface TaskScheduleTimingOnce {
@@ -231,7 +231,9 @@ function parseTaskConfig(value: unknown): TaskScheduleTaskConfig {
     value.department_filter.some((item) => typeof item !== 'string') ||
     (value.sampling_method !== 'all' &&
       value.sampling_method !== 'count' &&
-      value.sampling_method !== 'percentage') ||
+      value.sampling_method !== 'percentage' &&
+      value.sampling_method !== 'department_count' &&
+      value.sampling_method !== 'department_ratio') ||
     !isObject(value.sampling_config) ||
     (value.assign_method !== 'by_ratio' &&
       value.assign_method !== 'by_original_reviewer' &&

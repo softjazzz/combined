@@ -110,22 +110,42 @@
           <a-radio-button value="all" class="!rounded-l-lg"> 全部 </a-radio-button>
           <a-radio-button value="count"> 按数量 </a-radio-button>
           <a-radio-button value="percentage" class="!rounded-r-lg"> 按比例 </a-radio-button>
+          <a-radio-button value="department_count"> 每科室定额 </a-radio-button>
+          <a-radio-button value="department_ratio"> 每科室比例 </a-radio-button>
         </a-radio-group>
-        <div v-if="form.sampling_method === 'count'" class="mt-2">
+        <div
+          v-if="form.sampling_method === 'count' || form.sampling_method === 'department_count'"
+          class="mt-2"
+        >
           <a-input-number
             v-model:value="form.sampling_count"
             :min="1"
-            :max="500"
-            placeholder="抽样数量（上限 500）"
+            :max="10000"
+            :placeholder="
+              form.sampling_method === 'department_count' ? '每科室固定份数' : '抽样数量'
+            "
             class="w-full"
           />
         </div>
-        <div v-if="form.sampling_method === 'percentage'" class="mt-2">
+        <div
+          v-if="
+            form.sampling_method === 'percentage' || form.sampling_method === 'department_ratio'
+          "
+          class="mt-2"
+        >
           <a-slider
             v-model:value="form.sampling_pct"
             :min="1"
             :max="100"
             :tip-formatter="(v: number) => `${v}%`"
+          />
+          <a-input-number
+            v-if="form.sampling_method === 'department_ratio'"
+            v-model:value="form.max_per_group"
+            :min="1"
+            :max="10000"
+            placeholder="每科室最多份数"
+            class="w-full"
           />
         </div>
       </div>
@@ -193,9 +213,10 @@ const form = reactive({
   case_scope: undefined as TaskCaseScope | undefined,
   dateRange: null as [Dayjs, Dayjs] | null,
   department_filter: [] as string[],
-  sampling_method: 'all' as 'all' | 'count' | 'percentage',
+  sampling_method: 'all' as import('@/api/tasks').SamplingMethod,
   sampling_count: 50,
   sampling_pct: 20,
+  max_per_group: 50,
   deadline: null as Dayjs | null,
 })
 
@@ -344,10 +365,12 @@ const handleSubmit = async () => {
   }
 
   // 抽样配置
-  if (form.sampling_method === 'count') {
+  if (form.sampling_method === 'count' || form.sampling_method === 'department_count') {
     params.sampling_config = { total: form.sampling_count }
-  } else if (form.sampling_method === 'percentage') {
+  } else if (form.sampling_method === 'percentage' || form.sampling_method === 'department_ratio') {
     params.sampling_config = { percentage: form.sampling_pct }
+    if (form.sampling_method === 'department_ratio')
+      params.sampling_config.max_per_group = form.max_per_group
   }
   if (requiredCaseScope.value && form.case_scope === requiredCaseScope.value) {
     params.sampling_config = { ...params.sampling_config, case_scope: requiredCaseScope.value }
@@ -389,6 +412,7 @@ const resetForm = () => {
   form.sampling_method = 'all'
   form.sampling_count = 50
   form.sampling_pct = 20
+  form.max_per_group = 50
   form.deadline = null
 }
 

@@ -19,7 +19,7 @@
     <div class="mb-5 flex justify-end">
       <a-button
         data-testid="save-current-task-template"
-        :disabled="submitting || ruleSetsLoading"
+        :disabled="submitting || ruleSetsLoading || rangeMode === 'refs'"
         @click="handleSaveTemplate"
       >
         <SaveOutlined /> 保存当前配置为模板
@@ -213,7 +213,11 @@
     <div v-show="currentStep === 2">
       <a-form layout="vertical">
         <a-form-item label="抽样方式">
-          <a-radio-group v-model:value="formData.sampling_method" class="w-full">
+          <a-radio-group
+            v-model:value="formData.sampling_method"
+            class="w-full"
+            :disabled="rangeMode === 'refs'"
+          >
             <div class="grid grid-cols-3 gap-3">
               <div
                 v-for="opt in samplingOptions"
@@ -224,7 +228,7 @@
                     ? 'border-blue-500 bg-blue-50 shadow-sm'
                     : 'border-gray-200 hover:border-blue-200',
                 ]"
-                @click="formData.sampling_method = opt.value"
+                @click="rangeMode !== 'refs' && (formData.sampling_method = opt.value)"
               >
                 <component
                   :is="opt.icon"
@@ -244,8 +248,14 @@
           </a-radio-group>
         </a-form-item>
 
-        <template v-if="formData.sampling_method === 'count'">
-          <a-form-item label="抽样数量">
+        <template
+          v-if="
+            formData.sampling_method === 'count' || formData.sampling_method === 'department_count'
+          "
+        >
+          <a-form-item
+            :label="formData.sampling_method === 'department_count' ? '每科室固定份数' : '抽样数量'"
+          >
             <a-input-number
               v-model:value="formData.sampling_config.total"
               :min="1"
@@ -254,14 +264,19 @@
               placeholder="输入要抽取的病历数量"
             />
           </a-form-item>
-          <a-form-item>
+          <a-form-item v-if="formData.sampling_method === 'count'">
             <a-checkbox v-model:checked="formData.sampling_config.by_department">
               按科室均匀分配抽样数量
             </a-checkbox>
           </a-form-item>
         </template>
 
-        <template v-if="formData.sampling_method === 'percentage'">
+        <template
+          v-if="
+            formData.sampling_method === 'percentage' ||
+            formData.sampling_method === 'department_ratio'
+          "
+        >
           <a-form-item label="抽样比例">
             <a-slider
               v-model:value="formData.sampling_config.percentage"
@@ -273,7 +288,19 @@
               {{ formData.sampling_config.percentage }}%
             </div>
           </a-form-item>
-          <a-form-item label="分组依据">
+          <a-form-item
+            v-if="formData.sampling_method === 'department_ratio'"
+            label="每科室最多份数"
+            required
+          >
+            <a-input-number
+              v-model:value="formData.sampling_config.max_per_group"
+              :min="1"
+              :max="10000"
+              style="width: 100%"
+            />
+          </a-form-item>
+          <a-form-item v-else label="分组依据">
             <a-select
               v-model:value="formData.sampling_config.group_by"
               placeholder="选择分组方式"
@@ -460,6 +487,9 @@ const visible = computed({
 const currentStep = ref(0)
 const submitting = ref(false)
 const rangeMode = ref<'date' | 'refs'>('date')
+watch(rangeMode, (mode) => {
+  if (mode === 'refs') formData.value.sampling_method = 'all'
+})
 const dateRangeValue = ref<[Dayjs, Dayjs] | null>(null)
 const blankRecordRef = (): TaskCaseRef => ({ institute_id: '', patient_id: '', visit_id: '' })
 const recordRefs = ref<TaskCaseRef[]>([blankRecordRef()])
@@ -479,13 +509,14 @@ const formData = ref({
   description: '',
   date_range: null as { start?: string; end?: string } | null,
   department_filter: [] as string[],
-  sampling_method: 'all' as 'all' | 'count' | 'percentage',
+  sampling_method: 'all' as import('@/api/tasks').SamplingMethod,
   sampling_config: {
     case_scope: undefined as TaskCaseScope | undefined,
     total: 50,
     percentage: 10,
     by_department: false,
     group_by: null as string | null,
+    max_per_group: 50,
   },
   assign_method: 'by_ratio' as TaskAssignableMethod,
   // 原质控员策略必选，不给默认值，避免用户未确认即拒绝或兜底
@@ -540,7 +571,7 @@ const departmentOptions = [
 ]
 
 const samplingOptions: Array<{
-  value: 'all' | 'count' | 'percentage'
+  value: import('@/api/tasks').SamplingMethod
   label: string
   desc: string
   icon: unknown
@@ -548,6 +579,13 @@ const samplingOptions: Array<{
   { value: 'all', label: '全部', desc: '取全部匹配病历', icon: DatabaseOutlined },
   { value: 'count', label: '按数量', desc: '随机抽取N条', icon: NumberOutlined },
   { value: 'percentage', label: '按比例', desc: '各组取X%', icon: PercentageOutlined },
+  { value: 'department_count', label: '每科室定额', desc: '各科室固定份数', icon: NumberOutlined },
+  {
+    value: 'department_ratio',
+    label: '每科室比例',
+    desc: '按比例且不超过上限',
+    icon: PercentageOutlined,
+  },
 ]
 
 // ============= 计算属性 =============
@@ -657,6 +695,9 @@ const samplingLabel = computed(() => {
   if (method === 'all') return '全部病历'
   if (method === 'count') return `随机抽取 ${formData.value.sampling_config.total} 条`
   if (method === 'percentage') return `各组抽取 ${formData.value.sampling_config.percentage}%`
+  if (method === 'department_count') return `每科室抽取 ${formData.value.sampling_config.total} 份`
+  if (method === 'department_ratio')
+    return `每科室抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
   return method
 })
 
@@ -780,6 +821,7 @@ const applyTemplateConfig = async (config: TaskTemplateConfig) => {
     percentage: config.sampling_config.percentage ?? 10,
     by_department: config.sampling_config.by_department ?? false,
     group_by: config.sampling_config.group_by ?? null,
+    max_per_group: config.sampling_config.max_per_group ?? 50,
   }
   formData.value.assign_method = config.assign_method
   formData.value.assign_fallback = config.assignee_config.fallback
@@ -805,13 +847,20 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
   const samplingConfig: TaskTemplateConfig['sampling_config'] = {
     ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
   }
-  if (formData.value.sampling_method === 'count') {
+  if (
+    formData.value.sampling_method === 'count' ||
+    formData.value.sampling_method === 'department_count'
+  ) {
     samplingConfig.total = formData.value.sampling_config.total
-    samplingConfig.by_department = formData.value.sampling_config.by_department
+    if (formData.value.sampling_method === 'count')
+      samplingConfig.by_department = formData.value.sampling_config.by_department
   } else if (formData.value.sampling_method === 'percentage') {
     samplingConfig.percentage = formData.value.sampling_config.percentage
     samplingConfig.group_by =
       formData.value.sampling_config.group_by === 'department' ? 'department' : null
+  } else if (formData.value.sampling_method === 'department_ratio') {
+    samplingConfig.percentage = formData.value.sampling_config.percentage
+    samplingConfig.max_per_group = formData.value.sampling_config.max_per_group
   }
   const start = formData.value.date_range?.start?.trim()
   const end = formData.value.date_range?.end?.trim()
@@ -831,6 +880,10 @@ const currentTemplateConfig = (): TaskTemplateConfig | null => {
 }
 
 const handleSaveTemplate = () => {
+  if (rangeMode.value === 'refs') {
+    message.warning('指定病历集合不能保存为范围模板')
+    return
+  }
   const config = currentTemplateConfig()
   if (!config) {
     message.warning('请先填写有效的场景、规则集、抽样和分配配置')
@@ -869,6 +922,7 @@ const resetForm = () => {
       percentage: 10,
       by_department: false,
       group_by: null,
+      max_per_group: 50,
     },
     assign_method: 'by_ratio',
     assign_fallback: undefined,
@@ -945,20 +999,29 @@ const handleSubmit = async () => {
       rule_set_key: formData.value.rule_set_key,
       task_type: 'one_time',
       deadline: formData.value.deadline?.format('YYYY-MM-DD'),
-      sampling_method: formData.value.sampling_method,
+      sampling_method: rangeMode.value === 'refs' ? 'all' : formData.value.sampling_method,
       sampling_config: {
         ...(requiredCaseScope.value ? { case_scope: requiredCaseScope.value } : {}),
-        ...(formData.value.sampling_method === 'count'
-          ? {
-              total: formData.value.sampling_config.total,
-              by_department: formData.value.sampling_config.by_department,
-            }
-          : formData.value.sampling_method === 'percentage'
-            ? {
-                percentage: formData.value.sampling_config.percentage,
-                group_by: formData.value.sampling_config.group_by,
-              }
-            : {}),
+        ...(rangeMode.value === 'refs'
+          ? {}
+          : formData.value.sampling_method === 'department_count'
+            ? { total: formData.value.sampling_config.total }
+            : formData.value.sampling_method === 'department_ratio'
+              ? {
+                  percentage: formData.value.sampling_config.percentage,
+                  max_per_group: formData.value.sampling_config.max_per_group,
+                }
+              : formData.value.sampling_method === 'count'
+                ? {
+                    total: formData.value.sampling_config.total,
+                    by_department: formData.value.sampling_config.by_department,
+                  }
+                : formData.value.sampling_method === 'percentage'
+                  ? {
+                      percentage: formData.value.sampling_config.percentage,
+                      group_by: formData.value.sampling_config.group_by,
+                    }
+                  : {}),
       },
       assign_method: formData.value.assign_method,
     }

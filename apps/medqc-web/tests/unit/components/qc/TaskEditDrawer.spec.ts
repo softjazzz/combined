@@ -183,12 +183,8 @@ describe('TaskEditDrawer', () => {
         date_range: null,
         department_filter: [],
         record_refs: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }],
-        sampling_method: 'percentage',
-        sampling_config: expect.objectContaining({
-          case_scope: 'active',
-          percentage: 15,
-          group_by: 'department',
-        }),
+        sampling_method: 'all',
+        sampling_config: { case_scope: 'active' },
         assign_method: 'by_original_reviewer',
         assignee_config: { fallback: 'reject' },
       }),
@@ -202,7 +198,33 @@ describe('TaskEditDrawer', () => {
     expect(wrapper.emitted('saved')?.[0]).toEqual(['task-1'])
   })
 
-  it('终末指定病例修改抽样仍保留出院窗口与三坐标', async () => {
+  it('每科室比例编辑保留上限并只提交该方式参数', async () => {
+    mocks.getTaskEdit.mockResolvedValue({
+      success: true,
+      data: {
+        ...detail,
+        sampling_method: 'department_ratio',
+        sampling_config: { case_scope: 'active', percentage: 25, max_per_group: 5 },
+      },
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { form: { max_per_group: number }; confirmSave: () => void }
+    expect(vm.form.max_per_group).toBe(5)
+    vm.form.max_per_group = 3
+    vm.confirmSave()
+    await flushPromises()
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        sampling_method: 'department_ratio',
+        sampling_config: { case_scope: 'active', percentage: 25, max_per_group: 3 },
+      }),
+    )
+    wrapper.unmount()
+  })
+
+  it('终末指定病例修改规划仍保留出院窗口与三坐标且禁止抽样', async () => {
     const refs = [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }]
     const window = { start: '2026-09-01', end: '2026-09-15' }
     mocks.getTaskEdit.mockResolvedValue({
@@ -235,7 +257,7 @@ describe('TaskEditDrawer', () => {
         date_range: window,
         record_refs: refs,
         department_filter: [],
-        sampling_config: { case_scope: 'discharged', total: 5, by_department: false },
+        sampling_config: { case_scope: 'discharged' },
       }),
     )
     wrapper.unmount()

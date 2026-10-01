@@ -137,7 +137,7 @@ def _replay_saved_sample(
     records = _saved_records(session, task_id)
     if modern:
         _require_coordinate_columns(session)
-        _validate_saved_modern_records(session, task_id)
+        _validate_saved_modern_records(session, task_id, _configured_case_identities(locked_task))
     return {
         "task_id": task_id,
         "sampled_count": actual_count,
@@ -175,7 +175,7 @@ def _require_coordinate_columns(session) -> None:
     session.execute(select(*(_TASK_RECORDS.c[field] for field in _CASE_COORDINATES)).limit(0))
 
 
-def _validate_saved_modern_records(session, task_id: str) -> None:
+def _validate_saved_modern_records(session, task_id: str, expected: set[tuple[str, str, str]] | None = None) -> None:
     rows = session.execute(
         select(_TASK_RECORDS.c.id, _TASK_RECORDS.c.record_id,
                *(_TASK_RECORDS.c[field] for field in _CASE_COORDINATES))
@@ -186,6 +186,8 @@ def _validate_saved_modern_records(session, task_id: str) -> None:
     identities = [_case_identity(dict(zip(_CASE_COORDINATES, row[2:]))) for row in rows]
     if len(identities) != len(set(identities)):
         raise SamplingConflict("任务已保存病例存在重复三坐标，请人工核对")
+    if expected is not None and set(identities) != expected:
+        raise SamplingConflict("指定病历固定集合与已保存病例不一致")
 
 
 def _candidate_department(record: dict[str, Any]) -> str | None:
@@ -230,6 +232,8 @@ def _build_modern_task_records(
                 "department": _candidate_department(record),
             }
         )
+    if allowed is not None and seen != allowed:
+        raise SamplingConflict("指定病历必须完整保存，不允许二次抽样")
     return task_records
 
 
@@ -292,6 +296,15 @@ def save_task_sample(
             modern = scene in _MODERN_SCENES
             if modern:
                 _ensure_snapshot_unchanged(task_snapshot, locked_task, modern=True)
+                from .task_sampling_service import validate_specified_case_sampling
+                try:
+                    validate_specified_case_sampling(
+                        locked_task.get("sampling_method"),
+                        _normalize_snapshot_value("sampling_config", locked_task.get("sampling_config")),
+                        _normalize_snapshot_value("record_refs", locked_task.get("record_refs")),
+                    )
+                except ValueError as exc:
+                    raise SamplingConflict(str(exc)) from exc
                 if _normalize_snapshot_value("record_ids", locked_task.get("record_ids")):
                     raise SamplingConflict("三坐标任务不得混用旧 record_ids")
                 _require_coordinate_columns(session)

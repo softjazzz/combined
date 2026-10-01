@@ -6,7 +6,12 @@ const BASE_URL = '/api/v1/task-edits'
 
 export type TaskEditScene = 'running' | 'final' | 'outpatient'
 export type TaskEditType = 'one_time' | 'scheduled'
-export type TaskEditSamplingMethod = 'all' | 'count' | 'percentage'
+export type TaskEditSamplingMethod =
+  | 'all'
+  | 'count'
+  | 'percentage'
+  | 'department_count'
+  | 'department_ratio'
 export type TaskEditableAssignMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
 export type TaskEditAssignMethod = TaskEditableAssignMethod | 'keep' | 'by_type' | 'by_record_type'
 export type TaskEditField =
@@ -131,7 +136,9 @@ function isTaskEditDateRange(value: unknown): value is TaskEditDateRange | null 
 
 function isTaskEditCaseRef(value: unknown): value is TaskEditCaseRef {
   if (!isObject(value)) return false
-  return isNonBlank(value.institute_id) && isNonBlank(value.patient_id) && isNonBlank(value.visit_id)
+  return (
+    isNonBlank(value.institute_id) && isNonBlank(value.patient_id) && isNonBlank(value.visit_id)
+  )
 }
 
 function parseTaskEditDetail(value: unknown, expectedTaskId: string): TaskEditDetail {
@@ -140,33 +147,43 @@ function parseTaskEditDetail(value: unknown, expectedTaskId: string): TaskEditDe
   const departments = value.department_filter
   const fields = value.editable_fields
   if (
-    value.id !== expectedTaskId
-    || !isNonBlank(value.task_number)
-    || !isNonBlank(value.task_name)
-    || !isNonBlank(value.task_type)
-    || !isNonBlank(value.status)
-    || (value.scene !== null && value.scene !== 'running' && value.scene !== 'final' && value.scene !== 'outpatient')
-    || (value.rule_set_key !== null && !isNonBlank(value.rule_set_key))
-    || (value.rule_set_version !== null && !isNonBlank(value.rule_set_version))
-    || !isNullableString(value.deadline)
-    || !isTaskEditDateRange(value.date_range)
-    || (departments !== null && (!Array.isArray(departments) || departments.some((item) => typeof item !== 'string')))
-    || (refs !== null && (!Array.isArray(refs) || refs.some((item) => !isTaskEditCaseRef(item))))
-    || (value.sampling_method !== null && value.sampling_method !== 'all' && value.sampling_method !== 'count' && value.sampling_method !== 'percentage')
-    || (value.sampling_config !== null && !isObject(value.sampling_config))
-    || (value.assign_method !== null
-      && value.assign_method !== 'by_ratio'
-      && value.assign_method !== 'by_original_reviewer'
-      && value.assign_method !== 'by_department'
-      && value.assign_method !== 'keep'
-      && value.assign_method !== 'by_type'
-      && value.assign_method !== 'by_record_type')
-    || (value.assignee_config !== null && !isObject(value.assignee_config))
-    || !Number.isInteger(value.configuration_version) || Number(value.configuration_version) <= 0
-    || !Array.isArray(fields)
-    || fields.some((item) => typeof item !== 'string' || !EDITABLE_FIELDS.has(item as TaskEditField))
-    || new Set(fields).size !== fields.length
-    || (value.updated_at !== null && !isNonBlank(value.updated_at))
+    value.id !== expectedTaskId ||
+    !isNonBlank(value.task_number) ||
+    !isNonBlank(value.task_name) ||
+    !isNonBlank(value.task_type) ||
+    !isNonBlank(value.status) ||
+    (value.scene !== null &&
+      value.scene !== 'running' &&
+      value.scene !== 'final' &&
+      value.scene !== 'outpatient') ||
+    (value.rule_set_key !== null && !isNonBlank(value.rule_set_key)) ||
+    (value.rule_set_version !== null && !isNonBlank(value.rule_set_version)) ||
+    !isNullableString(value.deadline) ||
+    !isTaskEditDateRange(value.date_range) ||
+    (departments !== null &&
+      (!Array.isArray(departments) || departments.some((item) => typeof item !== 'string'))) ||
+    (refs !== null && (!Array.isArray(refs) || refs.some((item) => !isTaskEditCaseRef(item)))) ||
+    (value.sampling_method !== null &&
+      !['all', 'count', 'percentage', 'department_count', 'department_ratio'].includes(
+        String(value.sampling_method),
+      )) ||
+    (value.sampling_config !== null && !isObject(value.sampling_config)) ||
+    (value.assign_method !== null &&
+      value.assign_method !== 'by_ratio' &&
+      value.assign_method !== 'by_original_reviewer' &&
+      value.assign_method !== 'by_department' &&
+      value.assign_method !== 'keep' &&
+      value.assign_method !== 'by_type' &&
+      value.assign_method !== 'by_record_type') ||
+    (value.assignee_config !== null && !isObject(value.assignee_config)) ||
+    !Number.isInteger(value.configuration_version) ||
+    Number(value.configuration_version) <= 0 ||
+    !Array.isArray(fields) ||
+    fields.some(
+      (item) => typeof item !== 'string' || !EDITABLE_FIELDS.has(item as TaskEditField),
+    ) ||
+    new Set(fields).size !== fields.length ||
+    (value.updated_at !== null && !isNonBlank(value.updated_at))
   ) {
     throw new Error('任务编辑响应格式无效')
   }
@@ -185,9 +202,10 @@ function extractStructuredError(error: unknown): { code?: TaskEditErrorCode; mes
   for (const key of ['detail', 'error'] as const) {
     const raw = body[key]
     if (!isObject(raw)) continue
-    const code = typeof raw.code === 'string' && ERROR_CODES.has(raw.code as TaskEditErrorCode)
-      ? raw.code as TaskEditErrorCode
-      : undefined
+    const code =
+      typeof raw.code === 'string' && ERROR_CODES.has(raw.code as TaskEditErrorCode)
+        ? (raw.code as TaskEditErrorCode)
+        : undefined
     const message = isNonBlank(raw.message) ? raw.message : undefined
     if (code || message) return { code, message }
   }
@@ -225,7 +243,8 @@ async function requestTaskEdit(
       success: false,
       status,
       code: structured.code,
-      message: structured.message || extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
+      message:
+        structured.message || extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
       uncertain: status === undefined || status >= 500,
     }
   }
@@ -249,9 +268,14 @@ export function updateTaskDraftConfiguration(
   })
 }
 
-export function updateTaskMetadata(taskId: string, data: TaskMetadataUpdate): Promise<TaskEditResult> {
-  if (!Object.prototype.hasOwnProperty.call(data, 'task_name')
-    && !Object.prototype.hasOwnProperty.call(data, 'deadline')) {
+export function updateTaskMetadata(
+  taskId: string,
+  data: TaskMetadataUpdate,
+): Promise<TaskEditResult> {
+  if (
+    !Object.prototype.hasOwnProperty.call(data, 'task_name') &&
+    !Object.prototype.hasOwnProperty.call(data, 'deadline')
+  ) {
     return Promise.resolve({
       success: false,
       message: '请至少修改任务名称或截止日期',

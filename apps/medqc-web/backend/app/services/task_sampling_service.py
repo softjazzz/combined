@@ -105,20 +105,36 @@ def validate_scoped_sampling_config(scene: Any, method: Any, config: Any) -> Non
         return
     if not isinstance(config, dict):
         raise ValueError("抽样配置格式无效")
-    if not isinstance(method, str) or method not in {"all", "count", "percentage"}:
+    if not isinstance(method, str) or method not in {"all", "count", "percentage", "department_count", "department_ratio"}:
         raise ValueError("无效的抽样方式")
-    if method == "count":
-        total = config.get("total", 50)
+    if method in {"department_count", "department_ratio"}:
+        allowed = {"case_scope", "total"} if method == "department_count" else {"case_scope", "percentage", "max_per_group"}
+        if set(config) - allowed:
+            raise ValueError("科室抽样配置含不支持的字段")
+    if method in {"count", "department_count"}:
+        total = config.get("total") if method == "department_count" else config.get("total", 50)
         if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
             raise ValueError("抽样数量必须为正整数")
+        if method == "department_count" and total > 10000:
+            raise ValueError("每科室抽样数量不能超过 10000")
         if not isinstance(config.get("by_department", False), bool):
             raise ValueError("按科室抽样参数必须为布尔值")
-    if method == "percentage":
+    if method in {"percentage", "department_ratio"}:
         percentage = config.get("percentage", 10)
         if isinstance(percentage, bool) or not isinstance(percentage, (int, float)) or not 0 < percentage <= 100:
             raise ValueError("抽样比例必须在 0 到 100 之间")
         if config.get("group_by") not in (None, "department"):
             raise ValueError("场景抽样仅支持按科室分组")
+        if method == "department_ratio":
+            maximum = config.get("max_per_group")
+            if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
+                raise ValueError("每科室最多份数必须为 1 到 10000 的整数")
+
+
+def validate_specified_case_sampling(method: Any, config: Any, refs: Any) -> None:
+    """指定三坐标病例是固定集合，不允许再次随机抽样。"""
+    if refs and (method != "all" or set(config or {}) - {"case_scope"}):
+        raise ValueError("指定病历不允许二次抽样，请使用全部病历且清空抽样参数")
 
 
 class TaskSamplingService:
@@ -426,6 +442,7 @@ class TaskSamplingService:
             config = {}
 
         validate_scoped_sampling_config(scene, method, config)
+        validate_specified_case_sampling(method, config, task.get("record_refs"))
 
         # 场景是任务意图，候选必须由该场景的真实数据源证明。
         if scene == "outpatient":
@@ -455,6 +472,8 @@ class TaskSamplingService:
             return self._sample_by_count(candidates, config)
         elif method == "percentage":
             return self._sample_by_percentage(candidates, config)
+        elif method in {"department_count", "department_ratio"}:
+            return self._sample_by_department(candidates, method, config)
         else:
             logger.warning(f"未知的抽样方式: {method}，使用全量")
             return candidates
@@ -511,6 +530,22 @@ class TaskSamplingService:
             except Exception as exc:
                 logger.warning("从数据库获取候选病历失败", exc_info=True)
                 raise RuntimeError("候选病历数据源不可用") from exc
+
+    def _sample_by_department(self, candidates: List[Dict], method: str, config: Dict[str, Any]) -> List[Dict]:
+        """按机构内科室分别抽样；比例沿用向下取整、非空组至少一份的约定。"""
+        groups: Dict[tuple[str, str], List[Dict]] = {}
+        for candidate in candidates:
+            institute, department = candidate.get("institute_id"), candidate.get("department")
+            if not isinstance(institute, str) or not institute.strip() or not isinstance(department, str) or not department.strip():
+                raise ValueError("科室抽样缺少可信机构或科室归属")
+            groups.setdefault((institute, department), []).append(candidate)
+        sampled = []
+        for records in groups.values():
+            count = config["total"] if method == "department_count" else min(
+                config["max_per_group"], max(1, int(len(records) * config["percentage"] / 100)),
+            )
+            sampled.extend(random.sample(records, min(count, len(records))))
+        return sampled
 
     def _sample_by_count(
         self, candidates: List[Dict], config: Dict[str, Any]

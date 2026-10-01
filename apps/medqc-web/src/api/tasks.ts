@@ -102,7 +102,12 @@ export type TaskTab = 'all' | 'created' | 'received'
 export type TaskTodo = 'assigned' | 'in_progress' | 'due_soon'
 export type TaskScene = 'running' | 'final' | 'outpatient'
 export type TaskSceneFilter = TaskScene | 'unclassified'
-export type SamplingMethod = 'all' | 'count' | 'percentage'
+export type SamplingMethod =
+  | 'all'
+  | 'count'
+  | 'percentage'
+  | 'department_count'
+  | 'department_ratio'
 export type AssignMethod =
   | 'keep'
   | 'by_department'
@@ -332,6 +337,7 @@ export interface TaskTemplateConfig {
     case_scope?: TaskCaseScope
     total?: number
     percentage?: number
+    max_per_group?: number
     by_department?: boolean
     group_by?: 'department' | null
   }

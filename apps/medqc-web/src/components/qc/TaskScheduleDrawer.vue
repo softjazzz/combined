@@ -448,6 +448,10 @@ const samplingLabel = computed(() => {
   }
   if (detail.sampling_method === 'count')
     return `按数量 ${String(detail.sampling_config?.total ?? '未知')}`
+  if (detail.sampling_method === 'department_count')
+    return `每科室固定 ${String(detail.sampling_config?.total ?? '未知')} 份`
+  if (detail.sampling_method === 'department_ratio')
+    return `每科室 ${String(detail.sampling_config?.percentage ?? '未知')}%，最多 ${String(detail.sampling_config?.max_per_group ?? '未知')} 份`
   return `按比例 ${String(detail.sampling_config?.percentage ?? '未知')}%`
 })
 const assignLabel = computed(() => {

@@ -236,8 +236,8 @@ def test_final_specified_cases_preserve_discharge_window_on_plan_edit(task_facto
 
     updated = task_edit_service.replace_draft_configuration(
         "task-contract", actor_id="owner", is_manager=False, expected_version=1,
-        configuration=_configuration(date_range=window, sampling_method="count",
-                                     sampling_config={"case_scope": "discharged", "total": 1}),
+        configuration=_configuration(date_range=window, sampling_method="all",
+                                     sampling_config={"case_scope": "discharged"}),
     )
     assert updated["date_range"] == window
     assert updated["record_refs"] == refs

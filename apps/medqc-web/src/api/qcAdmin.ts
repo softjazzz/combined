@@ -249,7 +249,9 @@ export async function getFinalRecordList(params?: FinalRecordListQuery) {
 }
 
 /** 获取门急诊病历分页列表（主链路接口） */
-export async function getOutpatientEmergencyRecordList(params?: OutpatientEmergencyRecordListQuery) {
+export async function getOutpatientEmergencyRecordList(
+  params?: OutpatientEmergencyRecordListQuery,
+) {
   const queryParams = new URLSearchParams()
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -267,7 +269,9 @@ export async function getOutpatientEmergencyRecordList(params?: OutpatientEmerge
 
 function outpatientExportParams(filters: OutpatientEmergencyRecordFilters) {
   return Object.fromEntries(
-    Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+    Object.entries(filters).filter(
+      ([, value]) => value !== undefined && value !== null && value !== '',
+    ),
   )
 }
 
@@ -292,15 +296,18 @@ async function outpatientExportErrorMessage(value: unknown): Promise<string | un
     if (blob.size === 0) return undefined
     try {
       const text = Reflect.get(blob, 'text')
-      const payload = typeof text === 'function'
-        ? String(await Reflect.apply(text, blob, []))
-        : await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => typeof reader.result === 'string'
-              ? resolve(reader.result) : reject(new Error('Blob读取结果不是文本'))
-            reader.onerror = () => reject(reader.error || new Error('Blob读取失败'))
-            reader.readAsText(blob, 'utf-8')
-          })
+      const payload =
+        typeof text === 'function'
+          ? String(await Reflect.apply(text, blob, []))
+          : await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () =>
+                typeof reader.result === 'string'
+                  ? resolve(reader.result)
+                  : reject(new Error('Blob读取结果不是文本'))
+              reader.onerror = () => reject(reader.error || new Error('Blob读取失败'))
+              reader.readAsText(blob, 'utf-8')
+            })
       body = JSON.parse(payload) as unknown
     } catch {
       return undefined
@@ -344,15 +351,16 @@ export async function exportOutpatientEmergencyRecords(
     })
     const contentType = responseHeader(response.headers, 'content-type')
     if (
-      response.status !== 200
-      || !(response.data instanceof Blob)
-      || response.data.size === 0
-      || !/^text\/csv(?:\s*;|$)/i.test(contentType)
+      response.status !== 200 ||
+      !(response.data instanceof Blob) ||
+      response.data.size === 0 ||
+      !/^text\/csv(?:\s*;|$)/i.test(contentType)
     ) {
       return {
         success: false,
-        message: await outpatientExportErrorMessage(response.data)
-          || '服务端未返回有效的门急诊病历 CSV 文件',
+        message:
+          (await outpatientExportErrorMessage(response.data)) ||
+          '服务端未返回有效的门急诊病历 CSV 文件',
         status: response.status,
       }
     }
@@ -366,7 +374,7 @@ export async function exportOutpatientEmergencyRecords(
     const body = isAxiosError(error) ? error.response?.data : undefined
     return {
       success: false,
-      message: await outpatientExportErrorMessage(body) || '导出门急诊病历失败，请稍后重试',
+      message: (await outpatientExportErrorMessage(body)) || '导出门急诊病历失败，请稍后重试',
       ...(status === undefined ? {} : { status }),
     }
   }
@@ -469,7 +477,7 @@ export interface CreateTaskParams {
   date_range?: { start: string; end: string }
   department_filter?: string[]
   record_ids?: string[]
-  sampling_method?: 'all' | 'count' | 'percentage'
+  sampling_method?: import('./tasks').SamplingMethod
   sampling_config?: Record<string, any>
   deadline?: string
 }
@@ -551,9 +559,7 @@ export async function createQCTaskAndSample(
         sampled: false,
         sampled_count: 0,
       },
-      message: sampleRes.success
-        ? '抽样结果缺少有效数量'
-        : sampleRes.message || '抽样执行失败',
+      message: sampleRes.success ? '抽样结果缺少有效数量' : sampleRes.message || '抽样执行失败',
     }
   }
 

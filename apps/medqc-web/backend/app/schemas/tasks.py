@@ -43,6 +43,8 @@ class SamplingMethod(str, Enum):
     ALL = "all"                 # 全部
     COUNT = "count"             # 按总数
     PERCENTAGE = "percentage"   # 按百分比
+    DEPARTMENT_COUNT = "department_count"  # 每科室固定份数
+    DEPARTMENT_PERCENTAGE = "department_ratio"  # 每科室比例与最多份数
 
 
 class AssignMethod(str, Enum):
@@ -164,6 +166,8 @@ class TaskTemplateConfig(BaseModel):
             SamplingMethod.ALL: {"case_scope"},
             SamplingMethod.COUNT: {"case_scope", "total", "by_department"},
             SamplingMethod.PERCENTAGE: {"case_scope", "percentage", "group_by"},
+            SamplingMethod.DEPARTMENT_COUNT: {"case_scope", "total"},
+            SamplingMethod.DEPARTMENT_PERCENTAGE: {"case_scope", "percentage", "max_per_group"},
         }[method]
         unknown_sampling = sorted(set(self.sampling_config) - allowed_sampling_keys)
         if unknown_sampling:
@@ -178,13 +182,13 @@ class TaskTemplateConfig(BaseModel):
                 raise ValueError("终末病历模板仅支持已出院范围")
         elif case_scope is not None:
             raise ValueError("当前场景不支持 case_scope")
-        if method == SamplingMethod.COUNT:
+        if method in {SamplingMethod.COUNT, SamplingMethod.DEPARTMENT_COUNT}:
             total = self.sampling_config.get("total")
             if isinstance(total, bool) or not isinstance(total, int) or not 1 <= total <= 10000:
                 raise ValueError("抽样数量必须为 1 到 10000 的整数")
             if not isinstance(self.sampling_config.get("by_department", False), bool):
                 raise ValueError("按科室抽样参数必须是布尔值")
-        elif method == SamplingMethod.PERCENTAGE:
+        elif method in {SamplingMethod.PERCENTAGE, SamplingMethod.DEPARTMENT_PERCENTAGE}:
             percentage = self.sampling_config.get("percentage")
             if (
                 isinstance(percentage, bool)
@@ -194,6 +198,10 @@ class TaskTemplateConfig(BaseModel):
                 raise ValueError("抽样比例必须在 0 到 100 之间")
             if self.sampling_config.get("group_by") not in (None, "department"):
                 raise ValueError("当前仅支持按科室分组")
+            if method == SamplingMethod.DEPARTMENT_PERCENTAGE:
+                maximum = self.sampling_config.get("max_per_group")
+                if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 10000:
+                    raise ValueError("每科室最多份数必须为 1 到 10000 的整数")
 
         if self.assign_method not in {
             AssignMethod.BY_RATIO,
@@ -294,6 +302,8 @@ class TaskCreateRequest(BaseModel):
         ]
         if len(identities) != len(set(identities)):
             raise ValueError("record_refs 不得包含重复病例三坐标")
+        from ..services.task_sampling_service import validate_specified_case_sampling
+        validate_specified_case_sampling(self.sampling_method, self.sampling_config, self.record_refs)
         return self
 
 
@@ -351,6 +361,8 @@ class TaskDraftConfigurationUpdateRequest(BaseModel):
         ]
         if len(identities) != len(set(identities)):
             raise ValueError("record_refs 不得包含重复病例三坐标")
+        from ..services.task_sampling_service import validate_specified_case_sampling
+        validate_specified_case_sampling(self.sampling_method, self.sampling_config, self.record_refs)
         if self.record_refs and self.department_filter:
             raise ValueError("指定病历不得与科室筛选混用")
         if self.record_refs and self.date_range is not None and self.sampling_config.get("case_scope") != "discharged":

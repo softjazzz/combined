@@ -56,8 +56,14 @@ type DrawerVm = {
     description: string
     date_range: { start?: string; end?: string } | null
     department_filter: string[]
-    sampling_method: 'all' | 'count' | 'percentage'
-    sampling_config: { case_scope?: 'active' | 'discharged'; group_by: string | null | undefined }
+    sampling_method: import('@/api/tasks').SamplingMethod
+    sampling_config: {
+      case_scope?: 'active' | 'discharged'
+      group_by: string | null | undefined
+      total?: number
+      percentage?: number
+      max_per_group?: number
+    }
   }
   handleSubmit: () => Promise<void>
   nextStep: () => void
@@ -214,6 +220,57 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
     expect(vm.formData.sampling_method).toBe('count')
     expect(vm.formData.assign_method).toBe('by_department')
     expect(mocks.message.success).toHaveBeenCalledWith('模板配置已套用，请填写任务名称和截止日期')
+  })
+
+  it.each(['department_count', 'department_ratio'] as const)(
+    '创建与模板保存 %s 只带对应科室参数',
+    async (method) => {
+      mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+      const wrapper = mountDrawer()
+      const vm = vmOf(wrapper)
+      await chooseRuleSet(vm, 'running')
+      vm.formData.task_name = 'SYN-科室抽样'
+      vm.formData.sampling_method = method
+      vm.formData.sampling_config.total = 3
+      vm.formData.sampling_config.percentage = 25
+      vm.formData.sampling_config.max_per_group = 4
+      vm.handleSaveTemplate()
+      await vm.handleSubmit()
+      const config =
+        method === 'department_count'
+          ? { case_scope: 'active', total: 3 }
+          : { case_scope: 'active', percentage: 25, max_per_group: 4 }
+      expect(mocks.createTask).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sampling_method: method, sampling_config: config }),
+      )
+      expect(wrapper.emitted('save-template')?.[0]?.[0]).toMatchObject({
+        sampling_method: method,
+        sampling_config: config,
+      })
+      wrapper.unmount()
+    },
+  )
+
+  it('指定三坐标固定全部集合，即使强行修改模型也不会提交抽样参数', async () => {
+    mocks.createTask.mockResolvedValue({ success: false, message: '测试停止' })
+    const wrapper = mountDrawer()
+    const vm = vmOf(wrapper)
+    await chooseRuleSet(vm, 'running')
+    vm.formData.task_name = 'SYN-指定病例'
+    vm.rangeMode = 'refs'
+    vm.recordRefs[0] = { institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }
+    await flushPromises()
+    expect(vm.formData.sampling_method).toBe('all')
+    vm.formData.sampling_method = 'department_ratio'
+    await vm.handleSubmit()
+    expect(mocks.createTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sampling_method: 'all',
+        sampling_config: { case_scope: 'active' },
+        record_refs: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }],
+      }),
+    )
+    wrapper.unmount()
   })
 
   it('保存当前配置时不携带任务名、期限、病例或人员身份', async () => {
