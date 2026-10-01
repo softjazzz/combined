@@ -63,6 +63,7 @@ def test_canonical_defect_returns_exact_frozen_reference(source):
     session = object()
     result = resolve(session=session)
     assert result == {
+        "_can_show_to_doctor": False,
         "target_kind": "canonical_defect", "target_id": "LX0609-001",
         "institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1",
         "scene": "running", "root_job_id": "job-1", "envelope_id": "env-1",

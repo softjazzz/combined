@@ -376,3 +376,33 @@ def test_luxian_0609_home_reports_department_scope_from_caller(monkeypatch):
     assert payload["scope"]["hospital_scope"] == "department"
     assert payload["scope"]["department"] == "心内科"
     assert payload["department_options"] == ["心内科"]
+
+
+def test_doctor_qc_home_recomputes_priority_from_doctor_visible_items(monkeypatch):
+    summary = {
+        **_ready(non_compliant=2),
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "v2",
+        "items": [
+            {"rule_id": "R-OPEN", "status": "non_compliant", "can_show_to_doctor": True},
+            {"rule_id": "R-HIDDEN", "status": "non_compliant", "can_show_to_doctor": True},
+        ],
+    }
+    service = _service(
+        monkeypatch,
+        [_record(1, department="心内科")],
+        {("hospital-a", "patient-1", "visit-1"): summary},
+    )
+    monkeypatch.setattr(
+        "app.services.doctor_rule_visibility_service.project_doctor_visible_items",
+        lambda items, **_kwargs: [dict(items[0])],
+    )
+
+    payload = service.get_luxian_0609_home(
+        department="心内科",
+        hospital_scope="department",
+        doctor_visibility={"institute_id": "hospital-a", "department_name": "心内科"},
+    )
+
+    assert payload["clinical_qc"]["canonical_status_counts"] == {"non_compliant": 1}
+    assert payload["clinical_qc"]["priority_items"][0]["status_counts"] == {"non_compliant": 1}

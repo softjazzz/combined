@@ -343,6 +343,7 @@ class WorkstationAggregationService:
         keyword: Optional[str] = None,
         priority_limit: int = 20,
         hospital_scope: str = "all",
+        doctor_visibility: Mapping[str, str] | None = None,
     ) -> Dict[str, Any]:
         """返回当前全病历质控首页所需的最小 Canonical 汇总。
 
@@ -358,6 +359,7 @@ class WorkstationAggregationService:
                 keyword=keyword,
                 priority_limit=priority_limit,
                 hospital_scope=hospital_scope,
+                doctor_visibility=doctor_visibility,
             )
             return {
                 "department_options": clinical_qc["department_options"],
@@ -809,6 +811,7 @@ class WorkstationAggregationService:
         keyword: Optional[str],
         priority_limit: int,
         hospital_scope: str = "all",
+        doctor_visibility: Mapping[str, str] | None = None,
     ) -> Dict[str, Any]:
         """按病历池相同三坐标范围聚合全病历 Canonical 质控摘要。
 
@@ -891,6 +894,24 @@ class WorkstationAggregationService:
             physician_bucket["completed_record_total"] += 1
             raw_counts = summary.get("status_counts")
             status_counts = raw_counts if isinstance(raw_counts, dict) else {}
+            if doctor_visibility is not None:
+                from ..doctor_rule_visibility_service import project_doctor_visible_items
+
+                raw_items = summary.get("items")
+                if not isinstance(raw_items, list):
+                    raise RuntimeError("医生端首页质控结果缺少规则条目")
+                visible_items = project_doctor_visible_items(
+                    raw_items,
+                    rule_set_key=_safe_text(summary.get("rule_set_key")),
+                    rule_set_version=_safe_text(summary.get("rule_set_version")),
+                    institute_id=_safe_text(doctor_visibility.get("institute_id")),
+                    department_name=_safe_text(doctor_visibility.get("department_name")),
+                )
+                status_counts = {}
+                for item in visible_items:
+                    status = _safe_text(item.get("status")).strip()
+                    if status:
+                        status_counts[status] = status_counts.get(status, 0) + 1
             normalized_counts: Dict[str, int] = {}
             for raw_status, raw_count in status_counts.items():
                 try:
@@ -1117,6 +1138,8 @@ class WorkstationAggregationService:
         return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
             record_refs=record_refs,
             session_factory=self._session_factory,
+            include_items=True,
+            include_rule_set_context=True,
         )
 
     def get_home_hotspots(

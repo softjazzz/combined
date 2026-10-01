@@ -58,6 +58,9 @@ export interface QualityPointRow {
   draftState: RuleSetEntryState | null
   /** 后端给出的可执行标记；缺失时为 null（显示未知）。 */
   executable: boolean | null
+  departmentScopeMode: 'all' | 'selected' | null
+  departmentRefs: Array<{ institute_id: string; department_name: string }> | null
+  doctorVisible: boolean | null
 }
 
 export interface EntryDiffItem {
@@ -67,6 +70,18 @@ export interface EntryDiffItem {
   from: RuleSetEntryState | null
   /** 草稿中没有该规则时为 null。 */
   to: RuleSetEntryState | null
+}
+
+export function toRuleSetEntry(entry: RuleSetEntry): RuleSetEntry {
+  return {
+    rule_id: entry.rule_id,
+    state: entry.state,
+    ...(entry.department_scope_mode !== undefined
+      ? { department_scope_mode: entry.department_scope_mode }
+      : {}),
+    ...(entry.department_refs !== undefined ? { department_refs: entry.department_refs } : {}),
+    ...(entry.doctor_visible !== undefined ? { doctor_visible: entry.doctor_visible } : {}),
+  }
 }
 
 function byRuleId<T extends { rule_id: string }>(items: readonly T[]): Map<string, T> {
@@ -86,20 +101,26 @@ export function buildPointRows(
       rule_id: entry.rule_id,
       name: entry.qc_point ?? draftEntry?.qc_point ?? null,
       document: entry.source_document ?? draftEntry?.source_document ?? null,
-      category: entry.category_name ?? draftEntry?.category_name ?? entry.category ?? draftEntry?.category ?? null,
+      category:
+        entry.category_name ??
+        draftEntry?.category_name ??
+        entry.category ??
+        draftEntry?.category ??
+        null,
       state: entry.state,
       draftState: draftEntry && draftEntry.state !== entry.state ? draftEntry.state : null,
       executable: typeof executable === 'boolean' ? executable : null,
+      departmentScopeMode: draftEntry?.department_scope_mode ?? entry.department_scope_mode ?? null,
+      departmentRefs: draftEntry?.department_refs ?? entry.department_refs ?? null,
+      doctorVisible: draftEntry?.doctor_visible ?? entry.doctor_visible ?? null,
     }
   })
 }
 
 export function rowsForTab(rows: readonly QualityPointRow[], tab: PointTab): QualityPointRow[] {
-  return rows.filter((row) => (
-    tab === 'online'
-      ? row.state === 'active'
-      : row.state === 'paused' || row.state === 'offline'
-  ))
+  return rows.filter((row) =>
+    tab === 'online' ? row.state === 'active' : row.state === 'paused' || row.state === 'offline',
+  )
 }
 
 export function filterRows(
@@ -124,12 +145,13 @@ export function applyStateToEntries(
 ): { entries: RuleSetEntry[]; changed: number } {
   const selected = new Set(ruleIds)
   let changed = 0
-  const next = entries.map(({ rule_id, state: current }) => {
+  const next = entries.map((entry) => {
+    const { rule_id, state: current } = entry
     if (selected.has(rule_id) && current !== state) {
       changed += 1
-      return { rule_id, state }
+      return toRuleSetEntry({ ...entry, state })
     }
-    return { rule_id, state: current }
+    return toRuleSetEntry(entry)
   })
   return { entries: next, changed }
 }
@@ -171,7 +193,10 @@ const CONFLICT_MESSAGES: Record<string, string> = {
 }
 
 /** 409 按业务 code 给出提示；其他错误用后端消息或兜底文案。 */
-export function describeFailure(result: RuleSetVersionApiResult<unknown>, fallback: string): string {
+export function describeFailure(
+  result: RuleSetVersionApiResult<unknown>,
+  fallback: string,
+): string {
   if (result.status === 409 && result.code && CONFLICT_MESSAGES[result.code]) {
     return CONFLICT_MESSAGES[result.code]
   }
@@ -180,7 +205,16 @@ export function describeFailure(result: RuleSetVersionApiResult<unknown>, fallba
 
 /** 这些冲突说明服务端状态已变化，需要刷新页面数据。 */
 export function needsRefresh(result: RuleSetVersionApiResult<unknown>): boolean {
-  return result.status === 409 && ['draft_exists', 'version_conflict', 'draft_changed', 'already_retired', 'current_version'].includes(result.code ?? '')
+  return (
+    result.status === 409 &&
+    [
+      'draft_exists',
+      'version_conflict',
+      'draft_changed',
+      'already_retired',
+      'current_version',
+    ].includes(result.code ?? '')
+  )
 }
 
 export function formatDateTime(value: string | null): string {

@@ -32,6 +32,10 @@ from ..services.rule_set_version_service import (
     resolve_rule_set_version,
 )
 from ..services.sichuan_qc_service import SichuanQCService
+from ..services.scoring_service import (
+    ScoringScopeContextUnavailable,
+    item_applies_to_department,
+)
 from ..services.sichuan_workspace_batch_worker import (
     _assert_luxian_0609_formal_customer_rule_ids,
     _enforce_sc_source_guard,
@@ -368,6 +372,63 @@ def prepare_workspace_batch_job(
     if not records:
         raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行病历")
 
+    scoped_record_rule_map: Dict[str, List[str]] = {}
+    if is_direct_native_selection and rule_set_resolution is not None:
+        selected_active = set(active_customer_rule_ids)
+        entry_by_rule = {
+            str(item.get("rule_id") or "").strip().upper(): item
+            for item in rule_set_resolution.get("entries") or []
+            if isinstance(item, Mapping)
+        }
+        has_explicit_department_scope = any(
+            "department_scope_mode" in item for item in entry_by_rule.values()
+        )
+        if not has_explicit_department_scope:
+            scoped_record_rule_map = {
+                CaseRef.from_mapping(record).as_key(): list(direct_native_rule_ids)
+                for record in records
+            }
+        else:
+            no_applicable_rule_refs: List[str] = []
+            for record in records:
+                record_ref = CaseRef.from_mapping(record)
+                institute_id = str(record_ref.institute_id or "").strip()
+                department_name = str(
+                    record.get("department")
+                    or record.get("discharge_dept_name")
+                    or record.get("admission_dept_name")
+                    or ""
+                ).strip()
+                applicable: List[str] = []
+                for rule_id in active_customer_rule_ids:
+                    config = entry_by_rule.get(rule_id, {})
+                    try:
+                        applies = item_applies_to_department(
+                            config,
+                            institute_id=institute_id,
+                            department_name=department_name,
+                        )
+                    except ScoringScopeContextUnavailable as exc:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="病历缺少可信院科上下文，无法应用规则版本科室范围",
+                        ) from exc
+                    if applies and rule_id in selected_active:
+                        applicable.append(rule_id)
+                if applicable:
+                    scoped_record_rule_map[record_ref.as_key()] = applicable
+                else:
+                    no_applicable_rule_refs.append(record_ref.as_key())
+            if no_applicable_rule_refs:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "record_has_no_applicable_rules",
+                        "message": "所选病例中存在没有适用已启用规则的病例，请调整规则科室范围后重试",
+                        "record_refs": sorted(no_applicable_rule_refs),
+                    },
+                )
+
     try:
         effective_record_refs = case_refs_from_records(records)
     except ValueError as exc:
@@ -530,10 +591,7 @@ def prepare_workspace_batch_job(
                     "scoped_customer_rule_ids": list(direct_native_rule_ids),
                     "active_customer_rule_ids": list(active_customer_rule_ids),
                     "pending_customer_rule_ids": list(pending_customer_rule_ids),
-                    "record_rule_map": {
-                        ref.as_key(): list(direct_native_rule_ids)
-                        for ref in effective_record_refs
-                    },
+                    "record_rule_map": scoped_record_rule_map,
                     "validation_mode": "programmatic",
                     "customer_rule_count": len(direct_native_rule_ids),
                     "execution_rule_count": len(active_customer_rule_ids),

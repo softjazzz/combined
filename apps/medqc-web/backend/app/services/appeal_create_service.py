@@ -239,6 +239,30 @@ def _resolve_canonical(
         raise ModernAppealUnavailable(str(exc)) from exc
 
 
+def _require_doctor_visible_target(
+    target: Mapping[str, Any], appellant: Appellant,
+) -> None:
+    from .doctor_rule_visibility_service import (
+        DoctorRuleVisibilityUnavailable,
+        visible_rule_ids,
+    )
+
+    try:
+        allowed = visible_rule_ids(
+            rule_set_key=str(target.get("rule_set_key") or ""),
+            rule_set_version=str(target.get("rule_set_version") or ""),
+            institute_id=appellant.institute_id,
+            department_name=appellant.department,
+        )
+    except DoctorRuleVisibilityUnavailable as exc:
+        raise ModernAppealUnavailable("医生端规则配置暂不可用") from exc
+    if (
+        target.get("_can_show_to_doctor") is not True
+        or str(target.get("target_id") or "").strip().upper() not in allowed
+    ):
+        raise ModernAppealForbidden("该质控问题未对本科室医生开放")
+
+
 def _resolve_manual(
     session: Session, request: ModernAppealRequest, workspace_factory: Callable[[], Any],
 ) -> tuple[dict[str, Any], str | None]:
@@ -370,6 +394,7 @@ def create_modern_appeal(
                     session, [CaseRef(*identity)], rule_set_key=LUXIAN_0609_RULE_SET_KEY,
                 )
                 target = _resolve_canonical(session, request, identity, workspace)
+                _require_doctor_visible_target(target, appellant)
                 defect_item = str(target["target_id"])
             else:
                 target, rule_code = _resolve_manual(session, request, workspace)
@@ -381,6 +406,7 @@ def create_modern_appeal(
 
             if request.target_kind == TARGET_CANONICAL_DEFECT:
                 refreshed = _resolve_canonical(session, request, identity, workspace)
+                _require_doctor_visible_target(refreshed, appellant)
                 if refreshed != target:
                     raise ModernAppealConflict("质控结果已更新，请刷新后重试")
 
@@ -469,7 +495,9 @@ def list_modern_appeal_candidates(
             _require_own_institute(identity, appellant)  # type: ignore[arg-type]
             case_department = _case_department(session, identity, loader)  # type: ignore[arg-type]
             _require_own_department(case_department, appellant)
-            canonical = _canonical_candidates(session, identity, workspace)  # type: ignore[arg-type]
+            canonical = _canonical_candidates(
+                session, identity, workspace, appellant,
+            )  # type: ignore[arg-type]
             manual = _manual_candidates(session, identity)  # type: ignore[arg-type]
     except (ModernAppealForbidden, ModernAppealInvalid, ModernAppealUnavailable):
         raise
@@ -485,6 +513,7 @@ def list_modern_appeal_candidates(
 
 def _canonical_candidates(
     session: Session, identity: tuple[str, str, str], workspace_factory: Callable[[], Any],
+    appellant: Appellant,
 ) -> dict[str, Any]:
     """读取当前最新 Canonical 结果；不可用时返回 unavailable，不伪造空缺陷。"""
     from .record_review_service import resolve_workspace_result_reference
@@ -509,7 +538,15 @@ def _canonical_candidates(
             expected_envelope_id=str(dto.get("envelope_id") or ""),
             workspace_factory=workspace_factory, session=session,
         )
-        items = workspace_targets._project_items(source.get("items"))
+        from .doctor_rule_visibility_service import project_doctor_visible_items
+
+        items = project_doctor_visible_items(
+            workspace_targets._project_items(source.get("items")),
+            rule_set_key=str(source.get("rule_set_key") or ""),
+            rule_set_version=str(source.get("rule_set_version") or ""),
+            institute_id=appellant.institute_id,
+            department_name=appellant.department,
+        )
     except Exception:  # noqa: BLE001 - 对外固定脱敏
         return {"state": "unavailable", "items": []}
     counts: dict[str, int] = {}

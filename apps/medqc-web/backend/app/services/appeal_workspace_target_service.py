@@ -114,7 +114,7 @@ def resolve_workspace_appeal_target(
         raise AppealWorkspaceTargetConflict("当前质控结果中的缺陷规则不唯一")
     if matches[0].get("is_confirmed_issue") is not True:
         raise AppealWorkspaceTargetConflict("当前规则不是已确认缺陷")
-    return base
+    return {**base, "_can_show_to_doctor": matches[0].get("can_show_to_doctor") is True}
 
 
 __all__ = [

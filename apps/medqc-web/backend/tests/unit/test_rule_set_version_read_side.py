@@ -446,7 +446,13 @@ def _publish_new_version() -> dict[str, Any]:
     """新版本：暂停 ACTIVE_RULE，并把静态排除的 EXCLUDED_RULE 改为暂停（不再排除）。"""
     draft = version_service.create_draft(KEY, actor=ACTOR)
     entries = [
-        {**item, "state": "paused"} if item["rule_id"] in {ACTIVE_RULE, EXCLUDED_RULE} else item
+        {
+            **item,
+            "state": "paused" if item["rule_id"] in {ACTIVE_RULE, EXCLUDED_RULE} else item["state"],
+            "department_scope_mode": "all",
+            "department_refs": [],
+            "doctor_visible": False,
+        }
         for item in draft["entries"]
     ]
     version_service.update_draft(KEY, actor=ACTOR, version_seq=draft["version_seq"], entries=entries)

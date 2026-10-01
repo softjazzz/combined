@@ -74,7 +74,7 @@ def score_input_needs_department(
     )
 
 
-def _in_scope(
+def item_applies_to_department(
     config: Mapping[str, Any], *, institute_id: str, department_name: str,
 ) -> bool:
     department_mode = config.get("department_scope_mode", "all")
@@ -104,6 +104,10 @@ def _in_scope(
     elif refs:
         raise ScoringScopeContextUnavailable("全科室模式包含非法科室引用")
     return True
+
+
+# 兼容模块内既有调用；院科精确匹配的公共 owner 为 item_applies_to_department。
+_in_scope = item_applies_to_department
 
 
 def _decimal(value: Any) -> Decimal:

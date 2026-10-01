@@ -252,7 +252,13 @@ def test_worker_projection_new_branch_equals_legacy_branch_with_builtin(
 def _publish_pausing(rule_id: str, version: str) -> dict[str, Any]:
     draft = version_service.create_draft(KEY, actor=ACTOR)
     entries = [
-        {**item, "state": "paused"} if item["rule_id"] == rule_id else item
+        {
+            **item,
+            "state": "paused" if item["rule_id"] == rule_id else item["state"],
+            "department_scope_mode": "all",
+            "department_refs": [],
+            "doctor_visible": False,
+        }
         for item in draft["entries"]
     ]
     draft = version_service.update_draft(

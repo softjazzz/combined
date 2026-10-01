@@ -17,10 +17,7 @@
           :options="ruleSetOptions"
           :disabled="saving"
         />
-        <span
-          v-else
-          class="coding-rule-set-label"
-        >编码质控规则</span>
+        <span v-else class="coding-rule-set-label">编码质控规则</span>
         <span class="current-version">
           当前生效版本：<strong>{{ versionList?.current_version || UNKNOWN_TEXT }}</strong>
         </span>
@@ -39,12 +36,7 @@
         >
           导出当前版本
         </a-button>
-        <a-button
-          v-if="editable"
-          type="primary"
-          class="action-btn"
-          @click="importOpen = true"
-        >
+        <a-button v-if="editable" type="primary" class="action-btn" @click="importOpen = true">
           导入草稿
         </a-button>
       </div>
@@ -64,13 +56,7 @@
       class="page-alert"
       message="当前角色只读：仅管理员或质控管理员可调整质控点状态并发布版本。"
     />
-    <a-alert
-      v-if="loadError"
-      type="error"
-      show-icon
-      class="page-alert"
-      :message="loadError"
-    />
+    <a-alert v-if="loadError" type="error" show-icon class="page-alert" :message="loadError" />
 
     <!-- 草稿面板 -->
     <RuleSetDraftPanel
@@ -85,18 +71,9 @@
 
     <!-- 标签页 -->
     <div class="tabs-container">
-      <a-tabs
-        v-model:active-key="activeTab"
-        class="custom-tabs"
-      >
-        <a-tab-pane
-          key="online"
-          :tab="`已上线（${onlineCount}）`"
-        />
-        <a-tab-pane
-          key="offline"
-          :tab="`未上线（${offlineCount}）`"
-        />
+      <a-tabs v-model:active-key="activeTab" class="custom-tabs">
+        <a-tab-pane key="online" :tab="`已上线（${onlineCount}）`" />
+        <a-tab-pane key="offline" :tab="`未上线（${offlineCount}）`" />
       </a-tabs>
     </div>
 
@@ -142,6 +119,13 @@
               批量删除
             </a-button>
           </a-popconfirm>
+          <a-button
+            :disabled="selectedRowKeys.length === 0 || saving"
+            class="batch-btn"
+            @click="openSelectedApplicability"
+          >
+            配置适用范围
+          </a-button>
           <span class="batch-hint">改动先写入草稿，发布新版本后生效</span>
         </template>
         <a-button
@@ -156,16 +140,9 @@
 
       <!-- 右侧搜索 -->
       <div class="search-area">
-        <a-select
-          v-model:value="searchType"
-          class="search-type-select"
-        >
-          <a-select-option value="id">
-            质控点ID
-          </a-select-option>
-          <a-select-option value="name">
-            质控点名称
-          </a-select-option>
+        <a-select v-model:value="searchType" class="search-type-select">
+          <a-select-option value="id"> 质控点ID </a-select-option>
+          <a-select-option value="name"> 质控点名称 </a-select-option>
         </a-select>
         <a-input-search
           v-model:value="searchKeyword"
@@ -200,9 +177,7 @@
                 <template v-if="isCodingMode">
                   分类：{{ asRow(record).category || UNKNOWN_TEXT }}
                 </template>
-                <template v-else>
-                  文书：{{ asRow(record).document || UNKNOWN_TEXT }}
-                </template>
+                <template v-else> 文书：{{ asRow(record).document || UNKNOWN_TEXT }} </template>
               </div>
             </div>
           </template>
@@ -212,35 +187,40 @@
               <a-tag :color="ENTRY_STATE_COLOR[asRow(record).state]">
                 {{ ENTRY_STATE_LABEL[asRow(record).state] }}
               </a-tag>
-              <a-tag
-                v-if="asRow(record).draftState"
-                color="blue"
-                class="draft-state-tag"
-              >
+              <a-tag v-if="asRow(record).draftState" color="blue" class="draft-state-tag">
                 草稿：{{ ENTRY_STATE_LABEL[asRow(record).draftState as RuleSetEntryState] }}
               </a-tag>
             </div>
           </template>
 
           <template v-else-if="column.key === 'executable'">
-            <a-tag
-              v-if="asRow(record).executable === true"
-              color="green"
-            >
-              可执行
-            </a-tag>
+            <a-tag v-if="asRow(record).executable === true" color="green"> 可执行 </a-tag>
             <a-tooltip
               v-else-if="asRow(record).executable === false"
               title="执行器未实现或规则未就绪，只能暂停或下线"
             >
-              <a-tag color="red">
-                不可执行
-              </a-tag>
+              <a-tag color="red"> 不可执行 </a-tag>
             </a-tooltip>
-            <span
-              v-else
-              class="unknown-text"
-            >{{ UNKNOWN_TEXT }}</span>
+            <span v-else class="unknown-text">{{ UNKNOWN_TEXT }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'visibility'">
+            <div class="state-cell">
+              <a-tag :color="asRow(record).departmentScopeMode ? 'blue' : 'orange'">
+                {{ scopeLabel(asRow(record)) }}
+              </a-tag>
+              <a-tag
+                :color="
+                  asRow(record).doctorVisible === true
+                    ? 'green'
+                    : asRow(record).doctorVisible === false
+                      ? 'default'
+                      : 'orange'
+                "
+              >
+                {{ doctorVisibilityLabel(asRow(record).doctorVisible) }}
+              </a-tag>
+            </div>
           </template>
 
           <template v-else-if="column.key === 'operation'">
@@ -269,10 +249,7 @@
       width="420"
       @close="builtinDetail = null"
     >
-      <dl
-        v-if="builtinDetail"
-        class="builtin-detail"
-      >
+      <dl v-if="builtinDetail" class="builtin-detail">
         <dt>质控点ID</dt>
         <dd>{{ builtinDetail.rule_id }}</dd>
         <dt>质控点名称</dt>
@@ -282,10 +259,43 @@
         <dt>当前版本状态</dt>
         <dd>{{ ENTRY_STATE_LABEL[builtinDetail.state] }}</dd>
         <dt>草稿状态</dt>
-        <dd>{{ builtinDetail.draftState ? ENTRY_STATE_LABEL[builtinDetail.draftState] : '无变更' }}</dd>
+        <dd>
+          {{ builtinDetail.draftState ? ENTRY_STATE_LABEL[builtinDetail.draftState] : '无变更' }}
+        </dd>
         <dt>是否可执行</dt>
-        <dd>{{ builtinDetail.executable === true ? '可执行' : builtinDetail.executable === false ? '不可执行' : UNKNOWN_TEXT }}</dd>
+        <dd>
+          {{
+            builtinDetail.executable === true
+              ? '可执行'
+              : builtinDetail.executable === false
+                ? '不可执行'
+                : UNKNOWN_TEXT
+          }}
+        </dd>
+        <dt>生效科室</dt>
+        <dd>{{ scopeLabel(builtinDetail) }}</dd>
+        <dt>医生端</dt>
+        <dd>{{ doctorVisibilityLabel(builtinDetail.doctorVisible) }}</dd>
       </dl>
+      <div v-if="builtinDetail && editable" class="applicability-editor">
+        <label>科室范围</label>
+        <a-radio-group v-model:value="scopeMode">
+          <a-radio-button value="all"> 全部科室 </a-radio-button>
+          <a-radio-button value="selected"> 指定科室 </a-radio-button>
+        </a-radio-group>
+        <template v-if="scopeMode === 'selected'">
+          <label>指定科室（每行“医院ID|科室名”）</label>
+          <a-textarea v-model:value="scopeRefsText" :rows="5" placeholder="HOSP-001|心内科" />
+        </template>
+        <label>医生端结果</label>
+        <a-radio-group v-model:value="doctorVisibleChoice">
+          <a-radio-button value="visible"> 开放 </a-radio-button>
+          <a-radio-button value="hidden"> 不开放 </a-radio-button>
+        </a-radio-group>
+        <a-button type="primary" :loading="saving" @click="saveApplicability">
+          保存到草稿
+        </a-button>
+      </div>
       <p class="builtin-detail-note">
         内置质控点由规则执行器实现，判定逻辑不支持在线编辑；可通过批量操作调整上线状态或删除。
       </p>
@@ -342,6 +352,7 @@ import {
   needsRefresh,
   nonExecutableRuleIds,
   rowsForTab,
+  toRuleSetEntry,
   type EntryDiffItem,
   type PointTab,
   type QualityPointRow,
@@ -350,13 +361,16 @@ import {
 const router = useRouter()
 const authStore = useAuthStore()
 
-const props = withDefaults(defineProps<{
-  managementMode?: 'noncoding' | 'coding'
-  embedded?: boolean
-}>(), {
-  managementMode: 'noncoding',
-  embedded: false,
-})
+const props = withDefaults(
+  defineProps<{
+    managementMode?: 'noncoding' | 'coding'
+    embedded?: boolean
+  }>(),
+  {
+    managementMode: 'noncoding',
+    embedded: false,
+  },
+)
 
 const isCodingMode = computed(() => props.managementMode === 'coding')
 const pageTitle = computed(() => (isCodingMode.value ? '编码质控点管理' : '非编码质控点管理'))
@@ -365,7 +379,11 @@ const ruleSetOptions = RULE_SET_OPTIONS.map((item) => ({ ...item }))
 const ruleSetKey = ref<string>(isCodingMode.value ? CODING_QC_RULE_SET_KEY : LX0609_RULE_SET_KEY)
 const activeTab = ref<PointTab>('online')
 const selectedRowKeys = ref<string[]>([])
-const deleteConfirmContext = ref<{ ruleSetKey: string; actorKey: string; ruleIds: string[] } | null>(null)
+const deleteConfirmContext = ref<{
+  ruleSetKey: string
+  actorKey: string
+  ruleIds: string[]
+} | null>(null)
 const searchType = ref<'id' | 'name'>('id')
 const searchKeyword = ref('')
 const appliedKeyword = ref('')
@@ -374,6 +392,10 @@ const importOpen = ref(false)
 const exportingCurrent = ref(false)
 /** 内置质控点只读详情；编码模式按手册不提供单项查看。 */
 const builtinDetail = ref<QualityPointRow | null>(null)
+const scopeMode = ref<'all' | 'selected' | ''>('')
+const scopeRefsText = ref('')
+const doctorVisibleChoice = ref<'visible' | 'hidden' | ''>('')
+const scopeTargetIds = ref<string[]>([])
 
 const loading = ref(false)
 const saving = ref(false)
@@ -390,7 +412,10 @@ let disposed = false
 const actorKey = computed(() => {
   const userId = String(authStore.user?.id ?? '').trim()
   const roles = Array.isArray(authStore.userRoles)
-    ? authStore.userRoles.map((role) => role.trim()).filter(Boolean).sort()
+    ? authStore.userRoles
+        .map((role) => role.trim())
+        .filter(Boolean)
+        .sort()
     : []
   return userId ? `${userId}|${roles.join(',')}` : ''
 })
@@ -415,7 +440,8 @@ const tableData = computed(() =>
 const draftDiff = computed<EntryDiffItem[] | null>(() => {
   const current = draft.value
   if (!current) return []
-  const base = current.base_version === currentDetail.value?.version ? currentDetail.value : baseDetail.value
+  const base =
+    current.base_version === currentDetail.value?.version ? currentDetail.value : baseDetail.value
   return base ? diffEntries(base.entries, current.entries) : null
 })
 
@@ -427,16 +453,22 @@ const enableBlockedReason = computed(() => {
 
 const deleteBlockedReason = computed(() => {
   const selected = new Set(selectedRowKeys.value)
-  const blocked = rows.value.filter((row) => selected.has(row.rule_id) && (
-    (row.state !== 'paused' && row.state !== 'offline') || row.draftState === 'deleted'
-  ))
+  const blocked = rows.value.filter(
+    (row) =>
+      selected.has(row.rule_id) &&
+      ((row.state !== 'paused' && row.state !== 'offline') || row.draftState === 'deleted'),
+  )
   if (!blocked.length) return ''
   return '只能删除当前版本中已暂停或已下线、且草稿中尚未删除的质控点'
 })
 
 const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
   { title: '质控点ID', dataIndex: 'rule_id', key: 'rule_id', width: 140 },
-  { title: isCodingMode.value ? '质控点名称 / 分类' : '质控点名称 / 文书', dataIndex: 'name', key: 'name' },
+  {
+    title: isCodingMode.value ? '质控点名称 / 分类' : '质控点名称 / 文书',
+    dataIndex: 'name',
+    key: 'name',
+  },
   {
     title: activeTab.value === 'online' ? '状态' : '状态（暂停 / 下线）',
     dataIndex: 'state',
@@ -444,6 +476,7 @@ const tableColumns = computed<TableColumnsType<QualityPointRow>>(() => [
     width: 220,
   },
   { title: '是否可执行', dataIndex: 'executable', key: 'executable', width: 120 },
+  { title: '适用范围 / 医生端', key: 'visibility', width: 230 },
   ...(isCodingMode.value ? [] : [{ title: '操作', key: 'operation', width: 90 }]),
 ])
 
@@ -491,13 +524,14 @@ async function load() {
     const list = listResult.data
     const detailResult = await getRuleSetVersion(key, list.current_version)
     const draftBase = list.draft?.base_version
-    const baseResult = draftBase && draftBase !== list.current_version
-      ? await getRuleSetVersion(key, draftBase)
-      : null
+    const baseResult =
+      draftBase && draftBase !== list.current_version
+        ? await getRuleSetVersion(key, draftBase)
+        : null
     if (!contextCurrent(context, actor, key) || request !== loadGeneration) return
     versionList.value = list
-    currentDetail.value = detailResult.success ? detailResult.data ?? null : null
-    baseDetail.value = baseResult?.success ? baseResult.data ?? null : null
+    currentDetail.value = detailResult.success ? (detailResult.data ?? null) : null
+    baseDetail.value = baseResult?.success ? (baseResult.data ?? null) : null
     if (!detailResult.success) loadError.value = detailResult.message || '读取当前版本详情失败'
   } finally {
     if (contextCurrent(context, actor, key) && request === loadGeneration) loading.value = false
@@ -518,7 +552,10 @@ async function downloadCurrentVersion() {
 }
 
 /** 批量修改质控点状态：只写草稿；无草稿时先以当前版本为基础创建草稿。 */
-async function applyBatch(state: RuleSetEntryState, frozenRuleIds: readonly string[] = selectedRowKeys.value) {
+async function applyBatch(
+  state: RuleSetEntryState,
+  frozenRuleIds: readonly string[] = selectedRowKeys.value,
+) {
   const list = versionList.value
   const key = ruleSetKey.value
   const actor = actorKey.value
@@ -530,10 +567,13 @@ async function applyBatch(state: RuleSetEntryState, frozenRuleIds: readonly stri
     message.warning('已在草稿中删除的质控点不能恢复或再次修改')
     return
   }
-  if (state === 'deleted' && ruleIds.some((ruleId) => {
-    const current = currentRows.get(ruleId)?.state
-    return current !== 'paused' && current !== 'offline'
-  })) {
+  if (
+    state === 'deleted' &&
+    ruleIds.some((ruleId) => {
+      const current = currentRows.get(ruleId)?.state
+      return current !== 'paused' && current !== 'offline'
+    })
+  ) {
     message.warning('只能删除当前版本中已暂停或已下线的质控点；当前在线规则请先下线并发布')
     return
   }
@@ -570,7 +610,9 @@ async function applyBatch(state: RuleSetEntryState, frozenRuleIds: readonly stri
     }
     versionList.value = { ...list, draft: updated.data }
     selectedRowKeys.value = []
-    message.success(`已写入草稿：${changed} 个质控点改为“${ENTRY_STATE_LABEL[state]}”，发布新版本后生效`)
+    message.success(
+      `已写入草稿：${changed} 个质控点改为“${ENTRY_STATE_LABEL[state]}”，发布新版本后生效`,
+    )
   } finally {
     if (contextCurrent(context, actor, key) && request === mutationGeneration) saving.value = false
   }
@@ -599,6 +641,105 @@ function confirmDelete() {
 function openBuiltinDetail(row: QualityPointRow) {
   if (isCodingMode.value) return
   builtinDetail.value = row
+  scopeTargetIds.value = [row.rule_id]
+  scopeMode.value = row.departmentScopeMode ?? ''
+  scopeRefsText.value = (row.departmentRefs ?? [])
+    .map((ref) => `${ref.institute_id}|${ref.department_name}`)
+    .join('\n')
+  doctorVisibleChoice.value =
+    row.doctorVisible === true ? 'visible' : row.doctorVisible === false ? 'hidden' : ''
+}
+
+function openSelectedApplicability() {
+  const target = rows.value.find((row) => selectedRowKeys.value.includes(row.rule_id))
+  if (!target) return
+  openBuiltinDetail(target)
+  scopeTargetIds.value = [...selectedRowKeys.value]
+}
+
+function scopeLabel(row: QualityPointRow) {
+  if (row.departmentScopeMode === 'all') return '全部科室'
+  if (row.departmentScopeMode === 'selected')
+    return `指定科室（${row.departmentRefs?.length ?? 0}）`
+  return '科室范围未配置'
+}
+
+function doctorVisibilityLabel(value: boolean | null) {
+  return value === true ? '医生端开放' : value === false ? '医生端不开放' : '医生端未配置'
+}
+
+function parseDepartmentRefs() {
+  if (scopeMode.value === 'all') return []
+  const refs = scopeRefsText.value
+    .split(/\r?\n/u)
+    .filter((line) => line.trim())
+    .map((line) => {
+      const [instituteId, departmentName, ...extra] = line.split('|').map((part) => part.trim())
+      if (!instituteId || !departmentName || extra.length)
+        throw new Error('指定科室格式应为“医院ID|科室名”，每行一组')
+      return { institute_id: instituteId, department_name: departmentName }
+    })
+  if (!refs.length) throw new Error('指定科室模式至少需要一组医院与科室')
+  return refs
+}
+
+async function saveApplicability() {
+  const row = builtinDetail.value
+  const list = versionList.value
+  if (!row || !list || !editable.value) return
+  if (!scopeMode.value || !doctorVisibleChoice.value) {
+    message.warning('请明确选择科室范围和医生端开关')
+    return
+  }
+  let departmentRefs: Array<{ institute_id: string; department_name: string }>
+  try {
+    departmentRefs = parseDepartmentRefs()
+  } catch (error) {
+    message.warning(error instanceof Error ? error.message : '科室范围格式无效')
+    return
+  }
+  const key = ruleSetKey.value
+  const actor = actorKey.value
+  const context = contextGeneration
+  const request = ++mutationGeneration
+  saving.value = true
+  try {
+    let working = list.draft
+    if (!working) {
+      const created = await createRuleSetDraft(key, { base_version: list.current_version })
+      if (!contextCurrent(context, actor, key) || request !== mutationGeneration) return
+      if (!created.success || !created.data) {
+        message.warning(describeFailure(created, '创建草稿失败'))
+        return
+      }
+      working = created.data
+    }
+    const targets = new Set(scopeTargetIds.value.length ? scopeTargetIds.value : [row.rule_id])
+    const entries = working.entries.map((entry) =>
+      toRuleSetEntry(
+        targets.has(entry.rule_id)
+          ? {
+              ...entry,
+              department_scope_mode: scopeMode.value,
+              department_refs: departmentRefs,
+              doctor_visible: doctorVisibleChoice.value === 'visible',
+            }
+          : entry,
+      ),
+    )
+    const updated = await updateRuleSetDraft(key, { version_seq: working.version_seq, entries })
+    if (!contextCurrent(context, actor, key) || request !== mutationGeneration) return
+    if (!updated.success || !updated.data) {
+      message.warning(describeFailure(updated, '保存适用配置失败'))
+      if (needsRefresh(updated) || updated.status === 404) await load()
+      return
+    }
+    versionList.value = { ...list, draft: updated.data }
+    builtinDetail.value = null
+    message.success(`已为 ${targets.size} 个质控点保存适用范围与医生端开关，发布新版本后生效`)
+  } finally {
+    if (contextCurrent(context, actor, key) && request === mutationGeneration) saving.value = false
+  }
 }
 
 function handleCreateNew() {
@@ -610,7 +751,12 @@ function handleSearch() {
 }
 
 function contextCurrent(generation: number, actor: string, key: string) {
-  return !disposed && generation === contextGeneration && actor === actorKey.value && key === ruleSetKey.value
+  return (
+    !disposed &&
+    generation === contextGeneration &&
+    actor === actorKey.value &&
+    key === ruleSetKey.value
+  )
 }
 
 function invalidateContext() {
@@ -622,6 +768,7 @@ function invalidateContext() {
   selectedRowKeys.value = []
   deleteConfirmContext.value = null
   builtinDetail.value = null
+  scopeTargetIds.value = []
   versionList.value = null
   currentDetail.value = null
   baseDetail.value = null
@@ -852,6 +999,25 @@ onBeforeUnmount(() => {
         color: #999999;
       }
     }
+  }
+}
+
+.applicability-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+
+  label {
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  > button {
+    justify-self: start;
+    margin-top: 4px;
   }
 }
 

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ...services.luxian_0609_rule_master import load_luxian_0609_rule_master
+from ...services.doctor_rule_visibility_service import project_doctor_visible_items
 
 _RESULT_STATUSES = (
     "non_compliant",
@@ -222,6 +223,7 @@ class Luxian0609ResultAnalysisService:
         completed_to: datetime | None = None,
         page: int = 1,
         page_size: int = 20,
+        doctor_visibility: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         hospital_status = _CARE_PHASE_TO_HOSPITAL_STATUS.get(_safe_text(care_phase).lower())
         if hospital_status is None:
@@ -282,6 +284,17 @@ class Luxian0609ResultAnalysisService:
             if not isinstance(raw_items, list):
                 unavailable_result_total += 1
                 continue
+            if doctor_visibility is not None:
+                raw_items = project_doctor_visible_items(
+                    raw_items,
+                    rule_set_key=_safe_text(projection.get("rule_set_key")),
+                    rule_set_version=_safe_text(projection.get("rule_set_version")),
+                    institute_id=_safe_text(doctor_visibility.get("institute_id")),
+                    department_name=_safe_text(doctor_visibility.get("department_name")),
+                )
+                if not raw_items:
+                    ready_record_identities.add(identity)
+                    continue
             delivered_rule_ids: set[str] = set()
             normalized_items: list[dict[str, str]] = []
             for raw_item in raw_items:

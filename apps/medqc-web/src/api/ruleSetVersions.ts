@@ -39,6 +39,10 @@ export interface RuleSetVersionExcelIssue {
 export interface RuleSetEntry {
   rule_id: string
   state: RuleSetEntryState
+  /** 历史版本可缺失；发布新版本前必须显式配置。 */
+  department_scope_mode?: 'all' | 'selected' | null
+  department_refs?: Array<{ institute_id: string; department_name: string }> | null
+  doctor_visible?: boolean | null
 }
 
 /**
@@ -178,20 +182,29 @@ function extractErrorDetail(error: unknown): ErrorDetail {
           code,
           message: typeof message === 'string' && message.trim() ? message : undefined,
           problems: Array.isArray(problems)
-            ? problems.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+            ? problems.filter(
+                (item): item is string => typeof item === 'string' && item.trim() !== '',
+              )
             : undefined,
           issues: Array.isArray(issues)
             ? issues.flatMap((item): RuleSetVersionExcelIssue[] => {
                 if (typeof item !== 'object' || item === null) return []
                 const raw = item as Record<string, unknown>
-                if (typeof raw.sheet !== 'string' || typeof raw.code !== 'string' || typeof raw.message !== 'string') return []
-                return [{
-                  sheet: raw.sheet,
-                  row: typeof raw.row === 'number' ? raw.row : null,
-                  field: typeof raw.field === 'string' ? raw.field : null,
-                  code: raw.code,
-                  message: raw.message,
-                }]
+                if (
+                  typeof raw.sheet !== 'string' ||
+                  typeof raw.code !== 'string' ||
+                  typeof raw.message !== 'string'
+                )
+                  return []
+                return [
+                  {
+                    sheet: raw.sheet,
+                    row: typeof raw.row === 'number' ? raw.row : null,
+                    field: typeof raw.field === 'string' ? raw.field : null,
+                    code: raw.code,
+                    message: raw.message,
+                  },
+                ]
               })
             : undefined,
         }
@@ -208,7 +221,12 @@ async function request<T>(
   try {
     const response = await ApiService.requestRaw<T>(config)
     const normalized = normalizeApiSuccess<T>(response.data)
-    return { success: normalized.success, data: normalized.data, message: normalized.message, status: response.status }
+    return {
+      success: normalized.success,
+      data: normalized.data,
+      message: normalized.message,
+      status: response.status,
+    }
   } catch (error) {
     const detail = extractErrorDetail(error)
     return {
@@ -233,74 +251,108 @@ export function toWriteEntries(entries: readonly RuleSetEntry[]): RuleSetEntry[]
 
 /** 版本列表（含当前版本标记与草稿）。 */
 export async function listRuleSetVersions(ruleSetKey: string) {
-  return request<RuleSetVersionList>({
-    method: 'GET',
-    url: '/api/v1/rule-set-versions',
-    params: { rule_set_key: ruleSetKey },
-  }, '读取规则集版本失败')
+  return request<RuleSetVersionList>(
+    {
+      method: 'GET',
+      url: '/api/v1/rule-set-versions',
+      params: { rule_set_key: ruleSetKey },
+    },
+    '读取规则集版本失败',
+  )
 }
 
 /** 版本详情（含 entries 与解析结果）。 */
 export async function getRuleSetVersion(ruleSetKey: string, version: string) {
-  return request<RuleSetVersionDetail>({
-    method: 'GET',
-    url: `${keyPath(ruleSetKey)}/${encodeURIComponent(version)}`,
-  }, '读取规则集版本详情失败')
+  return request<RuleSetVersionDetail>(
+    {
+      method: 'GET',
+      url: `${keyPath(ruleSetKey)}/${encodeURIComponent(version)}`,
+    },
+    '读取规则集版本详情失败',
+  )
 }
 
 /** 草稿详情；无草稿时 404。 */
 export async function getRuleSetDraft(ruleSetKey: string) {
-  return request<RuleSetDraft>({ method: 'GET', url: `${keyPath(ruleSetKey)}/draft` }, '读取规则集草稿失败')
+  return request<RuleSetDraft>(
+    { method: 'GET', url: `${keyPath(ruleSetKey)}/draft` },
+    '读取规则集草稿失败',
+  )
 }
 
 /** 从基础版本创建草稿（缺省为当前版本）；已有草稿 409 draft_exists。 */
-export async function createRuleSetDraft(ruleSetKey: string, payload: RuleSetDraftCreatePayload = {}) {
-  return request<RuleSetDraft>({
-    method: 'POST',
-    url: `${keyPath(ruleSetKey)}/draft`,
-    data: { ...payload, entries: payload.entries ? toWriteEntries(payload.entries) : payload.entries },
-  }, '创建规则集草稿失败')
+export async function createRuleSetDraft(
+  ruleSetKey: string,
+  payload: RuleSetDraftCreatePayload = {},
+) {
+  return request<RuleSetDraft>(
+    {
+      method: 'POST',
+      url: `${keyPath(ruleSetKey)}/draft`,
+      data: {
+        ...payload,
+        entries: payload.entries ? toWriteEntries(payload.entries) : payload.entries,
+      },
+    },
+    '创建规则集草稿失败',
+  )
 }
 
 /** 修改草稿（version_seq CAS）；冲突 409 version_conflict。 */
 export async function updateRuleSetDraft(ruleSetKey: string, payload: RuleSetDraftUpdatePayload) {
-  return request<RuleSetDraft>({
-    method: 'PUT',
-    url: `${keyPath(ruleSetKey)}/draft`,
-    data: { ...payload, entries: payload.entries ? toWriteEntries(payload.entries) : payload.entries },
-  }, '保存规则集草稿失败')
+  return request<RuleSetDraft>(
+    {
+      method: 'PUT',
+      url: `${keyPath(ruleSetKey)}/draft`,
+      data: {
+        ...payload,
+        entries: payload.entries ? toWriteEntries(payload.entries) : payload.entries,
+      },
+    },
+    '保存规则集草稿失败',
+  )
 }
 
 /** 放弃草稿（version_seq CAS）。 */
 export async function deleteRuleSetDraft(ruleSetKey: string, versionSeq: number) {
-  return request<RuleSetDraftDeleteResult>({
-    method: 'DELETE',
-    url: `${keyPath(ruleSetKey)}/draft`,
-    params: { version_seq: versionSeq },
-  }, '放弃规则集草稿失败')
+  return request<RuleSetDraftDeleteResult>(
+    {
+      method: 'DELETE',
+      url: `${keyPath(ruleSetKey)}/draft`,
+      params: { version_seq: versionSeq },
+    },
+    '放弃规则集草稿失败',
+  )
 }
 
 /** 发布草稿为新版本；校验失败 422 带 problems，版本号重复 409 version_exists。 */
 export async function publishRuleSetDraft(ruleSetKey: string, payload: RuleSetDraftPublishPayload) {
-  return request<RuleSetVersionDetail>({
-    method: 'POST',
-    url: `${keyPath(ruleSetKey)}/draft/publish`,
-    data: payload,
-  }, '发布规则集版本失败')
+  return request<RuleSetVersionDetail>(
+    {
+      method: 'POST',
+      url: `${keyPath(ruleSetKey)}/draft/publish`,
+      data: payload,
+    },
+    '发布规则集版本失败',
+  )
 }
 
 /** 下线已发布版本；不能下线当前版本（current_version）或内置版本（builtin_version）。 */
 export async function retireRuleSetVersion(ruleSetKey: string, version: string) {
-  return request<RuleSetVersionDetail>({
-    method: 'POST',
-    url: `${keyPath(ruleSetKey)}/${encodeURIComponent(version)}/retire`,
-  }, '下线规则集版本失败')
+  return request<RuleSetVersionDetail>(
+    {
+      method: 'POST',
+      url: `${keyPath(ruleSetKey)}/${encodeURIComponent(version)}/retire`,
+    },
+    '下线规则集版本失败',
+  )
 }
 
 async function download(url: string, fallback: string): Promise<RuleSetVersionApiResult<Blob>> {
   try {
     const response = await ApiService.requestRaw<Blob>({ method: 'GET', url, responseType: 'blob' })
-    if (!(response.data instanceof Blob)) return { success: false, status: response.status, message: fallback }
+    if (!(response.data instanceof Blob))
+      return { success: false, status: response.status, message: fallback }
     return { success: true, data: response.data, status: response.status }
   } catch (error) {
     return {
@@ -313,7 +365,10 @@ async function download(url: string, fallback: string): Promise<RuleSetVersionAp
 
 /** 导出冻结的内置/已发布/已下线版本。 */
 export function exportRuleSetVersion(ruleSetKey: string, version: string) {
-  return download(`${keyPath(ruleSetKey)}/${encodeURIComponent(version)}/export`, '导出规则集版本失败')
+  return download(
+    `${keyPath(ruleSetKey)}/${encodeURIComponent(version)}/export`,
+    '导出规则集版本失败',
+  )
 }
 
 /** 导出当前草稿，文件携带 version_seq 供再次导入时做 CAS。 */
@@ -325,12 +380,15 @@ export function exportRuleSetDraft(ruleSetKey: string) {
 export async function importRuleSetDraft(ruleSetKey: string, file: File) {
   const form = new FormData()
   form.append('file', file)
-  const result = await request<unknown>({
-    method: 'POST',
-    url: `${keyPath(ruleSetKey)}/draft/import`,
-    data: form,
-    timeout: 120_000,
-  }, '导入规则集草稿失败')
+  const result = await request<unknown>(
+    {
+      method: 'POST',
+      url: `${keyPath(ruleSetKey)}/draft/import`,
+      data: form,
+      timeout: 120_000,
+    },
+    '导入规则集草稿失败',
+  )
   if (!result.success) {
     const knownNotWritten = [401, 403, 409, 413, 422].includes(result.status ?? 0)
     return { ...result, resultUnknown: !knownNotWritten } as RuleSetDraftImportApiResult
@@ -351,25 +409,27 @@ function normalizeImportedDraft(value: unknown, ruleSetKey: string): RuleSetDraf
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const item = value as Record<string, unknown>
   if (
-    item.rule_set_key !== ruleSetKey
-    || item.status !== 'draft'
-    || !Number.isInteger(item.version_seq)
-    || Number(item.version_seq) < 1
-    || typeof item.base_version !== 'string'
-    || !item.base_version.trim()
-    || !Array.isArray(item.entries)
-  ) return null
+    item.rule_set_key !== ruleSetKey ||
+    item.status !== 'draft' ||
+    !Number.isInteger(item.version_seq) ||
+    Number(item.version_seq) < 1 ||
+    typeof item.base_version !== 'string' ||
+    !item.base_version.trim() ||
+    !Array.isArray(item.entries)
+  )
+    return null
   const seen = new Set<string>()
   for (const raw of item.entries) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
     const entry = raw as Record<string, unknown>
     if (
-      typeof entry.rule_id !== 'string'
-      || !entry.rule_id.trim()
-      || !['active', 'paused', 'offline', 'deleted'].includes(String(entry.state))
-      || typeof entry.executable !== 'boolean'
-      || seen.has(entry.rule_id)
-    ) return null
+      typeof entry.rule_id !== 'string' ||
+      !entry.rule_id.trim() ||
+      !['active', 'paused', 'offline', 'deleted'].includes(String(entry.state)) ||
+      typeof entry.executable !== 'boolean' ||
+      seen.has(entry.rule_id)
+    )
+      return null
     seen.add(entry.rule_id)
   }
   return item as unknown as RuleSetDraft

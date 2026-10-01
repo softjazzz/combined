@@ -95,12 +95,20 @@ async def get_luxian_0609_home(
     """当前全病历质控首页的轻量读取入口。"""
 
     scope = resolve_workstation_data_scope(current_user, department)
+    doctor_visibility = (
+        {
+            "institute_id": str(current_user.get("institute_id") or "").strip(),
+            "department_name": str(current_user.get("department") or "").strip(),
+        }
+        if scope.hospital_scope == "department" else None
+    )
     try:
         data = default_workstation_aggregation_service.get_luxian_0609_home(
             department=scope.department,
             keyword=keyword,
             priority_limit=priority_limit,
             hospital_scope=scope.hospital_scope,
+            doctor_visibility=doctor_visibility,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
@@ -158,6 +166,13 @@ async def get_luxian_0609_result_analysis(
     """读取当前范围中每份病历最新 Canonical 结果的规则下钻统计。"""
 
     scope = resolve_workstation_data_scope(current_user, department)
+    doctor_visibility = (
+        {
+            "institute_id": str(current_user.get("institute_id") or "").strip(),
+            "department_name": str(current_user.get("department") or "").strip(),
+        }
+        if scope.hospital_scope == "department" else None
+    )
     try:
         data = default_luxian_0609_result_analysis_service.get_analysis(
             care_phase=care_phase,
@@ -169,6 +184,7 @@ async def get_luxian_0609_result_analysis(
             completed_to=completed_to,
             page=page,
             page_size=page_size,
+            doctor_visibility=doctor_visibility,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:

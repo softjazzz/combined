@@ -66,6 +66,8 @@ MAX_ACTOR_LENGTH = 64
 MAX_NOTE_LENGTH = 1000
 MAX_ENTRIES = 1000
 MAX_RULE_ID_LENGTH = 64
+MAX_INSTITUTE_ID_LENGTH = 64
+MAX_DEPARTMENT_NAME_LENGTH = 100
 _VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 _TABLE = QCRuleSetVersion.__table__
@@ -243,16 +245,23 @@ def with_executable_flags(rule_set_key: Any, item: Mapping[str, Any]) -> dict[st
 # ---------------------------------------------------------------------------
 
 
-def normalize_entries(raw: Any) -> list[dict[str, str]]:
-    """结构校验并规范化 entries：rule_id 去空白转大写、state 限定枚举、不重复、按 rule_id 排序。"""
+def normalize_entries(raw: Any) -> list[dict[str, Any]]:
+    """规范化版本条目；旧版本缺少适用配置时保留未配置语义。"""
     if not isinstance(raw, list):
         raise RuleSetVersionInvalid("entries 必须是数组")
     if len(raw) > MAX_ENTRIES:
         raise RuleSetVersionInvalid(f"entries 不能超过 {MAX_ENTRIES} 条")
-    normalized: dict[str, dict[str, str]] = {}
+    normalized: dict[str, dict[str, Any]] = {}
+    allowed_keys = {
+        "rule_id", "state", "department_scope_mode", "department_refs", "doctor_visible",
+    }
     for item in raw:
-        if not isinstance(item, Mapping) or set(item) != {"rule_id", "state"}:
-            raise RuleSetVersionInvalid("entries 每项必须且只能包含 rule_id 与 state")
+        if (
+            not isinstance(item, Mapping)
+            or not {"rule_id", "state"}.issubset(item)
+            or set(item) - allowed_keys
+        ):
+            raise RuleSetVersionInvalid("entries 条目字段无效")
         rule_id = item.get("rule_id")
         state = item.get("state")
         if not isinstance(rule_id, str) or not rule_id.strip() or len(rule_id.strip()) > MAX_RULE_ID_LENGTH:
@@ -262,20 +271,59 @@ def normalize_entries(raw: Any) -> list[dict[str, str]]:
         rule_id = rule_id.strip().upper()
         if rule_id in normalized:
             raise RuleSetVersionInvalid(f"entries 中规则重复：{rule_id}")
-        normalized[rule_id] = {"rule_id": rule_id, "state": state}
+        normalized_item: dict[str, Any] = {"rule_id": rule_id, "state": state}
+        configured = any(key in item for key in allowed_keys - {"rule_id", "state"})
+        if configured:
+            mode = item.get("department_scope_mode")
+            refs = item.get("department_refs")
+            doctor_visible = item.get("doctor_visible")
+            if mode is not None and (not isinstance(mode, str) or mode not in {"all", "selected"}):
+                raise RuleSetVersionInvalid("entries 中科室范围模式无效")
+            if refs is not None and not isinstance(refs, list):
+                raise RuleSetVersionInvalid("entries 中科室范围引用无效")
+            normalized_refs: list[dict[str, str]] | None = None
+            if isinstance(refs, list):
+                seen_refs: set[tuple[str, str]] = set()
+                normalized_refs = []
+                for ref in refs:
+                    if not isinstance(ref, Mapping) or set(ref) != {"institute_id", "department_name"}:
+                        raise RuleSetVersionInvalid("entries 中科室范围引用无效")
+                    institute_id = _clean(ref.get("institute_id"))
+                    department_name = _clean(ref.get("department_name"))
+                    if (
+                        not institute_id or not department_name
+                        or len(institute_id) > MAX_INSTITUTE_ID_LENGTH
+                        or len(department_name) > MAX_DEPARTMENT_NAME_LENGTH
+                    ):
+                        raise RuleSetVersionInvalid("entries 中科室范围引用无效")
+                    pair = (institute_id, department_name)
+                    if pair not in seen_refs:
+                        seen_refs.add(pair)
+                        normalized_refs.append({
+                            "institute_id": institute_id, "department_name": department_name,
+                        })
+                normalized_refs.sort(key=lambda ref: (ref["institute_id"], ref["department_name"]))
+            if doctor_visible is not None and type(doctor_visible) is not bool:
+                raise RuleSetVersionInvalid("entries 中医生端开关无效")
+            normalized_item.update({
+                "department_scope_mode": mode,
+                "department_refs": normalized_refs,
+                "doctor_visible": doctor_visible,
+            })
+        normalized[rule_id] = normalized_item
     return [normalized[rule_id] for rule_id in sorted(normalized)]
 
 
-def dump_entries(entries: Sequence[Mapping[str, str]]) -> str:
+def dump_entries(entries: Sequence[Mapping[str, Any]]) -> str:
     """规范化序列化：按 rule_id 排序、键排序、紧凑分隔符、保留中文。"""
     ordered = sorted(
-        ({"rule_id": item["rule_id"], "state": item["state"]} for item in entries),
+        (dict(item) for item in entries),
         key=lambda item: item["rule_id"],
     )
     return json.dumps(ordered, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def compute_entries_digest(entries: Sequence[Mapping[str, str]]) -> str:
+def compute_entries_digest(entries: Sequence[Mapping[str, Any]]) -> str:
     """entries 规范化 JSON 的 UTF-8 SHA-256 十六进制摘要。"""
     return hashlib.sha256(dump_entries(entries).encode("utf-8")).hexdigest()
 
@@ -311,6 +359,7 @@ def _resolution(
         # 执行消费者继续只认 excluded；墓碑与下线规则都不得进入执行。
         "excluded_rule_ids": _ordered(rule_set, [*offline_rule_ids, *deleted_rule_ids]),
         "content_digest": content_digest,
+        "entries": [dict(item) for item in entries],
     }
 
 
@@ -328,6 +377,7 @@ def _builtin_resolution(rule_set: QCRuleSet) -> dict[str, Any]:
         "deleted_rule_ids": [],
         "excluded_rule_ids": list(excluded),
         "content_digest": compute_entries_digest(entries),
+        "entries": entries,
     }
 
 
@@ -370,6 +420,18 @@ def _resolve_in_session(session: Any, rule_set: QCRuleSet, version: str) -> dict
         rule_set, version=row.version, source=row.status,
         entries=_stored_entries(row), content_digest=row.content_digest,
     )
+
+
+def _entries_for_version_in_session(
+    session: Any, rule_set: QCRuleSet, version: str,
+) -> list[dict[str, Any]]:
+    if version == rule_set.version:
+        active, paused, excluded = _builtin_partition(rule_set)
+        return _entries_from_partition(active, paused, excluded)
+    row = _published_row(session, rule_set.key, version)
+    if row is None:
+        raise RuleSetVersionNotFound("规则集版本不存在")
+    return _stored_entries(row)
 
 
 def _current_in_session(session: Any, rule_set: QCRuleSet) -> str:
@@ -506,8 +568,8 @@ def _require_deleted_transitions(
 
 
 def validate_publish_entries(
-    rule_set: QCRuleSet, base: Mapping[str, Any], entries: Sequence[Mapping[str, str]],
-    *, current: Mapping[str, Any] | None = None,
+    rule_set: QCRuleSet, base: Mapping[str, Any], entries: Sequence[Mapping[str, Any]],
+    *, current: Mapping[str, Any] | None = None, require_applicability: bool = True,
 ) -> None:
     """发布校验（合同第 4 节）；不通过抛 RuleSetVersionInvalid，problems 逐条列出原因。"""
     rule_ids = {item["rule_id"] for item in entries}
@@ -531,11 +593,66 @@ def validate_publish_entries(
         problems.append(f"以下规则当前不可执行，只能设为 paused 或 offline：{','.join(not_executable)}")
     if not any(item["state"] == STATE_ACTIVE for item in entries):
         problems.append("至少需要 1 条 active 规则")
+    unconfigured = sorted(
+        item["rule_id"] for item in entries
+        if item["state"] != STATE_DELETED and (
+            item.get("department_scope_mode") not in {"all", "selected"}
+            or item.get("doctor_visible") is None
+            or not isinstance(item.get("department_refs"), list)
+        )
+    )
+    invalid_scope = sorted(
+        item["rule_id"] for item in entries
+        if item["state"] != STATE_DELETED and (
+            (item.get("department_scope_mode") == "selected" and not item.get("department_refs"))
+            or (item.get("department_scope_mode") == "all" and item.get("department_refs"))
+        )
+    )
+    if require_applicability and unconfigured:
+        problems.append(f"以下规则尚未配置科室范围或医生端开关：{','.join(unconfigured)}")
+    if invalid_scope:
+        problems.append(f"以下规则科室范围配置无效：{','.join(invalid_scope)}")
     if current is not None:
         problems.extend(_deleted_transition_problems(current, entries))
     if problems:
         raise RuleSetVersionInvalid(
             "规则集版本发布校验未通过", code="publish_validation_failed", problems=problems,
+        )
+
+
+def validate_department_refs(
+    entries: Sequence[Mapping[str, Any]], *, session: Any,
+) -> None:
+    """指定科室必须来自病例权威院科选项，不接受任意客户端字符串。"""
+
+    requested = {
+        (ref["institute_id"], ref["department_name"])
+        for item in entries if item.get("department_scope_mode") == "selected"
+        for ref in item.get("department_refs") or []
+    }
+    if not requested:
+        return
+    try:
+        from .medical_records.query_service import list_scoring_department_options
+
+        options = list_scoring_department_options(session=session)
+    except Exception as exc:  # noqa: BLE001 - 权威选项不可用时禁止发布
+        raise RuleSetVersionUnavailable("院科范围选项暂不可用") from exc
+    authoritative = {
+        (_clean(item.get("institute_id")), _clean(item.get("department_name")))
+        for item in options if isinstance(item, Mapping)
+    }
+    unknown = sorted(requested - authoritative)
+    if unknown:
+        raise RuleSetVersionInvalid(
+            "规则集版本发布校验未通过",
+            code="publish_validation_failed",
+            problems=[
+                "以下院科组合不存在：" + ",".join(
+                    f"{institute_id}|{department_name}"
+                    for institute_id, department_name in unknown
+                )
+            ],
         )
 
 
@@ -797,7 +914,9 @@ def create_draft(
                 if _draft_row(session, rule_set.key) is not None:
                     raise RuleSetVersionConflict("该规则集已有草稿", code="draft_exists")
                 if normalized_entries is None:
-                    normalized_entries = _entries_from_resolution(base)
+                    normalized_entries = _entries_for_version_in_session(
+                        session, rule_set, base["version"],
+                    )
                     current_resolution = _resolve_in_session(session, rule_set, current)
                     current_deleted = set(current_resolution.get("deleted_rule_ids") or ())
                     normalized_entries = [
@@ -899,7 +1018,11 @@ def preflight_draft_import_snapshot(
                 )
             current_name = _current_in_session(session, rule_set)
             current = _resolve_in_session(session, rule_set, current_name)
-            validate_publish_entries(rule_set, base, normalized_entries, current=current)
+            validate_publish_entries(
+                rule_set, base, normalized_entries, current=current,
+                require_applicability=False,
+            )
+            validate_department_refs(normalized_entries, session=session)
             return {
                 "base": base,
                 "entries": normalized_entries,
@@ -961,7 +1084,9 @@ def import_draft_snapshot(
                 current_resolution = _resolve_in_session(session, rule_set, current_name)
                 validate_publish_entries(
                     rule_set, base, normalized_entries, current=current_resolution,
+                    require_applicability=False,
                 )
+                validate_department_refs(normalized_entries, session=session)
                 row = _draft_row(session, rule_set.key, for_update=True)
                 if row is None:
                     if expected_version is not None:
@@ -1094,6 +1219,7 @@ def publish_draft(
                 current_name = _current_in_session(session, rule_set)
                 current_resolution = _resolve_in_session(session, rule_set, current_name)
                 validate_publish_entries(rule_set, base, entries, current=current_resolution)
+                validate_department_refs(entries, session=session)
                 now = _now()
                 updated = session.execute(
                     update(_TABLE)

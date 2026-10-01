@@ -9,7 +9,8 @@
 - POST   /api/v1/rule-set-versions/{key}/draft/publish      发布 {version, note}
 - POST   /api/v1/rule-set-versions/{key}/{version}/retire   下线（不能下线当前/内置版本）
 读取需登录；写操作沿用规则管理路由的 admin/qc_manager 角色要求。数据库故障固定脱敏为 503。
-响应中的 entries（含列表里的草稿）附加只读派生字段 executable、qc_point、source_document；写接口 entries 只接受 rule_id/state。
+响应中的 entries（含列表里的草稿）附加只读派生字段 executable、qc_point、source_document；
+写接口 entries 接受状态与版本级适用范围，仍拒绝只读派生字段。
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from urllib.parse import quote
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
@@ -61,11 +62,21 @@ _UNAVAILABLE_DETAIL = "规则集版本服务暂不可用，请稍后重试"
 _MANAGER_ROLES = [UserRole.ADMIN, UserRole.QC_MANAGER]
 
 
+class RuleSetDepartmentRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    institute_id: StrictStr
+    department_name: StrictStr
+
+
 class RuleSetEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rule_id: StrictStr
     state: StrictStr
+    department_scope_mode: Optional[StrictStr] = None
+    department_refs: Optional[list[RuleSetDepartmentRef]] = None
+    doctor_visible: Optional[StrictBool] = None
 
 
 class DraftCreateRequest(BaseModel):
@@ -107,7 +118,7 @@ def _actor(current_user: dict) -> str:
 
 
 def _entries(entries: Optional[list[RuleSetEntry]]) -> Optional[list[dict[str, Any]]]:
-    return None if entries is None else [item.model_dump() for item in entries]
+    return None if entries is None else [item.model_dump(exclude_unset=True) for item in entries]
 
 
 def _raise_http(exc: Exception, action: str) -> None:

@@ -646,6 +646,8 @@ def project_customer_safe_result_item(
             True if status == "compliant" else False if status == "non_compliant" else None
         ),
         "is_confirmed_issue": status == "non_compliant",
+        # 仅搬运后处理器给出的医生端安全标记；规则版本开关由医生投影层再做 AND。
+        "can_show_to_doctor": raw.get("can_show_to_doctor") is True,
         "reason_code": _canonical_reason_code(raw),
         "rule_version": _safe_text(raw.get("rule_version")),
         "conclusion": conclusion,
@@ -3916,6 +3918,7 @@ class CustomQCWorkspaceService:
         rule_set_version: Optional[str] = None,
         session_factory: Optional[Callable[[], Session]] = None,
         include_items: bool = False,
+        include_rule_set_context: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """批量读取病历池可展示的最新 Canonical 结果摘要。
 
@@ -3930,6 +3933,7 @@ class CustomQCWorkspaceService:
             rule_set_version=rule_set_version,
             session_factory=session_factory,
             include_items=include_items,
+            include_rule_set_context=include_rule_set_context,
         )
         return projections
 
@@ -3941,6 +3945,7 @@ class CustomQCWorkspaceService:
         rule_set_version: Optional[str],
         session_factory: Optional[Callable[[], Session]],
         include_items: bool,
+        include_rule_set_context: bool = False,
     ) -> tuple[
         Dict[tuple[str, str, str], Dict[str, Any]],
         Dict[tuple[str, str, str], Dict[str, Any]],
@@ -4250,6 +4255,9 @@ class CustomQCWorkspaceService:
                         # 仅供病历审核锚定结果对象，不改变选择行为；病历池输出会按白名单裁剪。
                         summary["root_job_id"] = selected_job_id
                         summary["envelope_id"] = _safe_text(selected_envelopes[0].get("id"))
+                        if include_rule_set_context:
+                            summary["rule_set_key"] = normalized_rule_set_key
+                            summary["rule_set_version"] = job_rule_set_version(ready_selection.job)
                         selected_jobs[identity] = ready_selection.job
                     projections[identity] = summary
                     continue

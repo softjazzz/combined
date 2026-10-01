@@ -108,6 +108,45 @@ def test_draft_roundtrip_carries_base_digest_and_version_seq():
     assert parsed.base_content_digest == service.resolve_rule_set_version(KEY, BUILTIN)["content_digest"]
 
 
+def test_applicability_fields_roundtrip_without_defaulting_unconfigured_entries():
+    rows = builtin_entries()
+    rows[0].update({
+        "department_scope_mode": "selected",
+        "department_refs": [
+            {"institute_id": "HOSP-001", "department_name": "心内科"},
+        ],
+        "doctor_visible": True,
+    })
+    parsed = excel.parse_workbook(workbook_bytes(rows), expected_rule_set_key=KEY)
+
+    assert parsed.entries[0] == rows[0]
+    assert "department_scope_mode" not in parsed.entries[1]
+
+
+def test_legacy_v1_four_column_workbook_imports_as_unconfigured_draft():
+    content = edit_workbook(workbook_bytes(), lambda workbook: (
+        setattr(workbook[excel.INFO_SHEET]["A2"], "value", excel.LEGACY_TEMPLATE_VERSION),
+        workbook[excel.ENTRY_SHEET].delete_cols(5, 3),
+    ))
+
+    parsed = excel.parse_workbook(content, expected_rule_set_key=KEY)
+
+    assert parsed.entries == builtin_entries()
+    assert all("doctor_visible" not in item for item in parsed.entries)
+
+
+def test_numeric_doctor_visibility_is_rejected_instead_of_coerced_to_bool():
+    content = edit_workbook(workbook_bytes(), lambda workbook: (
+        setattr(workbook[excel.ENTRY_SHEET]["E2"], "value", "all"),
+        setattr(workbook[excel.ENTRY_SHEET]["G2"], "value", 1),
+    ))
+
+    with pytest.raises(excel.RuleSetVersionExcelInvalid) as caught:
+        excel.parse_workbook(content, expected_rule_set_key=KEY)
+
+    assert any(issue.code == "invalid_doctor_visible" for issue in caught.value.issues)
+
+
 def test_deleted_state_roundtrips_without_becoming_offline():
     entries = builtin_entries()
     deleted_rule = next(item["rule_id"] for item in entries if item["state"] == "offline")

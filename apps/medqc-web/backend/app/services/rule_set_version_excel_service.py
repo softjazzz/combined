@@ -18,12 +18,17 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 
-TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V1"
+LEGACY_TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V1"
+TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V2"
 INFO_SHEET = "版本信息"
 ENTRY_SHEET = "质控点"
 EXPECTED_SHEETS = (INFO_SHEET, ENTRY_SHEET)
 INFO_HEADERS = ("模板版本", "规则集键", "导出版本", "导出状态", "基础版本", "基础内容摘要", "草稿版本序号")
-ENTRY_HEADERS = ("质控点ID", "状态", "质控点名称", "来源文书")
+ENTRY_HEADERS = (
+    "质控点ID", "状态", "质控点名称", "来源文书",
+    "科室范围模式", "指定科室", "医生端开放",
+)
+LEGACY_ENTRY_HEADERS = ENTRY_HEADERS[:4]
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_ZIP_MEMBERS = 32
@@ -67,7 +72,7 @@ class ParsedRuleSetVersionWorkbook:
     base_content_digest: str
     expected_draft_version: str | None
     expected_draft_version_seq: int | None
-    entries: list[dict[str, str]]
+    entries: list[dict[str, Any]]
     metadata: list[tuple[int, str, str, str]] = field(repr=False)
 
 
@@ -130,8 +135,22 @@ def build_workbook(
             cell = entries.cell(row_no, column, value)
             if isinstance(value, str):
                 cell.data_type = "s"
+        mode = item.get("department_scope_mode")
+        if mode in {"all", "selected"}:
+            entries.cell(row_no, 5, mode)
+            refs = item.get("department_refs") or []
+            entries.cell(
+                row_no,
+                6,
+                "\n".join(
+                    f"{_text(ref.get('institute_id'))}|{_text(ref.get('department_name'))}"
+                    for ref in refs if isinstance(ref, Mapping)
+                ),
+            )
+            if type(item.get("doctor_visible")) is bool:
+                entries.cell(row_no, 7, item["doctor_visible"])
     _style_headers(entries, len(ENTRY_HEADERS))
-    for column, width in zip("ABCD", (18, 14, 44, 34), strict=True):
+    for column, width in zip("ABCDEFG", (18, 14, 44, 34, 18, 42, 16), strict=True):
         entries.column_dimensions[column].width = width
     validation = DataValidation(type="list", formula1='"active,paused,offline,deleted"')
     entries.add_data_validation(validation)
@@ -232,7 +251,11 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
         info = workbook[INFO_SHEET]
         entry_sheet = workbook[ENTRY_SHEET]
         info_headers_ok = _exact_headers(info, INFO_HEADERS, issues)
-        entry_headers_ok = _exact_headers(entry_sheet, ENTRY_HEADERS, issues)
+        raw_template = _text(info.cell(2, 1).value)
+        expected_entry_headers = (
+            LEGACY_ENTRY_HEADERS if raw_template == LEGACY_TEMPLATE_VERSION else ENTRY_HEADERS
+        )
+        entry_headers_ok = _exact_headers(entry_sheet, expected_entry_headers, issues)
         if info.max_row != 2:
             issues.append(_issue(INFO_SHEET, None, None, "invalid_row_count", "版本信息必须且只能有一行数据"))
         if entry_sheet.max_row - 1 > MAX_ENTRY_ROWS:
@@ -249,7 +272,7 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
         base_digest = _text(values["基础内容摘要"])
         raw_seq = values["草稿版本序号"]
 
-        if template != TEMPLATE_VERSION:
+        if template not in {LEGACY_TEMPLATE_VERSION, TEMPLATE_VERSION}:
             issues.append(_issue(INFO_SHEET, 2, "模板版本", "template_version", "模板版本不匹配，请重新导出"))
         if rule_set_key != expected_rule_set_key:
             issues.append(_issue(INFO_SHEET, 2, "规则集键", "rule_set_mismatch", "工作簿规则集与当前页面不一致"))
@@ -275,13 +298,17 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
         elif not exported_version:
             issues.append(_issue(INFO_SHEET, 2, "导出版本", "required", "冻结版本必须包含导出版本"))
 
-        entries: list[dict[str, str]] = []
+        entries: list[dict[str, Any]] = []
         metadata: list[tuple[int, str, str, str]] = []
         for row_no in range(2, entry_sheet.max_row + 1):
-            row = [entry_sheet.cell(row_no, index).value for index in range(1, 5)]
+            column_count = 4 if template == LEGACY_TEMPLATE_VERSION else 7
+            row = [entry_sheet.cell(row_no, index).value for index in range(1, column_count + 1)]
             if all(value in (None, "") for value in row):
                 continue
-            rule_id, state, qc_point, source_document = (_text(value) for value in row)
+            rule_id, state, qc_point, source_document = (_text(value) for value in row[:4])
+            mode = _text(row[4]) if column_count == 7 else ""
+            refs_text = _text(row[5]) if column_count == 7 else ""
+            raw_doctor_visible = row[6] if column_count == 7 else None
             if not rule_id:
                 issues.append(_issue(ENTRY_SHEET, row_no, "质控点ID", "required", "质控点ID不能为空"))
             if state not in ALLOWED_STATES:
@@ -289,7 +316,35 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
                     ENTRY_SHEET, row_no, "状态", "invalid_state",
                     "状态只能是 active、paused、offline 或 deleted",
                 ))
-            entries.append({"rule_id": rule_id, "state": state})
+            entry: dict[str, Any] = {"rule_id": rule_id, "state": state}
+            applicability_values = (mode, refs_text, raw_doctor_visible)
+            if any(value not in (None, "") for value in applicability_values):
+                if mode not in {"all", "selected"}:
+                    issues.append(_issue(
+                        ENTRY_SHEET, row_no, "科室范围模式", "invalid_department_scope_mode",
+                        "科室范围模式只能是 all 或 selected",
+                    ))
+                if type(raw_doctor_visible) is not bool:
+                    issues.append(_issue(
+                        ENTRY_SHEET, row_no, "医生端开放", "invalid_doctor_visible",
+                        "医生端开放只能填写 TRUE 或 FALSE",
+                    ))
+                refs: list[dict[str, str]] = []
+                for raw_ref in refs_text.splitlines():
+                    parts = [part.strip() for part in raw_ref.split("|")]
+                    if len(parts) != 2 or not all(parts):
+                        issues.append(_issue(
+                            ENTRY_SHEET, row_no, "指定科室", "invalid_department_ref",
+                            "指定科室每行必须为“医院ID|科室名”",
+                        ))
+                        continue
+                    refs.append({"institute_id": parts[0], "department_name": parts[1]})
+                entry.update({
+                    "department_scope_mode": mode or None,
+                    "department_refs": refs,
+                    "doctor_visible": raw_doctor_visible if type(raw_doctor_visible) is bool else None,
+                })
+            entries.append(entry)
             metadata.append((row_no, rule_id, qc_point, source_document))
         if not entries:
             issues.append(_issue(ENTRY_SHEET, None, None, "empty_entries", "质控点不能为空"))

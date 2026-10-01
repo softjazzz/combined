@@ -36,6 +36,41 @@ from app.services.qc_workspace.canonical_result_store import (
     lock_case_result_mutations,
 )
 
+REAL_VISIBILITY_CHECKER = service._require_doctor_visible_target
+
+
+@pytest.fixture(autouse=True)
+def _legacy_appeal_contract_visibility(monkeypatch):
+    """既有测试聚焦申诉事务；规则可见性由独立单测覆盖。"""
+
+    monkeypatch.setattr(service, "_require_doctor_visible_target", lambda *_args: None)
+    monkeypatch.setattr(
+        "app.services.doctor_rule_visibility_service.project_doctor_visible_items",
+        lambda items, **_kwargs: [dict(item) for item in items],
+    )
+
+
+@pytest.mark.parametrize(
+    ("result_flag", "allowed"),
+    [(False, {"LX0609-001"}), (True, set())],
+)
+def test_modern_appeal_target_requires_result_flag_and_version_visibility(
+    monkeypatch, result_flag, allowed,
+):
+    monkeypatch.setattr(
+        "app.services.doctor_rule_visibility_service.visible_rule_ids",
+        lambda **_kwargs: frozenset(allowed),
+    )
+    target = {
+        "target_id": "LX0609-001",
+        "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "rule_set_version": RULE_SET_VERSION,
+        "_can_show_to_doctor": result_flag,
+    }
+
+    with pytest.raises(service.ModernAppealForbidden):
+        REAL_VISIBILITY_CHECKER(target, service.resolve_appellant(_doctor()))
+
 CASE_A = ("hospital-a", "patient-1", "visit-1")
 CASE_B = ("hospital-a", "patient-2", "visit-2")
 CASE_A_OTHER_HOSPITAL = ("hospital-b", "patient-1", "visit-1")

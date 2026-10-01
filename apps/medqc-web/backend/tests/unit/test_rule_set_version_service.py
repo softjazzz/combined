@@ -70,6 +70,7 @@ class _Workspace:
         return [{
             "institute_id": "SYN-HOSP", "patient_id": "SYN-PAT", "record_id": "SYN-VISIT",
             "visit_id": "SYN-VISIT", "scope": "final",
+            "department": "心内科",
             "admission_datetime": "2026-06-01 08:00:00", "discharge_datetime": "2026-06-05 08:00:00",
         }]
 
@@ -112,6 +113,9 @@ def test_builtin_resolution_equals_current_prepare_computation(rule_set_key, mon
         assert set(resolved["excluded_rule_ids"]) == set(LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS)
         assert set(resolved["active_rule_ids"]) == set(filters["active_customer_rule_ids"])
         assert set(resolved["paused_rule_ids"]) == set(filters["pending_customer_rule_ids"])
+        assert filters["record_rule_map"]['["SYN-HOSP","SYN-PAT","SYN-VISIT"]'] == list(
+            filters["selected_rule_ids"]
+        )
     else:
         assert resolved["excluded_rule_ids"] == [] and resolved["paused_rule_ids"] == []
 
@@ -132,6 +136,49 @@ def test_builtin_digest_is_canonical_sha256_of_equivalent_entries(monkeypatch):
     # 输入顺序不影响摘要。
     assert service.compute_entries_digest(list(reversed(entries))) == expected
     assert service.resolve_rule_set_version(KEY, BUILTIN)["content_digest"] == expected
+
+
+def test_entry_applicability_validation_is_stable_and_publish_requires_explicit_config():
+    with pytest.raises(service.RuleSetVersionInvalid):
+        service.normalize_entries([{
+            "rule_id": "LX0609-001", "state": "active",
+            "department_scope_mode": [], "department_refs": [], "doctor_visible": True,
+        }])
+
+    with pytest.raises(service.RuleSetVersionInvalid) as error:
+        service.validate_publish_entries(
+            service._rule_set(KEY),
+            service.resolve_rule_set_version(KEY, BUILTIN),
+            _builtin_entries(),
+        )
+    assert any("尚未配置" in problem for problem in error.value.problems)
+
+
+def test_prepare_rejects_selected_case_without_any_applicable_rule(monkeypatch):
+    resolution = service.resolve_rule_set_version(KEY, BUILTIN)
+    resolution["entries"] = [
+        {
+            **item,
+            "department_scope_mode": "selected",
+            "department_refs": [{"institute_id": "OTHER", "department_name": "骨科"}],
+            "doctor_visible": False,
+        }
+        for item in resolution["entries"]
+    ]
+    monkeypatch.setattr(
+        prepare_module, "_resolve_prepare_rule_set_version", lambda *_args, **_kwargs: resolution,
+    )
+
+    with pytest.raises(Exception) as error:
+        prepare_module.prepare_workspace_batch_job(
+            prepare_module.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key=KEY, rule_ids=["LX0609-001"], scope="final",
+            ),
+            qc_service=_QCService(), workspace=_Workspace(), settings_provider=_native_settings,
+        )
+
+    assert getattr(error.value, "status_code", None) == 422
+    assert error.value.detail["code"] == "record_has_no_applicable_rules"
 
 
 def test_empty_table_current_version_is_builtin(sessions):
@@ -219,7 +266,20 @@ def test_0916_and_other_builtin_only_rule_sets_reject_draft(sessions):
 # ---------------------------------------------------------------------------
 
 
+def _configured_entries(entries):
+    return [
+        {
+            **item,
+            "department_scope_mode": "all",
+            "department_refs": [],
+            "doctor_visible": False,
+        }
+        for item in entries
+    ]
+
+
 def _publish_with(entries, version="2026-09-27.1", **kwargs):
+    entries = _configured_entries(entries)
     service.create_draft(KEY, actor=ACTOR, entries=entries)
     return service.publish_draft(KEY, actor=ACTOR, version=version, **kwargs)
 
@@ -228,7 +288,7 @@ def test_publish_writes_digest_and_becomes_current(sessions):
     entries = _with_state(_builtin_entries(), EXCLUDED_RULE, "active")
     published = _publish_with(entries, note="上线 033")
     assert published["status"] == "published" and published["version"] == "2026-09-27.1"
-    assert published["content_digest"] == service.compute_entries_digest(entries)
+    assert published["content_digest"] == service.compute_entries_digest(_configured_entries(entries))
     assert published["published_by"] == ACTOR and published["is_current"] is True
     assert published["note"] == "上线 033"
     assert service.current_version(KEY) == "2026-09-27.1"
@@ -345,7 +405,7 @@ def test_published_version_is_immutable(sessions):
     service.create_draft(KEY, actor=ACTOR, base_version="v1")
     service.update_draft(KEY, actor=ACTOR, version_seq=1, entries=_with_state(_builtin_entries(), "LX0609-001", "offline"))
     assert service.resolve_rule_set_version(KEY, "v1")["content_digest"] == service.compute_entries_digest(
-        _builtin_entries()
+        _configured_entries(_builtin_entries())
     )
 
 

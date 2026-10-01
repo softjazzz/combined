@@ -66,11 +66,18 @@ def test_list_detail_draft_publish_retire_flow(sessions):
     assert http.get(f"{BASE}/{KEY}/draft").json()["data"]["id"] == draft["id"]
 
     entries = [
-        {"rule_id": item["rule_id"], "state": "active" if item["rule_id"] == "LX0609-033" else item["state"]}
+        {
+            "rule_id": item["rule_id"],
+            "state": "active" if item["rule_id"] == "LX0609-033" else item["state"],
+            "department_scope_mode": "all",
+            "department_refs": [],
+            "doctor_visible": False,
+        }
         for item in draft["entries"]
     ]
     updated = http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "entries": entries})
-    assert updated.status_code == 200 and updated.json()["data"]["version_seq"] == 2
+    assert updated.status_code == 200, updated.json()
+    assert updated.json()["data"]["version_seq"] == 2
     stale = http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "note": "旧"})
     assert stale.status_code == 409 and stale.json()["detail"]["code"] == "version_conflict"
 
@@ -114,7 +121,11 @@ def test_entries_carry_readonly_executable_flag(sessions):
     assert flags["LX0609-033"] is True and flags["LX0609-020"] is False
     assert flags == {rule_id: rule_id in executable for rule_id in flags}
     # 摘要只覆盖 rule_id/state，附加字段不影响内容摘要。
-    assert detail["content_digest"] == service.compute_entries_digest(detail["entries"])
+    digest_entries = [
+        {"rule_id": item["rule_id"], "state": item["state"]}
+        for item in detail["entries"]
+    ]
+    assert detail["content_digest"] == service.compute_entries_digest(digest_entries)
 
     draft = http.post(f"{BASE}/{KEY}/draft", json={}).json()["data"]
     assert all(isinstance(item["executable"], bool) for item in draft["entries"])
@@ -146,7 +157,11 @@ def test_entries_carry_rule_master_metadata_including_offline_rules(sessions):
         assert item["source_document"] == master[item["rule_id"]].source_document
     # 下线规则（如 LX0609-033）同样有名称与来源文书。
     assert by_id["LX0609-033"]["state"] == "offline" and by_id["LX0609-033"]["qc_point"]
-    assert detail["content_digest"] == service.compute_entries_digest(detail["entries"])
+    digest_entries = [
+        {"rule_id": item["rule_id"], "state": item["state"]}
+        for item in detail["entries"]
+    ]
+    assert detail["content_digest"] == service.compute_entries_digest(digest_entries)
 
     draft = http.post(f"{BASE}/{KEY}/draft", json={}).json()["data"]
     assert {item["rule_id"]: item["qc_point"] for item in draft["entries"]} == {

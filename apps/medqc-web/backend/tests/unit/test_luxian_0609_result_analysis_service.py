@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.services.workstation.luxian_0609_result_analysis_service import (
+    Luxian0609ResultAnalysisService,
+)
+
 
 @pytest.mark.parametrize('hospital_status', ['inpatient', 'discharged'])
 def test_default_scope_loader_obeys_shared_filter_contract(monkeypatch, hospital_status):
@@ -30,10 +34,6 @@ def test_default_scope_loader_obeys_shared_filter_contract(monkeypatch, hospital
     assert captured['sync_scope'] == 'all'
     assert captured['hospital_status'] == hospital_status
     session.close.assert_called_once()
-
-from app.services.workstation.luxian_0609_result_analysis_service import (
-    Luxian0609ResultAnalysisService,
-)
 
 
 def _record(
@@ -131,6 +131,34 @@ def test_analysis_uses_latest_canonical_items_and_never_exposes_technical_status
         ("LX0609-001", 2),
         ("LX0609-017", 0),
     ]
+
+
+def test_doctor_with_no_visible_items_keeps_canonical_record_ready(monkeypatch):
+    record = _record("visit-1")
+    result = _ready("2026-08-19T08:00:00+00:00", ("LX0609-001", "non_compliant"))
+    result.update({"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "v2"})
+    service, _ = _service(
+        monkeypatch,
+        [record],
+        {("inst-a", "patient-visit-1", "visit-1"): result},
+    )
+    monkeypatch.setattr(
+        "app.services.workstation.luxian_0609_result_analysis_service.project_doctor_visible_items",
+        lambda *_args, **_kwargs: [],
+    )
+
+    payload = service.get_analysis(
+        care_phase="inpatient",
+        doctor_visibility={"institute_id": "inst-a", "department_name": "重症医学科"},
+    )
+
+    assert payload["kpis"] == {
+        "scoped_record_total": 1,
+        "ready_record_total": 1,
+        "unavailable_result_total": 0,
+    }
+    assert payload["rule_distribution"] == []
+    assert payload["record_page"]["items"] == []
 
 
 def test_analysis_filters_selected_rule_and_status_then_returns_case_drilldown(monkeypatch):
