@@ -51,6 +51,191 @@ const issues: QCRecordCompareIssue[] = [
 ]
 
 describe('QCRecordCompareWorkbench', () => {
+  it('定位正文迟到时不能覆盖已切换病例的正文与高亮', async () => {
+    let resolveOld!: (value: unknown) => void
+    const pending = new Promise((resolve) => {
+      resolveOld = resolve
+    })
+    const evidence = {
+      source_ref: 'safe-old-ref',
+      source_type: 'admission_record',
+      evidence_excerpt: '旧病例持续腹痛三天入院',
+    }
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        documents: [
+          {
+            key: 'old-doc',
+            source_ref: 'safe-old-ref',
+            document_type: 'admission_record',
+            title: '旧文书',
+            execution_domain: 'admission_record',
+            content_loaded: false,
+          },
+        ],
+      },
+    })
+    getDocumentMock.mockReturnValueOnce(pending)
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'old-visit',
+        instituteId: 'H-1',
+        patientId: 'old-patient',
+        jobId: 'old-job',
+        issues: [],
+        singleRecordItems: [
+          {
+            rule_id: 'LX0609-001',
+            rule_name: '主诉',
+            status: 'non_compliant',
+            evidence: [evidence],
+          },
+        ],
+        evidenceTarget: {
+          instituteId: 'H-1',
+          patientId: 'old-patient',
+          visitId: 'old-visit',
+          jobId: 'old-job',
+          ruleId: 'LX0609-001',
+          evidence,
+        },
+      },
+    })
+    await flushPromises()
+    expect(getDocumentMock).toHaveBeenCalledTimes(1)
+    await wrapper.setProps({
+      visitId: 'new-visit',
+      patientId: 'new-patient',
+      jobId: 'new-job',
+      evidenceTarget: null,
+      providedDocuments: [
+        {
+          key: 'new-doc',
+          title: '新文书',
+          document_type: 'admission_record',
+          content: '当前病例正文',
+        },
+      ],
+    })
+    await flushPromises()
+    resolveOld({
+      success: true,
+      data: {
+        key: 'old-doc',
+        document_type: 'admission_record',
+        content: '旧病例持续腹痛三天入院',
+      },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前病例正文')
+    expect(wrapper.text()).not.toContain('旧病例持续腹痛三天入院')
+    expect(wrapper.find('.record-evidence-highlight').exists()).toBe(false)
+    expect(wrapper.find('.record-location-chip').text()).not.toContain('未找到对应文书')
+    wrapper.unmount()
+  })
+
+  it('分区导航复用当前结果文书引用，身份或作业不匹配不定位', async () => {
+    const evidence = {
+      source_ref: 'safe-admission-ref',
+      source_type: 'admission_record',
+      field_path: 'chief_complaint',
+      evidence_excerpt: '患者持续腹痛三天入院',
+    }
+    const target = {
+      instituteId: 'H-1',
+      patientId: 'P-1',
+      visitId: 'visit-1',
+      jobId: 'job-1',
+      ruleId: 'LX0609-001',
+      evidence,
+    }
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1',
+        instituteId: 'H-1',
+        patientId: 'P-1',
+        jobId: 'job-1',
+        issues: [],
+        singleRecordItems: [
+          {
+            rule_id: 'LX0609-001',
+            rule_name: '主诉',
+            status: 'non_compliant',
+            evidence: [evidence],
+          },
+        ],
+        providedDocuments: [
+          {
+            key: 'admission',
+            source_ref: 'safe-admission-ref',
+            document_type: 'admission_record',
+            title: '入院记录',
+            content: '患者持续腹痛三天入院，神志清楚。',
+          },
+        ],
+        evidenceTarget: { ...target, jobId: 'other-job' },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.record-evidence-highlight').exists()).toBe(false)
+    await wrapper.setProps({ evidenceTarget: target })
+    await flushPromises()
+    expect(wrapper.find('.record-evidence-highlight').text()).toBe('患者持续腹痛三天入院')
+    await wrapper.setProps({
+      evidenceTarget: { ...target, evidence: { ...evidence, source_ref: 'other-ref' } },
+    })
+    await flushPromises()
+    expect(wrapper.find('.record-evidence-highlight').text()).toBe('患者持续腹痛三天入院')
+    wrapper.unmount()
+  })
+
+  it('安全引用命中但文书类型不符时不回退唯一文书', async () => {
+    const evidence = {
+      source_ref: 'safe-admission-ref',
+      source_type: 'discharge_record',
+      evidence_excerpt: '腹痛3天',
+    }
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1',
+        instituteId: 'H-1',
+        patientId: 'P-1',
+        jobId: 'job-1',
+        issues: [],
+        singleRecordItems: [
+          {
+            rule_id: 'LX0609-001',
+            rule_name: '主诉',
+            status: 'non_compliant',
+            evidence: [evidence],
+          },
+        ],
+        providedDocuments: [
+          {
+            key: 'admission',
+            source_ref: 'safe-admission-ref',
+            document_type: 'admission_record',
+            title: '入院记录',
+            content: '腹痛3天',
+          },
+        ],
+        evidenceTarget: {
+          instituteId: 'H-1',
+          patientId: 'P-1',
+          visitId: 'visit-1',
+          jobId: 'job-1',
+          ruleId: 'LX0609-001',
+          evidence,
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.record-evidence-highlight').exists()).toBe(false)
+    expect(wrapper.find('.record-location-chip').text()).toContain('未找到对应文书')
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     getDocumentsMock.mockReset()
     getDocumentMock.mockReset()

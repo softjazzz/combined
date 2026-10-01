@@ -330,6 +330,7 @@ import {
   buildSingleRecordQcResultItems,
   recommendationEvidenceForSingleRecord,
   type SingleRecordQcEvidence,
+  type SingleRecordQcEvidenceTarget,
   type SingleRecordQcResultItem,
 } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 import type {
@@ -357,6 +358,7 @@ const props = withDefaults(
     issues: QCRecordCompareIssue[]
     /** 单病历纵向切片专用；存在时右栏不再使用批量结果旧模型。 */
     singleRecordItems?: SingleRecordQcResultItem[]
+    evidenceTarget?: SingleRecordQcEvidenceTarget | null
     presentationMode?: 'flat' | 'grouped'
     debugContext?: QcResultDebugContext
     activeIssueKey?: string
@@ -710,6 +712,7 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
       )
       if (typedDocuments.length === 1) return { document: typedDocuments[0] }
       if (typedDocuments.length > 1) return null
+      if (referencedDocuments.length) return null
     }
     // 同一安全引用对应多种投影视图时，不允许仅凭引用顺序猜测文书。
     if (referencedDocuments.length === 1) return { document: referencedDocuments[0] }
@@ -890,6 +893,7 @@ async function tryLocateEvidence(
   evidence: QCRecordCompareEvidence,
   allowMetadataFallback: boolean,
 ) {
+  const generation = loadGeneration
   const exactMatch = matchDocumentByIdWithOverride(evidence)
   if (exactMatch) {
     const exactSummary = exactMatch.document
@@ -903,7 +907,7 @@ async function tryLocateEvidence(
           }
         : undefined,
     )
-    if (!exactDocument) return false
+    if (!exactDocument || generation !== loadGeneration) return false
     const range = findQuoteRange(exactDocument, evidence.quote)
     await applyLocatedDocument(
       exactDocument,
@@ -927,7 +931,7 @@ async function tryLocateEvidence(
     if (metadataSummary) {
       selectedDocumentKey.value = metadataSummary.key
       const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
-      if (!metadataDocument) return false
+      if (!metadataDocument || generation !== loadGeneration) return false
       await applyLocatedDocument(
         metadataDocument,
         null,
@@ -940,7 +944,9 @@ async function tryLocateEvidence(
 }
 
 async function locateEvidence(evidence: QCRecordCompareEvidence) {
+  const generation = loadGeneration
   if (documents.value.length && (await tryLocateEvidence(evidence, true))) return
+  if (generation !== loadGeneration) return
   locationState.value = 'missing'
   matchedRange.value = null
   matchedSectionKey.value = ''
@@ -962,6 +968,31 @@ function toCompareEvidence(evidence: SingleRecordQcEvidence): QCRecordCompareEvi
 
 async function locateSingleRecordEvidence(evidence: SingleRecordQcEvidence) {
   await locateEvidence(toCompareEvidence(evidence))
+}
+
+async function locateRequestedEvidence() {
+  const target = props.evidenceTarget
+  if (!target || loading.value) return
+  if (
+    target.instituteId !== props.instituteId ||
+    target.patientId !== props.patientId ||
+    target.visitId !== props.visitId ||
+    target.jobId !== props.jobId
+  )
+    return
+  const item = props.singleRecordItems?.find((row) => row.rule_id === target.ruleId)
+  const evidence =
+    item &&
+    recommendationEvidenceForSingleRecord(item).find(
+      (entry) =>
+        entry.source_ref === target.evidence.source_ref &&
+        entry.source_type === target.evidence.source_type &&
+        entry.field_path === target.evidence.field_path &&
+        entry.recommendation_index === target.evidence.recommendation_index &&
+        entry.evidence_role === target.evidence.evidence_role,
+    )
+  if (!evidence || !evidence.source_ref?.trim()) return
+  await locateSingleRecordEvidence(evidence)
 }
 
 async function selectSingleRecordResult(key: string) {
@@ -1118,6 +1149,7 @@ async function loadDocuments() {
     documents.value = props.providedDocuments.filter((document) => document.enabled !== false)
     selectedDocumentKey.value = resolveDefaultDocumentKey()
     mobileTab.value = 'record'
+    await locateRequestedEvidence()
     return
   }
   if (!visitId && !(jobId && recordRef)) {
@@ -1146,10 +1178,15 @@ async function loadDocuments() {
   }
   documents.value = result.data.documents.filter((document) => document.enabled !== false)
   selectedDocumentKey.value = resolveDefaultDocumentKey()
-  if (selectedIssue.value) await locateSelectedIssue()
+  if (props.evidenceTarget) await locateRequestedEvidence()
+  else if (selectedIssue.value) await locateSelectedIssue()
   else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
 }
 
+watch(
+  () => props.evidenceTarget,
+  () => void locateRequestedEvidence(),
+)
 watch(
   () => props.activeIssueKey,
   (value) => {

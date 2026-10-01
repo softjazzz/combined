@@ -65,6 +65,18 @@
         </div>
         <p>{{ item.conclusion || item.detail || '暂无结论说明' }}</p>
         <small v-if="item.source_document">{{ item.source_document }}</small>
+        <div class="case-defect-partitions__evidence">
+          <button
+            v-for="evidence in itemEvidence(item)"
+            :key="`${evidence.source_ref}:${evidence.field_path || ''}:${evidence.recommendation_index || ''}`"
+            type="button"
+            data-testid="partition-locate-evidence"
+            @click="locateEvidence(item, evidence)"
+          >
+            <FileSearch :size="14" />{{ evidence.source_label || '查看文书依据' }}
+          </button>
+          <small v-if="!itemEvidence(item).length">未提供可定位的文书依据</small>
+        </div>
       </article>
     </div>
 
@@ -116,7 +128,7 @@
 
 <script setup lang="ts">
 import { isAxiosError } from 'axios'
-import { CircleAlert, Info, RefreshCw } from 'lucide-vue-next'
+import { CircleAlert, FileSearch, Info, RefreshCw } from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
 import { getCaseManualDefects } from '@/api/manualDefectReviews'
 import type { ManualDefectReviewItem } from '@/api/manualDefectReviews'
@@ -126,7 +138,12 @@ import {
   getLatestLuxian0609RecordDefectPartitions,
   type CaseDefectPartitionsPayload,
 } from '@/services/sichuan-rule-workspace-service'
-import type { SingleRecordQcResultItem } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
+import {
+  recommendationEvidenceForSingleRecord,
+  type SingleRecordQcEvidence,
+  type SingleRecordQcEvidenceTarget,
+  type SingleRecordQcResultItem,
+} from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
 type PartitionKey = 'confirmed' | 'veto' | 'manual' | 'coding' | 'core'
 export interface CaseDefectTarget {
@@ -145,7 +162,10 @@ const props = defineProps<{
   initialTab?: 'confirmed' | 'manual'
   initialTarget?: CaseDefectTarget | null
 }>()
-const emit = defineEmits<{ forbidden: [] }>()
+const emit = defineEmits<{
+  forbidden: []
+  'locate-evidence': [target: SingleRecordQcEvidenceTarget]
+}>()
 
 const activeTab = ref<PartitionKey>(props.initialTab ?? 'confirmed')
 const panelRoot = ref<HTMLElement | null>(null)
@@ -222,6 +242,24 @@ const vetoItems = computed(() => canonicalItemsFor(vetoRuleIds.value))
 const activeCanonicalItems = computed(() =>
   activeTab.value === 'veto' ? vetoItems.value : confirmedItems.value,
 )
+
+function itemEvidence(item: SingleRecordQcResultItem) {
+  return recommendationEvidenceForSingleRecord(item).filter((evidence) =>
+    /^[a-z0-9][a-z0-9:_-]{1,127}$/i.test(evidence.source_ref?.trim() || ''),
+  )
+}
+
+function locateEvidence(item: SingleRecordQcResultItem, evidence: SingleRecordQcEvidence) {
+  if (loading.value || activeError.value || activeMessage.value || !partition.value) return
+  emit('locate-evidence', {
+    instituteId: props.instituteId,
+    patientId: props.patientId,
+    visitId: props.visitId,
+    jobId: props.jobId,
+    ruleId: item.rule_id,
+    evidence,
+  })
+}
 const normalizedTargetRuleId = computed(() =>
   String(props.initialTarget?.ruleId || '')
     .trim()
@@ -599,6 +637,23 @@ watch(
   font-size: 13px;
   line-height: 21px;
   overflow-wrap: anywhere;
+}
+.case-defect-partitions__evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.case-defect-partitions__evidence button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
 }
 .case-defect-partitions__footnote {
   margin: 10px 4px 0;

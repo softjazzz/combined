@@ -108,6 +108,36 @@ function tab(wrapper: ReturnType<typeof mountPanel>, label: string) {
 }
 
 describe('CaseDefectPartitionsPanel', () => {
+  it('只把当前确认缺陷的既有文书依据连同三坐标和作业传给联审', async () => {
+    const evidence = {
+      source_ref: 'safe-admission-ref',
+      source_type: 'admission_record',
+      field_path: 'chief_complaint',
+    }
+    const wrapper = mountPanel({ canonicalItems: [{ ...canonicalItems[0], evidence: [evidence] }] })
+    await flushPromises()
+    await wrapper.get('[data-testid="partition-locate-evidence"]').trigger('click')
+    expect(wrapper.emitted('locate-evidence')?.[0]).toEqual([
+      {
+        instituteId: 'H-1',
+        patientId: 'P-1',
+        visitId: 'V-1',
+        jobId: 'job-1',
+        ruleId: 'LX0609-001',
+        evidence,
+      },
+    ])
+    wrapper.unmount()
+  })
+
+  it('没有可信文书依据时不以规则目录文书名伪造定位', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="partition-locate-evidence"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('未提供可定位的文书依据')
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     getPartitions.mockReset().mockResolvedValue({ success: true, data: partitionPayload() })
     getManual.mockReset().mockResolvedValue({

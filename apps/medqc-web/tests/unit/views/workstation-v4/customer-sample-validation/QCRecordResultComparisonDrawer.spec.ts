@@ -54,6 +54,7 @@ const QCRecordCompareWorkbenchStub = defineComponent({
     recordRef: { type: String, default: '' },
     issues: { type: Array, default: () => [] },
     singleRecordItems: { type: Array, default: () => [] },
+    evidenceTarget: { type: Object, default: null },
     debugContext: { type: Object, default: undefined },
     presentationMode: { type: String, default: 'flat' },
   },
@@ -542,6 +543,28 @@ describe('QCRecordResultComparisonDrawer', () => {
     await wrapper.get('[data-testid="record-result-nav-prev"]').trigger('click')
     expect(wrapper.emitted('navigate-prev')).toHaveLength(1)
     expect(wrapper.find('[data-testid="record-result-nav-position"]').exists()).toBe(false)
+  })
+
+  it('分区文书依据传入当前联审工作区，切换病例清空导航目标', async () => {
+    authState.roles = ['qc_manager']
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped', { recordReview: true, scoreScene: 'running' })
+    await flushPromises()
+    const target = {
+      instituteId: 'H1',
+      patientId: 'P001',
+      visitId: 'V001',
+      jobId: 'job-safe-001',
+      ruleId: 'LX0609-018',
+      evidence: { source_ref: 'safe-admission-ref' },
+    }
+    wrapper.getComponent(CaseDefectPartitionsPanelStub).vm.$emit('locate-evidence', target)
+    await flushPromises()
+    expect(workbenchProps?.evidenceTarget).toEqual(target)
+    await wrapper.setProps({ focus: { visitId: 'V002', instituteId: 'H1', patientId: 'P002' } })
+    await flushPromises()
+    expect(workbenchProps?.evidenceTarget).toBeNull()
+    wrapper.unmount()
   })
 
   it('五类缺陷分区与病例审核同条件挂载，并按三坐标、场景和本次结果传入', async () => {

@@ -141,6 +141,7 @@
           :initial-tab="initialDefectPartition"
           :initial-target="initialDefectTarget"
           @forbidden="defectPartitionsForbidden = true"
+          @locate-evidence="evidenceTarget = $event"
         />
         <!-- 操作记录时间线：只装配各 owner 的事件，只读；与缺陷分区同一挂载条件。 -->
         <CaseOperationTimeline
@@ -163,6 +164,7 @@
         :job-id="latestResult.job_id"
         :issues="[]"
         :single-record-items="latestResult.items"
+        :evidence-target="evidenceTarget"
         :debug-context="debugContext"
         :presentation-mode="presentationMode"
       />
@@ -195,7 +197,10 @@ import {
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
-import type { SingleRecordQcResultPayload } from './single-record-result-model'
+import type {
+  SingleRecordQcEvidenceTarget,
+  SingleRecordQcResultPayload,
+} from './single-record-result-model'
 import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
 
 export interface QCRecordResultFocus {
@@ -325,6 +330,7 @@ const loading = ref(false)
 const exporting = ref(false)
 const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
+const evidenceTarget = ref<SingleRecordQcEvidenceTarget | null>(null)
 const authorizedRecordRef = ref('')
 const qcTimeText = ref('')
 let activeRequestSequence = 0
@@ -406,6 +412,7 @@ async function loadLatestResult() {
   const requestSequence = ++activeRequestSequence
   const focus = props.focus
   latestResult.value = null
+  evidenceTarget.value = null
   reviewForbidden.value = false
   defectPartitionsForbidden.value = false
   operationsForbidden.value = false

@@ -24,6 +24,16 @@ export interface SingleRecordQcEvidence {
   evidence_role?: 'opinion' | 'execution'
 }
 
+/** 联审导航只消费当前结果已保存的文书依据。 */
+export interface SingleRecordQcEvidenceTarget {
+  instituteId: string
+  patientId: string
+  visitId: string
+  jobId: string
+  ruleId: string
+  evidence: SingleRecordQcEvidence
+}
+
 function isSafeRecommendationEvidenceRef(
   value: unknown,
 ): value is { source_type: string; source_ref: string } {
