@@ -1,5 +1,11 @@
 <template>
   <main class="staff-analysis">
+    <a-tabs v-model:active-key="reportTab">
+      <a-tab-pane key="staff" tab="质控员工作分析" />
+      <a-tab-pane key="manual" tab="人工质控报表" />
+    </a-tabs>
+    <ManualQualityReportPanel v-if="reportTab === 'manual'" />
+    <div v-show="reportTab === 'staff'">
     <header class="page-head">
       <div>
         <h1>质控员工作分析</h1>
@@ -184,6 +190,7 @@
         </template>
       </template>
     </a-drawer>
+    </div>
   </main>
 </template>
 
@@ -192,6 +199,8 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleAlert, Download, RefreshCw, Search } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import ManualQualityReportPanel from './ManualQualityReportPanel.vue'
+const reportTab = ref('staff')
 import {
   exportStaffAnalysis,
   getStaffAnalysis,

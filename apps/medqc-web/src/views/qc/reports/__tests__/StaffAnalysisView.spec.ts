@@ -76,6 +76,9 @@ function render(): VueWrapper {
   const wrapper = mount(StaffAnalysisView, {
     global: {
       stubs: {
+        'a-tabs': { props: ['activeKey'], emits: ['update:activeKey'], template: '<nav><button class="manual-tab" @click="$emit(\'update:activeKey\', \'manual\')">人工质控报表</button><slot /></nav>' },
+        'a-tab-pane': true,
+        ManualQualityReportPanel: { template: '<section class="manual-report-entry">人工报表入口</section>' },
         'a-drawer': {
           props: ['open', 'title'],
           emits: ['update:open'],
@@ -98,6 +101,13 @@ function deferred<T>() {
 }
 
 describe('StaffAnalysisView', () => {
+  it('复用既有报告页面的人工质控tab入口', async () => {
+    const wrapper = render()
+    await settle()
+    await wrapper.get('.manual-tab').trigger('click')
+    await settle()
+    expect(wrapper.get('.manual-report-entry').text()).toContain('人工报表入口')
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     state.auth.userId = 'admin-1'
