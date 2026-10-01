@@ -87,6 +87,37 @@ const run: TaskScheduleRunResponse = {
 describe('task schedules API', () => {
   beforeEach(() => vi.restoreAllMocks())
 
+  it.each(['record_type_count', 'record_type_ratio'] as const)(
+    '类型计划%s回执保留完整类型配置与分配方式',
+    async (method) => {
+      const config = {
+        institutes: [
+          {
+            institute_id: 'SYN-H',
+            critical: { positive_codes: ['C+'], negative_codes: ['C-'] },
+            difficult: { positive_codes: ['D+'], negative_codes: ['D-'] },
+          },
+        ],
+        overlap_policy: 'priority',
+        priority: ['difficult', 'critical'],
+        selected_buckets: ['difficult'],
+      }
+      const typed = {
+        ...schedule,
+        task_config: {
+          ...schedule.task_config,
+          sampling_method: method,
+          sampling_config: { record_type_config: config },
+          assign_method: 'by_record_type',
+        },
+      }
+      vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response(typed))
+      const result = await getTaskSchedule(schedule.id)
+      expect(result.success).toBe(true)
+      expect(result.data?.task_config).toEqual(typed.task_config)
+    },
+  )
+
   it('创建只发送源草稿、配置版本和严格时间配置', async () => {
     const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response(schedule))
     const payload: TaskScheduleCreateRequest = {

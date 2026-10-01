@@ -73,7 +73,7 @@
 </template>
 <script setup lang="ts">
 import { Plus, Trash2 } from 'lucide-vue-next'
-import type { TaskRecordTypeConfig } from '@/api/tasks'
+import type { TaskRecordTypeBucket, TaskRecordTypeConfig } from '@/api/tasks'
 const props = defineProps<{
   modelValue?: TaskRecordTypeConfig
   required?: boolean
@@ -97,7 +97,16 @@ function toggleFilter(enabled: boolean) {
   else delete next.selected_buckets
   emit('update:modelValue', next)
 }
-function changeBuckets(value: NonNullable<TaskRecordTypeConfig['selected_buckets']>) {
+function isTypeBucket(value: unknown): value is TaskRecordTypeBucket {
+  return (
+    value === 'critical' ||
+    value === 'difficult' ||
+    value === 'critical_and_difficult' ||
+    value === 'ordinary'
+  )
+}
+function changeBuckets(value: unknown) {
+  if (!Array.isArray(value) || !value.every(isTypeBucket)) return
   const next = copy()
   next.selected_buckets = value
   emit('update:modelValue', next)
@@ -124,8 +133,10 @@ function changeCodes(
   index: number,
   flag: 'critical' | 'difficult',
   key: 'positive_codes' | 'negative_codes',
-  values: string[],
+  values: unknown,
 ) {
+  if (!Array.isArray(values) || !values.every((item): item is string => typeof item === 'string'))
+    return
   const next = copy()
   next.institutes[index][flag][key] = values
   emit('update:modelValue', next)
@@ -136,7 +147,8 @@ function changePolicy(value: 'separate' | 'priority') {
   delete next.priority
   emit('update:modelValue', next)
 }
-function changePriority(value: 'critical' | 'difficult') {
+function changePriority(value: unknown) {
+  if (value !== 'critical' && value !== 'difficult') return
   const next = copy()
   next.priority = value === 'critical' ? ['critical', 'difficult'] : ['difficult', 'critical']
   emit('update:modelValue', next)

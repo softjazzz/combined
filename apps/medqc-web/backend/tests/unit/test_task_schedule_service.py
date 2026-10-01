@@ -218,6 +218,17 @@ def test_create_final_schedule_replaces_source_window_and_rejects_once(schedule_
     assert created["task_config"]["sampling_config"]["case_scope"] == "discharged"
 
 
+@pytest.mark.parametrize("method,parameters", [("record_type_count", {"total": 2}), ("record_type_ratio", {"percentage": 50, "max_per_group": 3})])
+def test_schedule_saves_and_reads_explicit_record_type_config(schedule_store, method, parameters):
+    types = {"institutes": [{"institute_id": "SYN-H", "critical": {"positive_codes": ["C+"], "negative_codes": ["C-"]}, "difficult": {"positive_codes": ["D+"], "negative_codes": ["D-"]}}], "overlap_policy": "priority", "priority": ["difficult", "critical"], "selected_buckets": ["difficult"]}
+    config = {"case_scope": "active", "record_type_config": types, **parameters}
+    _insert_source(schedule_store, sampling_method=method, sampling_config=json.dumps(config), assign_method="by_record_type")
+    created = service.create_task_schedule(actor_id="owner-1", is_manager=False, request_id="SYN-type-plan", source_task_id="source-1", source_configuration_version=3, timing_config=_future_daily())
+    assert created["task_config"]["sampling_config"] == config
+    preview = service.get_task_schedule(created["id"], actor_id="owner-1")
+    assert preview["task_config"] == created["task_config"]
+
+
 def test_create_freezes_source_without_mutating_it(schedule_store) -> None:
     created = _create(schedule_store)
     assert created["source_task_id"] == "source-1"

@@ -210,6 +210,75 @@ describe('TaskScheduleDrawer', () => {
     vi.unstubAllGlobals()
   })
 
+  it.each(['record_type_count', 'record_type_ratio'] as const)(
+    '类型抽样%s源草稿可创建计划且预览标签明确',
+    async (method) => {
+      const types = {
+        institutes: [
+          {
+            institute_id: 'SYN-H',
+            critical: { positive_codes: ['C+'], negative_codes: ['C-'] },
+            difficult: { positive_codes: ['D+'], negative_codes: ['D-'] },
+          },
+        ],
+        overlap_policy: 'separate',
+        selected_buckets: ['critical'],
+      }
+      const config = {
+        case_scope: 'active',
+        total: 2,
+        percentage: 50,
+        max_per_group: 3,
+        record_type_config: types,
+      }
+      mocks.getTaskEdit.mockResolvedValue({
+        success: true,
+        data: {
+          ...sourceDetail,
+          sampling_method: method,
+          sampling_config: config,
+          assign_method: 'by_record_type',
+        },
+      })
+      const wrapper = mountDrawer()
+      await flushPromises()
+      const vm = wrapper.vm as unknown as {
+        sourceDetailError: string
+        samplingLabel: string
+        timingKind: 'daily'
+        startDate: Dayjs
+        executionTime: Dayjs
+        confirmCreate: () => void
+        selectedSchedule: TaskScheduleResponse
+      }
+      expect(vm.sourceDetailError).toBe('')
+      expect(vm.samplingLabel).toContain('每机构内类型桶')
+      vm.timingKind = 'daily'
+      vm.startDate = dayjs('2026-10-02')
+      vm.executionTime = dayjs().hour(9).minute(5)
+      vm.confirmCreate()
+      await flushPromises()
+      expect(mocks.createTaskSchedule.mock.calls[0][0]).toMatchObject({
+        source_task_id: 'task-1',
+        source_configuration_version: 3,
+      })
+      expect(mocks.createTaskSchedule.mock.calls[0][0]).not.toHaveProperty('sampling_config')
+      vm.selectedSchedule = {
+        ...schedule,
+        task_config: {
+          ...schedule.task_config,
+          sampling_method: method,
+          sampling_config: config,
+          assign_method: 'by_record_type',
+        },
+      }
+      await flushPromises()
+      expect(wrapper.text()).toContain(
+        method.endsWith('count') ? '每病历类型定额' : '每病历类型比例',
+      )
+    },
+  )
+
   it('创建只引用已核实源草稿和版本，不重拼抽样或分配配置', async () => {
     const wrapper = mountDrawer()
     await flushPromises()

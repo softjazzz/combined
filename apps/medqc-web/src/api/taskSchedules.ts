@@ -10,7 +10,11 @@ export type TaskScheduleState = 'active' | 'paused' | 'ended' | 'cancelled'
 export type TaskScheduleRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 export type TaskScheduleTriggerType = 'scheduled' | 'manual'
 export type TaskScheduleSamplingMethod = import('./tasks').SamplingMethod
-export type TaskScheduleAssignMethod = 'by_ratio' | 'by_original_reviewer' | 'by_department'
+export type TaskScheduleAssignMethod =
+  | 'by_ratio'
+  | 'by_original_reviewer'
+  | 'by_department'
+  | 'by_record_type'
 
 export interface TaskScheduleTimingOnce {
   kind: 'once'
@@ -237,11 +241,14 @@ function parseTaskConfig(value: unknown): TaskScheduleTaskConfig {
       value.sampling_method !== 'qc_physician_count' &&
       value.sampling_method !== 'qc_physician_ratio' &&
       value.sampling_method !== 'qc_reviewer_count' &&
-      value.sampling_method !== 'qc_reviewer_ratio') ||
+      value.sampling_method !== 'qc_reviewer_ratio' &&
+      value.sampling_method !== 'record_type_count' &&
+      value.sampling_method !== 'record_type_ratio') ||
     !isObject(value.sampling_config) ||
     (value.assign_method !== 'by_ratio' &&
       value.assign_method !== 'by_original_reviewer' &&
-      value.assign_method !== 'by_department') ||
+      value.assign_method !== 'by_department' &&
+      value.assign_method !== 'by_record_type') ||
     !isObject(value.assignee_config)
   ) {
     throw new Error('定时计划响应格式无效')

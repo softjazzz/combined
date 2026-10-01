@@ -450,6 +450,8 @@ const samplingMethodLabels: Record<import('@/api/tasks').SamplingMethod, string>
   qc_physician_ratio: '每质控医师签名比例',
   qc_reviewer_count: '每最近审核质控员定额',
   qc_reviewer_ratio: '每最近审核质控员比例',
+  record_type_count: '每病历类型定额',
+  record_type_ratio: '每病历类型比例',
 }
 const samplingLabel = computed(() => {
   const detail = sourceDetail.value
@@ -465,11 +467,14 @@ const samplingLabel = computed(() => {
     return `每科室 ${String(detail.sampling_config?.percentage ?? '未知')}%，最多 ${String(detail.sampling_config?.max_per_group ?? '未知')} 份`
   if (
     detail.sampling_method.startsWith('qc_physician_') ||
-    detail.sampling_method.startsWith('qc_reviewer_')
+    detail.sampling_method.startsWith('qc_reviewer_') ||
+    detail.sampling_method.startsWith('record_type_')
   ) {
     const group = detail.sampling_method.startsWith('qc_physician_')
       ? '每机构内质控医师签名'
-      : '每机构内最近审核质控员'
+      : detail.sampling_method.startsWith('record_type_')
+        ? '每机构内类型桶'
+        : '每机构内最近审核质控员'
     return detail.sampling_method.endsWith('_count')
       ? `${group}固定 ${String(detail.sampling_config?.total ?? '未知')} 份`
       : `${group} ${String(detail.sampling_config?.percentage ?? '未知')}%，最多 ${String(detail.sampling_config?.max_per_group ?? '未知')} 份`
@@ -481,6 +486,7 @@ const assignLabel = computed(() => {
   if (method === 'by_ratio') return '按比例均分'
   if (method === 'by_original_reviewer') return '原质控员'
   if (method === 'by_department') return '按科室'
+  if (method === 'by_record_type') return '按冻结类型桶'
   return '未知'
 })
 
@@ -682,7 +688,8 @@ function sourceIsEligible(detail: TaskEditDetail): boolean {
     !!detail.sampling_config &&
     (detail.assign_method === 'by_ratio' ||
       detail.assign_method === 'by_original_reviewer' ||
-      detail.assign_method === 'by_department') &&
+      detail.assign_method === 'by_department' ||
+      detail.assign_method === 'by_record_type') &&
     requiredPlanningFields.every((field) => detail.editable_fields.includes(field))
   )
 }
