@@ -25,6 +25,7 @@ export type RectificationOperationType =
   | 'rectification_approved'
   | 'rectification_rejected'
   | 'rectification_urged'
+  | 'rectification_urge_withdrawn'
 
 /** 整改 owner 的冻结来源及事件快照，不从当前病例结果推导归属。 */
 export interface RectificationOperationSummary {
@@ -41,6 +42,7 @@ export interface RectificationOperationSummary {
   new_status: string
   comment: string
   recipient_id: string
+  related_event_id?: string | null
 }
 
 /** 质控运行完成：结果对象 join 批量任务。 */
@@ -145,6 +147,7 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<KnownCaseOperationType>([
   'rectification_approved',
   'rectification_rejected',
   'rectification_urged',
+  'rectification_urge_withdrawn',
 ])
 
 export function isKnownCaseOperation(item: CaseOperation): item is KnownCaseOperation {

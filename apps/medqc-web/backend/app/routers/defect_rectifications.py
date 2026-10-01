@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.security import get_current_user
 from ..services.defect_rectification_service import DefectRectificationService, RectificationError
@@ -35,8 +35,15 @@ class Create(BaseModel):
 class Action(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     version: int = Field(strict=True, ge=1)
-    action: Literal["submit", "approve", "reject", "urge"]
+    action: Literal["submit", "approve", "reject", "urge", "withdraw_urge"]
     comment: str = Field(min_length=10, max_length=2000)
+    urge_event_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+    @model_validator(mode="after")
+    def validate_urge_reference(self):
+        if (self.action == "withdraw_urge") != (self.urge_event_id is not None):
+            raise ValueError("撤回催办须且仅须提供原催办事件")
+        return self
 
 
 def _call(user, method, *args, **kwargs):
@@ -65,8 +72,15 @@ def create(body: Create, user=Depends(get_current_user)):
 
 @router.get("")
 def list_tasks(state: str | None = None, page: int = Query(1, ge=1),
-               page_size: int = Query(20, ge=1, le=100), user=Depends(get_current_user)):
-    return _call(user, service.list, state=state, page=page, page_size=page_size)
+               page_size: int = Query(20, ge=1, le=100),
+               institute_id: str | None = None, patient_id: str | None = None, visit_id: str | None = None,
+               scene: str | None = None, target_kind: str | None = None, target_id: str | None = None,
+               root_job_id: str | None = None, envelope_id: str | None = None,
+               user=Depends(get_current_user)):
+    source = dict(institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, scene=scene,
+                  target_kind=target_kind, target_id=target_id, root_job_id=root_job_id, envelope_id=envelope_id)
+    return _call(user, service.list, state=state, page=page, page_size=page_size,
+                 source=source if any(value is not None for value in source.values()) else None)
 
 
 @router.get("/candidates")

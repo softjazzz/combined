@@ -129,6 +129,70 @@ def test_stale_cas_and_invalid_transition(setup):
     assert len(service.detail("qc", row["id"])["events"]) == 2
 
 
+def test_withdraw_urge_references_exact_event_and_never_changes_rectification_state(setup):
+    service, _, _, data = setup
+    row = service.create("qc", data)
+    service.transition("qc", row["id"], version=1, action="urge", comment="请及时处理合成缺陷并提交")
+    urge = service.detail("qc", row["id"])["events"][-1]
+    assert urge["can_withdraw"] is True
+    withdrawn = service.transition("qc", row["id"], version=2, action="withdraw_urge",
+                                   urge_event_id=urge["id"], comment="已电话联系医生故撤回此提醒")
+    assert withdrawn["status"] == "pending" and withdrawn["version"] == 3
+    events = service.detail("qc", row["id"])["events"]
+    assert events[-1]["related_event_id"] == urge["id"]
+    assert events[-1]["old_status"] == events[-1]["new_status"] == "pending"
+    assert not any(event["can_withdraw"] for event in events)
+    for version in (2, 3):
+        with pytest.raises(RectificationError) as error:
+            service.transition("qc", row["id"], version=version, action="withdraw_urge",
+                               urge_event_id=urge["id"], comment="重复撤回不得生成重复历史事件")
+        assert error.value.status == 409
+    assert len(service.detail("qc", row["id"])["events"]) == 3
+
+
+@pytest.mark.parametrize("actor", ["doc", "other", "cross"])
+def test_withdraw_urge_permissions(setup, actor):
+    service, _, _, data = setup
+    row = service.create("qc", data)
+    service.transition("qc", row["id"], version=1, action="urge", comment="合成催办需要指定医生处理")
+    urge = service.detail("qc", row["id"])["events"][-1]
+    with pytest.raises(RectificationError) as error:
+        service.transition(actor, row["id"], version=2, action="withdraw_urge",
+                           urge_event_id=urge["id"], comment="未授权账号不可撤回催办")
+    assert error.value.status == 403
+
+
+def test_urge_from_other_round_or_answered_before_rejection_cannot_be_withdrawn(setup):
+    service, _, _, data = setup
+    old = service.create("qc", data)
+    service.transition("qc", old["id"], version=1, action="urge", comment="旧轮合成催办提醒医生处理")
+    event_id = service.detail("qc", old["id"])["events"][-1]["id"]
+    new = service.create("qc", {**data, "root_job_id": "job2", "envelope_id": "env2"})
+    with pytest.raises(RectificationError):
+        service.transition("qc", new["id"], version=1, action="withdraw_urge", urge_event_id=event_id,
+                           comment="新轮不能撤回旧轮的催办事件")
+    service.transition("doc", old["id"], version=2, action="submit", comment="已完成旧轮合成整改说明提交")
+    service.transition("qc", old["id"], version=3, action="reject", comment="需补充旧轮合成整改证据")
+    assert not any(event["can_withdraw"] for event in service.detail("qc", old["id"])["events"])
+    with pytest.raises(RectificationError):
+        service.transition("qc", old["id"], version=4, action="withdraw_urge", urge_event_id=event_id,
+                           comment="已回应过的催办不可再次撤回")
+
+
+def test_exact_source_list_isolated_before_pagination(setup):
+    service, _, _, data = setup
+    first = service.create("qc", data)
+    service.create("qc", {**data, "root_job_id": "job2", "envelope_id": "env2"})
+    source = {key: data[key] for key in (
+        "institute_id", "patient_id", "visit_id", "scene", "target_kind", "target_id", "root_job_id", "envelope_id",
+    )}
+    result = service.list("qc", source=source, page_size=1)
+    assert result["total"] == 1 and result["items"][0]["id"] == first["id"]
+    assert service.list("qc", source={**source, "envelope_id": "missing"})["total"] == 0
+    with pytest.raises(RectificationError):
+        service.list("qc", source={"visit_id": data["visit_id"]})
+
+
 @pytest.mark.parametrize("change", [{"institute_id": "H2"}, {"department": "外科"}, {"roles": {"qc_staff"}}])
 def test_assignee_must_be_persistent_same_scope_doctor(setup, change):
     service, sessions, people, data = setup

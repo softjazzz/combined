@@ -309,6 +309,22 @@ def test_unknown_persistent_account_fails_closed(env):
         timeline(actor_id="missing-user")
 
 
+def test_withdraw_urge_history_keeps_original_reference(env):
+    factory, _ = env
+    add_rectification(factory)
+    with factory.begin() as session:
+        session.add(DefectRectificationEvent(
+            id="withdraw-old", rectification_id="rect-old", action="withdraw_urge", actor_id="mgr-1",
+            old_status="pending", new_status="pending", version=6, comment="合成撤回提醒",
+            recipient_id="doctor-1", related_event_id="rect-old-2", created_at=at(60),
+        ))
+    event = timeline()["items"][0]
+    assert event["type"] == "rectification_urge_withdrawn"
+    assert event["summary"]["related_event_id"] == "rect-old-2"
+    assert event["summary"]["root_job_id"] == "old-job"
+    assert event["summary"]["new_status"] == "pending"
+
+
 def test_same_visit_other_institute_is_isolated(env):
     factory, _ = env
     with factory.begin() as session:

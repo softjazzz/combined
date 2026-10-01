@@ -50,9 +50,11 @@ class DefectRectificationEvent(Base):
     version = Column(Integer, nullable=False)
     comment = Column(Text, nullable=False)
     recipient_id = Column(String(36), nullable=False)
+    related_event_id = Column(String(36), ForeignKey("qc.qc_defect_rectification_events.id"))
     created_at = Column(DateTime, nullable=False)
     __table_args__ = (
         UniqueConstraint("rectification_id", "version", name="uq_rectification_event_version"),
+        UniqueConstraint("related_event_id", name="uq_rectification_event_withdrawal"),
         Index("ix_rectification_event_recipient", "recipient_id", "created_at"),
         {"schema": "qc"},
     )

@@ -302,6 +302,7 @@ def _rectification_events(session: Any, identity: tuple[str, str, str]) -> list[
         "assign": "rectification_assigned", "submit": "rectification_submitted",
         "approve": "rectification_approved", "reject": "rectification_rejected",
         "urge": "rectification_urged",
+        "withdraw_urge": "rectification_urge_withdrawn",
     }
     events = []
     for event, rectification in rows:
@@ -318,6 +319,7 @@ def _rectification_events(session: Any, identity: tuple[str, str, str]) -> list[
                 "version": event.version, "old_status": event.old_status,
                 "new_status": event.new_status, "comment": event.comment,
                 "recipient_id": event.recipient_id,
+                "related_event_id": event.related_event_id,
             },
         ))
     return events

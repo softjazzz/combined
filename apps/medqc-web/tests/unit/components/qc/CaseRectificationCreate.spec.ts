@@ -33,11 +33,12 @@ const target = {
   envelope_id: 'E1',
   label: '缺陷一',
 }
-function make() {
+function make(extra = {}) {
   return mount(CaseRectificationCreate, {
-    props,
+    props: { ...props, ...extra },
     global: {
       stubs: {
+        HomeRectificationTodos: true,
         'a-modal': Modal,
         'a-select': Select,
         'a-spin': { template: '<div><slot/></div>' },
@@ -61,6 +62,22 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id: 'rect1' })
 })
 describe('病例缺陷整改派发', () => {
+  it('缺陷列表所选项冻结八维处理来源，不挂到其他缺陷或新一轮', async () => {
+    mocks.candidates.mockResolvedValue({ targets: [target, { ...target, target_id: 'R2' }], doctors: [] })
+    const wrapper = make({ initialTarget: { source: 'auto', ruleId: 'R1', rootJobId: 'J1', envelopeId: 'E1' } })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    const scope = wrapper.getComponent({ name: 'HomeRectificationTodos' }).props('scope')
+    expect(scope).toEqual({ institute_id: 'H1', patient_id: 'P1', visit_id: 'V1',
+      target_kind: 'canonical_defect', target_id: 'R1', scene: 'running', root_job_id: 'J1', envelope_id: 'E1' })
+    expect(wrapper.findAll('select')[0].text()).not.toContain('R2')
+    await wrapper.setProps({ jobId: 'J2' })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已换轮')
+    expect(wrapper.findComponent({ name: 'HomeRectificationTodos' }).exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('真实候选冻结来源后提交，不发送展示label', async () => {
     const wrapper = make()
     await wrapper.get('button').trigger('click')

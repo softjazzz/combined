@@ -200,6 +200,7 @@ const TYPE_LABELS: Record<string, string> = {
   rectification_approved: '验收整改',
   rectification_rejected: '驳回整改',
   rectification_urged: '催办整改',
+  rectification_urge_withdrawn: '撤回催办',
 }
 const STAGE_LABELS: Record<string, string> = { initial: '初审', recheck: '复审' }
 const REVIEW_DECISION_LABELS: Record<string, string> = { approved: '通过', doubtful: '存疑' }
@@ -283,7 +284,8 @@ function summaryParts(item: CaseOperation): string[] {
     case 'rectification_submitted':
     case 'rectification_approved':
     case 'rectification_rejected':
-    case 'rectification_urged': {
+    case 'rectification_urged':
+    case 'rectification_urge_withdrawn': {
       const s = item.summary
       if (text(s.target_id)) push(`缺陷 ${text(s.target_id)}`)
       push(enumPart('场景', s.scene, SCENE_LABELS))
@@ -293,6 +295,7 @@ function summaryParts(item: CaseOperation): string[] {
       if (text(s.envelope_id)) push(`结果 ${text(s.envelope_id)}`)
       if (text(s.rule_set_version)) push(`规则集 ${text(s.rule_set_version)}`)
       if (isCount(s.version)) push(`整改版本 ${s.version}`)
+      if (text(s.related_event_id)) push(`原催办 ${text(s.related_event_id)}`)
       break
     }
   }

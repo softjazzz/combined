@@ -135,6 +135,7 @@
           :patient-id="focus.patientId"
           :visit-id="focus.visitId"
           :job-id="latestResult.job_id"
+          :initial-target="initialDefectTarget"
         />
         <CaseDefectPartitionsPanel
           v-if="showDefectPartitions && scoreScene"
@@ -239,7 +240,7 @@ const props = withDefaults(
     currentIndex?: number
     totalCount?: number
     initialDefectPartition?: 'confirmed' | 'manual'
-    initialDefectTarget?: CaseDefectTarget | null
+    initialDefectTarget?: (CaseDefectTarget & { rootJobId?: string; envelopeId?: string }) | null
     /** 得分场景：运行列表 running、终末列表 final；未传时不显示得分分区。 */
     scoreScene?: ScoringScene
   }>(),

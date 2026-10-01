@@ -1,9 +1,10 @@
 <template>
   <section>
-    <a-button @click="openForm"><Send :size="14" />派发整改</a-button>
+    <a-button @click="openForm"><Send :size="14" />派发整改 / 整改处理</a-button>
     <a-modal
       v-model:open="open"
-      title="派发缺陷整改"
+      title="缺陷整改"
+      width="min(760px, 100vw)"
       :confirm-loading="saving"
       :ok-button-props="{
         disabled: loading || uncertain || !targetKey || !doctorId || requirement.trim().length < 10,
@@ -30,15 +31,17 @@
             ><a-textarea v-model:value="requirement" :maxlength="2000" :rows="4"
           /></a-form-item>
         </a-form>
+        <HomeRectificationTodos v-if="selectedSource" :scope="selectedSource" />
       </a-spin>
     </a-modal>
   </section>
 </template>
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { Send } from 'lucide-vue-next'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
+import HomeRectificationTodos from '@/views/workstation/HomeRectificationTodos.vue'
 import {
   createRectification,
   getRectificationCandidates,
@@ -49,6 +52,7 @@ const props = defineProps<{
   patientId: string
   visitId: string
   jobId: string
+  initialTarget?: { source: 'auto' | 'manual'; ruleId?: string; defectId?: string; rootJobId?: string; envelopeId?: string } | null
 }>()
 const auth = useAuthStore()
 const open = ref(false),
@@ -67,6 +71,13 @@ const identity = () => ({
   patient_id: props.patientId,
   visit_id: props.visitId,
 })
+const selectedSource = computed(() => {
+  if (targetKey.value === undefined) return undefined
+  const target = targets.value[Number(targetKey.value)]
+  if (!target) return undefined
+  const { label: _label, ...source } = target
+  return { ...identity(), ...source }
+})
 async function load() {
   const token = ++generation
   loading.value = true
@@ -76,10 +87,25 @@ async function load() {
   targets.value = []
   doctors.value = []
   try {
+    if (props.initialTarget?.source === 'auto' && (
+      !props.initialTarget.rootJobId || !props.initialTarget.envelopeId || props.initialTarget.rootJobId !== props.jobId
+    )) throw new Error('所选缺陷缺少可信结果版本或已换轮，请刷新缺陷列表')
     const result = await getRectificationCandidates(identity(), props.jobId)
     if (token !== generation) return
     targets.value = result.targets
     doctors.value = result.doctors
+    if (props.initialTarget) {
+      const expectedKind = props.initialTarget.source === 'auto' ? 'canonical_defect' : 'task_manual_defect'
+      const expectedId = props.initialTarget.source === 'auto' ? props.initialTarget.ruleId : props.initialTarget.defectId
+      targets.value = result.targets.filter((target) => target.target_kind === expectedKind && target.target_id === expectedId && (
+        props.initialTarget?.source !== 'auto' || target.envelope_id === props.initialTarget.envelopeId
+      ))
+      if (targets.value.length === 1) targetKey.value = '0'
+      else {
+        targets.value = []
+        error.value = '所选缺陷已变化或不可用于整改，请刷新病例'
+      }
+    }
     uncertain.value = false
   } catch (e) {
     if (token === generation) error.value = e instanceof Error ? e.message : '候选读取失败'
@@ -138,6 +164,7 @@ watch(
     props.patientId,
     props.visitId,
     props.jobId,
+    props.initialTarget,
     auth.user?.id,
     auth.user?.roles,
   ],

@@ -2,7 +2,7 @@ import { ApiService } from '@/services/apiService'
 import { unwrapApiEnvelope, extractApiErrorMessageFromError } from '@/utils/api-envelope'
 
 export type RectificationState = 'pending' | 'submitted' | 'approved' | 'rejected'
-export type RectificationAction = 'submit' | 'approve' | 'reject' | 'urge'
+export type RectificationAction = 'submit' | 'approve' | 'reject' | 'urge' | 'withdraw_urge'
 export interface RectificationTarget {
   target_kind: 'canonical_defect' | 'task_manual_defect'
   target_id: string
@@ -35,6 +35,8 @@ export interface RectificationDetail extends Rectification {
     comment: string
     created_at: string
     version: number
+    can_withdraw?: boolean
+    related_event_id?: string | null
   }>
 }
 export interface RectificationCandidates {
@@ -60,11 +62,12 @@ export const getRectificationCandidates = (identity: RectificationIdentity, job:
 export const createRectification = (
   data: RectificationIdentity & RectificationTarget & { assignee_id: string; requirement: string },
 ) => request<Rectification>({ url: base, method: 'POST', data })
-export const listRectifications = (state?: RectificationState, page = 1) =>
+export type RectificationSource = RectificationIdentity & RectificationTarget
+export const listRectifications = (state?: RectificationState, page = 1, source?: RectificationSource) =>
   request<{ items: Rectification[]; total: number }>({
     url: base,
     method: 'GET',
-    params: { state, page, page_size: 10 },
+    params: { state, page, page_size: 10, ...source },
   })
 export const getRectification = (id: string) =>
   request<RectificationDetail>({ url: `${base}/${encodeURIComponent(id)}`, method: 'GET' })
@@ -73,9 +76,10 @@ export const actOnRectification = (
   version: number,
   action: RectificationAction,
   comment: string,
+  urgeEventId?: string,
 ) =>
   request<Rectification>({
     url: `${base}/${encodeURIComponent(id)}/actions`,
     method: 'POST',
-    data: { version, action, comment },
+    data: { version, action, comment, ...(urgeEventId ? { urge_event_id: urgeEventId } : {}) },
   })

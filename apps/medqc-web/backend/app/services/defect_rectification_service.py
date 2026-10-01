@@ -126,6 +126,14 @@ def _view(row):
     return {c.name: getattr(row, c.name) for c in row.__table__.columns}
 
 
+def _active_urge_ids(events):
+    # 医生提交已回应此前提醒；被明确撤回的提醒不再有效，历史行保留。
+    submitted_version = max((event.version for event in events if event.action == "submit"), default=0)
+    withdrawn = {event.related_event_id for event in events if event.action == "withdraw_urge"}
+    return {event.id for event in events
+            if event.action == "urge" and event.version > submitted_version and event.id not in withdrawn}
+
+
 class DefectRectificationService:
     def __init__(self, session_factory=None, source_loader=None, department_loader=None,
                  person_loader=None, visibility_check=None):
@@ -195,11 +203,11 @@ class DefectRectificationService:
                 )} | {"label": row.rule_name or row.rule_code or "人工缺陷"})
             return {"targets": targets, "doctors": doctors, "department": department}
 
-    def _event(self, session, row, actor, action, old, comment, recipient):
+    def _event(self, session, row, actor, action, old, comment, recipient, related_event_id=None):
         session.add(Event(id=str(uuid4()), rectification_id=row.id, action=action,
                           actor_id=actor["id"], old_status=old, new_status=row.status,
                           version=row.version, comment=comment, recipient_id=recipient,
-                          created_at=_now()))
+                          created_at=_now(), related_event_id=related_event_id))
 
     def create(self, actor_id, data):
         try:
@@ -231,7 +239,7 @@ class DefectRectificationService:
         except IntegrityError as exc:
             raise RectificationError("同一轮缺陷已派发，请刷新列表", 409) from exc
 
-    def transition(self, actor_id, task_id, *, version, action, comment):
+    def transition(self, actor_id, task_id, *, version, action, comment, urge_event_id=None):
         with self.sessions() as session, session.begin():
             actor = self.person(session, actor_id)
             row = session.execute(select(Task).where(Task.id == task_id).with_for_update()).scalar_one_or_none()
@@ -242,6 +250,8 @@ class DefectRectificationService:
                 raise RectificationError("整改已被更新，请刷新", 409)
             old = row.status
             manager = _manager(actor)
+            if action != "withdraw_urge" and urge_event_id is not None:
+                raise RectificationError("仅撤回催办允许指定催办事件")
             if action == "submit":
                 if actor["id"] != row.assignee_id or "doctor" not in actor["roles"]:
                     raise RectificationError("仅受领医生可提交", 403)
@@ -264,6 +274,16 @@ class DefectRectificationService:
                     raise RectificationError("当前状态无需催办", 409)
                 changes = {}
                 recipient = row.assignee_id
+            elif action == "withdraw_urge":
+                if not manager:
+                    raise RectificationError("仅质控人员可撤回催办", 403)
+                if old not in {"pending", "rejected"}:
+                    raise RectificationError("当前状态没有可撤回催办", 409)
+                events = session.scalars(select(Event).where(Event.rectification_id == row.id)).all()
+                if not urge_event_id or urge_event_id not in _active_urge_ids(events):
+                    raise RectificationError("催办事件已失效或不属于该整改，请刷新", 409)
+                changes = {}
+                recipient = row.assignee_id
             else:
                 raise RectificationError("不支持的整改操作")
             changed = session.execute(update(Task).where(Task.id == row.id, Task.version == version)
@@ -271,16 +291,21 @@ class DefectRectificationService:
             if changed.rowcount != 1:
                 raise RectificationError("整改已被更新，请刷新", 409)
             session.refresh(row)
-            self._event(session, row, actor, action, old, comment, recipient)
+            self._event(session, row, actor, action, old, comment, recipient, urge_event_id)
             session.flush()
             return _view(row)
 
-    def list(self, actor_id, *, state=None, page=1, page_size=20):
+    def list(self, actor_id, *, state=None, page=1, page_size=20, source=None):
         with self.sessions() as session:
             actor = self.person(session, actor_id)
             if not _manager(actor) and "doctor" not in actor["roles"]:
                 raise RectificationError("无整改访问权限", 403)
             conditions = []
+            if source is not None:
+                keys = ("institute_id", "patient_id", "visit_id", "scene", "target_kind", "target_id", "root_job_id", "envelope_id")
+                if set(source) != set(keys) or any(not isinstance(source[key], str) or not source[key].strip() for key in keys):
+                    raise RectificationError("整改来源必须提供完整八维坐标")
+                conditions.extend(getattr(Task, key) == source[key] for key in keys)
             if "admin" not in actor["roles"]:
                 if not actor["institute_id"]:
                     raise RectificationError("账号缺少机构范围", 403)
@@ -307,4 +332,7 @@ class DefectRectificationService:
             _scope(actor, row.institute_id, row.department, assignee_id=row.assignee_id)
             events = session.scalars(select(Event).where(Event.rectification_id == row.id)
                                      .order_by(Event.version)).all()
-            return {**_view(row), "events": [_view(event) for event in events]}
+            active = _active_urge_ids(events) if row.status in {"pending", "rejected"} else set()
+            return {**_view(row), "events": [
+                {**_view(event), "can_withdraw": event.id in active} for event in events
+            ]}

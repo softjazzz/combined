@@ -1,7 +1,7 @@
 <template>
   <section v-if="allowed" class="rectification-todos">
     <header>
-      <h2>缺陷整改待办</h2>
+      <h2>{{ scope ? '该缺陷整改' : '缺陷整改待办' }}</h2>
       <a-select
         v-model:value="state"
         :options="states"
@@ -23,7 +23,7 @@
           </button>
         </li>
       </ul>
-      <p v-if="!loading && !error && !items.length">没有待处理整改</p>
+      <p v-if="!loading && !error && !items.length">{{ scope ? '该缺陷尚无整改记录' : '没有待处理整改' }}</p>
       <a-pagination
         v-if="!error && total"
         v-model:current="page"
@@ -71,6 +71,12 @@
           <a-timeline-item v-for="event in selected.events" :key="event.id">
             {{ eventLabels[event.action] || event.action }} · {{ event.comment }}
             <div>{{ event.created_at }}</div>
+            <a-button
+              v-if="manager && event.can_withdraw"
+              :disabled="saving || uncertain || comment.trim().length < 10"
+              @click="submit('withdraw_urge', event.id)"
+              >撤回该催办</a-button
+            >
           </a-timeline-item>
         </a-timeline>
       </template>
@@ -89,7 +95,9 @@ import {
   type RectificationAction,
   type RectificationDetail,
   type RectificationState,
+  type RectificationSource,
 } from '@/api/defectRectifications'
+const props = defineProps<{ scope?: RectificationSource; refreshKey?: number }>()
 const auth = useAuthStore()
 const manager = computed(() =>
   ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
@@ -107,9 +115,10 @@ const eventLabels: Record<string, string> = {
   approve: '验收通过',
   reject: '驳回整改',
   urge: '催办提醒',
+  withdraw_urge: '撤回催办',
 }
-const states = Object.entries(labels).map(([value, label]) => ({ value, label }))
-const state = ref<RectificationState>('pending'),
+const states = [{ value: '', label: '全部状态' }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]
+const state = ref<RectificationState | ''>(props.scope ? '' : 'pending'),
   page = ref(1),
   total = ref(0)
 const items = ref<Rectification[]>([]),
@@ -150,7 +159,9 @@ async function load() {
   items.value = []
   total.value = 0
   try {
-    const result = await listRectifications(state.value, page.value)
+    const result = props.scope
+      ? await listRectifications(state.value || undefined, page.value, props.scope)
+      : await listRectifications(state.value || undefined, page.value)
     if (token !== listToken) return
     items.value = result.items
     total.value = result.total
@@ -170,18 +181,21 @@ async function show(id: string) {
   uncertain.value = false
   try {
     const result = await getRectification(id)
+    if (props.scope && Object.entries(props.scope).some(([key, value]) => result[key as keyof RectificationSource] !== value))
+      throw new Error('整改来源与所选缺陷不一致，请刷新核对')
     if (token === detailToken) selected.value = result
   } catch (e) {
     if (token === detailToken) detailError.value = e instanceof Error ? e.message : '整改详情不可用'
   }
 }
-async function submit(action: RectificationAction) {
+async function submit(action: RectificationAction, urgeEventId?: string) {
   if (!selected.value || saving.value || uncertain.value || comment.value.trim().length < 10) return
   const item = selected.value,
     token = detailToken
   saving.value = true
   try {
-    await actOnRectification(item.id, item.version, action, comment.value.trim())
+    if (urgeEventId) await actOnRectification(item.id, item.version, action, comment.value.trim(), urgeEventId)
+    else await actOnRectification(item.id, item.version, action, comment.value.trim())
     if (token !== detailToken) return
     saving.value = false
     await show(item.id)
@@ -220,6 +234,12 @@ watch(open, (value) => {
     saving.value = false
   }
 })
+watch(() => [props.scope, props.refreshKey], () => {
+  reset()
+  page.value = 1
+  state.value = props.scope ? '' : 'pending'
+  if (allowed.value) void load()
+}, { deep: true })
 onUnmounted(reset)
 </script>
 <style scoped>

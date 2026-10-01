@@ -54,6 +54,8 @@ export interface WorkstationDefectItem {
   description: string
   status: string
   occurred_at: string | null
+  root_job_id?: string | null
+  envelope_id?: string | null
 }
 
 function normalizeDepartment(raw: unknown): DeptInfo {
@@ -270,6 +272,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
                 description: String(item.description ?? '').trim(),
                 status: String(item.status ?? '').trim(),
                 occurred_at: item.occurred_at == null ? null : String(item.occurred_at),
+                root_job_id: item.root_job_id == null ? null : String(item.root_job_id),
+                envelope_id: item.envelope_id == null ? null : String(item.envelope_id),
               },
             ]
           })

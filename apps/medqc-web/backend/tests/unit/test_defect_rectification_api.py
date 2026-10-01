@@ -23,7 +23,7 @@ def test_actor_from_login_and_bounded_pagination(client):
     http, service = client
     service.list.return_value = {"items": [], "total": 0}
     assert http.get("/api/v1/defect-rectifications").status_code == 200
-    service.list.assert_called_once_with("u1", state=None, page=1, page_size=20)
+    service.list.assert_called_once_with("u1", state=None, page=1, page_size=20, source=None)
     assert http.get("/api/v1/defect-rectifications?page_size=101").status_code == 422
 
 
@@ -31,11 +31,21 @@ def test_actor_from_login_and_bounded_pagination(client):
     {"version": True, "action": "submit", "comment": "这是足够长的整改说明内容"},
     {"version": 1, "action": "approve", "comment": "短"},
     {"version": 1, "action": "approve", "comment": "这是足够长的整改说明内容", "actor_id": "admin"},
+    {"version": 1, "action": "withdraw_urge", "comment": "这是足够长的撤回催办说明"},
+    {"version": 1, "action": "urge", "comment": "这是足够长的催办说明内容", "urge_event_id": "event1"},
 ])
 def test_invalid_actions_rejected_before_service(client, body):
     http, service = client
     assert http.post("/api/v1/defect-rectifications/t1/actions", json=body).status_code == 422
     service.transition.assert_not_called()
+
+
+def test_withdraw_action_keeps_original_event_reference(client):
+    http, service = client
+    service.transition.return_value = {"status": "pending"}
+    body = {"version": 2, "action": "withdraw_urge", "comment": "已通知医生因此撤回本次催办", "urge_event_id": "event1"}
+    assert http.post("/api/v1/defect-rectifications/t1/actions", json=body).status_code == 200
+    service.transition.assert_called_once_with("u1", "t1", **body)
 
 
 @pytest.mark.parametrize("code", [403, 404, 409])

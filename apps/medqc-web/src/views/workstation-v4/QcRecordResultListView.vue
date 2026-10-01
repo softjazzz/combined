@@ -361,7 +361,10 @@
             >
             <span>{{ item.document || '位置未知' }}</span>
             <span>{{ defectStatusLabel(item) }}</span>
-            <span><button type="button" @click="openDefectResult(item)">查看病例</button></span>
+            <span>
+              <button type="button" @click="openDefectResult(item)">查看病例</button>
+              <button type="button" @click="openDefectResult(item)">整改 / 催办</button>
+            </span>
           </div>
           <p
             v-if="!loading && !loadError && defects.length === 0"
@@ -510,6 +513,8 @@ const selectedDefectTarget = ref<{
   source: 'auto' | 'manual'
   ruleId?: string
   defectId?: string
+  rootJobId?: string
+  envelopeId?: string
 } | null>(null)
 const startDate = ref('')
 const endDate = ref('')
@@ -664,7 +669,8 @@ function openDefectResult(item: WorkstationDefectItem) {
   selectedDefectTarget.value =
     item.source === 'manual'
       ? { source: 'manual', defectId: item.defect_id || undefined }
-      : { source: 'auto', ruleId: item.rule_id || undefined }
+      : { source: 'auto', ruleId: item.rule_id || undefined,
+          rootJobId: item.root_job_id || undefined, envelopeId: item.envelope_id || undefined }
   selectedRecordKey.value = ''
   selectedFocus.value = {
     visitId: item.visit_id,

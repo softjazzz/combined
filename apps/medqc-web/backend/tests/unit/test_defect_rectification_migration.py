@@ -35,3 +35,21 @@ def test_nonempty_downgrade_refused(monkeypatch):
     with pytest.raises(RuntimeError):
         module.downgrade()
     operations.drop_table.assert_not_called()
+
+
+def test_withdrawal_migration_preserves_qc_event_owner(monkeypatch):
+    path = Path(__file__).parents[2] / "alembic/versions/20261001_000078_rectification_urge_withdrawal.py"
+    spec = importlib.util.spec_from_file_location("withdrawal_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    operations = Mock()
+    monkeypatch.setattr(module, "op", operations)
+    module.upgrade()
+    assert module.down_revision == "20260930_000077"
+    assert operations.add_column.call_args.kwargs["schema"] == "qc"
+    assert operations.create_foreign_key.call_args.kwargs["referent_schema"] == "qc"
+    assert operations.create_unique_constraint.call_args.args[0] == "uq_rectification_event_withdrawal"
+    operations.get_bind.return_value.execute.return_value.scalar.return_value = 1
+    with pytest.raises(RuntimeError):
+        module.downgrade()
+    operations.drop_column.assert_not_called()
