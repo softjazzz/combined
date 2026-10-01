@@ -17,6 +17,7 @@ def _migration():
     module = module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
+    module.configured_search_path = lambda: []
     return module
 
 
@@ -26,6 +27,9 @@ class Inspector:
 
     def has_table(self, table, schema=None):
         return (schema, table) in self.tables
+
+    def get_schema_names(self):
+        return sorted({schema for schema, _table in self.tables})
 
 
 def test_upgrade_creates_only_authoritative_sys_table(monkeypatch):
@@ -65,6 +69,32 @@ def test_ambiguous_or_missing_authoritative_user_schema_fails_closed():
         migration._target_schema(
             Inspector({("sys", "sys_users"), ("public", "sys_users")})
         )
+
+
+@pytest.mark.parametrize("owner,other", [("sys", "public"), ("public", "sys")])
+def test_dual_user_tables_follow_application_path_not_alembic_default(owner, other):
+    migration = _migration()
+    migration.configured_search_path = lambda: ["qc", owner, other]
+    inspector = Inspector({("sys", "sys_users"), ("public", "sys_users")})
+    assert migration._target_schema(inspector) == owner
+
+
+def test_unknown_user_owner_is_rejected_even_when_sys_table_exists():
+    migration = _migration()
+    migration.configured_search_path = lambda: ["unexpected", "sys", "public"]
+    inspector = Inspector({("unexpected", "sys_users"), ("sys", "sys_users")})
+    with pytest.raises(RuntimeError, match="不受信任"):
+        migration._target_schema(inspector)
+
+
+def test_qr_table_in_other_schema_is_not_silently_reused():
+    migration = _migration()
+    migration.configured_search_path = lambda: ["sys", "public"]
+    inspector = Inspector({
+        ("sys", "sys_users"), ("public", "sys_users"), ("public", migration.TABLE),
+    })
+    with pytest.raises(RuntimeError, match="非权威"):
+        migration._target_schema(inspector)
 
 
 def test_postgres_any_reflection_matches_status_in_contract():

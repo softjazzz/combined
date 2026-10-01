@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import (
+    QCAppeal,
     QCAppealReview,
     QCDefect,
     QCDefectHistory,
@@ -29,7 +30,6 @@ from .medical_records.query_service import load_scoring_departments
 from .performance_ranking_service import (
     HOSPITAL_TIMEZONE,
     SCENE_ALL,
-    SCENE_NOT_ATTRIBUTABLE,
     PerformanceRankingInvalid,
     RankingWindow,
     compute_window,
@@ -79,9 +79,10 @@ class AnalysisScope:
 
     @property
     def appeals_attributable(self) -> bool:
+        # 运行/终末按申诉创建时冻结的 scene 归属；历史无 scene 的申诉只进入全场景。
+        # 科室/机构/任务筛选下申诉事件仍无可信归属，保持未知。
         return (
-            self.scene == SCENE_ALL
-            and self.institute_id is None
+            self.institute_id is None
             and self.department is None
             and self.task_id is None
         )
@@ -211,6 +212,13 @@ def _event(
     }
 
 
+def _appeal_execution_options(session: Any) -> dict[str, Any]:
+    """申诉与申诉审核的权威表在 qc；PostgreSQL 下不经 search_path 命中 public 同名旧表。"""
+    if session.get_bind().dialect.name == "postgresql":
+        return {"schema_translate_map": {None: "qc"}}
+    return {}
+
+
 def _load_base_events(session: Any, scope: AnalysisScope) -> tuple[list[dict[str, Any]], bool]:
     window = scope.window
     review_predicates = [
@@ -337,11 +345,19 @@ def _load_base_events(session: Any, scope: AnalysisScope) -> tuple[list[dict[str
     if scope.appeals_attributable:
         start = window.utc_start.replace(tzinfo=timezone.utc)
         end = window.utc_end.replace(tzinfo=timezone.utc)
-        appeals = session.execute(select(QCAppealReview).where(
+        statement = select(QCAppealReview).where(
             QCAppealReview.action.in_(("approve", "reject")),
             QCAppealReview.created_at >= start,
             QCAppealReview.created_at < end,
-        )).scalars().all()
+        )
+        if scope.scene != SCENE_ALL:
+            # 只统计审核事件关联的、已冻结为该场景的申诉；历史 NULL 不计入具体场景。
+            statement = statement.join(
+                QCAppeal, QCAppeal.id == QCAppealReview.appeal_id,
+            ).where(QCAppeal.scene == scope.scene)
+        appeals = session.execute(
+            statement, execution_options=_appeal_execution_options(session),
+        ).scalars().all()
         for row in appeals:
             if not row.reviewer_id:
                 raise StaffWorkAnalysisUnavailable("申诉审核事件缺少审核人")
@@ -506,8 +522,7 @@ def _ordered_staff(
 def _unavailable_metrics(scope: AnalysisScope) -> dict[str, str]:
     if scope.appeals_attributable:
         return {}
-    reason = SCENE_NOT_ATTRIBUTABLE if scope.scene != SCENE_ALL else FILTER_NOT_ATTRIBUTABLE
-    return dict.fromkeys(APPEAL_COUNT_FIELDS, reason)
+    return dict.fromkeys(APPEAL_COUNT_FIELDS, FILTER_NOT_ATTRIBUTABLE)
 
 
 def _read(

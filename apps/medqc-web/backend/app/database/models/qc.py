@@ -43,6 +43,7 @@ class SysUser(Base):
     phone = Column(String(20), unique=True, comment="手机号（登录备用标识）")
     password_hash = Column(Text)
     display_name = Column(String(100), nullable=False)
+    institute_id = Column(String(128), comment="管理员绑定的可信机构范围")
     department = Column(String(100))
     role = Column(String(50), default="doctor")
     roles_json = Column(Text, comment="JSON array for role compatibility")
@@ -55,6 +56,7 @@ class SysUser(Base):
         Index("ix_sys_users_email", "email"),
         Index("ix_sys_users_phone", "phone"),
         Index("ix_sys_users_role", "role"),
+        Index("ix_sys_users_institute_department", "institute_id", "department"),
     )
 
 
@@ -584,6 +586,32 @@ class QCTaskQCRun(Base):
     )
 
 
+QC_APPEAL_MODERN_COLUMNS = (
+    "target_kind", "target_id", "institute_id", "patient_id", "visit_id", "scene",
+    "root_job_id", "envelope_id", "rule_set_key", "rule_set_version", "case_department",
+)
+# 旧申诉：现代列全空且旧主键齐全；现代申诉：现代列齐全、场景受限且不写旧主键。
+QC_APPEAL_MODERN_SOURCE_CHECK_SQL = (
+    "("
+    + " AND ".join(f"{name} IS NULL" for name in QC_APPEAL_MODERN_COLUMNS)
+    + " AND qc_result_id IS NOT NULL AND record_id IS NOT NULL"
+    + ") OR ("
+    + " AND ".join(f"{name} IS NOT NULL" for name in QC_APPEAL_MODERN_COLUMNS)
+    + " AND target_kind IN ('canonical_defect', 'task_manual_defect')"
+    + " AND scene IN ('running', 'final', 'outpatient_emergency')"
+    + " AND qc_result_id IS NULL AND record_id IS NULL"
+    + ")"
+)
+# 同一申诉人对同一冻结目标只允许一条未完结（pending/reviewing）现代申诉。
+QC_APPEAL_OPEN_TARGET_COLUMNS = (
+    "appellant_id", "target_kind", "target_id", "institute_id", "patient_id",
+    "visit_id", "scene", "root_job_id", "envelope_id",
+)
+QC_APPEAL_OPEN_TARGET_WHERE_SQL = (
+    "target_kind IS NOT NULL AND status IN ('pending', 'reviewing')"
+)
+
+
 class QCAppeal(Base):
     """Appeal table used by appeals.py."""
 
@@ -591,8 +619,9 @@ class QCAppeal(Base):
 
     id = Column(String(36), primary_key=True)
     appeal_number = Column(String(40), unique=True)
-    qc_result_id = Column(String(36), nullable=False)
-    record_id = Column(String(36), nullable=False)
+    # 旧申诉必填；现代申诉不伪造旧主键，保持 NULL（见 ck_qc_appeals_modern_source）。
+    qc_result_id = Column(String(36), nullable=True)
+    record_id = Column(String(36), nullable=True)
     appeal_type = Column(String(20), nullable=False, comment="defect/score")
     defect_item = Column(String(200))
     reason = Column(Text, nullable=False)
@@ -617,7 +646,31 @@ class QCAppeal(Base):
         nullable=False,
     )
 
+    # 现代申诉创建时冻结的目标与来源（迁移 72）；历史行全部为 NULL，不回填猜测。
+    target_kind = Column(String(32), nullable=True)
+    target_id = Column(String(100), nullable=True)
+    institute_id = Column(String(128), nullable=True)
+    patient_id = Column(String(128), nullable=True)
+    visit_id = Column(String(128), nullable=True)
+    scene = Column(String(24), nullable=True, comment="创建时冻结的质控场景；历史 NULL")
+    root_job_id = Column(String(36), nullable=True)
+    envelope_id = Column(String(36), nullable=True)
+    rule_set_key = Column(String(96), nullable=True)
+    rule_set_version = Column(String(96), nullable=True)
+    case_department = Column(String(100), nullable=True, comment="创建时病例权威科室")
+
     __table_args__ = (
+        CheckConstraint(
+            QC_APPEAL_MODERN_SOURCE_CHECK_SQL, name="ck_qc_appeals_modern_source",
+        ),
+        Index(
+            "uq_qc_appeals_open_target",
+            *QC_APPEAL_OPEN_TARGET_COLUMNS,
+            unique=True,
+            postgresql_where=text(QC_APPEAL_OPEN_TARGET_WHERE_SQL),
+            sqlite_where=text(QC_APPEAL_OPEN_TARGET_WHERE_SQL),
+        ),
+        Index("ix_qc_appeals_scene_status", "scene", "status"),
         Index("ix_qc_appeals_status", "status"),
         Index("ix_qc_appeals_priority", "priority"),
         Index("ix_qc_appeals_type", "appeal_type"),

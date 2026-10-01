@@ -64,6 +64,7 @@ def _user_payload(user: dict) -> dict:
         "email": user["email"],
         "username": user.get("username"),
         "display_name": user["display_name"],
+        "institute_id": user.get("institute_id"),
         "department": user["department"],
         "roles": user["roles"],
         "avatar": user["avatar"],
@@ -241,18 +242,15 @@ async def update_profile(    request: Request,profile_data: UserUpdate, current_
     if department is not None:
         requested = department.strip()
         current = str(current_user.get("department") or "").strip()
-        roles = {str(role) for role in current_user.get("roles") or []}
-        if requested != current and "admin" not in roles:
+        if requested != current:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="科室由管理员维护，个人资料不能修改科室",
+                detail="医院与科室由管理员维护，个人资料不能修改",
             )
-        department = requested if requested != current else None
     try:
         user = update_user_profile(
             user_id=str(current_user.get("id") or ""),
             display_name=profile_data.display_name,
-            department=department,
             phone=profile_data.phone,
             bio=profile_data.bio,
         )

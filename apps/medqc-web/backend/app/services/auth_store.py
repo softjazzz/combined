@@ -7,11 +7,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import func, or_, select, text
+import sqlalchemy as sa
+from sqlalchemy import func, or_, select
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import SysUser
 from ..storage.memory import users_db
+from .user_scope_owner import resolve_user_owner_schema, user_owner_options
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,7 @@ _REQUIRED_AUTH_COLUMNS = {
     "email",
     "password_hash",
     "display_name",
+    "institute_id",
     "department",
     "role",
     "roles_json",
@@ -75,21 +78,16 @@ def _memory_overlay(*, email: str | None, user_id: str | None) -> dict[str, Any]
 
 def _supports_persistent_auth(session) -> bool:
     try:
-        rows = session.execute(
-            text(
-                """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema IN ('sys', 'public')
-              AND table_name = 'sys_users'
-                """
-            )
-        ).fetchall()
+        schema = resolve_user_owner_schema(session)
+        inspector = sa.inspect(session.get_bind())
+        rows = inspector.get_columns("sys_users", schema=schema)
+        options = user_owner_options(session)
+        if options:
+            session.connection(execution_options=options)
     except Exception:
         logger.warning("Failed to inspect sys_users schema; fallback to memory store", exc_info=True)
         return False
-
-    columns = {str(row[0]) for row in rows}
+    columns = {str(row["name"]) for row in rows}
     return _REQUIRED_AUTH_COLUMNS.issubset(columns)
 
 
@@ -105,6 +103,8 @@ def _normalize_memory_user(user: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("avatar", "")
     normalized.setdefault("bio", "")
     normalized.setdefault("phone", None)
+    # 内存仅是登录兼容层，不是医院归属 owner；即使旧镜像残留也必须失败关闭。
+    normalized["institute_id"] = None
     return normalized
 
 
@@ -117,6 +117,7 @@ def _orm_user_to_dict(user: SysUser) -> dict[str, Any]:
         "username": username,
         "email": str(user.email or "").strip().lower(),
         "display_name": str(user.display_name or "").strip(),
+        "institute_id": str(user.institute_id or "").strip() or None,
         "department": str(user.department or "").strip(),
         "roles": roles,
         "role": roles[0] if roles else "doctor",
@@ -139,6 +140,7 @@ def _sync_memory_user(user: dict[str, Any]) -> None:
         "username": str(user.get("username") or "").strip() or _derive_username(email),
         "email": email,
         "display_name": user.get("display_name") or "",
+        "institute_id": None,
         "department": user.get("department") or "",
         "roles": list(user.get("roles") or ["doctor"]),
         "password_hash": user.get("password_hash") or "",
@@ -158,7 +160,11 @@ def _query_db_user_by_account(account: str) -> dict[str, Any] | None:
     if not normalized:
         return None
 
-    session = SessionLocal()
+    try:
+        session = SessionLocal()
+    except Exception:
+        logger.warning("Auth DB account session unavailable; fallback to memory store", exc_info=True)
+        return None
     try:
         if not _supports_persistent_auth(session):
             return None
@@ -190,7 +196,11 @@ def _query_db_user_by_subject(subject: str) -> dict[str, Any] | None:
     if not normalized:
         return None
 
-    session = SessionLocal()
+    try:
+        session = SessionLocal()
+    except Exception:
+        logger.warning("Auth DB subject session unavailable; fallback to memory store", exc_info=True)
+        return None
     try:
         if not _supports_persistent_auth(session):
             return None
@@ -298,6 +308,7 @@ def create_user(
         "username": normalized_username,
         "email": normalized_email,
         "display_name": display_name,
+        "institute_id": None,
         "department": department,
         "roles": roles,
         "role": roles[0],
@@ -320,6 +331,7 @@ def create_user(
                 phone=payload["phone"],
                 password_hash=password_hash,
                 display_name=payload["display_name"],
+                institute_id=None,
                 department=payload["department"],
                 role=payload["role"],
                 roles_json=json.dumps(payload["roles"], ensure_ascii=False),
@@ -374,7 +386,6 @@ def update_user_profile(
     *,
     user_id: str,
     display_name: str | None = None,
-    department: str | None = None,
     phone: str | None = None,
     bio: str | None = None,
 ) -> dict[str, Any] | None:
@@ -399,8 +410,6 @@ def update_user_profile(
                     user.phone = normalized_phone
                 if display_name is not None:
                     user.display_name = display_name
-                if department is not None:
-                    user.department = department
                 session.commit()
                 session.refresh(user)
                 updated_payload = _orm_user_to_dict(user)
@@ -425,8 +434,6 @@ def update_user_profile(
         if str(raw_user.get("id") or "").strip() == str(user_id or "").strip():
             if display_name is not None:
                 raw_user["display_name"] = display_name
-            if department is not None:
-                raw_user["department"] = department
             if phone is not None:
                 raw_user["phone"] = str(phone or "").strip() or None
             if bio is not None:

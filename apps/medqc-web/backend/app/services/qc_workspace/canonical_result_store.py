@@ -75,6 +75,23 @@ _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = {
 }
 
 
+def lock_case_result_mutations(
+    session: Session, record_refs: Sequence[CaseRef], *, rule_set_key: str,
+) -> None:
+    """串行同一规则集病例的 Canonical 写入与依赖 latest 的原子操作。
+
+    所有引用先排序再取 PostgreSQL 事务锁，避免两个重叠批次因病例顺序不同而死锁。
+    SQLite 仅用于隔离测试，没有 advisory lock，直接跳过。
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    for record_ref in sorted(set(record_refs)):
+        key = "qc_canonical_case|" + "|".join((*record_ref, rule_set_key))
+        session.execute(
+            sa.text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key},
+        )
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -607,6 +624,11 @@ class CanonicalResultStore:
                 "items": [projector(item) for item in record_items],
             }
             prepared_envelopes.append((record_ref, envelope))
+
+        lock_case_result_mutations(
+            session, [record_ref for record_ref, _ in prepared_envelopes],
+            rule_set_key=rule_set_key,
+        )
 
         receipts: list[tuple[CaseRef, str]] = []
         receipt_bytes = 0

@@ -1119,6 +1119,33 @@ def load_scoring_departments(
         return read(active)
 
 
+def list_scoring_department_options(*, session: Session) -> list[dict[str, str]]:
+    """列出工作台权威科室口径中实际存在的机构＋科室组合。"""
+    discharge_summary = _workstation_discharge_summary_subquery(session)
+    department = _workstation_department_expr(discharge_summary)
+    query = session.query(
+        MedicalRecordFrontpage.institute_id,
+        department.label("department"),
+    )
+    if discharge_summary is not None:
+        query = query.outerjoin(
+            discharge_summary, _workstation_discharge_join_condition(discharge_summary),
+        )
+    rows = query.filter(
+        MedicalRecordFrontpage.institute_id.is_not(None),
+        func.trim(MedicalRecordFrontpage.institute_id) != "",
+        func.trim(department) != "",
+    ).distinct().limit(5000).all()
+    return [
+        {"institute_id": institute_id, "department": department_name}
+        for institute_id, department_name in sorted({
+            (str(row.institute_id or "").strip(), str(row.department or "").strip())
+            for row in rows
+            if str(row.institute_id or "").strip() and str(row.department or "").strip()
+        })
+    ]
+
+
 def _workstation_resolved_discharge_expr(discharge_summary=None):
     if discharge_summary is None:
         return MedicalRecordFrontpage.discharge_datetime

@@ -239,3 +239,58 @@ def test_database_error_is_sanitized(monkeypatch, caplog, path):
     assert response.status_code == 503
     assert "private SQL" not in response.text
     assert "private SQL" not in caplog.text
+
+
+_SCENE_APPEALS = [
+    {"id": "s-run", "appellant_id": "doctor-1", "created_at": "2026-09-20",
+     "status": "pending", "scene": "running"},
+    {"id": "s-final", "appellant_id": "doctor-1", "created_at": "2026-09-21",
+     "status": "pending", "scene": "final"},
+    {"id": "s-oe", "appellant_id": "doctor-2", "created_at": "2026-09-22",
+     "status": "reviewing", "scene": "outpatient_emergency"},
+    {"id": "s-legacy", "appellant_id": "doctor-1", "created_at": "2026-09-19",
+     "status": "pending", "scene": None},
+]
+
+
+@pytest.mark.parametrize("scene,expected", [
+    ("running", ["s-run"]),
+    ("final", ["s-final"]),
+    ("outpatient_emergency", ["s-oe"]),
+    ("all", ["s-oe", "s-final", "s-run", "s-legacy"]),
+])
+def test_reviewable_count_filters_by_frozen_scene_and_legacy_only_in_all(
+    monkeypatch, scene, expected,
+):
+    db = _DB(appeals_rows=_SCENE_APPEALS)
+    monkeypatch.setattr(appeals, "get_supabase", lambda: db)
+
+    response = _client(_user("reviewer-1", "qc_manager")).get(
+        f"/api/v1/appeals?status=reviewable&scene={scene}"
+    )
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["data"]["items"]] == expected
+    assert response.json()["data"]["total"] == len(expected)
+    scene_filters = [item for item in db.queries[-1].filters if item[0] == "scene"]
+    assert scene_filters == ([] if scene == "all" else [("scene", scene)])
+
+
+def test_default_list_is_all_scenes_and_doctor_still_sees_only_own(monkeypatch):
+    db = _DB(appeals_rows=_SCENE_APPEALS)
+    monkeypatch.setattr(appeals, "get_supabase", lambda: db)
+
+    response = _client(_user()).get("/api/v1/appeals?scene=final")
+    assert [row["id"] for row in response.json()["data"]["items"]] == ["s-final"]
+    assert db.queries[-1].filters == [("appellant_id", "doctor-1"), ("scene", "final")]
+
+    response = _client(_user()).get("/api/v1/appeals")
+    assert response.json()["data"]["total"] == 3
+
+
+def test_unknown_scene_is_rejected_without_query(monkeypatch):
+    db = _DB(appeals_rows=_SCENE_APPEALS)
+    monkeypatch.setattr(appeals, "get_supabase", lambda: db)
+    response = _client(_user("reviewer-1", "qc_manager")).get("/api/v1/appeals?scene=legacy")
+    assert response.status_code == 422
+    assert db.queries == []

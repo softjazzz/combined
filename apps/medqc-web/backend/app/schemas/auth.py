@@ -7,6 +7,8 @@ settings = get_settings()
 
 
 class UserBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
     username: Optional[str] = None
     display_name: str
@@ -37,6 +39,8 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     display_name: Optional[str] = None
     department: Optional[str] = None
     phone: Optional[str] = None
@@ -93,4 +97,3 @@ class QrConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     verification_code: str = Field(pattern=r"^\d{6}$")
-

@@ -7,6 +7,8 @@ import re
 import sqlalchemy as sa
 from alembic import op
 
+from app.services.user_scope_owner import configured_search_path, select_user_owner_schema
+
 revision = "20260928_000071"
 down_revision = "20260928_000070"
 branch_labels = None
@@ -107,15 +109,18 @@ def _validate_existing(inspector: sa.Inspector, schema: str) -> None:
 
 
 def _target_schema(inspector: sa.Inspector) -> str:
-    user_schemas = [schema for schema in SCHEMAS if inspector.has_table(USER_TABLE, schema=schema)]
-    if len(user_schemas) != 1:
-        raise RuntimeError(f"{USER_TABLE} 权威 schema 不唯一: {user_schemas}")
+    path = configured_search_path()
+    candidates = list(dict.fromkeys([*path, *SCHEMAS]))
+    if not path:
+        candidates = list(dict.fromkeys([*inspector.get_schema_names(), *candidates]))
+    user_schemas = [schema for schema in candidates if inspector.has_table(USER_TABLE, schema=schema)]
+    owner = select_user_owner_schema(search_path=path, schemas_with_user_table=user_schemas)
     existing = [schema for schema in SCHEMAS if inspector.has_table(TABLE, schema=schema)]
-    if any(schema != user_schemas[0] for schema in existing):
+    if any(schema != owner for schema in existing):
         raise RuntimeError(f"{TABLE} 位于非权威 schema: {existing}")
     if existing:
         _validate_existing(inspector, existing[0])
-    return user_schemas[0]
+    return owner
 
 
 def upgrade() -> None:

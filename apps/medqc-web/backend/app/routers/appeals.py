@@ -12,7 +12,7 @@
 """
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
-from typing import Optional
+from typing import Literal, Optional
 import logging
 from anyio import to_thread
 from pydantic import BaseModel, ValidationError
@@ -28,7 +28,17 @@ from ..services.appeal_review_service import (
     review_appeal_atomically,
     withdraw_appeal_atomically,
 )
+from ..services import appeal_create_service
+from ..services.appeal_create_service import (
+    ModernAppealConflict,
+    ModernAppealForbidden,
+    ModernAppealInvalid,
+    ModernAppealNotFound,
+    ModernAppealRequest,
+    ModernAppealUnavailable,
+)
 from ..schemas.appeals import (
+    ModernAppealCreate,
     AppealCreate,
     AppealUpdate,
     AppealWithdraw,
@@ -145,6 +155,79 @@ async def create_appeal(
         ) from exc
 
 
+_MODERN_ERROR_STATUS = (
+    (ModernAppealInvalid, 422),
+    (ModernAppealForbidden, 403),
+    (ModernAppealNotFound, 404),
+    (ModernAppealConflict, 409),
+)
+
+
+def _raise_modern_error(exc: Exception, *, fallback: str) -> None:
+    for error_type, status_code in _MODERN_ERROR_STATUS:
+        if isinstance(exc, error_type):
+            raise HTTPException(status_code=status_code, detail=str(exc)) from None
+    if isinstance(exc, ModernAppealUnavailable):
+        raise HTTPException(status_code=503, detail=fallback) from None
+    logger.error("modern_appeal_failed error_type=%s", type(exc).__name__)
+    raise HTTPException(status_code=503, detail=fallback) from None
+
+
+@router.post("/modern", response_model=dict)
+async def create_modern_appeal(
+    request: Request,
+    payload: ModernAppealCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    """现代申诉创建：医生对本科室病例的已确认缺陷或已审核通过的人工缺陷发起申诉。
+
+    同一事务内重验目标、授权与科室并冻结来源；任何失败零写入。旧 ``POST /appeals``
+    保留为兼容入口，本接口不依赖旧 ``qc_result_id/record_id``。
+    """
+    body = ModernAppealRequest(
+        target_kind=payload.target_kind,
+        institute_id=payload.institute_id,
+        patient_id=payload.patient_id,
+        visit_id=payload.visit_id,
+        scene=payload.scene,
+        reason=payload.reason,
+        expected_job_id=payload.expected_job_id,
+        expected_envelope_id=payload.expected_envelope_id,
+        rule_id=payload.rule_id,
+        defect_id=payload.defect_id,
+        evidence=list(payload.evidence),
+        priority=payload.priority.value,
+    )
+    try:
+        result = await to_thread.run_sync(
+            lambda: appeal_create_service.create_modern_appeal(body, current_user=current_user)
+        )
+    except Exception as exc:  # noqa: BLE001 - 统一映射为稳定错误合同
+        _raise_modern_error(exc, fallback="申诉创建暂不可用，请稍后重试")
+    return success_response(data=result, message="申诉创建成功", trace_id=get_trace_id(request))
+
+
+@router.get("/modern/candidates", response_model=dict)
+async def list_modern_appeal_candidates(
+    request: Request,
+    institute_id: str = Query(..., min_length=1, max_length=128),
+    patient_id: str = Query(..., min_length=1, max_length=128),
+    visit_id: str = Query(..., min_length=1, max_length=128),
+    current_user: dict = Depends(get_current_user),
+):
+    """医生端申诉入口的只读候选；创建时仍会全部重验。"""
+    try:
+        result = await to_thread.run_sync(
+            lambda: appeal_create_service.list_modern_appeal_candidates(
+                institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+                current_user=current_user,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - 统一映射为稳定错误合同
+        _raise_modern_error(exc, fallback="申诉候选暂不可用，请稍后重试")
+    return success_response(data=result, trace_id=get_trace_id(request))
+
+
 @router.get("", response_model=dict)
 async def list_appeals(
     request: Request,
@@ -153,6 +236,9 @@ async def list_appeals(
     appeal_type: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    scene: Literal["all", "running", "final", "outpatient_emergency"] = Query(
+        "all", description="冻结质控场景；历史无场景申诉只出现在 all",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user)
@@ -201,6 +287,10 @@ async def list_appeals(
 
         if appeal_type:
             query = query.eq("appeal_type", appeal_type)
+
+        # 按创建时冻结的场景过滤；等值条件天然排除历史 NULL，只有 all 才包含历史申诉。
+        if scene != "all":
+            query = query.eq("scene", scene)
 
         if start_date:
             query = query.gte("created_at", start_date)
@@ -631,4 +721,3 @@ async def get_appeal_statistics(
             status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="申诉统计服务暂不可用",
         ) from exc
-

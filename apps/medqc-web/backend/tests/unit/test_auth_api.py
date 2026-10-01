@@ -3,11 +3,9 @@
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
 import uuid
 
-from tests.conftest import assert_response_success, assert_response_error
+from tests.conftest import assert_response_success
 
 
 def _unique_phone() -> str:
@@ -192,6 +190,14 @@ class TestAuthAPI:
         response = client.post("/api/v1/auth/register", json=register_data)
         assert response.status_code == 422  # Validation error
 
+    def test_register_cannot_supply_institute_scope(self, client):
+        response = client.post("/api/v1/auth/register", json={
+            "email": f"scope{uuid.uuid4().hex[:8]}@example.com",
+            "password": "Password123!", "display_name": "越权用户",
+            "institute_id": "hospital-a",
+        })
+        assert response.status_code == 422
+
     def test_register_missing_required_fields(self, client):
         """测试注册 - 缺少必填字段"""
         # 缺少邮箱
@@ -236,6 +242,7 @@ class TestAuthAPI:
         data = response.json()
         assert data["email"] == email
         assert data["display_name"] == "当前用户"
+        assert data["institute_id"] is None
         assert not data["department"]
 
     def test_get_current_user_no_token(self, client):
@@ -333,6 +340,13 @@ class TestAuthAPI:
         assert data["display_name"] == "新用户名"
         assert not data["department"]  # 注册不保存科室，部分更新也不改变
         assert data["phone"] == register_data["phone"]  # 未更新
+
+        forbidden_scope = client.put(
+            "/api/v1/auth/profile",
+            json={"institute_id": "hospital-a"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert forbidden_scope.status_code == 422
 
     def test_update_profile_no_token(self, client):
         """测试更新用户资料 - 未提供 token"""
@@ -467,4 +481,3 @@ class TestAuthAPI:
             assert response.status_code == 200
             data = response.json()
             assert "access_token" in data
-

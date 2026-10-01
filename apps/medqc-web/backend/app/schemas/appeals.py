@@ -3,8 +3,8 @@
 """
 
 from datetime import datetime
-from typing import Optional, List, Any
-from pydantic import BaseModel, Field, UUID4
+from typing import Optional, List, Literal
+from pydantic import BaseModel, ConfigDict, Field, UUID4
 from enum import Enum
 
 
@@ -54,6 +54,28 @@ class AppealCreate(BaseModel):
     priority: AppealPriority = Field(AppealPriority.MEDIUM, description="优先级")
     appellant_department: Optional[str] = Field(None, description="申诉人科室")
     notes: Optional[str] = Field(None, description="备注")
+
+
+class ModernAppealCreate(BaseModel):
+    """现代申诉创建请求：只收目标与三坐标，不收科室、旧主键或申诉人身份。
+
+    科室、申诉人、冻结来源全部由服务端从账号与权威来源取得；多余字段直接拒绝。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_kind: Literal["canonical_defect", "task_manual_defect"]
+    institute_id: str = Field(..., min_length=1, max_length=128)
+    patient_id: str = Field(..., min_length=1, max_length=128)
+    visit_id: str = Field(..., min_length=1, max_length=128)
+    scene: Literal["running", "final", "outpatient_emergency"]
+    expected_job_id: Optional[str] = Field(None, min_length=1, max_length=36)
+    expected_envelope_id: Optional[str] = Field(None, min_length=1, max_length=36)
+    rule_id: Optional[str] = Field(None, min_length=1, max_length=100)
+    defect_id: Optional[str] = Field(None, min_length=1, max_length=36)
+    reason: str = Field(..., min_length=10, max_length=2000)
+    evidence: List[dict] = Field(default_factory=list, max_length=20)
+    priority: AppealPriority = Field(AppealPriority.MEDIUM)
 
 
 class AppealUpdate(BaseModel):

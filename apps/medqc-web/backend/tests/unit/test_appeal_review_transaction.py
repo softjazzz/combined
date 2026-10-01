@@ -38,23 +38,53 @@ def session_factory():
         engine.dispose()
 
 
-def _add_appeal(session_factory, *, appeal_id: str = "appeal-1", status: str = "pending") -> None:
+def _add_appeal(
+    session_factory, *, appeal_id: str = "appeal-1", status: str = "pending",
+    modern: bool = False,
+) -> None:
     with session_factory() as session:
-        session.add(
-            QCAppeal(
-                id=appeal_id,
-                appeal_number=f"AP-{appeal_id}",
-                qc_result_id="result-1",
-                record_id="record-1",
-                appeal_type="defect",
-                reason="需要重新核对该质控结果",
-                priority="medium",
-                appellant_id="user-1",
-                appellant_name="申诉人",
-                status=status,
-            )
-        )
+        source = ({
+            "qc_result_id": None, "record_id": None,
+            "target_kind": "canonical_defect", "target_id": "LX0609-001",
+            "institute_id": "hospital-a", "patient_id": "patient-1",
+            "visit_id": "visit-1", "scene": "running", "root_job_id": "job-1",
+            "envelope_id": "envelope-1", "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026.09", "case_department": "心内科",
+        } if modern else {"qc_result_id": "result-1", "record_id": "record-1"})
+        session.add(QCAppeal(
+            id=appeal_id, appeal_number=f"AP-{appeal_id}", appeal_type="defect",
+            reason="需要重新核对该质控结果", priority="medium",
+            appellant_id="user-1", appellant_name="申诉人", status=status, **source,
+        ))
         session.commit()
+
+
+@pytest.mark.parametrize("action", [ReviewAction.APPROVE, ReviewAction.REJECT])
+def test_modern_appeal_with_null_legacy_ids_can_be_reviewed(
+    monkeypatch, session_factory, action,
+):
+    _add_appeal(session_factory, modern=True)
+    monkeypatch.setattr(appeal_review_service, "SessionLocal", session_factory)
+    result = review_appeal_atomically(
+        "appeal-1", action=action, comment="现代申诉审核", resolution=None,
+        reviewer_id="reviewer-1", reviewer_name="审核人", reviewer_role="qc_manager",
+    )
+    assert result["status"] == ("approved" if action == ReviewAction.APPROVE else "rejected")
+    assert result["qc_result_id"] is None
+    assert result["record_id"] is None
+
+
+def test_modern_appeal_with_null_legacy_ids_can_be_withdrawn(
+    monkeypatch, session_factory,
+):
+    _add_appeal(session_factory, modern=True)
+    monkeypatch.setattr(appeal_review_service, "SessionLocal", session_factory)
+    result = withdraw_appeal_atomically(
+        "appeal-1", appellant_id="user-1", reason="不再申诉",
+    )
+    assert result["status"] == "withdrawn"
+    assert result["qc_result_id"] is None
+    assert result["record_id"] is None
 
 
 @pytest.mark.parametrize(

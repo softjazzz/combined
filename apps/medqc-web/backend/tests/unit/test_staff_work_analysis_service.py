@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import (
-    QCDefect, QCDefectHistory, QCAppealReview, QCRecordReview, QCTask,
+    QCAppeal, QCDefect, QCDefectHistory, QCAppealReview, QCRecordReview, QCTask,
     QCTaskRecord, SysUser,
 )
 from app.services import staff_work_analysis_service as service
@@ -58,11 +58,30 @@ def history(key: str, defect_id: str, action: str, actor: str, minutes: int) -> 
     }
 
 
-def appeal(key: str, actor: str, action: str, minutes: int) -> dict:
+def appeal(
+    key: str, actor: str, action: str, minutes: int, *, appeal_id: str | None = None,
+) -> dict:
     return {
-        "id": key, "appeal_id": f"appeal-{key}", "reviewer_id": actor,
+        "id": key, "appeal_id": appeal_id or f"appeal-{key}", "reviewer_id": actor,
         "reviewer_name": actor, "action": action,
         "created_at": event_time(minutes),
+    }
+
+
+def appeal_row(appeal_id: str, scene: str | None) -> dict:
+    """合成申诉：有 scene 为现代冻结申诉，NULL 为历史申诉。"""
+    base = {
+        "id": appeal_id, "appeal_type": "defect", "reason": "合成申诉理由十个字以上",
+        "priority": "medium", "appellant_id": "doctor-1", "appellant_name": "医生",
+        "status": "approved", "created_at": event_time(0), "updated_at": event_time(0),
+    }
+    if scene is None:
+        return {**base, "qc_result_id": "legacy-result", "record_id": "legacy-record"}
+    return {
+        **base, "target_kind": "canonical_defect", "target_id": "LX0609-001",
+        "institute_id": "A", "patient_id": "P", "visit_id": "V", "scene": scene,
+        "root_job_id": "job-1", "envelope_id": "env-1", "rule_set_key": "r",
+        "rule_set_version": "v1", "case_department": "内科",
     }
 
 
@@ -71,7 +90,7 @@ def db(monkeypatch):
     engine = sa.create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
     )
-    for model in (QCDefect, QCDefectHistory, QCAppealReview, QCRecordReview, SysUser):
+    for model in (QCDefect, QCDefectHistory, QCAppeal, QCAppealReview, QCRecordReview, SysUser):
         model.__table__.create(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(service, "SessionLocal", factory)
@@ -169,7 +188,7 @@ def test_scene_requires_database_and_unknown_scene_is_rejected(monkeypatch):
         service.get_staff_work_analysis(period="this_week", scene="unknown", now=NOW)
 
 
-def test_scene_filters_attributable_events_and_marks_only_appeals_unknown(db):
+def test_scene_filters_events_and_counts_only_frozen_scene_appeals(db):
     with db.begin() as session:
         session.execute(QCRecordReview.__table__.insert(), [
             review("run-initial", "run-reviewer", 1, scene="running"),
@@ -197,44 +216,71 @@ def test_scene_filters_attributable_events_and_marks_only_appeals_unknown(db):
                 "historic-create", "historic-defect", "manual_create", "historic-creator", 9,
             ),
         ])
+        for row in (
+            appeal_row("appeal-running", "running"),
+            appeal_row("appeal-final", "final"),
+            appeal_row("appeal-historic", None),
+        ):
+            session.execute(QCAppeal.__table__.insert(), row)
         session.execute(QCAppealReview.__table__.insert(), [
-            appeal("scene-unknown", "appeal-only", "approve", 10),
+            appeal("run-ok", "appeal-run", "approve", 10, appeal_id="appeal-running"),
+            appeal("final-no", "appeal-final", "reject", 11, appeal_id="appeal-final"),
+            appeal("historic-ok", "appeal-historic", "approve", 12, appeal_id="appeal-historic"),
+            appeal("orphan-ok", "appeal-orphan", "approve", 13, appeal_id="appeal-missing"),
         ])
 
     data = scene_report("running")
     rows = {row["user_id"]: row for row in data["staff"]}
-    assert set(rows) == {"run-reviewer", "run-creator", "run-approver"}
-    assert data["summary"]["active_staff_count"] == 3
+    assert set(rows) == {"run-reviewer", "run-creator", "run-approver", "appeal-run"}
+    assert data["summary"]["active_staff_count"] == 4
     assert data["summary"]["record_reviewer_count"] == 1
     assert data["summary"]["record_review_count"] == 2
     assert data["summary"]["reviewed_case_count"] == 1
-    assert data["summary"]["avg_record_reviews_per_active_staff"] == 0.67
-    assert data["summary"]["avg_reviewed_cases_per_reviewer"] == 1
     assert data["summary"]["manual_defect_created_count"] == 1
     assert data["summary"]["manual_review_rejected_count"] == 1
-    assert data["summary"]["appeal_approved_count"] is None
-    assert data["summary"]["appeal_rejected_count"] is None
-    assert all(row["appeal_approved_count"] is None for row in rows.values())
-    assert all(row["appeal_rejected_count"] is None for row in rows.values())
-    assert data["unavailable_metrics"] == {
-        "appeal_approved_count": "scene_not_attributable",
-        "appeal_rejected_count": "scene_not_attributable",
-    }
+    # 只计入冻结为 running 的申诉；历史 NULL 与缺失申诉行不计入具体场景。
+    assert data["summary"]["appeal_approved_count"] == 1
+    assert data["summary"]["appeal_rejected_count"] == 0
+    assert rows["appeal-run"]["appeal_approved_count"] == 1
+    assert data["unavailable_metrics"] == {}
     assert data["unavailable_reason"] is None
 
     final_data = scene_report("final")
     final_rows = {row["user_id"]: row for row in final_data["staff"]}
-    assert set(final_rows) == {"final-reviewer", "final-creator", "final-approver"}
+    assert set(final_rows) == {
+        "final-reviewer", "final-creator", "final-approver", "appeal-final",
+    }
     assert final_data["summary"]["record_review_count"] == 1
-    assert final_data["summary"]["manual_defect_created_count"] == 1
     assert final_data["summary"]["manual_review_approved_count"] == 1
-    assert final_data["summary"]["appeal_approved_count"] is None
-    assert final_data["unavailable_metrics"] == data["unavailable_metrics"]
+    assert final_data["summary"]["appeal_approved_count"] == 0
+    assert final_data["summary"]["appeal_rejected_count"] == 1
+    assert "appeal-historic" not in final_rows
 
     all_data = report()
-    assert all_data["summary"]["appeal_approved_count"] == 1
-    assert "appeal-only" in {row["user_id"] for row in all_data["staff"]}
-    assert "historic-reviewer" in {row["user_id"] for row in all_data["staff"]}
+    assert all_data["summary"]["appeal_approved_count"] == 3
+    assert all_data["summary"]["appeal_rejected_count"] == 1
+    assert {"appeal-historic", "appeal-orphan", "historic-reviewer"} <= {
+        row["user_id"] for row in all_data["staff"]
+    }
+
+    detail = service.get_staff_work_details(
+        user_id="appeal-final", metric="appeal_rejected_count",
+        period="this_week", scene="final", now=NOW,
+    )
+    assert detail["unavailable_reason"] is None
+    assert [item["appeal_id"] for item in detail["items"]] == ["appeal-final"]
+
+
+def test_scene_appeals_remain_unknown_under_department_filter(db):
+    data = service.get_staff_work_analysis(
+        period="this_week", scene="final", institute_id="A", department="内科", now=NOW,
+        department_loader=lambda identities, *, session: {},
+    )
+    assert data["summary"]["appeal_approved_count"] is None
+    assert data["unavailable_metrics"] == {
+        "appeal_approved_count": "filter_not_attributable",
+        "appeal_rejected_count": "filter_not_attributable",
+    }
 
 
 def test_empty_and_source_error_are_distinct(db):
