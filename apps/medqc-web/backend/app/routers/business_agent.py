@@ -140,7 +140,9 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return (await tools.execute("read_rule", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
             if binding["kind"] == "record":
                 data = await tools.saved_results(metadata, user, reference_id)
-                return {"id": reference_id, "kind": "evidence", "title": "病例保存结果", "text": "\n\n".join(f"{row['rule_id']} · {row['title']}\n{row.get('conclusion', '')}\n{row.get('suggestion', '')}" for row in data.get("references", [])) or "当前病例暂无可读取的保存结果"}
+                page = data.get("result_page")
+                scope = f"当前显示第{page['page']}页{page['returned']}条，匹配{page['matched_total']}条、保存共{page['total']}条；其余页请继续查询。\n\n" if page else ""
+                return {"id": reference_id, "kind": "evidence", "title": "病例保存结果", "text": scope + ("\n\n".join(f"{row['rule_id']} · {row['title']}\n{row.get('conclusion', '')}\n{row.get('suggestion', '')}" for row in data.get("references", [])) or "当前病例暂无可读取的保存结果")}
             if binding["kind"] == "statistics":
                 data = await tools.read_api("/api/v1/qc-agent/business/statistics", binding["filters"])
                 return {"id": reference_id, "kind": "statistics", "title": "正式统计口径与规则分布", "locator": "按原筛选条件刷新读取；数据可能较上一轮更新", "text": "按质控完成时间，使用范围内每份病例最新 Canonical 结果。\n" + statistics_text(data)}

@@ -1,7 +1,11 @@
 import { defineComponent, ref, type PropType } from 'vue'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BusinessAgentAccess, BusinessEvidenceDocument } from '@/api/businessAgent'
+import type {
+  BusinessAgentAccess,
+  BusinessEvidenceDocument,
+  BusinessAgentContext,
+} from '@/api/businessAgent'
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
@@ -25,7 +29,25 @@ vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
         run_id: 'run-a',
         question: '查看问题',
         answer: '保存结论',
-        references: [{ id: 'result-a', kind: 'saved_result', title: '保存问题' }],
+        references: [
+          { id: 'result-a', position: 1, kind: 'saved_result', title: '保存问题' },
+          { id: 'result-second', position: 2, kind: 'saved_result', title: '第二条保存问题' },
+        ],
+        result_pages: [
+          {
+            job_id: 'task-a',
+            record_ref: 'record-a',
+            statuses: ['non_compliant'],
+            page: 1,
+            page_size: 2,
+            total: 75,
+            matched_total: 4,
+            returned: 2,
+            has_more: true,
+            status_counts: { compliant: 71, non_compliant: 4 },
+            reference_ids: ['result-a', 'result-second'],
+          },
+        ],
         elapsed_ms: 100,
         tool_calls: 1,
         status: 'completed',
@@ -47,9 +69,9 @@ const Range = defineComponent({
   emits: ['update:value'],
   template: '<div />',
 })
-function mountDrawer() {
+function mountDrawer(userContext: BusinessAgentContext = { view: 'manager' }) {
   return shallowMount(BusinessAgentDrawer, {
-    props: { open: true, userContext: { view: 'manager' } },
+    props: { open: true, userContext },
     global: {
       stubs: {
         'a-drawer': { template: '<div><slot /></div>' },
@@ -125,6 +147,26 @@ describe('管理助手范围选择', () => {
     await flushPromises()
     expect(wrapper.findAllComponents(Select)[0].props('options')).toEqual([])
     expect(mocks.send).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('显示准确页范围并把第二条快捷追问绑定同页稳定id', async () => {
+    mocks.access.mockResolvedValue({ doctor_case_count: 2, manager_scopes: [] })
+    const context = { view: 'doctor' as const, institute_id: 'H', patient_id: 'P', visit_id: 'V' }
+    const wrapper = mountDrawer(context)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="business-agent-result-page"]').text()).toContain(
+      '本页 2 条，匹配共 4 条，保存结果共 75 条',
+    )
+    expect(wrapper.get('[data-testid="business-agent-result-page"]').text()).toContain('后续页')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '第二条为什么不合规？')!
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '发送')!
+      .trigger('click')
+    expect(mocks.send).toHaveBeenCalledWith('第二条为什么不合规？', context, 'result-second')
     wrapper.unmount()
   })
   it('按保存问题选择证据并正确高亮包含表情的 Unicode 坐标', async () => {

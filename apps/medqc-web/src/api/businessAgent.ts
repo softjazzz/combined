@@ -22,6 +22,7 @@ export interface BusinessAgentReference {
   status?: string
   conclusion?: string
   suggestion?: string
+  position?: number
   evidence?: {
     source_type: string
     source_ref: string
@@ -55,12 +56,26 @@ export interface BusinessAgentTurn {
   answer: string
   status: 'completed' | 'failed' | 'stopped'
   references: BusinessAgentReference[]
+  result_pages?: BusinessResultPage[]
   tool_calls: number
   model_calls?: number
   reference_scope?: 'prior_turns'
   elapsed_ms: number
   usage?: { input_tokens: number; output_tokens: number }
   error?: string
+}
+export interface BusinessResultPage {
+  job_id: string
+  record_ref: string
+  statuses: string[]
+  page: number
+  page_size: number
+  total: number
+  matched_total: number
+  returned: number
+  has_more: boolean
+  status_counts: Record<string, number>
+  reference_ids: string[]
 }
 export interface BusinessAgentSession {
   session_id: string

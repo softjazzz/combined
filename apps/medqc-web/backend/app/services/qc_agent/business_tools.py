@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from urllib.parse import quote
 from uuid import uuid4
+from collections import Counter
+from typing import Literal
 
 import httpx
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .business_store import BusinessSessionStore
 
@@ -17,6 +19,17 @@ class ToolInput(BaseModel):
 
 class ReadResults(ToolInput):
     record_reference: str | None = Field(default=None, max_length=160)
+    statuses: list[Literal["non_compliant", "data_gap", "compliant", "not_applicable", "not_executed", "needs_review", "uncertain", "technical_error"]] = Field(default_factory=list, max_length=8)
+    page: int = Field(default=1, ge=1, le=100)
+    page_size: int = Field(default=10, ge=1, le=10)
+    detail: Literal["index", "saved_text"] = "index"
+    expected_job_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def require_page_version(self):
+        if self.page > 1 and not self.expected_job_id:
+            raise ValueError("后续页需要上一页返回的 expected_job_id")
+        return self
 
 
 class ReadIssue(ToolInput):
@@ -31,13 +44,14 @@ class QueryStatistics(ToolInput):
     rule_id: str | None = Field(default=None, pattern=r"^LX0609-\d{2}-\d{2}-\d{2}$")
     result_status: str | None = Field(default=None, pattern=r"^(non_compliant|data_gap|compliant|not_applicable|not_executed|uncertain)$")
     page: int = Field(default=1, ge=1, le=100)
+    rule_limit: int = Field(default=5, ge=1, le=75)
 
 
 TOOL_DEFINITIONS = {
-    "read_saved_results": (ReadResults, "读取当前病例的正式保存结果，不执行新质控。管理者须使用统计返回的 record_reference 下钻。"),
+    "read_saved_results": (ReadResults, "分页读取正式保存结果。statuses为空查全类别；仅列不合规时指定non_compliant。每页最多10条，卡片保留完整结论建议。index仅给索引；要保存结论建议用saved_text，无需另查证据或规则。后续页带已看到的expected_job_id；管理下钻用统计返回record_reference。"),
     "read_saved_issue": (ReadIssue, "按稳定 result_id 读取同一任务的具体问题、正式建议和已保存病历证据。"),
     "read_rule": (ReadRule, "读取权威规则目录中的当前启用状态和院内实施口径；不是规范原文。"),
-    "query_statistics": (QueryStatistics, "按会话确定的科室、病例范围和质控完成时间读取既有统计与病例下钻；不改统计口径。"),
+    "query_statistics": (QueryStatistics, "沿用会话机构/科室、病例范围和质控完成日期读取正式统计，不改口径。规则概览按不合规次数降序默认前5条；rule_limit可指定1至75。page是病例页，返回record_reference用于选择具体病例。"),
 }
 
 
@@ -95,7 +109,8 @@ class BusinessTools:
             raise HTTPException(403, "病例来源不属于当前会话机构")
         return binding["identity"]
 
-    async def saved_results(self, metadata: dict, user: dict, record_reference: str | None) -> dict:
+    async def saved_results(self, metadata: dict, user: dict, record_reference: str | None, params: ReadResults | None = None) -> dict:
+        params = params or ReadResults(record_reference=record_reference)
         identity = self.identity(metadata, record_reference)
         visit = quote(identity["visit_id"], safe="")
         payload = await self.read_api(f"/api/v1/qc-agent/business/records/{visit}/latest-result", {
@@ -104,21 +119,32 @@ class BusinessTools:
         })
         if payload.get("state") != "ready":
             return {"state": payload.get("state"), "reason_code": payload.get("reason_code"), "references": []}
+        if params.expected_job_id:
+            seen = [binding for binding in metadata["references"].values() if binding.get("kind") == "saved_result" and binding.get("identity") == identity and binding.get("job_id") == params.expected_job_id]
+            if not seen:
+                raise HTTPException(404, "本会话尚未查看所选保存版本")
+            if payload["job_id"] != params.expected_job_id or not any(binding.get("record_ref") == payload["record_ref"] for binding in seen):
+                raise HTTPException(409, "保存版本已变化，请从第一页重新查看；本次未合并新旧页面")
+        items = payload.get("items", [])
+        matched = [item for item in items if not params.statuses or item.get("status") in params.statuses]
+        offset = (params.page - 1) * params.page_size
         references = []
-        for item in payload.get("items", []):
+        for index, item in enumerate(matched[offset:offset + params.page_size], offset + 1):
             rule_id = item.get("rule_id") or item.get("rule_code")
             result_id = f"result:{payload['job_id']}:{payload['record_ref']}:{rule_id}"
             self.store.bind(metadata["session_id"], user, result_id, {
                 "kind": "saved_result", "identity": identity, "job_id": payload["job_id"],
                 "record_ref": payload["record_ref"], "rule_id": rule_id,
             })
-            references.append(self.issue_reference(result_id, item, payload))
+            references.append({**self.issue_reference(result_id, item, payload), "position": index})
         return {
             "state": "ready", "job_id": payload["job_id"], "rule_set_version": payload.get("rule_set_version"),
             "is_complete": payload.get("is_complete"), "missing_rule_ids": payload.get("missing_rule_ids", []),
             "result_time": payload.get("completed_at"),
             "result_time_note": "正式接口未提供保存时间" if not payload.get("completed_at") else "",
             "references": references,
+            # 只数保存状态并筛选展示，不生成新的医学结论。
+            "result_page": {"job_id": payload["job_id"], "record_ref": payload["record_ref"], "detail": params.detail, "statuses": list(dict.fromkeys(params.statuses)) if params.statuses else [], "page": params.page, "page_size": params.page_size, "total": len(items), "matched_total": len(matched), "returned": len(references), "has_more": offset + len(references) < len(matched), "status_counts": dict(Counter(item.get("status") or "unknown" for item in items)), "reference_ids": [ref["id"] for ref in references]},
         }
 
     @staticmethod
@@ -165,7 +191,7 @@ class BusinessTools:
         model, _ = TOOL_DEFINITIONS[name]
         params = model.model_validate(arguments)
         if name == "read_saved_results":
-            return await self.saved_results(metadata, user, params.record_reference)
+            return await self.saved_results(metadata, user, params.record_reference, params)
         if name == "read_saved_issue":
             return await self.issue(metadata, params.result_id)
         if name == "read_rule":
@@ -182,7 +208,7 @@ class BusinessTools:
             raise HTTPException(422, "请在管理工作台限定范围后问数")
         filters = {key: context[key] for key in ("institute_id", "department", "care_phase", "completed_from", "completed_to") if key in context}
         filters.setdefault("care_phase", "discharged")
-        filters.update(params.model_dump(exclude_none=True))
+        filters.update(params.model_dump(exclude_none=True, exclude={"rule_limit"}))
         payload = await self.read_api("/api/v1/qc-agent/business/statistics", filters)
         references = []
         for record in payload.get("record_page", {}).get("items", []):
@@ -194,4 +220,4 @@ class BusinessTools:
         self.store.bind(metadata["session_id"], user, statistics_id, {"kind": "statistics", "filters": filters})
         references.insert(0, {"id": statistics_id, "kind": "statistics", "title": "当前范围质控统计", "locator": "按质控完成时间；每份病例最新 Canonical 结果", "text": statistics_text(payload)})
         # 正式统计值与明细原样搬运，不在助手中另行聚合。
-        return {"statistics": payload, "filters": filters, "metric_owner": "LX0609 正式结果分析接口", "references": references}
+        return {"statistics": payload, "filters": filters, "metric_owner": "LX0609 正式结果分析接口", "references": references, "statistics_page": {"rule_limit": params.rule_limit}}

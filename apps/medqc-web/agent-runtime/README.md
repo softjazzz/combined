@@ -15,6 +15,8 @@
 
 执行历史在应用 `.tmp/0910-full-audit/business-agent-dsh-private/`，不提交。业务元数据仅保存账号、上下文和引用坐标；不复制模型历史或结果正文。参考 [验证记录](../docs/plans/2026-09-30-business-agent-m1-validation.md) 区分模拟与真实验证。
 
+模型文本通过 `business-output.mjs` 纯投影，完整卡片和分页范围保留在原生 `presentationMeta`。保存概览默认 `index`、每页最多10条；正式结论建议用 `saved_text`，状态数组为空表示全部类别，后续页必须携带已见 `expected_job_id`。不截断单问题证据或重判状态；旧会话的大输出不会自动重写。同五轮性能/质量边界见[精简输入验证](../docs/plans/2026-10-01-business-agent-compact-input-validation.md)。
+
 ## 本机合成业务联调
 
 使用 `backend/tests/manual/business_agent_validation_app.py` 的独立 FastAPI 应用，不使用主应用启动钩子，不创建表、启动 Worker 或读取客户数据库。它的固定合成身份只对该测试应用生效。
@@ -34,3 +36,5 @@
 在 `backend` 使用 `tests.manual.business_agent_readonly_app:app` 启动8003：显式设置 `MEDQC_AGENT_SOURCE_ENV` 为用户授权的既有 `backend/.env` 路径，以及上述私有授权路径。只选择读取 DATABASE_URL、DB_SCHEMA_MODE、DB_SEARCH_PATH、JWT_SECRET、JWT_ALGORITHM；PostgreSQL连接强制只读。实际登录委托既有8001，新验证服务不注册账号或修改角色，也不加载主应用/启动Worker。合成应用和真实只读应用不能同时占用8003。
 
 真实病例坐标、截图及模型输出必须留在 `.tmp/0910-full-audit/` 的私有目录，不放入本仓库页面或 Git。当前已有私有浏览器验证页，不在文档复制其病例配置。统一时区全量检查：设置 `TZ=Asia/Shanghai` 后执行 `npm run test:unit -- --maxWorkers=1 --minWorkers=1`。
+
+离线体积分析脚本：`backend/tests/manual/analyze_business_agent_trace.py --results <私有五轮结果> --trace-root <原生JSONL目录> --output <私有报告>`，统计文本字节，不代表Token。真实同五轮脚本为 `backend/tests/manual/verify_business_agent_compact.py --run-real-model`，沿用私有原始病例/问题和真实令牌，每轮前扣减10轮私有预算账本；本次10轮已经用尽，不能通过删除账本或重复脚本绕过预算。实际角色及WeKnora缺口未解决。

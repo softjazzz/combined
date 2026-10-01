@@ -45,6 +45,28 @@
           <p class="business-agent__answer">
             {{ turn.answer || turn.error || '本轮未完成，可重新查询。' }}
           </p>
+          <div
+            v-for="(page, pageIndex) in turn.result_pages || []"
+            :key="pageIndex"
+            class="mq-inset business-agent__reference"
+            data-testid="business-agent-result-page"
+          >
+            <p>
+              读取范围：{{
+                page.statuses.length ? page.statuses.map(statusLabel).join('、') : '全部状态'
+              }}
+              · 第 {{ page.page }} 页；本页 {{ page.returned }} 条，匹配共
+              {{ page.matched_total }} 条，保存结果共 {{ page.total }} 条。
+            </p>
+            <p class="business-agent__muted">
+              {{
+                Object.entries(page.status_counts)
+                  .map(([status, count]) => `${statusLabel(status)} ${count} 条`)
+                  .join(' · ')
+              }}
+            </p>
+            <p v-if="page.has_more">此范围还有后续页，可继续查询下一页。</p>
+          </div>
           <p v-if="turn.reference_scope === 'prior_turns'" class="business-agent__muted">
             本轮沿用此前读取的来源，未刷新业务结果。
           </p>
@@ -53,7 +75,7 @@
             :key="reference.id"
             class="mq-inset business-agent__reference"
           >
-            <strong>{{ index + 1 }}. {{ reference.title }}</strong>
+            <strong>{{ reference.position || index + 1 }}. {{ reference.title }}</strong>
             <span v-if="reference.status" class="mq-status">{{
               statusLabel(reference.status)
             }}</span>
@@ -302,7 +324,16 @@ async function submit() {
   if (!canQuery.value) return
   const message = draft.value
   draft.value = ''
-  await send(message, context.value)
+  const candidates =
+    turns.value
+      .at(-1)
+      ?.references.filter(
+        (reference) => reference.kind === 'saved_result' && reference.position === 2,
+      ) || []
+  // 固定快捷追问绑定页面可见的稳定问题，不要求模型再次排序。
+  if (message === '第二条为什么不合规？' && candidates.length === 1)
+    await send(message, context.value, candidates[0].id)
+  else await send(message, context.value)
 }
 async function explainReference(reference: BusinessAgentReference) {
   if (!canQuery.value) return

@@ -42,32 +42,38 @@ const spec = {
   description: '读取保存结果',
   parameters: { type: 'object', properties: {}, additionalProperties: false },
 }
-async function fixture(steps) {
+async function fixture(steps, response, toolSpec = spec) {
   const root = await mkdtemp(join(tmpdir(), 'medqc-dsh-'))
   const adapter = new ScriptedAdapter(steps),
     callbacks = []
   const fetchImpl = async (url, options) => {
-    callbacks.push({ url, authorization: options.headers.Authorization })
-    return Response.json({
-      references: [
-        {
-          id: 'result:synthetic:2',
-          kind: 'saved_result',
-          title: '第二条问题',
-          status: 'non_compliant',
-          conclusion: '合成预期缺项',
-          suggestion: '原保存建议',
-        },
-      ],
+    callbacks.push({
+      url,
+      authorization: options.headers.Authorization,
+      args: JSON.parse(options.body),
     })
+    return Response.json(
+      response || {
+        references: [
+          {
+            id: 'result:synthetic:2',
+            kind: 'saved_result',
+            title: '第二条问题',
+            status: 'non_compliant',
+            conclusion: '合成预期缺项',
+            suggestion: '原保存建议',
+          },
+        ],
+      },
+    )
   }
   const runtime = await createRuntime({ root, adapter, model: 'synthetic', fetchImpl })
   const sessionId = randomUUID(),
     context = { view: 'doctor', institute_id: 'S', patient_id: 'A', visit_id: 'A1' }
-  await runtime.create(sessionId, { context, tools: [spec] })
+  await runtime.create(sessionId, { context, tools: [toolSpec] })
   const body = {
     context,
-    tools: [spec],
+    tools: [toolSpec],
     run_id: randomUUID(),
     message: '查看当前病例问题',
     backend_url: 'http://127.0.0.1:8003',
@@ -75,6 +81,104 @@ async function fixture(steps) {
   }
   return { runtime, root, adapter, callbacks, sessionId, context, body, fetchImpl }
 }
+
+test('状态筛选数组在原生 schema 和业务传输中保持数组类型', async () => {
+  const toolSpec = {
+    ...spec,
+    parameters: {
+      type: 'object',
+      properties: {
+        statuses: { type: 'array', items: { type: 'string', enum: ['non_compliant', 'data_gap'] } },
+      },
+      additionalProperties: false,
+    },
+  }
+  const f = await fixture(
+    [{ tool: spec.name, args: { statuses: ['non_compliant'] } }, { text: '已读取筛选范围。' }],
+    undefined,
+    toolSpec,
+  )
+  try {
+    const turn = await f.runtime.chat(f.sessionId, f.body)
+    assert.equal(turn.status, 'completed')
+    assert.equal(f.adapter.requests[0].tools[0].parameters.properties.statuses.type, 'array')
+    assert.deepEqual(f.callbacks[0].args.statuses, ['non_compliant'])
+  } finally {
+    await f.runtime.close()
+  }
+})
+
+test('原生模型与展示卡片分离持久化，空筛选不冒用上一页来源', async () => {
+  const canonical = {
+    state: 'ready',
+    job_id: 'task-a',
+    references: [
+      {
+        id: 'result:second',
+        position: 2,
+        kind: 'saved_result',
+        title: '第二条',
+        status: 'data_gap',
+        conclusion: '完整卡片专有文字，不发送模型',
+        suggestion: '原保存建议',
+      },
+    ],
+    result_page: {
+      detail: 'index',
+      page: 1,
+      page_size: 10,
+      total: 75,
+      matched_total: 1,
+      returned: 1,
+      has_more: false,
+      statuses: ['data_gap'],
+      reference_ids: ['result:second'],
+      status_counts: { data_gap: 1, compliant: 74 },
+    },
+  }
+  const f = await fixture(
+    [
+      { tool: spec.name },
+      { text: '查看下方第二条卡片。' },
+      { tool: spec.name },
+      { text: '本次筛选没有匹配项，其他类别仍有记录。' },
+    ],
+    canonical,
+  )
+  try {
+    const first = await f.runtime.chat(f.sessionId, f.body)
+    assert.equal(first.references[0].conclusion, canonical.references[0].conclusion)
+    assert.equal(first.result_pages[0].total, 75)
+    assert.ok(!JSON.stringify(f.adapter.requests[1].messages).includes('完整卡片专有文字'))
+    canonical.references = []
+    canonical.result_page = {
+      ...canonical.result_page,
+      statuses: ['uncertain'],
+      matched_total: 0,
+      returned: 0,
+      reference_ids: [],
+    }
+    const second = await f.runtime.chat(f.sessionId, { ...f.body, run_id: randomUUID() })
+    assert.deepEqual(second.references, [])
+    assert.equal(second.reference_scope, undefined)
+    await f.runtime.close()
+    const restored = await createRuntime({
+      root: f.root,
+      adapter: new ScriptedAdapter([{ text: '沿用来源。' }]),
+      model: 'synthetic',
+      fetchImpl: f.fetchImpl,
+    })
+    try {
+      const session = await restored.restore(f.sessionId, { context: f.context, tools: [spec] })
+      assert.equal(session.turns[0].references[0].conclusion, '完整卡片专有文字，不发送模型')
+      assert.equal(session.turns[0].result_pages[0].matched_total, 1)
+    } finally {
+      await restored.close()
+    }
+  } finally {
+    await f.runtime.close()
+  }
+})
 
 test('真实 DSH 内核调工具、续问、持久化恢复与幂等回读', async () => {
   const f = await fixture([
