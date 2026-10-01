@@ -8,6 +8,7 @@ import type {
 } from '@/api/businessAgent'
 
 const mocks = vi.hoisted(() => ({
+  duplicateSecond: false,
   access: vi.fn(),
   send: vi.fn(),
   activate: vi.fn(),
@@ -32,6 +33,9 @@ vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
         references: [
           { id: 'result-a', position: 1, kind: 'saved_result', title: '保存问题' },
           { id: 'result-second', position: 2, kind: 'saved_result', title: '第二条保存问题' },
+          ...(mocks.duplicateSecond
+            ? [{ id: 'other-second', position: 2, kind: 'saved_result', title: '另一页第二条' }]
+            : []),
         ],
         result_pages: [
           {
@@ -92,6 +96,7 @@ function mountDrawer(userContext: BusinessAgentContext = { view: 'manager' }) {
 describe('管理助手范围选择', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    mocks.duplicateSecond = false
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
   })
@@ -167,6 +172,34 @@ describe('管理助手范围选择', () => {
       .find((node) => node.text() === '发送')!
       .trigger('click')
     expect(mocks.send).toHaveBeenCalledWith('第二条为什么不合规？', context, 'result-second')
+    wrapper.unmount()
+  })
+  it('多个页面都有第二条时阻止快捷问发送，具体卡片仍绑定自己的id', async () => {
+    mocks.duplicateSecond = true
+    mocks.access.mockResolvedValue({ doctor_case_count: 2, manager_scopes: [] })
+    const context = { view: 'doctor' as const, institute_id: 'H', patient_id: 'P', visit_id: 'V' }
+    const wrapper = mountDrawer(context)
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '第二条为什么不合规？')!
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '发送')!
+      .trigger('click')
+    expect(mocks.send).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('存在多个第二条，请点击具体问题卡片的“解释这条”。')
+    await wrapper
+      .findAll('button')
+      .filter((node) => node.text() === '解释这条')
+      .at(-1)!
+      .trigger('click')
+    expect(mocks.send).toHaveBeenCalledWith(
+      '解释“另一页第二条”，查看病历证据与规则依据',
+      context,
+      'other-second',
+    )
     wrapper.unmount()
   })
   it('按保存问题选择证据并正确高亮包含表情的 Unicode 坐标', async () => {

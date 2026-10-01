@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.response import get_trace_id, success_response
-from ..core.security import get_current_user, require_roles
+from ..core.security import get_current_user
 from ..services.workstation.worklist_service import default_workstation_aggregation_service
 from ..services.workstation.luxian_0609_result_analysis_service import (
     default_luxian_0609_result_analysis_service,
@@ -113,7 +113,6 @@ async def get_luxian_0609_result_analysis(
     request: Request,
     care_phase: Literal["inpatient", "discharged"] = Query(..., description="病历范围：在院/已出院"),
     department: Optional[str] = Query(None, description="科室筛选"),
-    institute_id: Optional[str] = Query(None, description="授权机构；科室管理员存在多个机构时必须指定"),
     doctor: Optional[str] = Query(None, description="主管医师筛选"),
     rule_id: Optional[str] = Query(None, description="LX0609 质控点编码"),
     result_status: Optional[
@@ -130,24 +129,12 @@ async def get_luxian_0609_result_analysis(
     completed_to: Optional[datetime] = Query(None, description="质控完成时间终点（闭区间）"),
     page: int = Query(1, ge=1, description="病历下钻页码"),
     page_size: int = Query(20, ge=1, le=100, description="病历下钻每页条数"),
-    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
+    current_user: dict = Depends(get_current_user),
 ):
     """读取当前范围中每份病历最新 Canonical 结果的规则下钻统计。"""
 
     try:
-        analysis = default_luxian_0609_result_analysis_service.get_analysis
-        if not set(current_user.get("roles") or []).intersection({"admin", "super_admin"}):
-            from ..services.qc_agent.business_access import get_business_access
-            from ..services.qc_agent.business_reads import department_analysis
-            access = get_business_access()
-            scopes = [scope for scope in access.grant(current_user).manager_scopes if scope.department == department]
-            if not institute_id and len(scopes) == 1:
-                institute_id = scopes[0].institute_id
-            access.require_department(current_user, institute_id, department)
-            def scoped_analysis(**filters):
-                return department_analysis(institute_id=institute_id, **filters)
-            analysis = scoped_analysis
-        data = analysis(
+        data = default_luxian_0609_result_analysis_service.get_analysis(
             care_phase=care_phase,
             department=department,
             doctor=doctor,

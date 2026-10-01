@@ -103,7 +103,7 @@ def test_manager_same_department_other_institution_is_excluded_before_results(mo
         business_reads.require_record(policy(), MANAGER, {**CASE, "visit_id": "V4"}, "manager", "本科室")
 
 
-def test_formal_statistics_route_cannot_bypass_manager_scope(tmp_path, monkeypatch):
+def test_legacy_statistics_keeps_baseline_without_assistant_configuration(monkeypatch):
     import importlib.util
     import sys
     from pathlib import Path
@@ -111,42 +111,52 @@ def test_formal_statistics_route_cannot_bypass_manager_scope(tmp_path, monkeypat
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.core.security import get_current_user
-    from app.services.qc_agent import business_reads
-    # 单独执行真实 router 源码；只隔离无关工作队列的导入，不初始化共享库或 Worker。
+    # 隔离无关队列初始化，执行真实旧入口；仅恢复助手接入之前的合同。
     unrelated = ModuleType("app.services.workstation.worklist_service")
     unrelated.default_workstation_aggregation_service = object()
     monkeypatch.setitem(sys.modules, unrelated.__name__, unrelated)
     spec = importlib.util.spec_from_file_location("app.routers._isolated_business_statistics", Path(__file__).resolve().parents[2] / "app/routers/workstation.py")
     workstation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(workstation)
-    path = tmp_path / "access-private.json"
-    path.write_text(policy().config.model_dump_json(), encoding="utf-8")
-    monkeypatch.setenv("MEDQC_AGENT_ACCESS_FILE", str(path))
-    user = {"value": DOCTOR}
+    monkeypatch.delenv("MEDQC_AGENT_ACCESS_FILE", raising=False)
     app = FastAPI()
     app.include_router(workstation.router)
-    app.dependency_overrides[get_current_user] = lambda: user["value"]
+    app.dependency_overrides[get_current_user] = lambda: MANAGER
     calls = []
     def read(**filters):
         calls.append(filters)
         return {"kpis": {"scoped_record_total": 1}}
-    monkeypatch.setattr(business_reads, "department_analysis", read)
     monkeypatch.setattr(workstation.default_luxian_0609_result_analysis_service, "get_analysis", read)
     client = TestClient(app)
-    url = "/api/v1/workstation/qc-result-analysis/luxian-0609"
-    assert client.get(url, params={"care_phase": "discharged"}).status_code == 403
-    assert calls == []
+    response = client.get("/api/v1/workstation/qc-result-analysis/luxian-0609", params={"care_phase": "discharged", "department": "本科室", "page": 2, "page_size": 10})
+    assert response.status_code == 200
+    assert calls == [{"care_phase": "discharged", "department": "本科室", "doctor": None, "rule_id": None, "result_status": None, "completed_from": None, "completed_to": None, "page": 2, "page_size": 10}]
+
+
+def test_business_statistics_remains_fail_closed_after_legacy_restore(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.core.security import get_current_user
+    from app.routers.business_agent import router, business_reads
+    app = FastAPI()
+    app.include_router(router)
+    user = {"value": MANAGER}
+    app.dependency_overrides[get_current_user] = lambda: user["value"]
+    monkeypatch.delenv("MEDQC_AGENT_ACCESS_FILE", raising=False)
+    calls = []
+    monkeypatch.setattr(business_reads, "department_analysis", lambda **kw: calls.append(kw) or {})
+    client = TestClient(app)
+    params = {"institute_id": "H1", "department": "本科室", "care_phase": "discharged", "completed_from": "2026-09-01T00:00:00+08:00", "completed_to": "2026-09-30T23:59:59+08:00"}
+    assert client.get("/business/statistics", params=params).status_code == 503
+    app.dependency_overrides[get_business_access] = policy
+    user["value"] = DOCTOR
+    assert client.get("/business/statistics", params=params).status_code == 403
     user["value"] = MANAGER
-    assert client.get(url, params={"care_phase": "discharged", "department": "其他科室"}).status_code == 403
-    assert client.get(url, params={"care_phase": "discharged", "department": "本科室", "institute_id": "H2"}).status_code == 403
+    assert client.get("/business/statistics", params={**params, "department": "其他科室"}).status_code == 403
+    assert client.get("/business/statistics", params={**params, "institute_id": "H2"}).status_code == 403
     assert calls == []
-    assert client.get(url, params={"care_phase": "discharged", "department": "本科室"}).status_code == 200
-    assert calls[0]["institute_id"] == "H1"
-    user["value"] = {"id": "admin", "roles": ["admin"]}
-    assert client.get(url, params={"care_phase": "inpatient", "page": 2, "page_size": 10}).status_code == 200
-    assert calls[-1]["care_phase"] == "inpatient"
-    assert calls[-1]["page"] == 2
-    assert calls[-1]["page_size"] == 10
+    assert client.get("/business/statistics", params=params).status_code == 200
+    assert len(calls) == 1
 
 
 def test_readonly_workspace_initialization_never_creates_or_alters_tables(monkeypatch):

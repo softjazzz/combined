@@ -1,6 +1,6 @@
-"""本机真实只读联调：复用实际身份，禁止数据库写入且不加载主应用/Worker。"""
+"""本机只读联调：复用既有账号身份，禁止数据库写入且不加载主应用/Worker。"""
 import os
-import httpx
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import dotenv_values, load_dotenv
@@ -33,7 +33,7 @@ def enforce_readonly(connection, _):
     connection.set_session(readonly=True)
 
 
-from app.core.security import get_current_user  # noqa: E402
+from app.core.security import get_current_user, create_access_token, verify_password  # noqa: E402
 from app.routers.business_agent import router  # noqa: E402
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store  # noqa: E402
 
@@ -43,9 +43,14 @@ store = BusinessSessionStore(backend.parent / ".tmp/0910-full-audit/business-age
 app.dependency_overrides[get_business_store] = lambda: store
 
 
+def public_user(user):
+    return {key: user.get(key) for key in ("id", "email", "username", "display_name", "department", "roles", "avatar", "phone", "bio", "created_at", "last_login")}
+
+
+@app.get("/api/v1/auth/me")
 @app.get("/api/auth/me")
 async def me(user=Depends(get_current_user)):
-    return user
+    return public_user(user)
 
 
 @app.get("/readonly-health")
@@ -57,15 +62,19 @@ async def health(user=Depends(get_current_user)):
 
 class ValidationLogin(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    username: str
+    account: str | None = None
+    username: str | None = None
     password: str
 
 
+@app.post("/api/v1/auth/login")
 @app.post("/api/auth/login")
 async def login(body: ValidationLogin):
-    # 登录由用户已授权的现有主服务处理；验证服务不注册账号或修改角色。
-    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
-        response = await client.post("http://127.0.0.1:8001/api/v1/auth/login", json={"account": body.username, "password": body.password})
-    if response.status_code != 200:
-        raise HTTPException(response.status_code, "现有主服务登录失败")
-    return response.json()
+    # 手工只读联调专用：复用正式账号查询及密码校验（含既有内存身份）。
+    # 身份来源必须单独记录；不调用正式登录的 last_login 写入，不新增身份。
+    from app.services.auth_store import find_user_by_account
+    user = find_user_by_account(body.account or body.username or "")
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(401, "现有账号或密码不正确")
+    token = create_access_token({"sub": user["email"], "uid": user["id"]}, expires_delta=timedelta(hours=2))
+    return {"access_token": token, "token_type": "bearer", "user": public_user(user)}

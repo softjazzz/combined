@@ -330,6 +330,11 @@ async function submit() {
       ?.references.filter(
         (reference) => reference.kind === 'saved_result' && reference.position === 2,
       ) || []
+  if (message === '第二条为什么不合规？' && candidates.length > 1) {
+    error.value = '存在多个第二条，请点击具体问题卡片的“解释这条”。'
+    return
+  }
+  error.value = ''
   // 固定快捷追问绑定页面可见的稳定问题，不要求模型再次排序。
   if (message === '第二条为什么不合规？' && candidates.length === 1)
     await send(message, context.value, candidates[0].id)
@@ -337,6 +342,7 @@ async function submit() {
 }
 async function explainReference(reference: BusinessAgentReference) {
   if (!canQuery.value) return
+  error.value = ''
   await send(
     reference.kind === 'record'
       ? `查看“${reference.title}”的保存质控问题`
