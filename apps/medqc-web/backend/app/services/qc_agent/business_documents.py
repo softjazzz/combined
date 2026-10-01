@@ -25,10 +25,18 @@ def locate_document(evidence: dict, payload: dict) -> dict:
         return {**result, "state": "source_type_mismatch", "note": "当前文书类别与保存证据来源不一致，未展示未确认的原文。"}
     content = str(doc.get("content") or "")
     result.update(title=doc.get("doc_name") or doc.get("label") or "对应文书原文", content=content, record_time=doc.get("record_time") or doc.get("sort_time") or "")
+    # 历史保存摘录没有截断元数据。先匹配整段，仅对既有300字摘录合同
+    # 提供明确标注的前缀定位；不能据省略号推断文书版本或完整摘录一致。
+    prefix_only = (
+        quote not in content and len(quote) == 301 and quote.endswith("…")
+        and evidence.get("excerpt_kind") in {"字段级依据", "文书级依据"}
+    )
+    matched_quote = quote[:-1] if prefix_only else quote
+    result.update(matched_quote=matched_quote, match_scope="excerpt_prefix" if prefix_only else "exact_excerpt")
     positions = []
     offset = 0
-    while quote:
-        start = content.find(quote, offset)
+    while matched_quote:
+        start = content.find(matched_quote, offset)
         if start < 0:
             break
         positions.append(start)
@@ -38,8 +46,8 @@ def locate_document(evidence: dict, payload: dict) -> dict:
     if not positions:
         return {**result, "state": "quote_not_found", "note": "已确认来源文书，但保存摘录与当前原文未直接匹配，未伪造具体位置。"}
     if len(positions) != 1:
-        return {**result, "state": "quote_ambiguous", "note": "保存摘录在当前文书中出现多次，已打开确认的文书，未猜测具体位置。"}
-    return {**result, "state": "located", "start": positions[0], "end": positions[0] + len(quote), "offset_unit": "unicode_code_points", "note": "高亮当前文书中的相同文字。保存摘录另列，匹配不代表文书版本未变化。"}
+        return {**result, "state": "quote_ambiguous", "note": ("摘录省略号前的300字在当前文书中出现多次，已打开确认的文书，未猜测具体位置。" if prefix_only else "保存摘录在当前文书中出现多次，已打开确认的文书，未猜测具体位置。")}
+    return {**result, "state": "located", "start": positions[0], "end": positions[0] + len(matched_quote), "offset_unit": "unicode_code_points", "note": ("保存摘录未整段匹配；仅高亮末尾省略号前的300字。省略号及其后内容未核对，不代表整份文书版本一致。" if prefix_only else "高亮当前文书中的相同文字。保存摘录另列，匹配不代表文书版本未变化。")}
 
 
 def read_evidence_document(identity: dict[str, str], evidence: dict) -> dict:

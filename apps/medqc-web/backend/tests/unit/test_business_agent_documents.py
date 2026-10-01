@@ -90,3 +90,43 @@ def test_document_endpoint_rechecks_saved_task_owner_and_access_before_loading(t
     access.config.accounts.clear()
     assert client.get(url, params=params).status_code == 403
     assert len(calls) == 1
+
+
+
+def test_legacy_excerpt_prefix_is_explicit_and_original_quote_is_preserved():
+    text = "😀" + "保留否定条件，不得改写。" * 40
+    evidence = {"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": text[:300] + "…", "excerpt_kind": "文书级依据"}
+    result = locate_document(evidence, {"documents": [document(content=text)]})
+    assert result["state"] == "located"
+    assert result["quote"] == evidence["evidence_excerpt"]
+    assert result["matched_quote"] == text[:300]
+    assert result["content"][result["start"]:result["end"]] == result["matched_quote"]
+    assert result["match_scope"] == "excerpt_prefix"
+    assert "未整段匹配" in result["note"]
+
+
+@pytest.mark.parametrize("kind,content,state", [
+    ("", "甲" * 300, "quote_not_found"),
+    ("文书级依据", "甲" * 301, "quote_ambiguous"),
+    ("文书级依据", "乙" * 300, "quote_not_found"),
+])
+def test_legacy_prefix_requires_known_excerpt_contract_and_unique_exact_text(kind, content, state):
+    evidence = {"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": "甲" * 300 + "…", "excerpt_kind": kind}
+    result = locate_document(evidence, {"documents": [document(content=content)]})
+    assert result["state"] == state
+    assert "start" not in result and "end" not in result
+
+
+@pytest.mark.parametrize("quote", ["原句中的省略号…", "甲" * 300 + "…"])
+def test_literal_ellipsis_prefers_exact_whole_excerpt(quote):
+    evidence = {"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": quote, "excerpt_kind": "字段级依据"}
+    result = locate_document(evidence, {"documents": [document(content=quote)]})
+    assert result["state"] == "located"
+    assert result["matched_quote"] == quote
+    assert result["match_scope"] == "exact_excerpt"
+
+
+def test_short_ellipsis_is_not_assumed_to_be_truncation():
+    evidence = {"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": "真实正文…", "excerpt_kind": "文书级依据"}
+    result = locate_document(evidence, {"documents": [document(content="真实正文")]})
+    assert result["state"] == "quote_not_found"

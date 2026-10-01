@@ -44,6 +44,8 @@ export interface BusinessEvidenceDocument {
     | 'quote_ambiguous'
   content?: string
   quote: string
+  matched_quote?: string
+  match_scope?: 'exact_excerpt' | 'excerpt_prefix'
   note: string
   record_time?: string
   start?: number
