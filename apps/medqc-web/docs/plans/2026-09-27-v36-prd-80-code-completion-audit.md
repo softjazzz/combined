@@ -2,7 +2,7 @@
 
 ## 基线与结论
 
-**当前状态以本表为唯一入口。** 第125节复用工作树补齐21缺陷查询、39终末定时抽样和58规则配置，三项由部分实现改为代码完整。当前47完整/20部分/13未实现；长程Goal目标64/80，尚差17个整项。58兼容修复已通过主线216项后端复验。历史10个部分项计划已确认计数6/10，不在本批重新盘点。未逐项重审的完整项不冒称本次重新验收。数据库迁移、真实病例和浏览器尚未验收，原PRD矩阵业务验收状态不变。
+**当前状态以本表为唯一入口。** 第128节复用v36a/v36b/v36c并行推进、3fa6集中集成；27补齐缺陷默认待处理（申诉或已派发待整改）、快捷筛选、用户模板与重置，由部分改为代码完整。当前48完整/19部分/13未实现；长程Goal目标64/80，尚差16个整项。40评分抽样、29整改统一历史补齐子能力，仍保留部分。历史10个部分项计划不在本批重新盘点。未逐项重审的完整项不冒称本次重新验收。数据库迁移、真实病例和浏览器尚未验收，原PRD矩阵业务验收状态不变。
 
 ## 固定验收边界
 
@@ -24,19 +24,19 @@
 
 | 代码状态 | 项数 | 占全部80项 |
 | -------- | ---: | ---------: |
-| 代码完整 |   47 |     58.75% |
-| 部分实现 |   20 |        25% |
+| 代码完整 |   48 |        60% |
+| 部分实现 |   19 |     23.75% |
 | 未实现   |   13 |     16.25% |
 | 合计     |   80 |       100% |
 
-**当前账本代码完整率为47/80 = 58.75%，不是对全部80项新一轮独立验收。** 有直接实现的67项不等于完成率；各项工作量不同，不据此推算剩余工时。
+**当前账本代码完整率为48/80 = 60%，不是对全部80项新一轮独立验收。** 有直接实现的67项不等于完成率；各项工作量不同，不据此推算剩余工时。
 
-代码完整项：01、02、03、04、06、07、08、10、18、21、22、25、26、30、31、32、34、35、37、38、39、43、47、50、51、58、59、61、62、63、64、65、66、67、68、69、70、71、72、73、74、75、76、77、78、79、80。
+代码完整项：01、02、03、04、06、07、08、10、18、21、22、25、26、27、30、31、32、34、35、37、38、39、43、47、50、51、58、59、61、62、63、64、65、66、67、68、69、70、71、72、73、74、75、76、77、78、79、80。
 
 | 模块                          | 完整 | 部分 | 未实现 | 总数 |
 | ----------------------------- | ---: | ---: | -----: | ---: |
 | 登录、工作台、门急诊（01–20） |    9 |    3 |      8 |   20 |
-| 运行、终末、任务（21–43）     |   13 |    9 |      1 |   23 |
+| 运行、终末、任务（21–43）     |   14 |    8 |      1 |   23 |
 | 统计分析（44–56）             |    3 |    6 |      4 |   13 |
 | 规则、文书、测试病历（57–80） |   22 |    2 |      0 |   24 |
 
@@ -84,9 +84,9 @@
 | 24  | 病历详情联审                             | 部分实现 | 三坐标文书、审核、相邻病例导航和人工缺陷已接；完整运行范围与精确命中片段仍缺。                                                                                                                                                                                                   | `src/views/workstation-v4/QcRecordResultListView.vue:266`                                                                                                                               | `348ad8b3a`                                       |
 | 25  | 病历列表批量操作                         | 代码完整 | 所选三坐标经二次确认直接创建LX0609 workspace作业，精确集合校验、动作及数据范围授权、创建/复用审计、owner进度及完成刷新；账号/角色/场景迟到隔离，未知创建结果禁止盲重试。完整运行集合仍由21单列，不开放未核验终末执行。                                                           | `src/views/workstation-v4/components/qc/QcRunSelectedControl.vue`；`backend/app/routers/qc_sichuan.py`                                                                                  | 第109节；合成验证，真实PG/病例/浏览器未验收       |
 | 26  | 自定义列                                 | 代码完整 | 运行列表列显隐、恢复默认与用户/阶段隔离的浏览器持久化已接；固定身份/选择/操作列，存储异常失败提示，保留旧布局。非跨设备同步。                                                                                                                                                    | `src/views/workstation-v4/components/qc/QcRecordColumnSettings.vue:1`；`src/views/workstation-v4/components/qc/qcRecordColumnPreferences.ts:1`                                          | 第90节专项提交                                    |
-| 27  | 默认筛选与快捷筛选                       | 部分实现 | 审核快捷项、默认模板和重置已接；缺陷临床申诉/待整改默认分区未完成。                                                                                                                                                                                                              | `src/views/workstation-v4/components/qc/RecordFilterTemplateBar.vue:176`                                                                                                                | `223d2f6e5`                                       |
+| 27  | 默认筛选与快捷筛选                       | 代码完整 | 病历审核默认/快捷保持；缺陷默认待处理为本轮待处理申诉或已派发待整改并集，保留单项快捷、显式全部、用户默认模板、URL和重置优先级。按冻结来源去重后分页，来源故障503；迁移77、真实病例及浏览器未验收。 | `src/views/workstation-v4/components/qc/RecordFilterTemplateBar.vue`；`backend/app/services/defect_workflow_filter_service.py` | `5e7413187`、`28a4db374`；第128节 |
 | 28  | 详情分区与结构化文书                     | 部分实现 | 确认缺陷、单否、人工、编码分区及核心未接入提示已接真实owner；三坐标/job回执隔离，单否明确默认标准。人工/编码截断仅预览，核心分类与精确命中定位仍未齐。                                                                                                                           | `src/components/qc/CaseDefectPartitionsPanel.vue`；`backend/app/services/case_defect_partition_service.py`                                                                              | `e1a57e6a1`；第123节                              |
-| 29  | 病历级操作与操作记录                     | 部分实现 | 病历通过/存疑与三坐标时间线已接；现代整改及催办有独立事件历史和站内待办，尚未并入病例统一时间线，改标准等动作未齐。 | `backend/app/services/case_operation_timeline_service.py`；`src/views/workstation/HomeRectificationTodos.vue` | `456cc9d68`；第127节 |
+| 29  | 病历级操作与操作记录                     | 部分实现 | 病历通过/存疑与三坐标时间线已接；整改派发/提交/验收/驳回/催办已并入统一历史，保留原始轮次和事件快照，持久账号授权；改标准等其他动作仍未齐。 | `backend/app/services/case_operation_timeline_service.py`；`src/components/qc/CaseOperationTimeline.vue` | `dad389605`；第128节 |
 | 30  | 终末病历列表查询                         | 代码完整 | 按用户确认的终末口径B（2026-09-30，推广到全部终末场景）：终末=已出院，页面标注“归档未核验”；V5 已出院列表按出院日期/科室/医生/关键字/审核状态查询，故障不返回伪状态。归档来源接入后统一收窄。                                                                                    | `backend/app/core/final_scope_policy.py`；`src/views/workstation-v4/QcRecordResultListView.vue`                                                                                         | 第121节                                           |
 | 31  | 批量质控                                 | 代码完整 | 口径B：四川workspace/自定义质控/样本池/任务直达的终末与全部范围不再因归档未核验拒绝，无效范围仍取数前拒绝；V5 已出院列表勾选三坐标发起 LX0609 终末任务并轮询进度与结果。旧 dashboard 终末页缺三坐标身份，仍停用发起并引导至 V5。                                                 | `backend/app/core/final_scope_policy.py`；`backend/app/routers/qc_sichuan.py`；`src/views/workstation-v4/components/qc/QcRunSelectedControl.vue`                                        | 第121节                                           |
 | 32  | 病历详情和联审                           | 代码完整 | 口径B：已出院病例可打开三坐标详情、查看缺陷、完成通过/存疑审核（与运行共用审核 owner）；缺陷整改与医生通知属23/29，不在本行验收。                                                                                                                                                | `src/views/workstation-v4/QcRecordResultListView.vue`；`backend/app/services/record_review_service.py`                                                                                  | 第121节                                           |
@@ -97,7 +97,7 @@
 | 37  | 我创建的任务：任务列表                   | 代码完整 | 创建人列表、统计、详情、进度与分配信息按created范围查询，有测试。                                                                                                                                                                                                                | `src/views/dashboard/tasks/MyTasksView.vue:394`；`backend/app/routers/tasks.py:1274`                                                                                                    | `bab0a581e`                                       |
 | 38  | 新建抽查任务：单次任务                   | 代码完整 | 两入口显式选择场景与规则集、冻结版本；运行=当前在院（入院日期窗）、终末=已出院（口径B，出院日期窗必填≤31天，未核验归档）均由源库住院口径抽样生成三坐标任务病历，指定病历须在窗口内；门急诊抽样已实现，缺门急诊规则集为外部阻塞。                                                 | `backend/app/services/task_sampling_service.py`（validate_scene_case_scope、\_get_discharged_final_candidates）；`src/components/qc/CreateTaskDrawer.vue`；`src/utils/taskCaseScope.ts` | 第122节                                           |
 | 39  | 新建抽查任务：定时任务                   | 代码完整 | 计划管理、到期生成抽样子任务、回执与重试；运行在院、终末已出院日/周/月计划，终末取上海时区上一完整周期，重试固定原触发窗口。门急诊规则来源仍为外部阻塞，不宣称已部署调度。基线为未实现，不计历史十项Goal。                                                                       | `backend/app/services/task_schedule_job_service.py`；`src/components/qc/TaskScheduleDrawer.vue`                                                                                         | `0000b17ba`；第125节                              |
-| 40  | 病历范围：自定义筛选、指定病历           | 部分实现 | 三坐标指定病例及日期/科室可用，终末指定病例保留出院窗口；指定集合在创建、编辑、执行、保存及回放禁用二次抽样。手册分数/病历类型/临床医生等复杂条件未齐。 | `backend/app/services/task_sampling_service.py`；`backend/app/services/task_sampling_persistence.py` | `8138c8244`；第127节 |
+| 40  | 病历范围：自定义筛选、指定病历           | 部分实现 | 日期/科室/指定三坐标可用，终末保留出院窗；同场景显式评分标准与得分上下界贯通创建/编辑/模板和全集先筛后抽样。指定集合禁二次筛选，科室源故障不得空成功；病历类型和临床医生条件仍缺。 | `backend/app/services/task_sampling_service.py`；`src/components/qc/TaskScoreFilterFields.vue` | `a170ae6ed`、`9c7cd902c`；第128节 |
 | 41  | 病历抽样：全部、数量、比例等             | 部分实现 | 全部、总数、每科室固定份数及比例加上限已接，分组包含机构隔离；手册病历类型/质控医生/质控员的六种分组方式缺可信来源，未编造实现。 | `backend/app/services/task_sampling_service.py`；`src/components/qc/CreateTaskDrawer.vue` | `8138c8244`；第127节 |
 | 42  | 任务分配：原质控员、科室、比例、病历类型 | 部分实现 | 原质控员、科室、比例三种已实现；病历类型策略明确不可用。                                                                                                                                                                                                                         | `backend/app/services/task_assignment_service.py:22`；`src/components/qc/CreateTaskDrawer.vue:537`                                                                                      | `e3e453490`                                       |
 | 43  | 全部任务                                 | 代码完整 | 管理列表、分配、模板、分析、安全编辑、CSV与定时入口已接通；任务范围科室精确匹配、上海日历创建日期、状态/场景/关键词在列表、统计、分页及导出同口径。105项后端及52项前端回归通过。重抽样不是原PRD强制验收；不将新病例来源限制泛化为已保存任务管理缺失。迁移64–66未执行，部署另列。 | `backend/app/services/task_list_filter_service.py:1`；`backend/app/services/task_export_service.py:1`；`src/views/dashboard/tasks/AllTasksView.vue:1`                                   | `cc0fa210f`；第91至94、102节                      |
@@ -168,7 +168,7 @@
 
 | 层级                 | 本次结论                                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 代码完成             | 当前账本47完整、20部分、13未实现；21/39/58本批收口，不冒称全部80项重新验收                                         |
+| 代码完成             | 当前账本48完整、19部分、13未实现；27本批收口，不冒称全部80项重新验收 |
 | 非生产验证           | 历史各批有不同范围的单测/合成PG/只读冒烟，不能给80项统一通过率；最新报表及人员分析只读PG窗口为空，不是非空正向验收 |
 | 业务库部署           | 本开发批次未完成部署；不能把隔离库revision62当业务库已升级                                                         |
 | 真实病例与浏览器验收 | 未对80项形成逐项签收清单；本次代码审计不能代替业务验收                                                             |
