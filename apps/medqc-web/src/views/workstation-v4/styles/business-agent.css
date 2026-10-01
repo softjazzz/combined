@@ -40,3 +40,14 @@
   padding-top: var(--mq-space-3);
   background: var(--mq-glass-bg-strong);
 }
+.business-agent__document {
+  max-height: 62vh;
+  overflow: auto;
+  padding: var(--mq-space-4);
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-md);
+}
+.business-agent__document mark {
+  background: #fff1b8;
+  color: inherit;
+}

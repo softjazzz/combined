@@ -1,6 +1,6 @@
 # MedQC 业务助手 DSH 运行时
 
-这是独立工作树中的只读接入验证。DSH 执行模型/工具循环并保存 JSONL 历史；MedQC 负责账号归属、上下文、正式结果和统计。未完成真实规范库、医生权限及客户病例验收，不能据此部署客户环境。
+这是独立工作树中的只读接入验证。DSH 执行模型/工具循环并保存 JSONL 历史；MedQC 负责账号归属、明确访问范围、正式结果和统计。实际管理员的有限病例/科室已只读验证；实际医生/科室管理者身份、真实规范库及答案质量仍未验收，不能据此部署客户环境。
 
 ## 固定依赖与运行
 
@@ -26,3 +26,11 @@
 5. 真实模型的五轮验证脚本为 `backend/tests/manual/verify_business_agent.py --run-real-model`；必须显式传参数，会产生实际模型调用。原始结果只写隔离目录。
 
 标准单测：运行时 `node --test`；Python 在 `backend` 执行 `python -m pytest --confcutdir=tests/unit tests/unit/test_business_agent.py -q`，避免加载主应用公共 conftest；前端执行 `npm run test:unit -- tests/unit/views/workstation-v4/useBusinessAgent.spec.ts tests/unit/views/workstation-v4/QCAgentChatDrawer.spec.ts tests/unit/views/workstation-v4/WorkstationV4HomeEntry.spec.ts`。
+
+## 明确范围与真实只读联调
+
+主业务接口需要 `MEDQC_AGENT_ACCESS_FILE` 指向服务端私有授权文件，按账号 UID 配置 `doctor_cases`、`manager_scopes`；缺失/无效503，无授权403，即使管理员也不能绕过新链路范围。字段示例和验收结果见[授权与原文验证](../docs/plans/2026-09-30-business-agent-scoped-read-validation.md)。不把可编辑个人资料或前端筛选当作授权。
+
+在 `backend` 使用 `tests.manual.business_agent_readonly_app:app` 启动8003：显式设置 `MEDQC_AGENT_SOURCE_ENV` 为用户授权的既有 `backend/.env` 路径，以及上述私有授权路径。只选择读取 DATABASE_URL、DB_SCHEMA_MODE、DB_SEARCH_PATH、JWT_SECRET、JWT_ALGORITHM；PostgreSQL连接强制只读。实际登录委托既有8001，新验证服务不注册账号或修改角色，也不加载主应用/启动Worker。合成应用和真实只读应用不能同时占用8003。
+
+真实病例坐标、截图及模型输出必须留在 `.tmp/0910-full-audit/` 的私有目录，不放入本仓库页面或 Git。当前已有私有浏览器验证页，不在文档复制其病例配置。统一时区全量检查：设置 `TZ=Asia/Shanghai` 后执行 `npm run test:unit -- --maxWorkers=1 --minWorkers=1`。

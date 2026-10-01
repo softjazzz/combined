@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -36,7 +37,15 @@ class BusinessSessionStore:
         target = self.path(metadata["session_id"])
         temporary = target.with_suffix(f".{uuid4().hex}.tmp")
         temporary.write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, target)
+        # Windows 文件扫描短暂占用目标时保留原子替换，不能退化为覆盖写。
+        for attempt in range(6):
+            try:
+                os.replace(temporary, target)
+                break
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
 
     def create(self, user: dict, context: BusinessContext) -> dict:
         metadata = {

@@ -6,7 +6,13 @@
         <p>{{ contextLabel }}</p>
         <template v-if="context.view === 'manager'">
           <label class="mq-field"
-            >科室 <a-input v-model:value="department" placeholder="当前授权范围"
+            >机构/科室
+            <a-select
+              v-model:value="selectedScope"
+              :options="scopeOptions"
+              :loading="accessLoading"
+              placeholder="选择已授权科室"
+              data-testid="business-agent-manager-scope"
           /></label>
           <label class="mq-field"
             >病例范围 <a-select v-model:value="carePhase" :options="carePhaseOptions"
@@ -17,11 +23,12 @@
         </template>
         <p class="business-agent__muted">读取已保存结果和规范依据，保留正式结论与建议。</p>
       </section>
+      <a-alert v-if="accessError" type="warning" :message="accessError" show-icon />
       <div class="business-agent__shortcuts">
         <a-button
           v-for="prompt in prompts"
           :key="prompt"
-          :disabled="loading"
+          :disabled="loading || !canQuery"
           @click="draft = prompt"
         >
           {{ prompt }}
@@ -61,7 +68,7 @@
             <a-button
               v-if="reference.kind === 'saved_result'"
               type="link"
-              :disabled="loading"
+              :disabled="loading || !canQuery"
               @click="explainReference(reference)"
             >
               解释这条
@@ -69,7 +76,7 @@
             <a-button
               v-if="reference.kind === 'record'"
               type="link"
-              :disabled="loading"
+              :disabled="loading || !canQuery"
               @click="explainReference(reference)"
             >
               查看病例问题
@@ -92,7 +99,7 @@
       <div class="business-agent__composer">
         <a-textarea
           v-model:value="draft"
-          :disabled="loading"
+          :disabled="loading || !canQuery"
           :auto-size="{ minRows: 2, maxRows: 5 }"
           placeholder="查看当前病例问题，或追问某条结果的依据"
           @keydown.enter.exact.prevent="submit"
@@ -100,7 +107,11 @@
         <div class="business-agent__shortcuts">
           <a-button @click="reset(context)"> 新建会话 </a-button>
           <a-button v-if="loading" @click="stop"> 停止 </a-button>
-          <a-button type="primary" :disabled="loading || !draft.trim()" @click="submit">
+          <a-button
+            type="primary"
+            :disabled="loading || !canQuery || !draft.trim()"
+            @click="submit"
+          >
             发送
           </a-button>
         </div>
@@ -116,12 +127,61 @@
       <p v-if="referenceLoading">正在读取原文…</p>
       <a-alert v-else-if="referenceError" type="warning" :message="referenceError" />
       <template v-else-if="selectedReference">
-        <p>{{ selectedReference.locator }}</p>
-        <pre class="business-agent__answer">{{
-          selectedReference.text ||
-          selectedReference.conclusion ||
-          '当前来源未提供原文，请核对材料范围。'
-        }}</pre>
+        <template v-if="selectedReference.evidence?.length">
+          <p>{{ selectedReference.conclusion }}</p>
+          <p v-if="selectedReference.suggestion">建议：{{ selectedReference.suggestion }}</p>
+          <article
+            v-for="(evidence, index) in selectedReference.evidence"
+            :key="index"
+            class="mq-inset business-agent__reference"
+          >
+            <small v-if="evidence.record_time">{{ evidence.record_time }}</small>
+            <p class="business-agent__answer">
+              {{ evidence.evidence_excerpt || '该证据未提供摘录。' }}
+            </p>
+            <a-button type="link" @click="openEvidenceDocument(selectedReference.id, index)">
+              查看对应文书原文
+            </a-button>
+          </article>
+        </template>
+        <template v-else>
+          <p>{{ selectedReference.locator }}</p>
+          <pre class="business-agent__answer">{{
+            selectedReference.text ||
+            selectedReference.conclusion ||
+            '当前来源未提供原文，请核对材料范围。'
+          }}</pre>
+        </template>
+      </template>
+    </a-modal>
+    <a-modal
+      v-model:open="documentOpen"
+      wrap-class-name="mq-modal"
+      :title="evidenceDocument?.title || '对应文书原文'"
+      :footer="null"
+      :width="800"
+    >
+      <p v-if="documentLoading">正在读取对应文书…</p>
+      <a-alert v-else-if="documentError" type="warning" :message="documentError" />
+      <template v-else-if="evidenceDocument">
+        <a-alert
+          :type="evidenceDocument.state === 'located' ? 'info' : 'warning'"
+          :message="evidenceDocument.note"
+        />
+        <p class="business-agent__muted">
+          当前文书 · {{ evidenceDocument.record_time || '未提供记录时间' }}
+        </p>
+        <p>保存结果中的摘录：</p>
+        <p class="mq-inset business-agent__answer">
+          {{ evidenceDocument.quote || '未提供摘录' }}
+        </p>
+        <pre
+          v-if="evidenceDocument.content"
+          class="business-agent__answer business-agent__document"
+          data-testid="business-agent-document">{{ documentSegments.before }}<mark
+v-if="documentSegments.quote"
+                                                                                                                                              data-testid="business-agent-document-location"
+        >{{ documentSegments.quote }}</mark>{{ documentSegments.after }}</pre>
       </template>
     </a-modal>
   </a-drawer>
@@ -133,12 +193,65 @@ import {
   businessAgentApi,
   type BusinessAgentContext,
   type BusinessAgentReference,
+  type BusinessAgentAccess,
+  type BusinessEvidenceDocument,
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 
 const open = defineModel<boolean>('open', { default: false })
 const props = defineProps<{ userContext?: BusinessAgentContext }>()
-const department = ref(props.userContext?.department || '')
+const accessScope = ref<BusinessAgentAccess>()
+const accessLoading = ref(false)
+const accessError = ref('')
+const selectedScope = ref('')
+const scopeOptions = computed(() =>
+  (accessScope.value?.manager_scopes || []).map((scope) => ({
+    value: JSON.stringify([scope.institute_id, scope.department]),
+    label: `${scope.department} · ${scope.institute_id}`,
+  })),
+)
+const managerScope = computed(() =>
+  accessScope.value?.manager_scopes.find(
+    (scope) => JSON.stringify([scope.institute_id, scope.department]) === selectedScope.value,
+  ),
+)
+let accessGeneration = 0
+watch(
+  open,
+  async (visible) => {
+    const epoch = ++accessGeneration
+    accessScope.value = undefined
+    selectedScope.value = ''
+    accessError.value = ''
+    accessLoading.value = false
+    if (!visible) return
+    accessLoading.value = true
+    try {
+      const result = await businessAgentApi.access()
+      if (epoch !== accessGeneration) return
+      accessScope.value = result
+      const requested = result.manager_scopes.find(
+        (scope) =>
+          scope.institute_id === props.userContext?.institute_id &&
+          scope.department === props.userContext?.department,
+      )
+      const initial =
+        requested || (result.manager_scopes.length === 1 ? result.manager_scopes[0] : undefined)
+      if (initial) selectedScope.value = JSON.stringify([initial.institute_id, initial.department])
+      if (
+        props.userContext?.view === 'doctor'
+          ? !result.doctor_case_count
+          : !result.manager_scopes.length
+      )
+        accessError.value = '当前账号没有此入口的明确授权范围。'
+    } catch {
+      if (epoch === accessGeneration) accessError.value = '访问范围读取失败，请确认账号授权配置。'
+    } finally {
+      if (epoch === accessGeneration) accessLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 const carePhase = ref<'inpatient' | 'discharged'>('discharged')
 const dates = ref<[string, string]>()
 const carePhaseOptions = [
@@ -150,11 +263,20 @@ const context = computed<BusinessAgentContext>(() =>
     ? props.userContext
     : {
         view: 'manager',
-        department: department.value || undefined,
+        institute_id: managerScope.value?.institute_id,
+        department: managerScope.value?.department,
         care_phase: carePhase.value,
         completed_from: dates.value ? `${dates.value[0]}T00:00:00+08:00` : undefined,
         completed_to: dates.value ? `${dates.value[1]}T23:59:59+08:00` : undefined,
       },
+)
+const canQuery = computed(
+  () =>
+    !!accessScope.value &&
+    !accessError.value &&
+    (context.value.view === 'doctor'
+      ? !!accessScope.value.doctor_case_count
+      : !!managerScope.value && !!dates.value?.[0] && !!dates.value?.[1]),
 )
 const contextLabel = computed(() =>
   context.value.view === 'doctor'
@@ -177,11 +299,13 @@ watch(
   { immediate: true, deep: true },
 )
 async function submit() {
+  if (!canQuery.value) return
   const message = draft.value
   draft.value = ''
   await send(message, context.value)
 }
 async function explainReference(reference: BusinessAgentReference) {
+  if (!canQuery.value) return
   await send(
     reference.kind === 'record'
       ? `查看“${reference.title}”的保存质控问题`
@@ -206,11 +330,57 @@ const referenceOpen = ref(false)
 const referenceLoading = ref(false)
 const referenceError = ref('')
 let referenceGeneration = 0
-watch(context, () => {
-  referenceGeneration += 1
-  referenceOpen.value = false
-  selectedReference.value = undefined
+const evidenceDocument = ref<BusinessEvidenceDocument>()
+const documentOpen = ref(false)
+const documentLoading = ref(false)
+const documentError = ref('')
+let documentGeneration = 0
+const documentSegments = computed(() => {
+  const document = evidenceDocument.value
+  const content = document?.content || ''
+  if (
+    document?.state !== 'located' ||
+    document.offset_unit !== 'unicode_code_points' ||
+    document.start === undefined ||
+    document.end === undefined
+  )
+    return { before: content, quote: '', after: '' }
+  // 后端坐标按 Unicode 字符计算，避免表情等字符的 UTF-16 长度错位。
+  const chars = Array.from(content)
+  return {
+    before: chars.slice(0, document.start).join(''),
+    quote: chars.slice(document.start, document.end).join(''),
+    after: chars.slice(document.end).join(''),
+  }
 })
+watch([context, open, sessionId], () => {
+  referenceGeneration += 1
+  documentGeneration += 1
+  referenceOpen.value = false
+  documentOpen.value = false
+  selectedReference.value = undefined
+  evidenceDocument.value = undefined
+})
+async function openEvidenceDocument(referenceId: string, evidenceIndex: number) {
+  const epoch = ++documentGeneration
+  documentOpen.value = true
+  documentLoading.value = true
+  documentError.value = ''
+  evidenceDocument.value = undefined
+  try {
+    const document = await businessAgentApi.evidenceDocument(
+      sessionId.value,
+      referenceId,
+      evidenceIndex,
+    )
+    if (epoch === documentGeneration) evidenceDocument.value = document
+  } catch {
+    if (epoch === documentGeneration)
+      documentError.value = '对应文书读取失败，请重新核对保存结果与授权范围。'
+  } finally {
+    if (epoch === documentGeneration) documentLoading.value = false
+  }
+}
 async function openReference(referenceId: string) {
   const epoch = ++referenceGeneration
   referenceOpen.value = true

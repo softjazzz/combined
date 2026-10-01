@@ -91,13 +91,16 @@ class BusinessTools:
         binding = metadata["references"].get(record_reference or "", {})
         if binding.get("kind") != "record":
             raise HTTPException(422, "请先从当前统计下钻选择病例")
+        if binding["identity"].get("institute_id") != context.get("institute_id"):
+            raise HTTPException(403, "病例来源不属于当前会话机构")
         return binding["identity"]
 
     async def saved_results(self, metadata: dict, user: dict, record_reference: str | None) -> dict:
         identity = self.identity(metadata, record_reference)
         visit = quote(identity["visit_id"], safe="")
-        payload = await self.read_api(f"/api/v1/qc/sichuan/workspace/records/{visit}/latest-result", {
+        payload = await self.read_api(f"/api/v1/qc-agent/business/records/{visit}/latest-result", {
             "institute_id": identity["institute_id"], "patient_id": identity["patient_id"],
+            "view": metadata["context"]["view"], "department": metadata["context"].get("department", ""),
         })
         if payload.get("state") != "ready":
             return {"state": payload.get("state"), "reason_code": payload.get("reason_code"), "references": []}
@@ -133,8 +136,14 @@ class BusinessTools:
         if not binding or binding.get("kind") != "saved_result":
             raise HTTPException(404, "问题不属于本会话已查看的结果")
         identity = binding["identity"]
-        payload = await self.read_api(f"/api/v1/qc/sichuan/workspace/records/{quote(identity['visit_id'], safe='')}/latest-result", {
+        context = metadata["context"]
+        if context["view"] == "doctor" and any(identity.get(key) != context.get(key) for key in ("institute_id", "patient_id", "visit_id")):
+            raise HTTPException(403, "问题来源不属于当前会话病例")
+        if context["view"] == "manager" and identity.get("institute_id") != context.get("institute_id"):
+            raise HTTPException(403, "问题来源不属于当前会话机构")
+        payload = await self.read_api(f"/api/v1/qc-agent/business/records/{quote(identity['visit_id'], safe='')}/latest-result", {
             "institute_id": identity["institute_id"], "patient_id": identity["patient_id"],
+            "view": metadata["context"]["view"], "department": metadata["context"].get("department", ""),
         })
         if payload.get("job_id") != binding["job_id"] or payload.get("record_ref") != binding["record_ref"]:
             raise HTTPException(409, "结果版本已变化，请重新查看问题；本次未把旧问题替换为新判定")
@@ -143,6 +152,7 @@ class BusinessTools:
             raise HTTPException(404, "当前保存结果中未找到这条问题")
         reference = self.issue_reference(result_id, item, payload)
         evidence = item.get("evidence") or item.get("customer_evidence") or []
+        reference["evidence"] = evidence
         reference["text"] = "\n\n".join(filter(None, [
             reference.get("conclusion"), reference.get("suggestion"),
             *[f"{row.get('source_type', '')} · {row.get('source_ref', '')} · {row.get('record_time', '')} · {row.get('field_path', '')}\n{row.get('evidence_excerpt', '未提供原文摘录')}" for row in evidence if isinstance(row, dict)],
@@ -170,10 +180,10 @@ class BusinessTools:
         context = metadata["context"]
         if context["view"] != "manager":
             raise HTTPException(422, "请在管理工作台限定范围后问数")
-        filters = {key: context[key] for key in ("department", "care_phase", "completed_from", "completed_to") if key in context}
+        filters = {key: context[key] for key in ("institute_id", "department", "care_phase", "completed_from", "completed_to") if key in context}
         filters.setdefault("care_phase", "discharged")
         filters.update(params.model_dump(exclude_none=True))
-        payload = await self.read_api("/api/v1/workstation/qc-result-analysis/luxian-0609", filters)
+        payload = await self.read_api("/api/v1/qc-agent/business/statistics", filters)
         references = []
         for record in payload.get("record_page", {}).get("items", []):
             reference_id = f"record:{uuid4()}"

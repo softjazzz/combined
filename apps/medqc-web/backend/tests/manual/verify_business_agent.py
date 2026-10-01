@@ -17,7 +17,7 @@ def main():
     with httpx.Client(base_url="http://127.0.0.1:8003", headers={"Authorization": "Bearer synthetic-business-agent"}, timeout=75, trust_env=False) as client:
         scenarios = [
             ({"view": "doctor", "institute_id": "SYNTHETIC", "patient_id": "A", "visit_id": "A1", "patient_name": "合成病例A"}, ["这份病历有哪些已保存的质控问题？按返回顺序列出。", "第二条为什么不合规？请读取保存证据并给出来源。", "这条规则的要求来自哪里？有规范原文吗？"]),
-            ({"view": "manager", "department": "合成科室", "care_phase": "discharged", "completed_from": "2026-09-01T00:00:00+08:00", "completed_to": "2026-09-30T23:59:59+08:00"}, ["当前范围哪些质控问题最多？给出原统计值并列出病例。", "读取刚才第一个病例的保存质控问题。"]),
+            ({"view": "manager", "institute_id": "SYNTHETIC", "department": "合成科室", "care_phase": "discharged", "completed_from": "2026-09-01T00:00:00+08:00", "completed_to": "2026-09-30T23:59:59+08:00"}, ["当前范围哪些质控问题最多？给出原统计值并列出病例。", "读取刚才第一个病例的保存质控问题。"]),
         ]
         for context, questions in scenarios:
             response = client.post("/api/v1/qc-agent/business/sessions", json={"context": context})

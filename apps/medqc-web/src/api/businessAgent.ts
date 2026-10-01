@@ -22,6 +22,32 @@ export interface BusinessAgentReference {
   status?: string
   conclusion?: string
   suggestion?: string
+  evidence?: {
+    source_type: string
+    source_ref: string
+    record_time?: string
+    evidence_excerpt?: string
+    excerpt_kind?: string
+    field_path?: string
+  }[]
+}
+export interface BusinessEvidenceDocument {
+  title: string
+  source_view: 'current'
+  state:
+    | 'located'
+    | 'source_not_found'
+    | 'source_ambiguous'
+    | 'source_type_mismatch'
+    | 'quote_not_found'
+    | 'quote_ambiguous'
+  content?: string
+  quote: string
+  note: string
+  record_time?: string
+  start?: number
+  end?: number
+  offset_unit?: 'unicode_code_points'
 }
 export interface BusinessAgentTurn {
   run_id: string
@@ -41,7 +67,14 @@ export interface BusinessAgentSession {
   context: BusinessAgentContext
   turns: BusinessAgentTurn[]
 }
+export interface BusinessAgentAccess {
+  doctor_case_count: number
+  manager_scopes: { institute_id: string; department: string }[]
+}
 export const businessAgentApi = {
+  async access(): Promise<BusinessAgentAccess> {
+    return (await http.get('/api/v1/qc-agent/business/access')).data
+  },
   async create(context: BusinessAgentContext): Promise<BusinessAgentSession> {
     return (await http.post('/api/v1/qc-agent/business/sessions', { context })).data
   },
@@ -75,6 +108,18 @@ export const businessAgentApi = {
       await http.get(
         `/api/v1/qc-agent/business/sessions/${sessionId}/references/${encodeURIComponent(referenceId)}`,
       )
+    ).data
+  },
+  async evidenceDocument(
+    sessionId: string,
+    referenceId: string,
+    evidenceIndex: number,
+  ): Promise<BusinessEvidenceDocument> {
+    return (
+      await http.get(`/api/v1/qc-agent/business/sessions/${sessionId}/evidence-document`, {
+        params: { reference_id: referenceId, evidence_index: evidenceIndex },
+        timeout: 60000,
+      })
     ).data
   },
 }

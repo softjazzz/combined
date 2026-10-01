@@ -2,19 +2,46 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
+from typing import Literal
 from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from app.core.security import get_current_user
-from app.services.qc_agent.business_schemas import BusinessChat, BusinessSessionCreate, BusinessStop
+from app.services.qc_agent.business_schemas import BusinessChat, BusinessContext, BusinessSessionCreate, BusinessStop
+from app.services.qc_agent.business_access import BusinessAccess, get_business_access
+from app.services.qc_agent import business_reads, business_documents
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store
 from app.services.qc_agent.business_tools import BusinessTools, statistics_text, tool_specs
 
 router = APIRouter(prefix="/business", tags=["business-agent"])
+
+
+@router.get("/access")
+async def get_access(user: dict = Depends(get_current_user), access: BusinessAccess = Depends(get_business_access)):
+    return access.visible_scope(user)
+
+
+@router.get("/records/{visit_id}/latest-result")
+async def read_record_result(visit_id: str, institute_id: str = Query(..., min_length=1), patient_id: str = Query(..., min_length=1), view: Literal["doctor", "manager"] = "doctor", department: str | None = None, user: dict = Depends(get_current_user), access: BusinessAccess = Depends(get_business_access)):
+    identity = {"institute_id": institute_id, "patient_id": patient_id, "visit_id": visit_id}
+    await run_in_threadpool(business_reads.require_record, access, user, identity, view, department)
+    return {"data": await run_in_threadpool(business_reads.saved_record, identity)}
+
+
+@router.get("/statistics")
+async def read_statistics(institute_id: str, department: str, care_phase: Literal["inpatient", "discharged"], completed_from: datetime, completed_to: datetime, rule_id: str | None = None, result_status: str | None = None, page: int = Query(1, ge=1, le=100), user: dict = Depends(get_current_user), access: BusinessAccess = Depends(get_business_access)):
+    access.require_context(user, BusinessContext(view="manager", institute_id=institute_id, department=department, care_phase=care_phase, completed_from=completed_from.isoformat(), completed_to=completed_to.isoformat()))
+    try:
+        data = await run_in_threadpool(business_reads.department_analysis, institute_id=institute_id, department=department, care_phase=care_phase, completed_from=completed_from, completed_to=completed_to, rule_id=rule_id, result_status=result_status, page=page)
+    except ValueError as exc:
+        raise HTTPException(422, "统计参数不符合正式接口口径") from exc
+    return {"data": data}
 
 
 def loopback_url(setting: str, fallback: str) -> str:
@@ -46,7 +73,8 @@ async def runtime_call(method: str, path: str, body: dict | None = None) -> dict
 
 
 @router.post("/sessions")
-async def create_session(payload: BusinessSessionCreate, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store)):
+async def create_session(payload: BusinessSessionCreate, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
+    access.require_context(user, payload.context)
     # 先确认运行时可用，再创建仅含归属/上下文的本地元数据。
     await runtime_call("GET", "/health")
     metadata = store.create(user, payload.context)
@@ -55,15 +83,17 @@ async def create_session(payload: BusinessSessionCreate, user: dict = Depends(ge
 
 
 @router.get("/sessions/{session_id}")
-async def restore_session(session_id: UUID, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store)):
+async def restore_session(session_id: UUID, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
     metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
     data = await runtime_call("POST", f"/sessions/{session_id}/restore", {"context": metadata["context"], "tools": tool_specs()})
     return {"session_id": str(session_id), "context": metadata["context"], "turns": data["turns"]}
 
 
 @router.post("/sessions/{session_id}/chat")
-async def chat(session_id: UUID, payload: BusinessChat, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store)):
+async def chat(session_id: UUID, payload: BusinessChat, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
     metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
     if payload.reference_id and payload.reference_id not in metadata["references"]:
         raise HTTPException(404, "所选来源不属于当前会话")
     return await runtime_call("POST", f"/sessions/{session_id}/chat", {
@@ -86,8 +116,9 @@ def api_client(request: Request) -> httpx.AsyncClient:
 
 
 @router.post("/sessions/{session_id}/tools/{name}")
-async def run_tool(session_id: UUID, name: str, arguments: dict, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store)):
+async def run_tool(session_id: UUID, name: str, arguments: dict, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
     metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
     async with api_client(request) as client:
         try:
             return await BusinessTools(store, client).execute(name, arguments, metadata, user)
@@ -96,8 +127,9 @@ async def run_tool(session_id: UUID, name: str, arguments: dict, request: Reques
 
 
 @router.get("/sessions/{session_id}/references/{reference_id:path}")
-async def get_reference(session_id: UUID, reference_id: str, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store)):
+async def get_reference(session_id: UUID, reference_id: str, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
     metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
     binding = metadata["references"].get(reference_id)
     if binding:
         async with api_client(request) as client:
@@ -110,6 +142,21 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 data = await tools.saved_results(metadata, user, reference_id)
                 return {"id": reference_id, "kind": "evidence", "title": "病例保存结果", "text": "\n\n".join(f"{row['rule_id']} · {row['title']}\n{row.get('conclusion', '')}\n{row.get('suggestion', '')}" for row in data.get("references", [])) or "当前病例暂无可读取的保存结果"}
             if binding["kind"] == "statistics":
-                data = await tools.read_api("/api/v1/workstation/qc-result-analysis/luxian-0609", binding["filters"])
+                data = await tools.read_api("/api/v1/qc-agent/business/statistics", binding["filters"])
                 return {"id": reference_id, "kind": "statistics", "title": "正式统计口径与规则分布", "locator": "按原筛选条件刷新读取；数据可能较上一轮更新", "text": "按质控完成时间，使用范围内每份病例最新 Canonical 结果。\n" + statistics_text(data)}
     return await runtime_call("POST", f"/sessions/{session_id}/reference", {"reference_id": reference_id, "context": metadata["context"], "tools": tool_specs()})
+
+
+@router.get("/sessions/{session_id}/evidence-document")
+async def get_evidence_document(session_id: UUID, request: Request, reference_id: str = Query(..., min_length=1, max_length=200), evidence_index: int = Query(..., ge=0, le=100), user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
+    metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
+    async with api_client(request) as client:
+        # 先回查同一保存任务/问题，再由服务端选择其证据坐标；前端不提交文书 ID。
+        issue = await BusinessTools(store, client).issue(metadata, reference_id)
+    evidence = issue["evidence"]
+    if evidence_index >= len(evidence) or not isinstance(evidence[evidence_index], dict):
+        raise HTTPException(404, "该问题未提供所选证据")
+    identity = metadata["references"][reference_id]["identity"]
+    await run_in_threadpool(business_reads.require_record, access, user, identity, metadata["context"]["view"], metadata["context"].get("department"))
+    return await run_in_threadpool(business_documents.read_evidence_document, identity, evidence[evidence_index])

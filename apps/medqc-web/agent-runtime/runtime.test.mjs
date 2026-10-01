@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createRuntime } from './runtime.mjs'
+import { MedqcModelAdapter } from './model-adapter.mjs'
 
 class ScriptedAdapter extends LlmAdapter {
   constructor(steps) {
@@ -144,6 +145,51 @@ test('停止实际中断 DSH 原生请求；停止先到时不发模型请求', 
     assert.equal(f.adapter.requests.length, 1)
   } finally {
     await f.runtime.close()
+  }
+})
+
+test('供应商请求在首个流片段前取消仍保存停止状态', async () => {
+  const f = await fixture([])
+  await f.runtime.close()
+  const adapter = new MedqcModelAdapter({
+    endpoint: 'https://synthetic.invalid/v1',
+    apiKey: 'synthetic',
+    model: 'synthetic',
+    fetchImpl: (_, options) =>
+      new Promise((_, reject) =>
+        options.signal.addEventListener(
+          'abort',
+          () => {
+            // 模拟 Node fetch 对取消原因增加不可枚举 stack 的实际行为。
+            Object.defineProperty(options.signal.reason, 'stack', {
+              value: 'synthetic_fetch_stack',
+              enumerable: false,
+              configurable: true,
+            })
+            reject(options.signal.reason)
+          },
+          { once: true },
+        ),
+      ),
+  })
+  const runtime = await createRuntime({
+    root: f.root,
+    adapter,
+    model: 'synthetic',
+    fetchImpl: f.fetchImpl,
+  })
+  try {
+    await runtime.create(f.sessionId, { context: f.context, tools: [spec] })
+    const running = runtime.chat(f.sessionId, f.body)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    runtime.stop(f.sessionId, f.body.run_id)
+    assert.equal((await running).status, 'stopped')
+    assert.equal(
+      (await runtime.restore(f.sessionId, { context: f.context, tools: [spec] })).turns[0].status,
+      'stopped',
+    )
+  } finally {
+    await runtime.close()
   }
 })
 

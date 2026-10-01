@@ -1443,8 +1443,8 @@ def _normalize_string_list(values: Any) -> List[str]:
     return normalized
 
 
-@lru_cache(maxsize=1)
-def _drafts_table() -> Table:
+@lru_cache(maxsize=2)
+def _drafts_table(*, readonly: bool = False) -> Table:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
     metadata = MetaData()
@@ -1477,12 +1477,13 @@ def _drafts_table() -> Table:
         sa.Column("updated_at", sa.DateTime, nullable=False),
         schema=schema,
     )
-    metadata.create_all(bind=engine, checkfirst=True)
+    if not readonly:
+        metadata.create_all(bind=engine, checkfirst=True)
     return table
 
 
-@lru_cache(maxsize=1)
-def _batch_jobs_table() -> Table:
+@lru_cache(maxsize=2)
+def _batch_jobs_table(*, readonly: bool = False) -> Table:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
     metadata = MetaData()
@@ -1523,8 +1524,9 @@ def _batch_jobs_table() -> Table:
         sa.Column("family_name", sa.String(64)),
         schema=schema,
     )
-    metadata.create_all(bind=engine, checkfirst=True)
-    _sync_batch_job_parent_columns(schema=schema)
+    if not readonly:
+        metadata.create_all(bind=engine, checkfirst=True)
+        _sync_batch_job_parent_columns(schema=schema)
     return table
 
 
@@ -2174,11 +2176,12 @@ class WorkspaceBatchJobListResult:
 
 
 class CustomQCWorkspaceService:
-    def __init__(self) -> None:
+    def __init__(self, *, readonly: bool = False) -> None:
         if engine is None:
             raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
-        self._draft_table = _drafts_table()
-        self._batch_job_table = _batch_jobs_table()
+        # 新只读入口仅构造表定义；旧写入口仍保留既有兼容初始化行为。
+        self._draft_table = _drafts_table(readonly=True) if readonly else _drafts_table()
+        self._batch_job_table = _batch_jobs_table(readonly=True) if readonly else _batch_jobs_table()
         self._record_result_envelope_table = _record_result_envelopes_table()
 
     @staticmethod

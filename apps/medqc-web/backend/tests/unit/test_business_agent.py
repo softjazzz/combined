@@ -30,6 +30,25 @@ def test_owner_isolation_and_metadata_has_no_evidence(tmp_path):
         BusinessContext(view="doctor", patient_id="A")
 
 
+def test_transient_windows_replace_lock_keeps_atomic_previous_metadata(tmp_path, monkeypatch):
+    from app.services.qc_agent import business_store
+    store = BusinessSessionStore(tmp_path)
+    session = store.create(USER, BusinessContext(view="doctor", institute_id="S", patient_id="A", visit_id="A1"))
+    original = business_store.os.replace
+    calls = []
+    def transient(source, target):
+        calls.append(target)
+        if len(calls) < 3:
+            assert store.get(session["session_id"], USER)["references"] == {}
+            raise PermissionError("synthetic_windows_lock")
+        original(source, target)
+    monkeypatch.setattr(business_store.os, "replace", transient)
+    monkeypatch.setattr(business_store.time, "sleep", lambda _: None)
+    store.bind(session["session_id"], USER, "result:1", {"kind": "saved_result"})
+    assert len(calls) == 3
+    assert store.get(session["session_id"], USER)["references"]["result:1"] == {"kind": "saved_result"}
+
+
 def test_saved_issue_keeps_formal_facts_and_rejects_replaced_job(tmp_path):
     async def scenario():
         store = BusinessSessionStore(tmp_path)
@@ -66,7 +85,7 @@ def test_saved_issue_keeps_formal_facts_and_rejects_replaced_job(tmp_path):
 def test_statistics_preserves_filters_and_api_metrics(tmp_path):
     async def scenario():
         store = BusinessSessionStore(tmp_path)
-        metadata = store.create(USER, BusinessContext(view="manager", department="合成科室", care_phase="discharged", completed_from="2026-09-01T00:00:00+08:00", completed_to="2026-09-30T23:59:59+08:00"))
+        metadata = store.create(USER, BusinessContext(view="manager", institute_id="S", department="合成科室", care_phase="discharged", completed_from="2026-09-01T00:00:00+08:00", completed_to="2026-09-30T23:59:59+08:00"))
         payload = {"kpis": {"scoped_record_total": 13, "ready_record_total": 10, "unavailable_result_total": 3},
                    "rule_distribution": [{"rule_id": RULE, "rule_name": "合成质控点", "non_compliant_count": 4, "data_gap_count": 2, "evaluated_count": 10}],
                    "record_page": {"items": [{"institute_id": "S", "patient_id": "A", "visit_id": "A1"}]}}
@@ -109,8 +128,12 @@ def test_selected_reference_and_restore_must_belong_to_current_account(tmp_path,
     from app.core.security import get_current_user
     from app.routers import business_agent
     from app.services.qc_agent.business_store import get_business_store
+    from app.services.qc_agent.business_access import BusinessAccess, get_business_access
     store = BusinessSessionStore(tmp_path)
-    metadata = store.create(USER, BusinessContext(view="manager"))
+    role_user = {**USER, "roles": ["doctor"]}
+    context = BusinessContext(view="doctor", institute_id="S", patient_id="A", visit_id="A1")
+    metadata = store.create(USER, context)
+    access = BusinessAccess({"version": 1, "accounts": {USER["id"]: {"doctor_cases": [{"institute_id": "S", "patient_id": "A", "visit_id": "A1"}]}}})
     selected = "record:synthetic"
     store.bind(metadata["session_id"], USER, selected, {"kind": "record", "identity": {"institute_id": "S", "patient_id": "A", "visit_id": "A1"}})
     calls = []
@@ -120,8 +143,9 @@ def test_selected_reference_and_restore_must_belong_to_current_account(tmp_path,
     monkeypatch.setattr(business_agent, "runtime_call", runtime_call)
     app = FastAPI()
     app.include_router(business_agent.router)
-    app.dependency_overrides[get_current_user] = lambda: USER
+    app.dependency_overrides[get_current_user] = lambda: role_user
     app.dependency_overrides[get_business_store] = lambda: store
+    app.dependency_overrides[get_business_access] = lambda: access
     client = TestClient(app)
     url = f"/business/sessions/{metadata['session_id']}"
     body = {"run_id": str(uuid4()), "message": "查看这份病例", "reference_id": "record:foreign"}
@@ -133,3 +157,11 @@ def test_selected_reference_and_restore_must_belong_to_current_account(tmp_path,
     app.dependency_overrides[get_current_user] = lambda: {"id": "synthetic-b"}
     assert client.get(url).status_code == 404
     assert len(calls) == 1
+    app.dependency_overrides[get_current_user] = lambda: role_user
+    access.config.accounts.clear()
+    assert client.get(url).status_code == 403
+    assert client.get(url + "/references/" + selected).status_code == 403
+    assert client.post(url + "/tools/read_saved_results", json={}).status_code == 403
+    assert len(calls) == 1
+    # 授权撤销后仍可取消本人执行，不读取历史或病例。
+    assert client.post(url + "/stop", json={"run_id": str(uuid4())}).status_code == 200
