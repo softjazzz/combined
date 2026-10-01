@@ -15,6 +15,7 @@
         <HomeTaskTodos v-if="canReadTasks" />
         <HomeReviewTodos :scene="reviewTodoScene" />
         <HomeAppealTodos />
+        <HomeRectificationTodos />
 
         <section
           v-if="loadError"
@@ -419,6 +420,7 @@ import { useAuthStore } from '@/stores/auth'
 import HomeTaskTodos from './HomeTaskTodos.vue'
 import HomeReviewTodos from './HomeReviewTodos.vue'
 import HomeAppealTodos from './HomeAppealTodos.vue'
+import HomeRectificationTodos from './HomeRectificationTodos.vue'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePriorityItem,

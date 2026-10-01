@@ -129,6 +129,13 @@
           @forbidden="scoreForbidden = true"
         />
         <!-- 五分区只装配各自 owner：Canonical / 计分 / 人工 / 编码；核心制度明确未接入。 -->
+        <CaseRectificationCreate
+          v-if="showRectification && scoreScene"
+          :institute-id="focus.instituteId"
+          :patient-id="focus.patientId"
+          :visit-id="focus.visitId"
+          :job-id="latestResult.job_id"
+        />
         <CaseDefectPartitionsPanel
           v-if="showDefectPartitions && scoreScene"
           :key="`case-defect-partitions:${focus.instituteId}:${focus.patientId}:${focus.visitId}:${latestResult.job_id}`"
@@ -185,6 +192,7 @@ import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
 import CaseDefectPartitionsPanel from '@/components/qc/CaseDefectPartitionsPanel.vue'
+import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import type { CaseDefectTarget } from '@/components/qc/CaseDefectPartitionsPanel.vue'
 import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
@@ -289,17 +297,19 @@ const reviewAuth = computed(() => {
   const authStore = useAuthStore()
   return {
     allowed: authStore.hasRole('admin') || authStore.hasRole('qc_manager'),
+    canRectify: ['admin', 'qc_manager', 'qc_staff'].some(role => authStore.hasRole(role)),
     userId: authStore.user?.id ?? '',
   }
 })
 const reviewerId = computed(() => reviewAuth.value?.userId ?? '')
+const showRectification = computed(() => !!reviewAuth.value?.canRectify && !!props.scoreScene)
 const showRecordReview = computed(() => !!reviewAuth.value?.allowed && !reviewForbidden.value)
 const showDefectPartitions = computed(
   () => !!reviewAuth.value?.allowed && !!props.scoreScene && !defectPartitionsForbidden.value,
 )
 const showOperations = computed(() => !!reviewAuth.value?.allowed && !operationsForbidden.value)
 const showReviewSection = computed(
-  () => showRecordReview.value || showDefectPartitions.value || showOperations.value,
+  () => showRecordReview.value || showDefectPartitions.value || showOperations.value || showRectification.value,
 )
 
 function handleReviewSubmitted(decision: RecordReviewDecision) {

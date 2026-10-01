@@ -204,6 +204,7 @@ function mountDrawer(
         QCRecordCompareWorkbench: QCRecordCompareWorkbenchStub,
         CaseRecordReviewPanel: CaseRecordReviewPanelStub,
         CaseDefectPartitionsPanel: CaseDefectPartitionsPanelStub,
+        CaseRectificationCreate: { template: '<div data-testid="rectification-create" />' },
         CaseOperationTimeline: CaseOperationTimelineStub,
         CaseScorePanel: CaseScorePanelStub,
       },
@@ -473,6 +474,9 @@ describe('QCRecordResultComparisonDrawer', () => {
     const wrapper = mountDrawer('grouped', { recordReview: true, scoreScene: 'running' })
     await flushPromises()
     expect(wrapper.find('[data-testid="case-review-stub"]').exists()).toBe(mounted)
+    expect(wrapper.find('[data-testid="rectification-create"]').exists()).toBe(
+      roles.some(role => ['admin', 'qc_manager', 'qc_staff'].includes(role)),
+    )
     if (mounted) {
       expect(reviewPanelProps).toMatchObject({
         instituteId: 'H1',
