@@ -70,6 +70,16 @@ def workbook_bytes(data=None, *, status="builtin", seq=None):
     )
 
 
+def test_core_system_excel_preserves_missing_null_empty_and_explicit_ids():
+    rows = builtin_entries()
+    rows[1]["core_system_ids"] = None
+    rows[2]["core_system_ids"] = []
+    rows[3]["core_system_ids"] = ["CORE-15"]
+    parsed = excel.parse_workbook(workbook_bytes(rows), expected_rule_set_key=KEY)
+    assert "core_system_ids" not in parsed.entries[0]
+    assert [entry.get("core_system_ids") for entry in parsed.entries[1:4]] == [None, [], ["CORE-15"]]
+
+
 def edit_workbook(content: bytes, edit) -> bytes:
     workbook = load_workbook(io.BytesIO(content), data_only=False)
     edit(workbook)
@@ -126,7 +136,7 @@ def test_applicability_fields_roundtrip_without_defaulting_unconfigured_entries(
 def test_legacy_v1_four_column_workbook_imports_as_unconfigured_draft():
     content = edit_workbook(workbook_bytes(), lambda workbook: (
         setattr(workbook[excel.INFO_SHEET]["A2"], "value", excel.LEGACY_TEMPLATE_VERSION),
-        workbook[excel.ENTRY_SHEET].delete_cols(5, 3),
+        workbook[excel.ENTRY_SHEET].delete_cols(5, 4),
     ))
 
     parsed = excel.parse_workbook(content, expected_rule_set_key=KEY)

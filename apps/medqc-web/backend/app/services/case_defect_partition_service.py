@@ -8,7 +8,7 @@
 - 单否：``scoring_service.score_case`` 按场景默认标准计分，``deductions`` 中
   ``is_veto`` 为真的 rule_id；计分服务是唯一 owner。计分复用本次已读取的 DTO，
   保证两个分区锚定同一结果对象。
-- 核心制度：规则目录没有核心制度归类，固定返回未接入，不猜测。
+- 核心制度：仅消费结果冻结版本的管理员显式分类，不从规则名称猜测。
 
 人工缺陷与编码缺陷由前端直接读取各自 owner 的既有只读接口，本模块不代理。
 """
@@ -21,6 +21,8 @@ from typing import Any, Callable, Iterable, Mapping
 from .case_identity import CaseRef
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from . import scoring_service
+from .rule_set_version_service import resolve_rule_set_version
+from .medical_core_system_catalog import CORE_SYSTEMS
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +139,7 @@ def build_case_defect_partitions(
     workspace: Any,
     scorer: Callable[..., Mapping[str, Any]] | None = None,
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] | None = None,
+    version_resolver: Callable[..., Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """按三坐标装配确认缺陷、单否与核心制度三类分区的 rule_id 集合。
 
@@ -182,12 +185,30 @@ def build_case_defect_partitions(
             },
             "core": core,
         }
+    confirmed = _confirmed_partition(dto, projector or scoring_service.project_customer_items)
+    if confirmed["status"] == "ready" and dto.get("rule_set_version"):
+        try:
+            resolution = (version_resolver or resolve_rule_set_version)(dto.get("rule_set_key"), dto.get("rule_set_version"))
+            entries = {item["rule_id"]: item for item in resolution["entries"]}
+            unknown = [rule_id for rule_id in confirmed["rule_ids"] if entries.get(rule_id, {}).get("core_system_ids") is None]
+            matched = [rule_id for rule_id in confirmed["rule_ids"] if entries.get(rule_id, {}).get("core_system_ids")]
+            # 无确认缺陷时也需要整份版本分类已配置，不能把历史未配置伪装成零。
+            configured = any(item.get("core_system_ids") is not None for item in entries.values())
+            core = {
+                "source": CORE_SOURCE, "status": "partial" if unknown and matched else "not_integrated" if unknown or not configured else "ready",
+                "reason_code": CORE_SYSTEM_REASON if unknown or not configured else None,
+                "rule_ids": matched, "unknown_rule_ids": unknown,
+                "systems": [{**system, "rule_ids": [rule_id for rule_id in matched if system["id"] in entries[rule_id]["core_system_ids"]]} for system in CORE_SYSTEMS],
+            }
+        except Exception as exc:  # noqa: BLE001 - 分类故障不影响其他分区
+            logger.warning("核心制度分类读取失败 error_type=%s", type(exc).__name__)
+            core = {"source": CORE_SOURCE, "status": "unavailable", "reason_code": "classification_unavailable", "rule_ids": []}
     return {
         "schema_version": SCHEMA_VERSION,
         **identity_payload,
         "state": "ready",
         "job_id": job_id,
-        "confirmed": _confirmed_partition(dto, projector or scoring_service.project_customer_items),
+        "confirmed": confirmed,
         "veto": _veto_partition(
             identity=identity,
             dto=dto,

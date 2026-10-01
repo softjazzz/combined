@@ -80,6 +80,7 @@
           <span class="diff-rule-id">{{ item.rule_id }}</span>
           <span class="diff-rule-name">{{ item.name || UNKNOWN_TEXT }}</span>
           <span class="diff-change">
+            <a-tag v-if="item.coreChanged">核心制度归属变更</a-tag>
             <a-tag :color="item.from ? ENTRY_STATE_COLOR[item.from] : 'default'">
               {{ item.from ? ENTRY_STATE_LABEL[item.from] : '不在基础版本' }}
             </a-tag>

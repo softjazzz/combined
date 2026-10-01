@@ -20,6 +20,19 @@ from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUD
 
 
 KEY = "luxian_0609_qc_v1"
+
+
+def test_core_system_ids_unknown_none_and_explicit_membership_preserve_digest():
+    unknown = {"rule_id": "LX0609-001", "state": "active"}
+    assert "core_system_ids" not in service.normalize_entries([unknown])[0]
+    for value in (None, [], ["CORE-15", "CORE-01"]):
+        row = service.normalize_entries([{**unknown, "core_system_ids": value}])[0]
+        assert row["core_system_ids"] == (sorted(value) if value is not None else None)
+        assert service.normalize_entries([row]) == [row]
+        assert service.compute_entries_digest([row]) != service.compute_entries_digest([unknown])
+    for value in (["CORE-99"], ["CORE-01", "CORE-01"], "CORE-01", [1]):
+        with pytest.raises(service.RuleSetVersionInvalid):
+            service.normalize_entries([{**unknown, "core_system_ids": value}])
 BUILTIN = "2026-06-09"
 ACTOR = "u-manager"
 PENDING_RULE = "LX0609-020"  # phase=pending_definition，不可执行
@@ -282,6 +295,32 @@ def _publish_with(entries, version="2026-09-27.1", **kwargs):
     entries = _configured_entries(entries)
     service.create_draft(KEY, actor=ACTOR, entries=entries)
     return service.publish_draft(KEY, actor=ACTOR, version=version, **kwargs)
+
+
+def test_admin_saves_publishes_and_old_new_core_classifications_stay_frozen(sessions):
+    from app.services.case_defect_partition_service import build_case_defect_partitions
+    entries = _configured_entries(_builtin_entries())
+    service.create_draft(KEY, actor=ACTOR, entries=entries)
+    old = service.publish_draft(KEY, actor=ACTOR, version="synthetic-core-old")
+    assert all("core_system_ids" not in entry for entry in service.resolve_rule_set_version(KEY, old["version"])["entries"])
+    draft = service.create_draft(KEY, actor=ACTOR, base_version=old["version"])
+    updated = [{**entry, **({"core_system_ids": ["CORE-15"]} if entry["rule_id"] == "LX0609-001" else {})} for entry in draft["entries"]]
+    saved = service.update_draft(KEY, actor=ACTOR, version_seq=draft["version_seq"], entries=updated)
+    new = service.publish_draft(KEY, actor=ACTOR, version="synthetic-core-new", version_seq=saved["version_seq"])
+    assert old["content_digest"] != new["content_digest"]
+    class Workspace:
+        def __init__(self, version):
+            self.version = version
+        def build_latest_single_record_result_dto(self, **_kwargs):
+            return {"state": "ready", "job_id": "synthetic-job", "rule_set_key": KEY, "rule_set_version": self.version,
+                    "items": [{"rule_id": "LX0609-001", "is_confirmed_issue": True}]}
+    for version, status, ids in ((old["version"], "not_integrated", []), (new["version"], "ready", ["LX0609-001"])):
+        result = build_case_defect_partitions(institute_id="synthetic-H", patient_id="synthetic-P", visit_id="synthetic-V", scene=None,
+            workspace=Workspace(version), projector=lambda items: list(items))
+        assert result["core"]["status"] == status
+        assert result["core"]["rule_ids"] == ids
+    copied = service.create_draft(KEY, actor=ACTOR, base_version=new["version"])
+    assert next(entry for entry in copied["entries"] if entry["rule_id"] == "LX0609-001")["core_system_ids"] == ["CORE-15"]
 
 
 def test_publish_writes_digest_and_becomes_current(sessions):

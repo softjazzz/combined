@@ -43,6 +43,8 @@ export interface RuleSetEntry {
   department_scope_mode?: 'all' | 'selected' | null
   department_refs?: Array<{ institute_id: string; department_name: string }> | null
   doctor_visible?: boolean | null
+  /** null/缺省为未知，空数组明确非核心制度。 */
+  core_system_ids?: string[] | null
 }
 
 /**
@@ -238,6 +240,14 @@ async function request<T>(
       issues: detail.issues,
     }
   }
+}
+
+export function getMedicalCoreSystems() {
+  return request<{
+    items: Array<{ id: string; name: string }>
+    source_url: string
+    id_kind: string
+  }>({ method: 'GET', url: '/api/v1/rule-set-versions/core-systems' }, '读取核心制度字典失败')
 }
 
 function keyPath(ruleSetKey: string): string {

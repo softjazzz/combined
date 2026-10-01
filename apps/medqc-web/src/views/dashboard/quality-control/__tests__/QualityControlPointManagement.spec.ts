@@ -24,6 +24,12 @@ const state = vi.hoisted(() => ({
   api: {
     listRuleSetVersions: vi.fn(),
     getRuleSetVersion: vi.fn(),
+    getMedicalCoreSystems: vi
+      .fn()
+      .mockResolvedValue({
+        success: true,
+        data: { items: [{ id: 'CORE-15', name: '病历管理制度' }] },
+      }),
     createRuleSetDraft: vi.fn(),
     updateRuleSetDraft: vi.fn(),
     deleteRuleSetDraft: vi.fn(),
@@ -351,6 +357,25 @@ describe('QualityControlPointManagement', () => {
     expect(panel.findAll('.diff-item')).toHaveLength(1)
     expect(panel.find('.diff-item').text()).toMatch(/LX0609-001.*入院记录完整性.*已开启.*已暂停/)
     expect(wrapper.find('.row[data-id="LX0609-001"]').text()).toContain('草稿：已暂停')
+  })
+
+  it('仅配置非核心制度也可独立保存，差异可发布且不补适用范围', async () => {
+    state.api.createRuleSetDraft.mockResolvedValue(ok(draftOf(entries, 1)))
+    state.api.updateRuleSetDraft.mockImplementation(
+      async (_key: string, payload: { entries: RuleSetEntryView[] }) =>
+        ok(draftOf(payload.entries, 2)),
+    )
+    const wrapper = await render()
+    await button(wrapper, '查看', '.row[data-id="LX0609-001"]').trigger('click')
+    await flush()
+    await wrapper.findAll('.drawer .radio-group')[2].setValue('none')
+    await button(wrapper, '保存核心制度归属到草稿', '.drawer').trigger('click')
+    await flush()
+    const saved = state.api.updateRuleSetDraft.mock.calls[0][1].entries[0]
+    expect(saved.core_system_ids).toEqual([])
+    expect(saved.department_scope_mode).toBeUndefined()
+    expect(wrapper.find('.diff-item').text()).toContain('核心制度归属变更')
+    expect(button(wrapper, '发布新版本').attributes('disabled')).toBeUndefined()
   })
 
   it('在现有详情抽屉显式配置科室范围与医生端开关并保存到同一草稿', async () => {

@@ -7,6 +7,38 @@ from app.services import scoring_service
 CASE = {"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"}
 
 
+def test_core_classification_uses_frozen_version_and_only_confirmed_rules():
+    workspace = Workspace()
+    workspace.dto["rule_set_version"] = "synthetic-frozen"
+    def resolve(key, version):
+        assert (key, version) == ("luxian_0609_qc_v1", "synthetic-frozen")
+        return {"entries": [
+            {"rule_id": "LX0609-001", "core_system_ids": ["CORE-15"]},
+            {"rule_id": "LX0609-002", "core_system_ids": ["CORE-01"]},
+        ]}
+    result = build_case_defect_partitions(**CASE, scene=None, workspace=workspace,
+        projector=lambda items: list(items), version_resolver=resolve)
+    assert result["core"]["status"] == "ready"
+    assert result["core"]["rule_ids"] == ["LX0609-001"]
+    assert next(item for item in result["core"]["systems"] if item["id"] == "CORE-15")["rule_ids"] == ["LX0609-001"]
+    for value, status in ((None, "not_integrated"), ([], "ready")):
+        result = build_case_defect_partitions(**CASE, scene=None, workspace=workspace,
+            projector=lambda items: list(items), version_resolver=lambda *_: {"entries": [{"rule_id": "LX0609-001", "core_system_ids": value}]})
+        assert result["core"]["status"] == status
+        assert result["core"]["rule_ids"] == []
+
+
+def test_core_classification_source_failure_is_not_zero():
+    workspace = Workspace()
+    workspace.dto["rule_set_version"] = "synthetic-frozen"
+    def fail(*_args):
+        raise RuntimeError("synthetic unavailable")
+    result = build_case_defect_partitions(**CASE, scene=None, workspace=workspace,
+        projector=lambda items: list(items), version_resolver=fail)
+    assert result["core"]["status"] == "unavailable"
+    assert result["confirmed"]["status"] == "ready"
+
+
 class Workspace:
     def __init__(self, state: str = "ready") -> None:
         self.dto = {

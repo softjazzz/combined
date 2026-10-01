@@ -43,6 +43,7 @@ from .coding_rule_catalog import (
     get_coding_rule_set,
 )
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+from .medical_core_system_catalog import CORE_SYSTEM_IDS
 
 # 本批允许 LX0609 与编码质控发布新版本；0916 等其余规则集只支持内置版本。
 VERSIONABLE_RULE_SET_KEYS = frozenset({LUXIAN_0609_RULE_SET_KEY, CODING_RULE_SET_KEY})
@@ -253,7 +254,7 @@ def normalize_entries(raw: Any) -> list[dict[str, Any]]:
         raise RuleSetVersionInvalid(f"entries 不能超过 {MAX_ENTRIES} 条")
     normalized: dict[str, dict[str, Any]] = {}
     allowed_keys = {
-        "rule_id", "state", "department_scope_mode", "department_refs", "doctor_visible",
+        "rule_id", "state", "department_scope_mode", "department_refs", "doctor_visible", "core_system_ids",
     }
     for item in raw:
         if (
@@ -272,7 +273,16 @@ def normalize_entries(raw: Any) -> list[dict[str, Any]]:
         if rule_id in normalized:
             raise RuleSetVersionInvalid(f"entries 中规则重复：{rule_id}")
         normalized_item: dict[str, Any] = {"rule_id": rule_id, "state": state}
-        configured = any(key in item for key in allowed_keys - {"rule_id", "state"})
+        if "core_system_ids" in item:
+            core_ids = item["core_system_ids"]
+            if core_ids is not None and (
+                not isinstance(core_ids, list)
+                or any(not isinstance(value, str) or value not in CORE_SYSTEM_IDS for value in core_ids)
+                or len(core_ids) != len(set(core_ids))
+            ):
+                raise RuleSetVersionInvalid("entries 中核心制度归属必须为固定制度ID数组或 null")
+            normalized_item["core_system_ids"] = None if core_ids is None else sorted(core_ids)
+        configured = any(key in item for key in {"department_scope_mode", "department_refs", "doctor_visible"})
         if configured:
             mode = item.get("department_scope_mode")
             refs = item.get("department_refs")

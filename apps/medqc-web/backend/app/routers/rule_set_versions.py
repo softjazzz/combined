@@ -54,6 +54,7 @@ from ..services.rule_set_version_excel_service import (
     parse_workbook,
     validate_readonly_metadata,
 )
+from ..services.medical_core_system_catalog import CORE_SYSTEMS, CORE_SYSTEM_SOURCE_URL
 
 router = APIRouter(prefix="/api/v1/rule-set-versions", tags=["rule-set-versions"])
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ class RuleSetEntry(BaseModel):
     department_scope_mode: Optional[StrictStr] = None
     department_refs: Optional[list[RuleSetDepartmentRef]] = None
     doctor_visible: Optional[StrictBool] = None
+    core_system_ids: Optional[list[StrictStr]] = None
 
 
 class DraftCreateRequest(BaseModel):
@@ -214,6 +216,11 @@ def _raise_import_http(exc: Exception) -> None:
             },
         ) from exc
     _raise_http(exc, "excel_import")
+
+
+@router.get("/core-systems")
+def core_system_catalog(request: Request, current_user: dict = Depends(get_current_user)):
+    return _ok(request, {"items": list(CORE_SYSTEMS), "source_url": CORE_SYSTEM_SOURCE_URL, "id_kind": "project_internal"})
 
 
 @router.get("")

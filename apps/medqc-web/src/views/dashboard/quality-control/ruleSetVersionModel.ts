@@ -61,6 +61,7 @@ export interface QualityPointRow {
   departmentScopeMode: 'all' | 'selected' | null
   departmentRefs: Array<{ institute_id: string; department_name: string }> | null
   doctorVisible: boolean | null
+  coreSystemIds: string[] | null
 }
 
 export interface EntryDiffItem {
@@ -70,6 +71,7 @@ export interface EntryDiffItem {
   from: RuleSetEntryState | null
   /** 草稿中没有该规则时为 null。 */
   to: RuleSetEntryState | null
+  coreChanged?: boolean
 }
 
 export function toRuleSetEntry(entry: RuleSetEntry): RuleSetEntry {
@@ -81,6 +83,7 @@ export function toRuleSetEntry(entry: RuleSetEntry): RuleSetEntry {
       : {}),
     ...(entry.department_refs !== undefined ? { department_refs: entry.department_refs } : {}),
     ...(entry.doctor_visible !== undefined ? { doctor_visible: entry.doctor_visible } : {}),
+    ...(entry.core_system_ids !== undefined ? { core_system_ids: entry.core_system_ids } : {}),
   }
 }
 
@@ -113,6 +116,7 @@ export function buildPointRows(
       departmentScopeMode: draftEntry?.department_scope_mode ?? entry.department_scope_mode ?? null,
       departmentRefs: draftEntry?.department_refs ?? entry.department_refs ?? null,
       doctorVisible: draftEntry?.doctor_visible ?? entry.doctor_visible ?? null,
+      coreSystemIds: (draftEntry ?? entry).core_system_ids ?? null,
     }
   })
 }
@@ -177,7 +181,12 @@ export function diffEntries(
     const from = base.get(ruleId)?.state ?? null
     const to = draft.get(ruleId)?.state ?? null
     const name = draft.get(ruleId)?.qc_point ?? base.get(ruleId)?.qc_point ?? null
-    return from === to ? [] : [{ rule_id: ruleId, name, from, to }]
+    const coreChanged =
+      JSON.stringify(base.get(ruleId)?.core_system_ids ?? null) !==
+      JSON.stringify(draft.get(ruleId)?.core_system_ids ?? null)
+    return from === to && !coreChanged
+      ? []
+      : [{ rule_id: ruleId, name, from, to, ...(coreChanged ? { coreChanged } : {}) }]
   })
 }
 

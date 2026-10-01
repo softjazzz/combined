@@ -43,6 +43,24 @@ def client(roles=("qc_manager",), user_id="u-1"):
     return TestClient(app)
 
 
+def test_fixed_core_dictionary_and_explicit_entry_http_contract(sessions):
+    http = client()
+    catalog = http.get(f"{BASE}/core-systems")
+    assert catalog.status_code == 200
+    assert catalog.json()["data"]["id_kind"] == "project_internal"
+    assert len(catalog.json()["data"]["items"]) == 18
+    assert catalog.json()["data"]["items"][-1] == {"id": "CORE-18", "name": "信息安全管理制度"}
+    draft = http.post(f"{BASE}/{KEY}/draft", json={}).json()["data"]
+    entries = [{"rule_id": entry["rule_id"], "state": entry["state"]} for entry in draft["entries"]]
+    entries[0]["core_system_ids"] = []
+    updated = http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 1, "entries": entries})
+    assert updated.status_code == 200
+    assert updated.json()["data"]["entries"][0]["core_system_ids"] == []
+    entries[0]["core_system_ids"] = ["CORE-99"]
+    assert http.put(f"{BASE}/{KEY}/draft", json={"version_seq": 2, "entries": entries}).status_code == 422
+    assert client(roles=("qc_doctor",)).put(f"{BASE}/{KEY}/draft", json={"version_seq": 2, "entries": entries}).status_code == 403
+
+
 def test_list_detail_draft_publish_retire_flow(sessions):
     http = client()
     listed = http.get(BASE, params={"rule_set_key": KEY})

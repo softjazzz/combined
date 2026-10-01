@@ -276,6 +276,16 @@
         <dd>{{ scopeLabel(builtinDetail) }}</dd>
         <dt>医生端</dt>
         <dd>{{ doctorVisibilityLabel(builtinDetail.doctorVisible) }}</dd>
+        <dt>核心制度归属</dt>
+        <dd>
+          {{
+            builtinDetail.coreSystemIds === null
+              ? '未知'
+              : builtinDetail.coreSystemIds.length
+                ? builtinDetail.coreSystemIds.join('、')
+                : '非核心制度'
+          }}
+        </dd>
       </dl>
       <div v-if="builtinDetail && editable" class="applicability-editor">
         <label>科室范围</label>
@@ -292,9 +302,25 @@
           <a-radio-button value="visible"> 开放 </a-radio-button>
           <a-radio-button value="hidden"> 不开放 </a-radio-button>
         </a-radio-group>
-        <a-button type="primary" :loading="saving" @click="saveApplicability">
+        <a-button type="primary" :loading="saving" @click="saveApplicability()">
           保存到草稿
         </a-button>
+        <label>医疗质量安全核心制度归属</label>
+        <a-radio-group v-model:value="coreClassification">
+          <a-radio-button value="unknown"> 未分类 </a-radio-button>
+          <a-radio-button value="none"> 非核心制度 </a-radio-button>
+          <a-radio-button value="selected"> 指定制度 </a-radio-button>
+        </a-radio-group>
+        <a-select
+          v-if="coreClassification === 'selected'"
+          v-model:value="coreIds"
+          mode="multiple"
+          :options="coreSystems.map((item) => ({ value: item.id, label: item.name }))"
+        />
+        <p v-if="coreCatalogError" role="alert">{{ coreCatalogError }}</p>
+        <a-button :loading="saving" @click="saveApplicability(true)"
+          >保存核心制度归属到草稿</a-button
+        >
       </div>
       <p class="builtin-detail-note">
         内置质控点由规则执行器实现，判定逻辑不支持在线编辑；可通过批量操作调整上线状态或删除。
@@ -326,6 +352,7 @@ import {
   createRuleSetDraft,
   exportRuleSetVersion,
   getRuleSetVersion,
+  getMedicalCoreSystems,
   listRuleSetVersions,
   updateRuleSetDraft,
   type RuleSetEntryState,
@@ -396,6 +423,10 @@ const scopeMode = ref<'all' | 'selected' | ''>('')
 const scopeRefsText = ref('')
 const doctorVisibleChoice = ref<'visible' | 'hidden' | ''>('')
 const scopeTargetIds = ref<string[]>([])
+const coreClassification = ref<'unknown' | 'none' | 'selected'>('unknown')
+const coreIds = ref<string[]>([])
+const coreSystems = ref<Array<{ id: string; name: string }>>([])
+const coreCatalogError = ref('')
 
 const loading = ref(false)
 const saving = ref(false)
@@ -641,6 +672,22 @@ function confirmDelete() {
 function openBuiltinDetail(row: QualityPointRow) {
   if (isCodingMode.value) return
   builtinDetail.value = row
+  coreClassification.value =
+    row.coreSystemIds === null ? 'unknown' : row.coreSystemIds.length ? 'selected' : 'none'
+  coreIds.value = [...(row.coreSystemIds ?? [])]
+  const context = contextGeneration
+  const actor = actorKey.value
+  const key = ruleSetKey.value
+  void (async () => {
+    try {
+      const result = await getMedicalCoreSystems()
+      if (!contextCurrent(context, actor, key)) return
+      coreSystems.value = result.data?.items ?? []
+      coreCatalogError.value = result.success ? '' : result.message || '核心制度字典不可用'
+    } catch {
+      if (contextCurrent(context, actor, key)) coreCatalogError.value = '核心制度字典不可用'
+    }
+  })()
   scopeTargetIds.value = [row.rule_id]
   scopeMode.value = row.departmentScopeMode ?? ''
   scopeRefsText.value = (row.departmentRefs ?? [])
@@ -683,23 +730,37 @@ function parseDepartmentRefs() {
   return refs
 }
 
-async function saveApplicability() {
+async function saveApplicability(coreOnly = false) {
   const row = builtinDetail.value
   const list = versionList.value
   if (!row || !list || !editable.value) return
-  if (!scopeMode.value || !doctorVisibleChoice.value) {
+  if (!coreOnly && (!scopeMode.value || !doctorVisibleChoice.value)) {
     message.warning('请明确选择科室范围和医生端开关')
     return
   }
   const configuredScopeMode = scopeMode.value
   let departmentRefs: Array<{ institute_id: string; department_name: string }>
   try {
-    departmentRefs = parseDepartmentRefs()
+    departmentRefs = coreOnly ? [] : parseDepartmentRefs()
   } catch (error) {
     message.warning(error instanceof Error ? error.message : '科室范围格式无效')
     return
   }
   const key = ruleSetKey.value
+  if (
+    coreOnly &&
+    coreClassification.value === 'selected' &&
+    (!coreIds.value.length || coreCatalogError.value)
+  ) {
+    message.warning('请选择可信字典中的核心制度')
+    return
+  }
+  const selectedCoreIds =
+    coreClassification.value === 'unknown'
+      ? null
+      : coreClassification.value === 'none'
+        ? []
+        : [...coreIds.value]
   const actor = actorKey.value
   const context = contextGeneration
   const request = ++mutationGeneration
@@ -719,12 +780,14 @@ async function saveApplicability() {
     const entries = working.entries.map((entry) =>
       toRuleSetEntry(
         targets.has(entry.rule_id)
-          ? {
-              ...entry,
-              department_scope_mode: configuredScopeMode,
-              department_refs: departmentRefs,
-              doctor_visible: doctorVisibleChoice.value === 'visible',
-            }
+          ? coreOnly
+            ? { ...entry, core_system_ids: selectedCoreIds }
+            : {
+                ...entry,
+                department_scope_mode: configuredScopeMode,
+                department_refs: departmentRefs,
+                doctor_visible: doctorVisibleChoice.value === 'visible',
+              }
           : entry,
       ),
     )
@@ -737,7 +800,9 @@ async function saveApplicability() {
     }
     versionList.value = { ...list, draft: updated.data }
     builtinDetail.value = null
-    message.success(`已为 ${targets.size} 个质控点保存适用范围与医生端开关，发布新版本后生效`)
+    message.success(
+      `已为 ${targets.size} 个质控点保存${coreOnly ? '核心制度归属' : '适用范围与医生端开关'}，发布新版本后生效`,
+    )
   } finally {
     if (contextCurrent(context, actor, key) && request === mutationGeneration) saving.value = false
   }

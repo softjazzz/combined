@@ -147,9 +147,12 @@ export interface CaseDefectRulePartition {
 }
 
 export interface CaseDefectCorePartition {
-  status: 'not_integrated'
+  status: 'not_integrated' | 'ready' | 'partial' | 'unavailable'
   source: 'core_system_classification'
-  reason_code: 'core_system_classification_missing'
+  reason_code: string | null
+  rule_ids?: string[]
+  unknown_rule_ids?: string[]
+  systems?: Array<{ id: string; name: string; rule_ids: string[] }>
 }
 
 export interface CaseDefectPartitionsPayload {

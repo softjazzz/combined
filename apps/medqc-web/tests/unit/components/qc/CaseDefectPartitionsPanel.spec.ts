@@ -108,6 +108,40 @@ function tab(wrapper: ReturnType<typeof mountPanel>, label: string) {
 }
 
 describe('CaseDefectPartitionsPanel', () => {
+  it('核心制度显示冻结归属的确认缺陷并复用文书定位，不展示未确认规则', async () => {
+    const evidence = {
+      source_ref: 'safe-admission-ref',
+      source_type: 'admission_record',
+      field_path: 'chief_complaint',
+      quote: '合成证据',
+    }
+    getPartitions.mockResolvedValue({
+      success: true,
+      data: partitionPayload({
+        core: {
+          status: 'ready',
+          source: 'core_system_classification',
+          reason_code: null,
+          rule_ids: ['LX0609-001'],
+          unknown_rule_ids: [],
+          systems: [{ id: 'CORE-15', name: '病历管理制度', rule_ids: ['LX0609-001'] }],
+        },
+      }),
+    })
+    const wrapper = mountPanel({
+      canonicalItems: [{ ...canonicalItems[0], evidence: [evidence] }, canonicalItems[1]],
+    })
+    await flushPromises()
+    await tab(wrapper, '核心制度').trigger('click')
+    expect(wrapper.text()).toContain('病历管理制度')
+    expect(wrapper.text()).toContain('确认缺陷一')
+    expect(wrapper.text()).not.toContain('单否缺陷二')
+    await wrapper.get('[data-testid="partition-locate-evidence"]').trigger('click')
+    expect(wrapper.emitted('locate-evidence')?.[0]?.[0]).toMatchObject({
+      jobId: 'job-1',
+      ruleId: 'LX0609-001',
+    })
+  })
   it('只把当前确认缺陷的既有文书依据连同三坐标和作业传给联审', async () => {
     const evidence = {
       source_ref: 'safe-admission-ref',
@@ -195,7 +229,7 @@ describe('CaseDefectPartitionsPanel', () => {
     await tab(wrapper, '编码').trigger('click')
     expect(wrapper.text()).toContain('编码缺陷')
     await tab(wrapper, '核心制度').trigger('click')
-    expect(wrapper.text()).toContain('未接入（缺核心制度归类）')
+    expect(wrapper.text()).toContain('未配置核心制度归属（未知）')
   })
 
   it('未配置评分标准与未做编码质控均不伪造零', async () => {

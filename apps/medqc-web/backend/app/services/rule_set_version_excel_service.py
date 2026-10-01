@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import io
+import json
 import posixpath
 import zipfile
 from dataclasses import dataclass, field
@@ -19,14 +20,15 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 
 LEGACY_TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V1"
-TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V2"
+APPLICABILITY_TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V2"
+TEMPLATE_VERSION = "V3.6_RULE_SET_VERSION_IMPORT_V3"
 INFO_SHEET = "版本信息"
 ENTRY_SHEET = "质控点"
 EXPECTED_SHEETS = (INFO_SHEET, ENTRY_SHEET)
 INFO_HEADERS = ("模板版本", "规则集键", "导出版本", "导出状态", "基础版本", "基础内容摘要", "草稿版本序号")
 ENTRY_HEADERS = (
     "质控点ID", "状态", "质控点名称", "来源文书",
-    "科室范围模式", "指定科室", "医生端开放",
+    "科室范围模式", "指定科室", "医生端开放", "核心制度ID数组",
 )
 LEGACY_ENTRY_HEADERS = ENTRY_HEADERS[:4]
 
@@ -149,8 +151,10 @@ def build_workbook(
             )
             if type(item.get("doctor_visible")) is bool:
                 entries.cell(row_no, 7, item["doctor_visible"])
+        if "core_system_ids" in item:
+            entries.cell(row_no, 8, json.dumps(item["core_system_ids"], ensure_ascii=False))
     _style_headers(entries, len(ENTRY_HEADERS))
-    for column, width in zip("ABCDEFG", (18, 14, 44, 34, 18, 42, 16), strict=True):
+    for column, width in zip("ABCDEFGH", (18, 14, 44, 34, 18, 42, 16, 38), strict=True):
         entries.column_dimensions[column].width = width
     validation = DataValidation(type="list", formula1='"active,paused,offline,deleted"')
     entries.add_data_validation(validation)
@@ -253,7 +257,8 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
         info_headers_ok = _exact_headers(info, INFO_HEADERS, issues)
         raw_template = _text(info.cell(2, 1).value)
         expected_entry_headers = (
-            LEGACY_ENTRY_HEADERS if raw_template == LEGACY_TEMPLATE_VERSION else ENTRY_HEADERS
+            LEGACY_ENTRY_HEADERS if raw_template == LEGACY_TEMPLATE_VERSION else
+            ENTRY_HEADERS[:7] if raw_template == APPLICABILITY_TEMPLATE_VERSION else ENTRY_HEADERS
         )
         entry_headers_ok = _exact_headers(entry_sheet, expected_entry_headers, issues)
         if info.max_row != 2:
@@ -272,7 +277,7 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
         base_digest = _text(values["基础内容摘要"])
         raw_seq = values["草稿版本序号"]
 
-        if template not in {LEGACY_TEMPLATE_VERSION, TEMPLATE_VERSION}:
+        if template not in {LEGACY_TEMPLATE_VERSION, APPLICABILITY_TEMPLATE_VERSION, TEMPLATE_VERSION}:
             issues.append(_issue(INFO_SHEET, 2, "模板版本", "template_version", "模板版本不匹配，请重新导出"))
         if rule_set_key != expected_rule_set_key:
             issues.append(_issue(INFO_SHEET, 2, "规则集键", "rule_set_mismatch", "工作簿规则集与当前页面不一致"))
@@ -301,14 +306,14 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
         entries: list[dict[str, Any]] = []
         metadata: list[tuple[int, str, str, str]] = []
         for row_no in range(2, entry_sheet.max_row + 1):
-            column_count = 4 if template == LEGACY_TEMPLATE_VERSION else 7
+            column_count = 4 if template == LEGACY_TEMPLATE_VERSION else 7 if template == APPLICABILITY_TEMPLATE_VERSION else 8
             row = [entry_sheet.cell(row_no, index).value for index in range(1, column_count + 1)]
             if all(value in (None, "") for value in row):
                 continue
             rule_id, state, qc_point, source_document = (_text(value) for value in row[:4])
-            mode = _text(row[4]) if column_count == 7 else ""
-            refs_text = _text(row[5]) if column_count == 7 else ""
-            raw_doctor_visible = row[6] if column_count == 7 else None
+            mode = _text(row[4]) if column_count >= 7 else ""
+            refs_text = _text(row[5]) if column_count >= 7 else ""
+            raw_doctor_visible = row[6] if column_count >= 7 else None
             if not rule_id:
                 issues.append(_issue(ENTRY_SHEET, row_no, "质控点ID", "required", "质控点ID不能为空"))
             if state not in ALLOWED_STATES:
@@ -317,6 +322,11 @@ def parse_workbook(content: bytes, *, expected_rule_set_key: str) -> ParsedRuleS
                     "状态只能是 active、paused、offline 或 deleted",
                 ))
             entry: dict[str, Any] = {"rule_id": rule_id, "state": state}
+            if column_count == 8 and row[7] not in (None, ""):
+                try:
+                    entry["core_system_ids"] = json.loads(_text(row[7]))
+                except (ValueError, TypeError):
+                    issues.append(_issue(ENTRY_SHEET, row_no, "核心制度ID数组", "invalid_core_system_ids", "核心制度须填写 JSON 数组或 null"))
             applicability_values = (mode, refs_text, raw_doctor_visible)
             if any(value not in (None, "") for value in applicability_values):
                 if mode not in {"all", "selected"}:

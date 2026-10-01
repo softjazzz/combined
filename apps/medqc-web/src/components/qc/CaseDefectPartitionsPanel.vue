@@ -37,6 +37,15 @@
     >
       评分标准：{{ partition.veto.standard_name || '默认标准名称未返回' }}
     </p>
+    <p
+      v-if="activeTab === 'core' && partition?.core.status === 'partial'"
+      class="case-defect-partitions__source-note"
+    >
+      {{
+        partition.core.unknown_rule_ids?.length ?? 0
+      }}
+      项确认缺陷未配置核心制度归属，仅展示已配置项
+    </p>
 
     <div
       v-if="activeMessage"
@@ -49,7 +58,7 @@
     </div>
 
     <div
-      v-else-if="activeTab === 'confirmed' || activeTab === 'veto'"
+      v-else-if="activeTab === 'confirmed' || activeTab === 'veto' || activeTab === 'core'"
       class="case-defect-partitions__list"
     >
       <article
@@ -65,6 +74,12 @@
         </div>
         <p>{{ item.conclusion || item.detail || '暂无结论说明' }}</p>
         <small v-if="item.source_document">{{ item.source_document }}</small>
+        <small v-if="activeTab === 'core'">{{
+          partition?.core.systems
+            ?.filter((system) => system.rule_ids.includes(item.rule_id))
+            .map((system) => system.name)
+            .join('、')
+        }}</small>
         <div class="case-defect-partitions__evidence">
           <button
             v-for="evidence in itemEvidence(item)"
@@ -220,7 +235,10 @@ function isPartitionPayload(value: unknown): value is CaseDefectPartitionsPayloa
     isRulePartition(value.veto, 'scoring_deductions') &&
     isRecord(value.core) &&
     value.core.source === 'core_system_classification' &&
-    value.core.status === 'not_integrated'
+    ['not_integrated', 'ready', 'partial', 'unavailable'].includes(String(value.core.status)) &&
+    (value.core.status === 'not_integrated' ||
+      (Array.isArray(value.core.rule_ids) &&
+        value.core.rule_ids.every((id) => typeof id === 'string')))
   )
 }
 
@@ -239,8 +257,13 @@ const confirmedRuleIds = computed(() => normalizedRuleIds(partition.value?.confi
 const vetoRuleIds = computed(() => normalizedRuleIds(partition.value?.veto.rule_ids))
 const confirmedItems = computed(() => canonicalItemsFor(confirmedRuleIds.value))
 const vetoItems = computed(() => canonicalItemsFor(vetoRuleIds.value))
+const coreItems = computed(() => canonicalItemsFor(partition.value?.core.rule_ids))
 const activeCanonicalItems = computed(() =>
-  activeTab.value === 'veto' ? vetoItems.value : confirmedItems.value,
+  activeTab.value === 'core'
+    ? coreItems.value
+    : activeTab.value === 'veto'
+      ? vetoItems.value
+      : confirmedItems.value,
 )
 
 function itemEvidence(item: SingleRecordQcResultItem) {
@@ -332,25 +355,37 @@ const tabs = computed(() => [
         ? '—'
         : String(codingTotal.value ?? '—'),
   },
-  { key: 'core' as const, label: '核心制度', count: '—' },
+  {
+    key: 'core' as const,
+    label: '核心制度',
+    count: partitionCount(partition.value?.core.status, coreItems.value.length),
+  },
 ])
 
 const canonicalReferenceMismatch = computed(() => {
   if (activeTab.value === 'confirmed')
     return confirmedItems.value.length !== confirmedRuleIds.value.length
   if (activeTab.value === 'veto') return vetoItems.value.length !== vetoRuleIds.value.length
+  if (activeTab.value === 'core')
+    return coreItems.value.length !== normalizedRuleIds(partition.value?.core.rule_ids).length
   return false
 })
 
 const activeError = computed(() => {
   if (activeTab.value === 'manual') return Boolean(manualError.value)
   if (activeTab.value === 'coding') return Boolean(codingError.value)
-  if (activeTab.value === 'core') return false
   return Boolean(partitionError.value || canonicalReferenceMismatch.value)
 })
 
 const activeMessage = computed(() => {
-  if (activeTab.value === 'core') return '未接入（缺核心制度归类）'
+  if (activeTab.value === 'core') {
+    if (partitionError.value || canonicalReferenceMismatch.value)
+      return '核心制度分区引用不可用，请刷新'
+    if (partition.value?.core.status === 'not_integrated') return '未配置核心制度归属（未知）'
+    if (partition.value?.core.status === 'unavailable') return '核心制度分类暂时不可用'
+    if (!partition.value) return '正在读取核心制度归属…'
+    return coreItems.value.length ? '' : '当前已分类确认缺陷中暂无核心制度缺陷'
+  }
   if (activeTab.value === 'manual') {
     if (manualError.value) return manualError.value
     if (!manualReady.value) return loading.value ? '正在读取人工缺陷…' : '人工缺陷暂时不可用'
