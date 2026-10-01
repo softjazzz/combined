@@ -5,6 +5,8 @@ import {
   exportRecordQualityReport,
   getRecordQualityRecords,
   getRecordQualityReport,
+  getRecordRemediationAnalysis,
+  exportRecordRemediationAnalysis,
 } from '@/api/qualityReports'
 
 function error(status: number, data: unknown) {
@@ -20,6 +22,48 @@ function error(status: number, data: unknown) {
 
 describe('quality reports API', () => {
   beforeEach(() => vi.restoreAllMocks())
+
+  it('keeps remediation label and authorized blob export on the same scope', async () => {
+    const request = vi
+      .spyOn(ApiService, 'requestRaw')
+      .mockResolvedValue({ status: 200, data: { success: true, data: {} } } as Awaited<
+        ReturnType<typeof ApiService.requestRaw>
+      >)
+    const blob = new Blob(['合成CSV'])
+    const get = vi
+      .spyOn(ApiService, 'getRaw')
+      .mockResolvedValue({ status: 200, data: blob } as Awaited<
+        ReturnType<typeof ApiService.getRaw>
+      >)
+    await getRecordRemediationAnalysis({
+      scene: 'final',
+      defect_source: 'manual',
+      label: 'urged_rectified',
+      page: 2,
+      page_size: 20,
+    })
+    expect(request).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/api/v1/quality-reports/record-quality/remediations',
+      params: {
+        scene: 'final',
+        defect_source: 'manual',
+        label: 'urged_rectified',
+        page: 2,
+        page_size: 20,
+      },
+    })
+    await exportRecordRemediationAnalysis({
+      scene: 'final',
+      defect_source: 'manual',
+      label: 'urged_rectified',
+    })
+    expect(get).toHaveBeenCalledWith(
+      '/api/v1/quality-reports/record-quality/remediations/export',
+      { scene: 'final', defect_source: 'manual', label: 'urged_rectified' },
+      { responseType: 'blob' },
+    )
+  })
 
   it('uses the same scoped filters for summary and drilldown', async () => {
     const request = vi

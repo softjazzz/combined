@@ -111,6 +111,57 @@ export interface RecordQualityRecordsPage {
   items: ReportCaseRow[]
 }
 
+export interface RemediationFilters extends RecordQualityFilters {
+  label?: string
+  page?: number
+  page_size?: number
+}
+export interface RemediationRow {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  scene: ReportScene
+  target_kind: 'canonical_defect' | 'task_manual_defect'
+  target_id: string
+  target_label: string
+  root_job_id: string
+  envelope_id: string
+  source_known: boolean
+  source_reason?: 'not_current_round' | 'manual_source_missing' | null
+  patient_name: string
+  department: string
+  doctor: string
+  labels: string[]
+  rectification_state: string
+  rectification_id: string | null
+  assignee_name: string | null
+  submission_event_id: string | null
+  submission_urge_ids: string[]
+  current_urge_ids: string[]
+  appeals: Array<{ id: string; status: string }>
+  events: Array<{
+    id: string
+    version: number
+    action: string
+    new_status: string
+    comment: string
+    created_at: string
+    related_event_id: string | null
+  }>
+}
+export interface RecordRemediationAnalysis {
+  scope: RecordQualityFilters
+  contract_status: 'assumed_unconfirmed'
+  assumptions: string[]
+  labels: Array<{ key: string; label: string; defect_total: number; case_total: number }>
+  state_counts: Record<string, number>
+  total: number
+  page: number
+  page_size: number
+  filter_label: string | null
+  items: RemediationRow[]
+}
+
 export interface QualityReportResult<T> {
   success: boolean
   data?: T
@@ -183,6 +234,29 @@ export function getRecordQualityReport(filters: RecordQualityFilters) {
 
 export function getRecordQualityRecords(filters: RecordDrilldownFilters) {
   return read<RecordQualityRecordsPage>(`${BASE}/records`, filters)
+}
+
+export function getRecordRemediationAnalysis(filters: RemediationFilters) {
+  return read<RecordRemediationAnalysis>(`${BASE}/remediations`, filters)
+}
+
+export async function exportRecordRemediationAnalysis(
+  filters: RemediationFilters,
+): Promise<QualityReportResult<Blob>> {
+  try {
+    const response = await ApiService.getRaw<Blob>(
+      `${BASE}/remediations/export`,
+      paramsOf(filters),
+      { responseType: 'blob' },
+    )
+    return { success: true, data: response.data, status: response.status }
+  } catch (error) {
+    return {
+      success: false,
+      status: isAxiosError(error) ? error.response?.status : undefined,
+      message: extractApiErrorMessageFromError(error, '导出整改分析失败'),
+    }
+  }
 }
 
 export async function exportRecordQualityReport(

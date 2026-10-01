@@ -49,7 +49,6 @@ SCORE_BUCKETS = (
     ("90-100", Decimal("90"), Decimal("100")),
 )
 UNAVAILABLE_DIMENSIONS = (
-    {"key": "remediation_status", "label": "整改状态", "reason_code": "remediation_owner_undefined"},
     {"key": "core_system", "label": "核心制度维度", "reason_code": "core_system_classification_missing"},
 )
 REVIEW_STATES = ("pending_review", "pending_recheck", "approved", "doubtful")
@@ -169,6 +168,7 @@ class ReportContext:
     department_record_totals: Mapping[str, int]
     doctor_record_totals: Mapping[str, int]
     scope_records: Mapping[tuple[str, str, str], Mapping[str, Any]] = field(default_factory=dict)
+    saved_results: Mapping[tuple[str, str, str], Mapping[str, Any]] = field(default_factory=dict)
 
 
 def _text(value: Any, default: str = "") -> str:
@@ -405,6 +405,7 @@ def build_report_context(
         department_record_totals=_count_by(records_by_identity.values(), "department", "未分科室"),
         doctor_record_totals=_count_by(records_by_identity.values(), "attending_physician", "未登记主治医师"),
         scope_records=records_by_identity,
+        saved_results=raw_by_identity,
     )
 
 

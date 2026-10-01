@@ -314,6 +314,7 @@
           </div>
         </div>
       </section>
+      <RecordRemediationAnalysisPanel :filters="filters" />
       <section class="unavailable">
         <h2>暂未接入的维度</h2>
         <p v-for="item in report.unavailable_dimensions" :key="item.key">
@@ -408,6 +409,7 @@ import { message } from 'ant-design-vue'
 import { CircleAlert, Columns3, Download, RefreshCw, Search } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import CoreSystemReportPanel from './CoreSystemReportPanel.vue'
+import RecordRemediationAnalysisPanel from './RecordRemediationAnalysisPanel.vue'
 const reportTab = ref('quality')
 import {
   exportRecordQualityReport,

@@ -63,6 +63,45 @@ def test_records_passes_filters_and_page_to_same_context(monkeypatch):
     assert (captured["page"], captured["page_size"]) == (2, 10)
 
 
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_remediation_scope_identity_pagination_and_export(monkeypatch, scene):
+    context = object()
+    analysis = {"rows": [], "labels": [], "assumptions": [], "contract_status": "assumed_unconfirmed"}
+    calls = []
+    monkeypatch.setattr(service, "build_report_context", lambda **kwargs: calls.append(kwargs) or context)
+    def build(ctx, *, actor_id):
+        assert ctx is context and actor_id == "qc-1"
+        return analysis
+    monkeypatch.setattr(routes.remediation_report_service, "build_analysis", build)
+    monkeypatch.setattr(routes.remediation_report_service, "page", lambda data, **kwargs: {"contract_status": data["contract_status"], **kwargs})
+    response = _client().get(f"{BASE}/remediations", params={"scene": scene, "label": "clinical_appeal", "page": 2, "defect_source": "manual"})
+    assert response.status_code == 200 and response.json()["data"]["label"] == "clinical_appeal"
+    assert calls[-1]["scene"] == scene and calls[-1]["defect_source"] == "manual"
+    labels = []
+    monkeypatch.setattr(routes.remediation_report_service, "export_csv", lambda data, *, label: labels.append(label) or codecs.BOM_UTF8 + b"synthetic\n")
+    response = _client().get(f"{BASE}/remediations/export", params={"scene": scene, "label": "clinical_appeal"})
+    assert response.status_code == 200 and response.content.startswith(codecs.BOM_UTF8)
+    assert labels == ["clinical_appeal"] and response.headers["cache-control"] == "no-store"
+
+
+def test_remediation_owner_failure_is_503_not_empty_data(monkeypatch):
+    monkeypatch.setattr(service, "build_report_context", lambda **kwargs: object())
+    def fail(*args, **kwargs):
+        raise RuntimeError("private source SQL")
+    monkeypatch.setattr(routes.remediation_report_service, "build_analysis", fail)
+    for path in ("remediations", "remediations/export"):
+        response = _client().get(f"{BASE}/{path}", params={"scene": "running"})
+        assert response.status_code == 503 and "private source SQL" not in response.text
+
+
+@pytest.mark.parametrize("roles", [("doctor",), ("qc_staff",)])
+def test_remediation_http_roles_cannot_override_persistent_owner(monkeypatch, roles):
+    called = []
+    monkeypatch.setattr(service, "build_report_context", lambda **kwargs: called.append(kwargs))
+    assert _client(roles).get(f"{BASE}/remediations", params={"scene": "running"}).status_code == 403
+    assert called == []
+
+
 def test_export_is_attachment_with_bom_and_audit(monkeypatch):
     events = []
     monkeypatch.setattr(service, "build_report_context", lambda **_kwargs: object())

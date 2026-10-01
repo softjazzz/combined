@@ -22,6 +22,8 @@ from ..core.permissions import (
 )
 from ..core.security import get_current_user, require_roles
 from ..services import record_quality_report_service as report_service
+from ..services import record_remediation_report_service as remediation_report_service
+from ..services.defect_rectification_service import RectificationError
 from ..services import frontpage_quality_report_service as frontpage_report_service
 from ..services import medical_record_indicator_service as indicator_service
 from ..services import task_analysis_service
@@ -178,6 +180,49 @@ async def get_record_quality_records(
     except Exception as exc:
         _raise_report_error(exc, "records")
     return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/record-quality/remediations")
+async def get_record_remediations(
+    request: Request, params: dict[str, Any] = Depends(_report_params),
+    label: str | None = Query(None), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_params(current_user, params)
+    actor_id = _task_actor_id(current_user)
+    try:
+        context = await run_in_threadpool(report_service.build_report_context, **query)
+        analysis = await run_in_threadpool(remediation_report_service.build_analysis, context, actor_id=actor_id)
+        data = await run_in_threadpool(remediation_report_service.page, analysis, label=label, page=page, page_size=page_size)
+    except RectificationError as exc:
+        raise HTTPException(exc.status, str(exc)) from None
+    except Exception as exc:
+        _raise_report_error(exc, "remediations")
+    return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/record-quality/remediations/export")
+async def export_record_remediations(
+    request: Request, params: dict[str, Any] = Depends(_report_params), label: str | None = Query(None),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    query = _authorized_params(current_user, params)
+    actor_id = _task_actor_id(current_user)
+    try:
+        context = await run_in_threadpool(report_service.build_report_context, **query)
+        analysis = await run_in_threadpool(remediation_report_service.build_analysis, context, actor_id=actor_id)
+        content = await run_in_threadpool(remediation_report_service.export_csv, analysis, label=label)
+        if not isinstance(content, bytes):
+            raise TypeError("整改分析导出服务未返回 CSV 字节")
+    except RectificationError as exc:
+        raise HTTPException(exc.status, str(exc)) from None
+    except Exception as exc:
+        _raise_report_error(exc, "remediations_export")
+    audit_event(request, action="quality_reports.record_remediation.export",
+        resource="/api/v1/quality-reports/record-quality/remediations/export", outcome="success",
+        details={"scene": query["scene"], "bytes": len(content)}, current_user=current_user)
+    return Response(content=content, media_type="text/csv; charset=utf-8", headers={"Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff", "Content-Disposition": f'attachment; filename="record_remediation_{query["scene"]}.csv"'})
 
 
 @router.get("/record-quality/export")

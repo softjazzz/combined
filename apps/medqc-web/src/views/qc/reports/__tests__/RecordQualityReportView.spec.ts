@@ -71,6 +71,7 @@ function render() {
     global: {
       stubs: {
         'a-drawer': drawerStub,
+        RecordRemediationAnalysisPanel: true,
         'a-tabs': {
           props: ['activeKey'],
           template:
