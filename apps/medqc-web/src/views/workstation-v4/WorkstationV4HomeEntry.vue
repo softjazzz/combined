@@ -11,7 +11,11 @@
       <span class="wv4-home-entry__agent-text">智能助手</span>
       <span class="wv4-home-entry__agent-status" aria-hidden="true" />
     </button>
-    <BusinessAgentDrawer v-model:open="qcAgentOpen" :user-context="{ view: 'manager' }" />
+    <BusinessAgentDrawer
+      v-model:open="qcAgentOpen"
+      allow-case-selection
+      :user-context="{ view: 'manager' }"
+    />
   </div>
   <WorkstationV4View v-else />
 </template>

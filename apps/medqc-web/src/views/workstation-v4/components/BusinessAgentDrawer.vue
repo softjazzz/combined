@@ -2,8 +2,43 @@
   <a-drawer :open="open" :width="760" title="智能业务助手" @close="open = false">
     <div class="business-agent">
       <section class="mq-soft">
+        <div
+          v-if="allowCaseSelection && caseOptions.length && scopeOptions.length"
+          class="business-agent__shortcuts"
+        >
+          <a-button
+            :type="activeView === 'doctor' ? 'primary' : 'default'"
+            @click="selectedView = 'doctor'"
+          >
+            病例问题
+          </a-button>
+          <a-button
+            :type="activeView === 'manager' ? 'primary' : 'default'"
+            @click="selectedView = 'manager'"
+          >
+            科室问数
+          </a-button>
+        </div>
         <strong>{{ context.view === 'doctor' ? '当前病例' : '管理问数范围' }}</strong>
         <p>{{ contextLabel }}</p>
+        <label v-if="allowCaseSelection && context.view === 'doctor'" class="mq-field"
+          >授权病例
+          <a-select
+            v-model:value="selectedCase"
+            :options="caseOptions"
+            :loading="accessLoading"
+            placeholder="选择已授权病例"
+            data-testid="business-agent-case-scope"
+          />
+        </label>
+        <p
+          v-if="
+            allowCaseSelection && context.view === 'doctor' && !caseOptions.length && !accessLoading
+          "
+          class="business-agent__muted"
+        >
+          当前入口没有可选择的授权病例，请从已授权病历详情进入或核对访问范围。
+        </p>
         <template v-if="context.view === 'manager'">
           <label class="mq-field"
             >机构/科室
@@ -221,11 +256,29 @@ import {
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 
 const open = defineModel<boolean>('open', { default: false })
-const props = defineProps<{ userContext?: BusinessAgentContext }>()
+const props = defineProps<{ userContext?: BusinessAgentContext; allowCaseSelection?: boolean }>()
 const accessScope = ref<BusinessAgentAccess>()
 const accessLoading = ref(false)
 const accessError = ref('')
 const selectedScope = ref('')
+const selectedCase = ref('')
+const selectedView = ref<'doctor' | 'manager'>('manager')
+const activeView = computed(() =>
+  props.allowCaseSelection ? selectedView.value : props.userContext?.view || 'manager',
+)
+const caseOptions = computed(() =>
+  (accessScope.value?.doctor_cases || []).map((record) => ({
+    value: JSON.stringify([record.institute_id, record.patient_id, record.visit_id]),
+    label: `住院 ${record.visit_id} · 患者 ${record.patient_id} · ${record.institute_id}`,
+  })),
+)
+const doctorCase = computed(() =>
+  accessScope.value?.doctor_cases?.find(
+    (record) =>
+      JSON.stringify([record.institute_id, record.patient_id, record.visit_id]) ===
+      selectedCase.value,
+  ),
+)
 const scopeOptions = computed(() =>
   (accessScope.value?.manager_scopes || []).map((scope) => ({
     value: JSON.stringify([scope.institute_id, scope.department]),
@@ -244,6 +297,7 @@ watch(
     const epoch = ++accessGeneration
     accessScope.value = undefined
     selectedScope.value = ''
+    selectedCase.value = ''
     accessError.value = ''
     accessLoading.value = false
     if (!visible) return
@@ -252,6 +306,8 @@ watch(
       const result = await businessAgentApi.access()
       if (epoch !== accessGeneration) return
       accessScope.value = result
+      if (props.allowCaseSelection)
+        selectedView.value = result.manager_scopes.length ? 'manager' : 'doctor'
       const requested = result.manager_scopes.find(
         (scope) =>
           scope.institute_id === props.userContext?.institute_id &&
@@ -261,9 +317,11 @@ watch(
         requested || (result.manager_scopes.length === 1 ? result.manager_scopes[0] : undefined)
       if (initial) selectedScope.value = JSON.stringify([initial.institute_id, initial.department])
       if (
-        props.userContext?.view === 'doctor'
-          ? !result.doctor_case_count
-          : !result.manager_scopes.length
+        props.allowCaseSelection
+          ? !result.doctor_case_count && !result.manager_scopes.length
+          : props.userContext?.view === 'doctor'
+            ? !result.doctor_case_count
+            : !result.manager_scopes.length
       )
         accessError.value = '当前账号没有此入口的明确授权范围。'
     } catch {
@@ -281,8 +339,10 @@ const carePhaseOptions = [
   { value: 'discharged', label: '已出院' },
 ]
 const context = computed<BusinessAgentContext>(() =>
-  props.userContext?.view === 'doctor'
-    ? props.userContext
+  activeView.value === 'doctor'
+    ? props.allowCaseSelection
+      ? { view: 'doctor', ...doctorCase.value }
+      : props.userContext || { view: 'doctor' }
     : {
         view: 'manager',
         institute_id: managerScope.value?.institute_id,
@@ -297,7 +357,11 @@ const canQuery = computed(
     !!accessScope.value &&
     !accessError.value &&
     (context.value.view === 'doctor'
-      ? !!accessScope.value.doctor_case_count
+      ? !!accessScope.value.doctor_case_count &&
+        !!context.value.institute_id &&
+        !!context.value.patient_id &&
+        !!context.value.visit_id &&
+        (!props.allowCaseSelection || !!doctorCase.value)
       : !!managerScope.value && !!dates.value?.[0] && !!dates.value?.[1]),
 )
 const contextLabel = computed(() =>

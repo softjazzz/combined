@@ -73,9 +73,12 @@ const Range = defineComponent({
   emits: ['update:value'],
   template: '<div />',
 })
-function mountDrawer(userContext: BusinessAgentContext = { view: 'manager' }) {
+function mountDrawer(
+  userContext: BusinessAgentContext = { view: 'manager' },
+  allowCaseSelection = false,
+) {
   return shallowMount(BusinessAgentDrawer, {
-    props: { open: true, userContext },
+    props: { open: true, userContext, allowCaseSelection },
     global: {
       stubs: {
         'a-drawer': { template: '<div><slot /></div>' },
@@ -99,6 +102,73 @@ describe('管理助手范围选择', () => {
     mocks.duplicateSecond = false
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
+  })
+  it('首页医生只从服务端授权病例选择，切换患者更新三坐标', async () => {
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 2,
+      doctor_cases: [
+        { institute_id: 'H1', patient_id: 'P1', visit_id: 'V1' },
+        { institute_id: 'H1', patient_id: 'P2', visit_id: 'V2' },
+      ],
+      manager_scopes: [],
+    })
+    const wrapper = mountDrawer({ view: 'manager' }, true)
+    await flushPromises()
+    const picker = wrapper.findComponent(Select)
+    expect(picker.props('options')).toHaveLength(2)
+    const query = () =>
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === '这份病历有哪些已保存的质控问题？')!
+    expect(query().attributes('disabled')).toBeDefined()
+    picker.vm.$emit('update:value', '["H1","P1","V1"]')
+    await flushPromises()
+    await query().trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '发送')!
+      .trigger('click')
+    expect(mocks.send).toHaveBeenLastCalledWith(expect.any(String), {
+      view: 'doctor',
+      institute_id: 'H1',
+      patient_id: 'P1',
+      visit_id: 'V1',
+    })
+    picker.vm.$emit('update:value', '["H1","P2","V2"]')
+    await flushPromises()
+    expect(mocks.activate).toHaveBeenLastCalledWith({
+      view: 'doctor',
+      institute_id: 'H1',
+      patient_id: 'P2',
+      visit_id: 'V2',
+    })
+    picker.vm.$emit('update:value', '["H1","OTHER","V3"]')
+    await flushPromises()
+    expect(query().attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).not.toContain('科室问数')
+  })
+  it('首页双范围账号可切换病例和科室，旧后端不猜病例列表', async () => {
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 1,
+      doctor_cases: [{ institute_id: 'H1', patient_id: 'P1', visit_id: 'V1' }],
+      manager_scopes: [{ institute_id: 'H1', department: '本科室' }],
+    })
+    const wrapper = mountDrawer({ view: 'manager' }, true)
+    await flushPromises()
+    expect(wrapper.text()).toContain('管理问数范围')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '病例问题')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('授权病例')
+    expect(mocks.activate).toHaveBeenLastCalledWith({ view: 'doctor' })
+    wrapper.unmount()
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    const legacy = mountDrawer({ view: 'manager' }, true)
+    await flushPromises()
+    expect(legacy.text()).toContain('没有可选择的授权病例')
+    expect(legacy.findComponent(Select).props('options')).toEqual([])
   })
   it('仅使用服务端授权机构/科室，完整日期后才能发送', async () => {
     mocks.access.mockResolvedValue({

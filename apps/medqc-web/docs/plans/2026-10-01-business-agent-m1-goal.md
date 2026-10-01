@@ -105,3 +105,25 @@ M1未完成：实际医院角色与真实WeKnora仍缺；主浏览器原文展�
 实际同一原生DSH会话GET恢复200，3轮状态为completed/completed/stopped；真实调用账本仍9/10。当前主浏览器在稳定九月范围仍无历史卡片、无恢复错误，尚不能证明本次UID修复解决这一个浏览器现场。完整DOM私存continuous-session-final-ui-private.txt；原生恢复摘要continuous-native-restore-private.json。未通过浏览器脚本注入存储或发送新模型调用补造历史。
 
 本段最终验证：TZ=Asia/Shanghai、单worker全量132文件/1171项全部通过，256.05秒，包含既有日期用例；完整原始日志continuous-full-unit-private.log，exit_code=0。完整lint0错误/75既有警告，type-check通过。本段没有真实模型调用，未推送或合并。
+
+## 长程任务接续：主首页授权病例入口与真实浏览器闭环
+
+实现依据见[授权病例入口最小设计](2026-10-01-business-agent-doctor-entry-design.md)。`business/access`新增可选兼容doctor_cases，仅返回该UID与角色同时允许的明确三坐标；管理者不获医生病例列表。首页助手支持授权病例选择，医生范围默认进入病例问题；管理者保留科室问数；两种授权均具备时可切换。病历详情仍使用既定患者上下文，未改旧病历池或全院查询合同。选择之外的坐标不给前端查询入口，服务端仍在每次会话/读取重验。
+
+浏览器现场的恢复缺口另已查明：临时匿名诊断显示sessionStorage条目为0，UID有效；服务端旧DSH会话仍有3轮。不是已证实的资料更新现场。诊断代码已移除，证据仅私存continuous-browser-storage-diagnostic-private.json。
+
+新目标第10轮已明确登记后，在主首页选择首份授权病例，询问前三条不合规及已保存结论建议。原生trace为4次read_saved_results：503、成功、401、401；5次模型调用，13181输入/730输出Token，47.534秒。3张卡片的状态/结论/建议及保存版本均与正式API逐项一致。但最终回答报告重复读取失败，未完整回答原问题，不能判为回答质量通过，也不能用completed抵消失败。401根因未保存足够证据，不能直接断言登录过期；重新使用同一获授权账号登录后，下列只读流程成功。预算现为10/10，失败也已计数，之后没有再发问答。
+
+实际主浏览器验收（既有内存管理员，真实PG授权病例，未扮演医院医生）：
+
+- 重登后，首页→病例问题→选择首例，直接恢复已有问题和3张卡片，未发模型。
+- 第二条问题→依据详情→第一份对应当前文书成功；实际DOM为MARK元素、300个Unicode字符，页面同时显示原保存摘录和“仅高亮末尾省略号前的300字”提示。截图确认原文、高亮、保存摘录及局部匹配提示均可读，不能称整份版本一致。
+- A填写未发送草稿→切B：卡片0、无A问题、草稿清空；回A：原问题及3张卡片恢复，未发新请求给模型。
+- 显式刷新主工作台→同入口重选A：3张卡片及问题恢复，无恢复错误，未发模型。
+- 本轮不重复消耗模型验证停止；先前第9轮已在主浏览器停止且原生stopped恢复，证据保留。新病例切换仍复用同一stop/activate逻辑并有单测保护。
+
+私有材料：doctor-entry-real-turn-private.json（卡片对照）、doctor-entry-tool-summary-private.json（真实错误顺序）、doctor-entry-document-ui-private.txt、doctor-entry-document-proof-private.json、doctor-entry-current-document-private.png、doctor-entry-switch-private.json、doctor-entry-refresh-private.json及对应DOM。患者正文、截图、账号与Token均不进入Git。
+
+验证：Python授权/业务/原文33项及Ruff通过；前端授权入口/抽屉/会话16项通过；TZ=Asia/Shanghai、单worker全量132文件/1173项全部通过，214.29秒，原始日志doctor-entry-full-unit-private.log（exit0）。type-check通过，完整lint0错误/85警告（包含既有模板格式警告，未关闭门禁）。早期新增UI测试误以为快捷按钮直接发送，实际只填草稿，已按真实“快捷→发送”流程更正后通过。
+
+未完成项及外部条件：实际医院医生/科室管理者账号与授权关系；真实WeKnora服务/允许知识库。再次只检查本地及获授权来源.env中的相应配置存在性，两处均未配置服务地址、知识库ID或Key，未输出凭据。真实回答复验需新的明确回合预算，当前10/10不能再发；自然语言序号变体等质量结论仍未验收。已一次集中向用户询问必要配置路径和预算，保留完整目标，不缩小验收口径。旧全院病历池接口权限仍为既存风险，此次未向医生挂接该接口。

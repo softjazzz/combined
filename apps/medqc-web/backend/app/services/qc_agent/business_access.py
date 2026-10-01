@@ -94,6 +94,7 @@ class BusinessAccess:
         grant = self.grant(user)
         roles = set(user.get("roles") or [])
         return {
+            "doctor_cases": [case.model_dump() for case in grant.doctor_cases] if roles.intersection({"doctor", "admin", "super_admin"}) else [],
             "doctor_case_count": len(grant.doctor_cases) if roles.intersection({"doctor", "admin", "super_admin"}) else 0,
             "manager_scopes": [scope.model_dump() for scope in grant.manager_scopes] if roles.intersection({"qc_manager", "admin", "super_admin"}) else [],
         }

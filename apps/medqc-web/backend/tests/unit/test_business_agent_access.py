@@ -175,3 +175,13 @@ def test_readonly_workspace_initialization_never_creates_or_alters_tables(monkey
     finally:
         workspace._drafts_table.cache_clear()
         workspace._batch_jobs_table.cache_clear()
+
+
+def test_case_discovery_is_limited_to_uid_and_role():
+    access = policy()
+    assert access.visible_scope(DOCTOR)["doctor_cases"] == [CASE]
+    assert access.visible_scope(MANAGER)["doctor_cases"] == []
+    # 即便配置含病例授权，管理角色本身不能获得医生病例列表。
+    assert access.visible_scope({**DOCTOR, "roles": ["qc_manager"]})["doctor_cases"] == []
+    with pytest.raises(HTTPException):
+        access.visible_scope({"id": "unknown", "roles": ["doctor"]})

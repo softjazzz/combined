@@ -86,6 +86,7 @@ export interface BusinessAgentSession {
 }
 export interface BusinessAgentAccess {
   doctor_case_count: number
+  doctor_cases?: { institute_id: string; patient_id: string; visit_id: string }[]
   manager_scopes: { institute_id: string; department: string }[]
 }
 export const businessAgentApi = {
