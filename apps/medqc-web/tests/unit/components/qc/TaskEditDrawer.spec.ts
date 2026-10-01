@@ -30,22 +30,42 @@ import TaskEditDrawer from '@/components/qc/TaskEditDrawer.vue'
 import type { TaskEditDetail } from '@/api/taskEdits'
 
 const detail: TaskEditDetail = {
-  id: 'task-1', task_number: 'QC-001', task_name: '原任务', task_type: 'one_time', status: 'draft',
-  scene: 'running', rule_set_key: 'luxian-0609', rule_set_version: 'v1', deadline: '2026-10-10',
-  date_range: { start: '2026-09-01', end: '2026-09-30' }, department_filter: ['内科'], record_refs: [],
-  sampling_method: 'count', sampling_config: { case_scope: 'active', total: 20, by_department: true },
-  assign_method: 'by_original_reviewer', assignee_config: { fallback: 'by_ratio' },
+  id: 'task-1',
+  task_number: 'QC-001',
+  task_name: '原任务',
+  task_type: 'one_time',
+  status: 'draft',
+  scene: 'running',
+  rule_set_key: 'luxian-0609',
+  rule_set_version: 'v1',
+  deadline: '2026-10-10',
+  date_range: { start: '2026-09-01', end: '2026-09-30' },
+  department_filter: ['内科'],
+  record_refs: [],
+  sampling_method: 'count',
+  sampling_config: { case_scope: 'active', total: 20, by_department: true },
+  assign_method: 'by_original_reviewer',
+  assignee_config: { fallback: 'by_ratio' },
   configuration_version: 3,
   editable_fields: [
-    'task_name', 'deadline', 'date_range', 'department_filter', 'record_refs',
-    'sampling_method', 'sampling_config', 'assign_method', 'assignee_config',
+    'task_name',
+    'deadline',
+    'date_range',
+    'department_filter',
+    'record_refs',
+    'sampling_method',
+    'sampling_config',
+    'assign_method',
+    'assignee_config',
   ],
   updated_at: '2026-09-27T10:00:00Z',
 }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
   return { promise, resolve }
 }
 
@@ -54,8 +74,14 @@ function mountDrawer(props: Record<string, unknown> = {}) {
     props: { open: true, taskId: 'task-1', ...props },
     global: {
       stubs: {
-        'a-alert': { props: ['message'], template: '<div><span>{{ message }}</span><slot name="action" /></div>' },
-        'a-button': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+        'a-alert': {
+          props: ['message'],
+          template: '<div><span>{{ message }}</span><slot name="action" /></div>',
+        },
+        'a-button': {
+          emits: ['click'],
+          template: '<button @click="$emit(\'click\')"><slot /></button>',
+        },
         'a-checkbox': true,
         'a-date-picker': true,
         'a-descriptions': { template: '<div><slot /></div>' },
@@ -83,10 +109,12 @@ describe('TaskEditDrawer', () => {
     authState.user = { id: 'u-1' }
     mocks.getTaskEdit.mockResolvedValue({ success: true, data: detail })
     mocks.updateTaskDraftConfiguration.mockResolvedValue({
-      success: true, data: { ...detail, task_name: '新任务', configuration_version: 4 },
+      success: true,
+      data: { ...detail, task_name: '新任务', configuration_version: 4 },
     })
     mocks.updateTaskMetadata.mockResolvedValue({
-      success: true, data: { ...detail, task_name: '新任务', configuration_version: 4 },
+      success: true,
+      data: { ...detail, task_name: '新任务', configuration_version: 4 },
     })
     mocks.confirm.mockImplementation((options: { onOk?: () => unknown }) => options.onOk?.())
   })
@@ -100,7 +128,11 @@ describe('TaskEditDrawer', () => {
       canEdit: (field: string) => boolean
     }
     expect(mocks.getTaskEdit).toHaveBeenCalledWith('task-1')
-    expect(vm.form).toMatchObject({ task_name: '原任务', scene: 'running', rule_set_key: 'luxian-0609' })
+    expect(vm.form).toMatchObject({
+      task_name: '原任务',
+      scene: 'running',
+      rule_set_key: 'luxian-0609',
+    })
     expect(vm.canEdit('task_name')).toBe(true)
     expect(vm.canEdit('scene')).toBe(false)
     expect(wrapper.text()).toContain('QC-001')
@@ -135,23 +167,32 @@ describe('TaskEditDrawer', () => {
     vm.form.fallback = 'reject'
     vm.rangeMode = 'refs'
     vm.recordRefs.splice(0, vm.recordRefs.length, {
-      institute_id: ' H-1 ', patient_id: ' P-1 ', visit_id: ' V-1 ',
+      institute_id: ' H-1 ',
+      patient_id: ' P-1 ',
+      visit_id: ' V-1 ',
     })
     vm.confirmSave()
     await flushPromises()
 
-    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith('task-1', expect.objectContaining({
-      configuration_version: 3,
-      task_name: '新任务',
-      deadline: '2026-10-20',
-      date_range: null,
-      department_filter: [],
-      record_refs: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }],
-      sampling_method: 'percentage',
-      sampling_config: expect.objectContaining({ case_scope: 'active', percentage: 15, group_by: 'department' }),
-      assign_method: 'by_original_reviewer',
-      assignee_config: { fallback: 'reject' },
-    }))
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        configuration_version: 3,
+        task_name: '新任务',
+        deadline: '2026-10-20',
+        date_range: null,
+        department_filter: [],
+        record_refs: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }],
+        sampling_method: 'percentage',
+        sampling_config: expect.objectContaining({
+          case_scope: 'active',
+          percentage: 15,
+          group_by: 'department',
+        }),
+        assign_method: 'by_original_reviewer',
+        assignee_config: { fallback: 'reject' },
+      }),
+    )
     const sent = mocks.updateTaskDraftConfiguration.mock.calls[0][1]
     expect(sent).not.toHaveProperty('scene')
     expect(sent).not.toHaveProperty('rule_set_key')
@@ -161,9 +202,77 @@ describe('TaskEditDrawer', () => {
     expect(wrapper.emitted('saved')?.[0]).toEqual(['task-1'])
   })
 
+  it('终末指定病例修改抽样仍保留出院窗口与三坐标', async () => {
+    const refs = [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }]
+    const window = { start: '2026-09-01', end: '2026-09-15' }
+    mocks.getTaskEdit.mockResolvedValue({
+      success: true,
+      data: {
+        ...detail,
+        scene: 'final',
+        date_range: window,
+        department_filter: [],
+        record_refs: refs,
+        sampling_config: { case_scope: 'discharged', total: 20 },
+      },
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      form: {
+        total: number
+        dateRange: [ReturnType<typeof dayjs>, ReturnType<typeof dayjs>] | null
+      }
+      confirmSave: () => void
+    }
+    expect(wrapper.find('[data-testid="task-edit-refs-discharge-range"]').exists()).toBe(true)
+    vm.form.total = 5
+    vm.confirmSave()
+    await flushPromises()
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        date_range: window,
+        record_refs: refs,
+        department_filter: [],
+        sampling_config: { case_scope: 'discharged', total: 5, by_department: false },
+      }),
+    )
+    wrapper.unmount()
+  })
+
+  it('终末指定病例清空出院窗口时阻止保存', async () => {
+    mocks.getTaskEdit.mockResolvedValue({
+      success: true,
+      data: {
+        ...detail,
+        scene: 'final',
+        department_filter: [],
+        record_refs: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1' }],
+        sampling_config: { case_scope: 'discharged', total: 20 },
+      },
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      form: { dateRange: null }
+      dateRangeTouched: boolean
+      confirmSave: () => void
+    }
+    vm.form.dateRange = null
+    vm.dateRangeTouched = true
+    vm.confirmSave()
+    await flushPromises()
+    expect(mocks.message.warning).toHaveBeenCalledWith('终末任务必须选择出院开始日期和结束日期')
+    expect(mocks.updateTaskDraftConfiguration).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('sampling/assigned/in_progress 状态只用 PATCH 更新名称或截止日期', async () => {
     const metadataOnly = {
-      ...detail, status: 'sampling', editable_fields: ['task_name', 'deadline'],
+      ...detail,
+      status: 'sampling',
+      editable_fields: ['task_name', 'deadline'],
     } as TaskEditDetail
     mocks.getTaskEdit.mockResolvedValue({ success: true, data: metadataOnly })
     const wrapper = mountDrawer()
@@ -174,7 +283,9 @@ describe('TaskEditDrawer', () => {
     vm.confirmSave()
     await flushPromises()
     expect(mocks.updateTaskMetadata).toHaveBeenCalledWith('task-1', {
-      configuration_version: 3, task_name: '新任务', deadline: null,
+      configuration_version: 3,
+      task_name: '新任务',
+      deadline: null,
     })
     expect(mocks.updateTaskDraftConfiguration).not.toHaveBeenCalled()
   })
@@ -208,12 +319,19 @@ describe('TaskEditDrawer', () => {
     })
     expect(mocks.updateTaskDraftConfiguration).not.toHaveBeenCalled()
 
-    const metadata = { ...precise, status: 'assigned', editable_fields: ['task_name', 'deadline'] } as TaskEditDetail
+    const metadata = {
+      ...precise,
+      status: 'assigned',
+      editable_fields: ['task_name', 'deadline'],
+    } as TaskEditDetail
     mocks.getTaskEdit.mockResolvedValue({ success: true, data: metadata })
     await wrapper.setProps({ open: false })
     await wrapper.setProps({ open: true })
     await flushPromises()
-    const current = wrapper.vm as unknown as { form: { task_name: string }; confirmSave: () => void }
+    const current = wrapper.vm as unknown as {
+      form: { task_name: string }
+      confirmSave: () => void
+    }
     current.form.task_name = '元数据改名'
     current.confirmSave()
     await flushPromises()
@@ -255,11 +373,17 @@ describe('TaskEditDrawer', () => {
     vm.form.percentage = 12
     vm.confirmSave()
     await flushPromises()
-    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith('task-1', expect.objectContaining({
-      deadline: precise.deadline,
-      date_range: precise.date_range,
-      sampling_config: expect.objectContaining({ percentage: 12, extension_owner: 'preserve-me' }),
-    }))
+    expect(mocks.updateTaskDraftConfiguration).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        deadline: precise.deadline,
+        date_range: precise.date_range,
+        sampling_config: expect.objectContaining({
+          percentage: 12,
+          extension_owner: 'preserve-me',
+        }),
+      }),
+    )
   })
 
   it('确认框打开后切换任务，不把旧载荷写入新任务', async () => {
@@ -280,7 +404,9 @@ describe('TaskEditDrawer', () => {
 
   it('网络、5xx 或坏 200 后锁定重复写，必须成功刷新详情才解锁', async () => {
     mocks.updateTaskMetadata.mockResolvedValueOnce({
-      success: false, uncertain: true, message: '任务保存结果未知',
+      success: false,
+      uncertain: true,
+      message: '任务保存结果未知',
     })
     const wrapper = mountDrawer()
     await flushPromises()
@@ -297,7 +423,10 @@ describe('TaskEditDrawer', () => {
     vm.confirmSave()
     expect(mocks.updateTaskMetadata).toHaveBeenCalledTimes(1)
 
-    mocks.getTaskEdit.mockResolvedValueOnce({ success: true, data: { ...detail, configuration_version: 4 } })
+    mocks.getTaskEdit.mockResolvedValueOnce({
+      success: true,
+      data: { ...detail, configuration_version: 4 },
+    })
     await vm.refresh()
     expect(vm.refreshRequired).toBe(false)
   })

@@ -8,17 +8,9 @@
     @close="closeDrawer"
   >
     <a-spin :spinning="loading">
-      <a-alert
-        v-if="loadError"
-        type="error"
-        show-icon
-        :message="loadError"
-        class="task-edit-alert"
-      >
+      <a-alert v-if="loadError" type="error" show-icon :message="loadError" class="task-edit-alert">
         <template #action>
-          <a-button size="small" @click="void refresh()">
-            <ReloadOutlined /> 重新读取
-          </a-button>
+          <a-button size="small" @click="void refresh()"> <ReloadOutlined /> 重新读取 </a-button>
         </template>
       </a-alert>
 
@@ -30,19 +22,12 @@
         class="task-edit-alert"
       >
         <template #action>
-          <a-button size="small" @click="void refresh()">
-            <ReloadOutlined /> 刷新任务
-          </a-button>
+          <a-button size="small" @click="void refresh()"> <ReloadOutlined /> 刷新任务 </a-button>
         </template>
       </a-alert>
 
       <template v-if="detail">
-        <a-descriptions
-          bordered
-          size="small"
-          :column="2"
-          class="task-edit-summary"
-        >
+        <a-descriptions bordered size="small" :column="2" class="task-edit-summary">
           <a-descriptions-item label="任务编号">
             {{ detail.task_number }}
           </a-descriptions-item>
@@ -107,16 +92,16 @@
             <section aria-labelledby="task-edit-range-title">
               <h3 id="task-edit-range-title">病历范围</h3>
               <a-form-item label="选择方式">
-                <a-radio-group
-                  v-model:value="rangeMode"
-                  :disabled="saving || refreshRequired"
-                >
+                <a-radio-group v-model:value="rangeMode" :disabled="saving || refreshRequired">
                   <a-radio value="date">按日期范围</a-radio>
                   <a-radio value="refs">指定病历</a-radio>
                 </a-radio-group>
               </a-form-item>
               <template v-if="rangeMode === 'date'">
-                <a-form-item label="日期范围">
+                <a-form-item
+                  :label="form.scene === 'final' ? '出院日期范围' : '日期范围'"
+                  :required="form.scene === 'final'"
+                >
                   <a-range-picker
                     v-model:value="form.dateRange"
                     style="width: 100%"
@@ -133,46 +118,53 @@
                   />
                 </a-form-item>
               </template>
-              <a-form-item v-else label="病历坐标" required>
-                <div class="record-ref-heading" aria-hidden="true">
-                  <span>机构 ID</span><span>患者 ID</span><span>就诊 ID</span><span />
-                </div>
-                <div
-                  v-for="(recordRef, index) in recordRefs"
-                  :key="index"
-                  class="record-ref-row"
-                >
-                  <a-input
-                    v-model:value="recordRef.institute_id"
+              <template v-else>
+                <a-form-item v-if="form.scene === 'final'" label="出院日期范围" required>
+                  <a-range-picker
+                    v-model:value="form.dateRange"
+                    data-testid="task-edit-refs-discharge-range"
+                    style="width: 100%"
                     :disabled="saving || refreshRequired"
-                    :aria-label="`第 ${index + 1} 条机构 ID`"
-                    placeholder="机构 ID"
+                    @change="dateRangeTouched = true"
                   />
-                  <a-input
-                    v-model:value="recordRef.patient_id"
-                    :disabled="saving || refreshRequired"
-                    :aria-label="`第 ${index + 1} 条患者 ID`"
-                    placeholder="患者 ID"
-                  />
-                  <a-input
-                    v-model:value="recordRef.visit_id"
-                    :disabled="saving || refreshRequired"
-                    :aria-label="`第 ${index + 1} 条就诊 ID`"
-                    placeholder="就诊 ID"
-                  />
-                  <a-button
-                    :disabled="saving || refreshRequired || recordRefs.length === 1"
-                    :aria-label="`删除第 ${index + 1} 条病历`"
-                    title="删除病历"
-                    @click="removeRecordRef(index)"
-                  >
-                    <DeleteOutlined />
+                </a-form-item>
+                <a-form-item label="病历坐标" required>
+                  <div class="record-ref-heading" aria-hidden="true">
+                    <span>机构 ID</span><span>患者 ID</span><span>就诊 ID</span><span />
+                  </div>
+                  <div v-for="(recordRef, index) in recordRefs" :key="index" class="record-ref-row">
+                    <a-input
+                      v-model:value="recordRef.institute_id"
+                      :disabled="saving || refreshRequired"
+                      :aria-label="`第 ${index + 1} 条机构 ID`"
+                      placeholder="机构 ID"
+                    />
+                    <a-input
+                      v-model:value="recordRef.patient_id"
+                      :disabled="saving || refreshRequired"
+                      :aria-label="`第 ${index + 1} 条患者 ID`"
+                      placeholder="患者 ID"
+                    />
+                    <a-input
+                      v-model:value="recordRef.visit_id"
+                      :disabled="saving || refreshRequired"
+                      :aria-label="`第 ${index + 1} 条就诊 ID`"
+                      placeholder="就诊 ID"
+                    />
+                    <a-button
+                      :disabled="saving || refreshRequired || recordRefs.length === 1"
+                      :aria-label="`删除第 ${index + 1} 条病历`"
+                      title="删除病历"
+                      @click="removeRecordRef(index)"
+                    >
+                      <DeleteOutlined />
+                    </a-button>
+                  </div>
+                  <a-button :disabled="saving || refreshRequired" @click="addRecordRef">
+                    <PlusOutlined /> 添加病历
                   </a-button>
-                </div>
-                <a-button :disabled="saving || refreshRequired" @click="addRecordRef">
-                  <PlusOutlined /> 添加病历
-                </a-button>
-              </a-form-item>
+                </a-form-item>
+              </template>
             </section>
 
             <section aria-labelledby="task-edit-sampling-title">
@@ -244,10 +236,7 @@
                 label="无原质控员时"
                 required
               >
-                <a-radio-group
-                  v-model:value="form.fallback"
-                  :disabled="saving || refreshRequired"
-                >
+                <a-radio-group v-model:value="form.fallback" :disabled="saving || refreshRequired">
                   <a-radio value="by_ratio">按比例分配</a-radio>
                   <a-radio value="reject">拒绝分配</a-radio>
                 </a-radio-group>
@@ -280,6 +269,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { Modal, message } from 'ant-design-vue'
 import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons-vue'
 import dayjs, { type Dayjs } from 'dayjs'
+import { dischargedDateRangeError } from '@/utils/taskCaseScope'
 import { useAuthStore } from '@/stores/auth'
 import {
   getTaskEdit,
@@ -335,21 +325,36 @@ const form = reactive({
 })
 
 const hasEditableFields = computed(() => !!detail.value?.editable_fields.length)
-const fullConfigurationEditable = computed(() =>
-  !!detail.value?.editable_fields.some((field) =>
-    !(['task_name', 'deadline'] as TaskEditField[]).includes(field),
-  ),
+const fullConfigurationEditable = computed(
+  () =>
+    !!detail.value?.editable_fields.some(
+      (field) => !(['task_name', 'deadline'] as TaskEditField[]).includes(field),
+    ),
 )
-const sceneLabel = computed(() => detail.value?.scene
-  ? ({ running: '运行病历', final: '终末病历', outpatient: '门急诊病历' })[detail.value.scene]
-  : '未标注')
-const taskTypeLabel = computed(() => ({ one_time: '单次任务', scheduled: '定期任务' }[
-  detail.value?.task_type || ''
-] || detail.value?.task_type || '未知'))
-const statusLabel = computed(() => ({
-  draft: '草稿', sampling: '抽样中', assigned: '已分配', in_progress: '进行中',
-  completed: '已完成', cancelled: '已取消',
-}[detail.value?.status || ''] || detail.value?.status || '未知'))
+const sceneLabel = computed(() =>
+  detail.value?.scene
+    ? { running: '运行病历', final: '终末病历', outpatient: '门急诊病历' }[detail.value.scene]
+    : '未标注',
+)
+const taskTypeLabel = computed(
+  () =>
+    ({ one_time: '单次任务', scheduled: '定期任务' })[detail.value?.task_type || ''] ||
+    detail.value?.task_type ||
+    '未知',
+)
+const statusLabel = computed(
+  () =>
+    ({
+      draft: '草稿',
+      sampling: '抽样中',
+      assigned: '已分配',
+      in_progress: '进行中',
+      completed: '已完成',
+      cancelled: '已取消',
+    })[detail.value?.status || ''] ||
+    detail.value?.status ||
+    '未知',
+)
 
 function blankRecordRef(): TaskEditCaseRef {
   return { institute_id: '', patient_id: '', visit_id: '' }
@@ -390,25 +395,27 @@ function fillForm(value: TaskEditDetail) {
   form.scene = value.scene
   form.rule_set_key = value.rule_set_key
   form.deadline = value.deadline ? calendarDay(value.deadline) : null
-  form.dateRange = value.date_range?.start && value.date_range.end
-    ? [calendarDay(value.date_range.start), calendarDay(value.date_range.end)]
-    : null
+  form.dateRange =
+    value.date_range?.start && value.date_range.end
+      ? [calendarDay(value.date_range.start), calendarDay(value.date_range.end)]
+      : null
   form.department_filter = [...(value.department_filter || [])]
   form.sampling_method = value.sampling_method
   form.total = typeof value.sampling_config?.total === 'number' ? value.sampling_config.total : 1
-  form.percentage = typeof value.sampling_config?.percentage === 'number'
-    ? value.sampling_config.percentage
-    : 10
+  form.percentage =
+    typeof value.sampling_config?.percentage === 'number' ? value.sampling_config.percentage : 10
   form.by_department = value.sampling_config?.by_department === true
   form.group_by = value.sampling_config?.group_by === 'department' ? 'department' : undefined
-  form.assign_method = value.assign_method === 'by_ratio'
-    || value.assign_method === 'by_original_reviewer'
-    || value.assign_method === 'by_department'
-    ? value.assign_method
-    : null
-  form.fallback = value.assignee_config?.fallback === 'by_ratio' || value.assignee_config?.fallback === 'reject'
-    ? value.assignee_config.fallback
-    : undefined
+  form.assign_method =
+    value.assign_method === 'by_ratio' ||
+    value.assign_method === 'by_original_reviewer' ||
+    value.assign_method === 'by_department'
+      ? value.assign_method
+      : null
+  form.fallback =
+    value.assignee_config?.fallback === 'by_ratio' || value.assignee_config?.fallback === 'reject'
+      ? value.assignee_config.fallback
+      : undefined
   rangeMode.value = value.record_refs?.length ? 'refs' : 'date'
   recordRefs.value = value.record_refs?.length
     ? value.record_refs.map((item) => ({ ...item }))
@@ -441,11 +448,12 @@ async function refresh() {
   loading.value = true
   const result = await getTaskEdit(taskId)
   if (
-    sequence !== requestSequence
-    || !props.open
-    || props.taskId?.trim() !== taskId
-    || authStore.user?.id?.trim() !== actorId
-  ) return
+    sequence !== requestSequence ||
+    !props.open ||
+    props.taskId?.trim() !== taskId ||
+    authStore.user?.id?.trim() !== actorId
+  )
+    return
   loading.value = false
   if (!result.success || !result.data) {
     loadError.value = result.message || '任务编辑详情读取失败'
@@ -471,7 +479,9 @@ function normalizedRefs(): TaskEditCaseRef[] | null {
     visit_id: item.visit_id.trim(),
   }))
   if (refs.some((item) => !item.institute_id || !item.patient_id || !item.visit_id)) return null
-  const keys = refs.map((item) => `${item.institute_id}\u0000${item.patient_id}\u0000${item.visit_id}`)
+  const keys = refs.map(
+    (item) => `${item.institute_id}\u0000${item.patient_id}\u0000${item.visit_id}`,
+  )
   return new Set(keys).size === refs.length ? refs : null
 }
 
@@ -525,34 +535,49 @@ function buildDraftPayload(): TaskDraftConfigurationUpdate | null {
     return null
   }
   let dateRange: TaskDraftConfigurationUpdate['date_range'] = null
-  if (rangeMode.value === 'date') {
+  if (rangeMode.value === 'date' || form.scene === 'final') {
     const original = detail.value.date_range
-    const unchanged = !!form.dateRange
-      && !!original?.start
-      && !!original.end
-      && form.dateRange[0].format('YYYY-MM-DD') === calendarDay(original.start).format('YYYY-MM-DD')
-      && form.dateRange[1].format('YYYY-MM-DD') === calendarDay(original.end).format('YYYY-MM-DD')
+    const unchanged =
+      !!form.dateRange &&
+      !!original?.start &&
+      !!original.end &&
+      form.dateRange[0].format('YYYY-MM-DD') === calendarDay(original.start).format('YYYY-MM-DD') &&
+      form.dateRange[1].format('YYYY-MM-DD') === calendarDay(original.end).format('YYYY-MM-DD')
     dateRange = unchanged
       ? { start: original.start, end: original.end }
       : form.dateRange
-        ? { start: form.dateRange[0].format('YYYY-MM-DD'), end: form.dateRange[1].format('YYYY-MM-DD') }
-        : (!dateRangeTouched.value && original ? { ...original } : null)
+        ? {
+            start: form.dateRange[0].format('YYYY-MM-DD'),
+            end: form.dateRange[1].format('YYYY-MM-DD'),
+          }
+        : !dateRangeTouched.value && original
+          ? { ...original }
+          : null
+  }
+  if (form.scene === 'final' && samplingConfig.case_scope === 'discharged') {
+    const error = dischargedDateRangeError(dateRange?.start, dateRange?.end)
+    if (error) {
+      message.warning(error)
+      return null
+    }
   }
   return {
     configuration_version: detail.value.configuration_version,
     task_name: taskName,
     deadline: normalizedDeadline(),
     date_range: dateRange,
-    department_filter: rangeMode.value === 'date'
-      ? [...new Set(form.department_filter.map((item) => item.trim()).filter(Boolean))]
-      : [],
+    department_filter:
+      rangeMode.value === 'date'
+        ? [...new Set(form.department_filter.map((item) => item.trim()).filter(Boolean))]
+        : [],
     record_refs: refs,
     sampling_method: form.sampling_method,
     sampling_config: samplingConfig,
     assign_method: form.assign_method,
     assignee_config: (() => {
       const config = { ...(detail.value?.assignee_config || {}) }
-      if (form.assign_method === 'by_original_reviewer' && form.fallback) config.fallback = form.fallback
+      if (form.assign_method === 'by_original_reviewer' && form.fallback)
+        config.fallback = form.fallback
       else delete config.fallback
       return config
     })(),
@@ -571,8 +596,10 @@ function buildMetadataPayload(): TaskMetadataUpdate | null {
   }
   const deadline = normalizedDeadline()
   if (canEdit('deadline') && deadline !== detail.value.deadline) payload.deadline = deadline
-  if (!Object.prototype.hasOwnProperty.call(payload, 'task_name')
-    && !Object.prototype.hasOwnProperty.call(payload, 'deadline')) {
+  if (
+    !Object.prototype.hasOwnProperty.call(payload, 'task_name') &&
+    !Object.prototype.hasOwnProperty.call(payload, 'deadline')
+  ) {
     message.warning('没有需要保存的修改')
     return null
   }
@@ -583,8 +610,8 @@ function normalizedDeadline(): string | null {
   if (!detail.value) return null
   if (!form.deadline) return null
   if (
-    detail.value.deadline
-    && form.deadline.format('YYYY-MM-DD') === calendarDay(detail.value.deadline).format('YYYY-MM-DD')
+    detail.value.deadline &&
+    form.deadline.format('YYYY-MM-DD') === calendarDay(detail.value.deadline).format('YYYY-MM-DD')
   ) {
     return detail.value.deadline
   }
@@ -613,9 +640,10 @@ function planningFingerprint(): string {
 
 function confirmSave() {
   if (!detail.value || saving.value || refreshRequired.value || !hasEditableFields.value) return
-  const operation = fullConfigurationEditable.value && planningFingerprint() !== planningBaseline.value
-    ? 'draft'
-    : 'metadata'
+  const operation =
+    fullConfigurationEditable.value && planningFingerprint() !== planningBaseline.value
+      ? 'draft'
+      : 'metadata'
   const payload = operation === 'draft' ? buildDraftPayload() : buildMetadataPayload()
   if (!payload) return
   const context = {
@@ -631,13 +659,14 @@ function confirmSave() {
     cancelText: '取消',
     async onOk() {
       if (
-        !context.taskId
-        || !context.actorId
-        || context.sequence !== requestSequence
-        || props.taskId?.trim() !== context.taskId
-        || authStore.user?.id?.trim() !== context.actorId
-        || detail.value?.configuration_version !== context.version
-      ) return
+        !context.taskId ||
+        !context.actorId ||
+        context.sequence !== requestSequence ||
+        props.taskId?.trim() !== context.taskId ||
+        authStore.user?.id?.trim() !== context.actorId ||
+        detail.value?.configuration_version !== context.version
+      )
+        return
       await save(payload, context, operation)
     },
   })
@@ -663,38 +692,43 @@ async function save(
 ) {
   if (!detail.value || saving.value) return
   if (
-    context.sequence !== requestSequence
-    || props.taskId?.trim() !== context.taskId
-    || authStore.user?.id?.trim() !== context.actorId
-    || detail.value.configuration_version !== context.version
-  ) return
+    context.sequence !== requestSequence ||
+    props.taskId?.trim() !== context.taskId ||
+    authStore.user?.id?.trim() !== context.actorId ||
+    detail.value.configuration_version !== context.version
+  )
+    return
   const previousVersion = context.version
   const sequence = ++requestSequence
   saving.value = true
-  const result = operation === 'draft'
-    ? await updateTaskDraftConfiguration(context.taskId, payload as TaskDraftConfigurationUpdate)
-    : await updateTaskMetadata(context.taskId, payload as TaskMetadataUpdate)
+  const result =
+    operation === 'draft'
+      ? await updateTaskDraftConfiguration(context.taskId, payload as TaskDraftConfigurationUpdate)
+      : await updateTaskMetadata(context.taskId, payload as TaskMetadataUpdate)
   if (
-    sequence !== requestSequence
-    || !props.open
-    || props.taskId?.trim() !== context.taskId
-    || authStore.user?.id?.trim() !== context.actorId
-  ) return
+    sequence !== requestSequence ||
+    !props.open ||
+    props.taskId?.trim() !== context.taskId ||
+    authStore.user?.id?.trim() !== context.actorId
+  )
+    return
   saving.value = false
   const receipt = result.data
-  const receiptValid = result.success
-    && receipt?.id === context.taskId
-    && Number.isInteger(receipt.configuration_version)
-    && receipt.configuration_version > previousVersion
+  const receiptValid =
+    result.success &&
+    receipt?.id === context.taskId &&
+    Number.isInteger(receipt.configuration_version) &&
+    receipt.configuration_version > previousVersion
   if (!receiptValid) {
     if (result.uncertain || result.success) {
       refreshRequired.value = true
       message.warning('任务保存结果未知，请刷新任务后再继续操作')
       return
     }
-    const conflict = result.code === 'version_conflict'
-      || result.code === 'state_conflict'
-      || result.code === 'association_conflict'
+    const conflict =
+      result.code === 'version_conflict' ||
+      result.code === 'state_conflict' ||
+      result.code === 'association_conflict'
     if (conflict) refreshRequired.value = true
     message.error(explainError(result))
     return
@@ -722,7 +756,9 @@ watch(
   { immediate: true },
 )
 
-onBeforeUnmount(() => { requestSequence += 1 })
+onBeforeUnmount(() => {
+  requestSequence += 1
+})
 </script>
 
 <style scoped>

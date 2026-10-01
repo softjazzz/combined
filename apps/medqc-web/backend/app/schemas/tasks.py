@@ -351,8 +351,10 @@ class TaskDraftConfigurationUpdateRequest(BaseModel):
         ]
         if len(identities) != len(set(identities)):
             raise ValueError("record_refs 不得包含重复病例三坐标")
-        if self.record_refs and (self.date_range is not None or self.department_filter):
-            raise ValueError("指定病历不得与日期范围或科室筛选混用")
+        if self.record_refs and self.department_filter:
+            raise ValueError("指定病历不得与科室筛选混用")
+        if self.record_refs and self.date_range is not None and self.sampling_config.get("case_scope") != "discharged":
+            raise ValueError("指定病历不得与日期范围混用，终末已出院范围除外")
         return self
 
 

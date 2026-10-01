@@ -225,3 +225,56 @@ def test_first_cas_write_wins_and_stale_retry_preserves_committed_value(task_fac
             QCTask.task_name, QCTask.configuration_version,
         )).one()
     assert row == ("第一次提交", 2)
+
+
+def test_final_specified_cases_preserve_discharge_window_on_plan_edit(task_factory):
+    _engine, factory = task_factory
+    window = {"start": "2026-09-01", "end": "2026-09-15"}
+    refs = _configuration()["record_refs"]
+    _seed(factory, scene="final", rule_set_key="final-rules", record_refs=refs,
+          date_range=json.dumps(window), sampling_config=json.dumps({"case_scope": "discharged"}))
+
+    updated = task_edit_service.replace_draft_configuration(
+        "task-contract", actor_id="owner", is_manager=False, expected_version=1,
+        configuration=_configuration(date_range=window, sampling_method="count",
+                                     sampling_config={"case_scope": "discharged", "total": 1}),
+    )
+    assert updated["date_range"] == window
+    assert updated["record_refs"] == refs
+    assert updated["configuration_version"] == 2
+    readback = task_edit_service.get_task_edit("task-contract", actor_id="owner")
+    assert readback["date_range"] == window
+    assert readback["record_refs"] == refs
+
+
+@pytest.mark.parametrize("window", [None, {"start": "2026-09-01", "end": "2026-09-02"}])
+def test_specified_case_window_exception_cannot_cross_frozen_scene(task_factory, window):
+    _engine, factory = task_factory
+    _seed(factory)
+    with pytest.raises(task_edit_service.TaskEditInvalid):
+        task_edit_service.replace_draft_configuration(
+            "task-contract", actor_id="owner", is_manager=False, expected_version=1,
+            configuration=_configuration(date_range=window, sampling_config={"case_scope": "discharged"}),
+        )
+    assert task_edit_service.get_task_edit("task-contract", actor_id="owner")["configuration_version"] == 1
+
+
+@pytest.mark.parametrize("overrides", [
+    {"date_range": None},
+    {"date_range": {"start": "2026-08-01", "end": "2026-09-15"}},
+    {"department_filter": ["内科"]},
+])
+def test_final_specified_cases_reject_invalid_scope_without_mutation(task_factory, overrides):
+    _engine, factory = task_factory
+    _seed(factory, scene="final", rule_set_key="final-rules")
+    values = _configuration(date_range={"start": "2026-09-01", "end": "2026-09-15"},
+                            sampling_config={"case_scope": "discharged"})
+    values.update(overrides)
+    with pytest.raises(task_edit_service.TaskEditInvalid):
+        task_edit_service.replace_draft_configuration(
+            "task-contract", actor_id="owner", is_manager=False, expected_version=1,
+            configuration=values,
+        )
+    unchanged = task_edit_service.get_task_edit("task-contract", actor_id="owner")
+    assert unchanged["configuration_version"] == 1
+    assert unchanged["record_refs"] == []
