@@ -16,8 +16,8 @@
       <label>机构<input v-model.trim="draft.institute_id" /></label>
       <label>科室<input v-model.trim="draft.department" /></label>
       <label>主治医师<input v-model.trim="draft.doctor" /></label>
-      <label>完成时间起<input v-model="draft.completed_from" type="datetime-local" /></label>
-      <label>完成时间止<input v-model="draft.completed_to" type="datetime-local" /></label>
+      <label>完成时间起（上海）<input v-model="draft.completed_from" type="datetime-local" /></label>
+      <label>完成时间止（上海）<input v-model="draft.completed_to" type="datetime-local" /></label>
       <label
         >明细制度<select v-model="draft.system_id">
           <option value="">全部制度</option>
@@ -282,14 +282,24 @@ async function load(page = 1) {
   }
 }
 function apply() {
+  const start = draft.value.completed_from
+    ? new Date(`${draft.value.completed_from}+08:00`)
+    : undefined
+  const end = draft.value.completed_to
+    ? new Date(`${draft.value.completed_to}+08:00`)
+    : undefined
+  if (
+    (start && !Number.isFinite(start.getTime())) ||
+    (end && !Number.isFinite(end.getTime())) ||
+    (start && end && start > end)
+  ) {
+    error.value = '请选择有效且顺序正确的上海时间窗口'
+    return
+  }
   applied = {
     ...draft.value,
-    completed_from: draft.value.completed_from
-      ? new Date(draft.value.completed_from).toISOString()
-      : undefined,
-    completed_to: draft.value.completed_to
-      ? new Date(draft.value.completed_to).toISOString()
-      : undefined,
+    completed_from: start?.toISOString(),
+    completed_to: end?.toISOString(),
   }
   void load()
 }

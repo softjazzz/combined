@@ -78,6 +78,28 @@ beforeEach(() => {
   mocks.get.mockResolvedValue(result)
 })
 describe('核心制度专题页面', () => {
+  it('完成时间按上海时区提交，逆序窗口不发送查询', async () => {
+    const wrapper = render()
+    await flushPromises()
+    const dates = wrapper.findAll('input[type="datetime-local"]')
+    await dates[0].setValue('2026-10-01T08:00')
+    await dates[1].setValue('2026-10-01T09:00')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        completed_from: '2026-10-01T00:00:00.000Z',
+        completed_to: '2026-10-01T01:00:00.000Z',
+      }),
+      1,
+    )
+    const count = mocks.get.mock.calls.length
+    await dates[0].setValue('2026-10-02T08:00')
+    await wrapper.get('form').trigger('submit')
+    expect(mocks.get).toHaveBeenCalledTimes(count)
+    expect(wrapper.get('[role="alert"]').text()).toContain('上海时间窗口')
+    wrapper.unmount()
+  })
   it('18制度列表保留真实0/无配置，原文与冻结缺陷点可打开', async () => {
     const wrapper = render()
     await flushPromises()

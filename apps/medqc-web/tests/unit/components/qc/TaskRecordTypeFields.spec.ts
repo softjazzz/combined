@@ -1,6 +1,16 @@
 import { shallowMount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { defineComponent } from 'vue'
 import TaskRecordTypeFields from '@/components/qc/TaskRecordTypeFields.vue'
+
+const SelectStub = defineComponent({
+  emits: ['update:value'],
+  template: '<div />',
+})
+const CheckboxStub = defineComponent({
+  emits: ['update:checked'],
+  template: '<div><slot /></div>',
+})
 
 describe('任务源类型显式配置', () => {
   it('Select异常值不转换成码值数组，合法字符串数组正常保存', () => {
@@ -18,16 +28,16 @@ describe('任务源类型显式配置', () => {
       },
       global: {
         stubs: {
-          'a-checkbox': true,
+          'a-checkbox': CheckboxStub,
           'a-input': true,
-          'a-select': true,
+          'a-select': SelectStub,
           'a-button': true,
           'a-radio': true,
           'a-radio-group': true,
         },
       },
     })
-    const select = wrapper.getComponent('a-select-stub')
+    const select = wrapper.getComponent(SelectStub)
     for (const value of ['C+', 1, ['C+', 2], [{ value: 'C+' }], null])
       select.vm.$emit('update:value', value)
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
@@ -41,16 +51,16 @@ describe('任务源类型显式配置', () => {
     const wrapper = shallowMount(TaskRecordTypeFields, {
       global: {
         stubs: {
-          'a-checkbox': true,
+          'a-checkbox': CheckboxStub,
           'a-input': true,
-          'a-select': true,
+          'a-select': SelectStub,
           'a-button': true,
           'a-radio': true,
           'a-radio-group': true,
         },
       },
     })
-    wrapper.getComponent('a-checkbox-stub').vm.$emit('update:checked', true)
+    wrapper.getComponent(CheckboxStub).vm.$emit('update:checked', true)
     expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toEqual({
       institutes: [
         {
