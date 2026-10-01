@@ -219,6 +219,7 @@
     <TaskRecordTypeFields
       v-if="currentStep === 1 && formData.scene !== 'outpatient'"
       v-model="formData.sampling_config.record_type_config"
+      :allow-filter="rangeMode !== 'refs'"
       :required="
         formData.sampling_method.startsWith('record_type_') ||
         formData.assign_method === 'by_record_type'
@@ -789,8 +790,10 @@ const samplingGroupLabel = computed(() =>
 const samplingLabel = computed(() => {
   const method = formData.value.sampling_method
   if (method === 'all') return '全部病历'
-  if (method === 'record_type_count') return `每机构类型桶抽取 ${formData.value.sampling_config.total} 份`
-  if (method === 'record_type_ratio') return `每机构类型桶抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
+  if (method === 'record_type_count')
+    return `每机构类型桶抽取 ${formData.value.sampling_config.total} 份`
+  if (method === 'record_type_ratio')
+    return `每机构类型桶抽取 ${formData.value.sampling_config.percentage}%，最多 ${formData.value.sampling_config.max_per_group} 份`
   if (method === 'count') return `随机抽取 ${formData.value.sampling_config.total} 条`
   if (method === 'percentage') return `各组抽取 ${formData.value.sampling_config.percentage}%`
   if (method === 'department_count') return `每科室抽取 ${formData.value.sampling_config.total} 份`

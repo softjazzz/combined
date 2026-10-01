@@ -113,3 +113,31 @@ async def test_null_or_source_failure_does_not_become_empty_success(monkeypatch)
     monkeypatch.setattr(sampling,'_load_task_record_type_flags',fail)
     with pytest.raises(RuntimeError,match='来源不可用'):
         await sampling.TaskSamplingService().sample(task)
+
+
+@pytest.mark.asyncio
+async def test_explicit_type_scope_filters_before_sampling_and_does_not_guess_unknown(monkeypatch):
+    candidates = [{'institute_id':'SYN-H','patient_id':f'SYN-P-{i}','visit_id':f'SYN-V-{i}'} for i in range(4)]
+    async def source(*_):
+        return candidates
+    monkeypatch.setattr(sampling.TaskSamplingService, '_get_active_running_candidates', source)
+    pairs = [('C+','D-'), ('C-','D+'), ('C+','D+'), ('C-','D-')]
+    monkeypatch.setattr(sampling, '_load_task_record_type_flags', lambda _: {sampling.TaskSamplingService._identity(row): flags for row, flags in zip(candidates, pairs)})
+    types = {**config(), 'selected_buckets':['critical', 'critical_and_difficult']}
+    task = {'scene':'running','sampling_method':'all','sampling_config':{'case_scope':'active','record_type_config':types}}
+    result = await sampling.TaskSamplingService().sample(task)
+    assert {row['visit_id'] for row in result} == {'SYN-V-0','SYN-V-2'}
+    assert all(row['record_type_snapshot']['bucket'] in types['selected_buckets'] for row in result)
+    pairs[-1] = (None, 'D-')
+    with pytest.raises(ValueError, match='不能按类型筛选'):
+        await sampling.TaskSamplingService().sample(task)
+
+
+def test_specified_case_set_rejects_type_scope_but_accepts_metadata():
+    refs = [{'institute_id':'SYN-H','patient_id':'SYN-P','visit_id':'SYN-V'}]
+    sampling.validate_specified_case_sampling('all', {'record_type_config':config()}, refs)
+    with pytest.raises(ValueError, match='二次类型筛选'):
+        sampling.validate_specified_case_sampling('all', {'record_type_config':{**config(), 'selected_buckets':['critical']}}, refs)
+    for buckets in ([], ['unknown'], ['critical','critical'], {'critical':True}):
+        with pytest.raises(ValueError, match='类型筛选'):
+            sampling.validate_task_record_type_config('running', {**config(), 'selected_buckets': buckets})

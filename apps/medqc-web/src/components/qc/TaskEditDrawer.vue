@@ -180,6 +180,7 @@
             <TaskRecordTypeFields
               v-if="form.scene !== 'outpatient'"
               v-model="recordTypeConfig"
+              :allow-filter="rangeMode !== 'refs'"
               :disabled="saving || refreshRequired"
               :required="
                 form.sampling_method?.startsWith('record_type_') ||

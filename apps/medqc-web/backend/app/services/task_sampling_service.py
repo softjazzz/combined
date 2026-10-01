@@ -27,8 +27,12 @@ def validate_task_record_type_config(scene: Any, value: Any, *, required: bool =
         return
     if scene not in {"running", "final"} or not isinstance(value, dict):
         raise ValueError("病历类型配置仅支持运行/终末场景且必须显式填写")
-    if set(value) - {"institutes", "overlap_policy", "priority"}:
+    if set(value) - {"institutes", "overlap_policy", "priority", "selected_buckets"}:
         raise ValueError("病历类型配置字段无效")
+    if "selected_buckets" in value:
+        buckets = value["selected_buckets"]
+        if not isinstance(buckets, list) or not buckets or any(not isinstance(bucket, str) or bucket not in RECORD_TYPE_BUCKETS for bucket in buckets) or len(buckets) != len(set(buckets)):
+            raise ValueError("类型筛选必须明确选择不重复的已知类型桶")
     policy = value.get("overlap_policy")
     if policy not in ("separate", "priority"):
         raise ValueError("必须选择双阳性独立桶或显式优先级策略")
@@ -291,6 +295,8 @@ def validate_specified_case_sampling(method: Any, config: Any, refs: Any) -> Non
     """指定三坐标病例是固定集合，不允许再次随机抽样。"""
     if refs and (method != "all" or set(config or {}) - {"case_scope", "record_type_config"}):
         raise ValueError("指定病历不允许二次抽样，请使用全部病历且清空抽样参数")
+    if refs and isinstance((config or {}).get("record_type_config"), dict) and "selected_buckets" in config["record_type_config"]:
+        raise ValueError("指定病历不允许二次类型筛选，请清空类型筛选条件")
 
 
 class TaskSamplingService:
@@ -634,6 +640,11 @@ class TaskSamplingService:
                 logger.warning("病历类型来源不可用 error_type=%s", type(exc).__name__)
                 raise RuntimeError("病历类型来源不可用") from None
             candidates = [{**row, "record_type_snapshot": classify_task_record_type(self._identity(row), flags.get(self._identity(row)), config["record_type_config"])} for row in candidates]
+            selected_buckets = config["record_type_config"].get("selected_buckets")
+            if selected_buckets is not None:
+                if any(row["record_type_snapshot"]["bucket"] == "unknown" for row in candidates):
+                    raise ValueError("病历类型存在NULL、未知码或缺少机构字典，不能按类型筛选")
+                candidates = [row for row in candidates if row["record_type_snapshot"]["bucket"] in selected_buckets]
 
         if not candidates:
             logger.info("任务候选病历为空")

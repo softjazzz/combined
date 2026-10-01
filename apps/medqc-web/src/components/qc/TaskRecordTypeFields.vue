@@ -51,6 +51,23 @@
         来源：cdm.mr_customize
         危重/疑难标志；NULL、未知码与缺少机构字典保持未知。普通桶仅包含双阴性病例。
       </p>
+      <a-checkbox
+        :checked="modelValue.selected_buckets !== undefined"
+        :disabled="allowFilter === false && modelValue.selected_buckets === undefined"
+        @update:checked="toggleFilter"
+        >仅选择指定病历类型桶</a-checkbox
+      >
+      <a-select
+        v-if="modelValue.selected_buckets !== undefined"
+        :value="modelValue.selected_buckets"
+        mode="multiple"
+        :disabled="allowFilter === false"
+        :options="bucketOptions"
+        @update:value="changeBuckets"
+      />
+      <p v-if="allowFilter === false && modelValue.selected_buckets !== undefined" role="alert">
+        指定病例集合不允许二次类型筛选，请取消类型筛选条件。
+      </p>
     </template>
   </section>
 </template>
@@ -61,12 +78,30 @@ const props = defineProps<{
   modelValue?: TaskRecordTypeConfig
   required?: boolean
   disabled?: boolean
+  allowFilter?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [TaskRecordTypeConfig | undefined] }>()
 const flags = [
   { key: 'critical' as const, label: '危重' },
   { key: 'difficult' as const, label: '疑难' },
 ]
+const bucketOptions = [
+  { value: 'critical', label: '危重' },
+  { value: 'difficult', label: '疑难' },
+  { value: 'critical_and_difficult', label: '危重且疑难' },
+  { value: 'ordinary', label: '普通（双阴性）' },
+]
+function toggleFilter(enabled: boolean) {
+  const next = copy()
+  if (enabled) next.selected_buckets = []
+  else delete next.selected_buckets
+  emit('update:modelValue', next)
+}
+function changeBuckets(value: NonNullable<TaskRecordTypeConfig['selected_buckets']>) {
+  const next = copy()
+  next.selected_buckets = value
+  emit('update:modelValue', next)
+}
 const blank = () => ({
   institute_id: '',
   critical: { positive_codes: [] as string[], negative_codes: [] as string[] },

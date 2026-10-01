@@ -129,6 +129,7 @@ export type TaskAssignableMethod =
   | 'by_record_type'
 export type TaskRecordTypeBucket = 'critical' | 'difficult' | 'critical_and_difficult' | 'ordinary'
 export interface TaskRecordTypeConfig {
+  selected_buckets?: TaskRecordTypeBucket[]
   institutes: Array<{
     institute_id: string
     critical: { positive_codes: string[]; negative_codes: string[] }

@@ -240,6 +240,7 @@ describe('CreateTaskDrawer 创建草稿边界', () => {
         },
       ],
       overlap_policy: 'priority',
+      selected_buckets: ['difficult'],
       priority: ['difficult', 'critical'],
     }
     vm.formData.sampling_config.record_type_config = config
