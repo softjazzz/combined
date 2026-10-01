@@ -151,7 +151,7 @@ export interface RemediationRow {
 }
 export interface RecordRemediationAnalysis {
   scope: RecordQualityFilters
-  contract_status: 'assumed_unconfirmed'
+  contract_status: 'confirmed'
   assumptions: string[]
   labels: Array<{ key: string; label: string; defect_total: number; case_total: number }>
   state_counts: Record<string, number>

@@ -1,4 +1,4 @@
-"""整改分析只读现代 owner；七标签为显式待确认假设，不是新的领域状态。"""
+"""整改分析只读现代 owner；七标签采用用户已确认口径，不是新的领域状态。"""
 
 import csv
 import io
@@ -25,10 +25,10 @@ LABELS = {
     "urged_rectified": "催办已整改",
 }
 ASSUMPTIONS = [
-    "七标签口径待确认；自动确认缺陷及已审核通过的人工缺陷按保存目标去重，申诉与整改独立，可跨标签重叠。",
+    "七标签口径已确认；自动确认缺陷及已审核通过的人工缺陷按保存目标去重，申诉与整改独立，可跨标签重叠。",
     "仅匹配当前保存结果的冻结轮次；人工缺陷使用自身创建/run/job/envelope来源，旧轮次与来源不足单列。",
     "已整改仅指质控验收通过；医生提交仍为待验收，不计入已整改。",
-    "催办/自行取医生本次提交前有效提醒；无有效催办且验收通过暂列医生自行整改，不表示未派发任务。",
+    "催办/自行取医生本次提交前有效提醒；无有效催办且验收通过列为医生自行整改，不表示未派发任务。",
     "未派发、缺少冻结来源或历史不足均单列，不推断未催办待整改。",
 ]
 CASE_SOURCE_KEYS = (*SOURCE_KEYS[:4], *SOURCE_KEYS[6:])
@@ -337,7 +337,7 @@ def build_analysis(
             )
         return {
             "scope": context.scope,
-            "contract_status": "assumed_unconfirmed",
+            "contract_status": "confirmed",
             "assumptions": ASSUMPTIONS,
             "labels": [
                 {
@@ -457,7 +457,7 @@ def export_csv(analysis, *, label=None):
                     for key in fields
                 ],
                 "、".join(LABELS[key] for key in row["labels"]),
-                "七标签待确认，可重叠；已整改仅验收通过，催办按提交时提醒",
+                "七标签已确认，可重叠；已整改仅验收通过，催办按提交前有效提醒",
             ]
         )
     return output.getvalue().encode("utf-8-sig")

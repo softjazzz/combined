@@ -236,7 +236,7 @@ def test_frozen_target_overlap_summary_page_and_csv_are_same_set(setup, scene):
             )
         )
     result = analysis(ctx, sessions)
-    assert result["contract_status"] == "assumed_unconfirmed"
+    assert result["contract_status"] == "confirmed"
     labels = {row["key"]: row["defect_total"] for row in result["labels"]}
     assert labels["clinical_appeal"] == labels["urged_pending"] == 1
     assert labels["not_urged_pending"] == 0
@@ -254,7 +254,7 @@ def test_frozen_target_overlap_summary_page_and_csv_are_same_set(setup, scene):
         len(csv_rows) == 1 and csv_rows[0]["target_id"] == page["items"][0]["target_id"]
     )
     assert csv_rows[0]["patient_name"].startswith("'=")
-    assert "待确认" in csv_rows[0]["统计口径"]
+    assert "已确认" in csv_rows[0]["统计口径"]
 
 
 @pytest.mark.parametrize(

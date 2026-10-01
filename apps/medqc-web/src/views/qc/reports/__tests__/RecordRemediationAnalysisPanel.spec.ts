@@ -55,7 +55,7 @@ const row: RemediationRow = {
 }
 const payload: RecordRemediationAnalysis = {
   scope: { scene: 'running', defect_source: 'all' },
-  contract_status: 'assumed_unconfirmed',
+  contract_status: 'confirmed',
   assumptions: ['催办按提交当时有效提醒，申诉独立'],
   labels: [
     { key: 'urged_rectified', label: '催办已整改', defect_total: 1, case_total: 1 },
@@ -100,10 +100,10 @@ beforeEach(() => {
   mocks.export.mockResolvedValue({ success: true, data: new Blob(['合成CSV']) })
 })
 describe('整改分析', () => {
-  it('七标签明确待确认且非互斥，历史带冻结来源和提交提醒证据', async () => {
+  it('七标签明确已确认且可重叠，历史带冻结来源和提交提醒证据', async () => {
     const wrapper = make()
     await flushPromises()
-    expect(wrapper.text()).toContain('七标签统计口径待确认')
+    expect(wrapper.text()).toContain('七标签统计口径已确认')
     expect(wrapper.text()).toContain('尚未派发：2')
     await wrapper
       .findAll('button')

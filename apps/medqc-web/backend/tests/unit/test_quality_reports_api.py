@@ -66,7 +66,7 @@ def test_records_passes_filters_and_page_to_same_context(monkeypatch):
 @pytest.mark.parametrize("scene", ["running", "final"])
 def test_remediation_scope_identity_pagination_and_export(monkeypatch, scene):
     context = object()
-    analysis = {"rows": [], "labels": [], "assumptions": [], "contract_status": "assumed_unconfirmed"}
+    analysis = {"rows": [], "labels": [], "assumptions": [], "contract_status": "confirmed"}
     calls = []
     monkeypatch.setattr(service, "build_report_context", lambda **kwargs: calls.append(kwargs) or context)
     def build(ctx, *, actor_id):

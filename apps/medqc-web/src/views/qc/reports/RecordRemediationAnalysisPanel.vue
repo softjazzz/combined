@@ -10,7 +10,7 @@
     <a-button v-if="error" :disabled="busy" @click="load(1)">重试读取</a-button>
     <a-spin :spinning="busy">
       <template v-if="analysis">
-        <a-alert type="warning" message="七标签统计口径待确认，不代表七种互斥业务状态" show-icon />
+        <a-alert type="info" message="七标签统计口径已确认，可重叠，申诉与整改独立" show-icon />
         <ul class="assumptions">
           <li v-for="assumption in analysis.assumptions" :key="assumption">{{ assumption }}</li>
         </ul>
@@ -176,7 +176,7 @@ async function load(page = 1) {
     )
       throw new Error('整改分析来源与筛选不一致')
     if (
-      response.data.contract_status !== 'assumed_unconfirmed' ||
+      response.data.contract_status !== 'confirmed' ||
       !Array.isArray(response.data.items) ||
       !Array.isArray(response.data.labels) ||
       !Array.isArray(response.data.assumptions) ||
