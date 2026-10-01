@@ -223,6 +223,17 @@ CASE = "/api/v1/manual-defects/case"
 CASE_PARAMS = {"institute_id": "hospital-A", "patient_id": "patient", "visit_id": "visit"}
 
 
+def test_case_http_pagination_keeps_exact_scope(sessions, monkeypatch):
+    http, _ = client(monkeypatch)
+    result = http.get(CASE, params={**CASE_PARAMS, "offset": 2, "limit": 2})
+    assert result.status_code == 200
+    data = result.json()["data"]
+    assert data["total"] == 5 and data["offset"] == 2 and data["limit"] == 2
+    assert [row["id"] for row in data["items"]] == ["m-3", "m-2"]
+    for params in ({"offset": -1}, {"limit": 201}, {"limit": 0}):
+        assert http.get(CASE, params={**CASE_PARAMS, **params}).status_code == 422
+
+
 def test_case_list_returns_all_review_states_for_exact_identity(sessions, monkeypatch):
     """按三坐标读取全部审核状态的人工缺陷；自动缺陷与其他病例不出现，total 精确。"""
     with sessions.begin() as session:

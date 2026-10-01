@@ -108,10 +108,35 @@
         <p>{{ item.description || '暂无问题说明' }}</p>
         <small v-if="item.location">{{ item.location }}</small>
       </article>
-      <p v-if="manualTotal > manualItems.length" class="case-defect-partitions__footnote">
-        预览最近 {{ manualItems.length }} 条，共 {{ manualTotal }} 条。
-      </p>
     </div>
+
+    <nav
+      v-if="activeTab === 'manual' && manualReady"
+      class="case-defect-partitions__pagination"
+      aria-label="人工缺陷分页"
+    >
+      <span
+        >第 {{ Math.floor(manualOffset / MANUAL_PAGE_SIZE) + 1 }} 页，共 {{ manualTotal }} 条</span
+      >
+      <button
+        type="button"
+        title="上一页人工缺陷"
+        aria-label="上一页人工缺陷"
+        :disabled="loading || manualLoading || manualOffset === 0"
+        @click="changeManualPage(manualOffset - MANUAL_PAGE_SIZE)"
+      >
+        <ChevronLeft :size="16" />
+      </button>
+      <button
+        type="button"
+        title="下一页人工缺陷"
+        aria-label="下一页人工缺陷"
+        :disabled="loading || manualLoading || manualOffset + MANUAL_PAGE_SIZE >= manualTotal"
+        @click="changeManualPage(manualOffset + MANUAL_PAGE_SIZE)"
+      >
+        <ChevronRight :size="16" />
+      </button>
+    </nav>
 
     <p v-if="targetNotice" class="case-defect-partitions__target-notice" role="status">
       {{ targetNotice }}
@@ -141,7 +166,14 @@
 
 <script setup lang="ts">
 import { isAxiosError } from 'axios'
-import { CircleAlert, FileSearch, Info, RefreshCw } from 'lucide-vue-next'
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  FileSearch,
+  Info,
+  RefreshCw,
+} from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
 import { getCaseManualDefects } from '@/api/manualDefectReviews'
 import type { ManualDefectReviewItem } from '@/api/manualDefectReviews'
@@ -188,6 +220,10 @@ const manualItems = ref<ManualDefectReviewItem[]>([])
 const manualTotal = ref(0)
 const manualReady = ref(false)
 const manualError = ref('')
+const MANUAL_PAGE_SIZE = 200
+const manualOffset = ref(0)
+const manualLoading = ref(false)
+let manualRequest = 0
 const codingSnapshot = ref<ModernCaseQcSnapshot | null>(null)
 const codingReady = ref(false)
 const codingError = ref('')
@@ -326,7 +362,7 @@ const targetNotice = computed(() => {
   }
   if (!manualReady.value || manualError.value || manualItems.value.some(isManualTarget)) return ''
   return manualTotal.value > manualItems.value.length
-    ? `目标人工缺陷 ${props.initialTarget.defectId || '未知'} 不在最近 200 条预览范围`
+    ? `目标人工缺陷 ${props.initialTarget.defectId || '未知'} 不在当前页，可翻页查找`
     : `未找到目标人工缺陷 ${props.initialTarget.defectId || '未知'}`
 })
 
@@ -407,7 +443,11 @@ const activeMessage = computed(() => {
   if (activeTab.value === 'manual') {
     if (manualError.value) return manualError.value
     if (!manualReady.value) return loading.value ? '正在读取人工缺陷…' : '人工缺陷暂时不可用'
-    return manualItems.value.length ? '' : '当前病历暂无人工缺陷'
+    return manualItems.value.length
+      ? ''
+      : manualTotal.value
+        ? '当前页暂无人工缺陷，请返回上一页'
+        : '当前病历暂无人工缺陷'
   }
   if (activeTab.value === 'coding') {
     if (codingError.value) return codingError.value
@@ -456,21 +496,25 @@ async function loadPartition(sequence: number) {
   partition.value = data
 }
 
-async function loadManual(sequence: number) {
+async function loadManual(sequence: number, offset = 0) {
+  const request = ++manualRequest
   const response = await getCaseManualDefects({
     institute_id: props.instituteId,
     patient_id: props.patientId,
     visit_id: props.visitId,
     scene: props.scene === 'outpatient' ? 'outpatient_emergency' : props.scene,
+    ...(offset ? { offset, limit: MANUAL_PAGE_SIZE } : {}),
   })
-  if (!isCurrent(sequence)) return
+  if (!isCurrent(sequence) || request !== manualRequest) return
   if (response.status === 403) emit('forbidden')
   if (
     !response.success ||
     !response.data ||
     !Array.isArray(response.data.items) ||
     !Number.isInteger(response.data.total) ||
-    response.data.total < 0
+    response.data.total < 0 ||
+    response.data.items.length > MANUAL_PAGE_SIZE ||
+    (offset > 0 && (response.data.offset !== offset || response.data.limit !== MANUAL_PAGE_SIZE))
   ) {
     manualError.value = response.message || '人工缺陷读取失败，请稍后重试'
     return
@@ -488,7 +532,23 @@ async function loadManual(sequence: number) {
   }
   manualItems.value = response.data.items
   manualTotal.value = response.data.total
+  manualOffset.value = offset
   manualReady.value = true
+}
+
+async function changeManualPage(offset: number) {
+  if (loading.value || manualLoading.value || offset < 0) return
+  const sequence = requestSequence
+  manualLoading.value = true
+  manualError.value = ''
+  try {
+    await loadManual(sequence, offset)
+    if (isCurrent(sequence)) await scrollToTarget()
+  } catch {
+    if (isCurrent(sequence)) manualError.value = '人工缺陷读取失败，请稍后重试'
+  } finally {
+    if (isCurrent(sequence)) manualLoading.value = false
+  }
 }
 
 async function loadCoding(sequence: number) {
@@ -521,6 +581,8 @@ async function loadAll() {
   manualTotal.value = 0
   manualReady.value = false
   manualError.value = ''
+  manualOffset.value = 0
+  manualLoading.value = false
   codingSnapshot.value = null
   codingReady.value = false
   codingError.value = ''
@@ -546,6 +608,30 @@ watch(
 </script>
 
 <style scoped>
+.case-defect-partitions__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.case-defect-partitions__pagination button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.case-defect-partitions__pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .case-defect-partitions {
   margin-top: 14px;
   padding: 16px;

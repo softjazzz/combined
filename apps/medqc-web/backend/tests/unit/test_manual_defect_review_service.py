@@ -105,6 +105,28 @@ def _state(factory, defect_id):
     return row, history
 
 
+def test_case_pages_reach_rows_after_default_limit(sessions):
+    with sessions.begin() as session:
+        session.execute(QCDefect.__table__.insert(), [
+            _defect(f"page-{index:03}", minutes=index + 20, scene="running")
+            for index in range(205)
+        ])
+    params = dict(institute_id="hospital-A", patient_id="patient", visit_id="visit", scene="running")
+    first = service.list_case_manual_defects(**params)
+    second = service.list_case_manual_defects(**params, offset=200)
+    assert first["total"] == second["total"] == 205
+    assert len(first["items"]) == 200 and len(second["items"]) == 5
+    assert second["offset"] == 200 and second["limit"] == 200
+    assert not {row["id"] for row in first["items"]} & {row["id"] for row in second["items"]}
+    assert second["items"][-1]["id"] == "page-000"
+
+
+@pytest.mark.parametrize("offset,limit", [(-1, 200), (True, 200), (0, 0), (0, 201), (0, False)])
+def test_case_page_rejects_invalid_bounds(sessions, offset, limit):
+    with pytest.raises(service.ManualDefectReviewInvalid):
+        service.list_case_manual_defects(institute_id="hospital-A", patient_id="patient", visit_id="visit", offset=offset, limit=limit)
+
+
 def test_report_batch_uses_full_identity_and_manual_scope(sessions, monkeypatch):
     with sessions.begin() as session:
         session.execute(QCDefect.__table__.insert(), [

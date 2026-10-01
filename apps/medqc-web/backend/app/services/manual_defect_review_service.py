@@ -194,12 +194,15 @@ def _case_identity(institute_id: Any, patient_id: Any, visit_id: Any) -> tuple[s
 
 def list_case_manual_defects(
     *, institute_id: str, patient_id: str, visit_id: str, scene: str = "all",
+    offset: int = 0, limit: int = CASE_LIST_LIMIT,
 ) -> dict[str, Any]:
-    """按三坐标只读取该病例全部审核状态的任务人工缺陷（最近 CASE_LIST_LIMIT 条 + 精确 total）。
+    """按三坐标分页读取该病例全部审核状态的任务人工缺陷。
 
     与审核列表共用人工缺陷谓词与字段白名单；只读，不改变任何状态。
     """
     identity = _case_identity(institute_id, patient_id, visit_id)
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= CASE_LIST_LIMIT:
+        raise ManualDefectReviewInvalid("人工缺陷分页参数无效")
     factory = _require_session_factory()
     predicates = (
         *_manual_scope(scene=scene),
@@ -219,7 +222,7 @@ def list_case_manual_defects(
                     QCDefect.manual_created_by, QCDefect.created_at,
                 ).where(*predicates)
                 .order_by(QCDefect.created_at.desc(), QCDefect.id.desc())
-                .limit(CASE_LIST_LIMIT)
+                .offset(offset).limit(limit)
             ).all()
             by_defect: dict[str, list[Any]] = {}
             if defects:
@@ -239,7 +242,7 @@ def list_case_manual_defects(
         _list_item(row, _task_identity(by_defect.get(row.id, []), row.manual_created_by))
         for row in defects
     ]
-    return {"items": items, "total": int(total), "limit": CASE_LIST_LIMIT}
+    return {"items": items, "total": int(total), "limit": limit, "offset": offset}
 
 
 _CASE_BATCH_CHUNK = 200

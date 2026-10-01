@@ -39,10 +39,12 @@ export interface ManualDefectReviewPage {
   scene: ManualDefectReviewScene
 }
 
-/** 单病例人工缺陷：按 created_at 倒序，最多返回 200 条；total 为精确总数，可能大于 items 长度。 */
+/** 单病例人工缺陷：按 created_at/id 倒序分页，每页最多 200 条。 */
 export interface CaseManualDefectList {
   items: ManualDefectReviewItem[]
   total: number
+  offset?: number
+  limit?: number
 }
 
 export interface CaseManualDefectQuery {
@@ -50,6 +52,8 @@ export interface CaseManualDefectQuery {
   patient_id: string
   visit_id: string
   scene?: ManualDefectReviewScene
+  offset?: number
+  limit?: number
 }
 
 export interface ManualDefectReviewPayload {
@@ -156,12 +160,14 @@ export async function reviewManualDefect(defectId: string, payload: ManualDefect
 
 /** 按三坐标读取单病例全部人工缺陷（含已审核），供病历结果抽屉只读展示。 */
 export async function getCaseManualDefects(query: CaseManualDefectQuery) {
-  const params: Record<string, string> = {
+  const params: Record<string, string | number> = {
     institute_id: query.institute_id,
     patient_id: query.patient_id,
     visit_id: query.visit_id,
   }
   if (query.scene) params.scene = query.scene
+  if (query.offset !== undefined) params.offset = query.offset
+  if (query.limit !== undefined) params.limit = query.limit
   return request<CaseManualDefectList>(
     {
       method: 'GET',

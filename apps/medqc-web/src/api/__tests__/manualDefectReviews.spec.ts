@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiService } from '@/services/apiService'
-import { getManualDefects } from '@/api/manualDefectReviews'
+import { getCaseManualDefects, getManualDefects } from '@/api/manualDefectReviews'
 
 function response(scene: 'all' | 'running' | 'final' | 'outpatient_emergency') {
   return {
@@ -14,6 +14,31 @@ function response(scene: 'all' | 'running' | 'final' | 'outpatient_emergency') {
 
 describe('manual defect review API', () => {
   beforeEach(() => vi.restoreAllMocks())
+
+  it('passes case pagination without changing identity or scene', async () => {
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response('running'))
+    await getCaseManualDefects({
+      institute_id: 'H1',
+      patient_id: 'P1',
+      visit_id: 'V1',
+      scene: 'running',
+      offset: 200,
+      limit: 200,
+    })
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: '/api/v1/manual-defects/case',
+        params: {
+          institute_id: 'H1',
+          patient_id: 'P1',
+          visit_id: 'V1',
+          scene: 'running',
+          offset: 200,
+          limit: 200,
+        },
+      }),
+    )
+  })
 
   it('passes the exact frozen scene to the pending review list', async () => {
     const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response('running'))
@@ -33,8 +58,10 @@ describe('manual defect review API', () => {
 
     await getManualDefects()
 
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({
-      params: { review_status: 'pending', page: 1, page_size: 20, scene: 'all' },
-    }))
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: { review_status: 'pending', page: 1, page_size: 20, scene: 'all' },
+      }),
+    )
   })
 })

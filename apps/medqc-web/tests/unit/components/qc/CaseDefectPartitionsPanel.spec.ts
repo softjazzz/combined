@@ -301,7 +301,7 @@ describe('CaseDefectPartitionsPanel', () => {
     expect(wrapper.text()).toContain('当前分区暂无缺陷')
   })
 
-  it('人工与编码结果截断时明确标为预览', async () => {
+  it('人工显示分页总数，编码保留既有预览行为', async () => {
     getManual.mockResolvedValue({
       success: true,
       data: {
@@ -325,12 +325,12 @@ describe('CaseDefectPartitionsPanel', () => {
     await flushPromises()
 
     await tab(wrapper, '人工').trigger('click')
-    expect(wrapper.text()).toContain('预览最近 1 条，共 2 条')
+    expect(wrapper.text()).toContain('第 1 页，共 2 条')
     await tab(wrapper, '编码').trigger('click')
     expect(wrapper.text()).toContain('预览本次前 1 条，共 3 条')
   })
 
-  it('按具体人工缺陷ID定位，超出200条预览时明确提示未定位', async () => {
+  it('按具体人工缺陷ID定位，当前页没有目标时提示翻页', async () => {
     getManual.mockResolvedValue({
       success: true,
       data: {
@@ -352,8 +352,80 @@ describe('CaseDefectPartitionsPanel', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('目标人工缺陷 manual-201 不在最近 200 条预览范围')
+    expect(wrapper.text()).toContain('目标人工缺陷 manual-201 不在当前页，可翻页查找')
     expect(wrapper.find('.case-defect-partitions__item.is-target').exists()).toBe(false)
+    getManual.mockResolvedValue({
+      success: true,
+      data: {
+        total: 201,
+        offset: 200,
+        limit: 200,
+        items: [
+          {
+            id: 'manual-201',
+            institute_id: 'H-1',
+            patient_id: 'P-1',
+            visit_id: 'V-1',
+            manual_review_status: 'approved',
+          },
+        ],
+      },
+    })
+    await wrapper.get('[aria-label="下一页人工缺陷"]').trigger('click')
+    await flushPromises()
+    expect(getManual).toHaveBeenLastCalledWith({
+      institute_id: 'H-1',
+      patient_id: 'P-1',
+      visit_id: 'V-1',
+      scene: 'running',
+      offset: 200,
+      limit: 200,
+    })
+    expect(wrapper.find('.case-defect-partitions__item.is-target').exists()).toBe(true)
+    expect(wrapper.get('[aria-label="下一页人工缺陷"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('第 2 页，共 201 条')
+    wrapper.unmount()
+  })
+
+  it('翻页后病例切换丢弃旧人工缺陷响应', async () => {
+    getManual.mockResolvedValueOnce({ success: true, data: { items: [], total: 201 } })
+    const wrapper = mountPanel({ initialTab: 'manual' })
+    await flushPromises()
+    const late = deferred<unknown>()
+    getManual
+      .mockReturnValueOnce(late.promise)
+      .mockResolvedValue({ success: true, data: { items: [], total: 0 } })
+    await wrapper.get('[aria-label="下一页人工缺陷"]').trigger('click')
+    await wrapper.setProps({ patientId: 'P-2', jobId: 'job-2' })
+    await flushPromises()
+    late.resolve({
+      success: true,
+      data: {
+        offset: 200,
+        limit: 200,
+        total: 201,
+        items: [{ institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1', id: 'old' }],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('第 1 页，共 0 条')
+    expect(wrapper.text()).not.toContain('201 条')
+    wrapper.unmount()
+  })
+
+  it('翻页回执游标不一致时保留错误而不冒认新页', async () => {
+    getManual.mockResolvedValueOnce({ success: true, data: { items: [], total: 201 } })
+    const wrapper = mountPanel({ initialTab: 'manual' })
+    await flushPromises()
+    getManual.mockResolvedValueOnce({
+      success: true,
+      data: { items: [], total: 201, offset: 0, limit: 200 },
+    })
+    await wrapper.get('[aria-label="下一页人工缺陷"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('人工缺陷读取失败')
+    expect(wrapper.text()).toContain('第 1 页，共 201 条')
+    wrapper.unmount()
   })
 
   it('按具体Canonical规则定位并高亮', async () => {
