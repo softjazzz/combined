@@ -561,7 +561,9 @@ describe('QCRecordResultComparisonDrawer', () => {
     wrapper.getComponent(CaseDefectPartitionsPanelStub).vm.$emit('locate-evidence', target)
     await flushPromises()
     expect(workbenchProps?.evidenceTarget).toEqual(target)
-    await wrapper.setProps({ focus: { visitId: 'V002', instituteId: 'H1', patientId: 'P002' } })
+    await wrapper.setProps({
+      focus: { recordId: 'record-002', label: '病例二', visitId: 'V002', instituteId: 'H1', patientId: 'P002' },
+    })
     await flushPromises()
     expect(workbenchProps?.evidenceTarget).toBeNull()
     wrapper.unmount()
