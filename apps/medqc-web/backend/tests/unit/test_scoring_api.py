@@ -578,6 +578,26 @@ def test_case_score_rejects_bad_scene(sessions):
     assert _case(client(), scene="other").status_code == 422
 
 
+def test_case_score_selected_standard_query_and_invalid_selection(monkeypatch):
+    captured = []
+
+    def score(**kwargs):
+        captured.append(kwargs)
+        if kwargs.get("standard_id") == "invalid":
+            raise scoring_service.ScoringStandardSelectionInvalid("评分标准不可用于当前病历场景")
+        return {"status": "no_result", "scene": kwargs["scene"], "standard_id": kwargs.get("standard_id")}
+
+    monkeypatch.setattr(scoring_service, "score_case", score)
+    http = client(roles=("qc_doctor",))
+    params = {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1", "scene": "running", "standard_id": "selected"}
+    response = http.get(f"{BASE}/case", params=params)
+    assert response.status_code == 200
+    assert captured[-1]["standard_id"] == "selected"
+    response = http.get(f"{BASE}/case", params={**params, "standard_id": "invalid"})
+    assert response.status_code == 422
+    assert len(captured) == 2
+
+
 def test_case_score_returns_exact_result_and_standard_references(sessions, monkeypatch):
     from app.services.case_identity import CaseRef
     from app.services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref

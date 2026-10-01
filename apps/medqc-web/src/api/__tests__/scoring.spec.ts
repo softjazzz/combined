@@ -42,6 +42,7 @@ describe('scoring API', () => {
     await listScoringStandards()
     await getScoringStandard('id/1')
     await getCaseScore({ institute_id: 'H', patient_id: 'P', visit_id: 'V', scene: 'final' })
+    await getCaseScore({ institute_id: 'H', patient_id: 'P', visit_id: 'V', scene: 'final', standard_id: 'selected' })
     expect(spy.mock.calls[0]?.[0]).toMatchObject({ method: 'GET', url: '/api/v1/scoring/scenes' })
     expect(spy.mock.calls[1]?.[0]).toMatchObject({ url: '/api/v1/scoring/standards', params: { scene: 'running', status: 'active' } })
     expect(spy.mock.calls[2]?.[0].params).toEqual({})
@@ -50,6 +51,7 @@ describe('scoring API', () => {
       url: '/api/v1/scoring/case',
       params: { institute_id: 'H', patient_id: 'P', visit_id: 'V', scene: 'final' },
     })
+    expect(spy.mock.calls[5]?.[0].params).toMatchObject({ standard_id: 'selected' })
   })
 
   it('单病历得分透传可空的结果引用与标准引用，不在前端拼造', async () => {

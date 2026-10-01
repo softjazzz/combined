@@ -340,12 +340,14 @@ def _score_case_references(
 
 def score_case(
     *, institute_id: str, patient_id: str, visit_id: str, scene: str,
+    standard_id: str | None = None,
+    selected_standard_loader: Callable[[str], Mapping[str, Any]] | None = None,
     standard_loader: Callable[[str], Mapping[str, Any] | None] | None = None,
     workspace_factory: Callable[[], Any] | None = None,
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] | None = None,
     department_loader: Callable[[list[tuple[str, str, str]]], Mapping[tuple[str, str, str], str]] | None = None,
 ) -> dict[str, Any]:
-    """单病历计分：场景默认标准 + 单病历最新 ready 结果。
+    """单病历只读计分：本次显式标准或场景默认标准 + 单病历最新 ready 结果。
 
     无默认标准 {status: no_standard}；无 ready 结果 {status: no_result, result_state}；
     标准读取失败抛 ScoringStandardUnavailable，结果读取失败原样上抛（路由脱敏为 503）。
@@ -355,7 +357,10 @@ def score_case(
         str(patient_id or "").strip(),
         str(visit_id or "").strip(),
     )
-    standard = (standard_loader or get_default_standard)(scene)
+    standard = (
+        get_workstation_standard(scene, standard_id, standard_loader=selected_standard_loader or get_standard)
+        if standard_id is not None else (standard_loader or get_default_standard)(scene)
+    )
     if standard is None:
         return {"status": STATE_NO_STANDARD, "scene": scene}
     dto = (workspace_factory or _default_workspace)().build_latest_single_record_result_dto(

@@ -247,6 +247,27 @@ def test_score_case_no_standard_does_not_read_result():
     assert workspace.calls == []
 
 
+def test_score_case_explicit_standard_is_read_only_and_never_falls_back():
+    ready = _Workspace({"state": "ready", "items": []})
+    selected = standard(id="selected", status="active", scene="running")
+    result = scoring_service.score_case(
+        institute_id="H1", patient_id="P1", visit_id="V1", scene="running", standard_id="selected",
+        selected_standard_loader=lambda identifier: selected,
+        standard_loader=lambda scene: pytest.fail("显式标准不得读取默认"),
+        workspace_factory=lambda: ready,
+    )
+    assert result["standard_id"] == "selected"
+    assert len(ready.calls) == 1
+    for invalid in ({"status": "draft"}, {"scene": "final"}, {"rule_set_key": "other"}):
+        with pytest.raises(scoring_service.ScoringStandardSelectionInvalid):
+            scoring_service.score_case(
+                institute_id="H1", patient_id="P1", visit_id="V1", scene="running", standard_id="selected",
+                selected_standard_loader=lambda identifier: {**selected, **invalid},
+                standard_loader=lambda scene: pytest.fail("无效显式标准不得回默认"),
+                workspace_factory=lambda: pytest.fail("无效标准不得读取病例"),
+            )
+
+
 def test_score_case_no_result_and_scored(monkeypatch):
     empty = _Workspace({"state": "not_found", "items": []})
     result = scoring_service.score_case(

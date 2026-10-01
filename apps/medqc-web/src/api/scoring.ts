@@ -219,6 +219,7 @@ export interface CaseScoreQuery {
   patient_id: string
   visit_id: string
   scene: ScoringScene
+  standard_id?: string
 }
 
 export interface ScoringApiResult<T> {
@@ -557,7 +558,7 @@ export async function importScoringStandard(file: File): Promise<ScoringImportRe
   }
 }
 
-/** 单病历按最新 ready 结果与场景默认标准计分（不落库）。 */
+/** 单病历按最新 ready 结果与本次选择或场景默认标准计分（不落库）。 */
 export async function getCaseScore(query: CaseScoreQuery) {
   return request<CaseScore>({
     method: 'GET',
@@ -567,6 +568,7 @@ export async function getCaseScore(query: CaseScoreQuery) {
       patient_id: query.patient_id,
       visit_id: query.visit_id,
       scene: query.scene,
+      ...(query.standard_id !== undefined ? { standard_id: query.standard_id } : {}),
     },
   }, '读取病历得分失败')
 }

@@ -1,28 +1,36 @@
 <template>
-  <section
-    v-if="!forbidden"
-    class="case-score"
-    data-testid="case-score"
-    aria-label="本病例得分"
-  >
+  <section v-if="!forbidden" class="case-score" data-testid="case-score" aria-label="本病例得分">
     <header class="case-score__header">
       <strong>病历得分</strong>
-      <span
-        v-if="scored"
-        class="case-score__basis"
-        data-testid="case-score-basis"
-      >计分依据：{{ scored.standard_name || '未知标准' }}（<template v-if="trustedStandardVersion !== null"><span
-        data-testid="case-score-standard-version"
-      >标准版本 v{{ trustedStandardVersion }}</span> · </template>满分 {{ formatNumber(scored.base_score) }}）</span>
+      <label class="case-score__standard">
+        <span>评分标准</span>
+        <select
+          v-model="selectedStandardId"
+          data-testid="case-score-standard"
+          :disabled="optionsLoading"
+          @change="load"
+        >
+          <option value="">场景默认</option>
+          <option v-for="standard in standardOptions" :key="standard.id" :value="standard.id">
+            {{ standard.name }}
+          </option>
+        </select>
+      </label>
+      <span v-if="scored" class="case-score__basis" data-testid="case-score-basis"
+        >计分依据：{{ scored.standard_name || '未知标准' }}（<template
+          v-if="trustedStandardVersion !== null"
+          ><span data-testid="case-score-standard-version"
+            >标准版本 v{{ trustedStandardVersion }}</span
+          >
+          · </template
+        >满分 {{ formatNumber(scored.base_score) }}）</span
+      >
     </header>
-
-    <p
-      v-if="loading"
-      class="case-score__hint"
-      role="status"
-    >
-      正在计算本病例得分…
+    <p v-if="optionsError" class="case-score__error" role="alert">
+      {{ optionsError }}<button type="button" @click="loadOptions">重试</button>
     </p>
+
+    <p v-if="loading" class="case-score__hint" role="status">正在计算本病例得分…</p>
     <div
       v-else-if="loadError"
       class="case-score__error"
@@ -30,12 +38,7 @@
       data-testid="case-score-error"
     >
       <span>{{ loadError }}</span>
-      <button
-        type="button"
-        class="case-score__retry"
-        data-testid="case-score-retry"
-        @click="load"
-      >
+      <button type="button" class="case-score__retry" data-testid="case-score-retry" @click="load">
         重试
       </button>
     </div>
@@ -63,23 +66,13 @@
           <small>等级</small>
           <strong data-testid="case-score-grade">{{ scored.grade || '未知' }}</strong>
         </span>
-        <span
-          v-if="scored.veto_hit"
-          class="case-score__veto"
-          data-testid="case-score-veto"
-        >命中单项否决，等级强制为 {{ scored.grade || '未知' }}</span>
+        <span v-if="scored.veto_hit" class="case-score__veto" data-testid="case-score-veto"
+          >命中单项否决，等级强制为 {{ scored.grade || '未知' }}</span
+        >
       </div>
 
-      <p
-        v-if="!groupedDeductions.length"
-        class="case-score__hint"
-      >
-        无扣分项
-      </p>
-      <ul
-        v-else
-        class="case-score__groups"
-      >
+      <p v-if="!groupedDeductions.length" class="case-score__hint">无扣分项</p>
+      <ul v-else class="case-score__groups">
         <li
           v-for="group in groupedDeductions"
           :key="group.group_name"
@@ -89,24 +82,16 @@
           <div class="case-score__group-heading">
             <strong>{{ group.group_name }}</strong>
             <span>扣 {{ formatNumber(group.applied_deduction) }} 分</span>
-            <span
-              v-if="group.capped"
-              class="case-score__cap"
-              data-testid="case-score-group-capped"
-            >已封顶（原扣 {{ formatNumber(group.raw_deduction) }}，封顶 {{ formatNumber(group.max_deduction) }}）</span>
+            <span v-if="group.capped" class="case-score__cap" data-testid="case-score-group-capped"
+              >已封顶（原扣 {{ formatNumber(group.raw_deduction) }}，封顶
+              {{ formatNumber(group.max_deduction) }}）</span
+            >
           </div>
           <ul class="case-score__items">
-            <li
-              v-for="item in group.items"
-              :key="item.rule_id"
-              data-testid="case-score-deduction"
-            >
+            <li v-for="item in group.items" :key="item.rule_id" data-testid="case-score-deduction">
               <span class="case-score__rule">{{ item.rule_id }}</span>
               <span>-{{ formatNumber(item.deduction) }}</span>
-              <span
-                v-if="item.is_veto"
-                class="case-score__veto-tag"
-              >单项否决</span>
+              <span v-if="item.is_veto" class="case-score__veto-tag">单项否决</span>
             </li>
           </ul>
         </li>
@@ -118,11 +103,9 @@
         data-testid="case-score-unscored"
       >
         <span>以下确定问题未配置扣分：</span>
-        <span
-          v-for="ruleId in scored.unscored_rule_ids"
-          :key="ruleId"
-          class="case-score__rule"
-        >{{ ruleId }}</span>
+        <span v-for="ruleId in scored.unscored_rule_ids" :key="ruleId" class="case-score__rule">{{
+          ruleId
+        }}</span>
       </div>
     </template>
   </section>
@@ -135,7 +118,8 @@
  * 读取失败可重试，不伪造分数；三坐标或场景切换时丢弃迟到响应。
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { getCaseScore } from '@/api/scoring'
+import { getCaseScore, listScoringStandards } from '@/api/scoring'
+import { useAuthStore } from '@/stores/auth'
 import type { CaseScore, CaseScoreScored, ScoringDeduction, ScoringScene } from '@/api/scoring'
 
 const props = defineProps<{
@@ -156,6 +140,12 @@ const SCENE_LABELS: Record<ScoringScene, string> = {
 }
 
 const loading = ref(false)
+const auth = useAuthStore()
+const selectedStandardId = ref('')
+const standardOptions = ref<{ id: string; name: string }[]>([])
+const optionsLoading = ref(false)
+const optionsError = ref('')
+let optionsSequence = 0
 const forbidden = ref(false)
 const loadError = ref('')
 const result = ref<CaseScore | null>(null)
@@ -172,11 +162,15 @@ const trustedStandardVersion = computed<number | null>(() => {
   const value = reference as Record<string, unknown>
   if (typeof value.standard_id !== 'string' || !value.standard_id.trim()) return null
   if (typeof value.updated_at !== 'string' || !value.updated_at.trim()) return null
-  if (typeof value.version_seq !== 'number'
-    || !Number.isInteger(value.version_seq)
-    || value.version_seq < 1) return null
+  if (
+    typeof value.version_seq !== 'number' ||
+    !Number.isInteger(value.version_seq) ||
+    value.version_seq < 1
+  )
+    return null
   if (typeof data.standard_id === 'string' && data.standard_id !== value.standard_id) return null
-  if (typeof data.standard_updated_at === 'string' && data.standard_updated_at !== value.updated_at) return null
+  if (typeof data.standard_updated_at === 'string' && data.standard_updated_at !== value.updated_at)
+    return null
   return value.version_seq
 })
 
@@ -235,6 +229,7 @@ async function load() {
       patient_id: props.patientId,
       visit_id: props.visitId,
       scene: props.scene,
+      ...(selectedStandardId.value ? { standard_id: selectedStandardId.value } : {}),
     })
     if (sequence !== requestSequence) return
     if (response.status === 403) {
@@ -250,6 +245,10 @@ async function load() {
       loadError.value = '得分数据不完整，已停止展示'
       return
     }
+    if (selectedStandardId.value && (!('standard_id' in response.data) || response.data.standard_id !== selectedStandardId.value)) {
+      loadError.value = '返回评分标准与当前选择不一致，已停止展示'
+      return
+    }
     result.value = response.data
   } catch {
     if (sequence === requestSequence) loadError.value = '读取本病例得分失败'
@@ -258,10 +257,44 @@ async function load() {
   }
 }
 
+async function loadOptions() {
+  const sequence = ++optionsSequence
+  optionsLoading.value = true
+  optionsError.value = ''
+  try {
+    const response = await listScoringStandards({ scene: props.scene, status: 'active' })
+    if (sequence !== optionsSequence) return
+    if (response.status === 403) {
+      forbidden.value = true
+      emit('forbidden')
+      return
+    }
+    if (!response.success || !Array.isArray(response.data?.items)) {
+      optionsError.value = response.message || '读取评分标准失败'
+      return
+    }
+    standardOptions.value = response.data.items
+      .filter(
+        (item) =>
+          item.status === 'active' &&
+          item.scene === props.scene &&
+          item.rule_set_key === 'luxian_0609_qc_v1',
+      )
+      .map((item) => ({ id: item.id, name: item.name }))
+  } catch {
+    if (sequence === optionsSequence) optionsError.value = '读取评分标准失败'
+  } finally {
+    if (sequence === optionsSequence) optionsLoading.value = false
+  }
+}
+
 watch(
-  () => [props.instituteId, props.patientId, props.visitId, props.scene],
+  () => [props.instituteId, props.patientId, props.visitId, props.scene, auth.user?.id],
   () => {
     forbidden.value = false
+    selectedStandardId.value = ''
+    standardOptions.value = []
+    void loadOptions()
     void load()
   },
   { immediate: true },
@@ -269,6 +302,7 @@ watch(
 
 onBeforeUnmount(() => {
   requestSequence += 1
+  optionsSequence += 1
 })
 </script>
 
@@ -294,6 +328,20 @@ onBeforeUnmount(() => {
 .case-score__basis {
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
+}
+
+.case-score__standard {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.case-score__standard select {
+  max-width: 280px;
+  padding: 4px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: #fff;
 }
 
 .case-score__hint {

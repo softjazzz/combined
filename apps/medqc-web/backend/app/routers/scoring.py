@@ -172,6 +172,8 @@ def _actor(current_user: dict) -> str:
 def _raise_http(exc: Exception, action: str) -> None:
     if isinstance(exc, HTTPException):
         raise exc
+    if isinstance(exc, scoring_service.ScoringStandardSelectionInvalid):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, ScoringStandardInvalid):
         raise HTTPException(
             status_code=422,
@@ -502,9 +504,10 @@ async def get_case_score(
     patient_id: str = Query(..., min_length=1, max_length=128),
     visit_id: str = Query(..., min_length=1, max_length=128),
     scene: Scene = Query(...),
+    standard_id: str | None = Query(None, min_length=1, max_length=128),
     current_user: dict = Depends(get_current_user),
 ):
-    """按单病历最新 ready 结果与场景默认标准计分；不落库。"""
+    """按单病历最新 ready 结果与本次选择或场景默认标准计分；不落库。"""
     identity = tuple(value.strip() for value in (institute_id, patient_id, visit_id))
     if not all(identity):
         raise HTTPException(status_code=422, detail="病历三坐标无效")
@@ -512,6 +515,7 @@ async def get_case_score(
         data = await run_in_threadpool(
             scoring_service.score_case,
             institute_id=identity[0], patient_id=identity[1], visit_id=identity[2], scene=scene,
+            standard_id=standard_id,
         )
     except Exception as exc:
         _raise_http(exc, "case")
