@@ -1,4 +1,4 @@
-"""人工质控报表：创建日期窗口、当前审核/整改状态；口径假设尚待人工确认。"""
+"""人工质控报表：已确认创建日期窗口、当前审核/整改状态统计口径。"""
 
 import csv
 import io
@@ -38,7 +38,7 @@ RECTIFICATION = (
     "unassigned",
     "unknown",
 )
-ASSUMPTION = "待确认统计假设：按医院上海自然日的人工缺陷创建日期计录入数；审核与整改为各自当前状态，同缺陷多次提交只计一条；科室取来源已核验的已保存任务病例抽样科室。"
+ASSUMPTION = "已确认统计口径：按医院上海自然日的人工缺陷创建日期计录入数；审核与整改为各自当前状态，同缺陷多次操作只计一条；支持机构、科室、录入人、任务及场景筛选；科室取来源已核验的已保存任务病例抽样科室，来源不完整或错配时相关信息为未知。"
 
 
 def _json(value):
@@ -503,7 +503,7 @@ def csv_export(rows, as_of=None):
     )
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow((*fields, "as_of", "统计口径（待确认）"))
+    writer.writerow((*fields, "as_of", "统计口径（已确认）"))
     for row in rows:
         values = []
         for key in fields:

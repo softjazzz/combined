@@ -4,9 +4,9 @@
     <a-alert
       :message="
         report?.assumption ||
-        '统计口径假设待确认：创建日期窗口、当前审核及整改状态、已保存任务抽样科室。'
+        '已确认统计口径：按上海自然日的缺陷创建日期计录入量，审核与整改分别展示当前状态；支持机构、科室、录入人、任务及场景筛选；同缺陷多次操作只计一条，来源不完整或错配时相关信息为未知。'
       "
-      type="warning"
+      type="info"
       show-icon
     />
     <form class="manual-filters" @submit.prevent="query">

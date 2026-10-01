@@ -13,7 +13,7 @@ vi.mock('@/api/manualQualityReport', () => ({
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
 const data = {
-  assumption: '待确认统计假设',
+  assumption: '已确认统计口径',
   summary: {
     entered: 1,
     review: { pending: 1, approved: 0, rejected: 0, unknown: 0 },
@@ -51,7 +51,7 @@ function make() {
   return mount(ManualQualityReportPanel, {
     global: {
       stubs: {
-        'a-alert': { props: ['message'], template: '<p>{{ message }}</p>' },
+        'a-alert': { props: ['message', 'type'], template: '<p :data-type="type">{{ message }}</p>' },
         'a-button': { template: '<button><slot/></button>' },
         'a-spin': { template: '<div><slot/></div>' },
         'a-table': {
@@ -111,7 +111,9 @@ describe('人工质控报表', () => {
   it('审核整改分列、完整院科人员任务场景筛选及分页', async () => {
     const wrapper = make()
     await flushPromises()
-    expect(wrapper.text()).toContain('待确认统计假设')
+    expect(wrapper.text()).toContain('已确认统计口径')
+    expect(wrapper.text()).not.toContain('待确认')
+    expect(wrapper.get('[data-type="info"]').attributes('data-type')).toBe('info')
     expect(wrapper.text()).toContain('待审核 1')
     expect(wrapper.text()).toContain('待验收 1')
     const selects = wrapper.findAll('select')

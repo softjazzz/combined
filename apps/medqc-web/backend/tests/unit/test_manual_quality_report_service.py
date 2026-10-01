@@ -284,7 +284,8 @@ def test_current_states_independent_scope_and_filter_before_page(setup):
     }
     assert result["summary"]["rectification"]["unassigned"] == 1
     assert result["summary"]["rectification"]["unknown"] == 1
-    assert "待确认" in result["assumption"]
+    assert "已确认统计口径" in result["assumption"]
+    assert "待确认" not in result["assumption"]
     assert result["as_of"].endswith("Z") and result["timezone"] == "Asia/Shanghai"
     assert report(setup, task_id="T1")["total"] == 1
     assert report(setup, creator_id="u2")["summary"]["entered"] == 1
@@ -423,7 +424,8 @@ def test_csv_formula_and_unknown_are_explicit_without_private_text():
         ]
     )
     assert "'=SUM(1)" in text and "' @evil" in text and "'\tformula" in text
-    assert "private text" not in text and "待确认" in text and "未知" in text
+    assert "private text" not in text and "统计口径（已确认）" in text and "未知" in text
+    assert "已确认统计口径" in text and "待确认" not in text
 
 
 def test_hospital_calendar_left_closed_right_open_utc_boundaries(setup):

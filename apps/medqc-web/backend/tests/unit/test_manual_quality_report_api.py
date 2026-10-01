@@ -92,7 +92,8 @@ def test_export_filtered_same_authorized_contract_and_formula_guard(client):
     assert (
         response.status_code == 200 and "text/csv" in response.headers["content-type"]
     )
-    assert "'=synthetic" in response.text and "待确认" in response.text
+    assert "'=synthetic" in response.text and "已确认统计口径" in response.text
+    assert "待确认" not in response.text
     assert service.report.call_args.kwargs["task_id"] == "T1"
     assert service.report.call_args.kwargs["institute_id"] == "H1"
     service.audit.assert_called_once()
