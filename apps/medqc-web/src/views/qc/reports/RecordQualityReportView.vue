@@ -1,5 +1,11 @@
 <template>
   <main class="report-page">
+    <a-tabs v-model:active-key="reportTab">
+      <a-tab-pane key="quality" tab="病历质量分析" />
+      <a-tab-pane key="core" tab="18项核心制度" />
+    </a-tabs>
+    <CoreSystemReportPanel v-if="reportTab === 'core'" />
+    <div v-show="reportTab === 'quality'">
     <header class="page-head">
       <div>
         <h1>病历质量分析</h1>
@@ -391,6 +397,7 @@
         </button>
       </div>
     </a-drawer>
+    </div>
   </main>
 </template>
 
@@ -400,6 +407,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { CircleAlert, Columns3, Download, RefreshCw, Search } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import CoreSystemReportPanel from './CoreSystemReportPanel.vue'
+const reportTab = ref('quality')
 import {
   exportRecordQualityReport,
   getRecordQualityRecords,

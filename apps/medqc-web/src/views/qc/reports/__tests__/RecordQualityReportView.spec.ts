@@ -67,10 +67,30 @@ async function flush() {
   await nextTick()
 }
 function render() {
-  return mount(RecordQualityReportView, { global: { stubs: { 'a-drawer': drawerStub } } })
+  return mount(RecordQualityReportView, {
+    global: {
+      stubs: {
+        'a-drawer': drawerStub,
+        'a-tabs': {
+          props: ['activeKey'],
+          template:
+            '<div><button data-testid="core-tab" @click="$emit(\'update:activeKey\', \'core\')">核心制度</button><slot /></div>',
+        },
+        'a-tab-pane': { template: '<div />' },
+        CoreSystemReportPanel: { template: '<div data-testid="core-panel">制度专题</div>' },
+      },
+    },
+  })
 }
 
 describe('RecordQualityReportView', () => {
+  it('opens the core-system report from the existing report tab', async () => {
+    const wrapper = render()
+    await flush()
+    await wrapper.get('[data-testid="core-tab"]').trigger('click')
+    expect(wrapper.find('[data-testid="core-panel"]').exists()).toBe(true)
+    expect(wrapper.get('.page-head').isVisible()).toBe(false)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
