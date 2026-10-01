@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type {
@@ -15,6 +16,7 @@ type ServiceResult<T> = {
   success: boolean
   data?: T
   message?: string
+  status?: number
 }
 
 const WORKSPACE_QUERY_TIMEOUT_MS = 60000
@@ -41,6 +43,7 @@ async function requestEnvelope<T>(
     return {
       success: false,
       message: toErrorMessage(error, fallbackMessage),
+      status: isAxiosError(error) ? error.response?.status : undefined,
     }
   }
 }
@@ -125,6 +128,64 @@ export async function getLatestLuxian0609RecordResult(record: {
       timeout: WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取该病历最近一次质控结果失败',
+  )
+}
+
+export type CaseDefectPartitionStatus =
+  | 'ready'
+  | 'no_scene'
+  | 'no_standard'
+  | 'unavailable'
+  | 'not_integrated'
+
+export interface CaseDefectRulePartition {
+  status: CaseDefectPartitionStatus
+  source: 'luxian_0609_canonical_projection' | 'scoring_deductions'
+  rule_ids: string[]
+  reason_code: string | null
+  standard_name?: string | null
+}
+
+export interface CaseDefectCorePartition {
+  status: 'not_integrated'
+  source: 'core_system_classification'
+  reason_code: 'core_system_classification_missing'
+}
+
+export interface CaseDefectPartitionsPayload {
+  schema_version: 'case-defect-partitions-v1'
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  state: string
+  job_id: string
+  confirmed: CaseDefectRulePartition
+  veto: CaseDefectRulePartition
+  core: CaseDefectCorePartition
+}
+
+/**
+ * 读取 Canonical 确认缺陷、计分单否和核心制度接入状态。
+ * 人工缺陷与编码缺陷分别继续使用其既有 owner，不由本接口转述。
+ */
+export async function getLatestLuxian0609RecordDefectPartitions(record: {
+  instituteId: string
+  patientId: string
+  visitId: string
+  scene?: 'running' | 'final' | 'outpatient'
+}) {
+  return requestEnvelope<CaseDefectPartitionsPayload>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sichuan/workspace/records/${encodeURIComponent(record.visitId)}/defect-partitions`,
+      params: {
+        institute_id: record.instituteId,
+        patient_id: record.patientId,
+        ...(record.scene ? { scene: record.scene } : {}),
+      },
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '获取该病历缺陷分区失败',
   )
 }
 

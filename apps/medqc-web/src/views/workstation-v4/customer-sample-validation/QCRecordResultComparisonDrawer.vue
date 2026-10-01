@@ -73,7 +73,8 @@
               v-if="navigationPositionText"
               class="customer-record-result-title__nav-position"
               data-testid="record-result-nav-position"
-            >{{ navigationPositionText }}</span>
+              >{{ navigationPositionText }}</span
+            >
             <button
               type="button"
               class="customer-record-result-title__nav-button"
@@ -127,16 +128,19 @@
           :scene="scoreScene"
           @forbidden="scoreForbidden = true"
         />
-        <!-- 人工缺陷分区：独立 owner（人工缺陷审核），此处只读；与病历审核同一挂载条件。 -->
-        <CaseManualDefectPanel
-          v-if="showManualDefects"
-          :key="`case-manual-defects:${focus.instituteId}:${focus.patientId}:${focus.visitId}`"
+        <!-- 五分区只装配各自 owner：Canonical / 计分 / 人工 / 编码；核心制度明确未接入。 -->
+        <CaseDefectPartitionsPanel
+          v-if="showDefectPartitions && scoreScene"
+          :key="`case-defect-partitions:${focus.instituteId}:${focus.patientId}:${focus.visitId}:${latestResult.job_id}`"
           :institute-id="focus.instituteId"
           :patient-id="focus.patientId"
           :visit-id="focus.visitId"
-          @forbidden="manualDefectForbidden = true"
+          :job-id="latestResult.job_id"
+          :scene="scoreScene"
+          :canonical-items="latestResult.items"
+          @forbidden="defectPartitionsForbidden = true"
         />
-        <!-- 操作记录时间线：只装配各 owner 的事件，只读；与人工缺陷同一挂载条件。 -->
+        <!-- 操作记录时间线：只装配各 owner 的事件，只读；与缺陷分区同一挂载条件。 -->
         <CaseOperationTimeline
           v-if="showOperations"
           :key="`case-operations:${focus.instituteId}:${focus.patientId}:${focus.visitId}`"
@@ -176,7 +180,7 @@ import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseRecordReviewPanel from '@/components/qc/CaseRecordReviewPanel.vue'
-import CaseManualDefectPanel from '@/components/qc/CaseManualDefectPanel.vue'
+import CaseDefectPartitionsPanel from '@/components/qc/CaseDefectPartitionsPanel.vue'
 import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
 import type { ScoringScene } from '@/api/scoring'
@@ -262,7 +266,7 @@ const navigationPositionText = computed(() => {
 })
 
 const reviewForbidden = ref(false)
-const manualDefectForbidden = ref(false)
+const defectPartitionsForbidden = ref(false)
 const operationsForbidden = ref(false)
 const scoreForbidden = ref(false)
 /** 得分读取只需登录，不依赖审核角色；403 时隐藏。 */
@@ -278,12 +282,12 @@ const reviewAuth = computed(() => {
 })
 const reviewerId = computed(() => reviewAuth.value?.userId ?? '')
 const showRecordReview = computed(() => !!reviewAuth.value?.allowed && !reviewForbidden.value)
-const showManualDefects = computed(
-  () => !!reviewAuth.value?.allowed && !manualDefectForbidden.value,
+const showDefectPartitions = computed(
+  () => !!reviewAuth.value?.allowed && !!props.scoreScene && !defectPartitionsForbidden.value,
 )
 const showOperations = computed(() => !!reviewAuth.value?.allowed && !operationsForbidden.value)
 const showReviewSection = computed(
-  () => showRecordReview.value || showManualDefects.value || showOperations.value,
+  () => showRecordReview.value || showDefectPartitions.value || showOperations.value,
 )
 
 function handleReviewSubmitted(decision: RecordReviewDecision) {
@@ -396,7 +400,7 @@ async function loadLatestResult() {
   const focus = props.focus
   latestResult.value = null
   reviewForbidden.value = false
-  manualDefectForbidden.value = false
+  defectPartitionsForbidden.value = false
   operationsForbidden.value = false
   scoreForbidden.value = false
   qcTimeText.value = ''

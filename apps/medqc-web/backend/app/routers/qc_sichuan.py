@@ -2310,9 +2310,10 @@ async def get_latest_workspace_record_defect_partitions(
         require_roles("admin", "qc_manager", "sync_admin", "super_admin")
     ),
 ):
-    """单病历详情缺陷分区：只装配确认缺陷、单否、核心制度的 rule_id，不返回正文。
+    """单病历详情缺陷分区：装配确认缺陷、单否和核心制度状态，不返回正文。
 
-    权限与单病历最新结果接口一致；读取失败统一脱敏为 503。
+    人工与编码缺陷仍由各自既有只读 owner 提供。权限与单病历最新结果接口一致；
+    读取失败统一脱敏为 503。
     """
 
     if not record_id.strip() or not institute_id.strip() or not patient_id.strip():
@@ -2327,6 +2328,8 @@ async def get_latest_workspace_record_defect_partitions(
             scene=scene,
             workspace=workspace,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="病历三坐标无效") from exc
     except Exception as exc:
         logger.error("缺陷分区读取失败 error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="缺陷分区暂时不可用") from None

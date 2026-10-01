@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = "case-defect-partitions-v1"
 CORE_SYSTEM_REASON = "core_system_classification_missing"
 SCORING_SCENES = frozenset({"running", "final", "outpatient"})
+CANONICAL_SOURCE = "luxian_0609_canonical_projection"
+VETO_SOURCE = "scoring_deductions"
+CORE_SOURCE = "core_system_classification"
 
 
 class _PinnedDtoWorkspace:
@@ -57,9 +60,15 @@ def _confirmed_partition(
         projected = projector(list(dto.get("items") or []))
     except Exception as exc:  # noqa: BLE001 - 投影合同失败只让本分区不可用
         logger.warning("缺陷分区确认缺陷投影失败 error_type=%s", type(exc).__name__)
-        return {"status": "unavailable", "rule_ids": [], "reason_code": "projection_failed"}
+        return {
+            "status": "unavailable",
+            "source": CANONICAL_SOURCE,
+            "rule_ids": [],
+            "reason_code": "projection_failed",
+        }
     return {
         "status": "ready",
+        "source": CANONICAL_SOURCE,
         "rule_ids": _rule_ids(
             item.get("rule_id")
             for item in projected
@@ -77,7 +86,12 @@ def _veto_partition(
     workspace: Any,
     scorer: Callable[..., Mapping[str, Any]],
 ) -> dict[str, Any]:
-    base: dict[str, Any] = {"rule_ids": [], "standard_name": None, "reason_code": None}
+    base: dict[str, Any] = {
+        "source": VETO_SOURCE,
+        "rule_ids": [],
+        "standard_name": None,
+        "reason_code": None,
+    }
     if not scene:
         return {**base, "status": "no_scene"}
     if scene not in SCORING_SCENES:
@@ -96,7 +110,9 @@ def _veto_partition(
         return {**base, "status": "no_standard"}
     if status != scoring_service.STATE_SCORED:
         return {**base, "status": "unavailable", "reason_code": "score_no_result"}
-    if str(scored.get("job_id") or "") != str(dto.get("job_id") or ""):
+    scored_job_id = str(scored.get("job_id") or "").strip()
+    dto_job_id = str(dto.get("job_id") or "").strip()
+    if not scored_job_id or not dto_job_id or scored_job_id != dto_job_id:
         # 计分与分区必须锚定同一结果对象；不一致时不展示单否，避免错配。
         return {**base, "status": "unavailable", "reason_code": "result_changed"}
     deductions = scored.get("deductions") or []
@@ -137,25 +153,40 @@ def build_case_defect_partitions(
         raise ValueError("缺陷分区读取缺少三坐标身份")
     dto = workspace.build_latest_single_record_result_dto(**identity.as_dict())
     state = str((dto or {}).get("state") or "") if isinstance(dto, Mapping) else ""
-    core = {"status": "not_integrated", "reason_code": CORE_SYSTEM_REASON}
-    if state != "ready":
+    core = {
+        "status": "not_integrated",
+        "source": CORE_SOURCE,
+        "reason_code": CORE_SYSTEM_REASON,
+    }
+    identity_payload = identity.as_dict()
+    job_id = str((dto or {}).get("job_id") or "").strip() if isinstance(dto, Mapping) else ""
+    if state != "ready" or not job_id:
+        reason_code = "result_identity_missing" if state == "ready" else "result_not_ready"
         return {
             "schema_version": SCHEMA_VERSION,
-            "state": state or "technical_error",
+            **identity_payload,
+            "state": "technical_error" if state == "ready" else state or "technical_error",
             "job_id": "",
-            "confirmed": {"status": "unavailable", "rule_ids": [], "reason_code": "result_not_ready"},
+            "confirmed": {
+                "status": "unavailable",
+                "source": CANONICAL_SOURCE,
+                "rule_ids": [],
+                "reason_code": reason_code,
+            },
             "veto": {
                 "status": "unavailable",
+                "source": VETO_SOURCE,
                 "rule_ids": [],
                 "standard_name": None,
-                "reason_code": "result_not_ready",
+                "reason_code": reason_code,
             },
             "core": core,
         }
     return {
         "schema_version": SCHEMA_VERSION,
+        **identity_payload,
         "state": "ready",
-        "job_id": str(dto.get("job_id") or ""),
+        "job_id": job_id,
         "confirmed": _confirmed_partition(dto, projector or scoring_service.project_customer_items),
         "veto": _veto_partition(
             identity=identity,
@@ -168,4 +199,11 @@ def build_case_defect_partitions(
     }
 
 
-__all__ = ["build_case_defect_partitions", "CORE_SYSTEM_REASON", "SCHEMA_VERSION"]
+__all__ = [
+    "build_case_defect_partitions",
+    "CANONICAL_SOURCE",
+    "CORE_SOURCE",
+    "CORE_SYSTEM_REASON",
+    "SCHEMA_VERSION",
+    "VETO_SOURCE",
+]

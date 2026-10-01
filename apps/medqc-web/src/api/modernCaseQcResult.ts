@@ -47,6 +47,7 @@ export interface ModernCaseQcIdentity {
 /** 缺陷条目：字段由规则执行器判定，前端只搬运，不重写业务状态与缺陷语义。 */
 export interface ModernCaseQcDefect {
   id?: string
+  rule_code?: string
   rule_name?: string
   description?: string
   severity?: string
@@ -314,11 +315,9 @@ function requireObjectArray(
     })
   }
   if (!value.every((item) => isPlainObject(item))) {
-    throw new ModernCaseQcSnapshotError(
-      'malformed_payload',
-      `字段 ${field} 的元素必须是对象`,
-      { details: { field } },
-    )
+    throw new ModernCaseQcSnapshotError('malformed_payload', `字段 ${field} 的元素必须是对象`, {
+      details: { field },
+    })
   }
   if (maxLength !== undefined && value.length > maxLength) {
     throw new ModernCaseQcSnapshotError(
@@ -342,11 +341,9 @@ function requireObjectOrNull<T>(data: Record<string, unknown>, field: string): T
     return null
   }
   if (!isPlainObject(value)) {
-    throw new ModernCaseQcSnapshotError(
-      'malformed_payload',
-      `字段 ${field} 必须是对象或 null`,
-      { details: { field } },
-    )
+    throw new ModernCaseQcSnapshotError('malformed_payload', `字段 ${field} 必须是对象或 null`, {
+      details: { field },
+    })
   }
   return value as T
 }
