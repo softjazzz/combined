@@ -316,9 +316,21 @@ async function pollJob(jobId: string, revision: number, owner: string, sceneValu
       .trim()
       .toLowerCase()
     if (status === 'completed') {
-      if (caseMode.value && Number(response.data.failed_count || 0) > 0) {
-        fail(response.data.error_message || '当前病历质控失败，请核对任务详情后重试。', sceneValue, owner)
-        return
+      if (caseMode.value) {
+        const counts = [response.data.total_records, response.data.success_count, response.data.failed_count]
+        if (!counts.every((count) => typeof count === 'number' && Number.isSafeInteger(count) && count >= 0)
+          || response.data.total_records !== 1) {
+          markCreateResultUnknown('当前病历完成计数不完整，结果待核实')
+          return
+        }
+        if (response.data.failed_count !== 0) {
+          fail(response.data.error_message || '当前病历质控失败，请核对任务详情后重试。', sceneValue, owner)
+          return
+        }
+        if (!response.data.success_count) {
+          markCreateResultUnknown('当前病历未确认成功交付，结果待核实')
+          return
+        }
       }
       clearPollTimer()
       clearPersistedJob(sceneValue, actorKey.value)

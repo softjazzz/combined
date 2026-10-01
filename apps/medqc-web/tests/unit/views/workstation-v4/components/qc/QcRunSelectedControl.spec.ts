@@ -69,7 +69,7 @@ describe('QcRunSelectedControl', () => {
 
   it.each(['inpatient', 'discharged'] as const)('病例入口按明确场景和当前唯一三坐标执行 %s', async (carePhase) => {
     mocks.createJob.mockResolvedValue({ success: true, data: { id: 'case-job', status: 'queued' } })
-    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'case-job', status: 'completed' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'case-job', status: 'completed', total_records: 1, success_count: 1, failed_count: 0 } })
     const wrapper = mountControl({ carePhase, recordRefs: [recordRefs[0]!], mode: 'case' })
     expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').text()).toBe('重新质控')
     await confirmRun(wrapper)
@@ -99,7 +99,7 @@ describe('QcRunSelectedControl', () => {
 
   it('病例任务完成但当前病例失败时显示失败而不刷新旧结果', async () => {
     mocks.createJob.mockResolvedValue({ success: true, data: { id: 'case-failed', status: 'queued' } })
-    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'case-failed', status: 'completed', failed_count: 1, error_message: '当前资料校验失败' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'case-failed', status: 'completed', total_records: 1, success_count: 0, failed_count: 1, error_message: '当前资料校验失败' } })
     const wrapper = mountControl({ carePhase: 'inpatient', recordRefs: [recordRefs[0]!], mode: 'case' })
     await confirmRun(wrapper)
     await flushPromises()
@@ -120,6 +120,17 @@ describe('QcRunSelectedControl', () => {
     expect(wrapper.text()).toContain('网络中断')
     expect(wrapper.text()).toContain('勿直接重复提交')
     expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').attributes('disabled')).toBe('')
+    wrapper.unmount()
+  })
+
+  it.each([undefined, '0', -1, Number.NaN, Number.POSITIVE_INFINITY])('病例完成失败计数未知或非法不宣称成功 %s', async (failed_count) => {
+    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'uncertain-case', status: 'queued' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: { id: 'uncertain-case', status: 'completed', total_records: 1, success_count: 1, failed_count } })
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs: [recordRefs[0]!], mode: 'case' })
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain('结果待核实')
+    expect(wrapper.emitted('completed')).toBeUndefined()
     wrapper.unmount()
   })
 
