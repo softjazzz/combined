@@ -4,7 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event as sqlalchemy_event, func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.database.models.case_communication import CaseCommunication as Event
@@ -170,3 +170,22 @@ def test_missing_notification_is_source_failure_not_an_empty_inbox(setup):
         session.get(Event, event["id"]).notification_id = None
     with pytest.raises(RuntimeError, match="来源"):
         service.inbox("doctor")
+
+
+@pytest.mark.parametrize("owner", [Event, Notification])
+def test_event_or_notification_write_failure_rolls_back_both_owners(setup, owner):
+    service, sessions, _, data = setup
+
+    def fail_after_insert(_mapper, _connection, _target):
+        raise RuntimeError("synthetic write failure")
+
+    sqlalchemy_event.listen(owner, "after_insert", fail_after_insert)
+    try:
+        with pytest.raises(RuntimeError, match="synthetic write failure"):
+            service.create("manager", data)
+    finally:
+        sqlalchemy_event.remove(owner, "after_insert", fail_after_insert)
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(Event)) == 0
+        assert session.scalar(select(func.count()).select_from(Notification)) == 0
+    assert service.create("manager", data)["request_id"] == data["request_id"]

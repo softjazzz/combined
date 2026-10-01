@@ -54,14 +54,20 @@ function make() {
         'a-alert': { props: ['message'], template: '<p>{{ message }}</p>' },
         'a-button': { template: '<button><slot/></button>' },
         'a-spin': { template: '<div><slot/></div>' },
-        'a-table': { props: ['dataSource'], template: '<div class="rows">{{ dataSource }}</div>' },
+        'a-table': {
+          props: ['dataSource'],
+          template: `<div class="rows"><div v-for="row in dataSource" :key="row.id">
+            <slot name="bodyCell" :column="{dataIndex: 'creator_name'}" :record="row" :text="row.creator_name" />
+            <slot name="bodyCell" :column="{key: 'detail'}" :record="{id: row.id}" />
+          </div></div>`,
+        },
         'a-pagination': {
           emits: ['change'],
           template: '<button class="next" @click="$emit(\'change\', 2)">下一页</button>',
         },
-        'a-drawer': true,
-        'a-descriptions': true,
-        'a-descriptions-item': true,
+        'a-drawer': { props: ['open'], template: '<aside v-if="open"><slot/></aside>' },
+        'a-descriptions': { template: '<dl><slot/></dl>' },
+        'a-descriptions-item': { template: '<dd><slot/></dd>' },
       },
     },
   })
@@ -73,6 +79,18 @@ beforeEach(() => {
   mocks.export.mockResolvedValue(new Blob(['synthetic csv']))
 })
 describe('人工质控报表', () => {
+  it('表格显示单元格文本，明细从已校验行读取，翻页清理旧明细', async () => {
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.get('.rows').text()).toContain('合成人员')
+    await wrapper.get('.rows button').trigger('click')
+    expect(wrapper.get('aside').text()).toContain('合成人员')
+    expect(wrapper.get('aside').text()).toContain('待验收')
+    await wrapper.get('.next').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('aside').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('账户改变后丢弃迟到查询，不能显示前账户病例', async () => {
     let resolve!: (value: unknown) => void
     mocks.report.mockImplementationOnce(

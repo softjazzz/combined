@@ -87,17 +87,17 @@
           :pagination="false"
           :scroll="{ x: 1000 }"
         >
-          <template #bodyCell="{ column, record }">
+          <template #bodyCell="{ column, record, text }">
             <template v-if="column.key === 'review_status'">{{
               reviewLabels[record.review_status] || '未知'
             }}</template>
             <template v-else-if="column.key === 'rectification_status'">{{
               rectificationLabels[record.rectification_status] || '未知'
             }}</template>
-            <a-button v-else-if="column.key === 'detail'" @click="selected = record"
+            <a-button v-else-if="column.key === 'detail'" @click="selectDetail(record.id)"
               >查看明细</a-button
             >
-            <template v-else>{{ record[column.dataIndex] ?? '未知' }}</template>
+            <template v-else>{{ text ?? '未知' }}</template>
           </template>
         </a-table>
         <a-pagination
@@ -210,6 +210,9 @@ const detailFields: Array<{ key: keyof ManualReportRow; label: string }> = [
   { key: 'rectification_status', label: '当前整改' },
   { key: 'source_verified', label: '冻结来源核验' },
 ]
+function selectDetail(id: unknown) {
+  selected.value = report.value?.items.find((item) => item.id === id) ?? null
+}
 function detailValue(key: keyof ManualReportRow) {
   if (!selected.value) return '未知'
   const value = selected.value[key]
