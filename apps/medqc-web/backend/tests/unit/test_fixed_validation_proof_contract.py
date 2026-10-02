@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from app.services.draft_test_validation_service import fixed_test_validation_state
+from app.services.draft_test_validation_service import fixed_test_validation_state, fixed_test_records_match
 
 
 def _draft():
@@ -40,6 +40,28 @@ def _draft():
 
 def test_complete_server_proof_accepts_distinct_patients_sharing_visit_number():
     assert fixed_test_validation_state(_draft()) == (True, None)
+
+
+@pytest.mark.parametrize("change", [None, "version", "removed", "superseded", "identity", "pool", "missing"])
+def test_proof_requires_current_active_test_case_versions(change):
+    selected = _draft()["last_test_summary"]["selected_items"]
+    rows = [{
+        "id": item["item_id"], "pool_id": "customer-created-test-records-v1",
+        "include_in_batch_1": True, "exclude_reason": "",
+        "updated_at": item["item_updated_at"],
+        **{f"matched_{key}": value for key, value in item["record_ref"].items()},
+    } for item in selected]
+    if change == "version":
+        rows[0]["updated_at"] = "2026-09-28T12:00:00Z"
+    elif change in ("removed", "superseded"):
+        rows[0].update(include_in_batch_1=False, exclude_reason=change)
+    elif change == "identity":
+        rows[0]["matched_patient_id"] = "OTHER"
+    elif change == "pool":
+        rows[0]["pool_id"] = "other"
+    elif change == "missing":
+        rows.pop()
+    assert fixed_test_records_match(selected, rows) is (change is None)
 
 
 @pytest.mark.parametrize("corruption", ["non_object", "duplicate", "identity", "version", "draft"])

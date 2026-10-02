@@ -2,10 +2,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(), getProof: vi.fn(), run: vi.fn(), publish: vi.fn(),
+  list: vi.fn(), getProof: vi.fn(), run: vi.fn(), publish: vi.fn(), copy: vi.fn(), catalog: vi.fn(),
 }))
 
-vi.mock('@/services/test-medical-records', () => ({ listTestRecords: mocks.list }))
+vi.mock('@/services/test-medical-records', () => ({ listTestRecords: mocks.list, copyTestRecord: mocks.copy, getCurrentRuleSetCatalog: mocks.catalog }))
+vi.mock('@/views/test-medical-records/components/TestRecordEditDrawer.vue', () => ({ default: {
+  props: ['item', 'open'], emits: ['saved', 'close'], template: '<button data-testid="save-edit" @click="$emit(\'saved\', \'new-item\')">保存新版</button>',
+} }))
 vi.mock('@/services/custom-rule-workspace-service', () => ({
   getFixedTestValidation: mocks.getProof,
   runFixedTestValidation: mocks.run,
@@ -44,6 +47,7 @@ const emptyState = {
 
 function render() {
   return mount(FixedTestValidationPanel, {
+    global: { stubs: { 'a-drawer': { template: '<div><slot /></div>' }, QCRecordCompareWorkbench: true } },
     props: { draftId: 'draft-1', draftUpdatedAt: '2026-09-28T12:00:00Z', actorKey: 'manager|qc_manager', enabled: true },
   })
 }
@@ -55,6 +59,51 @@ describe('FixedTestValidationPanel', () => {
     mocks.getProof.mockResolvedValue({ success: true, data: emptyState })
     mocks.run.mockResolvedValue({ success: true, data: { ...emptyState, validation: proof, publish_ready: true, unavailable_reason: null }, resultUnknown: false, conflict: false })
     mocks.publish.mockResolvedValue({ success: true, data: { draft_id: 'draft-1', rule_code: 'CUSTOM-001', published_rule_id: 'rule-1', status: 'published' }, resultUnknown: false, conflict: false })
+    mocks.copy.mockResolvedValue({ success: true, data: { visit_id: 'NEW-VISIT' } })
+    mocks.catalog.mockResolvedValue({ success: true, data: { entries: [{ rule_id: 'R1', qc_point: '应用规则名称' }] } })
+  })
+
+  it('移除只影响当前测试集并阻止用旧选择发布', async () => {
+    mocks.getProof.mockResolvedValue({ success: true, data: { ...emptyState, validation: proof, publish_ready: true, unavailable_reason: null } })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper.get('[aria-label="从当前测试集移除 测试病例A"]').trigger('click')
+    expect(wrapper.text()).toContain('测试病例A')
+    expect(wrapper.find('.selected-record').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="publish-validated-draft"]').attributes('disabled')).toBeDefined()
+    expect(mocks.publish).not.toHaveBeenCalled()
+  })
+
+  it('复制使用源版本且不猜测新版选择', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('.record-actions button')[2].trigger('click')
+    await flushPromises()
+    expect(mocks.copy).toHaveBeenCalledWith(record)
+    expect(wrapper.text()).toContain('已选 0 / 20')
+    expect(mocks.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('编辑成功清除旧选择和证明并要求重新选择新版', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper.findAll('.record-actions button')[1].trigger('click')
+    await wrapper.get('[data-testid="save-edit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('病例已更新，请添加新版病例并重新测试')
+    expect(wrapper.text()).toContain('已选 0 / 20')
+    expect(mocks.getProof).toHaveBeenCalledTimes(2)
+  })
+
+  it('详情显示该病例应用规则而非规则全集', async () => {
+    mocks.list.mockResolvedValue({ success: true, data: { items: [{ ...record, rule_ids: ['R1'] }], total: 1, page: 1, page_size: 100 } })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('.record-actions button')[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('R1 应用规则名称')
   })
 
   it('冻结所选固定池版本并把发现缺陷作为有效测试结果展示', async () => {

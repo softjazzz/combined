@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.routers import custom_qc
 from app.services import custom_qc_workspace_service as service_module
+from app.services import custom_qc_sample_pool_service as pool_module
 from app.services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     DraftBasicInfoConflict,
@@ -55,7 +56,23 @@ def workspace(monkeypatch):
         sa.Column("created_at", sa.DateTime, nullable=False),
         sa.Column("updated_at", sa.DateTime, nullable=False),
     )
+    items = sa.Table(
+        "test_pool_items", metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("pool_id", sa.String),
+        sa.Column("include_in_batch_1", sa.Boolean),
+        sa.Column("exclude_reason", sa.String),
+        sa.Column("updated_at", sa.DateTime),
+        *[sa.Column(f"matched_{key}", sa.String) for key in ("institute_id", "patient_id", "visit_id")],
+    )
     metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(items.insert().values(
+            id="item-1", pool_id="customer-created-test-records-v1", include_in_batch_1=True,
+            exclude_reason="", updated_at=datetime(2026, 9, 28, 8),
+            matched_institute_id="CUSTOMER_TEST", matched_patient_id="P1", matched_visit_id="TEST-V1",
+        ))
+    monkeypatch.setattr(pool_module, "_sample_pool_items_table", lambda: items)
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr(service_module, "_session", sessions)
     instance = object.__new__(CustomQCWorkspaceService)

@@ -112,6 +112,21 @@ def test_batch_publish_publishes_all_in_one_transaction(api):
     assert _rule_count(sessions, rules) == 2
 
 
+def test_batch_publish_rejects_replaced_test_case_without_writing_rules(api):
+    client, service, sessions, drafts, rules, _user = api
+    first, second = _publishable_draft(service, name="一"), _publishable_draft(service, name="二")
+    items = drafts.metadata.tables["test_pool_items"]
+    with sessions.begin() as session:
+        session.execute(items.update().values(include_in_batch_1=False, exclude_reason="superseded:new"))
+    response = client.post(
+        "/api/v1/custom-qc/workspace/drafts/publish-batch",
+        json={"items": [_publish_item(first), _publish_item(second)]},
+    )
+    assert response.status_code == 409
+    assert _rule_count(sessions, rules) == 0
+    assert set(_statuses(sessions, drafts).values()) == {"draft"}
+
+
 @pytest.mark.parametrize("breaker", ["stale_revision", "stale_proof", "untested", "foreign_owner"])
 def test_batch_publish_rolls_back_whole_batch_on_any_failure(api, breaker):
     client, service, sessions, drafts, rules, _user = api

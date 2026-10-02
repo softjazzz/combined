@@ -15,7 +15,7 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 import psycopg2
 import psycopg2.extras
 
@@ -4846,6 +4846,18 @@ class CustomQCSamplePoolService:
                 page=page,
                 page_size=page_size,
             )
+        finally:
+            session.close()
+
+    def fixed_test_records_current(self, *, selected: Sequence[Mapping[str, Any]]) -> bool:
+        from .draft_test_validation_service import fixed_test_records_match
+
+        session = _session()
+        try:
+            rows = session.execute(select(self._item_table).where(
+                self._item_table.c.id.in_([item["item_id"] for item in selected])
+            )).mappings().all()
+            return fixed_test_records_match(selected, rows)
         finally:
             session.close()
 

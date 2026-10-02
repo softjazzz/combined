@@ -1377,7 +1377,7 @@ async def get_workspace_draft_test_validation(
 ):
     service = DraftTestValidationService(
         workspace=workspace,
-        sample_pool=None,
+        sample_pool=CustomQCSamplePoolService(),
         qc_service=None,
     )
     try:

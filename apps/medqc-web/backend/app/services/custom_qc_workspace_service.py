@@ -39,6 +39,7 @@ from .draft_test_validation_service import (
     DraftTestValidationNotFound,
     DraftTestValidationResultUnknown,
     fixed_test_validation_state,
+    fixed_test_records_match,
 )
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
@@ -6120,6 +6121,17 @@ class CustomQCWorkspaceService:
         publish_ready, _ = fixed_test_validation_state(draft)
         if not publish_ready:
             raise ValueError("请先使用当前草稿完成固定测试病历验证")
+
+        # 与发布共用事务和行锁，病例编辑不能在版本核对后抢先提交。
+        from .custom_qc_sample_pool_service import _sample_pool_items_table
+
+        test_items = _sample_pool_items_table()
+        selected_items = last_test_summary["selected_items"]
+        current_items = session.execute(select(test_items).where(
+            test_items.c.id.in_([item["item_id"] for item in selected_items])
+        ).with_for_update()).mappings().all()
+        if not fixed_test_records_match(selected_items, current_items):
+            raise DraftTestValidationConflict("测试病例已修改或移除，请重新测试后发布")
 
         qc_rules_table = _qc_rules_table()
         draft_check_logic = dict(draft.get("check_logic") or {})

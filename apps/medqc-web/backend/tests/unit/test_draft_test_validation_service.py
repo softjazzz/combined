@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.routers import custom_qc
 from app.services import custom_qc_service, custom_qc_workspace_service as workspace_module
+from app.services import custom_qc_sample_pool_service as pool_module
 from app.services.qc_rule_orchestrator import QCRuleOrchestrator
 from app.services.draft_test_validation_service import (
     DraftTestValidationConflict,
@@ -41,7 +42,15 @@ def _threadsafe_workspace(monkeypatch, source_drafts):
     )
     metadata = sa.MetaData()
     drafts = source_drafts.to_metadata(metadata)
+    items = source_drafts.metadata.tables["test_pool_items"].to_metadata(metadata)
     metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(items.insert().values(
+            id="item-1", pool_id="customer-created-test-records-v1", include_in_batch_1=True,
+            exclude_reason="", updated_at=ITEM_UPDATED_AT.replace(tzinfo=None),
+            **{f"matched_{key}": value for key, value in RECORD_REF.items()},
+        ))
+    monkeypatch.setattr(pool_module, "_sample_pool_items_table", lambda: items)
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr(workspace_module, "_session", sessions)
     service = object.__new__(CustomQCWorkspaceService)
@@ -53,6 +62,9 @@ class SamplePool:
     def __init__(self, *, fail: Exception | None = None) -> None:
         self.fail = fail
         self.calls = []
+
+    def fixed_test_records_current(self, *, selected):
+        return self.fail is None
 
     def load_customer_test_record_transfer_payloads(self, **kwargs):
         self.calls.append(kwargs)
@@ -236,8 +248,9 @@ def test_generic_update_dto_rejects_client_proof_and_publish_fields():
             custom_qc.WorkspaceDraftUpdateRequest.model_validate({forbidden: "forged"})
 
 
+@pytest.mark.parametrize("case_changed", [False, True])
 def test_actual_http_runs_visual_validation_publishes_and_reads_published_state(
-    workspace, monkeypatch,  # noqa: F811 - pytest 注入复用 fixture。
+    workspace, monkeypatch, case_changed,  # noqa: F811 - pytest 注入复用 fixture。
 ):
     _old_service, _old_sessions, source_drafts = workspace
     service, sessions, drafts, engine = _threadsafe_workspace(monkeypatch, source_drafts)
@@ -292,6 +305,21 @@ def test_actual_http_runs_visual_validation_publishes_and_reads_published_state(
         validation_view_data = post_response.json()["data"]
         assert validation_view_data["publish_ready"] is True
         proof = validation_view_data["validation"]
+        if case_changed:
+            items = drafts.metadata.tables["test_pool_items"]
+            with engine.begin() as connection:
+                connection.execute(items.update().values(
+                    include_in_batch_1=False, exclude_reason="superseded:new-item",
+                ))
+            actual_pool = object.__new__(pool_module.CustomQCSamplePoolService)
+            actual_pool._item_table = items
+            monkeypatch.setattr(pool_module, "_session", sessions)
+            sample_pool.fixed_test_records_current = actual_pool.fixed_test_records_current
+            stale_view = client.get(
+                f"/api/v1/custom-qc/workspace/drafts/{draft['id']}/test-validations"
+            ).json()["data"]
+            assert stale_view["publish_ready"] is False
+            assert stale_view["unavailable_reason"] == "test_records_changed"
         publish_response = client.post(
             f"/api/v1/custom-qc/workspace/drafts/{draft['id']}/publish",
             json={
@@ -299,6 +327,14 @@ def test_actual_http_runs_visual_validation_publishes_and_reads_published_state(
                 "validation_id": proof["validation_id"],
             },
         )
+        if case_changed:
+            assert publish_response.status_code == 409
+            with sessions() as session:
+                assert session.execute(sa.select(sa.func.count()).select_from(rules)).scalar() == 0
+            with pytest.raises(DraftTestValidationConflict, match="测试病例已修改"):
+                service.publish_draft(draft_id=draft["id"], created_by="manager-1")
+            engine.dispose()
+            return
         assert publish_response.status_code == 200
         get_response = client.get(
             f"/api/v1/custom-qc/workspace/drafts/{draft['id']}/test-validations"

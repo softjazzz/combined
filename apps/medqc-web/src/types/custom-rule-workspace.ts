@@ -156,6 +156,7 @@ export type FixedTestValidationStatus =
   | 'technical_error'
   | 'uncertain'
 export type FixedTestValidationUnavailableReason =
+  | 'test_records_changed'
   | 'not_tested'
   | 'draft_changed'
   | 'validation_incomplete'

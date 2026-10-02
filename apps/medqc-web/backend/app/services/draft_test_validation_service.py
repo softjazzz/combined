@@ -180,6 +180,34 @@ def validation_view(draft: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def fixed_test_records_match(
+    selected: Sequence[Mapping[str, Any]], rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """证明绑定固定池的有效版本及三坐标，不接受已编辑或移除的旧病例。"""
+    by_id = {_text(row.get("id")): row for row in rows}
+    if not selected or len(by_id) != len(selected):
+        return False
+    for item in selected:
+        row = by_id.get(_text(item.get("item_id")))
+        identity = item.get("record_ref")
+        if not row or not isinstance(identity, Mapping):
+            return False
+        if (
+            row.get("pool_id") != "customer-created-test-records-v1"
+            or row.get("include_in_batch_1") is not True
+            or _text(row.get("exclude_reason"))
+            or _utc_datetime(row.get("updated_at")) is None
+            or _utc_datetime(row.get("updated_at")) != _utc_datetime(item.get("item_updated_at"))
+            or any(
+                not _text(identity.get(key))
+                or _text(row.get(f"matched_{key}")) != _text(identity.get(key))
+                for key in ("institute_id", "patient_id", "visit_id")
+            )
+        ):
+            return False
+    return True
+
+
 def _record_from_payload(payload: Mapping[str, Any], *, visual: bool) -> dict[str, Any]:
     record_ref = payload.get("record_ref")
     if not isinstance(record_ref, Mapping):
@@ -260,7 +288,13 @@ class DraftTestValidationService:
         draft = self.workspace.get_draft(draft_id=draft_id, created_by=created_by)
         if not draft:
             raise DraftTestValidationNotFound("草稿不存在或无权限")
-        return validation_view(draft)
+        view = validation_view(draft)
+        if view["publish_ready"] and not self.sample_pool.fixed_test_records_current(
+            selected=draft["last_test_summary"]["selected_items"],
+        ):
+            view["publish_ready"] = False
+            view["unavailable_reason"] = "test_records_changed"
+        return view
 
     async def run(
         self,

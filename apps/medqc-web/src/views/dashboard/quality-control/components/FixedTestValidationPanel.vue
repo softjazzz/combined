@@ -34,13 +34,27 @@
           <tbody>
             <tr v-for="record in records" :key="record.id">
               <td><input type="checkbox" :aria-label="`选择 ${record.case_title}`" :checked="isSelected(record.id)" :disabled="busy || (!isSelected(record.id) && selectedItems.length >= 20)" @change="toggleRecord(record, $event)" /></td>
-              <td><strong>{{ record.case_title }}</strong><span>{{ record.patient_name || '未知患者' }}</span></td>
+              <td><strong>{{ record.case_title }}</strong><span>{{ record.patient_name || '未知患者' }}</span>
+                <div class="record-actions">
+                  <button type="button" class="text-button" :disabled="busy" @click="detailItem = record"><Eye :size="14" />详情 / 应用质控点</button>
+                  <button type="button" class="text-button" :disabled="busy" @click="editItem = record"><Pencil :size="14" />编辑</button>
+                  <button type="button" class="text-button" :disabled="busy" @click="copyRecord(record)"><Copy :size="14" />复制</button>
+                </div>
+              </td>
               <td>{{ record.department || '未知科室' }}</td>
               <td class="mono">{{ record.institute_id }} / {{ record.patient_id }} / {{ record.visit_id }}</td>
               <td>{{ record.document_count === null ? '未知' : `${record.document_count} 份` }}</td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="selectedItems.length" class="selected-records">
+        <h3>当前测试集</h3>
+        <div v-for="item in selectedItems" :key="item.id" class="selected-record">
+          <span>{{ item.case_title }}</span>
+          <button type="button" class="text-button" :disabled="busy" :aria-label="`从当前测试集移除 ${item.case_title}`" @click="removeSelected(item.id)"><Minus :size="14" />移除</button>
+        </div>
       </div>
       <div v-if="recordsTotal !== null && recordsTotal > PAGE_SIZE" class="pagination-row">
         <button type="button" :disabled="page <= 1 || busy" @click="changePage(page - 1)">上一页</button>
@@ -60,7 +74,7 @@
             type="button"
             class="primary-button"
             data-testid="publish-validated-draft"
-            :disabled="busy || resultUnknown"
+            :disabled="busy || resultUnknown || selectionChanged"
             @click="publishDraft"
           >{{ publishing ? '正在发布' : '发布质控点' }}</button>
         </div>
@@ -82,12 +96,22 @@
         </div>
       </div>
     </template>
+    <TestRecordEditDrawer v-if="editItem" :key="`${actorKey}:${draftId}:${editItem.id}`" :open="true" :item="editItem" @close="editItem = null" @saved="recordEdited" />
+    <a-drawer :open="detailItem !== null" title="测试病例详情" width="min(1380px, 100vw)" @close="detailItem = null">
+      <template v-if="detailItem">
+        <h3>{{ detailItem.case_title }}</h3>
+        <p>应用质控点：{{ detailItem.rule_ids.length ? detailItem.rule_ids.map(ruleLabel).join('、') : '未关联' }}</p>
+        <QCRecordCompareWorkbench :key="detailItem.id" :visit-id="detailItem.visit_id" :institute-id="detailItem.institute_id" :patient-id="detailItem.patient_id" :issues="[]" document-only />
+      </template>
+    </a-drawer>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { listTestRecords } from '@/services/test-medical-records'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Copy, Eye, Minus, Pencil } from 'lucide-vue-next'
+import { copyTestRecord, getCurrentRuleSetCatalog, listTestRecords } from '@/services/test-medical-records'
+import TestRecordEditDrawer from '@/views/test-medical-records/components/TestRecordEditDrawer.vue'
 import {
   getFixedTestValidation, publishValidatedWorkspaceDraft, runFixedTestValidation,
 } from '@/services/custom-rule-workspace-service'
@@ -95,6 +119,7 @@ import type { TestRecordItem, TestRecordListResult } from '@/types/test-medical-
 import type { FixedTestValidationState, FixedTestValidationStatus } from '@/types/custom-rule-workspace'
 
 const PAGE_SIZE = 100
+const QCRecordCompareWorkbench = defineAsyncComponent(() => import('@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'))
 const props = defineProps<{
   draftId: string
   draftUpdatedAt: string
@@ -113,6 +138,11 @@ const page = ref(1)
 const draftQuery = ref('')
 const appliedQuery = ref('')
 const selectedItems = ref<TestRecordItem[]>([])
+const editItem = ref<TestRecordItem | null>(null)
+const detailItem = ref<TestRecordItem | null>(null)
+const copying = ref(false)
+const selectionChanged = ref(false)
+const ruleNames = ref<Record<string, string>>({})
 const recordsLoading = ref(false)
 const recordsError = ref('')
 const proofLoading = ref(false)
@@ -129,14 +159,16 @@ let contextRevision = 0
 let listRevision = 0
 let proofRevision = 0
 
-const busy = computed(() => recordsLoading.value || proofLoading.value || validating.value || publishing.value)
+const busy = computed(() => recordsLoading.value || proofLoading.value || validating.value || publishing.value || copying.value || editItem.value !== null)
 const proofText = computed(() => {
   const state = validationState.value
   if (!state?.validation) return '尚未完成测试'
+  if (selectionChanged.value) return '测试集已修改，请重新测试'
   if (state.publish_ready) return '测试证明有效，可以发布'
   const labels = {
     not_tested: '尚未完成测试', draft_changed: '草稿已修改，请重新测试',
     validation_incomplete: '存在数据不足或执行失败，暂不可发布', draft_not_executable: '当前草稿不可执行',
+    test_records_changed: '测试病例已修改或移除，请重新测试',
   }
   return state.unavailable_reason ? labels[state.unavailable_reason] : '测试证明暂不可用于发布'
 })
@@ -193,6 +225,7 @@ function resetContext(clearUnknown: boolean) {
   contextRevision += 1; listRevision += 1; proofRevision += 1
   recordsLoading.value = false; proofLoading.value = false; validating.value = false; publishing.value = false
   records.value = []; recordsTotal.value = null; selectedItems.value = []; validationState.value = null
+  editItem.value = null; detailItem.value = null; copying.value = false; selectionChanged.value = false; ruleNames.value = {}
   recordsError.value = ''; notice.value = ''; page.value = 1
   if (clearUnknown) {
     resultUnknown.value = false
@@ -207,10 +240,41 @@ function resetContext(clearUnknown: boolean) {
 }
 function isSelected(id: string) { return selectedItems.value.some((item) => item.id === id) }
 function toggleRecord(record: TestRecordItem, event: Event) {
+  if (busy.value) return
+  selectionChanged.value = true
   const checked = (event.target as HTMLInputElement).checked
   selectedItems.value = checked
     ? [...selectedItems.value, record].slice(0, 20)
     : selectedItems.value.filter((item) => item.id !== record.id)
+}
+function removeSelected(id: string) {
+  if (busy.value) return
+  selectedItems.value = selectedItems.value.filter((item) => item.id !== id)
+  selectionChanged.value = true
+}
+function ruleLabel(id: string) { return ruleNames.value[id] ? `${id} ${ruleNames.value[id]}` : id }
+async function recordEdited() {
+  const revision = contextRevision; const actor = props.actorKey; const draft = props.draftId
+  const oldId = editItem.value?.id
+  editItem.value = null
+  selectedItems.value = selectedItems.value.filter((item) => item.id !== oldId)
+  selectionChanged.value = true
+  validationState.value = null
+  await initialize()
+  if (!contextCurrent(revision, actor, draft)) return
+  noticeType.value = 'warning'
+  notice.value = '病例已更新，请添加新版病例并重新测试'
+}
+async function copyRecord(record: TestRecordItem) {
+  if (busy.value) return
+  const revision = contextRevision; const actor = props.actorKey; const draft = props.draftId
+  copying.value = true
+  const result = await copyTestRecord(record)
+  if (!contextCurrent(revision, actor, draft)) return
+  copying.value = false
+  noticeType.value = result.success ? 'success' : 'error'
+  notice.value = result.success ? '已创建复制病例，请在列表中选择后添加到测试集' : result.message || '复制结果无法确认，请刷新核对'
+  if (result.success) { page.value = 1; appliedQuery.value = ''; draftQuery.value = ''; await loadRecords() }
 }
 function applySearch() { if (busy.value) return; appliedQuery.value = draftQuery.value.trim(); page.value = 1; selectedItems.value = []; void loadRecords() }
 function resetSearch() { if (busy.value) return; draftQuery.value = ''; appliedQuery.value = ''; page.value = 1; selectedItems.value = []; void loadRecords() }
@@ -271,6 +335,7 @@ async function runValidation() {
     return
   }
   validationState.value = result.data; resultUnknown.value = false
+  selectionChanged.value = false
   unknownOperation.value = null; unknownBaselineValidationId.value = ''
   if (result.data.draft_updated_at !== props.draftUpdatedAt) emit('draft-updated', result.data.draft_updated_at)
   noticeType.value = result.data.publish_ready ? 'success' : 'warning'
@@ -278,7 +343,7 @@ async function runValidation() {
 }
 async function publishDraft() {
   const proof = validationState.value?.validation
-  if (busy.value || resultUnknown.value || !validationState.value?.publish_ready || !proof) return
+  if (busy.value || resultUnknown.value || selectionChanged.value || !validationState.value?.publish_ready || !proof) return
   const revision = contextRevision; const actor = props.actorKey; const draft = props.draftId
   publishing.value = true; notice.value = ''
   const result = await publishValidatedWorkspaceDraft(draft, {
@@ -305,12 +370,20 @@ async function publishDraft() {
 
 watch(() => [props.draftId, props.actorKey], () => resetContext(true))
 watch(() => [props.draftUpdatedAt, props.enabled], () => resetContext(false))
+watch(detailItem, async (item) => {
+  if (!item) return
+  const revision = contextRevision; const actor = props.actorKey; const draft = props.draftId
+  const result = await getCurrentRuleSetCatalog()
+  if (!contextCurrent(revision, actor, draft) || detailItem.value?.id !== item.id) return
+  ruleNames.value = Object.fromEntries((result.data?.entries || []).map((entry) => [entry.rule_id, entry.qc_point || '']))
+})
 onMounted(initialize)
 onUnmounted(() => { disposed = true; contextRevision += 1; listRevision += 1; proofRevision += 1 })
 </script>
 
 <style scoped>
 .validation-panel { padding: 22px; border: 1px solid rgba(0,0,0,.08); border-radius: 12px; background: #fff; }
+.record-actions,.selected-record { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }.record-actions .text-button,.selected-record .text-button { display:inline-flex; align-items:center; gap:4px; padding:0 4px; }.selected-records { margin-top:16px; }.selected-record { justify-content:space-between; border-bottom:1px solid rgba(0,0,0,.07); }
 .panel-heading,.proof-heading,.validation-toolbar,.pagination-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .panel-heading h2,.proof-heading h3 { margin:0; }.panel-heading span,.proof-heading span,.validation-toolbar span { color:rgba(29,29,31,.6); font-size:13px; }
 .validation-toolbar { justify-content:flex-start; flex-wrap:wrap; margin:18px 0 12px; }.validation-toolbar input { min-width:240px; height:36px; padding:0 11px; border:1px solid rgba(0,0,0,.12); border-radius:8px; }

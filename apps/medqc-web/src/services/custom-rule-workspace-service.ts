@@ -247,7 +247,7 @@ function normalizeValidationState(value: unknown, draftId: string): FixedTestVal
   if (!isRecord(value) || value.draft_id !== draftId || !nonBlankText(value.draft_updated_at)
     || typeof value.publish_ready !== 'boolean' || !['draft', 'published'].includes(String(value.draft_status))
     || (value.published_rule_id !== null && !nonBlankText(value.published_rule_id))) return null
-  const reasons = new Set(['not_tested', 'draft_changed', 'validation_incomplete', 'draft_not_executable'])
+  const reasons = new Set(['not_tested', 'draft_changed', 'validation_incomplete', 'draft_not_executable', 'test_records_changed'])
   if (value.unavailable_reason !== null && !reasons.has(String(value.unavailable_reason))) return null
   const validation = value.validation === null ? null : normalizeValidationProof(value.validation)
   if (value.validation !== null && (!validation || validation.draft_id !== draftId)) return null
