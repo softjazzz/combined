@@ -252,6 +252,8 @@
                 type="button"
                 role="menuitem"
                 data-testid="qc-result-export-filtered"
+                :disabled="hasColumnKeywordFilters"
+                :title="hasColumnKeywordFilters ? '暂不支持列筛选导出，请清除列筛选后导出' : undefined"
                 @click="runFilteredExport"
               >
                 <strong>导出当前筛选结果</strong>
@@ -649,6 +651,9 @@ const filterSync = useRecordFilterUrlSync({
   onBeforeLoad: clearSelection,
 })
 const { activeFilters, urlHadExplicitFilters, filtersInitialized, commitFilters } = filterSync
+const hasColumnKeywordFilters = computed(() =>
+  Object.values(columnFilters.value).some((value) => value.trim().length > 0),
+)
 function applyColumnQuery(query: ColumnQuery) {
   const queryChanged =
     JSON.stringify(columnFilters.value) !== JSON.stringify(query.filters) ||
@@ -1089,6 +1094,10 @@ async function exportSelectedRecords() {
 }
 
 async function exportCurrentFilter() {
+  if (hasColumnKeywordFilters.value) {
+    exportNotice.value = '暂不支持列筛选导出，请清除列筛选后导出'
+    return
+  }
   if (exporting.value) return
   exporting.value = true
   exportNotice.value = ''
