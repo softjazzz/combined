@@ -1,3 +1,7 @@
+## 2026-10-01 WeKnora Lite独立构建与接口验证
+
+官方v0.8.2源码4355文件无改动，Go1.26.8+MinGW UCRT/POSIX构建成功；独立SQLite实例在127.0.0.1:18083运行，浏览器登录页正常，重启持久化通过。合成文档检索→同ID原文、限定库Key及越界/写入403、现有DSH五个读取方法全部验证。发现关闭KB向量仍走默认入库向量路径，通用搜索也请求Embedding；本轮仅用本地固定向量桩，真实模型0次。桩已关闭，正式通用搜索需真实Embedding并重建索引；不能称真实规范或回答质量通过。产物/凭据在D:/LLM/WeKnora-Lite-evaluation，不改MedQC服务及共享库。详见[构建验证](2026-10-01-weknora-lite-build-validation.md)。
+
 ## 2026-10-01 WeKnora Lite评估与测试范围澄清
 
 用户确认当前仅admin测试账号，不再以缺医院角色阻塞测试阶段。已下载官方v0.8.2源码至D:/LLM/WeKnora-Lite-evaluation，保留旧版；Release无二进制附件。Lite适合小规范库，现有搜索/原文API源码初步匹配；默认简单解析不等于支持扫描PDF。本机无Go/C工具链且WSL Ubuntu磁盘缺失，尚未编译启动或真实检索；评估未调用模型。下一步是独立源码构建验证。详见[Lite评估](2026-10-01-weknora-lite-evaluation.md)。
