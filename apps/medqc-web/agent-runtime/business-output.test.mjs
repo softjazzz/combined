@@ -134,7 +134,9 @@ test('概览仅给同序稳定索引，完整展示文本不进入模型', () =>
     {},
     { ...value, result_page: { ...value.result_page, detail: 'saved_text' } },
   )
-  assert.equal(detailed.results[1].suggestion, '完整保存建议')
+  assert.deepEqual(detailed.results, result.results)
+  assert.ok(!JSON.stringify(detailed).includes('完整保存'))
+  assert.equal(value.references[1].suggestion, '完整保存建议')
 })
 
 test('单问题的否定条件和证据保持完整且只出现一次，规则不发送内部目录字段', () => {

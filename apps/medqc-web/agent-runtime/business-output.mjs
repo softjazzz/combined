@@ -26,7 +26,6 @@ export function businessModelValue(name, _args, value) {
         'status_counts',
       ])
     const fields = ['position', 'id', 'rule_id', 'title', 'status']
-    if (value.result_page?.detail === 'saved_text') fields.push('conclusion', 'suggestion')
     return {
       ...result,
       saved_result_coverage: select(value, [
@@ -40,7 +39,7 @@ export function businessModelValue(name, _args, value) {
           : '本次未取得可读保存结果；按state和reason_code说明正式读取状态，不从结果为空推断任务运行状态。',
       results: (value.references || []).map((ref) => select(ref, fields)),
       display_note:
-        '下方同序卡片保留保存结论与建议原文。回答改写只能称概述，不能称原文照录；逐字引用须保留完整原句及否定条件。页码/范围不表示已读其他页。仅解释时按稳定id读取证据。',
+        '下方同序卡片完整展示保存结论与建议原文，本次模型仅收到问题索引，未读取这些字段全文。列表回答只说明本页范围并引导查看卡片，不从标题推断具体原因或建议。回答改写只能称概述，不能称原文照录。页码/范围不表示已读其他页；仅在用户追问原因或依据时按稳定id读取具体问题。',
     }
   }
   if (name === 'read_saved_issue')

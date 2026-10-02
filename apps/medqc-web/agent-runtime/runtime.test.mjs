@@ -150,7 +150,7 @@ test('状态筛选数组在原生 schema 和业务传输中保持数组类型', 
   }
 })
 
-test('原生模型与展示卡片分离持久化，空筛选不冒用上一页来源', async () => {
+test('saved_text也只向模型传索引，完整卡片持久化，空筛选不冒用上一页来源', async () => {
   const canonical = {
     state: 'ready',
     job_id: 'task-a',
@@ -166,7 +166,7 @@ test('原生模型与展示卡片分离持久化，空筛选不冒用上一页�
       },
     ],
     result_page: {
-      detail: 'index',
+      detail: 'saved_text',
       page: 1,
       page_size: 10,
       total: 75,
@@ -190,8 +190,10 @@ test('原生模型与展示卡片分离持久化，空筛选不冒用上一页�
   try {
     const first = await f.runtime.chat(f.sessionId, f.body)
     assert.equal(first.references[0].conclusion, canonical.references[0].conclusion)
+    assert.equal(first.references[0].suggestion, canonical.references[0].suggestion)
     assert.equal(first.result_pages[0].total, 75)
     assert.ok(!JSON.stringify(f.adapter.requests[1].messages).includes('完整卡片专有文字'))
+    assert.ok(!JSON.stringify(f.adapter.requests[1].messages).includes('原保存建议'))
     canonical.references = []
     canonical.result_page = {
       ...canonical.result_page,
@@ -212,7 +214,7 @@ test('原生模型与展示卡片分离持久化，空筛选不冒用上一页�
     })
     try {
       const session = await restored.restore(f.sessionId, { context: f.context, tools: [spec] })
-      assert.equal(session.turns[0].references[0].conclusion, '完整卡片专有文字，不发送模型')
+      assert.deepEqual(session.turns[0].references, first.references)
       assert.equal(session.turns[0].result_pages[0].matched_total, 1)
     } finally {
       await restored.close()
