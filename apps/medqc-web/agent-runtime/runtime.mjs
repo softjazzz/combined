@@ -422,16 +422,40 @@ export async function createRuntime({
                   `比较必须使用用户本轮明确指定的规则：${requestedRules.join('、')}。请纠正规则编号后读取，不能把其他规则结果用于本轮回答。`,
                 )
             }
+            // @selected 只代表本轮用户选中的来源；未选择时原样交后端按未知来源拒绝。
+            const resolved = Object.fromEntries(
+              Object.entries(args).map(([key, value]) => [
+                key,
+                ['result_id', 'record_reference'].includes(key) &&
+                value === '@selected' &&
+                run.reference_id
+                  ? run.reference_id
+                  : value,
+              ]),
+            )
             const response = await fetchImpl(
               `${run.backend_url}/api/v1/qc-agent/business/sessions/${sessionId}/tools/${spec.name}`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: run.authorization },
-                body: JSON.stringify(args),
+                body: JSON.stringify(resolved),
                 signal: exec.signal,
               },
             )
-            if (!response.ok) throw new Error(`业务查询失败 HTTP ${response.status}`)
+            if (!response.ok) {
+              // 仅回传后端自身的简短中文说明，供模型按校验原因改写；不透传其他结构。
+              const detail =
+                response.status < 500
+                  ? await response
+                      .json()
+                      .then((body) => body?.detail)
+                      .catch(() => undefined)
+                  : undefined
+              throw new Error(
+                `业务查询失败 HTTP ${response.status}` +
+                  (typeof detail === 'string' && detail.length <= 200 ? `：${detail}` : ''),
+              )
+            }
             return response.json()
           },
         })
@@ -514,7 +538,7 @@ export async function createRuntime({
                 ? [
                     {
                       type: 'text',
-                      text: `用户在结果卡片中明确选择本会话来源 ${body.reference_id}，本轮解释或下钻绑定该来源。`,
+                      text: `用户在结果卡片中明确选择本会话来源 ${body.reference_id}，本轮解释或下钻绑定该来源；工具参数需要该来源标识（result_id 或 record_reference）时直接写 @selected，由系统替换为该来源，不要自行抄写或拼接。`,
                     },
                   ]
                 : []),

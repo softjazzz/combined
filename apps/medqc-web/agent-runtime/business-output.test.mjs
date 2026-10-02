@@ -533,3 +533,35 @@ test('验收摘要与保存缺口只给模型白名单字段，不带入口地�
   const plain = businessModelValue('read_saved_issue', {}, { references: [{ id: 'saved:ok' }] })
   assert.ok(!('source_gaps' in plain))
 })
+
+test('参考草稿：模型仅收到截断摘录与校验后摘要，不收到草稿全文', () => {
+  const facts = businessModelValue(
+    'read_draft_facts',
+    {},
+    {
+      result_id: 'result:a',
+      conclusion: '原保存结论',
+      suggestion: '原保存建议',
+      evidence: [{ evidence_position: 1, excerpt: '保存摘录', source_ref: '内部来源不进入模型' }],
+      references: [],
+    },
+  )
+  assert.equal(facts.evidence[0].excerpt, '保存摘录')
+  assert.ok(!JSON.stringify(facts).includes('内部来源不进入模型'))
+  assert.match(facts.draft_note, /待医生补充/)
+  const composed = businessModelValue(
+    'compose_reference_draft',
+    {},
+    {
+      draft: { result_id: 'result:a', segment_count: 2, placeholder_count: 1 },
+      references: [{ id: 'draft:x', text: '草稿全文不进入模型' }],
+    },
+  )
+  assert.equal(composed.id, 'draft:x')
+  assert.deepEqual(composed.draft, {
+    result_id: 'result:a',
+    segment_count: 2,
+    placeholder_count: 1,
+  })
+  assert.ok(!JSON.stringify(composed).includes('草稿全文不进入模型'))
+})

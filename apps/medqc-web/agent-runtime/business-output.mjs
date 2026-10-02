@@ -196,6 +196,23 @@ export function businessModelValue(name, _args, value) {
         ]),
       ),
     }
+  if (name === 'read_draft_facts')
+    return {
+      // 保存结论已作为序号0来源提供，不再重复字段。
+      ...select(value, ['result_id', 'rule_id', 'title', 'suggestion', 'job_id', 'scope_note']),
+      evidence: (value.evidence || []).map((item) =>
+        select(item, ['evidence_position', 'source_type', 'record_time', 'excerpt']),
+      ),
+      draft_note:
+        '只可复述上列摘录中的事实；摘录未写明的检查、诊疗、签名、时间或数值写成待医生补充。草稿不替代正式保存建议，不能称已整改。',
+    }
+  if (name === 'compose_reference_draft')
+    return {
+      id: value.references?.[0]?.id,
+      draft: select(value.draft, ['result_id', 'segment_count', 'placeholder_count']),
+      read_note:
+        '草稿已通过来源校验并在卡片完整展示；回答只简述草稿用途和待医生补充项数量，不复述草稿全文，不称已整改或已写入病历。',
+    }
   if (name === 'read_rule_validation')
     return {
       id: value.references?.[0]?.id,

@@ -578,6 +578,50 @@ describe('管理助手范围选择', () => {
     expect(wrapper.text()).toContain('异议反馈需本人填写理由并提交')
     wrapper.unmount()
   })
+  it('医生不合规问题可请求参考草稿，草稿卡复制后提示不等于整改', async () => {
+    const draftText = '参考草稿：不替代正式保存建议\n草稿：\n【待医生补充：检查原因】'
+    mocks.history = [
+      {
+        run_id: 'draft',
+        question: '起草',
+        answer: '已生成参考草稿',
+        references: [
+          { id: 'result-n', kind: 'saved_result', title: '缺检查原因', status: 'non_compliant' },
+          { id: 'result-g', kind: 'saved_result', title: '资料不足', status: 'data_gap' },
+          { id: 'draft:1', kind: 'draft', title: '参考草稿 · 缺检查原因', text: draftText },
+        ],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 2,
+      },
+    ]
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    const requests = wrapper.findAll('[data-testid="business-agent-draft-request"]')
+    expect(requests).toHaveLength(1)
+    await requests[0].trigger('click')
+    expect(mocks.send).toHaveBeenCalledWith(
+      expect.stringContaining('“缺检查原因”起草一段参考补充文字'),
+      expect.objectContaining({ view: 'doctor' }),
+      'result-n',
+    )
+    expect(wrapper.get('[data-testid="business-agent-draft-text"]').text()).toContain('待医生补充')
+    await wrapper.get('[data-testid="business-agent-draft-copy"]').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith(draftText)
+    expect(wrapper.get('[data-testid="business-agent-draft-copied"]').text()).toContain(
+      '复制不等于整改完成',
+    )
+    wrapper.unmount()
+  })
   it('已读取的规则验收记录不冒充对应规则详情', async () => {
     mocks.history = [
       {

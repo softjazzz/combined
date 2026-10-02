@@ -11,7 +11,7 @@ import httpx
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from app.services.qc_agent import business_rule_validation
+from app.services.qc_agent import business_drafts, business_rule_validation
 from app.services.qc_agent.business_source_gaps import project_saved_source_gaps, source_gaps_card_text
 
 from .business_store import BusinessSessionStore
@@ -109,6 +109,8 @@ class QueryFollowups(ToolInput):
 
 
 TOOL_DEFINITIONS = {
+    "read_draft_facts": (ReadIssue, "仅医生视图：用户明确要求参考补充文字时，按已查看的不合规问题 result_id（用户已选卡片时写 @selected）读取正式建议及来源：序号0为保存结论原文，1起为前5条保存证据摘录。不读取当前文书全文，不判定是否已整改。"),
+    "compose_reference_draft": (business_drafts.ComposeDraft, "仅医生视图：先用read_draft_facts取得来源后提交参考草稿。草稿是医生可写入病历的补充段落，只针对正式建议所指缺项，通常1至4段，不复述整条结论或其他已完成项。fact段只写所引来源（0为保存结论，1起为证据）明确出现的事实，必须填evidence_positions；来源未写明的临床意义、检查、诊疗、签名、时间或数值写成placeholder段（说明需医生填写什么；数字只可用正式建议或来源已有的时限等）。服务端校验数值来源，422时按原因改写一次重交。草稿卡完整展示，回答只简述，不复述全文，不称已整改。"),
     "read_rule_validation": (ReadRule, "仅管理视图读取现有规则验收阶段、样本覆盖、保存运行结论和验收入口。不读取测试病例原文，不执行验收；目录启用不表示验收通过，历史运行不证明当前部署已验收。"),
     "read_saved_results": (ReadResults, "分页读取正式保存结果。statuses为空查全类别；仅列不合规时指定non_compliant。每页最多10条，index和saved_text均在卡片完整展示结论建议，模型只收到索引；列清单无需另查证据或规则。追问具体原因或依据才用read_saved_issue。后续页带已看到的expected_job_id；管理下钻用统计返回record_reference。"),
     "read_saved_issue": (ReadIssue, "按稳定 result_id 读取同一任务的具体问题、正式建议和已保存病历证据。"),
@@ -123,7 +125,11 @@ TOOL_DEFINITIONS = {
 def tool_specs(view: Literal["doctor", "manager"]) -> list[dict]:
     return [{"name": name, "description": description, "parameters": model.model_json_schema()}
             for name, (model, description) in TOOL_DEFINITIONS.items()
-            if name not in {"query_statistics", "compare_statistics", "read_rule_validation"} or view == "manager"]
+            if (name not in MANAGER_ONLY or view == "manager") and (name not in DOCTOR_ONLY or view == "doctor")]
+
+
+MANAGER_ONLY = {"query_statistics", "compare_statistics", "read_rule_validation"}
+DOCTOR_ONLY = {"read_draft_facts", "compose_reference_draft"}
 
 
 def statistics_text(payload: dict) -> str:
@@ -236,7 +242,7 @@ class BusinessTools:
     async def issue(self, metadata: dict, result_id: str) -> dict:
         binding = metadata["references"].get(result_id)
         if not binding or binding.get("kind") != "saved_result":
-            raise HTTPException(404, "问题不属于本会话已查看的结果")
+            raise HTTPException(404, "问题不属于本会话已查看的结果；请原样使用结果卡片或列表返回的完整 result_id（形如 result:任务:病例:规则），不要改写")
         identity = binding["identity"]
         context = metadata["context"]
         if context["view"] == "doctor" and any(identity.get(key) != context.get(key) for key in ("institute_id", "patient_id", "visit_id")):
@@ -319,11 +325,39 @@ class BusinessTools:
                                                "只描述两期原值；期间长度可能不同，不计算差值、同比、环比或百分比；基线不自动提供病例下钻。"]},
                 "references": references, "metric_owner": "LX0609 正式结果分析接口"}
 
+    async def draft_reference(self, metadata: dict, result_id: str, segments: list, draft_id: str) -> dict:
+        """每次生成或回读都重新读取同一保存问题并校验；版本变化由 issue 返回409。"""
+        if metadata["context"]["view"] != "doctor":
+            raise HTTPException(422, "参考草稿仅在医生当前病例会话中提供")
+        issue = await self.issue(metadata, result_id)
+        reference = business_drafts.require_draftable(issue)
+        segments = [business_drafts.DraftSegment.model_validate(segment) for segment in segments]
+        business_drafts.validate_segments(segments, business_drafts.draft_evidence(issue["evidence"], reference.get("conclusion")), reference.get("suggestion"))
+        return {"id": draft_id, "kind": "draft", "rule_id": reference.get("rule_id"), "title": f"参考草稿 · {reference.get('title')}",
+                "locator": "参考草稿，不替代正式保存建议", "text": business_drafts.draft_card_text(reference, segments)}
+
     async def execute(self, name: str, arguments: dict, metadata: dict, user: dict) -> dict:
         if name not in TOOL_DEFINITIONS:
             raise HTTPException(404, "工具未提供")
         model, _ = TOOL_DEFINITIONS[name]
         params = model.model_validate(arguments)
+        if name == "read_draft_facts":
+            if metadata["context"]["view"] != "doctor":
+                raise HTTPException(422, "参考草稿仅在医生当前病例会话中提供")
+            issue = await self.issue(metadata, params.result_id)
+            reference = business_drafts.require_draftable(issue)
+            return {"result_id": params.result_id, "rule_id": reference.get("rule_id"), "title": reference.get("title"),
+                    "conclusion": reference.get("conclusion"), "suggestion": reference.get("suggestion"),
+                    "evidence": business_drafts.draft_evidence(issue["evidence"], reference.get("conclusion")), "job_id": issue.get("job_id"),
+                    "scope_note": "仅前5条保存证据摘录且每条截断至300字；不是当前文书全文，不能证明病历未书写或已整改", "references": []}
+        if name == "compose_reference_draft":
+            draft_id = f"draft:{uuid4()}"
+            segments = [segment.model_dump() for segment in params.segments]
+            reference = await self.draft_reference(metadata, params.result_id, segments, draft_id)
+            self.store.bind(metadata["session_id"], user, draft_id, {"kind": "draft", "result_id": params.result_id, "segments": segments})
+            return {"draft": {"result_id": params.result_id, "segment_count": len(segments),
+                              "placeholder_count": sum(segment["kind"] == "placeholder" for segment in segments)},
+                    "references": [reference]}
         if name == "read_rule_validation":
             record = await run_in_threadpool(business_rule_validation.read_rule_validation, params.rule_id, metadata, user)
             reference_id = f"rule-validation:{params.rule_id}"

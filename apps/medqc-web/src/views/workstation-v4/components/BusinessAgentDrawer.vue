@@ -152,6 +152,26 @@
             <p v-if="reference.rule_id" class="business-agent__muted">
               规则编号：{{ reference.rule_id }}
             </p>
+            <template v-if="reference.kind === 'draft'">
+              <p class="business-agent__draft" data-testid="business-agent-draft-text">
+                {{ reference.text }}
+              </p>
+              <a-button
+                type="link"
+                :disabled="!reference.text"
+                data-testid="business-agent-draft-copy"
+                @click="copyDraft(reference)"
+              >
+                复制参考草稿
+              </a-button>
+              <span
+                v-if="copiedDraftId === reference.id"
+                class="business-agent__muted"
+                data-testid="business-agent-draft-copied"
+              >
+                已复制；复制不等于整改完成，请核对原文后在病历系统中书写。
+              </span>
+            </template>
             <template v-if="reference.kind === 'saved_result'">
               <a-button
                 v-if="linkedRule(reference)"
@@ -184,8 +204,23 @@
                     ? '验收记录'
                     : reference.kind === 'rule'
                       ? '规则详情'
-                      : '依据与详情'
+                      : reference.kind === 'draft'
+                        ? '最新校验的草稿'
+                        : '依据与详情'
               }}
+            </a-button>
+            <a-button
+              v-if="
+                reference.kind === 'saved_result' &&
+                reference.status === 'non_compliant' &&
+                activeView === 'doctor'
+              "
+              type="link"
+              :disabled="loading || !canQuery"
+              data-testid="business-agent-draft-request"
+              @click="requestDraft(reference)"
+            >
+              生成参考补充文字
             </a-button>
             <a-button
               v-if="reference.kind === 'saved_result'"
@@ -643,6 +678,24 @@ function returnToSummary() {
   ).find((element) => element.dataset.runId === summaryRunId.value)
   target?.scrollIntoView({ block: 'start' })
   target?.focus({ preventScroll: true })
+}
+const copiedDraftId = ref('')
+async function copyDraft(reference: BusinessAgentReference) {
+  if (!reference.text) return
+  try {
+    await navigator.clipboard.writeText(reference.text)
+    copiedDraftId.value = reference.id
+  } catch {
+    error.value = '复制失败，请手动选择草稿文字复制'
+  }
+}
+async function requestDraft(reference: BusinessAgentReference) {
+  if (!canQuery.value) return
+  await send(
+    `请为“${reference.title}”起草一段参考补充文字：只复述保存证据中的事实，无法证实的内容列为待医生补充`,
+    context.value,
+    reference.id,
+  )
 }
 async function queryRule(reference: BusinessAgentReference) {
   if (!canQuery.value || !reference.rule_id) return

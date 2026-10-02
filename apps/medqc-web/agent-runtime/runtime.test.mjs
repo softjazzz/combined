@@ -896,3 +896,58 @@ test('模型准备阶段失败仍从 DSH 原生事件恢复失败轮次', async 
     await f.runtime.close()
   }
 })
+
+test('工具4xx时把后端简短中文原因交给模型改写，5xx不透传', async () => {
+  const draftSpec = {
+    name: 'compose_reference_draft',
+    description: '提交参考草稿',
+    parameters: { type: 'object', properties: {}, additionalProperties: true },
+  }
+  for (const [status, detail, expected] of [
+    [422, '第1段含所引证据未出现的数值，请改为待医生补充', /HTTP 422：第1段含所引证据未出现的数值/],
+    [503, '内部连接串不应出现', /HTTP 503(?!：)/],
+  ]) {
+    const f = await fixture(
+      [{ tool: 'compose_reference_draft' }, { text: '已改写。' }],
+      undefined,
+      draftSpec,
+    )
+    const runtime = await createRuntime({
+      root: f.root,
+      adapter: f.adapter,
+      model: 'synthetic',
+      fetchImpl: async () => Response.json({ detail }, { status }),
+    })
+    try {
+      await runtime.create(f.sessionId, { context: f.context, tools: [draftSpec] })
+      await runtime.chat(f.sessionId, f.body)
+      const followup = JSON.stringify(f.adapter.requests.at(-1).messages)
+      assert.match(followup, expected)
+      if (status >= 500) assert.ok(!followup.includes(detail))
+    } finally {
+      await runtime.close()
+      await f.runtime.close()
+    }
+  }
+})
+test('@selected 只替换为本轮用户所选来源，未选择时原样交后端拒绝', async () => {
+  for (const [referenceId, expected] of [
+    ['result:job:rec:LX0609-01-01-01', 'result:job:rec:LX0609-01-01-01'],
+    [undefined, '@selected'],
+  ]) {
+    const f = await fixture([
+      { tool: 'read_saved_results', args: { result_id: '@selected', page: 1 } },
+      { text: '已读取。' },
+    ])
+    try {
+      await f.runtime.chat(f.sessionId, {
+        ...f.body,
+        ...(referenceId ? { reference_id: referenceId } : {}),
+      })
+      assert.equal(f.callbacks[0].args.result_id, expected)
+      assert.equal(f.callbacks[0].args.page, 1)
+    } finally {
+      await f.runtime.close()
+    }
+  }
+})

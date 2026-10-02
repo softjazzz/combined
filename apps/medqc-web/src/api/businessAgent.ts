@@ -15,7 +15,7 @@ export interface BusinessAgentContext {
 export interface BusinessAgentReference {
   id: string
   title: string
-  kind: 'saved_result' | 'evidence' | 'guideline' | 'rule' | 'statistics' | 'record'
+  kind: 'saved_result' | 'evidence' | 'guideline' | 'rule' | 'statistics' | 'record' | 'draft'
   text?: string
   locator?: string
   rule_id?: string
