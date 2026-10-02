@@ -54,7 +54,7 @@ describe('usePatientRecords workstation filters', () => {
     const records = usePatientRecords('inpatient')
     records.qcSummary.value = { ...records.qcSummary.value, totalRecords: 88, readyRecords: 77 }
     records.scoreStandards.value = {
-      running: { status: 'configured', standard_id: 'old', standard_name: '旧账号标准', standard_updated_at: null },
+      running: { status: 'configured', standardId: 'old', standardName: '旧账号标准', standardUpdatedAt: null },
     }
     let resolveOld!: (value: unknown) => void
     mocks.getRaw.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve }))
