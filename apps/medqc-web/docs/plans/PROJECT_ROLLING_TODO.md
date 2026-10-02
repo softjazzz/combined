@@ -1,3 +1,7 @@
+## 2026-10-01 WeKnora真实Embedding与规范检索验收
+
+独立Lite已接入既有SiliconFlow BAAI/bge-m3（真实1024维），11份公开2010规范节选以新库重建索引，旧固定向量库隔离。预先固定12正例Top-1/Top-3均12/12，全部引用原文一致；14检索中位0.410秒、最大3.015秒，DSH五读取方法及重启后复验通过。两个无答案反例仍返回候选，不能把命中当作答案有依据；未验客户2026全规范/助手回答。新库只读Key仅该库retrieve，越界/写入403；真实配置保存在独立backend/.env的REAL\_\*项，未注入MedQC服务，聊天模型0调用。详见[真实检索验证](2026-10-01-weknora-real-embedding-validation.md)。
+
 ## 2026-10-01 WeKnora Lite独立构建与接口验证
 
 官方v0.8.2源码4355文件无改动，Go1.26.8+MinGW UCRT/POSIX构建成功；独立SQLite实例在127.0.0.1:18083运行，浏览器登录页正常，重启持久化通过。合成文档检索→同ID原文、限定库Key及越界/写入403、现有DSH五个读取方法全部验证。发现关闭KB向量仍走默认入库向量路径，通用搜索也请求Embedding；本轮仅用本地固定向量桩，真实模型0次。桩已关闭，正式通用搜索需真实Embedding并重建索引；不能称真实规范或回答质量通过。产物/凭据在D:/LLM/WeKnora-Lite-evaluation，不改MedQC服务及共享库。详见[构建验证](2026-10-01-weknora-lite-build-validation.md)。
