@@ -8,6 +8,7 @@
   现代申诉必须为空（不伪造旧主键含义）；
 - 部分唯一索引：同一申诉人对同一冻结目标只允许一条 pending/reviewing 现代申诉；
 - 升级前精确校验：未部署则部署，完整部署则幂等跳过，部分部署或漂移一律拒绝。
+- 旧列仅接受 VARCHAR(36) 非空或实测 TEXT 可空两种成对基线；锁表后拒绝缺关联历史。
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ SCHEMA = "qc"
 TABLE = "qc_appeals"
 LEGACY_REQUIRED = ("qc_result_id", "record_id")
 LEGACY_PRESENT = ("id", "appellant_id", "status", *LEGACY_REQUIRED)
+TRIM_CHARS_SQL = " || ".join(f"chr({code})" for code in (32, 9, 10, 11, 12, 13))
 
 # 名称 -> (类型, 长度)；全部可空、无默认值。
 COLUMNS: dict[str, tuple[type, int]] = {
@@ -56,8 +58,15 @@ CHECK_SQL = (
 )
 OPEN_TARGET_INDEX = "uq_qc_appeals_open_target"
 OPEN_TARGET_COLUMNS = [
-    "appellant_id", "target_kind", "target_id", "institute_id", "patient_id",
-    "visit_id", "scene", "root_job_id", "envelope_id",
+    "appellant_id",
+    "target_kind",
+    "target_id",
+    "institute_id",
+    "patient_id",
+    "visit_id",
+    "scene",
+    "root_job_id",
+    "envelope_id",
 ]
 OPEN_TARGET_WHERE = "target_kind IS NOT NULL AND status IN ('pending', 'reviewing')"
 SCENE_INDEX = "ix_qc_appeals_scene_status"
@@ -89,14 +98,38 @@ def _column_matches(column: dict, kind: type, length: int) -> bool:
 
 def _index_predicate(index: dict) -> str:
     options = index.get("dialect_options") or {}
-    return normalized_sql(index.get("postgresql_where") or options.get("postgresql_where"))
+    return normalized_sql(
+        index.get("postgresql_where") or options.get("postgresql_where")
+    )
+
+
+def _legacy_profile(columns: dict, *, deployed: bool) -> str:
+    """旧列类型不迁移，用成对精确类型识别升级前可空性和降级目标。"""
+    legacy = [columns[name] for name in LEGACY_REQUIRED]
+    text_profile = all(isinstance(item.get("type"), sa.Text) for item in legacy)
+    varchar_profile = all(
+        isinstance(item.get("type"), sa.String)
+        and not isinstance(item.get("type"), sa.Text)
+        and getattr(item["type"], "length", None) == 36
+        for item in legacy
+    )
+    expected_nullable = deployed or text_profile
+    if (
+        not (text_profile or varchar_profile)
+        or any(item.get("nullable") is not expected_nullable for item in legacy)
+        or any(item.get("default") is not None for item in legacy)
+    ):
+        raise RuntimeError(f"{SCHEMA}.{TABLE} 旧关联列类型或可空性漂移；拒绝迁移")
+    return "text_nullable" if text_profile else "varchar_required"
 
 
 def _state(inspector: sa.Inspector) -> bool:
     """返回是否已完整部署；部分部署或漂移抛错。"""
     if not inspector.has_table(TABLE, schema=SCHEMA):
         raise RuntimeError(f"{SCHEMA}.{TABLE} 不存在；拒绝跨越申诉表基线")
-    columns = {item["name"]: item for item in inspector.get_columns(TABLE, schema=SCHEMA)}
+    columns = {
+        item["name"]: item for item in inspector.get_columns(TABLE, schema=SCHEMA)
+    }
     missing_legacy = [name for name in LEGACY_PRESENT if name not in columns]
     if missing_legacy:
         raise RuntimeError(f"{SCHEMA}.{TABLE} 缺少旧列 {missing_legacy}；拒绝迁移")
@@ -104,10 +137,13 @@ def _state(inspector: sa.Inspector) -> bool:
         item.get("name"): item.get("sqltext")
         for item in inspector.get_check_constraints(TABLE, schema=SCHEMA)
     }
-    indexes = {item.get("name"): item for item in inspector.get_indexes(TABLE, schema=SCHEMA)}
+    indexes = {
+        item.get("name"): item for item in inspector.get_indexes(TABLE, schema=SCHEMA)
+    }
     present = [name for name in COLUMNS if name in columns]
     related_indexes = {
-        name: item for name, item in indexes.items()
+        name: item
+        for name, item in indexes.items()
         if name in (OPEN_TARGET_INDEX, SCENE_INDEX)
         or set(item.get("column_names") or []) & set(COLUMNS)
     }
@@ -116,15 +152,23 @@ def _state(inspector: sa.Inspector) -> bool:
     if not present:
         if CHECK in checks or related_indexes:
             raise RuntimeError(f"{SCHEMA}.{TABLE} 缺少现代列但残留相关约束或索引")
-        if any(value is not False for value in legacy_nullable.values()):
-            raise RuntimeError(f"{SCHEMA}.{TABLE} 旧主键列可空性漂移；拒绝迁移")
+        _legacy_profile(columns, deployed=False)
         return False
+
+    try:
+        _legacy_profile(columns, deployed=True)
+    except RuntimeError:
+        raise RuntimeError(
+            f"{SCHEMA}.{TABLE} 现代申诉来源合同部分部署或漂移；拒绝覆盖"
+        ) from None
 
     open_index = indexes.get(OPEN_TARGET_INDEX)
     scene_index = indexes.get(SCENE_INDEX)
     if (
         len(present) != len(COLUMNS)
-        or any(not _column_matches(columns[name], *spec) for name, spec in COLUMNS.items())
+        or any(
+            not _column_matches(columns[name], *spec) for name, spec in COLUMNS.items()
+        )
         or any(value is not True for value in legacy_nullable.values())
         or normalized_sql(checks.get(CHECK)) != normalized_sql(CHECK_SQL)
         or set(related_indexes) != {OPEN_TARGET_INDEX, SCENE_INDEX}
@@ -141,18 +185,49 @@ def _state(inspector: sa.Inspector) -> bool:
 
 
 def upgrade() -> None:
-    if _state(sa.inspect(op.get_bind())):
+    bind = op.get_bind()
+    if _state(sa.inspect(bind)):
         return
-    for name in LEGACY_REQUIRED:
-        op.alter_column(TABLE, name, nullable=True, schema=SCHEMA)
+    bind.execute(sa.text(f'LOCK TABLE "{SCHEMA}"."{TABLE}" IN ACCESS EXCLUSIVE MODE'))
+    inspector = sa.inspect(bind)
+    if _state(inspector):
+        return
+    columns = {
+        item["name"]: item for item in inspector.get_columns(TABLE, schema=SCHEMA)
+    }
+    profile = _legacy_profile(columns, deployed=False)
+    invalid = bind.execute(
+        sa.text(
+            f'SELECT count(*) FROM "{SCHEMA}"."{TABLE}" WHERE '
+            + " OR ".join(
+                f"{name} IS NULL OR btrim({name}, {TRIM_CHARS_SQL}) = ''"
+                for name in LEGACY_REQUIRED
+            )
+        )
+    ).scalar_one()
+    if invalid:
+        raise RuntimeError(
+            f"{SCHEMA}.{TABLE} 旧关联身份缺失或空白；拒绝迁移，不回填历史"
+        )
+    if profile == "varchar_required":
+        for name in LEGACY_REQUIRED:
+            op.alter_column(TABLE, name, nullable=True, schema=SCHEMA)
     for name, (kind, length) in COLUMNS.items():
-        op.add_column(TABLE, sa.Column(name, kind(length), nullable=True), schema=SCHEMA)
+        op.add_column(
+            TABLE, sa.Column(name, kind(length), nullable=True), schema=SCHEMA
+        )
     op.create_check_constraint(CHECK, TABLE, CHECK_SQL, schema=SCHEMA)
     op.create_index(
-        OPEN_TARGET_INDEX, TABLE, OPEN_TARGET_COLUMNS, unique=True, schema=SCHEMA,
+        OPEN_TARGET_INDEX,
+        TABLE,
+        OPEN_TARGET_COLUMNS,
+        unique=True,
+        schema=SCHEMA,
         postgresql_where=sa.text(OPEN_TARGET_WHERE),
     )
-    op.create_index(SCENE_INDEX, TABLE, SCENE_INDEX_COLUMNS, unique=False, schema=SCHEMA)
+    op.create_index(
+        SCENE_INDEX, TABLE, SCENE_INDEX_COLUMNS, unique=False, schema=SCHEMA
+    )
 
 
 def downgrade() -> None:
@@ -160,10 +235,19 @@ def downgrade() -> None:
     if not _state(sa.inspect(bind)):
         return
     bind.execute(sa.text(f'LOCK TABLE "{SCHEMA}"."{TABLE}" IN ACCESS EXCLUSIVE MODE'))
-    used = bind.execute(sa.text(
-        f'SELECT count(*) FROM "{SCHEMA}"."{TABLE}" '
-        "WHERE target_kind IS NOT NULL OR qc_result_id IS NULL OR record_id IS NULL"
-    )).scalar_one()
+    inspector = sa.inspect(bind)
+    if not _state(inspector):
+        return
+    columns = {
+        item["name"]: item for item in inspector.get_columns(TABLE, schema=SCHEMA)
+    }
+    profile = _legacy_profile(columns, deployed=True)
+    used = bind.execute(
+        sa.text(
+            f'SELECT count(*) FROM "{SCHEMA}"."{TABLE}" '
+            "WHERE target_kind IS NOT NULL OR qc_result_id IS NULL OR record_id IS NULL"
+        )
+    ).scalar_one()
     if used:
         raise RuntimeError(f"{SCHEMA}.{TABLE} 已有现代申诉；拒绝降级以免丢失冻结来源")
     op.drop_index(SCENE_INDEX, table_name=TABLE, schema=SCHEMA)
@@ -171,5 +255,6 @@ def downgrade() -> None:
     op.drop_constraint(CHECK, TABLE, type_="check", schema=SCHEMA)
     for name in reversed(tuple(COLUMNS)):
         op.drop_column(TABLE, name, schema=SCHEMA)
-    for name in LEGACY_REQUIRED:
-        op.alter_column(TABLE, name, nullable=False, schema=SCHEMA)
+    if profile == "varchar_required":
+        for name in LEGACY_REQUIRED:
+            op.alter_column(TABLE, name, nullable=False, schema=SCHEMA)
