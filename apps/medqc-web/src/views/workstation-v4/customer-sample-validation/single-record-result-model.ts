@@ -22,6 +22,7 @@ export interface SingleRecordQcEvidence {
   excerpt_kind?: '字段级依据' | '文书级依据' | string
   recommendation_index?: number
   evidence_role?: 'opinion' | 'execution'
+  manual_frozen_content?: string
 }
 
 /** 联审导航只消费当前结果已保存的文书依据。 */
@@ -32,6 +33,8 @@ export interface SingleRecordQcEvidenceTarget {
   jobId: string
   ruleId: string
   evidence: SingleRecordQcEvidence
+  manualDefectId?: string
+  source?: 'task_manual_defect'
 }
 
 function isSafeRecommendationEvidenceRef(

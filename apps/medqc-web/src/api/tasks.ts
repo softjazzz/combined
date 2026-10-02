@@ -272,6 +272,22 @@ export interface TaskQcRunRecordResult {
 
 export type TaskManualDefectSeverity = 'info' | 'warning' | 'error' | 'critical'
 
+export interface TaskManualDocumentAnchor {
+  source_ref: string
+  source_type: string
+  field_path: string
+  quote: string
+}
+export interface TaskManualFrozenDocumentAnchor extends TaskManualDocumentAnchor {
+  captured_at: 'manual_create'
+}
+export interface TaskManualDocumentOption {
+  source_ref: string
+  source_type: string
+  label: string
+  fields: Array<{ source_field: string; label: string; text: string }>
+}
+
 export interface TaskManualDefectCreate {
   defect_id: string
   run_number: number
@@ -280,6 +296,7 @@ export interface TaskManualDefectCreate {
   severity: TaskManualDefectSeverity
   suggestion?: string | null
   evidence?: string | null
+  document_anchor?: TaskManualDocumentAnchor | null
 }
 
 export interface TaskManualDefect {
@@ -295,6 +312,8 @@ export interface TaskManualDefect {
   manual_review_status: 'pending' | 'approved' | 'rejected'
   created_at: string
   idempotent?: boolean
+  document_anchor?: TaskManualFrozenDocumentAnchor | null
+  job_id?: string | null
 }
 
 export interface TaskManualDefectList {
@@ -550,6 +569,17 @@ export async function createTaskManualDefect(
     method: 'POST',
     url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/manual-defects`,
     data,
+  })
+}
+
+export async function getTaskManualDocumentOptions(taskId: string, taskRecordId: string, runNumber: number) {
+  return request<{
+    task_id: string; task_record_id: string; run_number: number; job_id: string
+    documents: TaskManualDocumentOption[]
+  }>({
+    method: 'GET',
+    url: `${BASE_URL}/${encodeURIComponent(taskId)}/records/${encodeURIComponent(taskRecordId)}/manual-document-options`,
+    params: { run_number: runNumber },
   })
 }
 

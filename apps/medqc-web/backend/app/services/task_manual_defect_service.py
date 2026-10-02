@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCDefect, QCDefectHistory, QCTask, QCTaskQCRun, QCTaskRecord
+from .manual_document_anchor import document_options, freeze_anchor
 from .task_qc_run_service import (
     TaskQCRunConflict,
     TaskQCRunForbidden,
@@ -133,7 +134,8 @@ def _history_details(session: Any, defect_id: str, actor_id: str) -> dict[str, A
     return details if isinstance(details, dict) else None
 
 
-def _response(defect: Any, *, task_id: str, task_record_id: str, run_number: int) -> dict[str, Any]:
+def _response(defect: Any, *, task_id: str, task_record_id: str, run_number: int,
+              details: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "id": defect.id,
         "task_id": task_id,
@@ -146,6 +148,9 @@ def _response(defect: Any, *, task_id: str, task_record_id: str, run_number: int
         "evidence": defect.evidence,
         "manual_review_status": defect.manual_review_status,
         "created_at": defect.created_at,
+        "document_anchor": {key: value for key, value in ((details or {}).get("document_anchor") or {}).items()
+                            if key != "frozen_content"} or None,
+        "job_id": (details or {}).get("job_id"),
     }
 
 
@@ -154,6 +159,7 @@ def _replay(
     task_record_id: str, actor_id: str, run_number: int,
     rule_name: str, description: str, severity: str,
     suggestion: str | None, evidence: str | None,
+    document_anchor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     details = _history_details(session, defect.id, actor_id)
     run = session.get(QCTaskQCRun, (task_id, run_number))
@@ -186,10 +192,12 @@ def _replay(
             ("rule_name", rule_name), ("description", description),
             ("severity", severity), ("suggestion", suggestion), ("evidence", evidence),
         ))
+        or ({key: value for key, value in (details.get("document_anchor") or {}).items()
+             if key not in {"frozen_content", "captured_at"}} or None) != document_anchor
     ):
         raise TaskManualDefectConflict("人工缺陷请求 ID 已被其他内容使用")
     return {**_response(defect, task_id=task_id, task_record_id=task_record_id,
-                        run_number=run_number), "idempotent": True}
+                        run_number=run_number, details=details), "idempotent": True}
 
 
 def create_task_manual_defect(
@@ -197,6 +205,7 @@ def create_task_manual_defect(
     run_number: int, rule_name: str, description: str, severity: str,
     suggestion: str | None = None, evidence: str | None = None,
     workspace_factory: Callable[[], Any],
+    document_anchor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """先核实受领运行结果，再原子保存人工缺陷与创建历史。"""
     _validate_actor(actor_id)
@@ -223,6 +232,7 @@ def create_task_manual_defect(
                 run_number=run_number, rule_name=rule_name,
                 description=description, severity=severity,
                 suggestion=suggestion, evidence=evidence,
+                document_anchor=document_anchor,
             )
 
     job_id = _verified_result(
@@ -235,6 +245,7 @@ def create_task_manual_defect(
             actor_id=actor_id, defect_id=defect_id, run_number=run_number,
             rule_name=rule_name, description=description, severity=severity,
             suggestion=suggestion, evidence=evidence, job_id=job_id,
+            document_anchor=document_anchor,
         )
     except IntegrityError:
         # 并发请求可能已抢先写入同一客户端请求 ID，回滚后重新核对。
@@ -249,6 +260,7 @@ def create_task_manual_defect(
                 run_number=run_number, rule_name=rule_name,
                 description=description, severity=severity,
                 suggestion=suggestion, evidence=evidence,
+                document_anchor=document_anchor,
             )
 
 
@@ -256,6 +268,7 @@ def _insert_verified_defect(
     *, task_id: str, task_record_id: str, actor_id: str, defect_id: str,
     run_number: int, rule_name: str, description: str, severity: str,
     suggestion: str | None, evidence: str | None, job_id: str,
+    document_anchor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         with session.begin():
@@ -268,6 +281,7 @@ def _insert_verified_defect(
                     run_number=run_number, rule_name=rule_name,
                     description=description, severity=severity,
                     suggestion=suggestion, evidence=evidence,
+                    document_anchor=document_anchor,
                 )
             scene = _frozen_scene(task)
             if task["status"] != "in_progress" or record["status"] != "in_progress":
@@ -284,6 +298,22 @@ def _insert_verified_defect(
                 raise TaskManualDefectForbidden("仅受领运行人可添加人工缺陷")
             if run["job_id"] != job_id:
                 raise TaskManualDefectConflict("任务运行身份已变化")
+            if document_anchor is not None and scene == "outpatient_emergency":
+                raise TaskManualDefectConflict("门急诊可信文书来源尚未接通")
+            try:
+                anchor = freeze_anchor(
+                    {key: record[key] for key in ("institute_id", "patient_id", "visit_id")},
+                    document_anchor,
+                )
+            except ValueError as exc:
+                raise TaskManualDefectConflict(str(exc)) from exc
+            except RuntimeError as exc:
+                raise TaskManualDefectUnavailable("可信文书暂不可用") from exc
+            details = {
+                "task_id": task_id, "task_record_id": task_record_id,
+                "run_number": run_number, "job_id": job_id, "scene": scene,
+                "document_anchor": anchor,
+            }
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             defect = QCDefect(
                 id=defect_id, record_id=task_record_id, identity_version=1,
@@ -300,15 +330,12 @@ def _insert_verified_defect(
             session.add(QCDefectHistory(
                 id=str(uuid4()), defect_id=defect_id, action="manual_create",
                 actor_id=actor_id,
-                details=json.dumps({
-                    "task_id": task_id, "task_record_id": task_record_id,
-                    "run_number": run_number, "job_id": job_id, "scene": scene,
-                }, ensure_ascii=False, sort_keys=True),
+                details=json.dumps(details, ensure_ascii=False, sort_keys=True),
                 created_at=now,
             ))
             session.flush()
             response = _response(defect, task_id=task_id,
-                                 task_record_id=task_record_id, run_number=run_number)
+                                 task_record_id=task_record_id, run_number=run_number, details=details)
     return {**response, "idempotent": False}
 
 
@@ -357,7 +384,7 @@ def list_task_manual_defects(
         for history in histories:
             by_defect.setdefault(history.defect_id, []).append(history)
         run_numbers: set[int] = set()
-        validated: list[tuple[QCDefect, int, str]] = []
+        validated: list[tuple[QCDefect, int, str, dict[str, Any]]] = []
         for defect in defects:
             rows = by_defect.get(defect.id, [])
             if len(rows) != 1 or rows[0].actor_id != actor_id:
@@ -377,7 +404,7 @@ def list_task_manual_defects(
             ):
                 raise TaskManualDefectUnavailable("人工缺陷创建历史与任务身份不一致")
             run_numbers.add(details["run_number"])
-            validated.append((defect, details["run_number"], details["job_id"]))
+            validated.append((defect, details["run_number"], details["job_id"], details))
         runs = session.execute(
             select(QCTaskQCRun).where(
                 QCTaskQCRun.task_id == task_id,
@@ -386,7 +413,7 @@ def list_task_manual_defects(
         ).scalars().all()
         by_number = {run.run_number: run for run in runs}
         items = []
-        for defect, run_number, job_id in validated:
+        for defect, run_number, job_id, details in validated:
             run = by_number.get(run_number)
             if (
                 run is None or run.run_scope != "assigned"
@@ -395,5 +422,30 @@ def list_task_manual_defects(
                 raise TaskManualDefectUnavailable("人工缺陷创建运行与当前任务不一致")
             items.append(_response(defect, task_id=task_id,
                                    task_record_id=task_record_id,
-                                   run_number=run_number))
+                                   run_number=run_number,
+                                   details=details))
         return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def list_task_manual_document_options(*, task_id: str, task_record_id: str, actor_id: str,
+                                      run_number: int, workspace_factory: Callable[[], Any]):
+    _validate_actor(actor_id)
+    with SessionLocal() as session:
+        task, record = _context(session, task_id, task_record_id, actor_id, lock=False)
+        if _frozen_scene(task) == "outpatient_emergency":
+            raise TaskManualDefectConflict("门急诊可信文书来源尚未接通")
+        identity = {key: record[key] for key in ("institute_id", "patient_id", "visit_id")}
+    job_id = _verified_result(task_id=task_id, task_record_id=task_record_id, actor_id=actor_id,
+                              run_number=run_number, workspace_factory=workspace_factory)
+    try:
+        documents = [{key: value for key, value in item.items() if key != "content"}
+                     for item in document_options(identity)]
+    except (ValueError, RuntimeError) as exc:
+        raise TaskManualDefectUnavailable("可信完整文书暂不可用") from exc
+    with SessionLocal() as session:
+        _context(session, task_id, task_record_id, actor_id, lock=False)
+        run = session.get(QCTaskQCRun, (task_id, run_number))
+        if run is None or run.job_id != job_id or run.run_scope != "assigned" or run.triggered_by != actor_id:
+            raise TaskManualDefectConflict("任务运行身份已变化")
+    return {"task_id": task_id, "task_record_id": task_record_id, "run_number": run_number,
+            "job_id": job_id, "documents": documents}

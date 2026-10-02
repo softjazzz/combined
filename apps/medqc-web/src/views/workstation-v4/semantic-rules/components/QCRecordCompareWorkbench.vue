@@ -892,6 +892,10 @@ async function tryLocateEvidence(
     )
     if (!exactDocument || generation !== loadGeneration || location !== locationGeneration)
       return false
+    if (evidence.manual_frozen_content !== undefined && evidence.manual_frozen_content !== exactDocument.content) {
+      await applyLocatedDocument(exactDocument, null, '', '当前文书已变化，与人工录入时冻结正文不一致，无法精确定位')
+      return true
+    }
     const result = locateUniqueEvidenceQuote(exactDocument.content || '', evidence.quote)
     const range = result.range
     await applyLocatedDocument(
@@ -972,6 +976,7 @@ function toCompareEvidence(evidence: SingleRecordQcEvidence): QCRecordCompareEvi
     recommendation_index: evidence.recommendation_index,
     evidence_role: evidence.evidence_role,
     quote: evidence.evidence_excerpt || '',
+    manual_frozen_content: evidence.manual_frozen_content,
   }
 }
 
@@ -980,7 +985,14 @@ async function locateSingleRecordEvidence(evidence: SingleRecordQcEvidence) {
 }
 
 async function locateRequestedEvidence() {
+  locationGeneration += 1
   const target = props.evidenceTarget
+  if (!target || target.source === 'task_manual_defect') {
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    exactLocationWarning.value = ''
+    locationState.value = 'idle'
+  }
   if (!target || loading.value) return
   if (
     target.instituteId !== props.instituteId ||
@@ -989,6 +1001,12 @@ async function locateRequestedEvidence() {
     target.jobId !== props.jobId
   )
     return
+  if (target.source === 'task_manual_defect' && target.manualDefectId) {
+    if (!target.evidence.source_ref?.trim() || !target.evidence.field_path?.trim()
+      || !target.evidence.evidence_excerpt?.trim() || !target.evidence.manual_frozen_content) return
+    await locateSingleRecordEvidence(target.evidence)
+    return
+  }
   const items = props.singleRecordItems?.filter((row) => row.rule_id === target.ruleId) ?? []
   const item = items.length === 1 ? items[0] : undefined
   const evidence =

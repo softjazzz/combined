@@ -528,6 +528,18 @@ class TaskRecordCompleteRequest(BaseModel):
     run_number: int = Field(..., strict=True, gt=0, description="assigned 质控运行序号")
 
 
+class TaskManualDocumentAnchor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_ref: Annotated[str, StringConstraints(pattern=r"^src_[0-9a-f]{24}$")]
+    source_type: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    field_path: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    quote: Annotated[str, StringConstraints(min_length=1, max_length=2000)]
+
+
+class TaskManualFrozenDocumentAnchor(TaskManualDocumentAnchor):
+    captured_at: Literal["manual_create"]
+
+
 class TaskManualDefectCreateRequest(BaseModel):
     """受领质控员基于已核实的本次任务运行补录缺陷。"""
 
@@ -540,6 +552,7 @@ class TaskManualDefectCreateRequest(BaseModel):
     severity: Literal["info", "warning", "error", "critical"]
     suggestion: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]] = None
     evidence: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]] = None
+    document_anchor: Optional[TaskManualDocumentAnchor] = None
 
 
 class TaskManualDefectResponse(BaseModel):
@@ -559,6 +572,8 @@ class TaskManualDefectResponse(BaseModel):
     manual_review_status: Literal["pending", "approved", "rejected"]
     created_at: datetime
     idempotent: Optional[bool] = None
+    document_anchor: Optional[TaskManualFrozenDocumentAnchor] = None
+    job_id: Optional[str] = None
 
 
 # ============================================================================

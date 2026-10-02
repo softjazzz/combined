@@ -1141,6 +1141,7 @@ async def create_task_record_manual_defect(
             severity=body.severity,
             suggestion=body.suggestion,
             evidence=body.evidence,
+            document_anchor=body.document_anchor.model_dump() if body.document_anchor else None,
             workspace_factory=_sichuan_workspace_service,
         )
         result = TaskManualDefectResponse.model_validate(data).model_dump(mode="json")
@@ -1171,6 +1172,32 @@ async def create_task_record_manual_defect(
         current_user=current_user,
     )
     return success_response(data=result, message="人工缺陷已保存", trace_id=get_trace_id(request))
+
+
+@router.get("/{task_id}/records/{task_record_id}/manual-document-options")
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.CREATE)
+async def get_task_manual_document_options(
+    request: Request, task_id: str, task_record_id: str,
+    run_number: int = Query(..., gt=0), current_user: dict = Depends(get_current_user),
+):
+    from ..services.task_manual_defect_service import list_task_manual_document_options
+    try:
+        data = await run_in_threadpool(
+            list_task_manual_document_options, task_id=task_id, task_record_id=task_record_id,
+            actor_id=_get_task_scope_user_id(current_user), run_number=run_number,
+            workspace_factory=_sichuan_workspace_service,
+        )
+    except TaskManualDefectNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TaskManualDefectForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TaskManualDefectConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskManualDefectUnavailable as exc:
+        raise HTTPException(status_code=503, detail="可信文书暂不可用") from exc
+    except Exception:
+        raise HTTPException(status_code=503, detail="可信文书暂不可用") from None
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 @router.get("/{task_id}/records/{task_record_id}/manual-defects")

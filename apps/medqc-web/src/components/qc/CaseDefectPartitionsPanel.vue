@@ -94,6 +94,7 @@
     </div>
 
     <div v-else-if="activeTab === 'manual'" class="case-defect-partitions__list">
+      <p v-if="manualLocationError" role="status">{{ manualLocationError }}</p>
       <article
         v-for="item in manualItems"
         :key="item.id"
@@ -107,6 +108,9 @@
         </div>
         <p>{{ item.description || '暂无问题说明' }}</p>
         <small v-if="item.location">{{ item.location }}</small>
+        <button v-if="item.document_anchor && item.job_id === jobId" type="button"
+          @click="locateManualEvidence(item)"><FileSearch :size="14" />人工录入原文</button>
+        <small v-else>缺少可信锚点或属于其他运行，无法精确定位</small>
       </article>
     </div>
 
@@ -175,7 +179,8 @@ import {
   RefreshCw,
 } from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
-import { getCaseManualDefects } from '@/api/manualDefectReviews'
+import { getAccessToken } from '@/utils/auth-token'
+import { getCaseManualDefects, getManualDefectDocumentAnchor } from '@/api/manualDefectReviews'
 import type { ManualDefectReviewItem } from '@/api/manualDefectReviews'
 import { getModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
 import type { ModernCaseQcDefect, ModernCaseQcSnapshot } from '@/api/modernCaseQcResult'
@@ -220,6 +225,8 @@ const manualItems = ref<ManualDefectReviewItem[]>([])
 const manualTotal = ref(0)
 const manualReady = ref(false)
 const manualError = ref('')
+const manualLocationError = ref('')
+let manualLocationSequence = 0
 const MANUAL_PAGE_SIZE = 200
 const manualOffset = ref(0)
 const manualLoading = ref(false)
@@ -335,6 +342,37 @@ function locateEvidence(item: SingleRecordQcResultItem, evidence: SingleRecordQc
     jobId: props.jobId,
     ruleId: item.rule_id,
     evidence,
+  })
+}
+
+async function locateManualEvidence(item: ManualDefectReviewItem) {
+  if (!item.document_anchor || item.job_id !== props.jobId || manualLoading.value || manualError.value) return
+  const identity = [props.instituteId, props.patientId, props.visitId, props.jobId, props.scene].join('|')
+  const accountToken = getAccessToken()
+  const locationSequence = ++manualLocationSequence
+  manualLocationError.value = ''
+  const response = await getManualDefectDocumentAnchor(item.id, {
+    institute_id: props.instituteId, patient_id: props.patientId, visit_id: props.visitId,
+    scene: props.scene === 'outpatient' ? 'outpatient_emergency' : props.scene, job_id: props.jobId,
+  })
+  if (identity !== [props.instituteId, props.patientId, props.visitId, props.jobId, props.scene].join('|')
+    || accountToken !== getAccessToken() || locationSequence !== manualLocationSequence) return
+  const data = response.data
+  if (!response.success || !data?.available || !data.anchor || data.defect_id !== item.id
+    || data.job_id !== props.jobId || data.institute_id !== props.instituteId
+    || data.patient_id !== props.patientId || data.visit_id !== props.visitId
+    || data.source !== 'task_manual_defect'
+    || data.scene !== (props.scene === 'outpatient' ? 'outpatient_emergency' : props.scene)) {
+    manualLocationError.value = data?.reason || '人工文书证据未通过身份校验'
+    return
+  }
+  const anchor = data.anchor
+  emit('locate-evidence', {
+    instituteId: props.instituteId, patientId: props.patientId, visitId: props.visitId,
+    jobId: item.job_id, ruleId: '', manualDefectId: item.id, source: 'task_manual_defect',
+    evidence: { source_ref: anchor.source_ref, source_type: anchor.source_type,
+      field_path: anchor.field_path, evidence_excerpt: anchor.quote,
+      manual_frozen_content: anchor.frozen_content, excerpt_kind: '人工录入时点原文' },
   })
 }
 const normalizedTargetRuleId = computed(() =>
@@ -497,6 +535,8 @@ async function loadPartition(sequence: number) {
 }
 
 async function loadManual(sequence: number, offset = 0) {
+  manualLocationSequence += 1
+  manualLocationError.value = ''
   const request = ++manualRequest
   const response = await getCaseManualDefects({
     institute_id: props.instituteId,

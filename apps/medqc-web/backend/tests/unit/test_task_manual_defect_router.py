@@ -26,6 +26,22 @@ def payload(**changes):
     return body
 
 
+def test_document_options_requires_create_permission_and_receives_run(monkeypatch):
+    calls = []
+    def read(**query):
+        calls.append(query)
+        return {"documents": [], "job_id": "job-1"}
+    monkeypatch.setattr(service, "list_task_manual_document_options", read)
+    http, _ = client(monkeypatch)
+    path = PATH.replace("manual-defects", "manual-document-options")
+    assert http.get(path, params={"run_number": 1}).status_code == 200
+    assert {key: value for key, value in calls[0].items() if key != "workspace_factory"} == {
+        "task_id": "task-1", "task_record_id": "record-a", "actor_id": "qc-1", "run_number": 1}
+    denied, _ = client(monkeypatch, roles=["unknown"])
+    assert denied.get(path, params={"run_number": 1}).status_code == 403
+    assert len(calls) == 1
+
+
 def response():
     return {
         "id": DEFECT_ID, "task_id": "task-1", "task_record_id": "record-a",
@@ -73,6 +89,7 @@ def test_create_strict_dto_permission_and_audit(monkeypatch):
     assert {key: value for key, value in calls[0].items() if key != "workspace_factory"} == {
         "task_id": "task-1", "task_record_id": "record-a", "actor_id": "qc-1",
         **payload(),
+        "document_anchor": None,
     }
     assert callable(calls[0]["workspace_factory"])
     assert audits[0]["action"] == "tasks.records.manual_defects.create"

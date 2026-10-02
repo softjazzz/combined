@@ -6,6 +6,7 @@
 
 import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
+import type { TaskManualFrozenDocumentAnchor } from '@/api/tasks'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
 export type ManualDefectReviewStatus = 'pending' | 'approved' | 'rejected'
@@ -29,6 +30,8 @@ export interface ManualDefectReviewItem {
   manual_review_status: ManualDefectReviewStatus
   manual_created_by: string | null
   created_at: string | null
+  job_id?: string | null
+  document_anchor?: TaskManualFrozenDocumentAnchor | null
 }
 
 export interface ManualDefectReviewPage {
@@ -176,4 +179,13 @@ export async function getCaseManualDefects(query: CaseManualDefectQuery) {
     },
     '读取本病例人工缺陷失败',
   )
+}
+
+export async function getManualDefectDocumentAnchor(defectId: string, query: CaseManualDefectQuery & { job_id: string }) {
+  return request<{
+    available: boolean; reason: string
+    anchor: (TaskManualFrozenDocumentAnchor & { frozen_content: string }) | null
+    defect_id?: string; job_id?: string; institute_id?: string; patient_id?: string; visit_id?: string
+    scene?: ManualDefectReviewScene; source?: 'task_manual_defect'
+  }>({ method: 'GET', url: `/api/v1/manual-defects/${encodeURIComponent(defectId)}/document-anchor`, params: query }, '读取人工文书证据失败')
 }

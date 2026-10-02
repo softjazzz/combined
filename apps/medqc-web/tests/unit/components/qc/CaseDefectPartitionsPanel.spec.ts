@@ -2,16 +2,17 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CaseDefectPartitionsPanel from '@/components/qc/CaseDefectPartitionsPanel.vue'
 
-const { getPartitions, getManual, getCoding } = vi.hoisted(() => ({
+const { getPartitions, getManual, getCoding, getAnchor } = vi.hoisted(() => ({
   getPartitions: vi.fn(),
   getManual: vi.fn(),
   getCoding: vi.fn(),
+  getAnchor: vi.fn(),
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getLatestLuxian0609RecordDefectPartitions: getPartitions,
 }))
-vi.mock('@/api/manualDefectReviews', () => ({ getCaseManualDefects: getManual }))
+vi.mock('@/api/manualDefectReviews', () => ({ getCaseManualDefects: getManual, getManualDefectDocumentAnchor: getAnchor }))
 vi.mock('@/api/modernCaseQcResult', () => ({ getModernCaseQcSnapshot: getCoding }))
 
 const canonicalItems = [
@@ -108,6 +109,21 @@ function tab(wrapper: ReturnType<typeof mountPanel>, label: string) {
 }
 
 describe('CaseDefectPartitionsPanel', () => {
+  it('人工锚点点击才读取单条正文，当前文书变化不发送定位', async () => {
+    getManual.mockResolvedValue({ success: true, data: { items: [{
+      id: 'manual-1', institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1', job_id: 'job-1',
+      manual_review_status: 'pending', rule_name: '合成问题',
+      document_anchor: { source_ref: 'src_' + 'a'.repeat(24), source_type: 'course_record', field_path: 'text', quote: '摘录' },
+    }], total: 1, offset: 0, limit: 200 } })
+    getAnchor.mockResolvedValue({ success: true, data: { available: false, reason: '当前文书已变化', anchor: null } })
+    const wrapper = mountPanel({ initialTab: 'manual' })
+    await flushPromises()
+    expect(getAnchor).not.toHaveBeenCalled()
+    await wrapper.findAll('button').find((button) => button.text().includes('人工录入原文'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前文书已变化')
+    expect(wrapper.emitted('locate-evidence')).toBeUndefined()
+  })
   it.each([null, {}, [{ id: 'CORE-15', name: '病历管理制度', rule_ids: null }]])(
     '核心制度分组回执损坏时不渲染为正常分类 %j',
     async (systems) => {

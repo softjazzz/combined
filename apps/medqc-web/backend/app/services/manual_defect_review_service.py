@@ -238,11 +238,64 @@ def list_case_manual_defects(
                     by_defect.setdefault(history.defect_id, []).append(history)
     except SQLAlchemyError as exc:
         raise ManualDefectReviewUnavailable("病例人工缺陷读取失败") from exc
-    items = [
-        _list_item(row, _task_identity(by_defect.get(row.id, []), row.manual_created_by))
-        for row in defects
-    ]
+    items = []
+    for row in defects:
+        histories = by_defect.get(row.id, [])
+        item = _list_item(row, _task_identity(histories, row.manual_created_by))
+        item.update(document_anchor=None, job_id=None)
+        if len(histories) == 1 and histories[0].actor_id == row.manual_created_by:
+            try:
+                details = json.loads(histories[0].details)
+                if isinstance(details, dict) and item["task_id"] is not None:
+                    item["document_anchor"] = {key: value for key, value in (details.get("document_anchor") or {}).items()
+                                               if key != "frozen_content"} or None
+                    item["job_id"] = details.get("job_id")
+            except (TypeError, ValueError):
+                pass
+        items.append(item)
     return {"items": items, "total": int(total), "limit": limit, "offset": offset}
+
+
+def get_manual_document_anchor(*, defect_id, actor_id, institute_id, patient_id, visit_id, scene, job_id):
+    from .appeal_manual_target_service import resolve_task_manual_defect_target
+    from .custom_qc_workspace_service import CustomQCWorkspaceService
+    from .defect_rectification_service import _person, RectificationError
+    from .manual_document_anchor import freeze_anchor
+
+    identity = dict(zip(("institute_id", "patient_id", "visit_id"),
+                        _case_identity(institute_id, patient_id, visit_id)))
+    if scene == "outpatient_emergency":
+        raise ManualDefectReviewInvalid("门急诊可信文书来源尚未接通")
+    with _require_session_factory()() as session:
+        try:
+            person = _person(session, actor_id)
+        except RectificationError as exc:
+            raise ManualDefectReviewForbidden("当前账号不可读取人工文书证据") from exc
+        if not person["roles"] & {"admin", "qc_manager", "qc_staff"} or (
+            "admin" not in person["roles"] and person["institute_id"] != institute_id
+        ):
+            raise ManualDefectReviewForbidden("无权读取该机构人工文书证据")
+        source = resolve_task_manual_defect_target(
+            defect_id=defect_id, workspace_factory=CustomQCWorkspaceService, session=session,
+        )
+        if any(source[key] != value for key, value in identity.items()) or source["scene"] != scene or source["root_job_id"] != job_id:
+            raise ManualDefectReviewInvalid("人工证据不属于当前病例、场景或运行")
+        histories = session.execute(select(QCDefectHistory).where(
+            QCDefectHistory.defect_id == defect_id, QCDefectHistory.action == "manual_create",
+        )).scalars().all()
+        details = json.loads(histories[0].details)
+        anchor = details.get("document_anchor")
+        if not isinstance(anchor, dict) or not anchor.get("frozen_content"):
+            return {"available": False, "reason": "旧人工缺陷缺少可信文书锚点", "anchor": None}
+        try:
+            current = freeze_anchor(identity, {key: value for key, value in anchor.items()
+                                               if key not in {"frozen_content", "captured_at"}})
+        except ValueError:
+            return {"available": False, "reason": "当前文书缺失、重复或摘录不一致，无法精确定位", "anchor": None}
+        if current != anchor:
+            return {"available": False, "reason": "当前文书已变化，无法精确定位人工录入原文", "anchor": None}
+        return {"available": True, "reason": "", "anchor": anchor, "job_id": job_id, "defect_id": defect_id,
+                "scene": scene, "source": "task_manual_defect", **identity}
 
 
 _CASE_BATCH_CHUNK = 200

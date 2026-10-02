@@ -2,10 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn() }))
+const api = vi.hoisted(() => ({ create: vi.fn(), list: vi.fn(), documents: vi.fn() }))
 vi.mock('@/api/tasks', () => ({
   createTaskManualDefect: api.create,
   getTaskManualDefects: api.list,
+  getTaskManualDocumentOptions: api.documents,
 }))
 
 import TaskManualDefectPanel from '@/components/qc/TaskManualDefectPanel.vue'
@@ -57,11 +58,12 @@ const TextareaStub = defineComponent({
 
 const SelectStub = defineComponent({
   name: 'ASelect',
+  inheritAttrs: false,
   props: { value: String, options: { type: Array, default: () => [] }, disabled: Boolean },
   emits: ['update:value'],
-  setup(props, { emit }) {
+  setup(props, { emit, attrs }) {
     return () => h('select', {
-      id: 'manual-defect-severity',
+      ...attrs,
       value: props.value,
       disabled: props.disabled,
       onChange: (event: Event) => emit('update:value', (event.target as HTMLSelectElement).value),
@@ -114,6 +116,39 @@ async function fillRequired(wrapper: ReturnType<typeof mountPanel>) {
 }
 
 describe('TaskManualDefectPanel', () => {
+  it('显式选择可信文书字段后按原样提交完整摘录', async () => {
+    api.documents.mockResolvedValue({ success: true, data: {
+      task_id: props.taskId, task_record_id: props.taskRecordId, run_number: props.runNumber, job_id: props.jobId,
+      documents: [{ source_ref: 'src_' + 'a'.repeat(24), source_type: 'course_record', label: '合成病程',
+        fields: [{ source_field: 'text', label: '正文', text: '完整合成摘录正文' }] }],
+    } })
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('选择可信文书'))!.trigger('click')
+    await flushPromises()
+    await wrapper.get('#manual-anchor-document').setValue('0')
+    await wrapper.get('#manual-anchor-field').setValue('text')
+    await wrapper.get('#manual-anchor-quote').setValue('合成摘录')
+    await fillRequired(wrapper)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.create.mock.calls[0][2].document_anchor).toEqual({
+      source_ref: 'src_' + 'a'.repeat(24), source_type: 'course_record', field_path: 'text', quote: '合成摘录',
+    })
+  })
+
+  it('账号切换后不接纳迟到文书读取回执', async () => {
+    const late = deferred<Record<string, unknown>>()
+    api.documents.mockReturnValue(late.promise)
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('选择可信文书'))!.trigger('click')
+    await wrapper.setProps({ userId: 'other-qc' })
+    late.resolve({ success: true, data: { task_id: props.taskId, task_record_id: props.taskRecordId,
+      run_number: props.runNumber, job_id: props.jobId, documents: [{ label: '旧账号文书' }] } })
+    await flushPromises()
+    expect(wrapper.find('#manual-anchor-document').exists()).toBe(false)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     api.list.mockResolvedValue(page())

@@ -129,6 +129,25 @@
         :rows="2"
         :disabled="!!pendingPayload || submitting"
       />
+      <a-button size="small" :loading="documentsLoading" :disabled="!!pendingPayload || submitting" @click="void loadDocuments()">
+        <RotateCw :size="14" />选择可信文书
+      </a-button>
+      <p v-if="documentsError" class="manual-defects__error" role="alert">{{ documentsError }}</p>
+      <template v-if="documentOptions.length">
+        <label for="manual-anchor-document">证据文书</label>
+        <a-select id="manual-anchor-document" v-model:value="selectedDocument" allow-clear
+          :disabled="!!pendingPayload || submitting" :options="documentOptions.map((item, index) => ({ value: String(index), label: item.label }))"
+          @change="selectedField = ''; anchorQuote = ''" />
+        <template v-if="anchorDocument">
+          <label for="manual-anchor-field">原文字段</label>
+          <a-select id="manual-anchor-field" v-model:value="selectedField"
+            :disabled="!!pendingPayload || submitting" :options="anchorDocument.fields.map((item) => ({ value: item.source_field, label: item.label }))"
+            @change="anchorQuote = ''" />
+          <pre v-if="anchorField" class="manual-defects__source">{{ anchorField.text }}</pre>
+          <label for="manual-anchor-quote">完整原文摘录</label>
+          <a-textarea id="manual-anchor-quote" v-model:value="anchorQuote" :maxlength="2000" :rows="3" :disabled="!!pendingPayload || submitting" />
+        </template>
+      </template>
       <p
         v-if="formError"
         class="manual-defects__error"
@@ -167,8 +186,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RotateCw } from 'lucide-vue-next'
-import { createTaskManualDefect, getTaskManualDefects } from '@/api/tasks'
-import type { TaskManualDefect, TaskManualDefectCreate, TaskManualDefectSeverity } from '@/api/tasks'
+import { createTaskManualDefect, getTaskManualDefects, getTaskManualDocumentOptions } from '@/api/tasks'
+import type { TaskManualDefect, TaskManualDefectCreate, TaskManualDefectSeverity, TaskManualDocumentOption } from '@/api/tasks'
 
 const props = defineProps<{
   taskId: string
@@ -195,6 +214,41 @@ const formError = ref('')
 const successMessage = ref('')
 const pendingPayload = ref<TaskManualDefectCreate | null>(null)
 let sequence = 0
+const documentOptions = ref<TaskManualDocumentOption[]>([])
+const documentsLoading = ref(false)
+const documentsError = ref('')
+const selectedDocument = ref<string>()
+const selectedField = ref('')
+const anchorQuote = ref('')
+const anchorDocument = computed(() => selectedDocument.value === undefined ? undefined : documentOptions.value[Number(selectedDocument.value)])
+const anchorField = computed(() => anchorDocument.value?.fields.find((item) => item.source_field === selectedField.value))
+let documentSequence = 0
+
+async function loadDocuments() {
+  const key = contextKey.value
+  const token = ++documentSequence
+  documentsLoading.value = true
+  documentsError.value = ''
+  documentOptions.value = []
+  selectedDocument.value = undefined
+  selectedField.value = ''
+  anchorQuote.value = ''
+  try {
+    const response = await getTaskManualDocumentOptions(props.taskId, props.taskRecordId, props.runNumber)
+    if (key !== contextKey.value || token !== documentSequence) return
+    const data = response.data
+    if (!response.success || !data || data.task_id !== props.taskId || data.task_record_id !== props.taskRecordId
+      || data.run_number !== props.runNumber || data.job_id !== props.jobId || !Array.isArray(data.documents)) {
+      throw new Error('可信文书未通过本次运行身份校验')
+    }
+    documentOptions.value = data.documents
+    if (!data.documents.length) documentsError.value = '本次暂无完整且唯一的可信文书字段'
+  } catch {
+    if (key === contextKey.value && token === documentSequence) documentsError.value = '可信文书暂不可用'
+  } finally {
+    if (key === contextKey.value && token === documentSequence) documentsLoading.value = false
+  }
+}
 
 const contextKey = computed(() => JSON.stringify([
   props.taskId, props.taskRecordId, props.runNumber, props.jobId, props.userId,
@@ -297,7 +351,15 @@ async function verifyPending() {
     if (!page || !isCurrent(key, token)) return
     items.value = page.items
     total.value = page.total
-    if (!page.items.some((item) => item.id === payload.defect_id && item.run_number === props.runNumber)) {
+    if (!page.items.some((item) => item.id === payload.defect_id && item.run_number === props.runNumber
+      && item.rule_name === payload.rule_name && item.description === payload.description
+      && item.severity === payload.severity && item.suggestion === (payload.suggestion || null)
+      && item.evidence === (payload.evidence || null)
+      && (!payload.document_anchor || (item.job_id === props.jobId
+        && item.document_anchor?.source_ref === payload.document_anchor.source_ref
+        && item.document_anchor?.source_type === payload.document_anchor.source_type
+        && item.document_anchor?.field_path === payload.document_anchor.field_path
+        && item.document_anchor?.quote === payload.document_anchor.quote)))) {
       formError.value = '未查到本次提交，保留原编号可安全重试'
       return
     }
@@ -306,6 +368,9 @@ async function verifyPending() {
     description.value = ''
     suggestion.value = ''
     evidence.value = ''
+    selectedDocument.value = undefined
+    selectedField.value = ''
+    anchorQuote.value = ''
     severity.value = 'warning'
     successMessage.value = '人工缺陷已保存并确认'
     emit('defect-created')
@@ -325,6 +390,10 @@ async function submit() {
       formError.value = '请填写问题名称和问题描述'
       return
     }
+    if (anchorDocument.value && (!anchorField.value || !anchorQuote.value.trim())) {
+      formError.value = '请选择原文字段并填写完整摘录'
+      return
+    }
     pendingPayload.value = {
       defect_id: crypto.randomUUID(),
       run_number: props.runNumber,
@@ -333,6 +402,10 @@ async function submit() {
       severity: severity.value,
       suggestion: suggestion.value.trim() || null,
       evidence: evidence.value.trim() || null,
+      ...(anchorDocument.value ? { document_anchor: {
+        source_ref: anchorDocument.value.source_ref, source_type: anchorDocument.value.source_type,
+        field_path: selectedField.value, quote: anchorQuote.value,
+      } } : {}),
     }
   }
   const key = contextKey.value
@@ -360,6 +433,13 @@ async function submit() {
 }
 
 watch(contextKey, () => {
+  documentSequence += 1
+  documentOptions.value = []
+  selectedDocument.value = undefined
+  selectedField.value = ''
+  anchorQuote.value = ''
+  documentsLoading.value = false
+  documentsError.value = ''
   sequence += 1
   items.value = []
   total.value = 0
@@ -393,4 +473,5 @@ watch(contextKey, () => {
 .manual-defects__form { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, .08); }
 .manual-defects__form label { margin-top: 4px; color: rgba(29, 29, 31, .7); font-size: 13px; }
 .manual-defects__actions { justify-content: flex-end; margin-top: 4px; }
+.manual-defects__source { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; margin: 0; padding: 8px; background: #f5f5f7; }
 </style>

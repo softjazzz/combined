@@ -332,6 +332,7 @@ export interface SichuanBatchSafeEvidenceRef {
 export type RecommendationEvidenceRole = 'opinion' | 'execution'
 
 export interface QCRecordCompareEvidence {
+  manual_frozen_content?: string
   key: string
   source_ref?: string
   source_document_id?: string

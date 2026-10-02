@@ -88,6 +88,95 @@ def create(env, **overrides):
     return service.create_task_manual_defect(**values)
 
 
+def test_anchor_frozen_in_transaction_and_replay_checks_whole_payload(env, monkeypatch):
+    anchor = {"source_ref": "src_" + "a" * 24, "source_type": "course_record",
+              "field_path": "text", "quote": "合成摘录"}
+    calls = []
+    def freeze(identity, payload):
+        calls.append(identity)
+        return {**payload, "frozen_content": "合成完整正文及合成摘录", "captured_at": "manual_create"}
+    monkeypatch.setattr(service, "freeze_anchor", freeze)
+    result = create(env, document_anchor=anchor)
+    assert calls == [{"institute_id": "hospital-A", "patient_id": "patient", "visit_id": "visit"}]
+    assert "frozen_content" not in result["document_anchor"]
+    with env[0]() as session:
+        history = session.execute(sa.select(QCDefectHistory.details)).scalar_one()
+    assert json.loads(history)["document_anchor"]["frozen_content"] == "合成完整正文及合成摘录"
+    assert create(env, document_anchor=anchor)["idempotent"] is True
+    assert len(calls) == 1
+    with pytest.raises(service.TaskManualDefectConflict):
+        create(env, document_anchor={**anchor, "field_path": "other"})
+    with pytest.raises(service.TaskManualDefectConflict):
+        create(env)
+
+
+def test_invalid_anchor_rolls_back_defect_and_history(env, monkeypatch):
+    def fail(*args):
+        raise ValueError("完整摘录重复")
+    monkeypatch.setattr(service, "freeze_anchor", fail)
+    with pytest.raises(service.TaskManualDefectConflict):
+        create(env, document_anchor={"quote": "invalid"})
+    assert snapshot(env) == ([], [])
+
+
+def test_manual_document_options_rechecks_assignment_after_source_read(env, monkeypatch):
+    def options(identity):
+        with env[0].begin() as session:
+            session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "record-a")
+                            .values(assignee_id="qc-2"))
+        return [{"content": "合成隐私正文", "source_ref": "src_" + "a" * 24}]
+    monkeypatch.setattr(service, "document_options", options)
+    with pytest.raises(service.TaskManualDefectForbidden):
+        service.list_task_manual_document_options(task_id="task-1", task_record_id="record-a",
+            actor_id="qc-1", run_number=1, workspace_factory=lambda: object())
+
+
+def test_outpatient_does_not_borrow_inpatient_document_owner(env, monkeypatch):
+    with env[0].begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(scene="outpatient"))
+    def must_not_load(*_):
+        raise AssertionError("不应读取住院文书")
+    monkeypatch.setattr(service, "freeze_anchor", must_not_load)
+    with pytest.raises(service.TaskManualDefectConflict, match="门急诊"):
+        create(env, document_anchor={"quote": "合成"})
+    assert snapshot(env) == ([], [])
+
+
+@pytest.mark.parametrize("case", ["valid", "old_job", "other_case", "other_account", "changed_content"])
+def test_single_anchor_read_revalidates_source_account_and_full_content(env, monkeypatch, case):
+    from app.services import manual_defect_review_service as review
+    from app.services import manual_document_anchor as owner
+    from app.services import appeal_manual_target_service as source_owner
+    from app.services import defect_rectification_service as people
+    anchor = {"source_ref": "src_" + "a" * 24, "source_type": "course_record",
+              "field_path": "text", "quote": "合成摘录"}
+    frozen = {**anchor, "frozen_content": "合成完整正文及合成摘录", "captured_at": "manual_create"}
+    monkeypatch.setattr(service, "freeze_anchor", lambda *_: frozen)
+    result = create(env, document_anchor=anchor)
+    monkeypatch.setattr(review, "SessionLocal", env[0])
+    monkeypatch.setattr(people, "_person", lambda *_: {
+        "roles": {"qc_staff"}, "institute_id": "other" if case == "other_account" else "hospital-A"})
+    monkeypatch.setattr(source_owner, "resolve_task_manual_defect_target", lambda **_: {
+        "institute_id": "hospital-A", "patient_id": "patient", "visit_id": "visit",
+        "scene": "running", "root_job_id": "job-1"})
+    monkeypatch.setattr(owner, "freeze_anchor", lambda *_: {
+        **frozen, "frozen_content": "已变正文及合成摘录" if case == "changed_content" else frozen["frozen_content"]})
+    query = {"defect_id": result["id"], "actor_id": "reviewer", "institute_id": "hospital-A",
+             "patient_id": "patient", "visit_id": "other" if case == "other_case" else "visit",
+             "scene": "running", "job_id": "job-2" if case == "old_job" else "job-1"}
+    if case == "other_account":
+        with pytest.raises(review.ManualDefectReviewForbidden):
+            review.get_manual_document_anchor(**query)
+    elif case in {"old_job", "other_case"}:
+        with pytest.raises(review.ManualDefectReviewInvalid):
+            review.get_manual_document_anchor(**query)
+    else:
+        detail = review.get_manual_document_anchor(**query)
+        assert detail["available"] is (case == "valid")
+        if case == "changed_content":
+            assert detail["anchor"] is None
+
+
 def snapshot(env):
     sessions, _, _ = env
     with sessions() as session:

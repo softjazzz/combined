@@ -104,6 +104,37 @@ describe('QCRecordCompareWorkbench', () => {
     wrapper.unmount()
   })
 
+  it.each([['原文摘录', true], ['原文摘录及变更', false]])('人工来源全文冻结核对 %s', async (content, matched) => {
+    const wrapper = mountSavedEvidence(content, '摘录')
+    await wrapper.setProps({ evidenceTarget: {
+      instituteId: 'H1', patientId: 'P1', visitId: 'V1', jobId: 'job1', ruleId: '',
+      source: 'task_manual_defect', manualDefectId: 'manual-1',
+      evidence: { source_ref: 'saved-source', source_type: 'admission_record', field_path: 'text',
+        evidence_excerpt: '摘录', manual_frozen_content: '原文摘录' },
+    } })
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(matched)
+    if (!matched) expect(wrapper.text()).toContain('人工录入时冻结正文不一致')
+    wrapper.unmount()
+  })
+
+  it('新定位目标撤销或跨病例时清除旧高亮', async () => {
+    const wrapper = mountSavedEvidence('原文摘录', '摘录')
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(true)
+    await wrapper.setProps({ evidenceTarget: null })
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(false)
+    await wrapper.setProps({ evidenceTarget: {
+      instituteId: 'other', patientId: 'P1', visitId: 'V1', jobId: 'job1', ruleId: '',
+      source: 'task_manual_defect', manualDefectId: 'manual-1',
+      evidence: { source_ref: 'saved-source', field_path: 'text', evidence_excerpt: '摘录', manual_frozen_content: '原文摘录' },
+    } })
+    await flushPromises()
+    expect(wrapper.find('mark').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it.each([
     ['腹痛3天。再次记载腹痛3天', '腹痛3天', '重复出现'],
     ['当前患者头痛', '腹痛3天', '当前正文不一致'],

@@ -24,6 +24,24 @@ def review_path(defect_id: str) -> str:
     return f"/api/v1/manual-defects/{defect_id}/review"
 
 
+def test_single_document_anchor_requires_review_and_exact_source_query(monkeypatch):
+    calls = []
+    def read(**query):
+        calls.append(query)
+        return {"available": False, "reason": "旧人工缺陷缺少可信锚点", "anchor": None}
+    monkeypatch.setattr(service, "get_manual_document_anchor", read)
+    http, _ = client(monkeypatch)
+    params = {"institute_id": "hospital-A", "patient_id": "patient", "visit_id": "visit",
+              "scene": "running", "job_id": "job-1"}
+    path = f"{LIST}/m-1/document-anchor"
+    assert http.get(path, params=params).status_code == 200
+    assert calls == [{"defect_id": "m-1", "actor_id": "mgr-1", **params}]
+    denied, _ = client(monkeypatch, roles=("unknown",))
+    assert denied.get(path, params=params).status_code == 403
+    assert len(calls) == 1
+    assert http.get(path, params={**params, "scene": "all"}).status_code == 422
+
+
 def _defect(
     defect_id, minutes, *, created_by="qc-1", review="pending", origin="manual", scene=None,
 ):

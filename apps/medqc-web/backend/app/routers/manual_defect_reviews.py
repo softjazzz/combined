@@ -19,6 +19,7 @@ from ..core.audit import audit_event
 from ..core.permissions import PermissionAction, ResourceType, has_permission
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
+from ..schemas.tasks import TaskManualFrozenDocumentAnchor
 from ..services.manual_defect_review_service import (
     MAX_PAGE_SIZE,
     ManualDefectReviewConflict,
@@ -71,6 +72,8 @@ class ManualDefectListItem(BaseModel):
     manual_review_status: Literal["pending", "approved", "rejected"]
     manual_created_by: Optional[str]
     created_at: Optional[datetime]
+    job_id: Optional[str] = None
+    document_anchor: Optional[TaskManualFrozenDocumentAnchor] = None
 
 
 class ManualDefectReviewResult(BaseModel):
@@ -169,6 +172,35 @@ async def get_case_manual_defects(
         logger.error("manual_defect_case_list_failed error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=503, detail=_UNAVAILABLE_DETAIL) from None
     return success_response(data=result, trace_id=get_trace_id(request))
+
+
+@router.get("/{defect_id}/document-anchor")
+async def get_manual_defect_document_anchor(
+    request: Request, defect_id: str,
+    institute_id: str = Query(..., min_length=1, max_length=128),
+    patient_id: str = Query(..., min_length=1, max_length=128),
+    visit_id: str = Query(..., min_length=1, max_length=128),
+    scene: Literal["running", "final", "outpatient_emergency"] = Query(...),
+    job_id: str = Query(..., min_length=1, max_length=36),
+    current_user: dict = Depends(get_current_user),
+):
+    from ..services.manual_defect_review_service import get_manual_document_anchor
+    from ..services.appeal_manual_target_service import AppealManualTargetConflict, AppealManualTargetNotFound
+    actor_id = _require_review(current_user)
+    try:
+        data = await run_in_threadpool(get_manual_document_anchor,
+            defect_id=defect_id, actor_id=actor_id, institute_id=institute_id,
+            patient_id=patient_id, visit_id=visit_id, scene=scene, job_id=job_id)
+    except ManualDefectReviewForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ManualDefectReviewInvalid, AppealManualTargetConflict) as exc:
+        raise HTTPException(status_code=409, detail="人工证据来源与当前运行不一致") from exc
+    except AppealManualTargetNotFound as exc:
+        raise HTTPException(status_code=404, detail="人工缺陷不存在") from exc
+    except Exception as exc:
+        logger.error("manual_document_anchor_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="人工文书证据暂不可用") from None
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 @router.post("/{defect_id}/review")
