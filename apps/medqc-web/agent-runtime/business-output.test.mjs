@@ -493,3 +493,43 @@ test('单问题保留正式结论建议，摘录仅留原卡片，规则不发�
   assert.equal(rule.rule.policy_summary, '实施口径')
   assert.ok(!JSON.stringify(rule).includes('不发送'))
 })
+
+test('验收摘要与保存缺口只给模型白名单字段，不带入口地址或原始文本', () => {
+  const validation = businessModelValue(
+    'read_rule_validation',
+    { rule_id: 'LX0609-01-01-01' },
+    {
+      validation_record: {
+        rule: { rule_id: 'LX0609-01-01-01' },
+        stage: 'pending_approval',
+        coverage: { acceptance_cases: 2 },
+        runs: [],
+        run_limit: 5,
+        has_more_runs: false,
+        data_notes: [],
+        scope_note: '不是当前病例统计',
+        entry_path: '/workstation-v4/rules/validation/LX0609-01-01-01',
+        internal_debug: '不进入模型',
+      },
+      references: [{ id: 'rule-validation:LX0609-01-01-01', text: '来源卡全文不进入模型' }],
+    },
+  )
+  assert.equal(validation.id, 'rule-validation:LX0609-01-01-01')
+  assert.equal(validation.validation_record.stage, 'pending_approval')
+  assert.ok(!('entry_path' in validation.validation_record))
+  assert.ok(validation.read_note.includes('不表示结论或批准通过'))
+  assert.ok(!JSON.stringify(validation).includes('不进入模型'))
+  const gaps = { missing_sources: ['检验结果明细'], projection_notes: ['不重判'] }
+  const issue = businessModelValue(
+    'read_saved_issue',
+    {},
+    {
+      references: [{ id: 'saved:gap', status: 'data_gap', conclusion: '原保存结论' }],
+      source_gaps: gaps,
+    },
+  )
+  assert.deepEqual(issue.source_gaps, gaps)
+  assert.equal(issue.conclusion, '原保存结论')
+  const plain = businessModelValue('read_saved_issue', {}, { references: [{ id: 'saved:ok' }] })
+  assert.ok(!('source_gaps' in plain))
+})

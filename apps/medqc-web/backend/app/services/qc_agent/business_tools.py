@@ -9,7 +9,10 @@ from datetime import datetime, timedelta
 
 import httpx
 from fastapi import HTTPException
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.services.qc_agent import business_rule_validation
+from app.services.qc_agent.business_source_gaps import project_saved_source_gaps, source_gaps_card_text
 
 from .business_store import BusinessSessionStore
 
@@ -106,6 +109,7 @@ class QueryFollowups(ToolInput):
 
 
 TOOL_DEFINITIONS = {
+    "read_rule_validation": (ReadRule, "仅管理视图读取现有规则验收阶段、样本覆盖、保存运行结论和验收入口。不读取测试病例原文，不执行验收；目录启用不表示验收通过，历史运行不证明当前部署已验收。"),
     "read_saved_results": (ReadResults, "分页读取正式保存结果。statuses为空查全类别；仅列不合规时指定non_compliant。每页最多10条，index和saved_text均在卡片完整展示结论建议，模型只收到索引；列清单无需另查证据或规则。追问具体原因或依据才用read_saved_issue。后续页带已看到的expected_job_id；管理下钻用统计返回record_reference。"),
     "read_saved_issue": (ReadIssue, "按稳定 result_id 读取同一任务的具体问题、正式建议和已保存病历证据。"),
     "read_rule": (ReadRule, "读取权威规则目录中的当前启用状态和院内实施口径；不是规范原文。"),
@@ -119,7 +123,7 @@ TOOL_DEFINITIONS = {
 def tool_specs(view: Literal["doctor", "manager"]) -> list[dict]:
     return [{"name": name, "description": description, "parameters": model.model_json_schema()}
             for name, (model, description) in TOOL_DEFINITIONS.items()
-            if name not in {"query_statistics", "compare_statistics"} or view == "manager"]
+            if name not in {"query_statistics", "compare_statistics", "read_rule_validation"} or view == "manager"]
 
 
 def statistics_text(payload: dict) -> str:
@@ -255,7 +259,12 @@ class BusinessTools:
             reference.get("conclusion"), reference.get("suggestion"),
             *[f"{row.get('source_type', '')} · {row.get('source_ref', '')} · {row.get('record_time', '')} · {row.get('field_path', '')}\n{row.get('evidence_excerpt', '未提供原文摘录')}" for row in evidence if isinstance(row, dict)],
         ]))
+        # 仅资料不足或保存了缺口字段时附带安全投影；其它结论不加缺口说明，避免模型据此重判。
+        has_gaps = item.get("status") == "data_gap" or any(key in item for key in ("missing_sources", "missing_fields", "source_availability", "data_gap_details"))
+        if has_gaps:
+            reference["text"] += "\n\n" + source_gaps_card_text(item)
         return {"references": [reference], "evidence": evidence, "evidence_scope": "执行时保存的证据摘录；不是重新读取的完整文书", "reason_code": item.get("reason_code"),
+                **({"source_gaps": project_saved_source_gaps(item)} if has_gaps else {}),
                 "job_id": payload.get("job_id"), "rule_set_version": payload.get("rule_set_version"), "result_time": payload.get("completed_at"),
                 "version_note": "规则版本仅为正式保存结果的执行版本标识；未读取该版本的历史规则正文，不得用当前目录冒充当时判据"}
 
@@ -315,6 +324,14 @@ class BusinessTools:
             raise HTTPException(404, "工具未提供")
         model, _ = TOOL_DEFINITIONS[name]
         params = model.model_validate(arguments)
+        if name == "read_rule_validation":
+            record = await run_in_threadpool(business_rule_validation.read_rule_validation, params.rule_id, metadata, user)
+            reference_id = f"rule-validation:{params.rule_id}"
+            self.store.bind(metadata["session_id"], user, reference_id, {"kind": "rule_validation", "rule_id": params.rule_id})
+            reference = {"id": reference_id, "kind": "rule", "rule_id": params.rule_id,
+                         "title": f"规则验收记录 · {params.rule_id}", "locator": record["scope_note"],
+                         "entry_path": record["entry_path"], "text": business_rule_validation.rule_validation_card_text(record)}
+            return {"validation_record": record, "references": [reference]}
         if name == "read_saved_results":
             return await self.saved_results(metadata, user, params.record_reference, params)
         if name == "read_saved_issue":

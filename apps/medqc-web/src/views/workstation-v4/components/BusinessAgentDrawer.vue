@@ -180,9 +180,11 @@
               查看{{
                 reference.kind === 'guideline'
                   ? '规范原文'
-                  : reference.kind === 'rule'
-                    ? '规则详情'
-                    : '依据与详情'
+                  : isRuleValidation(reference)
+                    ? '验收记录'
+                    : reference.kind === 'rule'
+                      ? '规则详情'
+                      : '依据与详情'
               }}
             </a-button>
             <a-button
@@ -308,9 +310,20 @@
       <p v-if="referenceLoading">正在读取原文…</p>
       <a-alert v-else-if="referenceError" type="warning" :message="referenceError" />
       <template v-else-if="selectedReference">
-        <p v-if="selectedReference.kind === 'rule'" class="business-agent__muted">
+        <p v-if="isRuleValidation(selectedReference)" class="business-agent__muted">
+          已保存的规则验收摘要；不是当前规则目录口径，也不代表当前部署规则已完成验收。
+        </p>
+        <p v-else-if="selectedReference.kind === 'rule'" class="business-agent__muted">
           当前规则目录口径；历史执行版本与规范原文需另行核对。
         </p>
+        <a-button
+          v-if="ruleValidationPath"
+          type="link"
+          :href="ruleValidationPath"
+          data-testid="business-agent-rule-validation-link"
+        >
+          打开规则验收记录
+        </a-button>
         <template v-if="selectedReference.evidence?.length">
           <p>{{ selectedReference.conclusion }}</p>
           <p v-if="selectedReference.suggestion">建议：{{ selectedReference.suggestion }}</p>
@@ -643,7 +656,18 @@ function linkedRule(reference: BusinessAgentReference) {
   if (!reference.rule_id) return undefined
   return turns.value
     .flatMap((turn) => turn.references)
-    .find((item) => item.kind === 'rule' && item.rule_id === reference.rule_id)
+    .find(
+      (item) =>
+        item.kind === 'rule' && item.rule_id === reference.rule_id && !isRuleValidation(item),
+    )
+}
+// 验收记录沿用 rule 来源类型，以稳定标识区分，不能当作当前目录规则详情。
+function isRuleValidation(reference: BusinessAgentReference) {
+  return (
+    reference.kind === 'rule' &&
+    !!reference.rule_id &&
+    reference.id === `rule-validation:${reference.rule_id}`
+  )
 }
 async function explainReference(reference: BusinessAgentReference, sourceRunId?: string) {
   if (!canQuery.value) return
@@ -683,6 +707,19 @@ function statusLabel(status: string) {
   return labels[status] || '状态待核对'
 }
 const selectedReference = ref<BusinessAgentReference>()
+const ruleValidationPath = computed(() => {
+  const reference = selectedReference.value
+  if (
+    activeView.value !== 'manager' ||
+    !reference ||
+    !isRuleValidation(reference) ||
+    !reference.rule_id ||
+    !/^LX0609-\d{2}-\d{2}-\d{2}$/.test(reference.rule_id)
+  )
+    return undefined
+  const expected = `/workstation-v4/rules/validation/${reference.rule_id}`
+  return reference.entry_path === expected ? expected : undefined
+})
 const referenceOpen = ref(false)
 const referenceLoading = ref(false)
 const referenceError = ref('')

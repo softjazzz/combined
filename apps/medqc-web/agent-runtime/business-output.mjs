@@ -133,6 +133,7 @@ export function businessModelValue(name, _args, value) {
         'rule_set_version',
         'result_time',
         'version_note',
+        'source_gaps',
       ]),
       evidence_index: (value.evidence || []).map((item, index) => ({
         evidence_position: index + 1,
@@ -194,6 +195,22 @@ export function businessModelValue(name, _args, value) {
           'release_scope',
         ]),
       ),
+    }
+  if (name === 'read_rule_validation')
+    return {
+      id: value.references?.[0]?.id,
+      validation_record: select(value.validation_record, [
+        'rule',
+        'stage',
+        'coverage',
+        'runs',
+        'run_limit',
+        'has_more_runs',
+        'data_notes',
+        'scope_note',
+      ]),
+      read_note:
+        '仅为已保存的规则验收摘要，不是当前病例或科室质控统计。当前目录启用不表示通过验收，运行成功不表示结论或批准通过；执行标识不能证明与当前部署一致。未知或缺失保持未取得，不补零。请用中文解释保存阶段及结论，完整入口见来源详情，不生成网址。',
     }
   if (name === 'read_rule')
     return {

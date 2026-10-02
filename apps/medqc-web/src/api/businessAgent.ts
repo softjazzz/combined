@@ -19,6 +19,7 @@ export interface BusinessAgentReference {
   text?: string
   locator?: string
   rule_id?: string
+  entry_path?: string
   status?: string
   conclusion?: string
   suggestion?: string

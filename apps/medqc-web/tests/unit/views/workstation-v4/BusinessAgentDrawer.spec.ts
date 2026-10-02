@@ -6,6 +6,7 @@ import type {
   BusinessEvidenceDocument,
   BusinessAgentContext,
   BusinessAgentTurn,
+  BusinessAgentReference,
 } from '@/api/businessAgent'
 
 const mocks = vi.hoisted(() => ({
@@ -116,8 +117,9 @@ function mountDrawer(
         'a-drawer': { template: '<div><slot /></div>' },
         'a-modal': { template: '<div><slot /></div>' },
         'a-button': {
-          props: { disabled: Boolean },
-          template: '<button :disabled="disabled"><slot /></button>',
+          props: { disabled: Boolean, href: String },
+          template:
+            '<a v-if="href" :href="href"><slot /></a><button v-else :disabled="disabled"><slot /></button>',
         },
         'a-select': Select,
         'a-range-picker': Range,
@@ -137,6 +139,130 @@ describe('管理助手范围选择', () => {
     mocks.history = undefined
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
+  })
+  it.each([
+    {
+      name: '管理者固定规则验收路径',
+      view: 'manager',
+      kind: 'rule',
+      entry: '/workstation-v4/rules/validation/LX0609-01-01-01',
+      visible: true,
+    },
+    {
+      name: '外站路径',
+      view: 'manager',
+      kind: 'rule',
+      entry: 'https://example.com/workstation-v4/rules/validation/LX0609-01-01-01',
+      visible: false,
+    },
+    {
+      name: '另一规则路径',
+      view: 'manager',
+      kind: 'rule',
+      entry: '/workstation-v4/rules/validation/LX0609-01-01-02',
+      visible: false,
+    },
+    {
+      name: '路径附带查询参数',
+      view: 'manager',
+      kind: 'rule',
+      entry: '/workstation-v4/rules/validation/LX0609-01-01-01?next=https://example.com',
+      visible: false,
+    },
+    {
+      name: '医生视图',
+      view: 'doctor',
+      kind: 'rule',
+      entry: '/workstation-v4/rules/validation/LX0609-01-01-01',
+      visible: false,
+    },
+    {
+      name: '普通来源',
+      view: 'manager',
+      kind: 'saved_result',
+      entry: '/workstation-v4/rules/validation/LX0609-01-01-01',
+      visible: false,
+    },
+    {
+      name: '旧规则来源无入口字段',
+      view: 'manager',
+      kind: 'rule',
+      entry: undefined,
+      visible: false,
+    },
+    {
+      name: '当前目录规则来源附带入口字段',
+      view: 'manager',
+      kind: 'rule',
+      id: 'rule:LX0609-01-01-01',
+      entry: '/workstation-v4/rules/validation/LX0609-01-01-01',
+      visible: false,
+    },
+  ] satisfies {
+    name: string
+    view: 'manager' | 'doctor'
+    kind: BusinessAgentReference['kind']
+    id?: string
+    entry: string | undefined
+    visible: boolean
+  }[])('$name仅显示已核验的本地验收入口', async ({ view, kind, id, entry, visible }) => {
+    const referenceId = id || (kind === 'rule' ? 'rule-validation:LX0609-01-01-01' : 'saved:source')
+    const validation = referenceId === 'rule-validation:LX0609-01-01-01'
+    const reference: BusinessAgentReference = {
+      id: referenceId,
+      kind,
+      rule_id: 'LX0609-01-01-01',
+      title: '已保存来源',
+      text: '来源内容仍正常显示',
+      ...(entry ? { entry_path: entry } : {}),
+    }
+    mocks.history = [
+      {
+        run_id: 'rule-source',
+        question: '查询规则',
+        answer: '查看来源',
+        references: [reference],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 1,
+      },
+    ]
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 1,
+      manager_scopes: [{ institute_id: 'H', department: '内科' }],
+    })
+    mocks.reference.mockResolvedValue(reference)
+    const wrapper = mountDrawer({
+      view,
+      institute_id: 'H',
+      department: '内科',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find(
+        (button) =>
+          button.text() ===
+          (validation ? '查看验收记录' : kind === 'rule' ? '查看规则详情' : '查看依据与详情'),
+      )!
+      .trigger('click')
+    await flushPromises()
+    const link = wrapper.find('[data-testid="business-agent-rule-validation-link"]')
+    expect(link.exists()).toBe(visible)
+    if (validation) {
+      expect(wrapper.text()).toContain('已保存的规则验收摘要')
+      expect(wrapper.text()).not.toContain('当前规则目录口径；')
+    }
+    if (visible) {
+      expect(link.element.tagName).toBe('A')
+      expect(link.attributes('href')).toBe('/workstation-v4/rules/validation/LX0609-01-01-01')
+      expect(link.text()).toBe('打开规则验收记录')
+    }
+    expect(wrapper.text()).toContain('来源内容仍正常显示')
+    expect(wrapper.text()).not.toContain('验收通过')
+    wrapper.unmount()
   })
   it('反馈读取失败不可提交，重试回显既有反馈且不再提供提交按钮', async () => {
     mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
@@ -450,6 +576,53 @@ describe('管理助手范围选择', () => {
       '查看提醒与整改记录',
     )
     expect(wrapper.text()).toContain('异议反馈需本人填写理由并提交')
+    wrapper.unmount()
+  })
+  it('已读取的规则验收记录不冒充对应规则详情', async () => {
+    mocks.history = [
+      {
+        run_id: 'validation',
+        question: '查看验收',
+        answer: '验收摘要',
+        references: [
+          {
+            id: 'rule-validation:LX0609-01-01-01',
+            kind: 'rule',
+            rule_id: 'LX0609-01-01-01',
+            title: '规则验收记录',
+          },
+        ],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 1,
+      },
+      {
+        run_id: 'issue',
+        question: '查看问题',
+        answer: '保存问题',
+        references: [
+          { id: 'result-v', kind: 'saved_result', title: '保存问题', rule_id: 'LX0609-01-01-01' },
+        ],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 1,
+      },
+    ]
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const issue = wrapper.get('[data-run-id="issue"]')
+    expect(issue.findAll('button').some((button) => button.text() === '查看对应规则')).toBe(false)
+    expect(issue.findAll('button').some((button) => button.text() === '查询这条规则')).toBe(true)
+    expect(
+      wrapper
+        .get('[data-run-id="validation"]')
+        .findAll('button')
+        .some((button) => button.text() === '查看验收记录'),
+    ).toBe(true)
     wrapper.unmount()
   })
   it('规范候选明确提示不等于回答依据，仍可读取原文', async () => {

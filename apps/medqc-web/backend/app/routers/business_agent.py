@@ -163,6 +163,8 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return (await tools.issue(metadata, reference_id))["references"][0]
             if binding["kind"] == "rule":
                 return (await tools.execute("read_rule", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
+            if binding["kind"] == "rule_validation":
+                return (await tools.execute("read_rule_validation", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
             if binding["kind"] == "record":
                 data = await tools.saved_results(metadata, user, reference_id)
                 page = data.get("result_page")
