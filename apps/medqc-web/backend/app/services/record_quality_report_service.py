@@ -502,9 +502,9 @@ def _group_metrics(ctx: ReportContext, rows: list[CaseRow], record_total: int) -
             sum(len(row.manual_rule_codes) for row in rows) if manual_on and manual_ok else None
         ),
         "veto_defect_total": sum(len(row.veto_rule_ids) for row in rows) if scores_complete else None,
+        "veto_record_total": sum(bool(row.veto_rule_ids) for row in rows) if scores_complete else None,
         "records_with_defect": (
             sum(1 for row in rows if _defects(row, source))
-        "veto_record_total": sum(bool(row.veto_rule_ids) for row in rows) if scores_complete else None,
             if (not manual_on or manual_ok) else None
         ),
     }
@@ -728,6 +728,7 @@ _CSV_HEADERS = {
     "name": "名称", "record_total": "病历总数", "qc_ready_total": "已质控病历数",
     "average_score": "平均分", "top_grade_rate": "最高等级占比",
     "review_approved_total": "审核通过数", "veto_defect_total": "单否缺陷数",
+    "veto_record_total": "单否病历数",
     "records_with_defect": "有缺陷病历数",
     "reviewed_total": "已审核病历数", "top_grade_total": "最高等级病历数",
     "defect_total": "缺陷总数", "average_defect_total": "平均缺陷数（每份已质控病历）",
@@ -753,7 +754,6 @@ def export_csv(
     ctx: ReportContext, *, sheet: str = "departments",
     department: str | None = None, doctor: str | None = None,
     rule_id: str | None = None, document: str | None = None,
-    "veto_record_total": "单否病历数",
     grade: str | None = None, has_defect: bool | None = None,
     columns: Sequence[str] | None = None,
 ) -> bytes:
