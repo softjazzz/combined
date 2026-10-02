@@ -75,8 +75,8 @@ def cancel_task(*, task_id: str, actor_id: str, is_manager: bool = False) -> dic
                 raise TaskCancelNotFound("任务不存在")
 
             creator_id = task["creator_id"]
-            if not is_manager and (not creator_id or creator_id != actor_id):
-                raise TaskCancelForbidden("仅任务创建人或管理员可取消任务")
+            if not creator_id or creator_id != actor_id:
+                raise TaskCancelForbidden("仅任务创建人可取消任务")
             if task["status"] == "cancelled":
                 updated_at = task["updated_at"]
                 if updated_at is not None and updated_at.tzinfo is None:

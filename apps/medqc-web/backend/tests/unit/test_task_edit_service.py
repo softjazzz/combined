@@ -106,7 +106,7 @@ def test_record_type_mapping_is_preserved_in_draft_edit(task_db):
     assert updated["assign_method"] == "by_record_type"
 
 
-def test_draft_plan_requires_owner_or_manager_and_rejects_stale_version(task_db):
+def test_draft_plan_requires_owner_and_rejects_stale_version(task_db):
     seed(task_db)
     with pytest.raises(service.TaskEditForbidden):
         service.replace_draft_configuration(
@@ -114,7 +114,7 @@ def test_draft_plan_requires_owner_or_manager_and_rejects_stale_version(task_db)
             expected_version=1, configuration=configuration(),
         )
     service.replace_draft_configuration(
-        "task-1", actor_id="manager", is_manager=True,
+        "task-1", actor_id="owner", is_manager=True,
         expected_version=1, configuration=configuration(),
     )
     with pytest.raises(service.TaskEditConflict) as caught:
@@ -123,6 +123,25 @@ def test_draft_plan_requires_owner_or_manager_and_rejects_stale_version(task_db)
             expected_version=1, changes={"task_name": "过期写入"},
         )
     assert caught.value.code == "version_conflict"
+
+
+@pytest.mark.parametrize("operation", ["read", "configuration", "metadata"])
+def test_manager_cannot_edit_another_creators_task(task_db, operation):
+    seed(task_db)
+    with pytest.raises(service.TaskEditForbidden):
+        if operation == "read":
+            service.get_task_edit("task-1", actor_id="manager", is_manager=True)
+        elif operation == "configuration":
+            service.replace_draft_configuration(
+                "task-1", actor_id="manager", is_manager=True,
+                expected_version=1, configuration=configuration(),
+            )
+        else:
+            service.update_task_metadata(
+                "task-1", actor_id="manager", is_manager=True,
+                expected_version=1, changes={"task_name": "越权修改"},
+            )
+    assert service.get_task_edit("task-1", actor_id="owner")["configuration_version"] == 1
 
 
 @pytest.mark.parametrize("related", ["record", "run"])

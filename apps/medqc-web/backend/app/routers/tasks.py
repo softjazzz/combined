@@ -107,6 +107,7 @@ from ..services.task_cancel_service import (
 )
 from ..services.task_delete_service import (
     TaskDeleteConflict,
+    TaskDeleteForbidden,
     TaskDeleteNotFound,
     delete_empty_draft_task,
 )
@@ -1834,9 +1835,12 @@ async def delete_task(
     task_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """仅管理员和质控主管可删除无关联的草稿任务。"""
+    """有删除权限的创建人可删除无关联的草稿任务。"""
+    actor_id = _get_task_scope_user_id(current_user)
     try:
-        await run_in_threadpool(delete_empty_draft_task, task_id=task_id)
+        await run_in_threadpool(delete_empty_draft_task, task_id=task_id, actor_id=actor_id)
+    except TaskDeleteForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except TaskDeleteNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TaskDeleteConflict as exc:

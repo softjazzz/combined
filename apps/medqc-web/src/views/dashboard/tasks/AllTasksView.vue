@@ -461,6 +461,7 @@
                 分配
               </a-button>
               <a-button
+                v-if="isTaskCreator(record as DashboardTaskItem)"
                 data-testid="task-row-edit"
                 type="link"
                 size="small"
@@ -471,6 +472,8 @@
                 编辑
               </a-button>
               <a-button
+                v-if="isTaskCreator(record as DashboardTaskItem) && record.status === 'draft'"
+                data-testid="task-row-delete"
                 type="link"
                 size="small"
                 danger
@@ -1193,7 +1196,11 @@ async function submitBatchAssignment() {
   }
 }
 
+const isTaskCreator = (record: DashboardTaskItem) =>
+  !!authStore.user?.id && record.creator_id === authStore.user.id
+
 const handleEdit = (record: DashboardTaskItem) => {
+  if (!isTaskCreator(record)) return
   if (record.status === 'completed' || record.status === 'cancelled') return
   editTaskId.value = record.id
   editDrawerVisible.value = true
@@ -1214,6 +1221,7 @@ const handleScheduleTaskDetail = (taskId: string) => {
 }
 
 const handleDelete = async (record: DashboardTaskItem) => {
+  if (!isTaskCreator(record) || record.status !== 'draft') return
   try {
     const res = await deleteTask(record.id)
     if (res.success) {

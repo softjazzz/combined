@@ -158,8 +158,8 @@ def _authorize(task: dict[str, Any], actor_id: str, is_manager: bool) -> None:
     creator_id = task.get("creator_id")
     if not isinstance(creator_id, str) or not creator_id.strip():
         raise TaskEditForbidden("任务缺少可核实的创建人，不能编辑")
-    if not is_manager and creator_id != actor_id:
-        raise TaskEditForbidden("仅任务创建人或管理员可编辑任务")
+    if creator_id != actor_id:
+        raise TaskEditForbidden("仅任务创建人可编辑任务")
 
 
 def _editable_fields(task: dict[str, Any], record_count: int, run_count: int) -> list[str]:

@@ -20,7 +20,7 @@ from app.services import task_delete_service as service
 def db(monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     metadata = MetaData()
-    tasks = Table("qc_tasks", metadata, Column("id", String, primary_key=True), Column("status", String))
+    tasks = Table("qc_tasks", metadata, Column("id", String, primary_key=True), Column("status", String), Column("creator_id", String))
     records = Table("qc_task_records", metadata, Column("task_id", String, nullable=False))
     runs = Table("task_qc_runs", metadata, Column("task_id", String, nullable=False))
     version = Table("alembic_version", metadata, Column("version_num", String, nullable=False))
@@ -28,9 +28,9 @@ def db(monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(service, "SessionLocal", factory)
 
-    def seed(*, status="draft", with_record=False, with_run=False):
+    def seed(*, status="draft", with_record=False, with_run=False, creator="owner"):
         with factory.begin() as session:
-            session.execute(tasks.insert().values(id="task-1", status=status))
+            session.execute(tasks.insert().values(id="task-1", status=status, creator_id=creator))
             if with_record:
                 session.execute(records.insert().values(task_id="task-1"))
             if with_run:
@@ -47,13 +47,13 @@ def db(monkeypatch):
 
 def test_missing_task_is_not_found_without_writes(db):
     with pytest.raises(service.TaskDeleteNotFound):
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == []
 
 
 def test_empty_draft_is_deleted(db):
     db.seed()
-    service.delete_empty_draft_task(task_id="task-1")
+    service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == []
 
 
@@ -61,7 +61,7 @@ def test_empty_draft_is_deleted(db):
 def test_non_draft_is_not_deleted(db, status):
     db.seed(status=status)
     with pytest.raises(service.TaskDeleteConflict, match="草稿"):
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == [status]
 
 
@@ -69,7 +69,7 @@ def test_non_draft_is_not_deleted(db, status):
 def test_associations_prevent_delete_without_writes(db, with_record, with_run):
     db.seed(with_record=with_record, with_run=with_run)
     with pytest.raises(service.TaskDeleteConflict):
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == ["draft"]
 
 
@@ -83,7 +83,7 @@ def test_conditional_delete_rejects_state_race(db, monkeypatch):
 
     monkeypatch.setattr(service, "_lock_association_tables", change_status)
     with pytest.raises(service.TaskDeleteConflict, match="变化"):
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == ["draft"]
 
 
@@ -98,7 +98,7 @@ def test_inserted_record_between_lock_and_check_prevents_delete(db, monkeypatch)
 
     monkeypatch.setattr(service, "_lock_association_tables", insert_record)
     with pytest.raises(service.TaskDeleteConflict, match="病例"):
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == ["draft"]
 
 
@@ -113,11 +113,11 @@ def test_missing_runs_table_requires_pre_49_revision(db, revision, allowed):
         session.execute(db.version.insert().values(version_num=revision))
     db.runs.drop(db.engine)
     if allowed:
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
         assert db.state() == []
     else:
         with pytest.raises(RuntimeError, match="历史表缺失"):
-            service.delete_empty_draft_task(task_id="task-1")
+            service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
         assert db.state() == ["draft"]
 
 
@@ -129,7 +129,7 @@ def test_association_inspection_failure_does_not_delete(db, monkeypatch):
 
     monkeypatch.setattr(service, "inspect", fail)
     with pytest.raises(RuntimeError, match="private database detail"):
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     assert db.state() == ["draft"]
 
 
@@ -142,7 +142,7 @@ def test_postgresql_lock_order_before_reads_is_explicit(db):
 
     event.listen(db.factory.class_, "do_orm_execute", capture)
     try:
-        service.delete_empty_draft_task(task_id="task-1")
+        service.delete_empty_draft_task(task_id="task-1", actor_id="owner")
     finally:
         event.remove(db.factory.class_, "do_orm_execute", capture)
     assert "FOR UPDATE" in statements[0]
@@ -175,6 +175,7 @@ def _request():
 
 
 @pytest.mark.parametrize("error, status", [
+    (service.TaskDeleteForbidden("forbidden"), 403),
     (service.TaskDeleteNotFound("missing"), 404),
     (service.TaskDeleteConflict("conflict"), 409),
     (RuntimeError("private database detail"), 503),
@@ -223,6 +224,14 @@ def test_route_audits_success_for_authorized_roles(monkeypatch, role):
     monkeypatch.setattr(tasks, "audit_event", lambda *_args, **kwargs: audit.append(kwargs))
     result = asyncio.run(tasks.delete_task(request=_request(), task_id="task-1",
                                            current_user={"id": "manager", "roles": [role]}))
-    assert calls == [(service.delete_empty_draft_task, {"task_id": "task-1"})]
+    assert calls == [(service.delete_empty_draft_task, {"task_id": "task-1", "actor_id": "manager"})]
     assert result["data"] == {"task_id": "task-1"}
     assert audit[0]["action"] == "tasks.lifecycle.delete"
+
+
+@pytest.mark.parametrize("creator", ["owner", None, ""])
+def test_foreign_or_unowned_draft_cannot_be_deleted(db, creator):
+    db.seed(creator=creator)
+    with pytest.raises(service.TaskDeleteForbidden):
+        service.delete_empty_draft_task(task_id="task-1", actor_id="manager")
+    assert db.state() == ["draft"]

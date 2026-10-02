@@ -280,6 +280,18 @@ describe('AllTasksView 场景口径', () => {
     vi.restoreAllMocks()
   })
 
+  it('他人创建的任务可查看但不展示编辑和删除入口', async () => {
+    const response = listWith('他人任务')
+    response.data.items[0].creator_id = 'other'
+    mocks.getTaskList.mockResolvedValue(response)
+    const wrapper = await mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="task-row-edit"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="task-row-delete"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="task-row-analysis"]').exists()).toBe(true)
+    expect(mocks.deleteTask).not.toHaveBeenCalled()
+  })
+
   it('编辑所选任务，只有当前抽屉保存才刷新列表', async () => {
     mocks.getTaskList.mockResolvedValue(listWith('待编辑任务'))
     const wrapper = await mountView()

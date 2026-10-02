@@ -101,9 +101,12 @@ def test_foreign_or_unowned_task_is_denied_without_mutation(db, creator):
     assert db.status() == "draft"
 
 
-def test_manager_can_cancel_historical_unowned_task(db):
-    db.seed(creator=None)
-    assert cancel(actor="manager", manager=True)["status"] == "cancelled"
+@pytest.mark.parametrize("creator", [None, "owner"])
+def test_manager_cannot_cancel_foreign_or_unowned_task(db, creator):
+    db.seed(creator=creator)
+    with pytest.raises(service.TaskCancelForbidden):
+        cancel(actor="manager", manager=True)
+    assert db.status() == "draft"
 
 
 @pytest.mark.parametrize("actor", ["", "   ", "x" * 65])

@@ -17,7 +17,11 @@ class TaskDeleteConflict(ValueError):
     pass
 
 
-_TASKS = table("qc_tasks", column("id", String), column("status", String))
+class TaskDeleteForbidden(PermissionError):
+    pass
+
+
+_TASKS = table("qc_tasks", column("id", String), column("status", String), column("creator_id", String))
 _RECORDS = table("qc_task_records", column("task_id", String))
 _RUNS = table("task_qc_runs", column("task_id", String))
 _ALEMBIC_VERSION = table("alembic_version", column("version_num", String))
@@ -48,17 +52,21 @@ def _lock_association_tables(session: Any) -> bool:
     return has_runs
 
 
-def delete_empty_draft_task(*, task_id: str) -> None:
+def delete_empty_draft_task(*, task_id: str, actor_id: str) -> None:
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        raise TaskDeleteForbidden("当前用户缺少有效身份")
     if SessionLocal is None:
         raise RuntimeError("数据库会话不可用")
 
     with SessionLocal() as session:
         with session.begin():
             task = session.execute(
-                select(_TASKS.c.status).where(_TASKS.c.id == task_id).with_for_update()
+                select(_TASKS.c.status, _TASKS.c.creator_id).where(_TASKS.c.id == task_id).with_for_update()
             ).first()
             if task is None:
                 raise TaskDeleteNotFound("任务不存在")
+            if not task.creator_id or task.creator_id != actor_id:
+                raise TaskDeleteForbidden("仅任务创建人可删除任务")
             if task.status != "draft":
                 raise TaskDeleteConflict("仅可删除草稿任务")
 
