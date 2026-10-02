@@ -254,6 +254,7 @@ describe('QcRecordResultListView', () => {
     vi.clearAllMocks()
     mocks.authStore = null
     window.sessionStorage.clear()
+    window.localStorage.clear()
     routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
     mocks.routerReplace.mockResolvedValue(undefined)
@@ -772,7 +773,7 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const rows = wrapper.findAll('tbody tr[data-record-key]')
-    await rows[0]!.find('button').trigger('click')
+    await rows[1]!.find('button').trigger('click')
 
     const preview = wrapper.getComponent(QcRecordReviewPreview)
     expect(preview.props('row')).toMatchObject({
@@ -859,16 +860,14 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).toContain('无法确认当前病历身份')
   })
 
-  it('不展示任务、批量、生成、编码、结算或整改入口，已保存结果在当前页打开分组抽屉', async () => {
+  it('已保存结果在当前页打开分组抽屉，不混入生成编码结算入口', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
     const text = wrapper.text()
 
-    ;['开始质控', '重新质控', '批量', '生成首页', '编码质控', '结算质控', '整改'].forEach(
-      (forbidden) => {
-        expect(text).not.toContain(forbidden)
-      },
-    )
+    ;['开始质控', '重新质控', '生成首页', '编码质控', '结算质控', '整改'].forEach((forbidden) => {
+      expect(text).not.toContain(forbidden)
+    })
     await wrapper
       .findComponent({ name: 'QcRecordResultTable' })
       .vm.$emit('open-result', '["H","P","V-priority"]')
@@ -918,6 +917,43 @@ describe('QcRecordResultListView', () => {
     mocks.authStore.user = { id: 'other-user', email: 'other@example.com' }
     await flushPromises()
     expect(wrapper.getComponent(QcRunSelectedControl).props('selectedCount')).toBe(0)
+  })
+
+  it('双列表恢复各自列查询，切账号后忽略迟到的旧列查询响应', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    await wrapper.get('[data-testid="column-filter-score"]').setValue('0')
+    await wrapper.get('.column-query form').trigger('submit')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('column_filters', '{"score":"0"}')
+    await wrapper.get('[data-testid="qc-result-view-defects"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('column_filters')
+    await wrapper.get('[data-testid="column-filter-rule"]').setValue('合成规则')
+    await wrapper.get('.column-query form').trigger('submit')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('column_filters', '{"rule":"合成规则"}')
+    await wrapper.get('[data-testid="qc-result-view-records"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).toHaveProperty('column_filters', '{"score":"0"}')
+    let resolveOld!: (value: ReturnType<typeof response>) => void
+    mocks.getRaw.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve
+        }),
+    )
+    await wrapper.get('[data-testid="column-filter-score"]').setValue('99')
+    await wrapper.get('.column-query form').trigger('submit')
+    if (!mocks.authStore) throw new Error('auth store missing')
+    mocks.authStore.user = { id: 'new-user', email: 'new@example.com' }
+    await flushPromises()
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('column_filters')
+    const old = response()
+    old.data.records[0]!.patient_name = '旧账号迟到病例'
+    resolveOld(old)
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('旧账号迟到病例')
   })
 
   it('在同一页面切换结果分析，并将下钻病历交给既有结果抽屉', async () => {
@@ -1102,7 +1138,10 @@ describe('QcRecordResultListView', () => {
     drawer.vm.$emit('qc-completed', { instituteId: 'H', patientId: 'P', visitId: 'V-priority' })
     await flushPromises()
     expect(mocks.getRaw.mock.calls.length).toBe(requestsBefore + 2)
-    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', expect.objectContaining({ page: 2 }))
+    expect(mocks.getRaw).toHaveBeenLastCalledWith(
+      '/api/medical-records/workstation',
+      expect.objectContaining({ page: 2 }),
+    )
   })
 
   describe('抽屉上一个/下一个导航', () => {
@@ -1126,8 +1165,8 @@ describe('QcRecordResultListView', () => {
       const wrapper = mountView('discharged')
       await flushPromises()
 
-      // 排序后：V-data-gap、V-priority、V-not-run、V-technical、V-uncertain
-      await openFull(wrapper, 'V-data-gap')
+      // 保持服务端顺序：V-priority、V-data-gap、V-not-run、V-technical、V-uncertain。
+      await openFull(wrapper, 'V-priority')
       const drawer = wrapper.getComponent(ResultDrawerStub)
       expect(drawer.props()).toMatchObject({
         hasPrev: false,
@@ -1138,7 +1177,7 @@ describe('QcRecordResultListView', () => {
 
       drawer.vm.$emit('navigate-next')
       await flushPromises()
-      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-priority' })
+      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-data-gap' })
       expect(drawer.props()).toMatchObject({
         hasPrev: true,
         hasNext: true,
@@ -1164,7 +1203,7 @@ describe('QcRecordResultListView', () => {
 
       drawer.vm.$emit('navigate-prev')
       await flushPromises()
-      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-priority' })
+      expect(drawer.props('focus')).toMatchObject({ visitId: 'V-data-gap' })
     })
 
     it('从分析面板下钻或关闭抽屉后不提供导航', async () => {
@@ -1189,7 +1228,7 @@ describe('QcRecordResultListView', () => {
         dischargeTime: '2026-08-12 10:00',
       })
 
-      drawer.vm.$emit('navigate-prev')
+      drawer.vm.$emit('navigate-next')
       await flushPromises()
       const focus = drawer.props('focus') as Record<string, unknown>
       expect(focus.visitId).toBe('V-data-gap')

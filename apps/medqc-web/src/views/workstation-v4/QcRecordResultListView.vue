@@ -274,7 +274,8 @@
         <div class="review-workbench-list">
           <div class="qc-record-result-list-view__list-heading">
             <h2>病历结果</h2>
-            <span>共 {{ serverTotal }} 份 · 本页 {{ rows.length }} 份</span>
+            <span v-if="!loadError">共 {{ serverTotal }} 份 · 本页 {{ rows.length }} 份</span>
+            <span v-else role="alert">{{ emptyMessage }}</span>
             <span
               v-if="selectedCount > 0"
               class="qc-record-result-list-view__selected-count"
@@ -298,6 +299,12 @@
               :care-phase="carePhase"
               :available-columns="availableColumns"
               :default-columns="defaultColumns"
+            />
+            <QcColumnQuerySettings
+              :user-id="currentUserId"
+              :care-phase="carePhase"
+              result-view="records"
+              @change="applyColumnQuery"
             />
           </div>
           <QcRecordResultTable
@@ -341,16 +348,27 @@
         <div class="qc-record-result-list-view__list-heading">
           <h2>缺陷结果</h2>
           <span v-if="!loadError">共 {{ serverTotal }} 条 · 本页 {{ defects.length }} 条</span>
-          <span v-else role="alert">缺陷数据加载失败，请重试</span>
+          <span v-else role="alert">缺陷数据加载失败，请重试：{{ loadErrorMessage }}</span>
+          <QcColumnQuerySettings
+            :user-id="currentUserId"
+            :care-phase="carePhase"
+            result-view="defects"
+            @change="applyColumnQuery"
+          />
         </div>
         <div
           class="qc-record-result-list-view__defect-table"
           role="table"
           aria-label="缺陷结果列表"
+          :style="{ '--defect-columns': defectGridColumns }"
         >
           <div class="qc-record-result-list-view__defect-row is-header" role="row">
-            <span>患者与病历</span><span>来源</span><span>质控点</span><span>文书/位置</span
-            ><span>状态</span><span>操作</span>
+            <span v-if="showDefectColumn('patient')">患者与病历</span
+            ><span v-if="showDefectColumn('department')">科室</span
+            ><span v-if="showDefectColumn('source')">来源</span
+            ><span v-if="showDefectColumn('rule')">质控点</span
+            ><span v-if="showDefectColumn('document')">文书/位置</span
+            ><span v-if="showDefectColumn('status')">状态</span><span>操作</span>
           </div>
           <div
             v-for="item in defects"
@@ -358,17 +376,20 @@
             class="qc-record-result-list-view__defect-row"
             role="row"
           >
-            <span
+            <span v-if="showDefectColumn('patient')"
               ><strong>{{ item.patient_name || '姓名未知' }}</strong
-              ><small>{{ item.visit_id }} · {{ item.department || '科室未知' }}</small></span
+              ><small>{{ item.visit_id }}</small></span
             >
-            <span>{{ item.source === 'auto' ? '自动缺陷' : '人工缺陷' }}</span>
-            <span
+            <span v-if="showDefectColumn('department')">{{ item.department || '科室未知' }}</span>
+            <span v-if="showDefectColumn('source')">{{
+              item.source === 'auto' ? '自动缺陷' : '人工缺陷'
+            }}</span>
+            <span v-if="showDefectColumn('rule')"
               ><strong>{{ item.rule_id || '未编码' }}</strong
               ><small>{{ item.rule_name || item.description || '未返回名称' }}</small></span
             >
-            <span>{{ item.document || '位置未知' }}</span>
-            <span>{{ defectStatusLabel(item) }}</span>
+            <span v-if="showDefectColumn('document')">{{ item.document || '位置未知' }}</span>
+            <span v-if="showDefectColumn('status')">{{ defectStatusLabel(item) }}</span>
             <span>
               <button type="button" @click="openDefectResult(item)">查看病例</button>
               <button type="button" @click="openDefectResult(item, true)">整改 / 催办</button>
@@ -474,6 +495,7 @@ import QcRecordResultTable, {
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
 import QcRecordColumnSettings from './components/qc/QcRecordColumnSettings.vue'
+import QcColumnQuerySettings, { type ColumnQuery } from './components/qc/QcColumnQuerySettings.vue'
 import {
   QC_RECORD_COLUMN_OPTIONS,
   defaultQcRecordColumns,
@@ -541,6 +563,19 @@ const actorKey = computed(() => {
 const availableColumns = QC_RECORD_COLUMN_OPTIONS.map((option) => option.key)
 const defaultColumns = defaultQcRecordColumns({ compactReview: true, showScore: true })
 const visibleColumns = ref<QcRecordOptionalColumn[]>([...defaultColumns])
+const hiddenDefectColumns = ref<string[]>([])
+const defectGridColumns = computed(() =>
+  ['patient', 'department', 'source', 'rule', 'document', 'status']
+    .filter(showDefectColumn)
+    .map((key) =>
+      key === 'patient' || key === 'rule' ? 'minmax(180px, 1.5fr)' : 'minmax(100px, 1fr)',
+    )
+    .concat('140px')
+    .join(' '),
+)
+function showDefectColumn(key: string) {
+  return !hiddenDefectColumns.value.includes(key)
+}
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '已出院病历质控结果'))
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
@@ -558,6 +593,11 @@ const {
   fetchData,
   handlePageChange,
   loadError,
+  loadErrorMessage,
+  invalidateData,
+  columnFilters,
+  columnSort,
+  columnDirection,
   loading,
   qcSummary,
   refreshData,
@@ -609,6 +649,19 @@ const filterSync = useRecordFilterUrlSync({
   onBeforeLoad: clearSelection,
 })
 const { activeFilters, urlHadExplicitFilters, filtersInitialized, commitFilters } = filterSync
+function applyColumnQuery(query: ColumnQuery) {
+  const queryChanged =
+    JSON.stringify(columnFilters.value) !== JSON.stringify(query.filters) ||
+    columnSort.value !== query.sort ||
+    columnDirection.value !== query.direction
+  columnFilters.value = query.filters
+  columnSort.value = query.sort
+  columnDirection.value = query.direction
+  if (activeView.value === 'defects') hiddenDefectColumns.value = query.hidden
+  clearSelection()
+  currentPage.value = 1
+  if (filtersInitialized.value && queryChanged && currentUserId.value) void fetchData(1)
+}
 const hasUserDefaultTemplate = ref(false)
 const hasExplicitFilterSelection = ref(false)
 let defectViewVisited = false
@@ -722,7 +775,7 @@ const metricItems = computed<QcRecordMetricItem[]>(() => [
 
 const rows = computed<QcRecordResultRow[]>(() => {
   const resultRows = allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow)
-  return resultRows.sort(compareLatestQcTimeDesc)
+  return resultRows
 })
 const selectedCount = computed(() => selectedRecordKeys.value.length)
 
@@ -788,7 +841,7 @@ function handleSelectPreview(recordKey: string) {
 
 const emptyMessage = computed(() => {
   if (loading.value) return '正在加载质控结果…'
-  if (loadError.value) return '加载失败，请重试'
+  if (loadError.value) return `加载失败，请重试：${loadErrorMessage.value}`
   if (!isEmptyRecordFilter(activeFilters.value)) return '当前筛选条件下暂无病历，可调整筛选或重置'
   return '暂无符合当前范围的病历'
 })
@@ -800,17 +853,6 @@ function statusCount(statusCounts: Record<string, number>, status: string): numb
 
 function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
-}
-
-function qcTimeSortValue(value?: string): number {
-  const text = String(value || '').trim()
-  if (!text || text === '—') return 0
-  const timestamp = Date.parse(`${text.replace(' ', 'T')}+08:00`)
-  return Number.isFinite(timestamp) ? timestamp : 0
-}
-
-function compareLatestQcTimeDesc(left: QcRecordResultRow, right: QcRecordResultRow): number {
-  return qcTimeSortValue(right.latestQcTime) - qcTimeSortValue(left.latestQcTime)
 }
 
 function toResultRow(record: PatientRecord): QcRecordResultRow {
@@ -1103,10 +1145,32 @@ watch(
   },
 )
 
-watch(actorKey, clearSelection)
-watch(resultView, (view) => {
-  if (activeView.value !== 'analysis') activeView.value = view
-})
+let loadedActorId = currentUserId.value
+watch(
+  actorKey,
+  () => {
+    clearSelection()
+    invalidateData()
+    if (loadedActorId !== currentUserId.value) {
+      columnFilters.value = {}
+      columnSort.value = ''
+      columnDirection.value = 'asc'
+      loadedActorId = currentUserId.value
+    }
+    if (filtersInitialized.value && currentUserId.value) void fetchData(1)
+  },
+  { flush: 'sync' },
+)
+watch(
+  resultView,
+  (view) => {
+    columnFilters.value = {}
+    columnSort.value = ''
+    columnDirection.value = 'asc'
+    if (activeView.value !== 'analysis') activeView.value = view
+  },
+  { flush: 'sync' },
+)
 
 onMounted(async () => {
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
@@ -1451,7 +1515,7 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__defect-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) 90px minmax(220px, 1.5fr) minmax(130px, 1fr) 90px 88px;
+  grid-template-columns: var(--defect-columns);
   min-width: 900px;
   align-items: center;
   gap: 12px;

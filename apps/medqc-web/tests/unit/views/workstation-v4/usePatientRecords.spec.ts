@@ -50,6 +50,35 @@ async function flushPromises() {
 }
 
 describe('usePatientRecords workstation filters', () => {
+  it('列查询交给服务端分页前处理，清除排序恢复默认请求', async () => {
+    const records = usePatientRecords('inpatient')
+    records.columnFilters.value = { patient: '患者甲', score: '0' }
+    records.columnSort.value = 'score'
+    records.columnDirection.value = 'desc'
+    await records.fetchData(2)
+    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
+      page: 2,
+      column_filters: '{"patient":"患者甲","score":"0"}',
+      column_sort: 'score',
+      column_direction: 'desc',
+    })
+    records.columnSort.value = ''
+    records.columnFilters.value = {}
+    await records.fetchData(1)
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('column_sort')
+    expect(mocks.getRaw.mock.lastCall?.[1]).not.toHaveProperty('column_filters')
+  })
+
+  it('服务端拒绝超量列查询时保留错误，不能展示为成功的空列表', async () => {
+    mocks.getRaw.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 422, data: { detail: '列查询超过5000，请缩小范围' } },
+    })
+    const records = usePatientRecords('inpatient')
+    await records.fetchData()
+    expect(records.loadError.value).toBe(true)
+    expect(records.loadErrorMessage.value).toContain('5000')
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     window.history.replaceState({}, '', '/')

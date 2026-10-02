@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError } from '@/utils/api-envelope'
 import type {
   DeptInfo,
   DoctorInfo,
@@ -121,6 +122,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const totalCount = computed(() => serverTotal.value)
   const loading = ref(false)
   const loadError = ref(false)
+  const loadErrorMessage = ref('')
+  const columnFilters = ref<Record<string, string>>({})
+  const columnSort = ref('')
+  const columnDirection = ref<'asc' | 'desc'>('asc')
   const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
   /** 响应顶层 score_standards：本页涉及场景的默认评分标准概况。 */
   const scoreStandards = ref<ScoreStandardOverviewMap>({})
@@ -147,6 +152,15 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const defectWorkflowFilter = ref<RecordDefectWorkflow | ''>('')
   const hasDefectFilter = ref<boolean | null>(null)
   let activeRequestSequence = 0
+  function invalidateData() {
+    ++activeRequestSequence
+    allRecords.value = []
+    defects.value = []
+    serverTotal.value = 0
+    loading.value = false
+    loadError.value = false
+    loadErrorMessage.value = ''
+  }
 
   const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
     { value: 'all', label: '全部病历' },
@@ -163,6 +177,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     const requestSequence = ++activeRequestSequence
     loading.value = true
     loadError.value = false
+    loadErrorMessage.value = ''
     try {
       const [startDate, endDate] = dateRange.value || []
       const requestedPageSize =
@@ -216,6 +231,12 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         params.defect_source = defectSourceFilter.value
       }
       if (hasDefectFilter.value !== null) params.has_defect = String(hasDefectFilter.value)
+      if (Object.keys(columnFilters.value).length)
+        params.column_filters = JSON.stringify(columnFilters.value)
+      if (columnSort.value) {
+        params.column_sort = columnSort.value
+        params.column_direction = columnDirection.value
+      }
       // 下钻上下文只有 analyticsDrilldown 一条资料链，参数名与后端查询项保持一致。
       const analyticsQuery = new URLSearchParams(window.location.search)
       for (const key of ANALYTICS_DRILLDOWN_QUERY_KEYS) {
@@ -316,6 +337,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
+      loadErrorMessage.value = extractApiErrorMessageFromError(error, '加载失败，请重试')
       allRecords.value = []
       defects.value = []
       serverTotal.value = 0
@@ -430,6 +452,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     scoreMinFilter,
     scoreMaxFilter,
     resultView,
+    columnFilters,
+    columnSort,
+    columnDirection,
+    loadErrorMessage,
+    invalidateData,
     defectSourceFilter,
     defectWorkflowFilter,
     hasDefectFilter,
