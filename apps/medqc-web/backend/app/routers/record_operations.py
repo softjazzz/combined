@@ -50,6 +50,10 @@ class CaseOperationItem(BaseModel):
         "rectification_rejected",
         "rectification_urged",
         "rectification_urge_withdrawn",
+        "case_urge",
+        "case_opinion",
+        "case_withdraw",
+        "case_notification_read",
     ]
     occurred_at: datetime
     actor_id: Optional[str]

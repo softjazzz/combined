@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
@@ -11,6 +13,8 @@ from sqlalchemy.exc import OperationalError
 from app.routers import record_operations as routes
 from tests.unit.test_case_operation_timeline_service import add_rectification, build_env
 from app.database.models.qc import SysUser
+from app.services.case_communication_service import CaseCommunicationService
+from app.services.case_operation_timeline_service import list_case_operations
 
 PATH = "/api/v1/record-operations/case"
 CASE = {"institute_id": "hospital-A", "patient_id": "P1", "visit_id": "V1"}
@@ -65,6 +69,45 @@ def test_rectification_events_http_contract(monkeypatch):
         assert urge["summary"]["new_status"] == "pending"
         assert urge["summary"]["root_job_id"] == "old-job"
         assert urge["summary"]["envelope_id"] == "old-envelope"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("action,expected_type", [
+    ("urge", "case_urge"), ("opinion", "case_opinion"),
+    ("withdraw", "case_withdraw"), ("read", "case_notification_read"),
+])
+def test_owner_communication_events_survive_timeline_response_model(monkeypatch, action, expected_type):
+    engine, factory, _ = build_env(monkeypatch)
+    try:
+        with factory.begin() as session:
+            session.add(SysUser(id="synthetic-doctor", username="synthetic-doctor",
+                display_name="合成医生", role="doctor", roles_json='["doctor"]',
+                is_active=True, institute_id=CASE["institute_id"], department="合成科室"))
+        source = {**CASE, "scene": "running", "root_job_id": "synthetic-job",
+            "envelope_id": "synthetic-envelope", "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "synthetic-v1"}
+        owner = CaseCommunicationService(factory, lambda *_args, **_kwargs: source,
+            lambda *_args: "合成科室")
+        request = {**source, "recipient_id": "synthetic-doctor", "request_id": str(uuid4()),
+            "action": "opinion" if action == "opinion" else "urge",
+            "content": "合成病例沟通验收正文", "related_event_id": None}
+        notice = owner.create("mgr-1", request)
+        if action == "withdraw":
+            owner.create("mgr-1", {**request, "request_id": str(uuid4()),
+                "action": "withdraw", "related_event_id": notice["id"]})
+        elif action == "read":
+            owner.read("synthetic-doctor", notice["id"])
+        events = list_case_operations(actor_id="mgr-1", **CASE)["items"]
+        original = next(item for item in events if item["type"] == expected_type)
+        response = client().get(PATH, params=CASE)
+        assert response.status_code == 200
+        items = response.json()["data"]["items"]
+        actual = next(item for item in items if item["id"] == original["id"])
+        assert actual == routes.CaseOperationItem.model_validate(original).model_dump(mode="json")
+        assert actual["summary"]["root_job_id"] == source["root_job_id"]
+        assert actual["summary"]["envelope_id"] == source["envelope_id"]
+        assert actual["summary"]["scene"] == source["scene"]
     finally:
         engine.dispose()
 
