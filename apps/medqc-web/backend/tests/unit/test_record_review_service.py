@@ -316,8 +316,7 @@ def test_task_list_summary_scope_and_real_approved_count(env, summaries):
     assert result["qc_assignees"] == [{"id": "qc-1", "name": None}, {"id": "qc-2", "name": None}]
     assert result["qc_run_statuses"] == ["completed", "completed", "completed"]
     assert read(actor="other")["task-1"] == list_summary.unknown_summary()
-    assert read(actor="qc-1", tab="received")["task-1"]["assigned_to_me"] == 3
-    assert read(actor="qc-1", tab="received")["task-1"]["qc_run_statuses"] == ["completed"]
+    assert read(actor="qc-1", tab="received")["task-1"] == list_summary.unknown_summary()
 
 
 @pytest.mark.parametrize("change", [{"created_by": "other"}, {"filters_json": "{}"}, {"status": "invalid"}])

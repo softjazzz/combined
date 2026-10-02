@@ -227,11 +227,19 @@ describe('MyTasksView 我的任务口径', () => {
   })
 
   it('缺失审核与运行回执显示未知，未完成任务不伪造完成时间', async () => {
+    routeState.query = { tab: 'created' }
     mocks.getTaskList.mockResolvedValue(listWith('未知任务', 'in_progress'))
     const wrapper = await mountView()
     expect(wrapper.get('[data-testid="task-approvedRecords"]').text()).toBe('未知')
     expect(wrapper.get('[data-testid="task-qcStatus"]').text()).toBe('未知')
     expect(wrapper.get('[data-testid="task-actualCompletedAt"]').text()).toBe('未完成')
+  })
+
+  it('我收到保持原有已完成列，不展示创建列表的新统计字段', async () => {
+    const wrapper = await mountView()
+    const columns = wrapper.getComponent(ProStandardTableStub).props('columns') as Array<{ title: string }>
+    expect(columns.map((column) => column.title)).toContain('已完成')
+    expect(columns.map((column) => column.title)).not.toContain('审核通过病历数')
   })
 
   it('草稿不显示开始入口，快捷开始也不会提交草稿', async () => {

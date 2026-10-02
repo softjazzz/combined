@@ -31,9 +31,9 @@ def unknown_summary() -> dict[str, Any]:
 def get_task_list_summaries(
     *, task_ids: list[str], actor_id: str, tab: str, is_manager: bool,
 ) -> dict[str, dict[str, Any]]:
-    """仅补已授权分页任务，独立复核 created/received/all 范围，失败逐字段未知。"""
+    """仅补创建/管理分页任务，独立复核权限范围；受领列表保持旧合同。"""
     summaries = {task_id: unknown_summary() for task_id in task_ids}
-    if not task_ids or not actor_id or SessionLocal is None or tab not in {"created", "received", "all"}:
+    if not task_ids or not actor_id or SessionLocal is None or tab not in {"created", "all"}:
         return summaries
     if tab == "all" and not is_manager:
         return summaries
@@ -42,10 +42,6 @@ def get_task_list_summaries(
             query = select(QCTask.__table__).where(QCTask.id.in_(task_ids))
             if tab == "created":
                 query = query.where(QCTask.creator_id == actor_id)
-            elif tab == "received":
-                query = query.where(QCTask.id.in_(select(QCTaskRecord.task_id).where(
-                    QCTaskRecord.assignee_id == actor_id,
-                )))
             tasks = session.execute(query).mappings().all()
             ids = [task["id"] for task in tasks]
             if not ids:
@@ -91,8 +87,6 @@ def get_task_list_summaries(
             for run in runs:
                 latest.setdefault((run["task_id"], run["run_scope"], run["triggered_by"]), run)
             selected = list(latest.values())
-            if tab == "received":
-                selected = [run for run in selected if run["run_scope"] == "assigned" and run["triggered_by"] == actor_id]
             table = _job_status_table()
             jobs = session.execute(select(table).where(table.c.id.in_({run["job_id"] for run in selected}))).mappings().all() if selected else []
             job_map = {job["id"]: job for job in jobs}

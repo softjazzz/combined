@@ -276,7 +276,7 @@
         :data-source="tasks"
         :loading="loading"
         :pagination="pagination"
-        :scroll="{ x: 2130 }"
+        :scroll="{ x: activeTab === 'created' ? 2130 : 1200 }"
         row-key="id"
         class="rounded-lg"
         @change="handleTableChange"
@@ -496,7 +496,7 @@ const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
 ]
 
 // 表格列配置
-const columns: TableColumnsType<TaskItem> = [
+const createdColumns: TableColumnsType<TaskItem> = [
   { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
   { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
   { title: '任务类型', dataIndex: 'task_type', key: 'taskType', width: 100 },
@@ -520,6 +520,19 @@ const columns: TableColumnsType<TaskItem> = [
   { title: '实际完成时间', key: 'actualCompletedAt', width: 170 },
   { title: '操作', key: 'action', width: 200, fixed: 'right' as const },
 ]
+
+const receivedColumns: TableColumnsType<TaskItem> = [
+  { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
+  { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
+  { title: '场景', dataIndex: 'scene', key: 'scene', width: 90 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+  { title: '进度', dataIndex: 'progress', key: 'progress', width: 140 },
+  { title: '总病历', dataIndex: 'total_records', key: 'totalRecords', width: 90, align: 'center' },
+  { title: '已完成', dataIndex: 'completed_records', key: 'completedRecords', width: 90, align: 'center' },
+  { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
+  { title: '操作', key: 'action', width: 200, fixed: 'right' },
+]
+const columns = computed(() => activeTab.value === 'created' ? createdColumns : receivedColumns)
 
 function qcStatusText(task: TaskItem): string {
   if (!task.qc_run_statuses) return '未知'

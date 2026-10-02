@@ -195,6 +195,22 @@ def test_list_summary_receives_only_authorized_page_and_preserves_approved_zero(
     assert row["assigned_to_me"] == 2
 
 
+def test_received_list_keeps_original_contract_without_new_summary(monkeypatch):
+    database = _Database(
+        task_rows=[{**_task("assigned", "in_progress", None, created_at="1"), "completed_records": 3}],
+        record_rows=[{"task_id": "assigned", "assignee_id": "real-user"}],
+    )
+    def forbidden(**_kwargs):
+        pytest.fail("受领列表不应读取创建/管理摘要")
+    monkeypatch.setattr(tasks, "get_task_list_summaries", forbidden)
+    client = _make_client(monkeypatch, database, _user("real-user"))
+    response = client.get("/api/v1/tasks?tab=received")
+    assert response.status_code == 200
+    row = response.json()["data"]["items"][0]
+    assert row["completed_records"] == 3
+    assert "approved_records" not in row and "qc_assignees" not in row
+
+
 def test_create_task_uses_authenticated_id_before_legacy_id(
     monkeypatch: pytest.MonkeyPatch,
 ):
