@@ -5,6 +5,7 @@ from urllib.parse import quote
 from uuid import uuid4
 from collections import Counter
 from typing import Literal
+from datetime import datetime, timedelta
 
 import httpx
 from fastapi import HTTPException
@@ -60,6 +61,44 @@ class QueryStatistics(ToolInput):
     rule_limit: int = Field(default=5, ge=1, le=75)
 
 
+def comparison_range(start_text: str, end_text: str) -> tuple[datetime, datetime]:
+    start = datetime.fromisoformat(start_text.replace("Z", "+00:00"))
+    end = datetime.fromisoformat(end_text.replace("Z", "+00:00"))
+    if start.utcoffset() is None or end.utcoffset() is None or start > end or end - start > timedelta(days=366):
+        raise ValueError("比较需要带时区、顺序正确且不超过366天的完整起止日期")
+    return start, end
+
+
+def statistics_scope_text(filters: dict) -> str:
+    def display(text):
+        try:
+            value = datetime.fromisoformat((text or "").replace("Z", "+00:00"))
+            offset = value.strftime("%z")
+            if not offset:
+                return "未提供带时区的日期"
+            return value.strftime("%Y年%m月%d日 %H:%M:%S") + f"（UTC{offset[:3]}:{offset[3:]}）"
+        except ValueError:
+            return "未提供完整日期"
+    phase = {"inpatient": "在院", "discharged": "出院"}.get(filters.get("care_phase"), "未提供")
+    return (f"机构：{filters.get('institute_id', '未提供')}；科室：{filters.get('department', '未提供')}；病例范围：{phase}\n"
+            f"规则：{filters.get('rule_id') or '全部规则'}\n"
+            f"质控完成期间（含起止）：{display(filters.get('completed_from'))} 至 {display(filters.get('completed_to'))}\n"
+            "读取当前最新权威保存结果，不是期间历史快照；未验证两期历史版本相同或完整覆盖。\n"
+            "范围病例数和结果不可用数为当前范围数量，未按期间过滤；期间内有效保存结果数量才按完成时间筛选。\n"
+            "已评价数量包含未执行和不适用，不能视为真实执行覆盖率。\n")
+
+
+class CompareStatistics(ToolInput):
+    rule_id: str = Field(pattern=r"^LX0609-\d{2}-\d{2}-\d{2}$")
+    baseline_completed_from: str = Field(min_length=1, max_length=64)
+    baseline_completed_to: str = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def require_explicit_period(self):
+        comparison_range(self.baseline_completed_from, self.baseline_completed_to)
+        return self
+
+
 class QueryFollowups(ToolInput):
     kind: Literal["notifications", "remediations"]
     page: int = Field(default=1, ge=1, le=100)
@@ -73,25 +112,32 @@ TOOL_DEFINITIONS = {
     "search_rules": (SearchRules, "不知道编号时按名称或关键词查当前权威目录。多个关键词用空格分开且必须全部匹配，支持中文及CT等英文；不做语义推断。选定候选后用read_rule读取口径；未命中不表示没有规范要求。"),
     "query_followups": (QueryFollowups, "读取既有通知或整改台账；医生仅当前病例，管理者仅授权科室。按源列表分页，无法证明病例授权的条目排除，空页不代表没有待办。仅展示保存状态与期限，不执行标记已读、催办或整改；没有全局总量。"),
     "query_statistics": (QueryStatistics, "沿用会话机构/科室、病例范围和质控完成日期读取正式统计，不改口径。规则概览按不合规次数降序默认前5条；rule_limit可指定1至75。page是病例页，返回record_reference用于选择具体病例。"),
+    "compare_statistics": (CompareStatistics, "管理者跨期描述：同一明确规则，当前期间沿用会话筛选，基线起止必须来自用户明确期间，带时区且跨度不超过366天。缺少基线日期或规则时先追问，不自行推断上月/同期日界。机构、科室、病例范围固定；只读取两期正式原值，不计算差值、百分比或因果。来源是当前最新保存结果，不是历史快照；不得声称历史版本相同或覆盖率改善。基线不提供病例下钻。"),
 }
 
 
 def tool_specs(view: Literal["doctor", "manager"]) -> list[dict]:
     return [{"name": name, "description": description, "parameters": model.model_json_schema()}
             for name, (model, description) in TOOL_DEFINITIONS.items()
-            if name != "query_statistics" or view == "manager"]
+            if name not in {"query_statistics", "compare_statistics"} or view == "manager"]
 
 
 def statistics_text(payload: dict) -> str:
-    kpis = payload.get("kpis", {})
+    kpis = payload.get("kpis")
+    kpis = kpis if isinstance(kpis, dict) else {}
+    distribution = payload.get("rule_distribution")
+    rows = [row for row in distribution if isinstance(row, dict)] if isinstance(distribution, list) else []
+    def value(row, field):
+        count = row.get(field)
+        return "未提供" if count is None else count
     return (
-        f"范围病例 {kpis.get('scoped_record_total', '未提供')} 份\n"
-        f"已保存结果 {kpis.get('ready_record_total', '未提供')} 份\n"
-        f"结果不可用 {kpis.get('unavailable_result_total', '未提供')} 份\n"
+        f"范围病例 {value(kpis, 'scoped_record_total')} 份\n"
+        f"已保存结果 {value(kpis, 'ready_record_total')} 份\n"
+        f"结果不可用 {value(kpis, 'unavailable_result_total')} 份\n"
         + "\n".join(
-            f"{row.get('rule_name') or row.get('rule_id')}：不合规 {row.get('non_compliant_count', '未提供')}；"
-            f"资料不足 {row.get('data_gap_count', '未提供')}；已评价 {row.get('evaluated_count', '未提供')}"
-            for row in payload.get("rule_distribution", [])
+            f"{row.get('rule_name') or row.get('rule_id') or '未提供规则名称'}：不合规 {value(row, 'non_compliant_count')}；"
+            f"资料不足 {value(row, 'data_gap_count')}；已评价 {value(row, 'evaluated_count')}"
+            for row in rows
         )
     )
 
@@ -213,6 +259,57 @@ class BusinessTools:
                 "job_id": payload.get("job_id"), "rule_set_version": payload.get("rule_set_version"), "result_time": payload.get("completed_at"),
                 "version_note": "规则版本仅为正式保存结果的执行版本标识；未读取该版本的历史规则正文，不得用当前目录冒充当时判据"}
 
+    async def compare_statistics(self, params: CompareStatistics, metadata: dict, user: dict) -> dict:
+        context = metadata["context"]
+        if context["view"] != "manager":
+            raise HTTPException(422, "跨期比较仅适用于已限定范围的管理工作台")
+        try:
+            comparison_range(context.get("completed_from") or "", context.get("completed_to") or "")
+        except ValueError as exc:
+            raise HTTPException(422, "当前比较期间需要带时区、顺序正确且不超过366天的完整起止日期") from exc
+        if not context.get("institute_id") or not context.get("department") or context.get("care_phase") not in {"inpatient", "discharged"}:
+            raise HTTPException(422, "比较需要当前会话的完整机构、科室和病例范围")
+        fixed = {key: context[key] for key in ("institute_id", "department", "care_phase")}
+        requests = [("current", "当前期间", context["completed_from"], context["completed_to"]),
+                    ("baseline", "基线期间", params.baseline_completed_from, params.baseline_completed_to)]
+        periods = []
+        # 先取得两期原始响应；读取失败不保存半组来源，不自动用其他期间替代。
+        for key, label, start, end in requests:
+            filters = {**fixed, "rule_id": params.rule_id, "completed_from": start, "completed_to": end, "page": 1}
+            payload = await self.read_api("/api/v1/qc-agent/business/statistics", filters)
+            notes = []
+            kpis = payload.get("kpis")
+            ready = kpis.get("ready_record_total") if isinstance(kpis, dict) else None
+            if not isinstance(ready, int) or isinstance(ready, bool) or ready < 0:
+                notes.append("正式接口未提供期间内有效保存结果数量，不能判断该期数据是否完整")
+            elif ready == 0:
+                notes.append("该期没有期间内有效保存结果，不能将缺结果解释为零问题或改善")
+            distribution = payload.get("rule_distribution")
+            rows = [row for row in distribution if isinstance(row, dict) and row.get("rule_id") == params.rule_id] if isinstance(distribution, list) else []
+            if not rows:
+                notes.append("该期未返回所选规则统计，不能补零或据此判断规则未执行")
+            elif any(row.get(field) is None for row in rows for field in ("evaluated_count", "non_compliant_count", "data_gap_count", "uncertain_count")):
+                notes.append("该期所选规则统计字段不完整，只能描述已返回字段")
+            periods.append({"key": key, "label": label, "filters": filters,
+                            "statistics": {field: payload[field] for field in ("scope", "kpis", "status_distribution", "rule_distribution") if field in payload},
+                            "data_notes": notes})
+        references = []
+        for period in periods:
+            title = f"{period['label']}规则统计 · {params.rule_id}"
+            reference_id = f"statistics:{uuid4()}"
+            self.store.bind(metadata["session_id"], user, reference_id, {"kind": "statistics", "filters": period["filters"], "title": title})
+            period["source_reference"] = reference_id
+            references.append({"id": reference_id, "kind": "statistics", "title": title,
+                               "locator": statistics_scope_text(period["filters"]),
+                               "text": statistics_scope_text(period["filters"]) + statistics_text(period["statistics"]) + "\n" + "\n".join(period["data_notes"])})
+        return {"comparison": {"rule_id": params.rule_id, "periods": periods, "same_rule_version_verified": False,
+                               "limitations": ["两期均读取当前授权范围内每份病例最新权威保存结果，再按完成时间筛选；不是期间历史快照，较新复检可能使旧期间结果不再入选。",
+                                               "范围病例数和结果不可用数是当前科室及病例范围的数量，不是各期间病例总量或失败数；期间内有效保存结果数量才按完成时间筛选。",
+                                               "已评价数量包含所选规则返回的所有状态，包括未执行和不适用，不能当作真实执行覆盖率。",
+                                               "正式接口未提供两期历史执行版本、历史规则正文、完整执行覆盖和同步状态，无法验证同规则版本或完整覆盖；不得归因或把缺失补零。",
+                                               "只描述两期原值；期间长度可能不同，不计算差值、同比、环比或百分比；基线不自动提供病例下钻。"]},
+                "references": references, "metric_owner": "LX0609 正式结果分析接口"}
+
     async def execute(self, name: str, arguments: dict, metadata: dict, user: dict) -> dict:
         if name not in TOOL_DEFINITIONS:
             raise HTTPException(404, "工具未提供")
@@ -222,6 +319,8 @@ class BusinessTools:
             return await self.saved_results(metadata, user, params.record_reference, params)
         if name == "read_saved_issue":
             return await self.issue(metadata, params.result_id)
+        if name == "compare_statistics":
+            return await self.compare_statistics(params, metadata, user)
         if name == "query_followups":
             session_id = quote(metadata["session_id"], safe="")
             payload = await self.read_api(f"/api/v1/qc-agent/business/sessions/{session_id}/followups", params.model_dump())

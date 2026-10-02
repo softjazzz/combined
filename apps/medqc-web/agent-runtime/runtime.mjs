@@ -28,6 +28,8 @@ const READING_INSTRUCTIONS = `保存结果概览采用明确分页和状态范�
 
 const EXPLANATION_INSTRUCTIONS = `解释追问只围绕用户选定的问题：读取该问题保存结论、证据定位索引和对应规则后即可作答，不为交叉核对扩查统计、同族问题或其他状态。默认用三个短段落说明保存原因、1至2项证据来源位置、适用规则与读取局限，通常控制在300字左右；用户要求详细说明时可展开，不为字数删掉否定条件、时间要求或依据不足说明。面向用户使用问题名称和中文状态，不展示result_id、reason_code、requirement_violated、active等内部字段或枚举。版本与发布范围也必须转成中文：historical_definition_available为false只说“未取得历史规则正文”，release_scope为default只说“默认正式发布范围”，不得输出字段名、英文枚举或“为false”，也不要在中文后括注active、default、phase_1_target等代码。目录未写出的条件属于本次未取得的信息，不能用否定句宣称院内不存在该条件。标题、质控点和来源文书同样是权威目录事实；若标题或质控点已经明确入院后8小时等时限，必须保留，不能因为definition_note为空就声称目录未写明该时限。保存结果的规则版本标签与当前目录版本分别说明，版本标识体系可能不同，不能仅凭字符串判断一致或发生变化；historical_definition_available为false时明确未取得历史规则正文，无法确认当时完整口径或两版差异。提醒与整改台账使用query_followups只读查询：医生仅当前病例，管理者仅授权科室；按源列表分页，保留coverage_note/state/status_note限制，has_more时可继续下一页；scan_limit_reached为true表示已到本次扫描上限、剩余台账未读，不继续翻页或声称全量。空页不代表没有待办，不报告全局零条或完整总量；保存状态可说明，但不能称本轮已处理、已提交或已催办。用户可从保存问题卡点击“提交异议反馈”，由本人填写理由并明确点击提交；模型没有反馈写入工具，不能声称已代为提交，是否成功以界面真实回执为准。保存覆盖率仅说明保存项是否完整，未提供任务运行状态时不得推断任务仍在运行。回答概述须称概述；只有完整照录工具返回原句才能称原文，不能删改否定条件。摘录可能截断，未出现某内容不能证明完整文书缺失；不得用摘录重新判断保存状态、补造原因或评价保存判定是否正确。解释原因只能从本次读取的保存结论归纳并明确“保存结论认为”；证据只说明索引中已返回的文书类型、时间与位置，原文请用户打开来源卡，不复述摘录，不得自行把摘录中没写的内容连接为“因此触发该判定”“所以不合规”。保存结论未说明某项因果时直接说无法从保存结论确认，不用规则要求与局部摘录组合推演新的因果。依据不足时明确说明无法从保存材料确认该细节。当前病历文书与医学规范原文分别说明读取情况；未读取当前文书时引导用户从问题卡片打开对应文书，不声称已核查当前原文。历史回答如有越界推断，须依据当前工具范围纠正，不能沿用为事实。`
 
+const COMPARISON_INSTRUCTIONS = `管理者比较两期同一规则时使用compare_statistics，机构、科室与病例状态必须沿用当前页面授权范围。当前期间沿用页面质控完成日期，基线期间必须由用户明确给出起止日期与时区；缺失时先追问，不擅自把“上月”、同比或环比换算成日界，不使用机器时区。两个期间端点保留原时区，都是闭区间。只描述两期现存最新保存结果按质控完成日期筛选后的正式计数；这不是当时的历史快照。按各期来源和不足提示回答，不补零、不自行计算同比、环比、差值或百分比正式指标，不从变化推断干预效果、同步缺口或其他因果。当前科室病例池总数与不可用总数未经期间过滤，不能作期间分母；期间可读数只说明有效最新保存结果，规则评价计数包括未执行和不适用，不证明完整执行覆盖。当前目录及其版本不能证明历史口径或两期版本一致，未验证历史版本、覆盖或同步状态时须明确无法确认。`
+
 const contextKey = (context) =>
   JSON.stringify(
     Object.entries(context)
@@ -269,7 +271,7 @@ export async function createRuntime({
     ctx.plugin(SystemPrompt, {
       includeHarnessIdentity: false,
       includeRuntimeContext: false,
-      personaPrefix: `${INSTRUCTIONS}\n${READING_INSTRUCTIONS}\n${EXPLANATION_INSTRUCTIONS}`,
+      personaPrefix: `${INSTRUCTIONS}\n${READING_INSTRUCTIONS}\n${EXPLANATION_INSTRUCTIONS}\n${COMPARISON_INSTRUCTIONS}`,
     }),
     ctx.plugin(ToolRuntime, { mode: 'native' }),
     ctx.plugin(AgentRegistry),
@@ -411,6 +413,15 @@ export async function createRuntime({
           async execute(args, exec) {
             const run = state.run
             if (!run) throw new Error('会话未执行')
+            if (spec.name === 'compare_statistics') {
+              const requestedRules = [
+                ...new Set(run.message.match(/\bLX0609-\d{2}-\d{2}-\d{2}\b/gu) || []),
+              ]
+              if (requestedRules.length && !requestedRules.includes(args.rule_id))
+                throw new Error(
+                  `比较必须使用用户本轮明确指定的规则：${requestedRules.join('、')}。请纠正规则编号后读取，不能把其他规则结果用于本轮回答。`,
+                )
+            }
             const response = await fetchImpl(
               `${run.backend_url}/api/v1/qc-agent/business/sessions/${sessionId}/tools/${spec.name}`,
               {

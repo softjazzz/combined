@@ -2,6 +2,122 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { businessModelContext, businessModelValue } from './business-output.mjs'
 
+test('跨期正式统计保留缺键、null、None条目及非数组不足结构，不崩溃或补零', () => {
+  const values = [
+    {},
+    { scope: null, kpis: null, status_distribution: null, rule_distribution: null },
+    {
+      kpis: { ready_record_total: null },
+      status_distribution: [null],
+      rule_distribution: [null, { rule_id: 'R', non_compliant_count: null }],
+    },
+    { status_distribution: '未提供数组', rule_distribution: '未提供数组' },
+  ]
+  for (const statistics of values) {
+    const payload = {
+      comparison: {
+        rule_id: 'R',
+        periods: [{ key: 'baseline', statistics, data_notes: ['正式统计结构不足'] }],
+      },
+    }
+    const result = businessModelValue('compare_statistics', {}, payload).comparison.periods[0]
+    assert.deepEqual(result.statistics, statistics)
+    assert.deepEqual(result.data_notes, ['正式统计结构不足'])
+    assert.deepEqual(payload.comparison.periods[0].statistics, statistics)
+  }
+})
+
+test('跨期统计仅搬运两期权威计数、来源与不足，不补零或生成变化率', () => {
+  const payload = {
+    metric_owner: 'LX0609 正式结果分析接口',
+    comparison: {
+      rule_id: 'R',
+      same_rule_version_verified: false,
+      limitations: ['现存最新保存结果，非历史快照；无法验证历史版本及完整执行覆盖'],
+      periods: [
+        {
+          key: 'current',
+          label: '当前期间',
+          source_reference: 'stats:current',
+          filters: {
+            completed_from: '2026-09-01T00:00:00+08:00',
+            completed_to: '2026-09-30T23:59:59+08:00',
+            department: '内科',
+          },
+          data_notes: [],
+          statistics: {
+            scope: { department: '内科', rule_id: 'R', patient_id: '私有', visit_id: '私有' },
+            kpis: {
+              scoped_record_total: 90,
+              ready_record_total: 4,
+              unavailable_result_total: 2,
+              internal: '私有',
+            },
+            status_distribution: [{ status: 'not_executed', count: 3, internal: '私有' }],
+            rule_distribution: [
+              {
+                rule_id: 'R',
+                rule_name: '规则',
+                evaluated_count: 4,
+                non_compliant_count: 1,
+                not_executed_count: 3,
+                raw_payload: '私有',
+              },
+            ],
+            record_page: { records: [{ patient_id: '私有' }] },
+          },
+        },
+        {
+          key: 'baseline',
+          label: '基线期间',
+          source_reference: 'stats:baseline',
+          filters: {
+            completed_from: '2026-08-01T00:00:00+08:00',
+            completed_to: '2026-08-31T23:59:59+08:00',
+          },
+          data_notes: ['未取得选中规则的计数'],
+          statistics: { kpis: { ready_record_total: 0 } },
+        },
+      ],
+    },
+    references: [{ id: 'stats:current', text: '完整卡片私有' }],
+  }
+  const before = structuredClone(payload)
+  const result = businessModelValue('compare_statistics', {}, payload)
+  assert.equal(result.comparison.same_rule_version_verified, false)
+  assert.deepEqual(result.comparison.limitations, payload.comparison.limitations)
+  const [current, baseline] = result.comparison.periods
+  assert.equal(current.source_reference, 'stats:current')
+  assert.deepEqual(current.filters, payload.comparison.periods[0].filters)
+  assert.deepEqual(current.statistics.scope_pool_before_period_filter, {
+    scoped_record_total: 90,
+    unavailable_result_total: 2,
+  })
+  assert.deepEqual(current.statistics.kpis, { ready_record_total: 4 })
+  assert.equal(current.statistics.kpis.scoped_record_total, undefined)
+  assert.deepEqual(current.statistics.status_distribution, [{ status: 'not_executed', count: 3 }])
+  assert.deepEqual(current.statistics.rule_distribution, [
+    {
+      rule_id: 'R',
+      rule_name: '规则',
+      evaluated_count: 4,
+      non_compliant_count: 1,
+      not_executed_count: 3,
+    },
+  ])
+  assert.equal(baseline.statistics.rule_distribution, undefined)
+  assert.equal(baseline.statistics.status_distribution, undefined)
+  assert.deepEqual(baseline.data_notes, ['未取得选中规则的计数'])
+  assert.equal(baseline.source_reference, 'stats:baseline')
+  assert.ok(!JSON.stringify(result).includes('私有'))
+  assert.equal(result.comparison.delta, undefined)
+  assert.equal(result.comparison.change_rate, undefined)
+  assert.match(result.read_note, /不补零、不重算同比或环比/)
+  assert.match(result.read_note, /当前目录不能证明两期口径一致/)
+  assert.match(result.read_note, /缺数据不能解释为零问题/)
+  assert.deepEqual(payload, before)
+})
+
 test('医生模型上下文仅保留视图与机构，不改动正式授权上下文', () => {
   const context = Object.freeze({
     view: 'doctor',
@@ -279,6 +395,10 @@ test('统计概览缩小规则范围但保留正式计数与病例下钻标识',
   assert.match(result.display_note, /卡片完整展示本页病例/)
   assert.match(result.display_note, /不重复列出部分病例冒充整页/)
   assert.match(result.display_note, /未展示页不能称已读取/)
+  assert.match(result.display_note, /未按质控完成期间过滤，不能作期间分母/)
+  assert.match(result.display_note, /ready_record_total才是期间内最新可读保存结果数/)
+  assert.match(result.display_note, /evaluated_count包含not_executed与not_applicable/)
+  assert.match(result.display_note, /不等于完成执行覆盖/)
   assert.equal(statistics.rule_distribution.length, 3)
   assert.ok(!JSON.stringify(result).includes('完整展示内容'))
 })

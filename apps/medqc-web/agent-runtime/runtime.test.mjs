@@ -145,6 +145,132 @@ test('管理者实际模型消息保留原页面科室与质控完成日期范�
   }
 })
 
+test('跨期工具经DSH投影仅传正式原值，两期来源卡完整保存且恢复不泄漏正文与病例标识', async () => {
+  const context = {
+    view: 'manager',
+    institute_id: 'S',
+    department: '内科',
+    care_phase: 'discharged',
+    completed_from: '2026-09-01T00:00:00+08:00',
+    completed_to: '2026-09-30T23:59:59+08:00',
+  }
+  const args = {
+    rule_id: 'R',
+    baseline_completed_from: '2026-08-01T00:00:00+08:00',
+    baseline_completed_to: '2026-08-31T23:59:59+08:00',
+  }
+  const comparisonSpec = {
+    name: 'compare_statistics',
+    description: '两期正式统计',
+    parameters: {
+      type: 'object',
+      properties: Object.fromEntries(Object.keys(args).map((key) => [key, { type: 'string' }])),
+      required: Object.keys(args),
+      additionalProperties: false,
+    },
+  }
+  const references = ['current', 'baseline'].map((key) => ({
+    id: `statistics:${key}`,
+    kind: 'statistics',
+    title: `${key}期间来源`,
+    text: `仅来源卡完整正文-${key}`,
+  }))
+  const payload = {
+    metric_owner: '正式结果分析接口',
+    references,
+    comparison: {
+      rule_id: 'R',
+      same_rule_version_verified: false,
+      limitations: ['不是期间历史快照，未验证历史版本'],
+      periods: ['current', 'baseline'].map((key, index) => ({
+        key,
+        label: index ? '基线期间' : '当前期间',
+        source_reference: references[index].id,
+        filters: { ...context, patient_id: '工具内部患者标识', visit_id: '工具内部住院标识' },
+        data_notes: index ? ['未取得该期规则计数'] : [],
+        statistics: {
+          scope: { department: '内科', patient_id: '工具内部患者标识' },
+          kpis: { ready_record_total: index ? 0 : 3 },
+          ...(index
+            ? {}
+            : {
+                rule_distribution: [{ rule_id: 'R', non_compliant_count: 2, evaluated_count: 3 }],
+              }),
+          record_page: { records: [{ visit_id: '工具内部住院标识' }] },
+        },
+      })),
+    },
+  }
+  const f = await fixture(
+    [{ tool: 'compare_statistics', args }, { text: '两期现存结果原值见来源。' }],
+    payload,
+    comparisonSpec,
+    context,
+  )
+  try {
+    const turn = await f.runtime.chat(f.sessionId, f.body)
+    assert.equal(turn.status, 'completed')
+    assert.equal(turn.tool_calls, 1)
+    assert.deepEqual(f.callbacks[0].args, args)
+    assert.deepEqual(turn.references, references)
+    const messages = JSON.stringify(f.adapter.requests[1].messages)
+    for (const forbidden of [
+      '仅来源卡完整正文',
+      '工具内部患者标识',
+      '工具内部住院标识',
+      'patient_id',
+      'visit_id',
+      'record_page',
+    ])
+      assert.ok(!messages.includes(forbidden), `比较模型消息不应包含 ${forbidden}`)
+    assert.match(messages, /statistics:current/)
+    assert.match(messages, /statistics:baseline/)
+    assert.match(messages, /non_compliant_count/)
+    assert.match(messages, /未取得该期规则计数/)
+    assert.match(messages, /基线期间必须由用户明确给出/)
+    const restored = await f.runtime.restore(f.sessionId, { context, tools: [comparisonSpec] })
+    assert.deepEqual(restored.turns[0].references, references)
+  } finally {
+    await f.runtime.close()
+  }
+})
+
+test('比较工具不能将用户明确规则换成另一条，纠正后才查询且保留原生失败调用', async () => {
+  const expected = 'LX0609-06-01-05'
+  const tool = {
+    name: 'compare_statistics',
+    description: '比较',
+    parameters: {
+      type: 'object',
+      properties: { rule_id: { type: 'string' } },
+      required: ['rule_id'],
+    },
+  }
+  const f = await fixture(
+    [
+      { tool: tool.name, args: { rule_id: 'LX0609-02-02-03' } },
+      { tool: tool.name, args: { rule_id: expected } },
+      { text: '已按指定规则读取。' },
+    ],
+    { comparison: { rule_id: expected, periods: [] }, references: [] },
+    tool,
+    { view: 'manager', institute_id: 'S', department: '内科' },
+  )
+  try {
+    const turn = await f.runtime.chat(f.sessionId, {
+      ...f.body,
+      message: `请比较${expected}的两期结果`,
+    })
+    assert.equal(turn.status, 'completed')
+    assert.equal(turn.tool_calls, 2)
+    assert.equal(f.callbacks.length, 1)
+    assert.equal(f.callbacks[0].args.rule_id, expected)
+    assert.match(JSON.stringify(f.adapter.requests[1].messages), /必须使用用户本轮明确指定的规则/)
+  } finally {
+    await f.runtime.close()
+  }
+})
+
 test('无编号规则查询经目录候选读取详情，候选不冒充来源且恢复保留规则引用', async () => {
   const root = await mkdtemp(join(tmpdir(), 'medqc-rule-search-'))
   const ruleId = 'LX0609-01-01-01'

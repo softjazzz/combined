@@ -15,6 +15,69 @@ export function businessModelContext(context) {
 }
 
 export function businessModelValue(name, _args, value) {
+  if (name === 'compare_statistics') {
+    const comparison = value.comparison || {}
+    // 仅比较投影保留显式空值与非数组不足结构，不将缺失改写成零或空集合。
+    const projectObject = (item, fields) =>
+      item && typeof item === 'object' ? select(item, fields) : item
+    const projectRows = (rows, fields) =>
+      Array.isArray(rows)
+        ? rows.map((row) => projectObject(row, typeof fields === 'function' ? fields(row) : fields))
+        : projectObject(rows, typeof fields === 'function' ? fields(rows) : fields)
+    const projectStatistics = (statistics) => {
+      const result = select(statistics, [
+        'scope',
+        'kpis',
+        'status_distribution',
+        'rule_distribution',
+      ])
+      if ('scope' in result)
+        result.scope = projectObject(result.scope, [
+          'care_phase',
+          'department',
+          'doctor',
+          'rule_id',
+          'result_status',
+          'completed_from',
+          'completed_to',
+        ])
+      if ('kpis' in result) {
+        // 真实回答曾将未期间过滤的病例池误称“同期总数”，单独标明其归属。
+        const pool = select(result.kpis, ['scoped_record_total', 'unavailable_result_total'])
+        if (Object.keys(pool).length) result.scope_pool_before_period_filter = pool
+        result.kpis = projectObject(result.kpis, ['ready_record_total'])
+      }
+      if ('status_distribution' in result)
+        result.status_distribution = projectRows(result.status_distribution, ['status', 'count'])
+      if ('rule_distribution' in result)
+        result.rule_distribution = projectRows(result.rule_distribution, (row) => [
+          'rule_id',
+          'rule_name',
+          ...Object.keys(row || {}).filter((key) => key.endsWith('_count')),
+        ])
+      return result
+    }
+    return {
+      metric_owner: value.metric_owner,
+      comparison: {
+        ...select(comparison, ['rule_id', 'same_rule_version_verified', 'limitations']),
+        periods: (comparison.periods || []).map((period) => ({
+          ...select(period, ['key', 'label', 'source_reference', 'data_notes']),
+          filters: select(period.filters, [
+            'institute_id',
+            'department',
+            'care_phase',
+            'completed_from',
+            'completed_to',
+            'rule_id',
+          ]),
+          statistics: projectStatistics(period.statistics),
+        })),
+      },
+      read_note:
+        '仅描述两期正式接口返回的同一规则现存保存结果，不补零、不重算同比或环比正式指标，不从计数变化推断因果。来源卡对应各自期间；scope_pool_before_period_filter是日期过滤前的当前病例池，不能称同期病例总数或某月失败数，也不是期间分母；期间kpis仅保留ready_record_total。evaluated_count包含未执行和不适用。未验证历史规则版本、历史快照、完整执行覆盖或同步缺口，当前目录不能证明两期口径一致。保留各期不足提示，缺数据不能解释为零问题。',
+    }
+  }
   if (name === 'read_saved_results') {
     const result = select(value, [
       'state',
@@ -189,7 +252,7 @@ export function businessModelValue(name, _args, value) {
         records: records.map((ref) => ({ record_reference: ref.id, title: ref.title })),
       },
       display_note:
-        '下方病例卡片完整展示本页病例，正文说明统计指标与本页范围并引导查看卡片，不重复列出部分病例冒充整页。record_page.total为分页总量，不表示本页全部返回；未展示页不能称已读取。追问具体病例时使用对应record_reference下钻。',
+        'scoped_record_total与unavailable_result_total属于当前科室授权病例池，未按质控完成期间过滤，不能作期间分母；ready_record_total才是期间内最新可读保存结果数。evaluated_count包含not_executed与not_applicable，不等于完成执行覆盖。下方病例卡片完整展示本页病例，正文说明统计指标与本页范围并引导查看卡片，不重复列出部分病例冒充整页。record_page.total为分页总量，不表示本页全部返回；未展示页不能称已读取。追问具体病例时使用对应record_reference下钻。',
     }
   }
   throw new Error('未配置业务工具模型投影')

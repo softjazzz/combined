@@ -39,6 +39,7 @@ def test_runtime_bridge_limits_tools_on_create_restore_chat_and_reference(tmp_pa
     expected = {"read_saved_results", "read_saved_issue", "read_rule", "search_rules", "query_followups"}
     if view == "manager":
         expected.add("query_statistics")
+        expected.add("compare_statistics")
     bodies = [body for _, body in calls if body is not None]
     assert len(bodies) == 4
     for body in bodies:
