@@ -168,7 +168,26 @@ class ReadCapabilities(ToolInput):
     pass
 
 
+class SearchCodes(ToolInput):
+    q: str = Field(min_length=1, max_length=50)
+    type: Literal["icd10", "icd9cm3", "all"] = "all"
+    version: Literal["insurance", "clinical"] = "insurance"
+    limit: int = Field(default=10, ge=1, le=10)
+
+
+def code_card_text(params: SearchCodes, data: dict) -> str:
+    version = {"insurance": "医保版", "clinical": "国临版"}[params.version]
+    lines = [f"检索词：{params.q}；范围：{ {'icd10': '诊断ICD-10', 'icd9cm3': '手术操作ICD-9-CM-3', 'all': '诊断与手术'}[params.type] }；ICD-10版本：{version}",
+             f"字典命中 {data.get('total', '未提供')} 条，以下为前 {len(data.get('items') or [])} 条："]
+    for item in data.get("items") or []:
+        mapped = f"；{item['mapped_version']}对应 {item.get('mapped_code')} {item.get('mapped_name')}" if item.get("mapped_version") else ""
+        lines.append(f"{item.get('code')} {item.get('name')}（{item.get('version_label') or item.get('type_label')}）{mapped}")
+    lines.append("仅为编码字典检索候选，按文本匹配排序；不是针对本病例的编码建议或首页质控结论，不会自动应用编码，选用须由编码员依据病历确认。")
+    return "\n".join(lines)
+
+
 TOOL_DEFINITIONS = {
+    "search_icd_codes": (SearchCodes, "按疾病/手术名称、编码或拼音首字母检索 ICD 编码字典候选（ICD-10 医保版/国临版、ICD-9-CM-3）。只读字典，不读取病例，不判断本病例应编何码；回答只说明候选和版本差异，不称“应编为”或已应用。"),
     "read_action_capabilities": (ReadCapabilities, "用户要求分派、催办、通知、写回病历、订阅或询问助手能办什么时先调用。返回当前视图已接通与暂不可办理的事项及原因；不可办理的只说明原因和应走的业务流程，不承诺代办、不说已通知或已分派。"),
     "preview_recheck": (business_action_flow.PreviewRecheck, "仅医生视图：用户明确要求“再检查一下/复检”时，为当前病例的明确规则生成复检预览卡；规则原样使用用户点名的编号；用户在问题卡片上选中问题时rule_ids 可只写 @selected 一项，由系统替换为该问题规则；不擅自扩大到全部规则或自行编造编号。只生成预览，不执行；需用户在卡片上点击确认后才由正式任务服务创建任务。回答说明需确认、材料同步提示和预计范围，不称已复检。"),
     "preview_specialist_task": (business_action_flow.PreviewSpecialist, "仅管理视图：用户明确要求对已列出的病例做专项质控时生成任务预览卡。record_references只能用本会话统计下钻或提醒返回的病例来源（最多20份），rule_ids为用户明确的规则。只生成预览，不执行；需用户点击确认。回答不称任务已创建或完成。"),
@@ -427,11 +446,23 @@ class BusinessTools:
         return {"id": draft_id, "kind": "draft", "rule_id": reference.get("rule_id"), "title": f"参考草稿 · {reference.get('title')}",
                 "locator": "参考草稿，不替代正式保存建议", "text": business_drafts.draft_card_text(reference, segments)}
 
+    async def code_search(self, params: SearchCodes, reference_id: str) -> dict:
+        data = await self.read_api("/api/v1/icd/search", params.model_dump())
+        items = data.get("items") or []
+        return {"codes": {"total": data.get("total"), "items": [{key: item.get(key) for key in ("code", "name", "type_label", "version_label", "mapped_code", "mapped_name", "mapped_version", "is_diff") if key in item} for item in items]},
+                "references": [{"id": reference_id, "kind": "evidence", "title": f"编码字典候选 · {params.q}",
+                                "locator": "ICD 编码字典文本检索；不是编码建议", "text": code_card_text(params, data)}]}
+
     async def execute(self, name: str, arguments: dict, metadata: dict, user: dict) -> dict:
         if name not in TOOL_DEFINITIONS:
             raise HTTPException(404, "工具未提供")
         model, _ = TOOL_DEFINITIONS[name]
         params = model.model_validate(arguments)
+        if name == "search_icd_codes":
+            reference_id = f"codes:{uuid4()}"
+            result = await self.code_search(params, reference_id)
+            self.store.bind(metadata["session_id"], user, reference_id, {"kind": "codes", "arguments": params.model_dump()})
+            return result
         if name == "read_action_capabilities":
             result = business_capabilities.capabilities(metadata["context"]["view"])
             self.store.bind(metadata["session_id"], user, result["references"][0]["id"], {"kind": "capabilities"})

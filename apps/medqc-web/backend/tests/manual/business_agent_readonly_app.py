@@ -39,6 +39,9 @@ from app.services.qc_agent.business_store import BusinessSessionStore, get_busin
 
 app = FastAPI(title="业务助手真实只读验证")
 app.include_router(router, prefix="/api/v1/qc-agent")
+# ICD 字典检索只读本地字典文件，不访问数据库。
+from app.routers.icd_search import router as icd_router  # noqa: E402
+app.include_router(icd_router)
 store = BusinessSessionStore(backend.parent / ".tmp/0910-full-audit/business-agent-validation-private/real-metadata")
 app.dependency_overrides[get_business_store] = lambda: store
 

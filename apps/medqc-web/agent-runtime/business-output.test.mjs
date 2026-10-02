@@ -644,3 +644,20 @@ test('能力说明投影只给模型可办与不可办事项', () => {
   assert.match(value.read_note, /不承诺代办/)
   assert.ok(!JSON.stringify(value).includes('卡片全文'))
 })
+
+test('编码字典投影只给候选与版本对应，不含置信度或卡片全文', () => {
+  const value = businessModelValue(
+    'search_icd_codes',
+    {},
+    {
+      codes: {
+        total: 2,
+        items: [{ code: 'J18.900', name: '肺炎', version_label: '医保版', confidence: 0.9 }],
+      },
+      references: [{ id: 'codes:x', text: '卡片全文' }],
+    },
+  )
+  assert.deepEqual(value.candidates, [{ code: 'J18.900', name: '肺炎', version_label: '医保版' }])
+  assert.match(value.read_note, /不是本病例的编码建议/)
+  assert.ok(!JSON.stringify(value).includes('卡片全文'))
+})

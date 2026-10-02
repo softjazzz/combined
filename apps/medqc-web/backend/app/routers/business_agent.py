@@ -17,7 +17,7 @@ from app.services.qc_agent.business_schemas import BusinessChat, BusinessContext
 from app.services.qc_agent.business_access import BusinessAccess, get_business_access
 from app.services.qc_agent import business_reads, business_documents, business_followups
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store
-from app.services.qc_agent.business_tools import BusinessTools, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
+from app.services.qc_agent.business_tools import BusinessTools, SearchCodes, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
 from app.services.qc_agent import business_feedback
 from app.services.qc_agent import business_action_flow, business_capabilities
 from app.services.qc_agent.business_action_store import get_action_store
@@ -168,6 +168,8 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return (await tools.issue(metadata, reference_id))["references"][0]
             if binding["kind"] == "rule":
                 return (await tools.execute("read_rule", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
+            if binding["kind"] == "codes":
+                return (await tools.code_search(SearchCodes.model_validate(binding["arguments"]), reference_id))["references"][0]
             if binding["kind"] == "capabilities":
                 return business_capabilities.capabilities(metadata["context"]["view"])["references"][0]
             if binding["kind"] == "action":

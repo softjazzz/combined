@@ -40,6 +40,8 @@ from app.services.qc_agent.business_store import BusinessSessionStore, get_busin
 app = FastAPI(title="业务助手真实任务联调")
 app.include_router(business_router, prefix="/api/v1/qc-agent")
 app.include_router(qc_router)
+from app.routers.icd_search import router as icd_router  # noqa: E402
+app.include_router(icd_router)
 store = BusinessSessionStore(backend.parent / ".tmp/0910-full-audit/business-agent-validation-private/real-metadata")
 app.dependency_overrides[get_business_store] = lambda: store
 

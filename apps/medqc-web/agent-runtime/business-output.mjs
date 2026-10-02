@@ -196,6 +196,24 @@ export function businessModelValue(name, _args, value) {
         ]),
       ),
     }
+  if (name === 'search_icd_codes')
+    return {
+      id: value.references?.[0]?.id,
+      total: value.codes?.total,
+      candidates: (value.codes?.items || []).map((item) =>
+        select(item, [
+          'code',
+          'name',
+          'version_label',
+          'mapped_code',
+          'mapped_name',
+          'mapped_version',
+          'is_diff',
+        ]),
+      ),
+      read_note:
+        '仅字典文本检索候选，不读取病例，不是本病例的编码建议；回答说明候选与版本对应差异，不说“应编为”或已应用，选用须编码员依据病历确认。',
+    }
   if (name === 'read_action_capabilities')
     return {
       id: value.references?.[0]?.id,
