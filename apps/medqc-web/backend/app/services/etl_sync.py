@@ -1387,6 +1387,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
         "description": "客户样本验证专用，覆盖已纳管 CDM 证据域",
         "table_names": [
             "mr",
+            "mr_customize",
             "inpat_registration",
             "diagnosis",
             "mr_diagnosis",
@@ -1467,6 +1468,13 @@ SYNC_TABLE_GROUPS.append(
 # 历史 key_fields 字段保留兼容；新链路按本地主键 UPSERT
 SYNC_TABLES = [
     # ---- 基础表 ----
+    {
+        "name": "mr_customize",
+        "label": "首页医院自定义明细",
+        "source_table": "mr_customize",
+        # 已核对本地 CDM 三坐标主键；只纳管表直连，不猜测远端存储过程。
+        "key_fields": ["institute_id", "patient_id", "visit_id"],
+    },
     {
         "name": "mr",
         "label": "病案首页",
