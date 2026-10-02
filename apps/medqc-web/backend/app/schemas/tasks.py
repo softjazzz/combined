@@ -580,6 +580,11 @@ class TaskManualDefectResponse(BaseModel):
 # Response Models
 # ============================================================================
 
+class TaskListAssignee(BaseModel):
+    id: str
+    name: Optional[str] = None
+
+
 class TaskResponse(BaseModel):
     """任务响应"""
     id: str
@@ -593,6 +598,11 @@ class TaskResponse(BaseModel):
     progress: int = 0
     total_records: int = 0
     completed_records: int = 0
+    approved_records: Optional[int] = None
+    assigned_to_me: Optional[int] = None
+    qc_assignees: Optional[List[TaskListAssignee]] = None
+    actual_completed_at: Optional[str] = None
+    qc_run_statuses: Optional[List[Literal["queued", "running", "completed", "failed", "canceled"]]] = None
     creator_id: str
     creator_name: str = ""
     deadline: Optional[str] = None

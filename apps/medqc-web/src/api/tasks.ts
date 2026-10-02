@@ -154,6 +154,13 @@ export interface TaskItem {
   progress: number
   total_records: number
   completed_records: number
+  /** 当前病例结果对象上的审核通过数；缺失或 null 表示未知。 */
+  approved_records?: number | null
+  assigned_to_me?: number | null
+  qc_assignees?: Array<{ id: string; name: string | null }> | null
+  actual_completed_at?: string | null
+  /** 后端搬运当前运行节点状态；空数组表示未执行，null 表示读取未核实。 */
+  qc_run_statuses?: Array<'queued' | 'running' | 'completed' | 'failed' | 'canceled'> | null
   creator_id: string
   creator_name: string
   scene?: TaskScene | null

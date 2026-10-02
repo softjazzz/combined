@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.models.qc import QCRecordReview, QCTask, QCTaskQCRun, QCTaskRecord
 from app.services import record_review_service as service
+from app.services import task_list_summary_service as list_summary
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from app.services.task_qc_run_service import TaskQCRunConflict, TaskQCRunForbidden
 
@@ -280,6 +281,73 @@ def test_task_approved_counts_foreign_envelope_owner_cannot_replace_current_resu
     with env.sessions.begin() as session:
         session.execute(env.envelopes.update().where(env.envelopes.c.id == "env-a4").values(created_by="other"))
     assert task_counts(env)["task-1"] is None
+
+
+@pytest.fixture
+def summaries(env, monkeypatch):
+    table = sa.Table(
+        "list_summary_jobs", sa.MetaData(), sa.Column("id", sa.String, primary_key=True),
+        sa.Column("created_by", sa.String), sa.Column("status", sa.String), sa.Column("filters_json", sa.Text),
+    )
+    with env.sessions.begin() as session:
+        table.create(session.get_bind())
+        session.execute(table.insert(), [
+            {"id": job, "created_by": actor, "status": "completed", "filters_json": json.dumps({
+                "task_id": task, "task_run_number": number, "rule_set_key": LX,
+                "rule_set_version": VERSION, "query_scope": "final" if task == "task-2" else "running",
+            })}
+            for task, number, job, actor, _ in RUNS
+        ])
+    monkeypatch.setattr(list_summary, "SessionLocal", env.sessions)
+    monkeypatch.setattr(list_summary, "_job_status_table", lambda: table)
+    def read(actor="creator", tab="created", manager=False):
+        return list_summary.get_task_list_summaries(
+            task_ids=["task-1", "task-2", "task-3", "task-4"], actor_id=actor, tab=tab, is_manager=manager,
+        )
+    return read, table
+
+
+def test_task_list_summary_scope_and_real_approved_count(env, summaries):
+    read, _ = summaries
+    submit()
+    result = read()["task-1"]
+    assert result["approved_records"] == 1
+    assert result["assigned_to_me"] == 0
+    assert result["qc_assignees"] == [{"id": "qc-1", "name": None}, {"id": "qc-2", "name": None}]
+    assert result["qc_run_statuses"] == ["completed", "completed", "completed"]
+    assert read(actor="other")["task-1"] == list_summary.unknown_summary()
+    assert read(actor="qc-1", tab="received")["task-1"]["assigned_to_me"] == 3
+    assert read(actor="qc-1", tab="received")["task-1"]["qc_run_statuses"] == ["completed"]
+
+
+@pytest.mark.parametrize("change", [{"created_by": "other"}, {"filters_json": "{}"}, {"status": "invalid"}])
+def test_task_list_summary_unverified_job_status_is_unknown(env, summaries, change):
+    read, table = summaries
+    with env.sessions.begin() as session:
+        session.execute(table.update().where(table.c.id == "job-1").values(**change))
+    assert read()["task-1"]["qc_run_statuses"] is None
+    assert read()["task-1"]["assigned_to_me"] == 0
+
+
+def test_task_list_summary_actual_finish_needs_complete_record_times(env, summaries):
+    read, _ = summaries
+    assert read()["task-4"]["actual_completed_at"] is None
+    with env.sessions.begin() as session:
+        session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "rec-f").values(
+            status="completed", completed_at=datetime(2026, 10, 1, 12),
+        ))
+    assert read()["task-4"]["actual_completed_at"] == "2026-10-01T12:00:00Z"
+
+
+def test_task_list_summary_review_storage_failure_preserves_metadata(env, summaries, monkeypatch):
+    read, _ = summaries
+    def unavailable(*_args):
+        raise OperationalError("read", {}, Exception("unavailable"))
+    monkeypatch.setattr(list_summary, "task_approved_counts", unavailable)
+    result = read()["task-1"]
+    assert result["approved_records"] is None
+    assert result["assigned_to_me"] == 0
+    assert result["qc_run_statuses"] == ["completed", "completed", "completed"]
 
 
 def todos(**kwargs):

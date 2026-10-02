@@ -276,6 +276,7 @@
         :data-source="tasks"
         :loading="loading"
         :pagination="pagination"
+        :scroll="{ x: 2130 }"
         row-key="id"
         class="rounded-lg"
         @change="handleTableChange"
@@ -288,6 +289,30 @@
           </template>
           <template v-if="column.key === 'scene'">
             {{ sceneLabel((record as TaskItem).scene) }}
+          </template>
+          <template v-if="column.key === 'taskType'">
+            {{ (record as TaskItem).task_type === 'one_time' ? '单次任务' : (record as TaskItem).task_type === 'scheduled' ? '定时任务' : '未知' }}
+          </template>
+          <template v-if="column.key === 'qcStatus'">
+            {{ qcStatusText(record as TaskItem) }}
+          </template>
+          <template v-if="column.key === 'assignedToMe'">
+            {{ (record as TaskItem).assigned_to_me ?? '未知' }}
+          </template>
+          <template v-if="column.key === 'approvedRecords'">
+            {{ (record as TaskItem).approved_records ?? '未知' }}
+          </template>
+          <template v-if="column.key === 'qcAssignees'">
+            {{ assigneeText(record as TaskItem) }}
+          </template>
+          <template v-if="column.key === 'createdAt'">
+            {{ formatDate((record as TaskItem).created_at) }}
+          </template>
+          <template v-if="column.key === 'deadline'">
+            {{ (record as TaskItem).deadline ? formatDate((record as TaskItem).deadline!) : '未设置' }}
+          </template>
+          <template v-if="column.key === 'actualCompletedAt'">
+            {{ actualCompletedText(record as TaskItem) }}
           </template>
           <template v-if="column.key === 'progress'">
             <a-progress
@@ -474,26 +499,45 @@ const sceneOptions: Array<{ label: string; value: TaskSceneFilter }> = [
 const columns: TableColumnsType<TaskItem> = [
   { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
   { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
+  { title: '任务类型', dataIndex: 'task_type', key: 'taskType', width: 100 },
   { title: '场景', dataIndex: 'scene', key: 'scene', width: 90 },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+  { title: '质控状态', key: 'qcStatus', width: 140 },
+  { title: '任务状态', dataIndex: 'status', key: 'status', width: 100 },
   { title: '进度', dataIndex: 'progress', key: 'progress', width: 140 },
   {
-    title: '总病历',
+    title: '病历数量',
     dataIndex: 'total_records',
     key: 'totalRecords',
     width: 90,
     align: 'center' as const,
   },
-  {
-    title: '已完成',
-    dataIndex: 'completed_records',
-    key: 'completedRecords',
-    width: 90,
-    align: 'center' as const,
-  },
-  { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
+  { title: '分配给我的', key: 'assignedToMe', width: 110 },
+  { title: '审核通过病历数', key: 'approvedRecords', width: 140 },
+  { title: '创建人', dataIndex: 'creator_name', key: 'creatorName', width: 110 },
+  { title: '质控员', key: 'qcAssignees', width: 170 },
+  { title: '创建时间', key: 'createdAt', width: 170 },
+  { title: '期望完成时间', key: 'deadline', width: 170 },
+  { title: '实际完成时间', key: 'actualCompletedAt', width: 170 },
   { title: '操作', key: 'action', width: 200, fixed: 'right' as const },
 ]
+
+function qcStatusText(task: TaskItem): string {
+  if (!task.qc_run_statuses) return '未知'
+  if (!task.qc_run_statuses.length) return '未执行'
+  const labels = { queued: '排队中', running: '执行中', completed: '已完成', failed: '失败', canceled: '已取消' }
+  return [...new Set(task.qc_run_statuses)].map((state) => labels[state]).join('、')
+}
+
+function assigneeText(task: TaskItem): string {
+  if (!task.qc_assignees) return '未知'
+  if (!task.qc_assignees.length) return '未分配'
+  return task.qc_assignees.map((item) => item.name || '姓名未知').join('、')
+}
+
+function actualCompletedText(task: TaskItem): string {
+  if (task.status !== 'completed') return '未完成'
+  return task.actual_completed_at ? formatDate(task.actual_completed_at) : '未知'
+}
 
 // 工具函数
 const getStatusColor = (status: string) => {

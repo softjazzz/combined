@@ -176,6 +176,25 @@ def _task(
     }
 
 
+def test_list_summary_receives_only_authorized_page_and_preserves_approved_zero(monkeypatch):
+    database = _Database(task_rows=[
+        _task("own", "completed", None, created_at="2", creator_id="real-user"),
+        _task("foreign", "completed", None, created_at="1", creator_id="other"),
+    ])
+    calls = []
+    def read(**kwargs):
+        calls.append(kwargs)
+        return {"own": {**tasks.unknown_summary(), "approved_records": 0, "assigned_to_me": 2}}
+    monkeypatch.setattr(tasks, "get_task_list_summaries", read)
+    client = _make_client(monkeypatch, database, _user("real-user"))
+    response = client.get("/api/v1/tasks?tab=created")
+    assert response.status_code == 200
+    assert calls == [{"task_ids": ["own"], "actor_id": "real-user", "tab": "created", "is_manager": True}]
+    row = response.json()["data"]["items"][0]
+    assert row["approved_records"] == 0
+    assert row["assigned_to_me"] == 2
+
+
 def test_create_task_uses_authenticated_id_before_legacy_id(
     monkeypatch: pytest.MonkeyPatch,
 ):

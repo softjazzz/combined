@@ -58,6 +58,7 @@ from ..services.task_qc_run_service import (
     get_task_qc_run_record_result,
     list_task_qc_runs,
 )
+from ..services.task_list_summary_service import get_task_list_summaries, unknown_summary
 from ..services.task_record_sync_service import (
     TaskRecordSyncConflict,
     TaskRecordSyncForbidden,
@@ -771,6 +772,12 @@ async def list_tasks(
             if type(total) is not int or total < len(data):
                 raise HTTPException(status_code=503, detail="任务列表总数不可验证")
 
+        summaries = await run_in_threadpool(
+            get_task_list_summaries, task_ids=[row["id"] for row in data],
+            actor_id=_get_task_scope_user_id(current_user), tab=tab,
+            is_manager=has_any_role(current_user, [UserRole.ADMIN, UserRole.QC_MANAGER]),
+        )
+        data = [{**row, **summaries.get(row["id"], unknown_summary())} for row in data]
         return paginated_response(
             items=data, total=total, page=page, page_size=page_size,
             message="获取任务列表成功", trace_id=get_trace_id(request),

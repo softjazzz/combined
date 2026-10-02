@@ -106,11 +106,16 @@ const TaskDetailDrawerStub = defineComponent({
 
 const ProStandardTableStub = defineComponent({
   name: 'ProStandardTable',
-  props: { dataSource: Array },
+  props: { dataSource: Array, columns: Array },
   emits: ['change'],
   setup(props, { slots }) {
     return () => h('div', (props.dataSource || []).map((record) =>
-      h('div', { 'data-testid': 'task-row' }, slots.bodyCell?.({ column: { key: 'action' }, record })),
+      h('div', { 'data-testid': 'task-row' }, [
+        slots.bodyCell?.({ column: { key: 'action' }, record }),
+        ...['qcStatus', 'approvedRecords', 'assignedToMe', 'qcAssignees', 'actualCompletedAt'].map((key) =>
+          h('span', { 'data-testid': `task-${key}` }, slots.bodyCell?.({ column: { key }, record })),
+        ),
+      ]),
     ))
   },
 })
@@ -200,6 +205,33 @@ describe('MyTasksView 我的任务口径', () => {
     activeRoute.current = null
     mocks.getTaskList.mockResolvedValue(listResponse)
     mocks.getTaskStats.mockResolvedValue(statsResponse())
+  })
+
+  it('任务列表覆盖手册字段并且审核通过数不取任务完成数', async () => {
+    routeState.query = { tab: 'created' }
+    const response = listWith('列表任务', 'completed')
+    mocks.getTaskList.mockResolvedValue({ ...response, data: { ...response.data, items: [{
+      ...response.data.items[0], completed_records: 7, approved_records: 0, assigned_to_me: 2,
+      qc_assignees: [{ id: 'qc-1', name: '质控员甲' }], qc_run_statuses: ['failed'],
+      actual_completed_at: '2026-10-01T00:00:00Z',
+    }] } })
+    const wrapper = await mountView()
+    const columns = wrapper.getComponent(ProStandardTableStub).props('columns') as Array<{ title: string }>
+    expect(columns.map((column) => column.title)).toEqual(expect.arrayContaining([
+      '任务名称', '任务类型', '质控状态', '任务状态', '进度', '病历数量', '分配给我的',
+      '审核通过病历数', '创建人', '质控员', '创建时间', '期望完成时间', '实际完成时间',
+    ]))
+    expect(wrapper.get('[data-testid="task-approvedRecords"]').text()).toBe('0')
+    expect(wrapper.get('[data-testid="task-qcStatus"]').text()).toBe('失败')
+    expect(wrapper.get('[data-testid="task-qcAssignees"]').text()).toBe('质控员甲')
+  })
+
+  it('缺失审核与运行回执显示未知，未完成任务不伪造完成时间', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('未知任务', 'in_progress'))
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-testid="task-approvedRecords"]').text()).toBe('未知')
+    expect(wrapper.get('[data-testid="task-qcStatus"]').text()).toBe('未知')
+    expect(wrapper.get('[data-testid="task-actualCompletedAt"]').text()).toBe('未完成')
   })
 
   it('草稿不显示开始入口，快捷开始也不会提交草稿', async () => {
