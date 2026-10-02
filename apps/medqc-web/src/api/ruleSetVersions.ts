@@ -45,6 +45,9 @@ export interface RuleSetEntry {
   doctor_visible?: boolean | null
   /** null/缺省为未知，空数组明确非核心制度。 */
   core_system_ids?: string[] | null
+  defect_category?: string | null
+  defect_type?: string | null
+  reminder_level?: string | null
 }
 
 /**
@@ -254,9 +257,19 @@ function keyPath(ruleSetKey: string): string {
   return `/api/v1/rule-set-versions/${encodeURIComponent(ruleSetKey)}`
 }
 
-/** 去掉只读派生字段，只保留写接口接受的 rule_id/state。 */
+/** 去掉只读派生字段，保留显式设置的版本配置；缺省字段不补 null。 */
 export function toWriteEntries(entries: readonly RuleSetEntry[]): RuleSetEntry[] {
-  return entries.map(({ rule_id, state }) => ({ rule_id, state }))
+  return entries.map((entry) => ({
+    rule_id: entry.rule_id,
+    state: entry.state,
+    ...(entry.department_scope_mode !== undefined ? { department_scope_mode: entry.department_scope_mode } : {}),
+    ...(entry.department_refs !== undefined ? { department_refs: entry.department_refs } : {}),
+    ...(entry.doctor_visible !== undefined ? { doctor_visible: entry.doctor_visible } : {}),
+    ...(entry.core_system_ids !== undefined ? { core_system_ids: entry.core_system_ids } : {}),
+    ...(entry.defect_category !== undefined ? { defect_category: entry.defect_category } : {}),
+    ...(entry.defect_type !== undefined ? { defect_type: entry.defect_type } : {}),
+    ...(entry.reminder_level !== undefined ? { reminder_level: entry.reminder_level } : {}),
+  }))
 }
 
 /** 版本列表（含当前版本标记与草稿）。 */

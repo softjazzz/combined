@@ -60,12 +60,20 @@ def _drilldown_params(
     document: str | None = Query(None),
     grade: str | None = Query(None),
     has_defect: bool | None = Query(None),
+    has_veto: bool | None = Query(None),
+    defect_category: str | None = Query(None),
+    defect_type: str | None = Query(None),
+    unknown_classification: Literal["defect_category", "defect_type"] | None = Query(None),
 ) -> dict[str, Any]:
     return {
         "rule_id": rule_id,
         "document": document,
         "grade": grade,
         "has_defect": has_defect,
+        "has_veto": has_veto,
+        "defect_category": defect_category,
+        "defect_type": defect_type,
+        "unknown_classification": unknown_classification,
     }
 
 

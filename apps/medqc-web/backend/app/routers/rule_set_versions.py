@@ -79,6 +79,9 @@ class RuleSetEntry(BaseModel):
     department_refs: Optional[list[RuleSetDepartmentRef]] = None
     doctor_visible: Optional[StrictBool] = None
     core_system_ids: Optional[list[StrictStr]] = None
+    defect_category: Optional[StrictStr] = None
+    defect_type: Optional[StrictStr] = None
+    reminder_level: Optional[StrictStr] = None
 
 
 class DraftCreateRequest(BaseModel):

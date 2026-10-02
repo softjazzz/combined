@@ -163,6 +163,17 @@
             <p v-else class="empty">不可用</p>
           </div>
           <div class="data-panel">
+            <h3>缺陷类型分布</h3>
+            <template v-if="report.defect_type_distribution">
+              <button v-for="item in report.defect_type_distribution" :key="item.name" class="data-row row-button" type="button"
+                @click="openDrilldown({ defect_type: item.name }, `缺陷类型：${item.name}`)">
+                <span>{{ item.name }}</span><strong>{{ item.defect_total }}</strong>
+              </button>
+              <p v-if="!report.defect_type_distribution.length" class="empty">暂无已分类缺陷</p>
+            </template>
+            <p v-else class="empty">不可用</p>
+          </div>
+          <div class="data-panel">
             <h3>文书分布</h3>
             <template v-if="report.document_distribution">
               <button
@@ -208,6 +219,14 @@
               <span class="rank">{{ index + 1 }}</span
               ><span class="top-name">{{ item.rule_name || item.name }}</span
               ><strong>{{ item.defect_total }}</strong>
+            </button>
+          </div>
+          <p v-if="activeTop === 'veto'" class="notice">单否按评分标准的自动缺陷计分结果统计；人工缺陷单否归属未知。</p>
+          <div class="notice" v-if="report.classification_unknown">
+            <button v-for="dimension in classificationDimensions" :key="dimension.key" type="button" class="link"
+              :disabled="report.classification_unknown[dimension.key] == null"
+              @click="openDrilldown({ unknown_classification: dimension.key }, `${dimension.label}未知的病例`)">
+              {{ dimension.label }}未知：{{ numberText(report.classification_unknown[dimension.key]) }}
             </button>
           </div>
         </div>
@@ -487,12 +506,16 @@ const optionalColumns = computed<Array<{ key: ColumnKey; label: string }>>(() =>
 const loading = ref(false)
 const loadError = ref('')
 const exporting = ref<ReportSheet | null>(null)
-const activeTop = ref<'rules' | 'departments' | 'doctors' | 'documents'>('rules')
+const activeTop = ref<'categories' | 'types' | 'documents' | 'veto' | 'rules'>('categories')
 const topTabs = [
-  { key: 'rules', label: '规则' },
-  { key: 'departments', label: '科室' },
-  { key: 'doctors', label: '医生' },
+  { key: 'categories', label: '大类' },
+  { key: 'types', label: '类型' },
   { key: 'documents', label: '文书' },
+  { key: 'veto', label: '单否' },
+  { key: 'rules', label: '规则' },
+] as const
+const classificationDimensions = [
+  { key: 'defect_category', label: '大类' }, { key: 'defect_type', label: '类型' },
 ] as const
 const columnPreset = ref('all')
 const storageKey = computed(
@@ -513,8 +536,9 @@ let recordsRequest = 0
 
 const topLists = computed(() => ({
   rules: report.value?.top_rules,
-  departments: report.value?.top_departments,
-  doctors: report.value?.top_doctors,
+  categories: report.value?.top_categories,
+  types: report.value?.top_types,
+  veto: report.value?.top_veto_rules,
   documents: report.value?.top_documents,
 }))
 const activeTopRows = computed(() => topLists.value[activeTop.value] ?? null)
@@ -727,9 +751,9 @@ function openDrilldown(dimensions: Partial<RecordDrilldownFilters>, title: strin
 function openTop(item: ReportDistributionItem): void {
   if (activeTop.value === 'rules')
     openDrilldown({ rule_id: item.rule_id || item.name }, `规则：${item.rule_name || item.name}`)
-  else if (activeTop.value === 'departments')
-    openDrilldown({ department: item.name }, `科室：${item.name}`)
-  else if (activeTop.value === 'doctors') openDrilldown({ doctor: item.name }, `医生：${item.name}`)
+  else if (activeTop.value === 'categories') openDrilldown({ defect_category: item.name }, `大类：${item.name}`)
+  else if (activeTop.value === 'types') openDrilldown({ defect_type: item.name }, `类型：${item.name}`)
+  else if (activeTop.value === 'veto') openDrilldown({ defect_source: 'auto', rule_id: item.rule_id || item.name, has_veto: true }, `单否：${item.rule_name || item.name}`)
   else openDrilldown({ document: item.name }, `文书：${item.name}`)
 }
 function changePage(page: number): void {

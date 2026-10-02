@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
     hasRole: (role: string) => boolean
   },
   push: vi.fn(),
+  query: {} as Record<string, string>,
   message: { success: vi.fn(), warning: vi.fn(), info: vi.fn(), error: vi.fn() },
   api: {
     listRuleSetVersions: vi.fn(),
@@ -44,7 +45,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => state.auth,
 }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: state.push }) }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: state.push }), useRoute: () => ({ query: state.query }) }))
 vi.mock('ant-design-vue', () => ({ message: state.message }))
 vi.mock('@/api/ruleSetVersions', () => state.api)
 vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
@@ -296,6 +297,7 @@ async function selectRow(wrapper: VueWrapper, ruleId: string) {
 describe('QualityControlPointManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    state.query = {}
     state.auth = reactive({
       user: { id: 'manager-1' },
       userRoles: ['qc_manager'],
@@ -376,6 +378,40 @@ describe('QualityControlPointManagement', () => {
     expect(saved.department_scope_mode).toBeUndefined()
     expect(wrapper.find('.diff-item').text()).toContain('核心制度归属变更')
     expect(button(wrapper, '发布新版本').attributes('disabled')).toBeUndefined()
+  })
+
+  it('缺陷分类独立写入版本草稿并显示可发布差异', async () => {
+    state.api.createRuleSetDraft.mockResolvedValue(ok(draftOf(entries, 1)))
+    state.api.updateRuleSetDraft.mockImplementation(async (_key: string, payload: { entries: RuleSetEntryView[] }) => ok(draftOf(payload.entries, 2)))
+    const wrapper = await render()
+    await button(wrapper, '查看', '.row[data-id="LX0609-001"]').trigger('click')
+    await flush()
+    await wrapper.get('#defect-category').setValue('合成大类')
+    await wrapper.get('#defect-type').setValue('合成类型')
+    await wrapper.get('#reminder-level').setValue('强制')
+    await button(wrapper, '保存缺陷分类到草稿', '.drawer').trigger('click')
+    await flush()
+    const saved = state.api.updateRuleSetDraft.mock.calls[0][1].entries[0]
+    expect(saved.defect_category).toBe('合成大类')
+    expect(saved.defect_type).toBe('合成类型')
+    expect(saved.reminder_level).toBe('强制')
+    expect(saved.department_scope_mode).toBeUndefined()
+    expect(wrapper.find('.diff-item').text()).toContain('缺陷分类变更')
+    expect(button(wrapper, '发布新版本').attributes('disabled')).toBeUndefined()
+  })
+
+  it('规则引用按规则集与精确ID定位暂停规则，未知规则集失败关闭', async () => {
+    state.query = { rule_set_key: KEY, rule_id: 'LX0609-020' }
+    const wrapper = await render()
+    expect(wrapper.find('.drawer').text()).toContain('LX0609-020')
+    expect(wrapper.find('.row[data-id="LX0609-020"]').exists()).toBe(true)
+    wrapper.unmount()
+    vi.clearAllMocks()
+    state.query = { rule_set_key: 'unknown-set', rule_id: 'LX0609-001' }
+    const invalid = await render()
+    expect(invalid.text()).toContain('不支持请求的规则集')
+    expect(state.api.listRuleSetVersions).not.toHaveBeenCalled()
+    invalid.unmount()
   })
 
   it('在现有详情抽屉显式配置科室范围与医生端开关并保存到同一草稿', async () => {

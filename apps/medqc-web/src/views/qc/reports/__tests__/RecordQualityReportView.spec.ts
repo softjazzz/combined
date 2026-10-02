@@ -89,6 +89,31 @@ function render() {
 }
 
 describe('RecordQualityReportView', () => {
+  it('四维排行用对应筛选下钻，未知分类可查看且导出不丢筛选', async () => {
+    state.getReport.mockResolvedValue({ success: true, data: { ...report,
+      top_categories: [{ name: '合成大类', defect_total: 2 }],
+      top_types: [{ name: '合成类型', defect_total: 2 }],
+      top_veto_rules: [{ name: 'LX0609-001', rule_id: 'LX0609-001', defect_total: 1 }],
+      classification_unknown: { defect_category: 1, defect_type: 1 },
+    } })
+    state.getRecords.mockResolvedValue({ success: true, data: { total: 1, page: 1, page_size: 20, items: [] } })
+    state.exportReport.mockResolvedValue({ success: false })
+    const wrapper = render()
+    await flush()
+    await wrapper.get('.top-row').trigger('click')
+    await flush()
+    expect(state.getRecords).toHaveBeenLastCalledWith(expect.objectContaining({ defect_category: '合成大类' }))
+    await wrapper.get('.drawer-actions button').trigger('click')
+    expect(state.exportReport).toHaveBeenLastCalledWith(expect.objectContaining({ defect_category: '合成大类' }), 'records', undefined)
+    const veto = wrapper.findAll('.top-head button').find((button) => button.text() === '单否')
+    await veto?.trigger('click')
+    await wrapper.get('.top-row').trigger('click')
+    expect(state.getRecords).toHaveBeenLastCalledWith(expect.objectContaining({ rule_id: 'LX0609-001', has_veto: true }))
+    const unknown = wrapper.findAll('.top-panel .notice button').find((button) => button.text().includes('类型未知'))
+    await unknown?.trigger('click')
+    expect(state.getRecords).toHaveBeenLastCalledWith(expect.objectContaining({ unknown_classification: 'defect_type' }))
+    wrapper.unmount()
+  })
   it('按真实等级展示比例并导出已显示列，使用已查询筛选', async () => {
     state.getReport.mockResolvedValue({ success: true, data: {
       ...report,
@@ -160,7 +185,7 @@ describe('RecordQualityReportView', () => {
     expect(wrapper.text()).toContain('未配置评分标准')
     expect(wrapper.text()).toContain('人工缺陷')
     expect(wrapper.text()).toContain('不可用')
-    expect(wrapper.findAll('.data-panel').length).toBe(2)
+    expect(wrapper.findAll('.data-panel').length).toBe(3)
   })
 
   it('serves the final scene as discharged cases with an unverified-archive notice', async () => {

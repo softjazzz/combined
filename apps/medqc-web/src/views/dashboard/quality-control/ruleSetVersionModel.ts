@@ -62,6 +62,9 @@ export interface QualityPointRow {
   departmentRefs: Array<{ institute_id: string; department_name: string }> | null
   doctorVisible: boolean | null
   coreSystemIds: string[] | null
+  defectCategory: string | null
+  defectType: string | null
+  reminderLevel: string | null
 }
 
 export interface EntryDiffItem {
@@ -72,6 +75,7 @@ export interface EntryDiffItem {
   /** 草稿中没有该规则时为 null。 */
   to: RuleSetEntryState | null
   coreChanged?: boolean
+  classificationChanged?: boolean
 }
 
 export function toRuleSetEntry(entry: RuleSetEntry): RuleSetEntry {
@@ -84,6 +88,9 @@ export function toRuleSetEntry(entry: RuleSetEntry): RuleSetEntry {
     ...(entry.department_refs !== undefined ? { department_refs: entry.department_refs } : {}),
     ...(entry.doctor_visible !== undefined ? { doctor_visible: entry.doctor_visible } : {}),
     ...(entry.core_system_ids !== undefined ? { core_system_ids: entry.core_system_ids } : {}),
+    ...(entry.defect_category !== undefined ? { defect_category: entry.defect_category } : {}),
+    ...(entry.defect_type !== undefined ? { defect_type: entry.defect_type } : {}),
+    ...(entry.reminder_level !== undefined ? { reminder_level: entry.reminder_level } : {}),
   }
 }
 
@@ -117,6 +124,9 @@ export function buildPointRows(
       departmentRefs: draftEntry?.department_refs ?? entry.department_refs ?? null,
       doctorVisible: draftEntry?.doctor_visible ?? entry.doctor_visible ?? null,
       coreSystemIds: (draftEntry ?? entry).core_system_ids ?? null,
+      defectCategory: (draftEntry ?? entry).defect_category ?? null,
+      defectType: (draftEntry ?? entry).defect_type ?? null,
+      reminderLevel: (draftEntry ?? entry).reminder_level ?? null,
     }
   })
 }
@@ -184,9 +194,12 @@ export function diffEntries(
     const coreChanged =
       JSON.stringify(base.get(ruleId)?.core_system_ids ?? null) !==
       JSON.stringify(draft.get(ruleId)?.core_system_ids ?? null)
-    return from === to && !coreChanged
+    const classificationChanged = (['defect_category', 'defect_type', 'reminder_level'] as const).some((key) =>
+      base.get(ruleId)?.[key] !== draft.get(ruleId)?.[key],
+    )
+    return from === to && !coreChanged && !classificationChanged
       ? []
-      : [{ rule_id: ruleId, name, from, to, ...(coreChanged ? { coreChanged } : {}) }]
+      : [{ rule_id: ruleId, name, from, to, ...(coreChanged ? { coreChanged } : {}), ...(classificationChanged ? { classificationChanged } : {}) }]
   })
 }
 

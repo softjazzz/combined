@@ -80,6 +80,25 @@ def test_core_system_excel_preserves_missing_null_empty_and_explicit_ids():
     assert [entry.get("core_system_ids") for entry in parsed.entries[1:4]] == [None, [], ["CORE-15"]]
 
 
+def test_defect_classification_excel_preserves_missing_null_and_literal_names():
+    rows = builtin_entries()
+    rows[1].update(defect_category=None, defect_type=None, reminder_level=None)
+    rows[2].update(defect_category="=不是公式", defect_type="合成类型", reminder_level="强制")
+    parsed = excel.parse_workbook(workbook_bytes(rows), expected_rule_set_key=KEY)
+    assert parsed.entries == rows
+    assert service.compute_entries_digest(parsed.entries) == service.compute_entries_digest(rows)
+
+
+def test_v3_core_template_remains_readable_without_new_null_fields():
+    rows = builtin_entries()
+    rows[0]["core_system_ids"] = ["CORE-15"]
+    def old_template(workbook):
+        workbook[excel.INFO_SHEET].cell(2, 1, excel.CORE_TEMPLATE_VERSION)
+        workbook[excel.ENTRY_SHEET].delete_cols(9, len(excel.ENTRY_HEADERS) - 8)
+    parsed = excel.parse_workbook(edit_workbook(workbook_bytes(rows), old_template), expected_rule_set_key=KEY)
+    assert parsed.entries == rows
+
+
 def edit_workbook(content: bytes, edit) -> bytes:
     workbook = load_workbook(io.BytesIO(content), data_only=False)
     edit(workbook)
@@ -136,7 +155,7 @@ def test_applicability_fields_roundtrip_without_defaulting_unconfigured_entries(
 def test_legacy_v1_four_column_workbook_imports_as_unconfigured_draft():
     content = edit_workbook(workbook_bytes(), lambda workbook: (
         setattr(workbook[excel.INFO_SHEET]["A2"], "value", excel.LEGACY_TEMPLATE_VERSION),
-        workbook[excel.ENTRY_SHEET].delete_cols(5, 4),
+        workbook[excel.ENTRY_SHEET].delete_cols(5, len(excel.ENTRY_HEADERS) - 4),
     ))
 
     parsed = excel.parse_workbook(content, expected_rule_set_key=KEY)

@@ -286,8 +286,18 @@
                 : '非核心制度'
           }}
         </dd>
+        <dt>缺陷大类</dt><dd>{{ builtinDetail.defectCategory || UNKNOWN_TEXT }}</dd>
+        <dt>缺陷类型</dt><dd>{{ builtinDetail.defectType || UNKNOWN_TEXT }}</dd>
+        <dt>提醒等级</dt><dd>{{ builtinDetail.reminderLevel || UNKNOWN_TEXT }}</dd>
       </dl>
       <div v-if="builtinDetail && editable" class="applicability-editor">
+        <label for="defect-category">缺陷大类</label>
+        <a-input id="defect-category" v-model:value="defectCategory" :maxlength="80" placeholder="未配置" />
+        <label for="defect-type">缺陷类型</label>
+        <a-input id="defect-type" v-model:value="defectType" :maxlength="80" placeholder="未配置" />
+        <label for="reminder-level">提醒等级</label>
+        <a-input id="reminder-level" v-model:value="reminderLevel" :maxlength="80" placeholder="未配置" />
+        <a-button :loading="saving" @click="saveApplicability(false, true)">保存缺陷分类到草稿</a-button>
         <label>科室范围</label>
         <a-radio-group v-model:value="scopeMode">
           <a-radio-button value="all"> 全部科室 </a-radio-button>
@@ -346,7 +356,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   createRuleSetDraft,
@@ -386,6 +396,7 @@ import {
 } from './ruleSetVersionModel'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const props = withDefaults(
@@ -403,7 +414,8 @@ const isCodingMode = computed(() => props.managementMode === 'coding')
 const pageTitle = computed(() => (isCodingMode.value ? '编码质控点管理' : '非编码质控点管理'))
 
 const ruleSetOptions = RULE_SET_OPTIONS.map((item) => ({ ...item }))
-const ruleSetKey = ref<string>(isCodingMode.value ? CODING_QC_RULE_SET_KEY : LX0609_RULE_SET_KEY)
+const requestedRuleSet = computed(() => typeof route.query.rule_set_key === 'string' ? route.query.rule_set_key : '')
+const ruleSetKey = ref<string>(requestedRuleSet.value || (isCodingMode.value ? CODING_QC_RULE_SET_KEY : LX0609_RULE_SET_KEY))
 const activeTab = ref<PointTab>('online')
 const selectedRowKeys = ref<string[]>([])
 const deleteConfirmContext = ref<{
@@ -425,6 +437,9 @@ const doctorVisibleChoice = ref<'visible' | 'hidden' | ''>('')
 const scopeTargetIds = ref<string[]>([])
 const coreClassification = ref<'unknown' | 'none' | 'selected'>('unknown')
 const coreIds = ref<string[]>([])
+const defectCategory = ref('')
+const defectType = ref('')
+const reminderLevel = ref('')
 const coreSystems = ref<Array<{ id: string; name: string }>>([])
 const coreCatalogError = ref('')
 
@@ -539,6 +554,12 @@ async function load() {
   const context = contextGeneration
   const request = ++loadGeneration
   if (!actor) return
+  if (!RULE_SET_OPTIONS.some((option) => option.value === key) && !(isCodingMode.value && key === CODING_QC_RULE_SET_KEY)) {
+    versionList.value = null
+    currentDetail.value = null
+    loadError.value = '不支持请求的规则集，无法定位质控点'
+    return
+  }
   loading.value = true
   loadError.value = ''
   selectedRowKeys.value = []
@@ -564,6 +585,18 @@ async function load() {
     currentDetail.value = detailResult.success ? (detailResult.data ?? null) : null
     baseDetail.value = baseResult?.success ? (baseResult.data ?? null) : null
     if (!detailResult.success) loadError.value = detailResult.message || '读取当前版本详情失败'
+    const targetId = typeof route.query.rule_id === 'string' ? route.query.rule_id.trim().toUpperCase() : ''
+    if (targetId && detailResult.success) {
+      const target = rows.value.find((row) => row.rule_id === targetId)
+      if (!target || target.state === 'deleted') loadError.value = '指定质控点不存在或已删除'
+      else {
+        activeTab.value = target.state === 'active' ? 'online' : 'offline'
+        searchType.value = 'id'
+        searchKeyword.value = targetId
+        appliedKeyword.value = targetId
+        openBuiltinDetail(target)
+      }
+    }
   } finally {
     if (contextCurrent(context, actor, key) && request === loadGeneration) loading.value = false
   }
@@ -670,6 +703,9 @@ function confirmDelete() {
 }
 
 function openBuiltinDetail(row: QualityPointRow) {
+  defectCategory.value = row.defectCategory || ''
+  defectType.value = row.defectType || ''
+  reminderLevel.value = row.reminderLevel || ''
   if (isCodingMode.value) return
   builtinDetail.value = row
   coreClassification.value =
@@ -730,18 +766,18 @@ function parseDepartmentRefs() {
   return refs
 }
 
-async function saveApplicability(coreOnly = false) {
+async function saveApplicability(coreOnly = false, classificationOnly = false) {
   const row = builtinDetail.value
   const list = versionList.value
   if (!row || !list || !editable.value) return
-  if (!coreOnly && (!scopeMode.value || !doctorVisibleChoice.value)) {
+  if (!coreOnly && !classificationOnly && (!scopeMode.value || !doctorVisibleChoice.value)) {
     message.warning('请明确选择科室范围和医生端开关')
     return
   }
   const configuredScopeMode = scopeMode.value || undefined
   let departmentRefs: Array<{ institute_id: string; department_name: string }>
   try {
-    departmentRefs = coreOnly ? [] : parseDepartmentRefs()
+    departmentRefs = coreOnly || classificationOnly ? [] : parseDepartmentRefs()
   } catch (error) {
     message.warning(error instanceof Error ? error.message : '科室范围格式无效')
     return
@@ -780,7 +816,10 @@ async function saveApplicability(coreOnly = false) {
     const entries = working.entries.map((entry) =>
       toRuleSetEntry(
         targets.has(entry.rule_id)
-          ? coreOnly
+          ? classificationOnly
+            ? { ...entry, defect_category: defectCategory.value.trim() || null, defect_type: defectType.value.trim() || null,
+                reminder_level: reminderLevel.value.trim() || null }
+            : coreOnly
             ? { ...entry, core_system_ids: selectedCoreIds }
             : {
                 ...entry,
@@ -801,7 +840,7 @@ async function saveApplicability(coreOnly = false) {
     versionList.value = { ...list, draft: updated.data }
     builtinDetail.value = null
     message.success(
-      `已为 ${targets.size} 个质控点保存${coreOnly ? '核心制度归属' : '适用范围与医生端开关'}，发布新版本后生效`,
+      `已为 ${targets.size} 个质控点保存${classificationOnly ? '缺陷分类' : coreOnly ? '核心制度归属' : '适用范围与医生端开关'}，发布新版本后生效`,
     )
   } finally {
     if (contextCurrent(context, actor, key) && request === mutationGeneration) saving.value = false
@@ -844,6 +883,11 @@ function invalidateContext() {
 watch(ruleSetKey, () => {
   invalidateContext()
   if (actorKey.value) void load()
+})
+
+watch(() => [route.query.rule_set_key, route.query.rule_id], () => {
+  if (requestedRuleSet.value && requestedRuleSet.value !== ruleSetKey.value) ruleSetKey.value = requestedRuleSet.value
+  else if (actorKey.value) void load()
 })
 
 watch(isCodingMode, (coding) => {

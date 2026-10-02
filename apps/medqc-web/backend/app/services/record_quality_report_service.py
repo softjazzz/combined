@@ -83,7 +83,7 @@ def _default_results_loader(refs: Sequence[Mapping[str, str]]) -> Mapping[tuple[
     from .custom_qc_workspace_service import CustomQCWorkspaceService
 
     return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
-        record_refs=refs, include_items=True,
+        record_refs=refs, include_items=True, include_rule_set_context=True,
     )
 
 
@@ -103,6 +103,14 @@ def _default_standard_loader(scene: str) -> Mapping[str, Any] | None:
     from .scoring_standard_service import get_default_standard
 
     return get_default_standard(scene)
+
+
+def _default_version_loader(rule_set_key: str, version: str) -> Mapping[str, Any] | None:
+    from .rule_set_version_service import resolve_rule_set_version, RuleSetVersionNotFound
+    try:
+        return resolve_rule_set_version(rule_set_key, version)
+    except RuleSetVersionNotFound:
+        return None
 
 
 def _default_projector(items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -151,6 +159,7 @@ class CaseRow:
     manual_rule_codes: list[str] = field(default_factory=list)
     manual_rejected: int = 0
     rule_statuses: dict[str, str] = field(default_factory=dict)
+    classifications: dict[str, dict[str, str | None]] = field(default_factory=dict)
 
 
 @dataclass
@@ -225,6 +234,7 @@ def build_report_context(
     projector: Callable[[Iterable[Mapping[str, Any]]], list[dict[str, Any]]] = _default_projector,
     rule_meta_loader: Callable[[], Mapping[str, Mapping[str, str]]] = _default_rule_meta_loader,
     department_loader: Callable[..., Mapping[tuple[str, str, str], str]] | None = None,
+    version_loader: Callable[[str, str], Mapping[str, Any] | None] = _default_version_loader,
 ) -> ReportContext:
     """读取并装配报表病例行；只在这里访问各 owner，汇总与下钻共用同一病例集。"""
     from .scoring_service import score_result
@@ -259,6 +269,7 @@ def build_report_context(
     rows: list[CaseRow] = []
     raw_by_identity: dict[tuple[str, str, str], Mapping[str, Any]] = {}
     projected_by_identity: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    version_classifications: dict[tuple[str, str], dict[str, dict[str, str | None]]] = {}
     unavailable_total = 0
     for identity in sorted(records_by_identity):
         raw = raw_results.get(identity) if isinstance(raw_results, Mapping) else None
@@ -280,6 +291,29 @@ def build_report_context(
             unavailable_total += 1
             continue
         record = records_by_identity[identity]
+        classifications: dict[str, dict[str, str | None]] = {}
+        version_key = (_text(raw.get("rule_set_key")), _text(raw.get("rule_set_version")))
+        if version_key[0] == LUXIAN_0609_RULE_SET_KEY and version_key[1] and raw.get("root_job_id") and raw.get("envelope_id"):
+            if version_key not in version_classifications:
+                try:
+                    resolved = version_loader(*version_key)
+                    entries = resolved.get("entries") if resolved else []
+                    if not isinstance(entries, list):
+                        raise ValueError("冻结分类无效")
+                    mapping: dict[str, dict[str, str | None]] = {}
+                    for entry in entries:
+                        rid = _text(entry.get("rule_id")).upper()
+                        if not rid or rid in mapping:
+                            raise ValueError("冻结分类规则身份无效")
+                        values = {key: entry.get(key) for key in ("defect_category", "defect_type")}
+                        if any(value is not None and (not isinstance(value, str) or not value.strip() or len(value.strip()) > 80) for value in values.values()):
+                            raise ValueError("冻结分类字段无效")
+                        mapping[rid] = values
+                    version_classifications[version_key] = mapping
+                except Exception as exc:  # noqa: BLE001 - 分类读取失败不改缺陷事实，归入未知分类
+                    logger.warning("病历质量冻结分类读取失败 error_type=%s", type(exc).__name__)
+                    version_classifications[version_key] = {}
+            classifications = version_classifications[version_key]
         rows.append(CaseRow(
             identity=identity,
             patient_name=_text(record.get("patient_name")),
@@ -291,6 +325,7 @@ def build_report_context(
                 if item.get("is_confirmed_issue") is True and _text(item.get("rule_id"))
             ),
             rule_statuses=_projected_rule_statuses(projected),
+            classifications=classifications,
         ))
         raw_by_identity[identity] = raw
         projected_by_identity[identity] = projected
@@ -440,6 +475,11 @@ def _level_of(ctx: ReportContext, rule_id: str) -> str:
     return meta["defect_level"] if meta else UNGRADED_LEVEL
 
 
+def _classification_of(row: CaseRow, origin: str, rule_id: str, dimension: str) -> str | None:
+    # 人工缺陷 owner 尚未提供创建时版本引用，不能借用同病例自动结果的分类。
+    return row.classifications.get(rule_id, {}).get(dimension) if origin == "auto" else None
+
+
 def _mean(values: list[float]) -> float | None:
     if not values:
         return None
@@ -573,8 +613,16 @@ def summarize(ctx: ReportContext) -> dict[str, Any]:
     rule_counter: dict[str, int] = defaultdict(int)
     department_counter: dict[str, int] = defaultdict(int)
     doctor_counter: dict[str, int] = defaultdict(int)
+    classification_counters: dict[str, dict[str, int]] = {key: defaultdict(int) for key in ("defect_category", "defect_type")}
+    classification_unknown = dict.fromkeys(classification_counters, 0)
     for row in rows:
         for origin, rule_id in _defects(row, source):
+            for key, counter in classification_counters.items():
+                value = _classification_of(row, origin, rule_id, key)
+                if value is None:
+                    classification_unknown[key] += 1
+                else:
+                    counter[value] += 1
             level_counter[_level_of(ctx, rule_id)] += 1
             document_counter[_document_of(ctx, origin, rule_id)] += 1
             rule_counter[rule_id or MANUAL_UNCLASSIFIED_DOCUMENT] += 1
@@ -586,6 +634,12 @@ def summarize(ctx: ReportContext) -> dict[str, Any]:
         {**item, "rule_id": item["name"], "rule_name": (ctx.rule_meta.get(item["name"]) or {}).get("rule_name", item["name"])}
         for item in _top(rule_counter)
     ]
+    veto_counter: dict[str, int] = defaultdict(int)
+    veto_available = source != "manual" and configured and all(row.score_status == "scored" for row in rows)
+    if veto_available:
+        for row in rows:
+            for rule_id in row.veto_rule_ids:
+                veto_counter[rule_id] += 1
 
     def grouped(key: Callable[[CaseRow], str], all_rows_counts: Mapping[str, int]) -> list[dict[str, Any]]:
         buckets: dict[str, list[CaseRow]] = defaultdict(list)
@@ -618,6 +672,15 @@ def summarize(ctx: ReportContext) -> dict[str, Any]:
         "score_distribution": score_distribution,
         "defect_level_distribution": None if manual_blind else _distribution(level_counter),
         "document_distribution": None if manual_blind else _distribution(document_counter),
+        "defect_type_distribution": None if manual_blind else _distribution(classification_counters["defect_type"]),
+        "top_categories": None if manual_blind else _top(classification_counters["defect_category"]),
+        "top_types": None if manual_blind else _top(classification_counters["defect_type"]),
+        "classification_unknown": dict.fromkeys(classification_unknown) if manual_blind else classification_unknown,
+        "top_veto_rules": [
+            {**item, "rule_id": item["name"], "rule_name": (ctx.rule_meta.get(item["name"]) or {}).get("rule_name", item["name"])}
+            for item in _top(veto_counter)
+        ] if veto_available else None,
+        "veto_source": "auto",
         "top_rules": None if manual_blind else top_rules,
         "top_departments": None if manual_blind else _top(department_counter),
         "top_doctors": None if manual_blind else _top(doctor_counter),
@@ -638,10 +701,18 @@ def _distribution(counter: Mapping[str, int]) -> list[dict[str, Any]]:
 def _filtered_rows(
     ctx: ReportContext, *, department: str | None, doctor: str | None,
     rule_id: str | None, document: str | None, grade: str | None,
-    has_defect: bool | None,
+    has_defect: bool | None, has_veto: bool | None = None,
+    defect_category: str | None = None, defect_type: str | None = None,
+    unknown_classification: str | None = None,
 ) -> list[CaseRow]:
     source = ctx.scope["defect_source"]
-    if (has_defect is not None or rule_id or document) and source in {"all", "manual"}:
+    if has_veto is not None and (
+        source == "manual" or ctx.score_status != "configured" or any(row.score_status != "scored" for row in ctx.rows)
+    ):
+        raise RecordQualityReportUnavailable("自动单否结果暂不可用，无法兑现下钻筛选")
+    if unknown_classification is not None and unknown_classification not in {"defect_category", "defect_type"}:
+        raise RecordQualityReportInvalid("未知分类维度无效")
+    if (has_defect is not None or rule_id or document or defect_category or defect_type or unknown_classification) and source in {"all", "manual"}:
         if ctx.manual_status != "available":
             raise RecordQualityReportUnavailable("人工缺陷暂不可用，无法兑现下钻筛选")
     if grade and (ctx.score_status != "configured" or any(row.score_status != "scored" for row in ctx.rows)):
@@ -655,7 +726,18 @@ def _filtered_rows(
             continue
         if grade and row.grade != grade:
             continue
+        if has_veto is not None and bool(row.veto_rule_ids) != has_veto:
+            continue
+        if has_veto and normalized_rule and normalized_rule not in row.veto_rule_ids:
+            continue
         defects = _defects(row, source)
+        if (defect_category or defect_type or unknown_classification) and not any(
+            (not defect_category or _classification_of(row, origin, rule, "defect_category") == defect_category)
+            and (not defect_type or _classification_of(row, origin, rule, "defect_type") == defect_type)
+            and (not unknown_classification or _classification_of(row, origin, rule, unknown_classification) is None)
+            for origin, rule in defects
+        ):
+            continue
         if normalized_rule and not any((rule or MANUAL_UNCLASSIFIED_DOCUMENT) == normalized_rule for _, rule in defects):
             continue
         if document and not any(_document_of(ctx, origin, rule) == document for origin, rule in defects):
@@ -696,6 +778,9 @@ def records_page(
     department: str | None = None, doctor: str | None = None,
     rule_id: str | None = None, document: str | None = None,
     grade: str | None = None, has_defect: bool | None = None,
+    has_veto: bool | None = None,
+    defect_category: str | None = None, defect_type: str | None = None,
+    unknown_classification: str | None = None,
 ) -> dict[str, Any]:
     """在与概览同一病例集上筛选并分页，不重新读取或重判事实。"""
     if not isinstance(page, int) or isinstance(page, bool) or page < 1:
@@ -705,7 +790,8 @@ def records_page(
     if has_defect is not None and not isinstance(has_defect, bool):
         raise RecordQualityReportInvalid("has_defect 必须为布尔值")
     rows = _filtered_rows(ctx, department=department, doctor=doctor, rule_id=rule_id,
-                          document=document, grade=grade, has_defect=has_defect)
+                          document=document, grade=grade, has_defect=has_defect, has_veto=has_veto,
+                          defect_category=defect_category, defect_type=defect_type, unknown_classification=unknown_classification)
     start = (page - 1) * page_size
     return {"total": len(rows), "page": page, "page_size": page_size,
             "items": [_record_item(ctx, row) for row in rows[start:start + page_size]]}
@@ -755,6 +841,9 @@ def export_csv(
     department: str | None = None, doctor: str | None = None,
     rule_id: str | None = None, document: str | None = None,
     grade: str | None = None, has_defect: bool | None = None,
+    has_veto: bool | None = None,
+    defect_category: str | None = None, defect_type: str | None = None,
+    unknown_classification: str | None = None,
     columns: Sequence[str] | None = None,
 ) -> bytes:
     """导出与页面相同的概览明细或病例下钻，返回带 BOM 的 CSV。"""
@@ -765,13 +854,15 @@ def export_csv(
             raise RecordQualityReportInvalid("病例导出不接受汇总列配置")
         rows = [_record_item(ctx, row) for row in _filtered_rows(
             ctx, department=department, doctor=doctor, rule_id=rule_id,
-            document=document, grade=grade, has_defect=has_defect,
+            document=document, grade=grade, has_defect=has_defect, has_veto=has_veto,
+            defect_category=defect_category, defect_type=defect_type, unknown_classification=unknown_classification,
         )]
         fields = ("institute_id", "patient_id", "visit_id", "patient_name", "department", "doctor",
                   "completed_at", "score", "grade", "score_status", "veto_hit", "review_state",
                   "auto_defect_total", "manual_defect_total")
     else:
-        if any(value is not None for value in (department, doctor, rule_id, document, grade, has_defect)):
+        if any(value is not None for value in (department, doctor, rule_id, document, grade, has_defect, has_veto,
+                                              defect_category, defect_type, unknown_classification)):
             raise RecordQualityReportInvalid("科室/医生汇总导出不接受病例下钻筛选")
         summary = summarize(ctx)
         rows = summary["department_rows" if sheet == "departments" else "doctor_rows"]

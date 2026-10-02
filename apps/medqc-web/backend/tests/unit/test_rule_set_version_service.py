@@ -22,6 +22,20 @@ from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUD
 KEY = "luxian_0609_qc_v1"
 
 
+def test_defect_classification_is_explicit_and_does_not_change_legacy_digest():
+    old = {"rule_id": "LX0609-001", "state": "active"}
+    assert service.normalize_entries([old]) == [old]
+    for field in ("defect_category", "defect_type", "reminder_level"):
+        for value in (None, " 合成分类 "):
+            normalized = service.normalize_entries([{**old, field: value}])
+            assert normalized[0][field] == (value.strip() if value else None)
+            assert service.normalize_entries(normalized) == normalized
+            assert service.compute_entries_digest(normalized) != service.compute_entries_digest([old])
+        for value in ("", "  ", 1, [], "长" * 81):
+            with pytest.raises(service.RuleSetVersionInvalid):
+                service.normalize_entries([{**old, field: value}])
+
+
 def test_core_system_ids_unknown_none_and_explicit_membership_preserve_digest():
     unknown = {"rule_id": "LX0609-001", "state": "active"}
     assert "core_system_ids" not in service.normalize_entries([unknown])[0]

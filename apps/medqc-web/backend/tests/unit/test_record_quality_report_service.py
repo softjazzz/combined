@@ -254,6 +254,59 @@ def test_group_veto_counts_cases_once_and_export_headers_escape_formulas():
     assert report.summarize(ctx)["department_rows"][0]["reviewed_total"] is None
 
 
+def test_classification_uses_each_saved_version_and_manual_remains_unknown():
+    calls = []
+    results = {
+        ("a", "p1", "same"): {"status": "ready", "completed_at": "2026-09-26T16:00:00Z",
+            "root_job_id": "job1", "envelope_id": "env1", "rule_set_key": report.LUXIAN_0609_RULE_SET_KEY,
+            "rule_set_version": "old", "items": [{"rule_id": "LX0609-001", "is_confirmed_issue": True}]},
+        ("b", "p2", "same"): {"status": "ready", "completed_at": "2026-09-26T16:00:00Z",
+            "root_job_id": "job2", "envelope_id": "env2", "rule_set_key": report.LUXIAN_0609_RULE_SET_KEY,
+            "rule_set_version": "new", "items": [{"rule_id": "LX0609-001", "is_confirmed_issue": True}]},
+    }
+    def versions(key, version):
+        calls.append((key, version))
+        return {"entries": [{"rule_id": "LX0609-001", "defect_category": version, "defect_type": f"类型-{version}"}]}
+    ctx = _context(results=results, version_loader=versions, standard_loader=lambda _: _standard())
+    summary = report.summarize(ctx)
+    assert {item["name"]: item["defect_total"] for item in summary["top_categories"]} == {"old": 1, "new": 1}
+    assert summary["classification_unknown"] == {"defect_category": 1, "defect_type": 1}
+    assert len(calls) == 2
+    page = report.records_page(ctx, defect_category="old")
+    assert [item["patient_id"] for item in page["items"]] == ["p1"]
+    exported = list(csv.DictReader(io.StringIO(report.export_csv(ctx, sheet="records", defect_category="old").decode("utf-8-sig"))))
+    assert [item["患者编号"] for item in exported] == ["p1"]
+    assert report.records_page(ctx, unknown_classification="defect_type")["total"] == 1
+    assert summary["top_veto_rules"][0]["defect_total"] == 2
+    assert report.records_page(ctx, rule_id="LX0609-001", has_veto=True)["total"] == 2
+
+
+def test_unversioned_defects_are_unknown_and_manual_veto_is_not_auto():
+    calls = []
+    ctx = _context(version_loader=lambda *args: calls.append(args))
+    summary = report.summarize(ctx)
+    assert calls == []
+    assert summary["top_categories"] == []
+    assert summary["classification_unknown"]["defect_category"] == 2
+    assert report.records_page(ctx, unknown_classification="defect_category")["total"] == 1
+    manual = _context(defect_source="manual", standard_loader=lambda _: _standard())
+    assert report.summarize(manual)["top_veto_rules"] is None
+    with pytest.raises(report.RecordQualityReportUnavailable):
+        report.records_page(manual, has_veto=True)
+
+
+def test_default_result_reader_requests_frozen_version_context(monkeypatch):
+    from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+    captured = {}
+    monkeypatch.setattr(CustomQCWorkspaceService, "__init__", lambda self: None)
+    def load(_self, **kwargs):
+        captured.update(kwargs)
+        return {}
+    monkeypatch.setattr(CustomQCWorkspaceService, "build_luxian_0609_completed_record_result_summaries", load)
+    report._default_results_loader([])
+    assert captured == {"record_refs": [], "include_items": True, "include_rule_set_context": True}
+
+
 def test_report_scoring_consumes_exact_department_scope():
     standard = _standard()
     standard["items"][0].update({

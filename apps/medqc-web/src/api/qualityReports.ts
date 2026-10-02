@@ -20,6 +20,10 @@ export interface RecordDrilldownFilters extends RecordQualityFilters {
   document?: string
   grade?: string
   has_defect?: boolean
+  has_veto?: boolean
+  defect_category?: string
+  defect_type?: string
+  unknown_classification?: 'defect_category' | 'defect_type'
   page?: number
   page_size?: number
 }
@@ -87,6 +91,12 @@ export interface RecordQualityReport {
   top_departments: ReportDistributionItem[] | null
   top_doctors: ReportDistributionItem[] | null
   top_documents: ReportDistributionItem[] | null
+  top_categories?: ReportDistributionItem[] | null
+  top_types?: ReportDistributionItem[] | null
+  top_veto_rules?: ReportDistributionItem[] | null
+  defect_type_distribution?: ReportDistributionItem[] | null
+  veto_source?: 'auto'
+  classification_unknown?: { defect_category: number | null; defect_type: number | null }
   department_rows: ReportGroupRow[]
   doctor_rows: ReportGroupRow[]
   unavailable_dimensions: Array<{ key: string; label: string; reason_code: string }>

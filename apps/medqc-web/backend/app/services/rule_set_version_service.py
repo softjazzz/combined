@@ -255,6 +255,7 @@ def normalize_entries(raw: Any) -> list[dict[str, Any]]:
     normalized: dict[str, dict[str, Any]] = {}
     allowed_keys = {
         "rule_id", "state", "department_scope_mode", "department_refs", "doctor_visible", "core_system_ids",
+        "defect_category", "defect_type", "reminder_level",
     }
     for item in raw:
         if (
@@ -273,6 +274,12 @@ def normalize_entries(raw: Any) -> list[dict[str, Any]]:
         if rule_id in normalized:
             raise RuleSetVersionInvalid(f"entries 中规则重复：{rule_id}")
         normalized_item: dict[str, Any] = {"rule_id": rule_id, "state": state}
+        for key in ("defect_category", "defect_type", "reminder_level"):
+            if key in item:
+                value = item[key]
+                if value is not None and (not isinstance(value, str) or not value.strip() or len(value.strip()) > 80):
+                    raise RuleSetVersionInvalid("缺陷分类/提醒等级必须为 1 到 80 字符或 null")
+                normalized_item[key] = value.strip() if value is not None else None
         if "core_system_ids" in item:
             core_ids = item["core_system_ids"]
             if core_ids is not None and (

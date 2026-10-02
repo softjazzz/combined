@@ -28,6 +28,18 @@ function httpError(status: number, body: unknown) {
 describe('ruleSetVersions API', () => {
   beforeEach(() => vi.restoreAllMocks())
 
+  it('分类与既有显式配置经创建和更新保留，旧条目不补空字段', async () => {
+    const spy = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({}))
+    const configured = { rule_id: 'LX0609-001', state: 'active' as const,
+      defect_category: '合成大类', defect_type: null, core_system_ids: [],
+      department_scope_mode: 'all' as const, department_refs: [], doctor_visible: false }
+    const old = { rule_id: 'LX0609-002', state: 'active' as const }
+    await createRuleSetDraft(KEY, { entries: [{ ...configured, executable: true } as typeof configured, old] })
+    await updateRuleSetDraft(KEY, { version_seq: 2, entries: [configured, old] })
+    for (const call of spy.mock.calls) expect(call[0].data).toMatchObject({ entries: [configured, old] })
+    expect((spy.mock.calls[0][0].data as { entries: object[] }).entries).toEqual([configured, old])
+  })
+
   it('按合同路径读取列表与详情，版本号做 URL 编码', async () => {
     const spy = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(envelope({ items: [] }))
     await listRuleSetVersions(KEY)
