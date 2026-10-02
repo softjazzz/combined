@@ -187,6 +187,78 @@ def _derive_state(decisions: list[Any], job_id: str, envelope_id: str) -> tuple[
     return ("pending_recheck" if stage == "recheck" else "pending_review"), stage, None
 
 
+def task_approved_counts(session: Any, tasks: Iterable[Any], records: Iterable[Any]) -> dict[str, int | None]:
+    """任务列表审核通过数：每病例只看当前受领结果对象，部分重跑不遮蔽其他病例。
+
+    输入由任务列表 owner 完成权限过滤；这里只读运行、Envelope 和审核决定。
+    不实例化 workspace，也不读取或初始化旧 job 表。任一病例身份或结果歧义使整任务未知。
+    """
+    task_map = {task["id"]: task for task in tasks}
+    record_rows = list(records)
+    counts: dict[str, int | None] = {
+        key: 0 if task.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        and task.get("rule_set_version") else None
+        for key, task in task_map.items()
+    }
+    if not task_map or not record_rows:
+        return counts
+    runs: dict[tuple[str, str], list[Any]] = {}
+    for chunk in _chunks(task_map):
+        for run in session.execute(
+            select(QCTaskQCRun.__table__).where(
+                QCTaskQCRun.task_id.in_(chunk), QCTaskQCRun.run_scope == "assigned",
+            ).order_by(QCTaskQCRun.run_number.desc())
+        ).mappings().all():
+            runs.setdefault((run["task_id"], run["triggered_by"]), []).append(run)
+    job_ids = {run["job_id"] for rows in runs.values() for run in rows}
+    envelopes: dict[tuple[str, tuple[str, str, str], str, str], list[tuple[str, str]]] = {}
+    table = _envelope_table()
+    for chunk in _chunks(job_ids):
+        for env in session.execute(select(
+            table.c.id, table.c.root_job_id, table.c.created_by,
+            table.c.institute_id, table.c.patient_id, table.c.visit_id,
+            table.c.rule_set_key, table.c.rule_set_version,
+        ).where(table.c.root_job_id.in_(chunk))).mappings().all():
+            key = (env["root_job_id"],
+                   (env["institute_id"], env["patient_id"], env["visit_id"]),
+                   env["rule_set_key"], env["rule_set_version"])
+            envelopes.setdefault(key, []).append((env["id"], env["created_by"]))
+    decisions: dict[tuple[str, str, str], list[Any]] = {}
+    for chunk in _chunks(job_ids):
+        for review in session.execute(
+            select(QCRecordReview).where(QCRecordReview.job_id.in_(chunk))
+            .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
+        ).scalars().all():
+            decisions.setdefault((review.institute_id, review.patient_id, review.visit_id), []).append(review)
+    seen: set[tuple[str, tuple[str, str, str]]] = set()
+    for record in record_rows:
+        task_id = record["task_id"]
+        task = task_map[task_id]
+        identity = _identity(record)
+        if identity is None or (task_id, identity) in seen:
+            counts[task_id] = None
+            continue
+        seen.add((task_id, identity))
+        if counts[task_id] is None:
+            continue
+        for run in runs.get((task_id, record.get("assignee_id")), []):
+            ids = envelopes.get((run["job_id"], identity,
+                                 task["rule_set_key"], task["rule_set_version"]), [])
+            if not ids:
+                continue  # 所选病例子集没有本病例：保留其更早的当前结果。
+            if len(ids) != 1 or ids[0][1] != run["triggered_by"]:
+                counts[task_id] = None
+                break
+            current_decisions = [item for item in decisions.get(identity, [])
+                                 if item.rule_set_key == task["rule_set_key"]
+                                 and item.rule_set_version == task["rule_set_version"]]
+            state, _, _ = _derive_state(current_decisions, run["job_id"], ids[0][0])
+            if state == "approved":
+                counts[task_id] += 1
+            break
+    return counts
+
+
 def _envelope_ids(
     session: Any, *, job_id: str, identity: tuple[str, str, str],
     rule_set_key: str, rule_set_version: str,

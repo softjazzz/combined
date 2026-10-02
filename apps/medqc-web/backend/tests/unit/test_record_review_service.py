@@ -235,6 +235,53 @@ def counts(actor="qc-1", scene=None):
     return service.count_my_record_review_todos(actor, scene=scene, workspace_factory=workspace)
 
 
+def task_counts(env):
+    with env.sessions() as session:
+        tasks = session.execute(sa.select(QCTask.__table__)).mappings().all()
+        records = session.execute(sa.select(QCTaskRecord.__table__)).mappings().all()
+        return service.task_approved_counts(session, tasks, records)
+
+
+def test_task_approved_counts_partial_rerun_preserves_other_current_result(env):
+    submit()
+    submit(record="rec-b", envelope="env-b1", request=REQ[2])
+    assert task_counts(env)["task-1"] == 2
+    env.add_run("task-1", 4, "job-rerun")
+    env.add_envelope("env-a4", "job-rerun", "rec-a")
+    assert task_counts(env)["task-1"] == 1
+    submit(envelope="env-a4", run=4, request=REQ[3])
+    assert task_counts(env)["task-1"] == 2
+
+
+def test_task_approved_counts_doubtful_is_not_approved(env):
+    submit("doubtful", reason="需要复核")
+    assert task_counts(env)["task-1"] == 0
+
+
+def test_task_approved_counts_ambiguous_case_makes_whole_count_unknown(env):
+    submit()
+    env.add_envelope("env-b-duplicate", "job-1", "rec-b")
+    assert task_counts(env)["task-1"] is None
+
+
+def test_task_approved_counts_identity_incomplete_without_run_is_unknown(env):
+    with env.sessions.begin() as session:
+        session.execute(QCTaskQCRun.__table__.delete())
+        session.execute(QCTaskRecord.__table__.update().where(QCTaskRecord.id == "rec-b").values(
+            institute_id=None, patient_id=None, visit_id=None,
+        ))
+    assert task_counts(env)["task-1"] is None
+
+
+def test_task_approved_counts_foreign_envelope_owner_cannot_replace_current_result(env):
+    submit()
+    env.add_run("task-1", 4, "job-rerun")
+    env.add_envelope("env-a4", "job-rerun", "rec-a")
+    with env.sessions.begin() as session:
+        session.execute(env.envelopes.update().where(env.envelopes.c.id == "env-a4").values(created_by="other"))
+    assert task_counts(env)["task-1"] is None
+
+
 def todos(**kwargs):
     kwargs.setdefault("actor_id", "qc-1")
     return service.list_my_record_review_todos(workspace_factory=workspace, **kwargs)
