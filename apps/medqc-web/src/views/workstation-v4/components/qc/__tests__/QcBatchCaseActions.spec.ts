@@ -12,7 +12,7 @@ vi.mock('@/api/caseCommunications', () => ({
 }))
 const identity = { institute_id: 'I', patient_id: 'P', visit_id: 'V' }
 const prepared = {
-  review: { can_submit: true },
+  review: { can_submit: true, result: { job_id: 'J', envelope_id: 'E' } },
   source: { ...identity, scene: 'running', root_job_id: 'J', envelope_id: 'E' },
   doctors: [],
 }
@@ -21,8 +21,10 @@ function mountControl() {
   return mount(QcBatchCaseActions, { props: { recordRefs: [identity], actorKey: 'one', carePhase: 'inpatient', allowed: true }, global: { stubs: { Modal: { template: '<div><slot /></div>' } } } })
 }
 beforeEach(() => {
-  vi.clearAllMocks()
-  prepareMock.mockResolvedValue(prepared as Awaited<ReturnType<typeof prepareBatchCase>>)
+  vi.resetAllMocks()
+  prepareMock.mockImplementation(async identity => ({ ...prepared, source: { ...prepared.source, ...identity } } as Awaited<ReturnType<typeof prepareBatchCase>>))
+  vi.mocked(approveBatchCase).mockImplementation(async payload => ({ ...payload, id: 'R', decision: 'approved', state: 'approved' } as Awaited<ReturnType<typeof approveBatchCase>>))
+  vi.mocked(createCommunication).mockImplementation(async payload => ({ ...payload, id: 'C' } as Awaited<ReturnType<typeof createCommunication>>))
 })
 describe('病历批量动作', () => {
   it('确认前不写入，确认使用冻结集合和版本，无医生也允许通过', async () => {
@@ -45,6 +47,27 @@ describe('病历批量动作', () => {
     expect(wrapper.text()).toContain('跨机构不可访问')
     expect(wrapper.findAll('button')[2].attributes('disabled')).toBeDefined()
     expect(approveBatchCase).not.toHaveBeenCalled()
+  })
+  it('准备来源串账时拒绝确认', async () => {
+    prepareMock.mockResolvedValueOnce({ ...prepared, source: { ...prepared.source, patient_id: 'OTHER' } } as Awaited<ReturnType<typeof prepareBatchCase>>)
+    const wrapper = mountControl()
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('准备回执来源不一致')
+    expect(wrapper.findAll('button')[2].attributes('disabled')).toBeDefined()
+  })
+  it.each(['approve', 'urge'])('不完整%s回执不能显示成功', async action => {
+    prepareMock.mockResolvedValueOnce({ ...prepared, doctors: [{ id: 'D', name: '医生' }] } as Awaited<ReturnType<typeof prepareBatchCase>>)
+    vi.mocked(approveBatchCase).mockResolvedValueOnce({} as Awaited<ReturnType<typeof approveBatchCase>>)
+    vi.mocked(createCommunication).mockResolvedValueOnce({} as Awaited<ReturnType<typeof createCommunication>>)
+    const wrapper = mountControl()
+    await wrapper.findAll('button')[action === 'approve' ? 0 : 1].trigger('click')
+    await flushPromises()
+    if (action === 'urge') await wrapper.find('select').setValue('D')
+    await wrapper.findAll('button')[2].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('结果未知，请核对')
+    expect(wrapper.text()).not.toContain(action === 'approve' ? '审核通过已保存' : '病历催办已发送')
   })
   it('未知POST只发送一次并保留未知回执', async () => {
     vi.mocked(approveBatchCase).mockRejectedValueOnce(new CommunicationError('网络中断'))

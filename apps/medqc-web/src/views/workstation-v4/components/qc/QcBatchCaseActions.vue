@@ -65,6 +65,11 @@ async function prepare(nextAction: 'approve' | 'urge') {
     try {
       const prepared = await prepareBatchCase(item.identity)
       if (token !== generation) return
+      if (!prepared?.source || !prepared.review || !Array.isArray(prepared.doctors)
+        || !['institute_id', 'patient_id', 'visit_id', 'scene'].every(key => prepared.source[key as keyof typeof prepared.source] === item.identity[key as keyof BatchCaseIdentity])
+        || !prepared.source.root_job_id || !prepared.source.envelope_id
+        || prepared.review.result?.job_id !== prepared.source.root_job_id
+        || prepared.review.result?.envelope_id !== prepared.source.envelope_id) throw new Error('准备回执来源不一致，请刷新核对')
       if (nextAction === 'approve' && !prepared.review.can_submit) throw new Error('当前结果不可审核，请刷新查看审核状态')
       if (nextAction === 'urge' && prepared.doctors.length === 0) throw new Error('当前科室没有可接收催办的医生')
       item.prepared = prepared
@@ -89,9 +94,17 @@ async function submit() {
     const source = item.prepared!.source
     try {
       if (action.value === 'approve') {
-        await approveBatchCase({ ...item.identity, job_id: source.root_job_id, envelope_id: source.envelope_id, request_id: item.requestId })
+        const receipt = await approveBatchCase({ ...item.identity, job_id: source.root_job_id, envelope_id: source.envelope_id, request_id: item.requestId })
+        if (!receipt?.id || receipt.request_id !== item.requestId || receipt.job_id !== source.root_job_id
+          || receipt.envelope_id !== source.envelope_id || receipt.decision !== 'approved' || receipt.state !== 'approved') {
+          throw new CommunicationError('审核回执不完整或与本次提交不一致')
+        }
       } else {
-        await createCommunication({ ...source, action: 'urge', content: content.value.trim(), recipient_id: item.recipient, request_id: item.requestId })
+        const receipt = await createCommunication({ ...source, action: 'urge', content: content.value.trim(), recipient_id: item.recipient, request_id: item.requestId })
+        if (!receipt?.id || receipt.request_id !== item.requestId || receipt.action !== 'urge' || receipt.recipient_id !== item.recipient
+          || !(Object.keys(source) as Array<keyof typeof source>).every(key => receipt[key] === source[key])) {
+          throw new CommunicationError('催办回执不完整或与本次提交不一致')
+        }
       }
       if (token !== generation) return
       item.state = 'success'
