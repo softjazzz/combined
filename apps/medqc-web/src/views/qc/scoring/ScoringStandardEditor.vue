@@ -316,18 +316,19 @@
         </header>
         <div class="scoring-editor__table-scroll">
           <table class="scoring-editor__table scoring-editor__table--overview">
-            <thead><tr><th>质控点 / 项目组</th><th>评分适用科室</th><th>规则生效科室</th><th>医生端</th><th>规则状态</th><th>评分启用</th><th>配置</th></tr></thead>
+            <thead><tr><th>质控点 / 项目组</th><th>评分适用科室</th><th>规则生效科室</th><th>提醒等级</th><th>医生端</th><th>规则状态</th><th>评分启用</th><th>配置</th></tr></thead>
             <tbody>
               <tr v-for="item in overviewItems" :key="item.key" data-testid="scoring-overview-row">
                 <td>{{ item.rule_id }} · {{ qcPointOf(item.rule_id) }}<br />{{ item.group_name }}</td>
                 <td>{{ item.department_scope_mode === 'all' ? '全部科室' : formatDepartmentRefs(item.department_refs) || UNKNOWN_TEXT }}</td>
                 <td>{{ ruleScopeOf(item.rule_id) }}</td>
+                <td data-testid="scoring-reminder-level">{{ ruleEntryOf(item.rule_id)?.reminder_level || UNKNOWN_TEXT }}</td>
                 <td>{{ doctorVisibilityOf(item.rule_id) }}</td>
                 <td>{{ ruleStateOf(item.rule_id) }}</td>
                 <td><a-checkbox v-model:checked="item.enabled" :disabled="!editable" :aria-label="`评分启用 ${item.rule_id}`" data-testid="scoring-overview-enabled" /></td>
                 <td><a :href="ruleConfigurationHref(item.rule_id)" target="_blank" rel="noopener" data-testid="scoring-rule-owner-link">规则配置</a></td>
               </tr>
-              <tr v-if="!overviewItems.length"><td colspan="7">暂无匹配质控点</td></tr>
+              <tr v-if="!overviewItems.length"><td colspan="8">暂无匹配质控点</td></tr>
             </tbody>
           </table>
         </div>

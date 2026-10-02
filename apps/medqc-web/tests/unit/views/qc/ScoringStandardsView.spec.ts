@@ -214,7 +214,7 @@ describe('ScoringStandardsView', () => {
     state.api.getScoringStandard.mockResolvedValue(ok(detail))
     state.rules.getRuleSetVersion.mockResolvedValue(ok({ entries: [
       { rule_id: 'LX0609-001', state: 'active', executable: true, qc_point: '入院记录完整性', source_document: null,
-        doctor_visible: false, department_scope_mode: 'selected', department_refs: [{ institute_id: 'H1', department_name: '内科' }] },
+        reminder_level: '强制', doctor_visible: false, department_scope_mode: 'selected', department_refs: [{ institute_id: 'H1', department_name: '内科' }] },
     ] }))
     const wrapper = await render()
     await row(wrapper, 'd1').get('[data-testid="scoring-action-open"]').trigger('click')
@@ -223,6 +223,8 @@ describe('ScoringStandardsView', () => {
     expect(overview[0].text()).toContain('不开放')
     expect(overview[0].text()).toContain('H1|内科')
     expect(overview[1].text()).toContain('未知')
+    expect(overview[0].get('[data-testid="scoring-reminder-level"]').text()).toBe('强制')
+    expect(overview[1].get('[data-testid="scoring-reminder-level"]').text()).toBe('未知')
     expect(overview[0].get('a').attributes('href')).toBe('/dashboard/quality-control?rule_set_key=luxian_0609_qc_v1&rule_id=LX0609-001')
     expect(overview[0].get('a').attributes('target')).toBe('_blank')
     await overview[0].get('[data-testid="scoring-overview-enabled"]').setValue(false)

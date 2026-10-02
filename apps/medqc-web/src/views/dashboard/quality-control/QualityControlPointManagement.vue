@@ -297,7 +297,7 @@
         <a-input id="defect-type" v-model:value="defectType" :maxlength="80" placeholder="未配置" />
         <label for="reminder-level">提醒等级</label>
         <a-input id="reminder-level" v-model:value="reminderLevel" :maxlength="80" placeholder="未配置" />
-        <a-button :loading="saving" @click="saveApplicability(false, true)">保存缺陷分类到草稿</a-button>
+        <a-button :loading="saving" @click="saveApplicability(false, true)">保存分类与提醒等级到草稿</a-button>
         <label>科室范围</label>
         <a-radio-group v-model:value="scopeMode">
           <a-radio-button value="all"> 全部科室 </a-radio-button>
@@ -840,7 +840,7 @@ async function saveApplicability(coreOnly = false, classificationOnly = false) {
     versionList.value = { ...list, draft: updated.data }
     builtinDetail.value = null
     message.success(
-      `已为 ${targets.size} 个质控点保存${classificationOnly ? '缺陷分类' : coreOnly ? '核心制度归属' : '适用范围与医生端开关'}，发布新版本后生效`,
+      `已为 ${targets.size} 个质控点保存${classificationOnly ? '分类与提醒等级' : coreOnly ? '核心制度归属' : '适用范围与医生端开关'}，发布新版本后生效`,
     )
   } finally {
     if (contextCurrent(context, actor, key) && request === mutationGeneration) saving.value = false

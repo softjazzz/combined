@@ -11,8 +11,9 @@ vi.mock('@/api/caseCommunications', () => ({
   CommunicationError: class extends Error { constructor(message: string, public status?: number) { super(message) } get unknown() { return this.status === undefined || this.status >= 500 } },
 }))
 const identity = { institute_id: 'I', patient_id: 'P', visit_id: 'V' }
-const prepared = {
-  review: { can_submit: true, result: { job_id: 'J', envelope_id: 'E' } },
+const prepared: Awaited<ReturnType<typeof prepareBatchCase>> = {
+  review: { ...identity, review_context: 'workspace', rule_set_key: 'rules', state: 'pending_review', stage: 'initial',
+    reason_code: null, current: null, history: [], can_submit: true, result: { job_id: 'J', envelope_id: 'E' } },
   source: { ...identity, scene: 'running', root_job_id: 'J', envelope_id: 'E' },
   doctors: [],
 }
@@ -23,7 +24,9 @@ function mountControl() {
 beforeEach(() => {
   vi.resetAllMocks()
   prepareMock.mockImplementation(async identity => ({ ...prepared, source: { ...prepared.source, ...identity } } as Awaited<ReturnType<typeof prepareBatchCase>>))
-  vi.mocked(approveBatchCase).mockImplementation(async payload => ({ ...payload, id: 'R', decision: 'approved', state: 'approved' } as Awaited<ReturnType<typeof approveBatchCase>>))
+  vi.mocked(approveBatchCase).mockImplementation(async payload => ({ ...payload, id: 'R', decision: 'approved', state: 'approved',
+    idempotent: false, review_context: 'workspace', task_id: null, task_record_id: null, run_number: null,
+    rule_set_key: 'rules', rule_set_version: 'v1', stage: 'initial', reason: null, reviewer_id: 'one', created_at: '2026-10-02T00:00:00Z' }))
   vi.mocked(createCommunication).mockImplementation(async payload => ({ ...payload, id: 'C' } as Awaited<ReturnType<typeof createCommunication>>))
 })
 describe('病历批量动作', () => {

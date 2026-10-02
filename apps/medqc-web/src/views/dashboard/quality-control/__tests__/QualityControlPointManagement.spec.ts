@@ -389,7 +389,7 @@ describe('QualityControlPointManagement', () => {
     await wrapper.get('#defect-category').setValue('合成大类')
     await wrapper.get('#defect-type').setValue('合成类型')
     await wrapper.get('#reminder-level').setValue('强制')
-    await button(wrapper, '保存缺陷分类到草稿', '.drawer').trigger('click')
+    await button(wrapper, '保存分类与提醒等级到草稿', '.drawer').trigger('click')
     await flush()
     const saved = state.api.updateRuleSetDraft.mock.calls[0][1].entries[0]
     expect(saved.defect_category).toBe('合成大类')
