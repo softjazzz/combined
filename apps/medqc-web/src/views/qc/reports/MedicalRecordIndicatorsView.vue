@@ -106,8 +106,8 @@
                   <td>
                     <strong>{{ rateText(item.verified_subset_rate) }}</strong>
                     <small
-                      >分子 {{ item.numerator_total }} / 已核实分母 {{ item.eligible_total }} / 未知
-                      {{ item.unknown_total }}</small
+                      >分子 {{ countText(item.numerator_total) }} / 已核实分母
+                      {{ countText(item.eligible_total) }} / 未知 {{ item.unknown_total }}</small
                     >
                   </td>
                   <td class="gap-cell">
@@ -156,7 +156,7 @@
             </div>
             <div class="data-row">
               <span>已核实 / 未知</span
-              ><strong>{{ item.eligible_total }} / {{ item.unknown_total }}</strong>
+              ><strong>{{ countText(item.eligible_total) }} / {{ item.unknown_total }}</strong>
             </div>
           </article>
           <div v-if="!breakdown.length" class="empty">暂无维度数据</div>
@@ -283,6 +283,9 @@ function stateLabel(state: IndicatorState) {
 }
 function rateText(value: number | null) {
   return value === null ? '不可计算' : `${value.toFixed(2)}%`
+}
+function countText(value: number | null) {
+  return value === null ? '未知' : String(value)
 }
 
 async function loadReport() {

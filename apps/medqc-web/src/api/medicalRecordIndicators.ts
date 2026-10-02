@@ -23,9 +23,9 @@ export interface MedicalRecordIndicator {
   availability: 'partial' | 'blocked'
   blocker?: string | null
   cohort_total: number
-  eligible_total: number
-  numerator_total: number
-  not_applicable_total: number
+  eligible_total: number | null
+  numerator_total: number | null
+  not_applicable_total: number | null
   unknown_total: number
   verified_subset_rate: number | null
   official_rate: number | null

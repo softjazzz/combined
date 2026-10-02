@@ -109,6 +109,8 @@ def _record_item(
 
 
 def _metric(definition: IndicatorDefinition, items: list[dict[str, Any]]) -> dict[str, Any]:
+    if definition.availability == "blocked":
+        return _blocked_metric(definition, len(items))
     counts = Counter(item["state"] for item in items)
     eligible = counts["compliant"] + counts["non_compliant"]
     verified_rate = round(counts["compliant"] * 100 / eligible, 2) if eligible else None
@@ -122,6 +124,16 @@ def _metric(definition: IndicatorDefinition, items: list[dict[str, Any]]) -> dic
         "verified_subset_rate": verified_rate,
         "official_rate": None,
         "calculation_status": "partial" if eligible else "unavailable",
+    }
+
+
+def _blocked_metric(definition: IndicatorDefinition, cohort_total: int) -> dict[str, Any]:
+    """来源未接通时没有可核实的分子、分母或不适用数。"""
+    return {
+        **definition.__dict__, "cohort_total": cohort_total,
+        "eligible_total": None, "numerator_total": None, "not_applicable_total": None,
+        "unknown_total": cohort_total, "verified_subset_rate": None,
+        "official_rate": None, "calculation_status": "blocked",
     }
 
 
@@ -162,9 +174,7 @@ def summarize(ctx: base_report.ReportContext) -> dict[str, Any]:
     }
     indicators = [
         _metric(definition, items_by_code.get(definition.code, [])) if definition.code in items_by_code
-        else {**definition.__dict__, "cohort_total": len(identities), "eligible_total": 0,
-              "numerator_total": 0, "not_applicable_total": 0, "unknown_total": len(identities),
-              "verified_subset_rate": None, "official_rate": None, "calculation_status": "blocked"}
+        else _blocked_metric(definition, len(identities))
         for definition in DEFINITIONS
     ]
     return {
@@ -222,15 +232,15 @@ def export_csv(
     if kind == "indicators":
         writer.writerow(["指标编码", "指标名称", "可计算性", "已核实分子", "已核实分母", "未知病例", "已核实子集率", "官方率", "缺口"])
         for item in summarize(ctx)["indicators"]:
-            writer.writerow([item["code"], item["name"], item["calculation_status"], item["numerator_total"],
-                             item["eligible_total"], item["unknown_total"], item["verified_subset_rate"], "未知",
+            writer.writerow([item["code"], item["name"], item["calculation_status"], _csv_number(item["numerator_total"]),
+                             _csv_number(item["eligible_total"]), item["unknown_total"], _csv_number(item["verified_subset_rate"]), _csv_number(item["official_rate"]),
                              base_report._csv_cell(item.get("blocker") or "")])
     elif kind == "breakdown":
         result = breakdown(ctx, indicator_code=indicator_code or "", dimension=dimension)
         writer.writerow(["维度", "已核实分子", "已核实分母", "不适用", "未知", "已核实子集率"])
         for item in result["items"]:
-            writer.writerow([base_report._csv_cell(item["name"]), item["numerator_total"], item["eligible_total"],
-                             item["not_applicable_total"], item["unknown_total"], item["verified_subset_rate"]])
+            writer.writerow([base_report._csv_cell(item["name"]), _csv_number(item["numerator_total"]), _csv_number(item["eligible_total"]),
+                             _csv_number(item["not_applicable_total"]), item["unknown_total"], _csv_number(item["verified_subset_rate"])])
     elif kind == "cases":
         definition = DEFINITION_BY_CODE.get(_text(indicator_code).upper())
         if definition is None:
@@ -247,3 +257,7 @@ def export_csv(
     else:
         raise MedicalRecordIndicatorInvalid("kind 必须为 indicators、breakdown 或 cases")
     return output.getvalue().encode("utf-8-sig")
+
+
+def _csv_number(value: int | float | None) -> int | float | str:
+    return "未知" if value is None else value

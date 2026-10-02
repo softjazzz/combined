@@ -41,8 +41,9 @@ const blocked = {
   data_source: '无',
   availability: 'blocked',
   blocker: '缺归档时间与工作日历；不得用出院时间代替',
-  eligible_total: 0,
-  numerator_total: 0,
+  eligible_total: null,
+  numerator_total: null,
+  not_applicable_total: null,
   unknown_total: 3,
   verified_subset_rate: null,
   calculation_status: 'blocked',
@@ -98,5 +99,20 @@ describe('MedicalRecordIndicatorsView', () => {
     await wrapper.get('select[aria-label="病例状态"]').setValue('unknown')
     await flush()
     expect(state.getCases).toHaveBeenLastCalledWith(expect.anything(), 'MER-TL-01', 'unknown', 1)
+  })
+
+  it('shows unknown source counts in summary and blocked breakdown', async () => {
+    const wrapper = mount(MedicalRecordIndicatorsView)
+    await flush()
+    const row = wrapper.findAll('tbody tr').find((item) => item.text().includes('MER-TQ-01'))!
+    expect(row.text()).toContain('分子 未知 / 已核实分母 未知 / 未知 3')
+    state.getBreakdown.mockResolvedValue({
+      success: true,
+      data: { items: [{ ...blocked, name: '内科' }] },
+    })
+    await row.get('button').trigger('click')
+    await flush()
+    expect(wrapper.get('.distribution-grid').text()).toContain('未知 / 3')
+    expect(wrapper.get('.distribution-grid').text()).not.toContain('0 / 3')
   })
 })

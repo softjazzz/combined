@@ -9,6 +9,7 @@
 - 病例唯一键固定为 `institute_id/patient_id/visit_id`，汇总、科室/医生下钻、病例明细和 CSV 共用同一去重集合。
 - `compliant/non_compliant/not_applicable` 只搬运既有 owner 的客户安全投影；`data_gap`、`needs_manual_review`、未执行、结果读取失败均归入 `unknown`，不计通过。
 - `verified_subset_rate = 已核实合规数 / (已核实合规数 + 已核实不合规数)`。只要原文分母未完整兑现，`official_rate` 必须为 `null`。
+- 缺权威来源的指标，其 `numerator_total/eligible_total/not_applicable_total` 为 `null`，汇总与下钻保持一致；CSV 与页面显示“未知”。`unknown_total` 仍为实际三坐标队列数；已有权威结果核实得到的零值保留为 0。
 - 2 日归档指 **2 个工作日**。缺归档时间和工作日历时不可计算，严禁用出院时间、病案提交时间或同步时间代替。
 
 ## 2. 两项真实结果来源
@@ -65,3 +66,13 @@
 - 前端：`/dashboard/qc/reports/medical-record-indicators`，复用 `reportPage.css`。
 
 验收重点：27 项不少项；三坐标去重；未知不计通过；官方率和已核实子集率分离；筛选、下钻、CSV 同一病例集；2 日归档不使用出院时间替代。
+
+## 5. 源接口工作簿复核（2026-10-02）
+
+直接读取 `docs/01cdm,V1.0（视图接口。红色为必备部分.xlsx` 的当前单元格，结论如下，不提升指标覆盖状态：
+
+- “出院记录”第 11 行 `submit_datetime` 是文档提交时间，第 42 行 `cheifphy_sign_datetime` 是主副主任医师签名时间；没有整份记录完成时间合同，后者也不能替代住院/主治医师完成记录时间。
+- “病案首页”第 137 行 `mr_datetime` 是病案提交时间（备注触发字段）；缺首页完成/签署时间映射。
+- “病案首页”第 110 行 `medicalrecord_quality` 引用外部“值域规范，1.0”的 `mr_quality_code`，备注“病案首页无数据”；仓库未提供该值域字典，不将自定义评分等级或未知代码映射为官方甲级。
+- “病案首页”第 145 行 `archive_sign` 只有归档标志，引用 `indicator_theroshold_code`；缺权威归档时刻、内容完整性结论及工作日历。
+- TL01/TL02 现有 owner 可搬运状态，但“同期住院”未确认采用入院队列或期间在院，完整手术适用分母也未接通；维持已核实子集率。其余复合完整性/一致性指标缺专属正式结论，不以局部规则拼接替代。

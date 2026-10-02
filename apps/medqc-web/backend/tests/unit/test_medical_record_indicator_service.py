@@ -166,9 +166,43 @@ def test_breakdown_cases_and_csv_share_the_same_three_coordinate_rows():
 def test_grade_without_official_mapping_stays_blocked():
     indicator = next(item for item in report.summarize(_context())["indicators"] if item["code"] == "MER-TQ-09")
     assert indicator["calculation_status"] == "blocked"
-    assert indicator["eligible_total"] == 0
+    assert indicator["eligible_total"] is None
     assert "等级名称可自定义" in indicator["blocker"]
     assert indicator["official_rate"] is None
+
+
+def test_blocked_unknown_counts_agree_in_summary_breakdown_and_csv():
+    ctx = _context()
+    summary = report.summarize(ctx)
+    blocked = [item for item in summary["indicators"] if item["availability"] == "blocked"]
+    assert len(blocked) == 25
+    for item in blocked:
+        assert item["numerator_total"] is None
+        assert item["eligible_total"] is None
+        assert item["not_applicable_total"] is None
+        assert item["unknown_total"] == 3
+    groups = report.breakdown(ctx, indicator_code="MER-TQ-01", dimension="department")["items"]
+    assert all(item["calculation_status"] == "blocked" for item in groups)
+    assert all(item["numerator_total"] is None and item["eligible_total"] is None for item in groups)
+    assert sum(item["unknown_total"] for item in groups) == 3
+    rows = list(csv.reader(io.StringIO(report.export_csv(ctx).decode("utf-8-sig"))))
+    archive = next(row for row in rows if row[0] == "MER-TQ-01")
+    assert archive[3:8] == ["未知", "未知", "3", "未知", "未知"]
+    groups_csv = list(csv.reader(io.StringIO(report.export_csv(
+        ctx, kind="breakdown", indicator_code="MER-TQ-01",
+    ).decode("utf-8-sig"))))
+    assert all(row[1:4] == ["未知", "未知", "未知"] and row[5] == "未知" for row in groups_csv[1:])
+
+
+def test_known_zero_numerator_is_preserved_when_results_are_verified():
+    ctx = _context()
+    ctx.rows[0].rule_statuses["LX0609-001"] = "non_compliant"
+    metric = next(item for item in report.summarize(ctx)["indicators"] if item["code"] == "MER-TL-01")
+    assert metric["numerator_total"] == 0
+    assert metric["eligible_total"] == 2
+    assert metric["verified_subset_rate"] == 0.0
+    rows = list(csv.reader(io.StringIO(report.export_csv(ctx).decode("utf-8-sig"))))
+    assert next(row for row in rows if row[0] == "MER-TL-01")[3] == "0"
 
 
 def test_invalid_filters_fail_closed():
