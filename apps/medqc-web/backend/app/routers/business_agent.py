@@ -15,9 +15,10 @@ from starlette.concurrency import run_in_threadpool
 from app.core.security import get_current_user
 from app.services.qc_agent.business_schemas import BusinessChat, BusinessContext, BusinessSessionCreate, BusinessStop
 from app.services.qc_agent.business_access import BusinessAccess, get_business_access
-from app.services.qc_agent import business_reads, business_documents
+from app.services.qc_agent import business_reads, business_documents, business_followups
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store
 from app.services.qc_agent.business_tools import BusinessTools, statistics_text, tool_specs
+from app.services.qc_agent import business_feedback
 
 router = APIRouter(prefix="/business", tags=["business-agent"])
 
@@ -88,6 +89,30 @@ async def restore_session(session_id: UUID, user: dict = Depends(get_current_use
     access.require_context(user, BusinessContext.model_validate(metadata["context"]))
     data = await runtime_call("POST", f"/sessions/{session_id}/restore", {"context": metadata["context"], "tools": tool_specs(metadata["context"]["view"])})
     return {"session_id": str(session_id), "context": metadata["context"], "turns": data["turns"]}
+
+
+@router.get("/sessions/{session_id}/followups")
+async def read_session_followups(session_id: UUID, kind: Literal["notifications", "remediations"], page: int = Query(1, ge=1, le=100), page_size: int = Query(5, ge=1, le=10), user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
+    metadata = store.get(str(session_id), user)
+    context = BusinessContext.model_validate(metadata["context"])
+    access.require_context(user, context)
+    return {"data": await run_in_threadpool(business_followups.read_followups, user=user, context=context, access=access, kind=kind, page=page, page_size=page_size)}
+
+
+@router.get("/sessions/{session_id}/feedback")
+async def read_session_feedback(session_id: UUID, reference_id: str = Query(..., min_length=1, max_length=200), user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access), feedback_store=Depends(business_feedback.get_feedback_store)):
+    metadata = store.get(str(session_id), user)
+    target = await run_in_threadpool(business_feedback.resolve_target, metadata, user, access, reference_id)
+    data = await run_in_threadpool(feedback_store.read, uid=metadata["owner_id"], session_id=str(session_id), reference_id=reference_id)
+    return {"target": business_feedback.public_target(target), "data": data}
+
+
+@router.post("/sessions/{session_id}/feedback")
+async def submit_session_feedback(session_id: UUID, payload: business_feedback.FeedbackSubmit, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access), feedback_store=Depends(business_feedback.get_feedback_store)):
+    metadata = store.get(str(session_id), user)
+    target = await run_in_threadpool(business_feedback.resolve_target, metadata, user, access, payload.reference_id)
+    data = await run_in_threadpool(feedback_store.submit, uid=metadata["owner_id"], session_id=str(session_id), target=target, payload=payload)
+    return {"data": data}
 
 
 @router.post("/sessions/{session_id}/chat")

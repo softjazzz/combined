@@ -42,6 +42,14 @@ app.include_router(router, prefix="/api/v1/qc-agent")
 store = BusinessSessionStore(backend.parent / ".tmp/0910-full-audit/business-agent-validation-private/real-metadata")
 app.dependency_overrides[get_business_store] = lambda: store
 
+# 默认关闭。仅取得共享库反馈写入授权后，在独立联调进程显式开启。
+# 主 engine 的 enforce_readonly 监听始终保留，不加载主应用或 worker。
+from tests.manual.business_feedback_session import install_feedback_override  # noqa: E402
+
+feedback_engine = install_feedback_override(
+    app, values, enabled=os.environ.get("MEDQC_AGENT_FEEDBACK_WRITE_ENABLED", "0"),
+)
+
 
 def public_user(user):
     return {key: user.get(key) for key in ("id", "email", "username", "display_name", "department", "roles", "avatar", "phone", "bio", "created_at", "last_login")}

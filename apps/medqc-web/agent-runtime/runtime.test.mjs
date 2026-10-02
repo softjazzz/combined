@@ -42,7 +42,12 @@ const spec = {
   description: '读取保存结果',
   parameters: { type: 'object', properties: {}, additionalProperties: false },
 }
-async function fixture(steps, response, toolSpec = spec) {
+async function fixture(
+  steps,
+  response,
+  toolSpec = spec,
+  context = { view: 'doctor', institute_id: 'S', patient_id: 'A', visit_id: 'A1' },
+) {
   const root = await mkdtemp(join(tmpdir(), 'medqc-dsh-'))
   const adapter = new ScriptedAdapter(steps),
     callbacks = []
@@ -68,8 +73,7 @@ async function fixture(steps, response, toolSpec = spec) {
     )
   }
   const runtime = await createRuntime({ root, adapter, model: 'synthetic', fetchImpl })
-  const sessionId = randomUUID(),
-    context = { view: 'doctor', institute_id: 'S', patient_id: 'A', visit_id: 'A1' }
+  const sessionId = randomUUID()
   await runtime.create(sessionId, { context, tools: [toolSpec] })
   const body = {
     context,
@@ -81,6 +85,65 @@ async function fixture(steps, response, toolSpec = spec) {
   }
   return { runtime, root, adapter, callbacks, sessionId, context, body, fetchImpl }
 }
+
+test('医生实际模型消息不发送患者及住院标识，正式来源与上下文隔离仍保留', async () => {
+  const context = {
+    view: 'doctor',
+    institute_id: 'S',
+    patient_id: 'internal-patient-unique',
+    visit_id: 'internal-visit-unique',
+  }
+  const f = await fixture(
+    [{ tool: 'read_saved_results' }, { text: '查看当前病例卡片。' }],
+    undefined,
+    spec,
+    context,
+  )
+  try {
+    const turn = await f.runtime.chat(f.sessionId, f.body)
+    assert.equal(turn.status, 'completed')
+    for (const request of f.adapter.requests) {
+      const messages = JSON.stringify(request.messages)
+      for (const forbidden of ['patient_id', 'visit_id', context.patient_id, context.visit_id])
+        assert.ok(!messages.includes(forbidden), `模型消息不应包含 ${forbidden}`)
+      assert.match(messages, /当前页面已选择且服务端授权的本次住院/)
+      assert.match(messages, /身份见页面，不猜\/复述标识/)
+    }
+    assert.equal(turn.references[0].id, 'result:synthetic:2')
+    assert.equal(turn.references[0].conclusion, '合成预期缺项')
+    assert.deepEqual(f.context, context)
+    await assert.rejects(
+      f.runtime.chat(f.sessionId, {
+        ...f.body,
+        run_id: randomUUID(),
+        context: { ...context, patient_id: 'other-patient' },
+      }),
+      /会话上下文不一致/,
+    )
+  } finally {
+    await f.runtime.close()
+  }
+})
+
+test('管理者实际模型消息保留原页面科室与质控完成日期范围', async () => {
+  const context = {
+    view: 'manager',
+    institute_id: 'S',
+    department: '内科',
+    care_phase: 'inpatient',
+    completed_from: '2026-09-01T00:00:00+08:00',
+    completed_to: '2026-09-30T23:59:59+08:00',
+  }
+  const f = await fixture([{ text: '请按页面条件查看统计。' }], undefined, spec, context)
+  try {
+    await f.runtime.chat(f.sessionId, f.body)
+    const messages = JSON.stringify(f.adapter.requests[0].messages)
+    for (const value of Object.values(context)) assert.ok(messages.includes(value))
+    assert.deepEqual(f.context, context)
+  } finally {
+    await f.runtime.close()
+  }
+})
 
 test('无编号规则查询经目录候选读取详情，候选不冒充来源且恢复保留规则引用', async () => {
   const root = await mkdtemp(join(tmpdir(), 'medqc-rule-search-'))
@@ -193,6 +256,115 @@ test('无编号规则查询经目录候选读取详情，候选不冒充来源�
     } finally {
       await restored.close()
     }
+  } finally {
+    await runtime.close()
+  }
+})
+
+test('单问题只给模型证据位置，正式结论和来源卡片原始摘录保持不变', async () => {
+  const evidence = [
+    {
+      source_ref: 'doc-a',
+      source_type: 'course',
+      record_time: '2026-09-01',
+      field_path: 'content',
+      evidence_excerpt: '唯一局部摘录，不进入模型……',
+    },
+  ]
+  const reference = {
+    id: 'saved:one',
+    kind: 'saved_result',
+    rule_id: 'R',
+    title: '保存问题',
+    conclusion: '正式结论保留否定条件',
+    suggestion: '正式建议保留原文',
+    evidence,
+    text: evidence[0].evidence_excerpt,
+  }
+  const f = await fixture(
+    [{ tool: 'read_saved_issue', args: {} }, { text: '保存结论认为存在问题，证据请查看来源卡。' }],
+    { references: [reference], evidence },
+    { ...spec, name: 'read_saved_issue' },
+  )
+  try {
+    const turn = await f.runtime.chat(f.sessionId, f.body)
+    assert.equal(turn.status, 'completed')
+    assert.deepEqual(turn.references, [reference])
+    const messages = JSON.stringify(f.adapter.requests[1].messages)
+    assert.ok(!messages.includes(evidence[0].evidence_excerpt))
+    assert.match(messages, /evidence_position/)
+    assert.match(messages, /doc-a/)
+    assert.match(messages, /正式结论保留否定条件/)
+    assert.match(messages, /正式建议保留原文/)
+    const restored = await f.runtime.restore(f.sessionId, {
+      context: f.context,
+      tools: f.body.tools,
+    })
+    assert.deepEqual(restored.turns[0].references, [reference])
+  } finally {
+    await f.runtime.close()
+  }
+})
+
+test('提醒只读工具保留覆盖限制且不生成引用或操作成功', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'medqc-followups-'))
+  const tools = [
+    {
+      name: 'query_followups',
+      description: '读取台账',
+      parameters: {
+        type: 'object',
+        properties: { kind: { type: 'string', enum: ['notifications', 'remediations'] } },
+        required: ['kind'],
+        additionalProperties: false,
+      },
+    },
+  ]
+  const adapter = new ScriptedAdapter([
+    { tool: 'query_followups', args: { kind: 'notifications' } },
+    { text: '本页没有可核验条目，不能据此判断没有待办。' },
+  ])
+  const calls = []
+  const runtime = await createRuntime({
+    root,
+    adapter,
+    model: 'synthetic',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, body: JSON.parse(options.body) })
+      return Response.json({
+        kind: 'notifications',
+        state: 'partial',
+        items: [],
+        page: 1,
+        page_size: 5,
+        has_more: true,
+        coverage_note: '身份无法核验的条目已排除',
+        status_note: '未执行任何办理',
+        total: 0,
+      })
+    },
+  })
+  const sessionId = randomUUID()
+  const context = { view: 'doctor', institute_id: 'H', patient_id: 'P', visit_id: 'V' }
+  try {
+    await runtime.create(sessionId, { context, tools })
+    const turn = await runtime.chat(sessionId, {
+      context,
+      tools,
+      run_id: randomUUID(),
+      message: '这份病例有提醒吗？',
+      backend_url: 'http://127.0.0.1:8003',
+      authorization: 'Bearer synthetic',
+    })
+    assert.equal(turn.status, 'completed')
+    assert.equal(calls.length, 1)
+    assert.ok(calls[0].url.endsWith('/query_followups'))
+    assert.deepEqual(calls[0].body, { kind: 'notifications' })
+    assert.deepEqual(turn.references, [])
+    const messages = JSON.stringify(adapter.requests[1].messages)
+    assert.match(messages, /身份无法核验的条目已排除/)
+    assert.match(messages, /未执行任何办理/)
+    assert.ok(!messages.includes('"total":0'))
   } finally {
     await runtime.close()
   }

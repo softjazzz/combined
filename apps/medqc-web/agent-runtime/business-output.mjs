@@ -3,6 +3,17 @@ const select = (value, keys) =>
   Object.fromEntries(
     keys.filter((key) => value?.[key] !== undefined).map((key) => [key, value[key]]),
   )
+
+// 仅收紧模型可见上下文；授权身份和会话隔离仍使用原业务上下文。
+export function businessModelContext(context) {
+  if (context?.view === 'doctor')
+    return {
+      ...select(context, ['view', 'institute_id']),
+      record_scope: '当前页面已选择且服务端授权的本次住院，身份见页面，不猜/复述标识。',
+    }
+  return { ...context }
+}
+
 export function businessModelValue(name, _args, value) {
   if (name === 'read_saved_results') {
     const result = select(value, [
@@ -60,9 +71,45 @@ export function businessModelValue(name, _args, value) {
         'result_time',
         'version_note',
       ]),
-      evidence: value.evidence || [],
+      evidence_index: (value.evidence || []).map((item, index) => ({
+        evidence_position: index + 1,
+        ...select(item, ['source_type', 'source_ref', 'record_time', 'field_path']),
+      })),
       evidence_read_note:
-        '本工具仅回读保存问题与证据摘录，当前文书和规范原文均未读取。摘录可能不完整，不能据此重新判定已保存状态或新增原因；保存依据不足以解释细节时应说明无法确认。查看当前文书请使用该问题卡片的“查看依据与详情→查看对应文书原文”。',
+        '本次模型仅收到保存结论、建议和证据定位索引，未读取证据摘录正文；证据序号仅为该问题证据数组位置，不是问题序号。完整保存证据由来源卡展示，不能补写或解释未读摘录，不能重新判定或新增原因。原因只能说明保存结论认为的内容；结论未说明的细节须明确无法确认。当前文书和规范原文均未读取，查看原文请使用该问题卡片的“查看依据与详情→查看对应文书原文”。',
+    }
+  if (name === 'query_followups')
+    return {
+      ...select(value, [
+        'kind',
+        'state',
+        'page',
+        'page_size',
+        'has_more',
+        'scan_limit_reached',
+        'coverage_note',
+        'status_note',
+      ]),
+      items: (value.items || []).map((item) => ({
+        ...select(item, ['record_reference']),
+        ...select(
+          item,
+          value.kind === 'notifications'
+            ? ['id', 'type', 'title', 'content', 'severity', 'is_read', 'created_at']
+            : [
+                'id',
+                'defect_type',
+                'severity',
+                'remediation_requirement',
+                'deadline',
+                'status',
+                'created_at',
+              ],
+        ),
+        identity: select(item.identity, ['institute_id', 'patient_id', 'visit_id']),
+      })),
+      read_note:
+        '仅本页已核验授权的保存条目，不提供全局总量；空页或排除项不能解释为无待办。通过关联病例卡或record_reference读取该病例当前保存质控问题，关联病例不是统计结果。没有执行标记已读、提交、关闭或催办，不把保存状态说成本轮操作成功。',
     }
   if (name === 'search_rules')
     return {
@@ -88,18 +135,23 @@ export function businessModelValue(name, _args, value) {
   if (name === 'read_rule')
     return {
       id: value.references?.[0]?.id,
-      rule: select(value.rule, [
-        'rule_id',
-        'title',
-        'implementation_status',
-        'phase_status',
-        'policy_summary',
-        'definition_note',
-        'release_scope',
-        'active_criteria',
-        'pending_criteria',
-        'pending_reason_code',
-      ]),
+      rule: {
+        ...select(value.rule, [
+          'rule_id',
+          'title',
+          'qc_point',
+          'source_document',
+          'implementation_status',
+          'phase_status',
+          'policy_summary',
+          'definition_note',
+          'release_scope',
+          'active_criteria',
+          'pending_criteria',
+          'pending_reason_code',
+        ]),
+        title: value.rule?.title ?? value.references?.[0]?.title,
+      },
       scope_note: value.scope_note,
       ...select(value, ['catalog_version', 'historical_definition_available']),
     }
@@ -136,6 +188,8 @@ export function businessModelValue(name, _args, value) {
         ...select(statistics.record_page, ['page', 'page_size', 'total']),
         records: records.map((ref) => ({ record_reference: ref.id, title: ref.title })),
       },
+      display_note:
+        '下方病例卡片完整展示本页病例，正文说明统计指标与本页范围并引导查看卡片，不重复列出部分病例冒充整页。record_page.total为分页总量，不表示本页全部返回；未展示页不能称已读取。追问具体病例时使用对应record_reference下钻。',
     }
   }
   throw new Error('未配置业务工具模型投影')

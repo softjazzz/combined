@@ -58,7 +58,7 @@
         </template>
         <p class="business-agent__muted">读取已保存结果和规范依据，保留正式结论与建议。</p>
         <p class="business-agent__muted" data-testid="business-agent-readonly-notice">
-          当前仅支持查询与解释；提醒、整改台账和反馈办理尚未接入，暂不可用。
+          支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
         </p>
       </section>
       <a-alert v-if="accessError" type="warning" :message="accessError" show-icon />
@@ -194,6 +194,15 @@
               解释这条
             </a-button>
             <a-button
+              v-if="reference.kind === 'saved_result'"
+              type="link"
+              :disabled="!sessionId || feedbackSubmitting"
+              data-testid="business-agent-feedback-open"
+              @click="openFeedback(reference.id)"
+            >
+              提交异议反馈
+            </a-button>
+            <a-button
               v-if="reference.kind === 'record'"
               type="link"
               :disabled="loading || !canQuery"
@@ -237,6 +246,58 @@
         </div>
       </div>
     </div>
+    <a-modal
+      :open="feedbackOpen"
+      title="质控异议反馈"
+      wrap-class-name="mq-modal"
+      :footer="null"
+      @cancel="closeFeedback"
+    >
+      <p v-if="feedbackLoading">正在核对反馈对象与已提交记录…</p>
+      <template v-if="feedbackPreview">
+        <p data-testid="business-agent-feedback-target">
+          机构 {{ feedbackPreview.target.institute_id }} · 患者
+          {{ feedbackPreview.target.patient_id }} · 住院 {{ feedbackPreview.target.visit_id }}
+        </p>
+        <p>{{ feedbackPreview.target.title }} · {{ feedbackPreview.target.rule_id }}</p>
+        <p class="business-agent__muted">提交后登记异议供复核，不改变当前质控状态。</p>
+        <template v-if="feedbackPreview.data">
+          <a-alert type="success" message="异议反馈已提交" show-icon />
+          <p>{{ feedbackPreview.data.comment }}</p>
+          <p class="business-agent__muted">提交时间：{{ feedbackPreview.data.created_at }}</p>
+        </template>
+        <template v-else>
+          <label class="mq-field"
+            >异议理由（必填，最多500字）
+            <a-textarea
+              v-model:value="feedbackComment"
+              :maxlength="500"
+              :disabled="feedbackSubmitting"
+              :auto-size="{ minRows: 3, maxRows: 6 }"
+              data-testid="business-agent-feedback-comment"
+            />
+          </label>
+          <a-button
+            type="primary"
+            :loading="feedbackSubmitting"
+            :disabled="
+              feedbackSubmitting || !feedbackComment.trim() || feedbackComment.trim().length > 500
+            "
+            data-testid="business-agent-feedback-submit"
+            @click="submitFeedback"
+          >
+            {{ feedbackError ? '重试提交' : '确认提交异议' }}
+          </a-button>
+        </template>
+      </template>
+      <a-alert v-if="feedbackError" type="warning" :message="feedbackError" show-icon />
+      <a-button
+        v-if="!feedbackPreview && !feedbackLoading"
+        @click="openFeedback(feedbackReferenceId)"
+      >
+        重新核对反馈对象
+      </a-button>
+    </a-modal>
     <a-modal
       v-model:open="referenceOpen"
       wrap-class-name="mq-modal"
@@ -311,13 +372,14 @@ v-if="documentSegments.quote"
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   businessAgentApi,
   type BusinessAgentContext,
   type BusinessAgentReference,
   type BusinessAgentAccess,
   type BusinessEvidenceDocument,
+  type BusinessFeedbackPreview,
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 
@@ -442,6 +504,86 @@ const prompts = computed(() =>
 )
 const draft = ref('')
 const { sessionId, turns, loading, error, activate, send, stop, reset } = useBusinessAgent()
+const feedbackOpen = ref(false)
+const feedbackLoading = ref(false)
+const feedbackSubmitting = ref(false)
+const feedbackReferenceId = ref('')
+const feedbackPreview = ref<BusinessFeedbackPreview>()
+const feedbackComment = ref('')
+const feedbackError = ref('')
+let feedbackGeneration = 0
+let feedbackController: AbortController | undefined
+let feedbackRequest: { request_id: string; comment: string } | undefined
+function closeFeedback() {
+  feedbackGeneration += 1
+  feedbackController?.abort()
+  feedbackController = undefined
+  feedbackOpen.value = false
+  feedbackLoading.value = false
+  feedbackSubmitting.value = false
+  feedbackPreview.value = undefined
+  feedbackComment.value = ''
+  feedbackError.value = ''
+  feedbackRequest = undefined
+}
+watch([context, sessionId, open], closeFeedback, { deep: true, flush: 'sync' })
+onBeforeUnmount(closeFeedback)
+function feedbackFailure(cause: unknown) {
+  const status = (cause as { response?: { status?: number } })?.response?.status
+  if (status === 403 || status === 404) return '反馈对象或授权已失效，请重新读取该问题。'
+  if (status === 409) return '结果版本或已提交反馈发生变化，请关闭后重新核对。'
+  if (status === 503) return '反馈服务暂不可用，未确认提交成功，请稍后重试。'
+  return '未确认反馈提交结果，请重试核对；重试不会重复登记同一反馈。'
+}
+async function openFeedback(referenceId: string) {
+  if (!sessionId.value || feedbackSubmitting.value) return
+  closeFeedback()
+  const epoch = feedbackGeneration
+  feedbackReferenceId.value = referenceId
+  feedbackOpen.value = true
+  feedbackLoading.value = true
+  feedbackController = new AbortController()
+  try {
+    const result = await businessAgentApi.feedback(
+      sessionId.value,
+      referenceId,
+      feedbackController.signal,
+    )
+    if (epoch === feedbackGeneration) feedbackPreview.value = result
+  } catch (cause) {
+    if (epoch === feedbackGeneration) feedbackError.value = feedbackFailure(cause)
+  } finally {
+    if (epoch === feedbackGeneration) feedbackLoading.value = false
+  }
+}
+async function submitFeedback() {
+  const preview = feedbackPreview.value
+  const comment = feedbackComment.value.trim()
+  if (!preview || preview.data || feedbackSubmitting.value || !comment || comment.length > 500)
+    return
+  const epoch = feedbackGeneration
+  // 网络失败重试沿用同一请求标识，修改理由才生成新标识；最终去重由服务端负责。
+  if (!feedbackRequest || feedbackRequest.comment !== comment)
+    feedbackRequest = { request_id: crypto.randomUUID(), comment }
+  feedbackSubmitting.value = true
+  feedbackError.value = ''
+  feedbackController = new AbortController()
+  try {
+    const result = await businessAgentApi.submitFeedback(
+      sessionId.value,
+      {
+        ...feedbackRequest,
+        reference_id: preview.target.reference_id,
+      },
+      feedbackController.signal,
+    )
+    if (epoch === feedbackGeneration) feedbackPreview.value = { ...preview, data: result }
+  } catch (cause) {
+    if (epoch === feedbackGeneration) feedbackError.value = feedbackFailure(cause)
+  } finally {
+    if (epoch === feedbackGeneration) feedbackSubmitting.value = false
+  }
+}
 watch(
   context,
   (value) => {
@@ -515,15 +657,11 @@ async function explainReference(reference: BusinessAgentReference, sourceRunId?:
         turn.reference_scope !== 'prior_turns' &&
         turn.references.some((item) => item.kind === 'record' && item.id === reference.id),
     )
-    const summary = prior
-      .slice(0, originIndex + 1)
-      .reverse()
-      .find(
-        (turn) =>
-          turn.reference_scope !== 'prior_turns' &&
-          turn.references.some((item) => item.kind === 'statistics'),
-      )
-    summaryRunId.value = summary?.run_id || ''
+    const origin = prior[originIndex]
+    // 提醒也能提供病例入口；只有该病例来源轮本身含统计，才能返回其汇总。
+    summaryRunId.value = origin?.references.some((item) => item.kind === 'statistics')
+      ? origin.run_id
+      : ''
   }
   await send(
     reference.kind === 'record'

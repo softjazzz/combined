@@ -1,4 +1,4 @@
-import { defineComponent, ref, type PropType } from 'vue'
+import { defineComponent, ref, type ComponentPublicInstance, type PropType } from 'vue'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -18,12 +18,16 @@ const mocks = vi.hoisted(() => ({
   activate: vi.fn(),
   reference: vi.fn(),
   evidenceDocument: vi.fn(),
+  feedback: vi.fn(),
+  submitFeedback: vi.fn(),
 }))
 vi.mock('@/api/businessAgent', () => ({
   businessAgentApi: {
     access: mocks.access,
     reference: mocks.reference,
     evidenceDocument: mocks.evidenceDocument,
+    feedback: mocks.feedback,
+    submitFeedback: mocks.submitFeedback,
   },
 }))
 vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
@@ -134,6 +138,150 @@ describe('管理助手范围选择', () => {
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
   })
+  it('反馈读取失败不可提交，重试回显既有反馈且不再提供提交按钮', async () => {
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    mocks.feedback.mockRejectedValueOnce({ response: { status: 503 } })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper.findAll('[data-testid="business-agent-feedback-open"]')[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="business-agent-feedback-submit"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('反馈服务暂不可用')
+    mocks.feedback.mockResolvedValueOnce({
+      target: {
+        reference_id: 'result-a',
+        institute_id: 'H',
+        patient_id: 'P',
+        visit_id: 'V',
+        rule_id: 'R',
+        title: '问题',
+      },
+      data: {
+        id: 'saved',
+        reference_id: 'result-a',
+        status: 'submitted',
+        comment: '此前已提交理由',
+        created_at: '2026-10-02',
+      },
+    })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '重新核对反馈对象')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('此前已提交理由')
+    expect(wrapper.find('[data-testid="business-agent-feedback-submit"]').exists()).toBe(false)
+    expect(mocks.submitFeedback).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('异议理由必填、失败同标识重试且提交中防重复', async () => {
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    const target = {
+      reference_id: 'result-a',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+      rule_id: 'R',
+      title: '保存问题',
+    }
+    mocks.feedback.mockResolvedValue({ target, data: null })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper.findAll('[data-testid="business-agent-feedback-open"]')[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="business-agent-feedback-target"]').text()).toContain('患者 P')
+    const submit = wrapper.get('[data-testid="business-agent-feedback-submit"]')
+    expect(submit.attributes('disabled')).toBeDefined()
+    wrapper
+      .findComponent<ComponentPublicInstance>('[data-testid="business-agent-feedback-comment"]')
+      .vm.$emit('update:value', ' 原判定存在异议 ')
+    await flushPromises()
+    mocks.submitFeedback.mockRejectedValueOnce({ response: { status: 503 } })
+    await submit.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('未确认提交成功')
+    const firstPayload = mocks.submitFeedback.mock.calls[0][1]
+    let finish!: (value: unknown) => void
+    mocks.submitFeedback.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    await submit.trigger('click')
+    await submit.trigger('click')
+    expect(mocks.submitFeedback).toHaveBeenCalledTimes(2)
+    expect(mocks.submitFeedback.mock.calls[1][1]).toEqual(firstPayload)
+    expect(firstPayload.comment).toBe('原判定存在异议')
+    expect(wrapper.text()).not.toContain('异议反馈已提交')
+    finish({
+      id: 'feedback-a',
+      reference_id: 'result-a',
+      status: 'submitted',
+      comment: firstPayload.comment,
+      created_at: '2026-10-02',
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('异议反馈已提交')
+    expect(wrapper.find('[data-testid="business-agent-feedback-submit"]').exists()).toBe(false)
+    expect(mocks.send).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('切换患者取消反馈提交且迟到成功不会串入新患者', async () => {
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    mocks.feedback.mockResolvedValue({
+      target: {
+        reference_id: 'result-a',
+        institute_id: 'H',
+        patient_id: 'P',
+        visit_id: 'V',
+        rule_id: 'R',
+        title: '问题',
+      },
+      data: null,
+    })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper.findAll('[data-testid="business-agent-feedback-open"]')[0].trigger('click')
+    await flushPromises()
+    wrapper
+      .findComponent<ComponentPublicInstance>('[data-testid="business-agent-feedback-comment"]')
+      .vm.$emit('update:value', '异议理由')
+    await flushPromises()
+    let finish!: (value: unknown) => void
+    mocks.submitFeedback.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    await wrapper.get('[data-testid="business-agent-feedback-submit"]').trigger('click')
+    const signal = mocks.submitFeedback.mock.calls[0][2] as AbortSignal
+    await wrapper.setProps({
+      userContext: { view: 'doctor', institute_id: 'H', patient_id: 'OTHER', visit_id: 'OTHER' },
+    })
+    expect(signal.aborted).toBe(true)
+    finish({ status: 'submitted', comment: '迟到反馈' })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('异议反馈已提交')
+    expect(wrapper.text()).not.toContain('迟到反馈')
+    wrapper.unmount()
+  })
   it('管理下钻可定位原汇总，不请求刷新；切换范围清除返回位置', async () => {
     mocks.managerDrilldown = true
     mocks.access.mockResolvedValue({
@@ -231,6 +379,54 @@ describe('管理助手范围选择', () => {
       wrapper.unmount()
     },
   )
+  it('同会话先统计后提醒，打开提醒病例清除旧汇总且不误返之前统计', async () => {
+    const makeTurn = (
+      run_id: string,
+      references: BusinessAgentTurn['references'],
+    ): BusinessAgentTurn => ({
+      run_id,
+      references,
+      question: run_id,
+      answer: run_id,
+      elapsed_ms: 1,
+      tool_calls: 1,
+      status: 'completed',
+    })
+    mocks.history = [
+      makeTurn('statistics', [
+        { id: 'stats-a', kind: 'statistics', title: '之前统计' },
+        { id: 'record-statistics', kind: 'record', title: '统计病例' },
+      ]),
+      makeTurn('followups', [{ id: 'record-followup', kind: 'record', title: '提醒关联病例' }]),
+    ]
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    wrapper.findComponent(Range).vm.$emit('update:value', ['2026-09-01', '2026-09-30'])
+    await flushPromises()
+    await wrapper
+      .get('[data-run-id="statistics"]')
+      .findAll('button')
+      .find((button) => button.text() === '查看病例问题')!
+      .trigger('click')
+    expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(true)
+    await wrapper
+      .get('[data-run-id="followups"]')
+      .findAll('button')
+      .find((button) => button.text() === '查看病例问题')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(false)
+    expect(mocks.send).toHaveBeenLastCalledWith(
+      '查看“提醒关联病例”的保存质控问题',
+      expect.objectContaining({ view: 'manager' }),
+      'record-followup',
+    )
+    wrapper.unmount()
+  })
   it('规则未读取时按明确编号及保存引用发起查询', async () => {
     mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
     const wrapper = mountDrawer({
@@ -250,6 +446,10 @@ describe('管理助手范围选择', () => {
       'result-a',
     )
     expect(wrapper.text()).toContain('查询将发起新一轮问答')
+    expect(wrapper.get('[data-testid="business-agent-readonly-notice"]').text()).toContain(
+      '查看提醒与整改记录',
+    )
+    expect(wrapper.text()).toContain('异议反馈需本人填写理由并提交')
     wrapper.unmount()
   })
   it('规范候选明确提示不等于回答依据，仍可读取原文', async () => {

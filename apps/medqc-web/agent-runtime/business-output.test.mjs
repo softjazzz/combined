@@ -1,6 +1,119 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { businessModelValue } from './business-output.mjs'
+import { businessModelContext, businessModelValue } from './business-output.mjs'
+
+test('医生模型上下文仅保留视图与机构，不改动正式授权上下文', () => {
+  const context = Object.freeze({
+    view: 'doctor',
+    institute_id: 'H',
+    patient_id: 'patient-internal',
+    visit_id: 'visit-internal',
+    department: '内科',
+  })
+  assert.deepEqual(businessModelContext(context), {
+    view: 'doctor',
+    institute_id: 'H',
+    record_scope: '当前页面已选择且服务端授权的本次住院，身份见页面，不猜/复述标识。',
+  })
+  assert.equal(context.patient_id, 'patient-internal')
+  assert.equal(context.visit_id, 'visit-internal')
+})
+
+test('管理者模型上下文保留页面范围与日期，返回独立投影', () => {
+  const context = Object.freeze({
+    view: 'manager',
+    institute_id: 'H',
+    department: '内科',
+    care_phase: 'discharged',
+    completed_from: '2026-09-01T00:00:00+08:00',
+    completed_to: '2026-09-30T23:59:59+08:00',
+  })
+  const projected = businessModelContext(context)
+  assert.deepEqual(projected, context)
+  assert.notEqual(projected, context)
+})
+
+test('read_rule使用真实dataclass字段保留质控点时限，标题取同一规则来源', () => {
+  // 后端asdict只有qc_point/source_document，title是计算属性，仅在引用中返回。
+  const payload = {
+    rule: {
+      rule_id: 'LX0609-01-02-01',
+      source_document: '首次病程',
+      qc_point: '入院后8小时内无首次病程记录',
+      definition_note: '',
+      policy_summary: '当前按客户已确认的《首次病程》质控点执行；新增或变更口径须单独验收。',
+    },
+    references: [
+      {
+        id: 'rule:LX0609-01-02-01',
+        rule_id: 'LX0609-01-02-01',
+        title: '首次病程：入院后8小时内无首次病程记录',
+      },
+    ],
+  }
+  const projected = businessModelValue('read_rule', {}, payload)
+  assert.equal(projected.rule.qc_point, payload.rule.qc_point)
+  assert.equal(projected.rule.source_document, payload.rule.source_document)
+  assert.equal(projected.rule.title, payload.references[0].title)
+  assert.equal(projected.rule.definition_note, '')
+  assert.equal(projected.rule.policy_summary, payload.rule.policy_summary)
+  assert.equal(payload.rule.title, undefined)
+})
+
+test('提醒与整改仅投影授权本页及范围限制，不透传总量或操作成功', () => {
+  for (const kind of ['notifications', 'remediations']) {
+    const value = businessModelValue(
+      'query_followups',
+      {},
+      {
+        kind,
+        state: 'partial',
+        page: 2,
+        page_size: 5,
+        has_more: true,
+        coverage_note: '身份不明条目已排除',
+        scan_limit_reached: true,
+        status_note: '保存状态未重判',
+        total: 0,
+        success: true,
+        internal: '秘密',
+        items: [
+          {
+            id: 'saved',
+            record_reference: 'record:authorized-case',
+            title: '提醒',
+            content: '保存内容',
+            status: 'submitted',
+            remediation_requirement: '保存要求',
+            deadline: '2020-01-01',
+            identity: { institute_id: 'H', patient_id: 'P', visit_id: 'V', extra: '秘密' },
+            raw_output: '秘密',
+            action_success: true,
+          },
+        ],
+      },
+    )
+    assert.equal(value.state, 'partial')
+    assert.equal(value.coverage_note, '身份不明条目已排除')
+    assert.equal(value.has_more, true)
+    assert.equal(value.scan_limit_reached, true)
+    assert.equal(value.items.length, 1)
+    assert.equal(value.items[0].record_reference, 'record:authorized-case')
+    assert.match(value.read_note, /关联病例卡/)
+    assert.equal(value.total, undefined)
+    assert.equal(value.success, undefined)
+    assert.ok(!JSON.stringify(value).includes('秘密'))
+    assert.equal(value.items[0].status, kind === 'remediations' ? 'submitted' : undefined)
+    assert.match(value.read_note, /空页.*不能解释为无待办/)
+  }
+  const empty = businessModelValue(
+    'query_followups',
+    {},
+    { kind: 'notifications', state: 'partial', items: [] },
+  )
+  assert.deepEqual(empty.items, [])
+  assert.equal(empty.total, undefined)
+})
 
 test('规则检索只给目录候选，保存版本与当前目录版本分别透传', () => {
   const candidate = {
@@ -98,7 +211,9 @@ test('保存覆盖率不能冒充任务运行状态，摘录不冒充当前文�
   )
   assert.match(issue.evidence_read_note, /不能.*重新判定/)
   assert.match(issue.evidence_read_note, /当前文书.*未读取/)
-  assert.equal(issue.evidence[0].evidence_excerpt, '未发现结果……')
+  assert.equal(issue.evidence, undefined)
+  assert.deepEqual(issue.evidence_index, [{ evidence_position: 1 }])
+  assert.ok(!JSON.stringify(issue).includes('未发现结果……'))
   assert.equal(canonical.is_complete, false)
   const conflicted = businessModelValue(
     'read_saved_results',
@@ -155,6 +270,15 @@ test('统计概览缩小规则范围但保留正式计数与病例下钻标识',
     has_more: true,
   })
   assert.equal(result.record_page.records[0].record_reference, 'record:bound')
+  assert.deepEqual(result.record_page, {
+    page: 1,
+    page_size: 20,
+    total: 6,
+    records: [{ record_reference: 'record:bound', title: '已授权病例' }],
+  })
+  assert.match(result.display_note, /卡片完整展示本页病例/)
+  assert.match(result.display_note, /不重复列出部分病例冒充整页/)
+  assert.match(result.display_note, /未展示页不能称已读取/)
   assert.equal(statistics.rule_distribution.length, 3)
   assert.ok(!JSON.stringify(result).includes('完整展示内容'))
 })
@@ -205,7 +329,7 @@ test('概览仅给同序稳定索引，完整展示文本不进入模型', () =>
   assert.equal(value.references[1].suggestion, '完整保存建议')
 })
 
-test('单问题的否定条件和证据保持完整且只出现一次，规则不发送内部目录字段', () => {
+test('单问题保留正式结论建议，摘录仅留原卡片，规则不发送内部目录字段', () => {
   const evidence = [{ source_ref: 'src-a', evidence_excerpt: '未发现变化；不能据此判断缺失。' }]
   const ref = {
     id: 'result-a',
@@ -223,9 +347,13 @@ test('单问题的否定条件和证据保持完整且只出现一次，规则�
     {},
     { references: [ref], evidence, reason_code: 'source_missing', evidence_scope: '保存时摘录' },
   )
-  assert.equal(issue.evidence[0].evidence_excerpt, evidence[0].evidence_excerpt)
-  assert.equal(JSON.stringify(issue).split('未发现变化').length - 1, 1)
+  assert.equal(issue.evidence, undefined)
+  assert.deepEqual(issue.evidence_index, [{ evidence_position: 1, source_ref: 'src-a' }])
+  assert.ok(!JSON.stringify(issue).includes(evidence[0].evidence_excerpt))
+  assert.equal(JSON.stringify(issue).split('未发现变化').length - 1, 0)
   assert.equal(issue.conclusion, ref.conclusion)
+  assert.equal(issue.suggestion, ref.suggestion)
+  assert.equal(ref.evidence[0].evidence_excerpt, evidence[0].evidence_excerpt)
   assert.ok(!JSON.stringify(issue).includes('重复全文'))
   const rule = businessModelValue(
     'read_rule',

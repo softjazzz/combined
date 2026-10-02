@@ -60,11 +60,18 @@ class QueryStatistics(ToolInput):
     rule_limit: int = Field(default=5, ge=1, le=75)
 
 
+class QueryFollowups(ToolInput):
+    kind: Literal["notifications", "remediations"]
+    page: int = Field(default=1, ge=1, le=100)
+    page_size: int = Field(default=5, ge=1, le=10)
+
+
 TOOL_DEFINITIONS = {
     "read_saved_results": (ReadResults, "分页读取正式保存结果。statuses为空查全类别；仅列不合规时指定non_compliant。每页最多10条，index和saved_text均在卡片完整展示结论建议，模型只收到索引；列清单无需另查证据或规则。追问具体原因或依据才用read_saved_issue。后续页带已看到的expected_job_id；管理下钻用统计返回record_reference。"),
     "read_saved_issue": (ReadIssue, "按稳定 result_id 读取同一任务的具体问题、正式建议和已保存病历证据。"),
     "read_rule": (ReadRule, "读取权威规则目录中的当前启用状态和院内实施口径；不是规范原文。"),
     "search_rules": (SearchRules, "不知道编号时按名称或关键词查当前权威目录。多个关键词用空格分开且必须全部匹配，支持中文及CT等英文；不做语义推断。选定候选后用read_rule读取口径；未命中不表示没有规范要求。"),
+    "query_followups": (QueryFollowups, "读取既有通知或整改台账；医生仅当前病例，管理者仅授权科室。按源列表分页，无法证明病例授权的条目排除，空页不代表没有待办。仅展示保存状态与期限，不执行标记已读、催办或整改；没有全局总量。"),
     "query_statistics": (QueryStatistics, "沿用会话机构/科室、病例范围和质控完成日期读取正式统计，不改口径。规则概览按不合规次数降序默认前5条；rule_limit可指定1至75。page是病例页，返回record_reference用于选择具体病例。"),
 }
 
@@ -114,9 +121,12 @@ class BusinessTools:
     def identity(self, metadata: dict, record_reference: str | None) -> dict:
         context = metadata["context"]
         if context["view"] == "doctor":
+            current = {key: context[key] for key in ("institute_id", "patient_id", "visit_id")}
             if record_reference:
-                raise HTTPException(422, "当前医生会话只能读取已选病例")
-            return {key: context[key] for key in ("institute_id", "patient_id", "visit_id")}
+                binding = metadata["references"].get(record_reference, {})
+                if binding.get("kind") != "record" or binding.get("identity") != current:
+                    raise HTTPException(422, "当前医生会话只能读取已选病例")
+            return current
         binding = metadata["references"].get(record_reference or "", {})
         if binding.get("kind") != "record":
             raise HTTPException(422, "请先从当前统计下钻选择病例")
@@ -212,6 +222,23 @@ class BusinessTools:
             return await self.saved_results(metadata, user, params.record_reference, params)
         if name == "read_saved_issue":
             return await self.issue(metadata, params.result_id)
+        if name == "query_followups":
+            session_id = quote(metadata["session_id"], safe="")
+            payload = await self.read_api(f"/api/v1/qc-agent/business/sessions/{session_id}/followups", params.model_dump())
+            references = []
+            bound_cases = {}
+            items = []
+            for item in payload.get("items", []):
+                identity = item["identity"]
+                key = tuple(identity[field] for field in ("institute_id", "patient_id", "visit_id"))
+                if key not in bound_cases:
+                    reference_id = f"record:{uuid4()}"
+                    self.store.bind(metadata["session_id"], user, reference_id, {"kind": "record", "identity": identity})
+                    bound_cases[key] = reference_id
+                    references.append({"id": reference_id, "kind": "record", "title": f"提醒/整改关联病例 · {identity['visit_id']}",
+                                       "locator": "已核验授权的提醒/整改关联病例；打开后读取当前保存质控结果"})
+                items.append({**item, "record_reference": bound_cases[key]})
+            return {**payload, "items": items, "references": references}
         if name == "search_rules":
             from app.services.luxian_0609_rule_master import LUXIAN_0609_RULE_MASTER_VERSION, load_luxian_0609_rule_master
             keywords = params.query.casefold().split()

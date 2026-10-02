@@ -89,7 +89,48 @@ export interface BusinessAgentAccess {
   doctor_cases?: { institute_id: string; patient_id: string; visit_id: string }[]
   manager_scopes: { institute_id: string; department: string }[]
 }
+export interface BusinessFeedback {
+  id: string
+  reference_id: string
+  status: 'submitted'
+  comment: string
+  created_at: string
+}
+export interface BusinessFeedbackPreview {
+  target: {
+    reference_id: string
+    institute_id: string
+    patient_id: string
+    visit_id: string
+    rule_id: string
+    title: string
+  }
+  data: BusinessFeedback | null
+}
 export const businessAgentApi = {
+  async feedback(
+    sessionId: string,
+    referenceId: string,
+    signal: AbortSignal,
+  ): Promise<BusinessFeedbackPreview> {
+    return (
+      await http.get(`/api/v1/qc-agent/business/sessions/${sessionId}/feedback`, {
+        params: { reference_id: referenceId },
+        signal,
+      })
+    ).data
+  },
+  async submitFeedback(
+    sessionId: string,
+    payload: { reference_id: string; comment: string; request_id: string },
+    signal: AbortSignal,
+  ): Promise<BusinessFeedback> {
+    return (
+      await http.post(`/api/v1/qc-agent/business/sessions/${sessionId}/feedback`, payload, {
+        signal,
+      })
+    ).data.data
+  },
   async access(): Promise<BusinessAgentAccess> {
     return (await http.get('/api/v1/qc-agent/business/access')).data
   },
