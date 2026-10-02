@@ -15,7 +15,15 @@ export interface BusinessAgentContext {
 export interface BusinessAgentReference {
   id: string
   title: string
-  kind: 'saved_result' | 'evidence' | 'guideline' | 'rule' | 'statistics' | 'record' | 'draft'
+  kind:
+    | 'saved_result'
+    | 'evidence'
+    | 'guideline'
+    | 'rule'
+    | 'statistics'
+    | 'record'
+    | 'draft'
+    | 'action'
   text?: string
   locator?: string
   rule_id?: string
@@ -24,6 +32,12 @@ export interface BusinessAgentReference {
   conclusion?: string
   suggestion?: string
   position?: number
+  // 操作预览卡：确认摘要只在待确认时返回；任务状态以正式任务服务为准。
+  action_id?: string
+  allowed?: boolean
+  confirmation_hash?: string | null
+  expires_at?: string
+  job_id?: string | null
   evidence?: {
     source_type: string
     source_ref: string
@@ -169,6 +183,23 @@ export const businessAgentApi = {
         `/api/v1/qc-agent/business/sessions/${sessionId}/references/${encodeURIComponent(referenceId)}`,
       )
     ).data
+  },
+  async confirmAction(
+    sessionId: string,
+    actionId: string,
+    confirmationHash: string,
+  ): Promise<BusinessAgentReference> {
+    return (
+      await http.post(
+        `/api/v1/qc-agent/business/sessions/${sessionId}/actions/${actionId}/confirm`,
+        { confirmed: true, confirmation_hash: confirmationHash },
+        { timeout: 60000 },
+      )
+    ).data
+  },
+  async readAction(sessionId: string, actionId: string): Promise<BusinessAgentReference> {
+    return (await http.get(`/api/v1/qc-agent/business/sessions/${sessionId}/actions/${actionId}`))
+      .data
   },
   async evidenceDocument(
     sessionId: string,

@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   evidenceDocument: vi.fn(),
   feedback: vi.fn(),
   submitFeedback: vi.fn(),
+  confirmAction: vi.fn(),
+  readAction: vi.fn(),
 }))
 vi.mock('@/api/businessAgent', () => ({
   businessAgentApi: {
@@ -29,6 +31,8 @@ vi.mock('@/api/businessAgent', () => ({
     evidenceDocument: mocks.evidenceDocument,
     feedback: mocks.feedback,
     submitFeedback: mocks.submitFeedback,
+    confirmAction: mocks.confirmAction,
+    readAction: mocks.readAction,
   },
 }))
 vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
@@ -576,6 +580,115 @@ describe('管理助手范围选择', () => {
       '查看提醒与整改记录',
     )
     expect(wrapper.text()).toContain('异议反馈需本人填写理由并提交')
+    wrapper.unmount()
+  })
+  it('操作预览仅在用户点击后确认，确认后展示正式任务状态且不能再次确认', async () => {
+    const future = new Date(Date.now() + 600000).toISOString()
+    const preview: BusinessAgentReference = {
+      id: 'action:1',
+      kind: 'action',
+      action_id: '1',
+      title: '单病例复检 · 1条规则',
+      status: 'previewed',
+      allowed: true,
+      confirmation_hash: 'a'.repeat(64),
+      expires_at: future,
+      text: '操作：单病例复检；状态：待确认',
+    }
+    mocks.history = [
+      {
+        run_id: 'action',
+        question: '再检查一下',
+        answer: '已生成复检预览，请确认',
+        references: [
+          preview,
+          {
+            ...preview,
+            id: 'action:2',
+            action_id: '2',
+            allowed: false,
+            text: '不能执行：同步失败',
+          },
+          { ...preview, id: 'action:3', action_id: '3', expires_at: '2000-01-01T00:00:00Z' },
+        ],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 1,
+      },
+    ]
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    mocks.confirmAction.mockResolvedValue({
+      ...preview,
+      status: 'submitted',
+      confirmation_hash: null,
+      job_id: 'job-1',
+      text: '正式任务 job-1：queued',
+    })
+    mocks.readAction.mockResolvedValue({
+      ...preview,
+      status: 'submitted',
+      text: '正式任务 job-1：completed',
+    })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    const confirms = wrapper.findAll('[data-testid="business-agent-action-confirm"]')
+    // 不可执行或已过期的预览不提供确认按钮。
+    expect(confirms).toHaveLength(1)
+    expect(mocks.confirmAction).not.toHaveBeenCalled()
+    await confirms[0].trigger('click')
+    await flushPromises()
+    expect(mocks.confirmAction).toHaveBeenCalledWith('session-a', '1', 'a'.repeat(64))
+    expect(wrapper.find('[data-testid="business-agent-action-confirm"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('正式任务 job-1：queued')
+    await wrapper.get('[data-testid="business-agent-action-refresh"]').trigger('click')
+    await flushPromises()
+    expect(mocks.readAction).toHaveBeenCalledWith('session-a', '1')
+    expect(wrapper.text()).toContain('正式任务 job-1：completed')
+    expect(wrapper.text()).toContain('停止对话不会取消已创建任务')
+    wrapper.unmount()
+  })
+  it('确认冲突时提示重新预览且不显示成功', async () => {
+    mocks.history = [
+      {
+        run_id: 'action',
+        question: '复检',
+        answer: '预览',
+        references: [
+          {
+            id: 'action:1',
+            kind: 'action',
+            action_id: '1',
+            title: '单病例复检',
+            status: 'previewed',
+            allowed: true,
+            confirmation_hash: 'b'.repeat(64),
+            expires_at: new Date(Date.now() + 600000).toISOString(),
+            text: '待确认',
+          },
+        ],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 1,
+      },
+    ]
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    mocks.confirmAction.mockRejectedValue({ response: { status: 409 } })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="business-agent-action-confirm"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('预览已失效；请重新发起预览。本次未提交任务')
+    expect(wrapper.text()).not.toContain('正式任务')
     wrapper.unmount()
   })
   it('医生不合规问题可请求参考草稿，草稿卡复制后提示不等于整改', async () => {

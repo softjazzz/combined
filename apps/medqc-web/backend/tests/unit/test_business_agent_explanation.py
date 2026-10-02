@@ -41,9 +41,10 @@ def test_runtime_bridge_limits_tools_on_create_restore_chat_and_reference(tmp_pa
         expected.add("query_statistics")
         expected.add("compare_statistics")
         expected.add("trend_statistics")
+        expected.add("preview_specialist_task")
         expected.add("read_rule_validation")
     else:
-        expected.update({"read_draft_facts", "compose_reference_draft"})
+        expected.update({"read_draft_facts", "compose_reference_draft", "preview_recheck"})
     bodies = [body for _, body in calls if body is not None]
     assert len(bodies) == 4
     for body in bodies:

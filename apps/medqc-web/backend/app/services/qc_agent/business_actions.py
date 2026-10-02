@@ -38,6 +38,8 @@ class MaterialVersion(ActionModel):
     version: str = Field(min_length=1, max_length=256)
     # 必须来自同步/材料所有者，不允许把医生口述“改好了”当作同步证明。
     synchronization_verified: bool = False
+    # 同步所有者明确报告失败时阻断；未知只警示，按当前已同步材料检查。
+    synchronization_failed: bool = False
 
 
 class ActionRequest(ActionModel):
@@ -64,6 +66,7 @@ class ActionPreview(ActionModel):
     material_versions: tuple[MaterialVersion, ...]
     allowed: bool
     blocked_reasons: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
     formal_request: FormalTaskRequest | None
     confirmation_hash: str
 
@@ -120,11 +123,18 @@ def build_action_preview(
         if pending or set(active) != set(selected):
             reasons.append("包含当前未正式执行规则，请重新选择并预览")
     versions = [item for item in material_versions if item.record_ref in refs]
+    warnings: list[str] = []
     for ref in refs:
         matched = [item for item in versions if item.record_ref == ref]
-        if len(matched) != 1 or not matched[0].synchronization_verified:
-            reasons.append("材料版本缺失、冲突或尚未证实同步，请核对后重新预览")
+        if len(matched) != 1:
+            reasons.append("材料版本缺失或冲突，请核对后重新预览")
             break
+        if matched[0].synchronization_failed:
+            reasons.append("病例材料同步失败，请先处理同步问题再复检")
+            break
+        if not matched[0].synchronization_verified:
+            warnings.append("未能证实最新修改的文书已同步；将检查当前已同步材料，结果不能证明新修改已被核对")
+    warnings = list(dict.fromkeys(warnings))
     formal = None if reasons else FormalTaskRequest(
         rule_ids=selected, record_refs=refs,
         scope="running" if context.care_phase == "inpatient" else "final",
@@ -132,7 +142,7 @@ def build_action_preview(
     payload = dict(owner_id=owner_id, session_id=session_id, expires_at=expires_at,
                    context=context, request=request, catalog_version=LUXIAN_0609_RULE_MASTER_VERSION,
                    material_versions=tuple(versions), allowed=not reasons,
-                   blocked_reasons=tuple(dict.fromkeys(reasons)), formal_request=formal,
+                   blocked_reasons=tuple(dict.fromkeys(reasons)), warnings=tuple(warnings), formal_request=formal,
                    confirmation_hash="")
     preview = ActionPreview(**payload)
     return preview.model_copy(update={"confirmation_hash": _digest(

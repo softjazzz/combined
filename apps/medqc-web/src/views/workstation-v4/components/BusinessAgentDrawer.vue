@@ -152,6 +152,34 @@
             <p v-if="reference.rule_id" class="business-agent__muted">
               规则编号：{{ reference.rule_id }}
             </p>
+            <template v-if="reference.kind === 'action'">
+              <p class="business-agent__draft" data-testid="business-agent-action-text">
+                {{ actionView(reference).text }}
+              </p>
+              <a-button
+                v-if="canConfirm(actionView(reference))"
+                type="primary"
+                :loading="actionBusy === reference.id"
+                :disabled="!!actionBusy"
+                data-testid="business-agent-action-confirm"
+                @click="confirmAction(reference)"
+              >
+                确认执行
+              </a-button>
+              <a-button
+                v-else-if="actionView(reference).status !== 'previewed'"
+                type="link"
+                :loading="actionBusy === reference.id"
+                :disabled="!!actionBusy"
+                data-testid="business-agent-action-refresh"
+                @click="refreshAction(reference)"
+              >
+                刷新任务进度
+              </a-button>
+              <p class="business-agent__muted">
+                助手不会自行执行；确认后由正式质控任务服务创建任务，停止对话不会取消已创建任务。
+              </p>
+            </template>
             <template v-if="reference.kind === 'draft'">
               <p class="business-agent__draft" data-testid="business-agent-draft-text">
                 {{ reference.text }}
@@ -206,7 +234,9 @@
                       ? '规则详情'
                       : reference.kind === 'draft'
                         ? '最新校验的草稿'
-                        : '依据与详情'
+                        : reference.kind === 'action'
+                          ? '操作最新状态'
+                          : '依据与详情'
               }}
             </a-button>
             <a-button
@@ -678,6 +708,68 @@ function returnToSummary() {
   ).find((element) => element.dataset.runId === summaryRunId.value)
   target?.scrollIntoView({ block: 'start' })
   target?.focus({ preventScroll: true })
+}
+// 操作卡的最新状态只来自确认/回读接口，不改写会话历史中的原卡片。
+const actionUpdates = ref<Record<string, BusinessAgentReference>>({})
+const actionBusy = ref('')
+function actionView(reference: BusinessAgentReference) {
+  return actionUpdates.value[reference.id] || reference
+}
+function canConfirm(reference: BusinessAgentReference) {
+  return (
+    reference.status === 'previewed' &&
+    reference.allowed === true &&
+    !!reference.confirmation_hash &&
+    !!reference.expires_at &&
+    Date.parse(reference.expires_at) > Date.now()
+  )
+}
+watch(sessionId, () => {
+  actionUpdates.value = {}
+  actionBusy.value = ''
+})
+async function confirmAction(reference: BusinessAgentReference) {
+  const current = actionView(reference)
+  const owner = sessionId.value
+  if (!owner || !current.action_id || !current.confirmation_hash) return
+  actionBusy.value = reference.id
+  error.value = ''
+  try {
+    const updated = await businessAgentApi.confirmAction(
+      owner,
+      current.action_id,
+      current.confirmation_hash,
+    )
+    // 切换会话后迟到的响应不写入新会话。
+    if (owner === sessionId.value)
+      actionUpdates.value = { ...actionUpdates.value, [reference.id]: updated }
+  } catch (cause) {
+    if (owner !== sessionId.value) return
+    const status = (cause as { response?: { status?: number } })?.response?.status
+    error.value =
+      status === 409
+        ? '授权、范围、规则或材料状态已变化，预览已失效；请重新发起预览。本次未提交任务。'
+        : '确认请求未完成，未能确认是否已提交；请点击刷新查看该操作状态，不要重复发起新预览。'
+  } finally {
+    actionBusy.value = ''
+  }
+}
+async function refreshAction(reference: BusinessAgentReference) {
+  const current = actionView(reference)
+  const owner = sessionId.value
+  if (!owner || !current.action_id) return
+  actionBusy.value = reference.id
+  error.value = ''
+  try {
+    const updated = await businessAgentApi.readAction(owner, current.action_id)
+    if (owner === sessionId.value)
+      actionUpdates.value = { ...actionUpdates.value, [reference.id]: updated }
+  } catch {
+    if (owner !== sessionId.value) return
+    error.value = '任务进度读取失败；任务状态以正式任务列表为准。'
+  } finally {
+    actionBusy.value = ''
+  }
 }
 const copiedDraftId = ref('')
 async function copyDraft(reference: BusinessAgentReference) {

@@ -19,6 +19,9 @@ from app.services.qc_agent import business_reads, business_documents, business_f
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store
 from app.services.qc_agent.business_tools import BusinessTools, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
 from app.services.qc_agent import business_feedback
+from app.services.qc_agent import business_action_flow
+from app.services.qc_agent.business_action_store import get_action_store
+from app.services.qc_agent.business_actions import ActionConfirmation
 
 router = APIRouter(prefix="/business", tags=["business-agent"])
 
@@ -144,9 +147,11 @@ def api_client(request: Request) -> httpx.AsyncClient:
 async def run_tool(session_id: UUID, name: str, arguments: dict, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access)):
     metadata = store.get(str(session_id), user)
     access.require_context(user, BusinessContext.model_validate(metadata["context"]))
+    # 动作存储只在预览工具中解析；只读工具不因写库未配置而失败。
+    actions = request.app.dependency_overrides.get(get_action_store, get_action_store) if name.startswith("preview_") else None
     async with api_client(request) as client:
         try:
-            return await BusinessTools(store, client).execute(name, arguments, metadata, user)
+            return await BusinessTools(store, client, access=access, actions=actions() if actions else None).execute(name, arguments, metadata, user)
         except ValidationError as exc:
             raise HTTPException(422, "工具参数不符合当前业务合同") from exc
 
@@ -163,6 +168,9 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return (await tools.issue(metadata, reference_id))["references"][0]
             if binding["kind"] == "rule":
                 return (await tools.execute("read_rule", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
+            if binding["kind"] == "action":
+                actions = request.app.dependency_overrides.get(get_action_store, get_action_store)()
+                return await business_action_flow.view(actions, client, metadata, user, binding["action_id"])
             if binding["kind"] == "trend":
                 params = TrendStatistics.model_validate(binding["arguments"])
                 return (await tools.trend_statistics(params, metadata, user, reference_id))["references"][0]
@@ -179,6 +187,23 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 data = await tools.read_api("/api/v1/qc-agent/business/statistics", binding["filters"])
                 return {"id": reference_id, "kind": "statistics", "title": binding.get("title") or "正式统计口径与规则分布", "locator": "按原筛选条件刷新读取；数据可能较上一轮更新", "text": statistics_scope_text(binding["filters"]) + statistics_text(data)}
     return await runtime_call("POST", f"/sessions/{session_id}/reference", {"reference_id": reference_id, "context": metadata["context"], "tools": tool_specs(metadata["context"]["view"])})
+
+
+@router.post("/sessions/{session_id}/actions/{action_id}/confirm")
+async def confirm_action(session_id: UUID, action_id: UUID, payload: ActionConfirmation, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access), actions=Depends(get_action_store)):
+    # 确认只来自用户按钮的独立请求；模型没有确认工具。
+    metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
+    async with api_client(request) as client:
+        return await business_action_flow.confirm(store, actions, client, metadata, user, access, str(action_id), payload)
+
+
+@router.get("/sessions/{session_id}/actions/{action_id}")
+async def read_action(session_id: UUID, action_id: UUID, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access), actions=Depends(get_action_store)):
+    metadata = store.get(str(session_id), user)
+    access.require_context(user, BusinessContext.model_validate(metadata["context"]))
+    async with api_client(request) as client:
+        return await business_action_flow.view(actions, client, metadata, user, str(action_id))
 
 
 @router.get("/sessions/{session_id}/evidence-document")

@@ -196,6 +196,20 @@ export function businessModelValue(name, _args, value) {
         ]),
       ),
     }
+  if (name === 'preview_recheck' || name === 'preview_specialist_task')
+    return {
+      id: value.references?.[0]?.id,
+      preview: select(value.preview, [
+        'operation',
+        'allowed',
+        'blocked_reasons',
+        'warnings',
+        'record_count',
+        'rule_ids',
+      ]),
+      read_note:
+        '这只是操作预览，尚未创建任务。可执行时请用户核对卡片后点击“确认执行”，助手不能代为确认；不可执行时说明原因。回答不得称已复检、已创建任务或问题已解决；有材料同步提示时必须转述。',
+    }
   if (name === 'trend_statistics') {
     const trend = value.trend || {}
     const ruleId = trend.rule_id

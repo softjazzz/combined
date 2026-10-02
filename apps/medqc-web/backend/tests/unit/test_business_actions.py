@@ -44,12 +44,12 @@ def test_formal_contract_and_repeat_confirmation_are_pure(inputs):
     assert "job_id" not in preview.model_dump()
 
 
-@pytest.mark.parametrize("kind", ["unauthorized", "unsynced", "missing", "duplicate", "unknown_rule", "doctor_batch", "missing_phase"])
+@pytest.mark.parametrize("kind", ["unauthorized", "sync_failed", "missing", "duplicate", "unknown_rule", "doctor_batch", "missing_phase"])
 def test_blocked_preview_cannot_confirm(inputs, kind):
     if kind == "unauthorized":
         inputs["authorized_record_refs"] = ()
-    elif kind == "unsynced":
-        inputs["material_versions"] = (inputs["material_versions"][0].model_copy(update={"synchronization_verified": False}),)
+    elif kind == "sync_failed":
+        inputs["material_versions"] = (inputs["material_versions"][0].model_copy(update={"synchronization_verified": False, "synchronization_failed": True}),)
     elif kind == "missing":
         inputs["material_versions"] = ()
     elif kind == "duplicate":
@@ -125,3 +125,13 @@ def test_confirm_hash_must_match_server_preview(inputs):
     with pytest.raises(ValueError, match="不一致"):
         actions.validate_confirmation(preview, actions.ActionConfirmation(
             confirmed=True, confirmation_hash="0" * 64), **args)
+
+
+def test_unverified_material_is_allowed_with_explicit_warning(inputs):
+    inputs["material_versions"] = (inputs["material_versions"][0].model_copy(update={"synchronization_verified": False}),)
+    preview = actions.build_action_preview(**inputs)
+    assert preview.allowed and preview.formal_request is not None
+    assert preview.warnings == ("未能证实最新修改的文书已同步；将检查当前已同步材料，结果不能证明新修改已被核对",)
+    verified = actions.build_action_preview(**{**inputs, "material_versions": (inputs["material_versions"][0].model_copy(update={"synchronization_verified": True}),)})
+    # 警示属于确认内容；同步状态变化会改变确认摘要。
+    assert verified.warnings == () and verified.confirmation_hash != preview.confirmation_hash

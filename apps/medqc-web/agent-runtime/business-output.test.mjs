@@ -605,3 +605,27 @@ test('科室趋势只把各期原值和数据不足给模型，不含病例下�
   for (const forbidden of ['不进入模型', 'patient_id', '卡片全文'])
     assert.ok(!text.includes(forbidden))
 })
+
+test('操作预览投影只给模型可执行性与提示，并要求用户确认', () => {
+  const value = businessModelValue(
+    'preview_recheck',
+    {},
+    {
+      preview: {
+        action_id: 'a',
+        operation: 'single_recheck',
+        allowed: true,
+        blocked_reasons: [],
+        warnings: ['未能证实最新修改的文书已同步'],
+        record_count: 1,
+        rule_ids: ['LX0609-01-01-01'],
+      },
+      references: [{ id: 'action:a', confirmation_hash: 'secret-hash', text: '卡片全文' }],
+    },
+  )
+  assert.equal(value.id, 'action:a')
+  assert.deepEqual(value.preview.warnings, ['未能证实最新修改的文书已同步'])
+  assert.match(value.read_note, /助手不能代为确认/)
+  assert.ok(!JSON.stringify(value).includes('secret-hash'))
+  assert.ok(!JSON.stringify(value).includes('卡片全文'))
+})
