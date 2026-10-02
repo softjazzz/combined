@@ -33,7 +33,7 @@ MAX_TEXT_FILTER_LENGTH = 100
 
 REVIEW_STATES = ("pending_review", "pending_recheck", "approved", "doubtful")
 SCORE_STATES = ("scored", "no_standard", "unavailable")
-_TEXT_FILTER_KEYS = ("dept", "doctor", "keyword", "grade")
+_TEXT_FILTER_KEYS = ("dept", "doctor", "keyword", "grade", "scoring_standard")
 _DATE_FILTER_KEYS = ("start_date", "end_date")
 _ENUM_FILTERS = {
     "date_field": frozenset({"visit", "admission", "discharge", "updated"}),
@@ -54,7 +54,7 @@ FILTER_KEYS = frozenset({
     "has_defect",
 })
 OUTPATIENT_PAGE_KEY = "v5_records_outpatient_emergency"
-OUTPATIENT_FILTER_KEYS = frozenset({"dept", "keyword", "start_date", "end_date", "date_field"})
+OUTPATIENT_FILTER_KEYS = frozenset({"dept", "keyword", "start_date", "end_date", "date_field", "scoring_standard"})
 
 _TABLE = QCUserFilterTemplate.__table__
 
@@ -146,6 +146,8 @@ def validate_filters(filters: Any, *, page_key: str | None = None) -> dict[str, 
     unknown = sorted(str(key) for key in filters if key not in FILTER_KEYS)
     if unknown:
         raise FilterTemplateInvalid(f"filters 含不支持的键：{', '.join(unknown)}")
+    if "scoring_standard" in filters and page_key != OUTPATIENT_PAGE_KEY:
+        raise FilterTemplateInvalid("scoring_standard 仅支持门急诊病历源筛选模板")
     if page_key == OUTPATIENT_PAGE_KEY:
         unsupported = sorted(str(key) for key in filters if key not in OUTPATIENT_FILTER_KEYS)
         if unsupported:

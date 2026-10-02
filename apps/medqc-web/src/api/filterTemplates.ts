@@ -31,6 +31,7 @@ export interface FilterTemplateFilters {
   dept?: string
   doctor?: string
   keyword?: string
+  scoring_standard?: string
   start_date?: string
   end_date?: string
   date_field?: FilterTemplateDateField

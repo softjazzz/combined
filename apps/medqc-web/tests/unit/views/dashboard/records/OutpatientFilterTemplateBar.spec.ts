@@ -167,6 +167,26 @@ describe('OutpatientFilterTemplateBar', () => {
     expect(api.removeFilterTemplate).toHaveBeenCalledWith('template-1', 3)
   })
 
+  it('评分标准随默认模板恢复，修改检测和保存不丢失该条件', async () => {
+    const saved = template({
+      is_default: true,
+      filters: { date_field: 'visit', scoring_standard: '历史标准甲' },
+    })
+    api.listFilterTemplates.mockResolvedValue({ success: true, data: [saved] })
+    const wrapper = mountBar({ scoring_standard: ' 历史标准甲 ' })
+    await flushPromises()
+    expect(wrapper.emitted('apply')?.at(-1)).toEqual([{ scoring_standard: '历史标准甲' }])
+    expect(wrapper.text()).not.toContain('已修改')
+    await wrapper.setProps({ currentFilters: { scoring_standard: ' 历史标准乙 ' } })
+    expect(wrapper.text()).toContain('已修改')
+    await wrapper.get('[data-testid="outpatient-filter-template-update"]').trigger('click')
+    await flushPromises()
+    expect(api.updateFilterTemplate).toHaveBeenCalledWith('template-1', {
+      version: 3,
+      filters: expect.objectContaining({ scoring_standard: '历史标准乙', date_field: 'visit' }),
+    })
+  })
+
   it('模板服务失败时明确显示不可用，不伪造空模板', async () => {
     api.listFilterTemplates.mockResolvedValue({ success: false, status: 503 })
     const wrapper = mountBar()

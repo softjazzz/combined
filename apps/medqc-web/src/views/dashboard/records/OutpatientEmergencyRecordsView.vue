@@ -370,6 +370,7 @@ const currentRecordTotal = computed(() => {
 
 const currentTemplateFilters = computed<OutpatientFilterSnapshot>(() => ({
   keyword: searchKeyword.value || undefined,
+  scoring_standard: scoringStandard.value.trim() || undefined,
   department: selectedDepartment.value,
   start_date: dateRange.value?.[0]?.format('YYYY-MM-DD'),
   end_date: dateRange.value?.[1]?.format('YYYY-MM-DD'),
@@ -488,7 +489,7 @@ const applyTemplateFilters = async (filters: OutpatientFilterSnapshot) => {
   suppressAutomaticFetch = true
   searchKeyword.value = filters.keyword || ''
   selectedDepartment.value = filters.department || undefined
-  scoringStandard.value = ''
+  scoringStandard.value = filters.scoring_standard || ''
   dateRange.value =
     filters.start_date && filters.end_date
       ? [dayjs(filters.start_date), dayjs(filters.end_date)]

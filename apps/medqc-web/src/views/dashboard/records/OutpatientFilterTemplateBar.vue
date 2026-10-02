@@ -123,6 +123,7 @@ import { useAuthStore } from '@/stores/auth'
 
 export interface OutpatientFilterSnapshot {
   keyword?: string
+  scoring_standard?: string
   department?: string
   start_date?: string
   end_date?: string
@@ -138,7 +139,7 @@ const emit = defineEmits<{
 }>()
 
 const PAGE_KEY = 'v5_records_outpatient_emergency' as const
-const ALLOWED_FILTER_KEYS = new Set(['keyword', 'dept', 'start_date', 'end_date', 'date_field'])
+const ALLOWED_FILTER_KEYS = new Set(['keyword', 'dept', 'start_date', 'end_date', 'date_field', 'scoring_standard'])
 const CONFLICT_MESSAGES = {
   name_conflict: '已存在同名模板，请换一个名称',
   limit_reached: '本页最多保存 20 个模板，请先删除不再使用的模板',
@@ -162,8 +163,10 @@ function normalizeSnapshot(filters: OutpatientFilterSnapshot): OutpatientFilterS
   const normalized: OutpatientFilterSnapshot = {}
   const keyword = filters.keyword?.trim()
   const department = filters.department?.trim()
+  const scoringStandard = filters.scoring_standard?.trim()
   if (keyword) normalized.keyword = keyword
   if (department) normalized.department = department
+  if (scoringStandard) normalized.scoring_standard = scoringStandard
   if (filters.start_date) normalized.start_date = filters.start_date
   if (filters.end_date) normalized.end_date = filters.end_date
   return normalized
@@ -177,6 +180,7 @@ function toApiFilters(filters: OutpatientFilterSnapshot): FilterTemplateFilters 
     start_date: normalized.start_date,
     end_date: normalized.end_date,
     date_field: 'visit',
+    ...(normalized.scoring_standard ? { scoring_standard: normalized.scoring_standard } : {}),
   }
 }
 
@@ -186,6 +190,7 @@ function fromApiFilters(filters: FilterTemplateFilters | null): OutpatientFilter
   if (Boolean(filters.start_date) !== Boolean(filters.end_date)) return null
   return normalizeSnapshot({
     keyword: filters.keyword,
+    scoring_standard: filters.scoring_standard,
     department: filters.dept,
     start_date: filters.start_date,
     end_date: filters.end_date,

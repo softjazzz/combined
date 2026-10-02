@@ -95,6 +95,7 @@ type ViewState = {
   handleSearch: () => void
   handleExportRecords: () => Promise<void>
   resetFilters: () => void
+  applyTemplateFilters: (filters: { scoring_standard?: string }) => Promise<void>
 }
 
 describe('门急诊病历列表导出', () => {
@@ -166,6 +167,12 @@ describe('门急诊病历列表导出', () => {
     expect(view.scoringStandard).toBe('')
     expect(state.getList).toHaveBeenLastCalledWith(expect.objectContaining({
       scoring_standard: undefined,
+    }))
+    await view.applyTemplateFilters({ scoring_standard: '历史模板标准' })
+    await flush()
+    expect(view.scoringStandard).toBe('历史模板标准')
+    expect(state.getList).toHaveBeenLastCalledWith(expect.objectContaining({
+      scoring_standard: '历史模板标准',
     }))
     wrapper.unmount()
   })

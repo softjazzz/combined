@@ -179,6 +179,23 @@ def test_outpatient_rejects_filters_outside_real_query_contract(sessions, filter
         _create("门急诊", page_key=OUTPATIENT, filters=filters)
 
 
+def test_outpatient_scoring_source_filter_round_trip_and_page_isolation(sessions):
+    item = _create("评分筛选", page_key=OUTPATIENT, filters={
+        "date_field": "visit", "scoring_standard": " 历史标准甲 ",
+    })
+    assert item["filters"]["scoring_standard"] == "历史标准甲"
+    loaded = service.list_templates(owner_id="u-1", page_key=OUTPATIENT)["items"]
+    assert loaded[0]["filters"] == item["filters"]
+    for page in (INPATIENT, DISCHARGED):
+        with pytest.raises(service.FilterTemplateInvalid):
+            _create("非门诊标准", page_key=page, filters={"scoring_standard": "历史标准甲"})
+    for value in (True, 123, "x" * 101):
+        with pytest.raises(service.FilterTemplateInvalid):
+            _create("非法标准", page_key=OUTPATIENT, filters={
+                "date_field": "visit", "scoring_standard": value,
+            })
+
+
 def test_limit_reached_per_owner_and_page(sessions):
     for index in range(service.MAX_TEMPLATES_PER_PAGE):
         _create(f"模板{index:02d}")
