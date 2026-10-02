@@ -207,8 +207,9 @@ export function businessModelValue(name, _args, value) {
         'record_count',
         'rule_ids',
       ]),
+      must_tell_user: value.preview?.warnings || [],
       read_note:
-        '这只是操作预览，尚未创建任务。可执行时请用户核对卡片后点击“确认执行”，助手不能代为确认；不可执行时说明原因。回答不得称已复检、已创建任务或问题已解决；有材料同步提示时必须转述。',
+        '这只是操作预览，尚未创建任务。可执行时请用户核对卡片后点击“确认执行”，助手不能代为确认；不可执行时说明原因。must_tell_user 非空时回答必须转述其内容，且不得说复检会读取或核对用户补写的新内容。不得称已复检、已创建任务或问题已解决；助手不会自动跟进结果，请用户在卡片上点“刷新任务进度”查看。',
     }
   if (name === 'trend_statistics') {
     const trend = value.trend || {}

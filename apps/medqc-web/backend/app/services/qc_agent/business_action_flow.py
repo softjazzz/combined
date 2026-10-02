@@ -74,9 +74,9 @@ def saved_statuses(identity: dict, rule_ids: list[str]) -> dict:
     try:
         saved = business_reads.saved_record(identity)
     except HTTPException:
-        return {"job_id": None, "statuses": {}}
+        return {"job_id": None, "record_ref": None, "statuses": {}}
     items = {(item.get("rule_id") or item.get("rule_code")): item.get("status") for item in saved.get("items", []) if isinstance(item, dict)}
-    return {"job_id": saved.get("job_id"), "statuses": {rule: items.get(rule) for rule in rule_ids}}
+    return {"job_id": saved.get("job_id"), "record_ref": saved.get("record_ref"), "statuses": {rule: items.get(rule) for rule in rule_ids}}
 
 
 def rule_titles(rule_ids) -> dict:
@@ -270,22 +270,21 @@ async def _reconcile(action_store, client, row, preview) -> None:
     if response.status_code >= 400:
         return
     items = ((response.json() or {}).get("data") or {}).get("items") or []
-    refs = sorted(json.dumps(ref.model_dump(), sort_keys=True) for ref in preview.request.record_refs)
     rules = sorted(preview.request.rule_ids)
+    count = len(preview.request.record_refs)
+    # 列表为客户安全投影，不含病例三坐标，record_ref 亦按任务生成不可对照；
+    # 只认本人在确认后创建、规则集合与病例数相同的唯一候选，多个即保持未知。
     claimed = row.get("claimed_at")
     matches = []
     for item in items:
-        filters = item.get("filters") if isinstance(item.get("filters"), dict) else {}
-        item_refs = sorted(json.dumps({k: r.get(k) for k in ("institute_id", "patient_id", "visit_id")}, sort_keys=True)
-                           for r in filters.get("record_refs") or [] if isinstance(r, dict))
-        if item_refs == refs and sorted(filters.get("selected_rule_ids") or []) == rules:
+        if sorted(item.get("draft_ids") or []) == rules and item.get("total_records") == count:
             created = item.get("created_at")
             try:
                 created_at = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
                 created_at = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
-            if claimed is None or created_at >= _aware(claimed) - timedelta(seconds=60):
+            if claimed is not None and created_at >= _aware(claimed) - timedelta(seconds=60):
                 matches.append(item.get("id"))
     if len(matches) == 1 and matches[0]:
         await run_in_threadpool(action_store.finish, action_id=row["id"], status=SUBMITTED, job_id=matches[0],

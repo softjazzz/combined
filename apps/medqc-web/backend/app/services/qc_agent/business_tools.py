@@ -165,7 +165,7 @@ class QueryFollowups(ToolInput):
 
 
 TOOL_DEFINITIONS = {
-    "preview_recheck": (business_action_flow.PreviewRecheck, "仅医生视图：用户明确要求“再检查一下/复检”时，为当前病例的明确规则生成复检预览卡；规则用用户所指问题的rule_id，不擅自扩大到全部规则。只生成预览，不执行；需用户在卡片上点击确认后才由正式任务服务创建任务。回答说明需确认、材料同步提示和预计范围，不称已复检。"),
+    "preview_recheck": (business_action_flow.PreviewRecheck, "仅医生视图：用户明确要求“再检查一下/复检”时，为当前病例的明确规则生成复检预览卡；规则原样使用用户点名的编号；用户在问题卡片上选中问题时rule_ids 可只写 @selected 一项，由系统替换为该问题规则；不擅自扩大到全部规则或自行编造编号。只生成预览，不执行；需用户在卡片上点击确认后才由正式任务服务创建任务。回答说明需确认、材料同步提示和预计范围，不称已复检。"),
     "preview_specialist_task": (business_action_flow.PreviewSpecialist, "仅管理视图：用户明确要求对已列出的病例做专项质控时生成任务预览卡。record_references只能用本会话统计下钻或提醒返回的病例来源（最多20份），rule_ids为用户明确的规则。只生成预览，不执行；需用户点击确认。回答不称任务已创建或完成。"),
     "read_draft_facts": (ReadIssue, "仅医生视图：用户明确要求参考补充文字时，按已查看的不合规问题 result_id（用户已选卡片时写 @selected）读取正式建议及来源：序号0为保存结论原文，1起为前5条保存证据摘录。不读取当前文书全文，不判定是否已整改。"),
     "compose_reference_draft": (business_drafts.ComposeDraft, "仅医生视图：先用read_draft_facts取得来源后提交参考草稿。草稿是医生可写入病历的补充段落，只针对正式建议所指缺项，通常1至4段，不复述整条结论或其他已完成项。fact段只写所引来源（0为保存结论，1起为证据）明确出现的事实，必须填evidence_positions；来源未写明的临床意义、检查、诊疗、签名、时间或数值写成placeholder段（说明需医生填写什么；数字只可用正式建议或来源已有的时限等）。服务端校验数值来源，422时按原因改写一次重交。草稿卡完整展示，回答只简述，不复述全文，不称已整改。"),

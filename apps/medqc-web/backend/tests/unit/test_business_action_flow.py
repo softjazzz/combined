@@ -170,7 +170,10 @@ def test_unknown_result_reconciles_only_unique_match_without_resubmit(env):
     card = preview(env, url)["references"][0]
     first = env["client"].post(f"{url}/actions/{card['action_id']}/confirm", json={"confirmed": True, "confirmation_hash": card["confirmation_hash"]}).json()
     assert first["status"] == "unknown" and "未自动重试" in first["text"]
-    matching = {"id": "job-9", "created_at": "2999-01-01T00:00:00+00:00", "filters": {"record_refs": [IDENTITY], "selected_rule_ids": [RULE]}}
+    # 与真实列表投影一致：无 filters/病例三坐标，只有规则与病例数。
+    matching = {"id": "job-9", "created_at": "2999-01-01T00:00:00", "draft_ids": [RULE], "total_records": 1, "filters": {}}
+    env["formal"].listing = [{**matching, "id": "job-old", "created_at": "2000-01-01T00:00:00"}, {**matching, "id": "job-other", "draft_ids": ["LX0609-99-99-99"]}]
+    assert env["client"].get(f"{url}/actions/{card['action_id']}").json()["status"] == "unknown"
     env["formal"].listing = [matching, {**matching, "id": "job-10"}]
     assert env["client"].get(f"{url}/actions/{card['action_id']}").json()["status"] == "unknown"
     env["formal"].listing = [matching]

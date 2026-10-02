@@ -413,16 +413,28 @@ export async function createRuntime({
           async execute(args, exec) {
             const run = state.run
             if (!run) throw new Error('会话未执行')
+            const requestedRules = [
+              ...new Set(run.message.match(/\bLX0609-\d{2}-\d{2}-\d{2}\b/gu) || []),
+            ]
             if (spec.name === 'compare_statistics') {
-              const requestedRules = [
-                ...new Set(run.message.match(/\bLX0609-\d{2}-\d{2}-\d{2}\b/gu) || []),
-              ]
               if (requestedRules.length && !requestedRules.includes(args.rule_id))
                 throw new Error(
                   `比较必须使用用户本轮明确指定的规则：${requestedRules.join('、')}。请纠正规则编号后读取，不能把其他规则结果用于本轮回答。`,
                 )
             }
+            // 预览会展示给用户确认，规则必须是用户本轮点名的规则，不能被模型改写。
+            if (
+              ['preview_recheck', 'preview_specialist_task'].includes(spec.name) &&
+              requestedRules.length &&
+              (args.rule_ids || []).some((rule) => !requestedRules.includes(rule))
+            )
+              throw new Error(
+                `预览只能使用用户本轮明确指定的规则：${requestedRules.join('、')}。请原样使用这些编号重新生成预览。`,
+              )
             // @selected 只代表本轮用户选中的来源；未选择时原样交后端按未知来源拒绝。
+            const selectedRule = /^result:.+:(LX0609-\d{2}-\d{2}-\d{2})$/u.exec(
+              run.reference_id || '',
+            )?.[1]
             const resolved = Object.fromEntries(
               Object.entries(args).map(([key, value]) => [
                 key,
@@ -430,7 +442,9 @@ export async function createRuntime({
                 value === '@selected' &&
                 run.reference_id
                   ? run.reference_id
-                  : value,
+                  : key === 'rule_ids' && Array.isArray(value) && selectedRule
+                    ? value.map((rule) => (rule === '@selected' ? selectedRule : rule))
+                    : value,
               ]),
             )
             const response = await fetchImpl(

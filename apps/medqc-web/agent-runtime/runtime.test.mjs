@@ -951,3 +951,49 @@ test('@selected 只替换为本轮用户所选来源，未选择时原样交后�
     }
   }
 })
+
+test('预览规则必须是用户点名的规则，@selected 取所选问题规则', async () => {
+  const previewSpec = {
+    name: 'preview_recheck',
+    description: '复检预览',
+    parameters: { type: 'object', properties: {}, additionalProperties: true },
+  }
+  const f = await fixture(
+    [
+      { tool: 'preview_recheck', args: { rule_ids: ['LX0609-25-07-18'] } },
+      { tool: 'preview_recheck', args: { rule_ids: ['LX0609-06-01-04'] } },
+      { text: '已生成预览。' },
+    ],
+    { references: [] },
+    previewSpec,
+  )
+  try {
+    await f.runtime.chat(f.sessionId, { ...f.body, message: '帮我复检 LX0609-06-01-04 这一条' })
+    // 编造的编号在请求后端前被拒绝，只有纠正后的请求到达后端。
+    assert.deepEqual(
+      f.callbacks.map((call) => call.args.rule_ids),
+      [['LX0609-06-01-04']],
+    )
+    assert.match(
+      JSON.stringify(f.adapter.requests[1].messages),
+      /预览只能使用用户本轮明确指定的规则/,
+    )
+  } finally {
+    await f.runtime.close()
+  }
+  const g = await fixture(
+    [{ tool: 'preview_recheck', args: { rule_ids: ['@selected'] } }, { text: '已生成预览。' }],
+    { references: [] },
+    previewSpec,
+  )
+  try {
+    await g.runtime.chat(g.sessionId, {
+      ...g.body,
+      message: '我改好了，再检查一下',
+      reference_id: 'result:job:rec:LX0609-06-01-04',
+    })
+    assert.deepEqual(g.callbacks[0].args.rule_ids, ['LX0609-06-01-04'])
+  } finally {
+    await g.runtime.close()
+  }
+})
