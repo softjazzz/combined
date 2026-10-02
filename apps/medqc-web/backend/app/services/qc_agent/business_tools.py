@@ -329,7 +329,7 @@ class BusinessTools:
             reference_id = f"rule-validation:{params.rule_id}"
             self.store.bind(metadata["session_id"], user, reference_id, {"kind": "rule_validation", "rule_id": params.rule_id})
             reference = {"id": reference_id, "kind": "rule", "rule_id": params.rule_id,
-                         "title": f"规则验收记录 · {params.rule_id}", "locator": record["scope_note"],
+                         "title": f"规则验收记录 · {params.rule_id}", "locator": "已保存的规则验收摘要（只读）",
                          "entry_path": record["entry_path"], "text": business_rule_validation.rule_validation_card_text(record)}
             return {"validation_record": record, "references": [reference]}
         if name == "read_saved_results":

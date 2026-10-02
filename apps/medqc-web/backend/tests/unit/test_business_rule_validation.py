@@ -55,7 +55,7 @@ def test_chinese_card_uses_safe_counts_and_decisions_without_raw_notes_or_entry_
     assert "合规：合成样本 2；真实病历副本样本 1" in text
     assert "不合规：合成样本 未提供" in text
     assert "保存结论：已接受" in text and "保存审批：已批准" in text
-    assert "2026年10月02日 01:00:00（UTC+00:00）" in text
+    assert "2026年10月02日 09:00:00（UTC+08:00）" in text
     assert "代码版本：abc123" in text
     assert PHI not in text and "/fake-user-input-path" not in text
     assert "pending_approval" not in text and "accepted" not in text

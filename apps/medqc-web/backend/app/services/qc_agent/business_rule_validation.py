@@ -1,7 +1,7 @@
 """规则验收记录只读摘要；不搬运测试病例、原文或自由文本复核意见。"""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import re
 from uuid import UUID
 
@@ -15,6 +15,7 @@ STAGES = frozenset({"preparing", "ready_to_run", "running", "reviewing", "pendin
                     "pending_approval", "approved_pending_release", "released", "rejected"})
 STATUSES = ("compliant", "non_compliant", "not_applicable", "data_gap")
 RUN_LIMIT = 5
+HOSPITAL_TZ = timezone(timedelta(hours=8))
 STAGE_LABELS = {"preparing": "准备中", "ready_to_run": "待运行", "running": "验证中", "reviewing": "逐例复核中",
                 "pending_conclusion": "待保存结论", "pending_approval": "待审批", "approved_pending_release": "已批准待发布",
                 "released": "已发布", "rejected": "已拒绝"}
@@ -156,7 +157,8 @@ def rule_validation_card_text(projected: dict) -> str:
     def time_text(value):
         if not _time(value):
             return "未提供时间"
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # owner 按 UTC 保存；来源卡统一换算为医院所在时区展示，并保留偏移标注。
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(HOSPITAL_TZ)
         offset = parsed.strftime("%z")
         return parsed.strftime("%Y年%m月%d日 %H:%M:%S") + f"（UTC{offset[:3]}:{offset[3:]}）"
     rule = projected.get("rule")
