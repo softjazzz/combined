@@ -2302,6 +2302,23 @@ def test_column_query_refuses_oversized_scope(workstation_session_factory, monke
         )
 
 
+@pytest.mark.parametrize("column,error", [
+    ("review", query_service_module.WorkstationReviewStateUnavailable),
+    ("score", query_service_module.WorkstationScoreUnavailable),
+])
+def test_column_owner_failure_is_not_an_empty_result(workstation_session_factory, column, error):
+    _insert_review_filter_records(workstation_session_factory)
+    def failed(*args, **kwargs):
+        raise RuntimeError("source unavailable")
+    with pytest.raises(error):
+        get_workstation_data(
+            column_filters='{"' + column + '":"通过"}',
+            session_factory=workstation_session_factory, settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy, qc_projection_loader=_review_filter_projection_loader,
+            review_state_loader=failed, score_state_loader=failed,
+        )
+
+
 @pytest.mark.parametrize(
     ("filters", "expected"),
     [

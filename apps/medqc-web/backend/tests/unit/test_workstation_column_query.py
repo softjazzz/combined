@@ -34,3 +34,12 @@ def test_datetime_sort_respects_offsets_and_defect_status_uses_display_label():
     assert [row['id'] for row in query_columns(rows, view='records', filters={}, sort='latestQc', direction='asc')] == ['earlier', 'later']
     defects = [{'source': 'manual', 'status': 'approved'}, {'source': 'auto', 'status': 'non_compliant'}]
     assert query_columns(defects, view='defects', filters={'status': '审核通过'}, sort=None, direction='asc') == defects[:1]
+
+
+@pytest.mark.parametrize('state,label', [
+    ('pending_review', '待审核'), ('pending_recheck', '待复审'),
+    ('approved', '审核通过'), ('doubtful', '审核存疑'),
+])
+def test_review_filters_match_visible_labels(state, label):
+    rows = [{'id': 'case', 'latest_qc_summary': {'review_state': state}}]
+    assert query_columns(rows, view='records', filters={'review': label}, sort=None, direction='asc') == rows

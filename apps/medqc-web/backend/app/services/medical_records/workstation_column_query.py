@@ -55,9 +55,16 @@ def column_value(row: Mapping[str, Any], column: str, view: str):
     if column in {"score", "grade"}:
         return score.get(column) if score.get("status") == "scored" else None
     if column == "latestQc":
-        return summary.get("completed_at")
+        value = summary.get("completed_at")
+        if value:
+            try:
+                datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                return value
+            except ValueError:
+                pass
+        return None
     if column == "review":
-        return {"pending_review": "待初审", "pending_recheck": "待复审", "approved": "审核通过", "doubtful": "存疑"}.get(summary.get("review_state"))
+        return {"pending_review": "待审核", "pending_recheck": "待复审", "approved": "审核通过", "doubtful": "审核存疑"}.get(summary.get("review_state"))
     if column == "patient":
         return " ".join(str(row.get(key) or "") for key in ("name", "instituteId", "patientId", "id"))
     return row.get({"patient": "name", "department": "department", "admission": "admissionDate", "discharge": "dischargeDate"}[column])

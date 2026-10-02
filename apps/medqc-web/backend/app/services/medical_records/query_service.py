@@ -699,6 +699,7 @@ def _attach_review_states(
     raw_summary_map: dict[tuple[str, str, str], dict[str, Any]],
     latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
     review_state_loader: Callable[[list[dict[str, Any]]], dict[tuple[str, str, str], str]],
+    *, strict: bool = False,
 ) -> None:
     """只对本页 ready 摘要原样挂 review_state，不重新判断审核状态。
 
@@ -724,9 +725,13 @@ def _attach_review_states(
         states = review_state_loader(anchors)
     except Exception as exc:  # noqa: BLE001 - 审核状态降级为未知，不阻断病历列表
         logger.warning("病历列表审核状态批量读取失败，降级为未知 error_type=%s", type(exc).__name__)
+        if strict:
+            raise WorkstationReviewStateUnavailable("审核列查询数据不可用") from None
         states = {}
     for identity, summary in page_ready.items():
         state = states.get(identity) if isinstance(states, dict) else None
+        if strict and state not in WORKSTATION_REVIEW_STATES:
+            raise WorkstationReviewStateUnavailable("审核列查询数据不可用")
         summary["review_state"] = state if state in WORKSTATION_REVIEW_STATES else None
 
 
@@ -770,6 +775,7 @@ def _attach_score_states(
     latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
     score_state_loader: Callable[..., Any],
     scene_for: Callable[[Any], str],
+    *, strict: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """只对本页 ready 摘要原样挂 score_state，不在本层计分。
 
@@ -798,6 +804,8 @@ def _attach_score_states(
         )
     except Exception as exc:  # noqa: BLE001 - 得分降级为不可用，不阻断病历列表
         logger.warning("病历列表得分批量计算失败，降级为不可用 error_type=%s", type(exc).__name__)
+        if strict:
+            raise WorkstationScoreUnavailable("评分列查询数据不可用") from None
         states, overview = {}, {}
     if not isinstance(states, dict):
         states = {}
@@ -2155,6 +2163,7 @@ def get_workstation_data(
             raw_qc_summary_map if isinstance(raw_qc_summary_map, dict) else {},
             latest_qc_summary_map,
             page_review_state_loader,
+            strict="review" in columns or sort_column == "review",
         )
         score_standards = _attach_score_states(
             records,
@@ -2163,11 +2172,14 @@ def get_workstation_data(
             (
                 lambda _page_scenes, _anchors: (filter_score_states, filter_score_overview)
                 if filter_score_states is not None and filter_score_overview is not None
-                else page_score_state_loader(_page_scenes, _anchors)
+                else page_score_state_loader(_page_scenes, _anchors, **(
+                    {"strict": True} if {"score", "grade"}.intersection(columns) or sort_column in {"score", "grade"} else {}
+                ))
             ),
             lambda record: _record_scoring_scene(
                 record, normalized_hospital_status, is_inpatient_scope,
             ),
+            strict=bool({"score", "grade"}.intersection(columns) or sort_column in {"score", "grade"}),
         )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
