@@ -10,6 +10,7 @@ import re
 from collections import Counter
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 
@@ -43,14 +44,19 @@ class Runner:
         self.checks = []
         self.cases = {identity(row): row for row in manifest["cases"]}
         self.people = manifest["assignees"]
-        token = os.environ.get("MEDQC_TASK_ACCEPTANCE_TOKEN")
-        require(token, "缺少 MEDQC_TASK_ACCEPTANCE_TOKEN 环境变量")
+        token_env = manifest.get("creator_token_env", "MEDQC_TASK_ACCEPTANCE_TOKEN")
+        token = os.environ.get(token_env)
+        require(token, f"缺少 {token_env} 环境变量")
         self.client = httpx.Client(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {token}"},
             timeout=120,
             follow_redirects=False,
         )
+
+    @staticmethod
+    def token_env(person):
+        return person.get("token_env") or "MEDQC_TASK_ASSIGNEE_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", person["user_id"]).upper()
 
     def request(self, method, path, payload=None, expected=200, token=None):
         require(method == "GET" or self.execute, "只读预检禁止写请求")
@@ -152,7 +158,7 @@ class Runner:
         repeat = self.request("POST", f"/api/v1/tasks/{task_id}/assign", payload)
         require(repeat.get("idempotent") is True, "重复分配不幂等")
         for person in self.people:
-            env_key = "MEDQC_TASK_ASSIGNEE_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", person["user_id"]).upper()
+            env_key = self.token_env(person)
             token = os.environ.get(env_key)
             require(token, f"缺少受领回读 token 环境变量 {env_key}")
             expected = {row["id"] for row in data["records"] if row["assignee_id"] == person["user_id"]}
@@ -165,8 +171,12 @@ class Runner:
         self.preflight()
         if not self.execute:
             return
+        require(self.manifest.get("source_sync_ready") is True,
+                "尚未确认正式任务同步将远端合成源投影至本地 CDM")
+        require(self.manifest.get("reviewer_facts_ready") is True,
+                "reviewer_id 仅为预期；尚未确认正式生产者和受领审核事实")
         for person in self.people:
-            env_key = "MEDQC_TASK_ASSIGNEE_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", person["user_id"]).upper()
+            env_key = self.token_env(person)
             require(os.environ.get(env_key), f"写入前缺少 {env_key}")
         methods = ["all", "count"] + [f"{group}_{mode}" for group in GROUPS for mode in ("count", "ratio")]
         for method in methods:
@@ -216,12 +226,55 @@ class Runner:
                 self.sample(self.create(payload), selected, scenario.get("method", "all"))
             self.checks.append(scenario["name"])
 
+    def review_bootstrap(self, artifacts):
+        """只消费正式任务/受领运行引用；审核 Envelope 从当前 GET 返回读取。"""
+        require(self.execute, "正式审核需要显式 --execute")
+        require(self.manifest.get("source_sync_ready") is True, "正式同步尚未确认")
+        seen = set()
+        for task in artifacts["tasks"]:
+            task_id = task["task_id"]
+            run_number = task["run_number"]
+            require(type(run_number) is int and run_number > 0 and task.get("job_id"), "正式运行引用缺失")
+            owners = {self.cases[identity(row)]["reviewer_id"] for row in task["records"]}
+            require(len(owners) == 1, "审核bootstrap任务存在多个预期受领人")
+            person = next((row for row in self.people if row["user_id"] in owners), None)
+            require(person is not None, "预期受领人不在本批manifest")
+            token = os.environ.get(self.token_env(person))
+            require(token, "缺少正式受领人token")
+            live = self.detail(task_id, token=token, tab="received")
+            wanted = {row["id"]: identity(row) for row in task["records"]}
+            require({row["id"]: identity(row) for row in live["records"]} == wanted,
+                    "正式受领详情与artifacts病例集合不同")
+            self.request("PUT", f"/api/v1/tasks/{task_id}", {"status": "in_progress"}, token=token)
+            for record_id, case_key in wanted.items():
+                require(case_key not in seen, "审核前置病例重复")
+                self.request("POST", f"/api/v1/tasks/{task_id}/records/{record_id}/start", token=token)
+                path = f"/api/v1/tasks/{task_id}/records/{record_id}/review"
+                view = self.request("GET", f"{path}?run_number={run_number}", token=token)
+                result = view.get("result") or {}
+                require(result.get("job_id") == task["job_id"] and result.get("envelope_id"),
+                        "正式审核GET未返回匹配的job与Envelope")
+                if not view.get("current"):
+                    require(view.get("can_submit") is True, "当前结果不能提交正式审核")
+                    request_id = str(uuid5(NAMESPACE_URL, f"{self.manifest['batch_prefix']}|{task_id}|{record_id}|{result['envelope_id']}"))
+                    self.request("POST", path, {"run_number": run_number, "decision": "approved",
+                                 "request_id": request_id, "envelope_id": result["envelope_id"]}, token=token)
+                saved = self.request("GET", f"{path}?run_number={run_number}", token=token)
+                current = saved.get("current") or {}
+                require(saved.get("state") == "approved" and current.get("reviewer_id") == person["user_id"]
+                        and current.get("envelope_id") == result["envelope_id"], "正式审核回读身份或结果对象不符")
+                seen.add(case_key)
+                print(json.dumps({"reviewed_task_record": record_id, "review_id": current.get("id")}, ensure_ascii=False))
+        require(seen == set(self.cases), "八例正式审核前置未完整覆盖")
+        self.checks.append("formal_assigned_record_reviews")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--execute", action="store_true", help="显式执行本批任务写入；不清理")
+    parser.add_argument("--review-artifacts", type=Path, help="仅审核正式受领运行前置，不启动抽样矩阵")
     args = parser.parse_args()
     parsed = urlparse(args.base_url)
     require(parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
@@ -235,7 +288,11 @@ def main():
     require(manifest.get("assignees"), "缺少受领人")
     runner = Runner(manifest, args.base_url, args.execute)
     try:
-        runner.run()
+        if args.review_artifacts:
+            runner.preflight()
+            runner.review_bootstrap(json.loads(args.review_artifacts.read_text(encoding="utf-8")))
+        else:
+            runner.run()
         print(json.dumps({"mode": "execute" if args.execute else "readonly_preflight",
                           "checks": runner.checks, "created_tasks": runner.tasks}, ensure_ascii=False))
     finally:
