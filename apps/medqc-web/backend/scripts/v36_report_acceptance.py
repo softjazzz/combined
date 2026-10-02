@@ -115,8 +115,10 @@ class Probe:
         if entries is None:
             # 只搬运正式基础目录元数据；状态和归属由本批显式确认的验收合同决定。
             entries = [{**row, "state": "active" if row["rule_id"] == "LX0609-001" else "offline",
+                        "department_scope_mode": "all", "department_refs": [],
+                        "doctor_visible": row["rule_id"] == "LX0609-001",
                         "core_system_ids": [self.manifest["core_system_id"]] if row["rule_id"] == "LX0609-001" else [],
-                        **({"doctor_visible": True} if row["rule_id"] == "LX0609-001" else {})}
+                        }
                        for row in base["resolution"]["entries"]]
         permitted = {"rule_id", "state", "department_scope_mode", "department_refs", "doctor_visible", "core_system_ids"}
         entries = [{key: value for key, value in row.items() if key in permitted} for row in entries]
