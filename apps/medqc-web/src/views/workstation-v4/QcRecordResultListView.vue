@@ -569,7 +569,7 @@ const hiddenDefectColumns = ref<string[]>([])
 const defectGridColumns = computed(() =>
   ['patient', 'department', 'source', 'rule', 'document', 'status']
     .filter(showDefectColumn)
-    .map((key) =>
+    .map<string>((key) =>
       key === 'patient' || key === 'rule' ? 'minmax(180px, 1.5fr)' : 'minmax(100px, 1fr)',
     )
     .concat('140px')

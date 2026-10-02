@@ -50,6 +50,24 @@ async function flushPromises() {
 }
 
 describe('usePatientRecords workstation filters', () => {
+  it('账号失效立即清除旧汇总与评分标准，迟到响应不能恢复', async () => {
+    const records = usePatientRecords('inpatient')
+    records.qcSummary.value = { ...records.qcSummary.value, totalRecords: 88, readyRecords: 77 }
+    records.scoreStandards.value = {
+      running: { status: 'configured', standard_id: 'old', standard_name: '旧账号标准', standard_updated_at: null },
+    }
+    let resolveOld!: (value: unknown) => void
+    mocks.getRaw.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve }))
+    const pending = records.fetchData()
+    records.invalidateData()
+    expect(records.qcSummary.value.totalRecords).toBe(0)
+    expect(records.qcSummary.value.readyRecords).toBe(0)
+    expect(records.scoreStandards.value).toEqual({})
+    resolveOld({ data: { records: [], total: 88, qc_summary: { total_records: 88 }, score_standards: { running: { status: 'configured', standard_id: 'old' } } } })
+    await pending
+    expect(records.qcSummary.value.totalRecords).toBe(0)
+    expect(records.scoreStandards.value).toEqual({})
+  })
   it('列查询交给服务端分页前处理，清除排序恢复默认请求', async () => {
     const records = usePatientRecords('inpatient')
     records.columnFilters.value = { patient: '患者甲', score: '0' }
