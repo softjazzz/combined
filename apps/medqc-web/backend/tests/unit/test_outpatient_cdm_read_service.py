@@ -16,6 +16,7 @@ def document(institute="I", patient="P", visit="V", doc="D", **values):
 class Database:
     def __init__(self, rows):
         self.rows, self.reads, self.hook = rows, [], None
+        self.document_order = None
 
     def table(self, name):
         assert name == "cdm.outpat_record"
@@ -51,6 +52,8 @@ async def execute(query):
     db.reads.append((dict(query.filters), query.start, query.end))
     rows = [row.copy() for row in db.rows if all(row.get(key) == value for key, value in query.filters.items())]
     rows.sort(key=lambda row: tuple(str(row.get(key)) for key in service.COORDINATES))
+    if db.document_order:
+        rows.sort(key=lambda row: db.document_order.index(row["document_id"]))
     if query.columns != "*":
         rows = [{key: row.get(key) for key in query.columns.split(",")} for row in rows]
     result = SimpleNamespace(data=rows[query.start:query.end + 1], count=len(rows))
@@ -158,3 +161,13 @@ async def test_list_projection_avoids_full_document_and_detail_size_refuses_trun
     assert page.total == 1
     with pytest.raises(OutpatientRecordSourceUnavailable):
         await service.detail(actor=ADMIN, source=db, execute=execute, coordinates=document())
+
+
+@pytest.mark.asyncio
+async def test_stable_database_collation_may_differ_from_python_unicode_order(monkeypatch):
+    monkeypatch.setattr(service, "PAGE_SIZE", 2)
+    db = Database([document(doc="Z"), document(doc="a"), document(doc="中")])
+    db.document_order = ["a", "Z", "中"]
+    rows = await service.load_documents(source=db, execute=execute)
+    assert [row["document_id"] for row in rows] == db.document_order
+    assert len(db.reads) == 4

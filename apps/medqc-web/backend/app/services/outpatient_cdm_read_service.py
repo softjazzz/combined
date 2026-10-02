@@ -51,7 +51,7 @@ async def load_documents(*, source, execute, institute_id=None, department=None,
         raise OutpatientRecordSourceUnavailable("门急诊 CDM 数据源不可用")
 
     async def scan():
-        rows, expected_count, previous, byte_size = [], None, None, 0
+        rows, expected_count, seen, byte_size = [], None, set(), 0
         while True:
             query = source.table(TABLE).select("*" if full else LIST_COLUMNS, count="exact")
             if institute_id:
@@ -76,13 +76,13 @@ async def load_documents(*, source, execute, institute_id=None, department=None,
                 if not isinstance(row, dict):
                     raise OutpatientRecordSourceUnavailable("门急诊文书来源无效")
                 key = identity(row)
-                if (previous is not None and key <= previous) or (case and key[:3] != case):
+                if key in seen or (case and key[:3] != case):
                     raise OutpatientRecordSourceUnavailable("门急诊文书重复或分页顺序发生变化")
                 if institute_id and key[0] != institute_id:
                     raise OutpatientRecordSourceUnavailable("门急诊文书机构范围不一致")
                 if department and row.get("dept_name") != department:
                     raise OutpatientRecordSourceUnavailable("门急诊文书科室范围不一致")
-                previous = key
+                seen.add(key)
                 if full:
                     byte_size += len(json.dumps(row, ensure_ascii=False, default=str).encode("utf-8"))
                     if byte_size > MAX_DOCUMENT_BYTES:
