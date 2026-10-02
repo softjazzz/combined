@@ -309,6 +309,30 @@
         </div>
       </section>
 
+      <section class="scoring-editor__section" aria-labelledby="scoring-overview-title">
+        <header class="scoring-editor__section-header">
+          <h3 id="scoring-overview-title" class="scoring-editor__section-title">规则总览 / 科室质控点</h3>
+          <a-select v-model:value="overviewDepartment" :options="overviewDepartmentOptions" aria-label="筛选生效科室" data-testid="scoring-overview-department" class="scoring-editor__overview-filter" />
+        </header>
+        <div class="scoring-editor__table-scroll">
+          <table class="scoring-editor__table scoring-editor__table--overview">
+            <thead><tr><th>质控点 / 项目组</th><th>评分适用科室</th><th>规则生效科室</th><th>医生端</th><th>规则状态</th><th>评分启用</th><th>配置</th></tr></thead>
+            <tbody>
+              <tr v-for="item in overviewItems" :key="item.key" data-testid="scoring-overview-row">
+                <td>{{ item.rule_id }} · {{ qcPointOf(item.rule_id) }}<br />{{ item.group_name }}</td>
+                <td>{{ item.department_scope_mode === 'all' ? '全部科室' : formatDepartmentRefs(item.department_refs) || UNKNOWN_TEXT }}</td>
+                <td>{{ ruleScopeOf(item.rule_id) }}</td>
+                <td>{{ doctorVisibilityOf(item.rule_id) }}</td>
+                <td>{{ ruleStateOf(item.rule_id) }}</td>
+                <td><a-checkbox v-model:checked="item.enabled" :disabled="!editable" :aria-label="`评分启用 ${item.rule_id}`" data-testid="scoring-overview-enabled" /></td>
+                <td><a :href="ruleConfigurationHref(item.rule_id)" target="_blank" rel="noopener" data-testid="scoring-rule-owner-link">规则配置</a></td>
+              </tr>
+              <tr v-if="!overviewItems.length"><td colspan="7">暂无匹配质控点</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- 扣分条目 -->
       <section class="scoring-editor__section">
         <header class="scoring-editor__section-header">
@@ -498,6 +522,7 @@ import {
 } from '@/api/scoring'
 import type { ScoringApiResult, ScoringStandardDetail } from '@/api/scoring'
 import { getRuleSetVersion, listRuleSetVersions } from '@/api/ruleSetVersions'
+import type { RuleSetEntryView } from '@/api/ruleSetVersions'
 import {
   MAX_BANDS,
   SCENE_LABELS,
@@ -537,6 +562,8 @@ const versionSeq = ref(0)
 const headerSnapshot = ref('')
 const rulesError = ref('')
 const qcPoints = ref<Map<string, string | null>>(new Map())
+const ruleEntries = ref<Map<string, RuleSetEntryView>>(new Map())
+const overviewDepartment = ref('all')
 let requestSequence = 0
 let rowKey = 0
 
@@ -579,6 +606,41 @@ const scopeModeOptions = [
   { value: 'all', label: '全部' },
   { value: 'selected', label: '指定' },
 ]
+const overviewDepartmentOptions = computed(() => {
+  const options = new Map<string, string>()
+  for (const item of form.items) {
+    for (const department of [...item.department_refs, ...(ruleEntryOf(item.rule_id)?.department_refs || [])]) {
+      options.set(JSON.stringify([department.institute_id, department.department_name]), `${department.institute_id} / ${department.department_name}`)
+    }
+  }
+  return [{ value: 'all', label: '全部科室' }, ...Array.from(options, ([value, label]) => ({ value, label }))]
+})
+const overviewItems = computed(() => form.items.filter((item) => {
+  if (overviewDepartment.value === 'all') return true
+  const matches = (department: { institute_id: string; department_name: string }) =>
+    JSON.stringify([department.institute_id, department.department_name]) === overviewDepartment.value
+  const entry = ruleEntryOf(item.rule_id)
+  return (item.department_scope_mode === 'all' || item.department_refs.some(matches))
+    && (entry?.department_scope_mode !== 'selected' || Boolean(entry.department_refs?.some(matches)))
+}))
+function ruleEntryOf(ruleId: string) { return ruleEntries.value.get(ruleId.trim().toUpperCase()) }
+function doctorVisibilityOf(ruleId: string) {
+  const visible = ruleEntryOf(ruleId)?.doctor_visible
+  return visible === true ? '开放' : visible === false ? '不开放' : UNKNOWN_TEXT
+}
+function ruleScopeOf(ruleId: string) {
+  const entry = ruleEntryOf(ruleId)
+  if (entry?.department_scope_mode === 'all') return '全部科室'
+  if (entry?.department_scope_mode === 'selected' && entry.department_refs?.length) return formatDepartmentRefs(entry.department_refs)
+  return UNKNOWN_TEXT
+}
+function ruleStateOf(ruleId: string) {
+  const state = ruleEntryOf(ruleId)?.state
+  return state ? { active: '启用', paused: '暂停', offline: '下线', deleted: '删除' }[state] : UNKNOWN_TEXT
+}
+function ruleConfigurationHref(ruleId: string) {
+  return `/dashboard/quality-control?${new URLSearchParams({ rule_set_key: detail.value?.rule_set_key || '', rule_id: ruleId })}`
+}
 
 function nextKey(prefix: string): string {
   rowKey += 1
@@ -616,6 +678,7 @@ function applyDetail(data: ScoringStandardDetail) {
 async function loadRules(ruleSetKey: string, sequence: number) {
   rulesError.value = ''
   qcPoints.value = new Map()
+  ruleEntries.value = new Map()
   const list = await listRuleSetVersions(ruleSetKey)
   if (sequence !== requestSequence) return
   if (!list.success || !list.data?.current_version) {
@@ -631,12 +694,14 @@ async function loadRules(ruleSetKey: string, sequence: number) {
   qcPoints.value = new Map(
     version.data.entries.map((entry) => [entry.rule_id.trim().toUpperCase(), entry.qc_point]),
   )
+  ruleEntries.value = new Map(version.data.entries.map((entry) => [entry.rule_id.trim().toUpperCase(), entry]))
 }
 
 async function load() {
   const id = props.standardId
   const sequence = ++requestSequence
   detail.value = null
+  overviewDepartment.value = 'all'
   loadError.value = ''
   conflict.value = false
   saveProblems.value = []
@@ -901,6 +966,8 @@ watch(
   border-collapse: collapse;
   font-size: 13px;
 }
+.scoring-editor__overview-filter { min-width: 220px; max-width: 100%; }
+.scoring-editor__table--overview { min-width: 900px; }
 
 .scoring-editor__table--items {
   min-width: 1280px;

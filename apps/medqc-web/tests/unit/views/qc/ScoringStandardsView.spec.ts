@@ -207,6 +207,31 @@ describe('ScoringStandardsView', () => {
     expect(row(wrapper, 'x1').find('[data-testid="scoring-action-archive"]').exists()).toBe(false)
   })
 
+  it('评分总览复用当前规则的医生端配置并精确导航，不把未知当开放', async () => {
+    const detail = detailOf(draft)
+    detail.items[1].department_scope_mode = 'selected'
+    detail.items[1].department_refs = [{ institute_id: 'H2', department_name: '内科' }]
+    state.api.getScoringStandard.mockResolvedValue(ok(detail))
+    state.rules.getRuleSetVersion.mockResolvedValue(ok({ entries: [
+      { rule_id: 'LX0609-001', state: 'active', executable: true, qc_point: '入院记录完整性', source_document: null,
+        doctor_visible: false, department_scope_mode: 'selected', department_refs: [{ institute_id: 'H1', department_name: '内科' }] },
+    ] }))
+    const wrapper = await render()
+    await row(wrapper, 'd1').get('[data-testid="scoring-action-open"]').trigger('click')
+    await flushPromises()
+    const overview = wrapper.findAll('[data-testid="scoring-overview-row"]')
+    expect(overview[0].text()).toContain('不开放')
+    expect(overview[0].text()).toContain('H1|内科')
+    expect(overview[1].text()).toContain('未知')
+    expect(overview[0].get('a').attributes('href')).toBe('/dashboard/quality-control?rule_set_key=luxian_0609_qc_v1&rule_id=LX0609-001')
+    expect(overview[0].get('a').attributes('target')).toBe('_blank')
+    await overview[0].get('[data-testid="scoring-overview-enabled"]').setValue(false)
+    expect(wrapper.findAll('[data-testid="scoring-item-enabled"]')[0].element).toHaveProperty('checked', false)
+    await wrapper.get('[data-testid="scoring-overview-department"]').setValue(JSON.stringify(['H1', '内科']))
+    expect(wrapper.findAll('[data-testid="scoring-overview-row"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="scoring-overview-row"]').text()).toContain('LX0609-001')
+  })
+
   it('门急诊无可用规则集：提示且不可新建；空场景显示未配置默认标准', async () => {
     const wrapper = await render()
     await wrapper.get('.tab-outpatient').trigger('click')
