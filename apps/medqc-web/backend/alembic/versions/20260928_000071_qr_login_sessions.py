@@ -54,7 +54,7 @@ def _normalized(value: object) -> str:
     text = str(value or "").lower().replace('"', "")
     text = re.sub(r"::(?:character varying(?:\(\d+\))?|varchar(?:\(\d+\))?|text)", "", text)
     text = re.sub(r"[\s()\[\]]", "", text)
-    return text.replace("=anyarray", "in")
+    return text.replace("=anyarray", "in").replace("<>allarray", "notin")
 
 
 def _column_matches(column: dict, expected: tuple[type, int | None, bool]) -> bool:

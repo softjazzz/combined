@@ -110,6 +110,33 @@ def test_postgres_any_reflection_matches_status_in_contract():
     )
 
 
+APPROVAL_REFLECTION = (
+    "(status::text <> ALL (ARRAY['approved'::character varying, "
+    "'consumed'::character varying]::text[])) OR "
+    "approved_user_id IS NOT NULL AND approved_at IS NOT NULL"
+)
+
+
+def test_postgres_all_reflection_matches_approval_not_in_contract():
+    migration = _migration()
+    assert migration._normalized(APPROVAL_REFLECTION) == migration._normalized(
+        migration.CHECKS["ck_sys_qr_login_sessions_approval"]
+    )
+
+
+@pytest.mark.parametrize("reflected", [
+    APPROVAL_REFLECTION.replace("'consumed'", "'pending'"),
+    APPROVAL_REFLECTION.replace(" OR ", " AND "),
+    APPROVAL_REFLECTION.replace(" AND ", " OR "),
+    APPROVAL_REFLECTION.replace("<> ALL", "= ALL"),
+])
+def test_postgres_all_reflection_preserves_approval_contract_drift(reflected):
+    migration = _migration()
+    assert migration._normalized(reflected) != migration._normalized(
+        migration.CHECKS["ck_sys_qr_login_sessions_approval"]
+    )
+
+
 def test_downgrade_refuses_nonempty_session_table(monkeypatch):
     migration = _migration()
     inspector = Inspector({("sys", "sys_users"), ("sys", migration.TABLE)})
