@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import codecs
+import json
 
 import pytest
 from fastapi import FastAPI
@@ -114,6 +115,25 @@ def test_export_is_attachment_with_bom_and_audit(monkeypatch):
     assert response.headers["cache-control"] == "no-store"
     assert events[0]["action"] == "quality_reports.record_quality.export"
     assert events[0]["details"]["sheet"] == "departments"
+
+
+def test_export_passes_structured_columns_without_splitting_grade_names(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(service, "build_report_context", lambda **_: object())
+    def export(_ctx, **kwargs):
+        captured.update(kwargs)
+        return b"synthetic\n"
+    monkeypatch.setattr(service, "export_csv", export)
+    columns = ["defect_total", "grade_rate:优秀,合格"]
+    response = _client().get(f"{BASE}/export", params={
+        "scene": "final", "sheet": "departments", "columns": json.dumps(columns),
+    })
+    assert response.status_code == 200
+    assert captured["columns"] == columns
+    for invalid in ('{}', '[1]', 'invalid'):
+        assert _client().get(f"{BASE}/export", params={
+            "scene": "running", "sheet": "departments", "columns": invalid,
+        }).status_code == 422
 
 
 def test_filtered_department_summary_export_uses_real_csv_service(monkeypatch):

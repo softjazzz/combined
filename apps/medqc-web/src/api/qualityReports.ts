@@ -33,6 +33,11 @@ export interface ReportMetrics {
   top_grade_name?: string | null
   top_grade_rate: number | null
   review_approved_total: number | null
+  reviewed_total?: number | null
+  top_grade_total?: number | null
+  grade_rates?: Record<string, number | null>
+  defect_total?: number | null
+  average_defect_total?: number | null
   review_state_counts?: Record<string, number> | null
   auto_defect_total: number | null
   records_with_auto_defect?: number | null
@@ -262,11 +267,12 @@ export async function exportRecordRemediationAnalysis(
 export async function exportRecordQualityReport(
   filters: RecordDrilldownFilters,
   sheet: ReportSheet,
+  columns?: string[],
 ): Promise<QualityReportResult<Blob>> {
   try {
     const response = await ApiService.getRaw<Blob>(
       `${BASE}/export`,
-      { ...paramsOf(filters), sheet },
+      { ...paramsOf(filters), sheet, ...(columns ? { columns: JSON.stringify(columns) } : {}) },
       { responseType: 'blob' },
     )
     return { success: true, data: response.data, status: response.status }

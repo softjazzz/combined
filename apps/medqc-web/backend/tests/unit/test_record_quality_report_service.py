@@ -200,6 +200,45 @@ def test_real_scoring_veto_grade_and_distribution():
     assert page["items"][0]["veto_hit"] is True
 
 
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_group_quality_metrics_and_selected_export_share_denominators(scene):
+    ctx = _context(standard_loader=lambda _: _standard())
+    ctx.scene = scene
+    row = report.summarize(ctx)["department_rows"][0]
+    assert row["defect_total"] == 2
+    assert row["average_defect_total"] == 1
+    assert row["reviewed_total"] == 1
+    assert row["top_grade_total"] == 1
+    assert row["grade_rates"] == {"甲": 0.5, "乙": 0, "丙": 0.5}
+    columns = ["defect_total", "average_defect_total", "top_grade_total", "grade_rate:丙"]
+    exported = list(csv.DictReader(io.StringIO(report.export_csv(ctx, columns=columns).decode("utf-8-sig"))))
+    assert list(exported[0]) == ["名称", "缺陷总数", "平均缺陷数（每份已质控病历）", "最高等级病历数", "丙占比"]
+    assert exported[0]["丙占比"] == "0.5"
+    with pytest.raises(report.RecordQualityReportInvalid):
+        report.export_csv(ctx, columns=["unknown"])
+
+
+def test_group_quality_unknown_sources_do_not_become_zero():
+    ctx = _context(manual_loader=lambda _: (_ for _ in ()).throw(RuntimeError("offline")))
+    row = report.summarize(ctx)["department_rows"][0]
+    assert row["defect_total"] is None
+    assert row["average_defect_total"] is None
+    assert row["top_grade_total"] is None
+    auto = _context(defect_source="auto", manual_loader=lambda _: (_ for _ in ()).throw(RuntimeError("offline")))
+    assert report.summarize(auto)["department_rows"][0]["average_defect_total"] == 0.5
+
+
+def test_group_rates_preserve_configured_grade_names_and_partial_scores_are_unknown():
+    standard = _standard()
+    standard["grade_bands"][0]["name"] = "优秀"
+    ctx = _context(standard_loader=lambda _: standard)
+    assert "优秀" in report.summarize(ctx)["department_rows"][0]["grade_rates"]
+    ctx.rows[0].score_status = "unavailable"
+    row = report.summarize(ctx)["department_rows"][0]
+    assert row["top_grade_total"] is None
+    assert all(value is None for value in row["grade_rates"].values())
+
+
 def test_report_scoring_consumes_exact_department_scope():
     standard = _standard()
     standard["items"][0].update({

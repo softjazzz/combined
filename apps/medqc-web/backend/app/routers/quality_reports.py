@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from datetime import date, datetime
 from typing import Any, Literal
 
@@ -231,10 +232,19 @@ async def export_record_quality(
     params: dict[str, Any] = Depends(_report_params),
     drilldown: dict[str, Any] = Depends(_drilldown_params),
     sheet: Literal["departments", "doctors", "records"] = Query(...),
+    columns: str | None = Query(None),
     current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:
+        selected_columns = None
+        if columns is not None:
+            try:
+                selected_columns = json.loads(columns)
+            except (ValueError, TypeError) as exc:
+                raise report_service.RecordQualityReportInvalid("汇总列配置无效") from exc
+            if not isinstance(selected_columns, list) or any(not isinstance(key, str) for key in selected_columns):
+                raise report_service.RecordQualityReportInvalid("汇总列配置无效")
         context = await run_in_threadpool(report_service.build_report_context, **query)
         export_filters = (
             {"department": query["department"], "doctor": query["doctor"], **drilldown}
@@ -242,7 +252,7 @@ async def export_record_quality(
         )
         content = await run_in_threadpool(
             report_service.export_csv, context,
-            sheet=sheet, **export_filters,
+            sheet=sheet, columns=selected_columns, **export_filters,
         )
         if not isinstance(content, bytes):
             raise TypeError("导出服务未返回 CSV 字节")

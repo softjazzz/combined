@@ -468,6 +468,13 @@ def _group_metrics(ctx: ReportContext, rows: list[CaseRow], record_total: int) -
     manual_ok = ctx.manual_status == "available"
     auto_on = source in {"all", "auto"}
     manual_on = source in {"all", "manual"}
+    defects_complete = not manual_on or manual_ok
+    defect_total = sum(len(_defects(row, source)) for row in rows) if defects_complete else None
+    grade_names = [str(band["name"]) for band in (ctx.standard or {}).get("grade_bands") or []]
+    grade_counts = {
+        name: sum(row.grade == name for row in rows) if scores_complete else None
+        for name in grade_names
+    }
     return {
         "record_total": record_total,
         "qc_ready_total": len(rows),
@@ -480,6 +487,16 @@ def _group_metrics(ctx: ReportContext, rows: list[CaseRow], record_total: int) -
         "review_approved_total": (
             sum(1 for row in rows if row.review_state == "approved") if review_ok else None
         ),
+        "reviewed_total": (
+            sum(row.review_state != "pending_review" for row in rows) if review_ok else None
+        ),
+        "top_grade_total": grade_counts.get(top_grade),
+        "grade_rates": {
+            name: _rate(count, len(rows)) if count is not None else None
+            for name, count in grade_counts.items()
+        },
+        "defect_total": defect_total,
+        "average_defect_total": _mean([float(len(_defects(row, source))) for row in rows]) if defects_complete else None,
         "auto_defect_total": sum(len(row.auto_defect_rule_ids) for row in rows) if auto_on else None,
         "manual_defect_total": (
             sum(len(row.manual_rule_codes) for row in rows) if manual_on and manual_ok else None
@@ -711,6 +728,8 @@ _CSV_HEADERS = {
     "average_score": "平均分", "top_grade_rate": "最高等级占比",
     "review_approved_total": "审核通过数", "veto_defect_total": "单否缺陷数",
     "records_with_defect": "有缺陷病历数",
+    "reviewed_total": "已审核病历数", "top_grade_total": "最高等级病历数",
+    "defect_total": "缺陷总数", "average_defect_total": "平均缺陷数（每份已质控病历）",
 }
 _CSV_STATUSES = {
     "scored": "已计分", "no_standard": "未配置评分标准", "unavailable": "不可用",
@@ -734,11 +753,14 @@ def export_csv(
     department: str | None = None, doctor: str | None = None,
     rule_id: str | None = None, document: str | None = None,
     grade: str | None = None, has_defect: bool | None = None,
+    columns: Sequence[str] | None = None,
 ) -> bytes:
     """导出与页面相同的概览明细或病例下钻，返回带 BOM 的 CSV。"""
     if sheet not in {"departments", "doctors", "records"}:
         raise RecordQualityReportInvalid("sheet 必须为 departments、doctors 或 records")
     if sheet == "records":
+        if columns is not None:
+            raise RecordQualityReportInvalid("病例导出不接受汇总列配置")
         rows = [_record_item(ctx, row) for row in _filtered_rows(
             ctx, department=department, doctor=doctor, rule_id=rule_id,
             document=document, grade=grade, has_defect=has_defect,
@@ -753,10 +775,21 @@ def export_csv(
         rows = summary["department_rows" if sheet == "departments" else "doctor_rows"]
         fields = ("name", "record_total", "qc_ready_total", "average_score", "top_grade_rate",
                   "review_approved_total", "auto_defect_total", "manual_defect_total",
-                  "veto_defect_total", "records_with_defect")
+                  "veto_defect_total", "records_with_defect", "reviewed_total", "top_grade_total",
+                  "defect_total", "average_defect_total")
+        grade_fields = tuple(f"grade_rate:{band['name']}" for band in (ctx.standard or {}).get("grade_bands") or [])
+        fields += grade_fields
+        if columns is not None:
+            if not columns or len(set(columns)) != len(columns) or any(key not in fields[1:] for key in columns):
+                raise RecordQualityReportInvalid("汇总列配置无效")
+            fields = ("name", *columns)
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow([_CSV_HEADERS[field] for field in fields])
+    writer.writerow([
+        f"{field.removeprefix('grade_rate:')}占比" if field.startswith("grade_rate:") else _CSV_HEADERS[field]
+        for field in fields
+    ])
     for row in rows:
-        writer.writerow([_csv_value(field, row.get(field)) for field in fields])
+        writer.writerow([_csv_value(field, row.get("grade_rates", {}).get(field.removeprefix("grade_rate:"))
+                                   if field.startswith("grade_rate:") else row.get(field)) for field in fields])
     return output.getvalue().encode("utf-8-sig")

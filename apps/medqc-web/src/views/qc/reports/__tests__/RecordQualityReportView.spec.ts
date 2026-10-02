@@ -89,6 +89,31 @@ function render() {
 }
 
 describe('RecordQualityReportView', () => {
+  it('按真实等级展示比例并导出已显示列，使用已查询筛选', async () => {
+    state.getReport.mockResolvedValue({ success: true, data: {
+      ...report,
+      kpis: { ...report.kpis, top_grade_name: '优秀' },
+      grade_distribution: [{ grade: '优秀', count: 1 }, { grade: '待改进', count: 1 }],
+      department_rows: [{ ...report.kpis, name: '合成科室', top_grade_total: 1,
+        defect_total: 4, average_defect_total: 2, grade_rates: { 优秀: 0.5, 待改进: 0.5 } }],
+    } })
+    state.exportReport.mockResolvedValue({ success: false })
+    const wrapper = render()
+    await flush()
+    expect(wrapper.text()).toContain('优秀病历数')
+    expect(wrapper.text()).toContain('待改进占比')
+    expect(wrapper.text()).toContain('50.0%')
+    await wrapper.get('input[value="auto_defect_total"]').setValue(false)
+    await wrapper.get('#report-department').setValue('尚未查询')
+    const exportButton = wrapper.findAll('.page-head button').find((button) => button.text().includes('科室 CSV'))
+    await exportButton?.trigger('click')
+    expect(state.exportReport).toHaveBeenCalledWith(
+      { scene: 'running', defect_source: 'all' }, 'departments',
+      expect.arrayContaining(['top_grade_total', 'grade_rate:优秀', 'grade_rate:待改进', 'average_defect_total']),
+    )
+    expect(state.exportReport.mock.calls[0][2]).not.toContain('auto_defect_total')
+    wrapper.unmount()
+  })
   it('核心制度入口传已查询过滤，不传后续未查询的草稿', async () => {
     const wrapper = render()
     await flush()

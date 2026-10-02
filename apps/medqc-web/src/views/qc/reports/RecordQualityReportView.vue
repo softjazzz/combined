@@ -439,12 +439,21 @@ type ColumnKey =
   | 'manual_defect_total'
   | 'veto_defect_total'
   | 'records_with_defect'
-const optionalColumns: Array<{ key: ColumnKey; label: string }> = [
+  | 'reviewed_total'
+  | 'top_grade_total'
+  | 'defect_total'
+  | 'average_defect_total'
+  | `grade_rate:${string}`
+const baseColumns: Array<{ key: ColumnKey; label: string }> = [
   { key: 'record_total', label: '病历数' },
   { key: 'qc_ready_total', label: '已质控' },
   { key: 'average_score', label: '平均分' },
   { key: 'top_grade_rate', label: '首档率' },
   { key: 'review_approved_total', label: '审核通过' },
+  { key: 'reviewed_total', label: '已审核' },
+  { key: 'top_grade_total', label: '首档病历数' },
+  { key: 'defect_total', label: '缺陷总数' },
+  { key: 'average_defect_total', label: '平均缺陷数（每份已质控病历）' },
   { key: 'auto_defect_total', label: '自动缺陷' },
   { key: 'manual_defect_total', label: '人工缺陷' },
   { key: 'veto_defect_total', label: '单否缺陷' },
@@ -463,6 +472,16 @@ const draft = ref({
 })
 const filters = ref<RecordQualityFilters>({ scene: scene.value, defect_source: 'all' })
 const report = ref<RecordQualityReport | null>(null)
+const optionalColumns = computed<Array<{ key: ColumnKey; label: string }>>(() => [
+  ...baseColumns.map((column) => ({
+    ...column,
+    label: column.key === 'top_grade_total' && report.value?.kpis.top_grade_name
+      ? `${report.value.kpis.top_grade_name}病历数` : column.label,
+  })),
+  ...(report.value?.grade_distribution || []).filter((item) => item.grade !== null).map((item) => ({
+    key: `grade_rate:${item.grade}` as ColumnKey, label: `${item.grade}占比`,
+  })),
+])
 const loading = ref(false)
 const loadError = ref('')
 const exporting = ref<ReportSheet | null>(null)
@@ -477,9 +496,9 @@ const columnPreset = ref('all')
 const storageKey = computed(
   () => `medqc:record-quality-columns:${authStore.user?.id || 'anonymous'}`,
 )
-const visibleColumns = ref<ColumnKey[]>(optionalColumns.map((column) => column.key))
+const visibleColumns = ref<ColumnKey[]>(baseColumns.map((column) => column.key))
 const shownColumns = computed(() =>
-  optionalColumns.filter((column) => visibleColumns.value.includes(column.key)),
+  optionalColumns.value.filter((column) => visibleColumns.value.includes(column.key)),
 )
 const drawerOpen = ref(false)
 const drilldownTitle = ref('病例明细')
@@ -541,8 +560,9 @@ function rateText(value: number | null | undefined, fallback = '不可用'): str
   return value == null ? fallback : `${(value * 100).toFixed(1)}%`
 }
 function cellValue(row: ReportGroupRow, key: ColumnKey): string {
-  const value = row[key]
-  if (key === 'average_score') return value == null ? scoreAvailability.value : value.toFixed(2)
+  if (key.startsWith('grade_rate:')) return rateText(row.grade_rates?.[key.slice('grade_rate:'.length)], scoreAvailability.value)
+  const value = row[key as Exclude<ColumnKey, `grade_rate:${string}`>]
+  if (key === 'average_score' || key === 'average_defect_total') return value == null ? '不可用' : value.toFixed(2)
   if (key === 'top_grade_rate') return rateText(value, scoreAvailability.value)
   return numberText(value)
 }
@@ -599,7 +619,10 @@ async function loadReport(): Promise<void> {
   const result = await getRecordQualityReport(filters.value)
   if (request !== reportRequest) return
   loading.value = false
-  if (result.success && result.data) report.value = result.data
+  if (result.success && result.data) {
+    report.value = result.data
+    restoreColumns()
+  }
   else loadError.value = result.message || '病历质量报表暂不可用'
 }
 function applyFilters(): void {
@@ -634,18 +657,18 @@ watch(scene, (next) => {
 })
 watch(storageKey, restoreColumns)
 function restoreColumns(): void {
-  visibleColumns.value = optionalColumns.map((column) => column.key)
+  visibleColumns.value = optionalColumns.value.map((column) => column.key)
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value) || 'null') as unknown
     if (Array.isArray(saved)) {
       const valid = saved.filter(
         (key): key is ColumnKey =>
-          typeof key === 'string' && optionalColumns.some((column) => column.key === key),
+          typeof key === 'string' && optionalColumns.value.some((column) => column.key === key),
       )
       if (valid.length) visibleColumns.value = valid
     }
   } catch {
-    visibleColumns.value = optionalColumns.map((column) => column.key)
+    visibleColumns.value = optionalColumns.value.map((column) => column.key)
   }
 }
 function saveColumns(): void {
@@ -674,7 +697,7 @@ function applyColumnPreset(): void {
             'veto_defect_total',
             'records_with_defect',
           ]
-        : optionalColumns.map((column) => column.key)
+        : optionalColumns.value.map((column) => column.key)
   saveColumns()
 }
 async function loadRecords(page = 1): Promise<void> {
@@ -715,6 +738,7 @@ async function download(sheet: ReportSheet): Promise<void> {
   const result = await exportRecordQualityReport(
     { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) },
     sheet,
+    sheet === 'records' ? undefined : shownColumns.value.map((column) => column.key),
   )
   exporting.value = null
   if (!result.success || !result.data) {
