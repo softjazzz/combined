@@ -89,6 +89,29 @@ function verifiedSourceQuotes(answer, references) {
   )
 }
 
+// 核对独立段落中的保存字段标签；不改正文，也不从“意思相同”推断逐字一致。
+// 段落以空行、下一字段标签或回答末尾结束，覆盖无引号和多行字段。
+function verifiedSavedTextLabels(answer, references) {
+  const labels = [...answer.matchAll(/^([ \t]*)(结论|建议)原文([ \t]*[：:][ \t]*)/gmu)]
+  const saved = references.filter((reference) => reference.kind === 'saved_result')
+  let projected = answer
+  for (let index = labels.length - 1; index >= 0; index--) {
+    const label = labels[index]
+    const start = label.index + label[0].length
+    const remaining = answer.slice(start, labels[index + 1]?.index ?? answer.length)
+    const blank = remaining.search(/\r?\n[ \t]*\r?\n/u)
+    let quoted = (blank < 0 ? remaining : remaining.slice(0, blank)).trim()
+    if (/^(?:“[\s\S]*”|"[\s\S]*")$/u.test(quoted)) quoted = quoted.slice(1, -1)
+    const field = label[2] === '结论' ? 'conclusion' : 'suggestion'
+    if (quoted && saved.some((reference) => reference[field] === quoted)) continue
+    projected =
+      projected.slice(0, label.index) +
+      `${label[1]}${label[2]}转述（未逐字核实）${label[3]}` +
+      projected.slice(start)
+  }
+  return projected
+}
+
 export function projectTurns(events) {
   const turns = new Map()
   const inbox = []
@@ -182,6 +205,7 @@ export function projectTurns(events) {
       }
       if (current.status === 'failed') current.error = '本轮未完成，已取得的来源保留在下方。'
       const sources = [...priorReferences.values()]
+      current.answer = verifiedSavedTextLabels(current.answer, sources)
       const guidelines = sources.filter((r) => r.kind === 'guideline')
       if (current.knowledgeQueried || guidelines.length)
         current.answer = verifiedSourceLinks(

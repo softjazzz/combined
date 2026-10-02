@@ -132,3 +132,63 @@ test('混合来源中的改写长摘录仍明确标为转述，不能借用未�
   ])
   assert.ok(early.answer.includes('回答转述（未逐字核实）'))
 })
+
+test('保存建议重排标点后不能称原文，逐字结论和来源卡片保持不变', () => {
+  const saved = {
+    id: 'saved:test',
+    kind: 'saved_result',
+    conclusion: '合成结论：未找到所需记录。',
+    suggestion: '修改对象：测试记录\n需要补充：测试字段\n注意事项：不要编造。',
+  }
+  const changed = saved.suggestion.replaceAll('\n', '；')
+  const answer = `结论原文：${saved.conclusion}\n建议原文：${changed}\n\n下一步：查看下方保存卡片。`
+  const input = events(answer, [saved], 0, 'read_saved_results')
+  const before = JSON.stringify(input)
+  const [turn] = projectTurns(input)
+  assert.equal(turn.answer, answer.replace('建议原文：', '建议转述（未逐字核实）：'))
+  assert.deepEqual(turn.references, [saved])
+  assert.equal(JSON.stringify(input), before)
+})
+
+test('保存字段原文支持多行和成对引号，但不能丢否定条件或借用其他类型来源', () => {
+  const saved = {
+    id: 'saved:test',
+    kind: 'saved_result',
+    conclusion: '测试结论。',
+    suggestion: '补充测试字段。\n不得倒签。',
+  }
+  for (const body of [saved.suggestion, `“${saved.suggestion}”`]) {
+    const answer = `建议原文：${body}\n\n概述：请查保存卡片。`
+    assert.equal(projectTurns(events(answer, [saved], 0, 'read_saved_results'))[0].answer, answer)
+  }
+  for (const [body, refs] of [
+    ['补充测试字段。', [saved]],
+    ['补充测试字段。可以倒签。', [saved]],
+    [saved.suggestion, [{ ...saved, kind: 'guideline', text: saved.suggestion }]],
+  ]) {
+    const answer = `建议原文：${body}`
+    assert.equal(
+      projectTurns(events(answer, refs, 0, 'read_saved_results'))[0].answer,
+      `建议转述（未逐字核实）：${body}`,
+    )
+  }
+  const answer = `结论原文：${saved.suggestion}`
+  assert.equal(
+    projectTurns(events(answer, [saved], 0, 'read_saved_results'))[0].answer,
+    `结论转述（未逐字核实）：${saved.suggestion}`,
+  )
+})
+
+test('保存字段原文可使用已读历史但不能借用未来来源，普通概述不改写', () => {
+  const saved = { id: 'saved:test', kind: 'saved_result', suggestion: '仅用于测试的保存建议。' }
+  const answer = `建议原文：${saved.suggestion}`
+  const turns = projectTurns([
+    ...events(answer, [], 0, false),
+    ...events('已读取保存建议', [saved], 1, 'read_saved_issue'),
+    ...events(answer, [], 2, false),
+  ])
+  assert.equal(turns[0].answer, `建议转述（未逐字核实）：${saved.suggestion}`)
+  assert.equal(turns[2].answer, answer)
+  const overview = '建议概述：补充相应记录。下方卡片保留建议原文。'
+  assert.equal(projectTurns(events(overview, [saved], 0, 'read_saved_results'))[0].answer, overview)
+})
