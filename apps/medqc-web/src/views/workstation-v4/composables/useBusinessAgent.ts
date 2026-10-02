@@ -13,6 +13,7 @@ export function useBusinessAgent() {
   const error = ref('')
   let generation = 0
   let storageKey = ''
+  let restorePending = false
   let active: { sessionId: string; runId: string; controller: AbortController } | undefined
   function contextKey(context: BusinessAgentContext) {
     return JSON.stringify(
@@ -97,6 +98,7 @@ export function useBusinessAgent() {
     storageKey = storageScope(context)
     const legacy = sessionStorage.getItem(storageKey) ? [] : legacySession(context)
     const stored = sessionStorage.getItem(storageKey) || legacy[0]?.id
+    restorePending = Boolean(stored)
     if (!stored) return
     loading.value = true
     try {
@@ -104,24 +106,33 @@ export function useBusinessAgent() {
       if (epoch !== generation) return
       if (contextKey(session.context) !== contextKey(context)) {
         sessionStorage.removeItem(storageKey)
+        restorePending = false
         return
       }
       sessionId.value = session.session_id
       turns.value = session.turns
+      restorePending = false
       // 服务端再次校验归属及权限、上下文一致后才迁移定位；不复制执行历史。
       if (legacy.length) {
         sessionStorage.setItem(storageKey, session.session_id)
         for (const { key } of legacy) sessionStorage.removeItem(key)
       }
     } catch {
-      if (epoch === generation) error.value = '会话恢复失败，可刷新重试或新建会话。'
+      if (epoch === generation) error.value = '会话恢复失败，可重试发送、刷新或新建会话。'
     } finally {
       if (epoch === generation) loading.value = false
     }
   }
   async function send(message: string, context: BusinessAgentContext, referenceId?: string) {
     if (!message.trim() || loading.value) return
-    if (storageKey !== storageScope(context)) await activate(context)
+    if (storageKey !== storageScope(context) || restorePending) {
+      const restoring = activate(context)
+      const activationEpoch = generation
+      await restoring
+      if (activationEpoch !== generation) return
+    }
+    // 已知历史未恢复时不另建会话，避免一次读取失败覆盖原生历史的定位。
+    if (restorePending) return
     const epoch = generation
     loading.value = true
     error.value = ''
@@ -157,8 +168,13 @@ export function useBusinessAgent() {
     }
   }
   async function reset(context: BusinessAgentContext) {
-    await stop()
+    const stopping = stop()
+    const epoch = generation
+    await stopping
+    if (epoch !== generation) return
     sessionStorage.removeItem(storageKey)
+    // 用户明确新建时也清除同UID、同上下文的唯一旧定位，避免再次恢复失败历史。
+    for (const { key } of legacySession(context)) sessionStorage.removeItem(key)
     await activate(context)
   }
   onScopeDispose(() => {
