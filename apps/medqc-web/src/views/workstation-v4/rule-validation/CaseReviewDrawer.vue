@@ -8,12 +8,14 @@
     root-class-name="rv-review-drawer"
     @close="emit('close')"
   >
-    <div v-if="row" class="rv-review" data-testid="case-review-drawer">
+    <div
+      v-if="row"
+      class="rv-review"
+      data-testid="case-review-drawer"
+    >
       <header class="rv-review__head">
         <div class="rv-review__title">
-          <span class="rv-muted"
-            >逐例核对 · {{ index + 1 }} / {{ rows.length }} · 运行 {{ runTime }}</span
-          >
+          <span class="rv-muted">逐例核对 · {{ index + 1 }} / {{ rows.length }} · 运行 {{ runTime }}</span>
           <h2>{{ row.case_title }}</h2>
           <div class="rv-review__tags">
             <span class="rv-tag">{{ SOURCE_KINDS[row.source_kind] }}</span>
@@ -40,7 +42,12 @@
           >
             ›
           </button>
-          <button type="button" class="mq-btn rv-icon-btn" aria-label="关闭" @click="emit('close')">
+          <button
+            type="button"
+            class="mq-btn rv-icon-btn"
+            aria-label="关闭"
+            @click="emit('close')"
+          >
             ×
           </button>
         </div>
@@ -49,10 +56,8 @@
       <div class="rv-review__body">
         <div class="rv-review__pair">
           <div class="mq-inset rv-review__side">
-            <span class="rv-muted"
-              >人工预期 · r{{ row.answer_revision
-              }}{{ row.labeled_by ? ` · 标注人 ${row.labeled_by}` : '' }}</span
-            >
+            <span class="rv-muted">人工预期 · r{{ row.answer_revision
+            }}{{ row.labeled_by ? ` · 标注人 ${row.labeled_by}` : '' }}</span>
             <span :class="statusClass(STATUS[row.expected_status].tone)">{{
               STATUS[row.expected_status].label
             }}</span>
@@ -71,7 +76,10 @@
         <section v-if="findings.length">
           <h3>判定事实</h3>
           <ul class="mq-soft rv-review__list">
-            <li v-for="(item, i) in findings" :key="i">
+            <li
+              v-for="(item, i) in findings"
+              :key="i"
+            >
               {{ item }}
             </li>
           </ul>
@@ -80,7 +88,12 @@
         <section v-if="publicFacts.length">
           <h3>结构化判定事实</h3>
           <ul class="mq-soft rv-review__list">
-            <li v-for="fact in publicFacts" :key="fact.path">{{ fact.path }}：{{ fact.value }}</li>
+            <li
+              v-for="fact in publicFacts"
+              :key="fact.path"
+            >
+              {{ fact.path }}：{{ fact.value }}
+            </li>
           </ul>
         </section>
         <CriterionResultBlock
@@ -90,8 +103,15 @@
         />
         <section>
           <h3>证据原文</h3>
-          <div v-if="evidence.length" class="rv-review__evidence">
-            <div v-for="(item, i) in evidence" :key="i" class="mq-inset rv-review__quote">
+          <div
+            v-if="evidence.length"
+            class="rv-review__evidence"
+          >
+            <div
+              v-for="(item, i) in evidence"
+              :key="i"
+              class="mq-inset rv-review__quote"
+            >
               <div class="rv-review__quote-head">
                 <b>{{ item.title }}</b>
                 <span class="mq-mono rv-muted">{{ item.time }}</span>
@@ -99,7 +119,12 @@
               <p>{{ item.text }}</p>
             </div>
           </div>
-          <p v-else class="rv-muted">本条结果没有返回证据片段。</p>
+          <p
+            v-else
+            class="rv-muted"
+          >
+            本条结果没有返回证据片段。
+          </p>
         </section>
 
         <section>
@@ -112,7 +137,10 @@
         <section v-if="history.length">
           <h3>核对记录</h3>
           <ul class="rv-review__history">
-            <li v-for="entry in history" :key="entry.id">
+            <li
+              v-for="entry in history"
+              :key="entry.id"
+            >
               <span :class="statusClass(entry.decision === 'confirmed' ? 'success' : 'danger')">{{
                 entry.decision === 'confirmed' ? '已确认' : '有问题'
               }}</span>
@@ -132,13 +160,16 @@
             placeholder="写明证据是否指向正确原文、建议是否可用；状态不一致时说明原因"
           />
         </label>
-        <a-alert v-if="error" type="error" :message="error" show-icon />
+        <a-alert
+          v-if="error"
+          type="error"
+          :message="error"
+          show-icon
+        />
       </div>
 
       <footer class="rv-review__foot">
-        <span class="rv-muted"
-          >状态与预期不一致时只能记录问题；确认通过要求状态一致且证据、建议均正确。</span
-        >
+        <span class="rv-muted">状态与预期不一致时只能记录问题；确认通过要求状态一致且证据、建议均正确。</span>
         <div class="rv-review__actions">
           <button
             type="button"

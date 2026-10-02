@@ -137,7 +137,8 @@ def build_kind(execution_version: dict | None) -> str:
 
 
 def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
-                  project: Callable[[dict], dict] | None = None) -> list[dict]:
+                  project: Callable[[dict], dict] | None = None, *,
+                  baseline_jobs: dict[str, dict | None] | None = None) -> list[dict]:
     """按病例三坐标比较已发布状态；一致只代表状态一致，证据和建议仍需人工复核。
 
     ``project`` 把唯一匹配的结果投影为可展示的结论/证据/建议（客户安全 DTO），供逐例核对。
@@ -161,6 +162,14 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
                "actual_status": actual, "comparison": outcome}
         if project is not None and len(matches) == 1:
             row["result"] = project(matches[0])
+        if row["role"] == "regression" and status == "completed" and len(matches) == 1:
+            from .rule_validation_comparison import compare_regression
+            comparison = compare_regression(
+                {**case, "rule_id": case_rule}, row.get("result") or {}, job,
+                (baseline_jobs or {}).get(case.get("baseline_job_id")), project)
+            row["regression_comparison"] = comparison
+            if comparison["status"] != "same":
+                row["comparison"] = comparison["status"]
         rows.append(row)
     return rows
 
@@ -343,7 +352,11 @@ class RuleValidationService:
                 or not conclusion.get("run_id") or _later_reviews(events, conclusion)):
             return []
         try:
-            return self.get_run(conclusion["run_id"])["cases"]
+            baseline = self.get_run(conclusion["run_id"])
+            if _answers_changed(baseline, self.list_cases(rule_id)):
+                return []
+            return [{**case, "baseline_run_id": baseline["id"], "baseline_job_id": baseline["job_id"]}
+                    for case in baseline["cases"]]
         except LookupError:
             return []
 
@@ -403,7 +416,7 @@ class RuleValidationService:
     def review_case(self, run: dict, rows: list[dict], item_id: str, *, decision: str, note: str, user: str) -> dict:
         if decision not in {"confirmed", "problem"} or not note.strip():
             raise ValueError("请选择复核结论并填写核对意见")
-        # 逐例核对只针对本规则病例；同族回归行只做状态比对
+        # 逐例核对针对本规则病例；同族由保存基线比较，不能用本规则复核覆盖差异。
         row = next((r for r in rows if r["item_id"] == item_id and r.get("role", "candidate") == "candidate"), None)
         if row is None:
             raise LookupError("该病例不在本次运行中")
@@ -434,7 +447,7 @@ class RuleValidationService:
                                  "regression_gaps": summary["regression_gaps"],
                                  "regression_rows": [
                                      {k: r.get(k) for k in ("rule_id", "item_id", "case_title", "expected_status",
-                                                            "actual_status", "comparison")}
+                                                            "actual_status", "comparison", "regression_comparison")}
                                      for r in rows if r.get("role") == "regression"],
                                  "build_kind": build_kind(run.get("execution_version"))}, ensure_ascii=False))
 
@@ -485,7 +498,7 @@ class RuleValidationService:
             "family_regression": {
                 "scope_rule_ids": run.get("scope_rule_ids") or [rule["rule_id"]],
                 "rows": conclusion.get("payload", {}).get("regression_rows") or [],
-                "gaps": run.get("regression_gaps") or [],
+                "gaps": conclusion.get("payload", {}).get("regression_gaps") or [],
             },
             "version": {"build_kind": kind, "development_version": kind != "release",
                         "implementation": runtime.get("implementation"), "first_pass": runtime.get("first_pass")},
@@ -509,7 +522,7 @@ class RuleValidationService:
         cases = run["cases"] if run is not None else self.list_cases(rule_id)
         coverage = _coverage(cases)
         blockers: list[str] = []
-        regression_gaps = (run or {}).get("regression_gaps") or []
+        regression_gaps = list((run or {}).get("regression_gaps") or [])
         if run is not None and rows is not None:
             if _answers_changed(run, self.list_cases(rule_id)):
                 blockers.append("运行病例预期已修改或移除，请重新运行验收")
@@ -519,6 +532,13 @@ class RuleValidationService:
                 latest[e["item_id"]] = e["decision"]
             own = [r for r in rows if r.get("role", "candidate") == "candidate"]
             regression = [r for r in rows if r.get("role") == "regression"]
+            for row in regression:
+                metrics = (row.get("regression_comparison") or {}).get("metrics")
+                if metrics is not None and not metrics["comparable"]:
+                    gap = {"rule_id": row["rule_id"], "name": row.get("case_title") or row["item_id"],
+                           "reason": metrics["reason"]}
+                    if gap not in regression_gaps:
+                        regression_gaps.append(gap)
             if any(r["comparison"] in {"pending"} for r in rows):
                 blockers.append("运行尚未完成")
             if any(r["comparison"] not in {"same", "pending"} for r in own):

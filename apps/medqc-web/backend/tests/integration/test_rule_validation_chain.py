@@ -105,6 +105,35 @@ def test_rule_centric_validation_to_release_sheet(monkeypatch, _isolated_databas
         assert [e["kind"] for e in detail["events"]] == ["case_review", "case_review", "conclusion", "approval"]
         assert all("result" not in e["payload"].get("comparison", {}) for e in detail["events"])
 
+        # 候选报告完整性规则读取刚才真正保存的同族保护集基线。
+        # 临时取消 RULE 的待验收展示替身；正式目录里的 RULE 是已上线规则。
+        with monkeypatch.context() as patch:
+            patch.setattr(rule_validation_api, "_service", rule_validation_module.RuleValidationService)
+            candidate = "/api/v1/qc/rule-validation/rules/LX0609-06-01-03"
+            for item_id in (item_a, "case-b"):
+                response = client.put(f"{candidate}/cases/{item_id}", json={
+                    "revision": 0, "expected_status": "not_applicable", "human_reason": "无影像主记录",
+                    "purpose": "development"})
+                assert response.status_code == 200, response.text
+            started_peer = client.post(f"{candidate}/runs", json={})
+            assert started_peer.status_code == 200, started_peer.text
+            peer_ids = started_peer.json()["data"]
+            assert _wait_for_terminal_job(workspace, peer_ids["job_id"])["status"] == "completed"
+            peer_detail = client.get(candidate).json()["data"]
+            regression = [r for r in peer_detail["latest_run_rows"] if r["role"] == "regression"]
+            assert len(regression) == 2
+            for row in regression:
+                assert row["rule_id"] == RULE and row["comparison"] == "same"
+                comparison = row["regression_comparison"]
+                assert comparison["baseline_job_id"] == ids["job_id"]
+                assert comparison["baseline_run_id"] == ids["run_id"]
+                assert comparison["baseline"]["customer_display_facts"] == row["result"]["customer_display_facts"]
+                assert comparison["changed_fields"] == []
+                assert comparison["metrics"]["baseline"]["tokens"] == 0
+                assert comparison["metrics"]["current"]["tokens"] == 0
+                assert comparison["metrics"]["comparable"] is False  # 新增候选后任务范围不同。
+            assert any("范围不同" in gap["reason"] for gap in peer_detail["regression_gaps"])
+
         review_url = f"/api/v1/qc/rule-validation/runs/{ids['run_id']}/cases/{item_a}/reviews"
         assert client.post(review_url, json={"decision": "problem", "note": "再次复核发现问题"}).status_code == 200
         assert client.get(base).json()["data"]["stage"] == "pending_conclusion"

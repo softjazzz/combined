@@ -84,8 +84,20 @@ async def _run_rows(request: Request, run: dict, current_user: Dict[str, Any]) -
     job = await _read_job(request, run["job_id"], current_user)
     if job is None:
         job = {"status": "creation_failed" if run["state"] == "creation_failed" else "creating"}
+    baseline_jobs = {}
+    for case in run["regression_cases"]:
+        baseline_id = case.get("baseline_job_id")
+        if not baseline_id or baseline_id in baseline_jobs:
+            continue
+        try:
+            baseline_jobs[baseline_id] = await _read_job(request, baseline_id, current_user)
+        except HTTPException as exc:
+            if exc.status_code not in {404, 409}:
+                raise
+            baseline_jobs[baseline_id] = None  # 历史结果缺失或合同不可读，明确列为基线缺口。
     # 本规则病例 + 同族回归病例（各按自己的规则比较）
-    return compare_cases(run["rule_id"], run["cases"] + run["regression_cases"], job, project=_project_result)
+    return compare_cases(run["rule_id"], run["cases"] + run["regression_cases"], job,
+                         project=_project_result, baseline_jobs=baseline_jobs)
 
 
 _RESULT_FIELDS = ("status", "display_status", "reason_code", "customer_conclusion", "conclusion",

@@ -353,9 +353,26 @@ describe('规则验收详情', () => {
     expect(regression).toEqual([expect.stringContaining('LX0609-06-01-04')])
     expect(regression[0]).toContain('不一致')
     expect(wrapper.find('[data-testid="regression-gap"]').text()).toContain('LX0609-06-01-05')
-    expect(wrapper.text()).toContain('同族回归无差异')
-    expect(wrapper.text()).toContain('同族保护集缺口')
+    expect(wrapper.text()).toContain('同族回归对照')
+    expect(wrapper.text()).toContain('同族回归缺口')
     expect(wrapper.find('textarea[aria-label="覆盖缺口说明"]').exists()).toBe(true)
+  })
+
+  it('没有同族保护病例时显示尚未验证，不标记无差异', async () => {
+    const impact = {
+      impact: 'shared_batch' as const, label: '共享抽取批次', executor_key: 'exam_lab',
+      basis: '共享抽取', peer_rule_ids: ['LX0609-06-01-04'],
+    }
+    const gap = { rule_id: 'LX0609-06-01-04', name: '已上线同族', reason: '没有保护集' }
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail({
+      rule: { ...detail().rule, impact },
+      runs: [{ ...run, impact, regression_cases: [], regression_gaps: [gap] }],
+      regression_gaps: [gap], latest_run_rows: rows,
+    }) })
+    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('同族回归尚未验证')
+    expect(wrapper.text()).not.toContain('同族回归无差异')
   })
 
   it('运行本规则后重新加载详情', async () => {

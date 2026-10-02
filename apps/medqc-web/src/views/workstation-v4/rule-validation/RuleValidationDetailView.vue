@@ -1,5 +1,8 @@
 <template>
-  <main class="mq-page rule-validation-page" data-testid="rule-validation-detail">
+  <main
+    class="mq-page rule-validation-page"
+    data-testid="rule-validation-detail"
+  >
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">
@@ -16,19 +19,32 @@
           v-if="detail"
           :class="statusClass(STAGES[detail.stage].tone)"
           data-testid="rule-stage"
-          >{{ STAGES[detail.stage].label }}</span
+        >{{ STAGES[detail.stage].label }}</span>
+        <router-link
+          class="mq-btn"
+          :to="{ name: 'WorkstationV4RuleValidation' }"
         >
-        <router-link class="mq-btn" :to="{ name: 'WorkstationV4RuleValidation' }">
           返回列表
         </router-link>
       </div>
     </header>
 
-    <a-alert v-if="error" type="error" :message="error" show-icon />
+    <a-alert
+      v-if="error"
+      type="error"
+      :message="error"
+      show-icon
+    />
 
-    <a-spin :spinning="loading && !detail" class="rule-validation-page">
+    <a-spin
+      :spinning="loading && !detail"
+      class="rule-validation-page"
+    >
       <template v-if="detail">
-        <section class="mq-card rv-steps" aria-label="验收进度">
+        <section
+          class="mq-card rv-steps"
+          aria-label="验收进度"
+        >
           <div
             v-for="(step, i) in steps"
             :key="step.title"
@@ -40,24 +56,27 @@
               <b>{{ step.title }}</b>
               <small class="rv-muted">{{ step.note }}</small>
             </div>
-            <span v-if="i < steps.length - 1" class="rv-step__line" />
+            <span
+              v-if="i < steps.length - 1"
+              class="rv-step__line"
+            />
           </div>
         </section>
 
         <section class="rv-grid-2">
           <div class="mq-card mq-card--padded rv-section">
-            <h2 class="mq-card__title">规则口径</h2>
+            <h2 class="mq-card__title">
+              规则口径
+            </h2>
             <div class="mq-soft rv-policy">
               {{ detail.rule.policy_summary || '（规则目录未填写业务口径）' }}
             </div>
             <div class="rv-facts">
               <div class="mq-inset rv-fact">
-                <small class="rv-muted">发布范围</small
-                ><b>{{ detail.rule.release_scope === 'default' ? '已上线' : '待验收' }}</b>
+                <small class="rv-muted">发布范围</small><b>{{ detail.rule.release_scope === 'default' ? '已上线' : '待验收' }}</b>
               </div>
               <div class="mq-inset rv-fact">
-                <small class="rv-muted">影响范围</small
-                ><b data-testid="impact-label">{{ detail.rule.impact?.label || '未声明' }}</b>
+                <small class="rv-muted">影响范围</small><b data-testid="impact-label">{{ detail.rule.impact?.label || '未声明' }}</b>
               </div>
               <div class="mq-inset rv-fact">
                 <small class="rv-muted">规则族</small><b>{{ detail.rule.source_document }}</b>
@@ -67,30 +86,38 @@
           </div>
           <div class="mq-card mq-card--padded rv-section">
             <div class="mq-card__head">
-              <h2 class="mq-card__title">覆盖矩阵</h2>
-              <span class="rv-tag rv-tag--blue"
-                >独立验收集 {{ detail.coverage.acceptance_cases }} 例</span
-              >
+              <h2 class="mq-card__title">
+                覆盖矩阵
+              </h2>
+              <span class="rv-tag rv-tag--blue">独立验收集 {{ detail.coverage.acceptance_cases }} 例</span>
             </div>
             <div class="rv-scroll">
               <table class="mq-table">
                 <thead>
                   <tr>
                     <th>预期状态</th>
-                    <th class="rv-num">合成病例</th>
-                    <th class="rv-num">真实病例副本</th>
-                    <th class="rv-num">合计</th>
+                    <th class="rv-num">
+                      合成病例
+                    </th>
+                    <th class="rv-num">
+                      真实病例副本
+                    </th>
+                    <th class="rv-num">
+                      合计
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="status in EXPECTED_STATUSES" :key="status">
+                  <tr
+                    v-for="status in EXPECTED_STATUSES"
+                    :key="status"
+                  >
                     <td>
                       {{ STATUS[status].label }}
                       <span
                         v-if="detail.coverage.gaps.includes(status)"
                         class="mq-status mq-status--warning"
-                        >缺口</span
-                      >
+                      >缺口</span>
                     </td>
                     <td class="rv-num">
                       {{ detail.coverage.counts[status].synthetic }}
@@ -101,16 +128,14 @@
                     <td class="rv-num rv-strong">
                       {{
                         detail.coverage.counts[status].synthetic +
-                        detail.coverage.counts[status].real_copy
+                          detail.coverage.counts[status].real_copy
                       }}
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <small class="rv-muted"
-              >合成病例只验证程序行为，不能替代客户真实病例验收；缺少的类别在验收结论时须逐项说明。</small
-            >
+            <small class="rv-muted">合成病例只验证程序行为，不能替代客户真实病例验收；缺少的类别在验收结论时须逐项说明。</small>
           </div>
         </section>
 
@@ -119,8 +144,13 @@
           <div class="mq-card__head">
             <div>
               <div class="rv-section__title">
-                <span class="rv-step__no" :class="stepNoClass(0)">1</span>
-                <h2 class="mq-card__title">测试病例与预期</h2>
+                <span
+                  class="rv-step__no"
+                  :class="stepNoClass(0)"
+                >1</span>
+                <h2 class="mq-card__title">
+                  测试病例与预期
+                </h2>
               </div>
               <p class="mq-card__desc">
                 每个病例按本规则单独标注预期；病例创建后内容与评价时间点固定，需修改请复制为新病例。
@@ -159,22 +189,31 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in detail.cases" :key="item.item_id" data-testid="case-row">
+                <tr
+                  v-for="item in detail.cases"
+                  :key="item.item_id"
+                  data-testid="case-row"
+                >
                   <td class="rv-strong">
                     {{ item.case_title }}
                   </td>
                   <td>
                     <span
                       :class="['rv-tag', item.source_kind === 'real_copy' ? 'rv-tag--blue' : '']"
-                      >{{ SOURCE_KINDS[item.source_kind] }}</span
-                    >
+                    >{{ SOURCE_KINDS[item.source_kind] }}</span>
                   </td>
                   <td>{{ PURPOSES[item.purpose] }}</td>
                   <td>
-                    <span v-if="item.evaluation_as_of_date" class="mq-mono">{{
+                    <span
+                      v-if="item.evaluation_as_of_date"
+                      class="mq-mono"
+                    >{{
                       item.evaluation_as_of_date
                     }}</span>
-                    <span v-else class="mq-status mq-status--warning">未固定</span>
+                    <span
+                      v-else
+                      class="mq-status mq-status--warning"
+                    >未固定</span>
                   </td>
                   <td>
                     <span :class="statusClass(STATUS[item.expected_status].tone)">{{
@@ -198,11 +237,20 @@
                     >
                       复制
                     </router-link>
-                    <button type="button" class="mq-btn" @click="openAnswer(item)">编辑预期</button>
+                    <button
+                      type="button"
+                      class="mq-btn"
+                      @click="openAnswer(item)"
+                    >
+                      编辑预期
+                    </button>
                   </td>
                 </tr>
                 <tr v-if="!detail.cases.length">
-                  <td colspan="8" class="rv-empty">
+                  <td
+                    colspan="8"
+                    class="rv-empty"
+                  >
                     还没有关联测试病例。请关联已有病例，或新建测试病例后回到这里标注预期。
                   </td>
                 </tr>
@@ -216,13 +264,21 @@
           <div class="mq-card__head">
             <div>
               <div class="rv-section__title">
-                <span class="rv-step__no" :class="stepNoClass(1)">2</span>
-                <h2 class="mq-card__title">运行验证</h2>
+                <span
+                  class="rv-step__no"
+                  :class="stepNoClass(1)"
+                >2</span>
+                <h2 class="mq-card__title">
+                  运行验证
+                </h2>
               </div>
               <p class="mq-card__desc">
                 只运行本规则，走正式执行、保存和读取链路；人工预期不进入任务。新运行会使旧结论和批准失效。
               </p>
-              <p v-if="sharedBatch" class="mq-card__desc">
+              <p
+                v-if="sharedBatch"
+                class="mq-card__desc"
+              >
                 本规则属于共享抽取批次：运行范围为本规则 + 同执行器已上线规则，并回归它们的保护集。
               </p>
             </div>
@@ -242,7 +298,10 @@
               }}
             </button>
           </div>
-          <div v-if="detail.runs.length" class="rv-runs">
+          <div
+            v-if="detail.runs.length"
+            class="rv-runs"
+          >
             <div
               v-for="(run, i) in detail.runs"
               :key="run.id"
@@ -253,18 +312,21 @@
               <b>{{ formatTime(run.created_at) }}</b>
               <span>{{ run.cases.length }} 例</span>
               <span class="rv-tag">{{ buildLabel(run) }}</span>
-              <span class="rv-run__note"
-                >{{ i === 0 ? '当前运行 · 比较与复核基于此次' : '已被后续运行取代'
-                }}{{
-                  run.scope_rule_ids.length > 1
-                    ? ` · 上线后范围 ${run.scope_rule_ids.length} 条规则`
-                    : ''
-                }}</span
-              >
+              <span class="rv-run__note">{{ i === 0 ? '当前运行 · 比较与复核基于此次' : '已被后续运行取代'
+              }}{{
+                run.scope_rule_ids.length > 1
+                  ? ` · 上线后范围 ${run.scope_rule_ids.length} 条规则`
+                  : ''
+              }}</span>
               <span class="mq-mono rv-muted">{{ run.job_id || '—' }}</span>
             </div>
           </div>
-          <p v-else class="rv-muted">尚未运行。</p>
+          <p
+            v-else
+            class="rv-muted"
+          >
+            尚未运行。
+          </p>
         </section>
 
         <!-- ③ 对照复核 -->
@@ -272,26 +334,34 @@
           <div class="mq-card__head">
             <div>
               <div class="rv-section__title">
-                <span class="rv-step__no" :class="stepNoClass(2)">3</span>
-                <h2 class="mq-card__title">对照复核</h2>
+                <span
+                  class="rv-step__no"
+                  :class="stepNoClass(2)"
+                >3</span>
+                <h2 class="mq-card__title">
+                  对照复核
+                </h2>
               </div>
               <p class="mq-card__desc">
                 状态一致只代表结论相同，仍需逐例核对原文、证据和修改建议。
               </p>
             </div>
-            <div v-if="rows.length" class="rv-summary-pills">
+            <div
+              v-if="rows.length"
+              class="rv-summary-pills"
+            >
               <span class="mq-status mq-status--success">一致 {{ countBy('same') }}</span>
               <span
                 v-if="rows.length - countBy('same') - countBy('pending')"
                 class="mq-status mq-status--danger"
-                >异常 {{ rows.length - countBy('same') - countBy('pending') }}</span
-              >
-              <span class="mq-status mq-status--info"
-                >已核对 {{ reviewedCount }} / {{ rows.length }}</span
-              >
+              >异常 {{ rows.length - countBy('same') - countBy('pending') }}</span>
+              <span class="mq-status mq-status--info">已核对 {{ reviewedCount }} / {{ rows.length }}</span>
             </div>
           </div>
-          <div v-if="rows.length" class="rv-scroll">
+          <div
+            v-if="rows.length"
+            class="rv-scroll"
+          >
             <table class="mq-table">
               <thead>
                 <tr>
@@ -305,7 +375,11 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, i) in rows" :key="row.item_id" data-testid="compare-row">
+                <tr
+                  v-for="(row, i) in rows"
+                  :key="row.item_id"
+                  data-testid="compare-row"
+                >
                   <td class="rv-strong">
                     {{ row.case_title }}
                   </td>
@@ -338,7 +412,12 @@
               </tbody>
             </table>
           </div>
-          <p v-else class="rv-muted">运行完成后在这里逐例对照。</p>
+          <p
+            v-else
+            class="rv-muted"
+          >
+            运行完成后在这里逐例对照。
+          </p>
           <div
             v-if="regressionRows.length || regressionGaps.length"
             class="rv-regression"
@@ -346,9 +425,12 @@
           >
             <h3>同族回归</h3>
             <p class="mq-card__desc">
-              同执行器已上线规则在“上线后范围”下的保护集结果，须与其验收时一致；只比对状态，不做逐例核对。
+              对照验收时保存的状态、原因、公开事实、证据和建议；调用统计按整任务展示，范围不同不直接比较成本。
             </p>
-            <div v-if="regressionRows.length" class="rv-scroll">
+            <div
+              v-if="regressionRows.length"
+              class="rv-scroll"
+            >
               <table class="mq-table">
                 <thead>
                   <tr>
@@ -357,6 +439,7 @@
                     <th>保护集预期</th>
                     <th>本次实际</th>
                     <th>比较</th>
+                    <th>基线对照</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -378,18 +461,24 @@
                         COMPARISONS[row.comparison].label
                       }}</span>
                     </td>
+                    <td><RegressionComparison :row="row" /></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <ul v-if="regressionGaps.length" class="rv-history">
-              <li v-for="gap in regressionGaps" :key="gap.rule_id" data-testid="regression-gap">
-                <span class="mq-status mq-status--warning">无保护集</span>
-                <span
-                  ><span class="mq-mono">{{ gap.rule_id }}</span> {{ gap.name }}：{{
-                    gap.reason
-                  }}</span
-                >
+            <ul
+              v-if="regressionGaps.length"
+              class="rv-history"
+            >
+              <li
+                v-for="gap in regressionGaps"
+                :key="`${gap.rule_id}-${gap.reason}-${gap.name}`"
+                data-testid="regression-gap"
+              >
+                <span class="mq-status mq-status--warning">回归缺口</span>
+                <span><span class="mq-mono">{{ gap.rule_id }}</span> {{ gap.name }}：{{
+                  gap.reason
+                }}</span>
               </li>
             </ul>
           </div>
@@ -399,31 +488,53 @@
         <section class="mq-card mq-card--padded rv-conclusion">
           <div class="rv-checks">
             <div class="rv-section__title">
-              <span class="rv-step__no" :class="stepNoClass(3)">4</span>
-              <h2 class="mq-card__title">验收结论与批准</h2>
+              <span
+                class="rv-step__no"
+                :class="stepNoClass(3)"
+              >4</span>
+              <h2 class="mq-card__title">
+                验收结论与批准
+              </h2>
             </div>
-            <p class="mq-card__desc">以下条件全部满足才能验收通过；不满足时仍可记录“不通过”。</p>
-            <div v-for="check in checks" :key="check.label" class="rv-check">
-              <span class="rv-check__mark" :class="`is-${check.state}`">{{
+            <p class="mq-card__desc">
+              以下条件全部满足才能验收通过；不满足时仍可记录“不通过”。
+            </p>
+            <div
+              v-for="check in checks"
+              :key="check.label"
+              class="rv-check"
+            >
+              <span
+                class="rv-check__mark"
+                :class="`is-${check.state}`"
+              >{{
                 check.state === 'ok' ? '✓' : check.state === 'no' ? '✕' : '!'
               }}</span>
               <div>
                 {{ check.label }}
-                <div v-if="check.note" class="rv-muted">
+                <div
+                  v-if="check.note"
+                  class="rv-muted"
+                >
                   {{ check.note }}
                 </div>
               </div>
             </div>
-            <ul v-if="decisions.length" class="rv-history">
-              <li v-for="event in decisions" :key="event.id">
+            <ul
+              v-if="decisions.length"
+              class="rv-history"
+            >
+              <li
+                v-for="event in decisions"
+                :key="event.id"
+              >
                 <span
                   :class="
                     statusClass(
                       ['accepted', 'approved'].includes(event.decision) ? 'success' : 'danger',
                     )
                   "
-                  >{{ decisionLabel(event) }}</span
-                >
+                >{{ decisionLabel(event) }}</span>
                 <span>{{ event.note }}</span>
                 <span class="rv-muted">{{ event.actor }} · {{ formatTime(event.created_at) }}</span>
               </li>
@@ -440,7 +551,10 @@
                 placeholder="说明核对范围、结论依据"
               />
             </label>
-            <label v-if="hasGaps" class="mq-field">
+            <label
+              v-if="hasGaps"
+              class="mq-field"
+            >
               <span class="mq-field__label">缺口说明<span class="mq-field__required">*</span></span>
               <a-textarea
                 v-model:value="gapAck"
@@ -450,7 +564,12 @@
                 :placeholder="gapPlaceholder"
               />
             </label>
-            <a-alert v-if="actionError" type="error" :message="actionError" show-icon />
+            <a-alert
+              v-if="actionError"
+              type="error"
+              :message="actionError"
+              show-icon
+            />
             <div class="rv-actions">
               <button
                 type="button"
@@ -545,6 +664,7 @@ import type {
 } from '@/services/rule-validation-service'
 import CaseAnswerModal from './CaseAnswerModal.vue'
 import CaseReviewDrawer from './CaseReviewDrawer.vue'
+import RegressionComparison from './RegressionComparison.vue'
 import ApprovalModal from './ApprovalModal.vue'
 import {
   COMPARISONS,
@@ -580,10 +700,10 @@ let pollTimer: ReturnType<typeof setTimeout> | undefined
 
 const latestRun = computed<ValidationRun | null>(() => detail.value?.runs[0] ?? null)
 const allRows = computed(() => detail.value?.latest_run_rows ?? [])
-/** 本规则病例：逐例核对与通过条件；同族回归行只比对状态 */
+/** 本规则逐例核对，同族对照保存基线与观测统计。 */
 const rows = computed(() => allRows.value.filter((r) => (r.role ?? 'candidate') === 'candidate'))
 const regressionRows = computed(() => allRows.value.filter((r) => r.role === 'regression'))
-const regressionGaps = computed(() => latestRun.value?.regression_gaps ?? [])
+const regressionGaps = computed(() => detail.value?.regression_gaps ?? latestRun.value?.regression_gaps ?? [])
 const sharedBatch = computed(() => {
   const kind = detail.value?.rule.impact?.impact
   return Boolean(kind && kind !== 'independent')
@@ -603,7 +723,7 @@ const gapPlaceholder = computed(() => {
   const coverage = detail.value?.coverage.gaps ?? []
   if (coverage.length) parts.push(`覆盖缺少：${coverage.map((s) => STATUS[s].label).join('、')}`)
   if (regressionGaps.value.length)
-    parts.push(`同族无保护集：${regressionGaps.value.map((g) => g.rule_id).join('、')}`)
+    parts.push(`同族回归缺口：${regressionGaps.value.map((g) => `${g.rule_id} ${g.reason}`).join('；')}`)
   return `${parts.join('；')}；逐项说明为何可接受`
 })
 const runInProgress = computed(
@@ -724,19 +844,19 @@ const checks = computed(() => {
     ...(sharedBatch.value
       ? [
           {
-            label: '同族回归无差异',
+            label: regressionRows.value.length ? '同族回归对照' : '同族回归尚未验证',
             note: drift.length
               ? drift
                   .map((r) => `${r.rule_id} ${r.case_title}：${COMPARISONS[r.comparison].label}`)
                   .join('；')
               : `回归 ${regressionRows.value.length} 例，范围 ${latestRun.value.scope_rule_ids.length} 条规则`,
-            state: drift.length ? 'no' : 'ok',
+            state: drift.length ? 'no' : regressionRows.value.length && !regressionGaps.value.length ? 'ok' : 'warn',
           },
           ...(regressionGaps.value.length
             ? [
                 {
-                  label: '同族保护集缺口',
-                  note: `${regressionGaps.value.map((g) => g.rule_id).join('、')} 无保护集，通过时须说明`,
+                  label: '同族回归缺口',
+                  note: `${regressionGaps.value.map((g) => `${g.rule_id} ${g.reason}`).join('；')}，通过时须说明`,
                   state: 'warn',
                 },
               ]

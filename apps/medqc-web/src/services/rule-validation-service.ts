@@ -15,7 +15,7 @@ export type ValidationStage =
   | 'approved_pending_release'
   | 'released'
   | 'rejected'
-export type Comparison = 'same' | 'different' | 'missing' | 'ambiguous' | 'pending' | 'failed'
+export type Comparison = 'same' | 'different' | 'missing' | 'ambiguous' | 'pending' | 'failed' | 'baseline_missing'
 
 /** 上线影响范围：共享抽取批次的规则须按“上线后范围”运行并回归同族保护集 */
 export type ImpactKind = 'independent' | 'shared_batch' | 'unverified'
@@ -108,7 +108,26 @@ export type ComparisonRow = ValidationCase & {
   actual_status: string | null
   comparison: Comparison
   result?: CaseResult
+  regression_comparison?: {
+    baseline_run_id: string | null
+    baseline_job_id: string | null
+    baseline: CaseResult | null
+    status: 'same' | 'different' | 'baseline_missing'
+    changed_fields: string[]
+    metrics: {
+      basis: 'whole_job'
+      baseline: RegressionMetrics
+      current: RegressionMetrics
+      delta: RegressionMetrics | null
+      baseline_scope: { rule_ids: string[]; record_count: number }
+      current_scope: { rule_ids: string[]; record_count: number }
+      comparable: boolean
+      reason: string
+    }
+  }
 }
+
+export type RegressionMetrics = { llm_calls: number | null; tokens: number | null; elapsed_seconds: number | null }
 
 export type ValidationEvent = {
   id: string

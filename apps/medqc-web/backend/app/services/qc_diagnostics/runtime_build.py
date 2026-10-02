@@ -35,6 +35,10 @@ def _unique_fields(pairs):
 
 def load_runtime_build() -> dict:
     try:
+        # 源码检出不是发布安装目录；包括 worktree 的 .git 文件。
+        # 只检查路径祖先标记，不调用 Git、不枚举源码，不信任遗留打包声明。
+        if any((parent / ".git").exists() for parent in _BUILD_PATH.resolve().parents):
+            return {"available": False, "reason": "development_checkout"}
         if _BUILD_PATH.is_symlink():
             raise ValueError("invalid_runtime_build")
         with _BUILD_PATH.open("rb") as stream:

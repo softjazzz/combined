@@ -15,6 +15,23 @@ def identity():
             "build_id": "medqc-web-customer-20260908-120000", "inventory_schema_version": 1}
 
 
+@pytest.mark.parametrize("worktree", [False, True])
+def test_checkout_cannot_claim_leftover_release_identity(tmp_path, monkeypatch, worktree):
+    root = tmp_path / "checkout"
+    path = root / "apps" / "medqc-web" / "backend" / "app" / "data" / "runtime_build.json"
+    path.parent.mkdir(parents=True)
+    marker = root / ".git"
+    if worktree:
+        marker.write_text("gitdir: unused", encoding="utf-8")
+    else:
+        marker.mkdir()
+    path.write_text(json.dumps(identity()), encoding="utf-8")
+    monkeypatch.setattr(runtime_build, "_BUILD_PATH", path)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("must not invoke Git"))
+    assert runtime_build.load_runtime_build()["available"] is False
+    assert json.loads(path.read_text(encoding="utf-8")) == identity()
+
+
 def test_runtime_needs_no_git_and_capture_freezes_build(tmp_path, monkeypatch):
     path = tmp_path / "runtime_build.json"
     path.write_text(json.dumps(identity()), encoding="utf-8")

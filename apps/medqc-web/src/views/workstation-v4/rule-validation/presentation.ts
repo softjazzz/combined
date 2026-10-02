@@ -38,6 +38,7 @@ export const COMPARISONS: Record<Comparison, Labeled> = {
   ambiguous: { label: '重复结果', tone: 'danger' },
   pending: { label: '等待完成', tone: 'info' },
   failed: { label: '执行失败', tone: 'danger' },
+  baseline_missing: { label: '基线不可比', tone: 'warning' },
 }
 
 export const SOURCE_KINDS: Record<SourceKind, string> = { synthetic: '合成', real_copy: '真实副本' }

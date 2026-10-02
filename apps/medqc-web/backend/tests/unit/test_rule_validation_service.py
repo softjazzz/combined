@@ -253,8 +253,9 @@ def test_shared_batch_runs_with_released_peers_and_blocks_on_drift(make_service)
     peer_run = service.begin_run(peer_ok, None, "u")
     service.bind_run(peer_run["id"], "job-peer", RELEASE)
     peer_run = service.get_run(peer_run["id"])
-    peer_rows = compare_cases(peer_ok, peer_run["cases"], {"status": "completed", "items": [
-        {"rule_id": peer_ok, "status": "non_compliant", **_ref("C2")}]})
+    peer_job = {"status": "completed", "items": [
+        {"rule_id": peer_ok, "status": "non_compliant", **_ref("C2")}]}
+    peer_rows = compare_cases(peer_ok, peer_run["cases"], peer_job)
     service.review_case(peer_run, peer_rows, "c2", decision="confirmed", note="ok", user="r")
     service.conclude(peer_run, peer_rows, decision="accepted", note="ok", gap_ack="缺口已知", user="u")
 
@@ -273,7 +274,11 @@ def test_shared_batch_runs_with_released_peers_and_blocks_on_drift(make_service)
             {"rule_id": RULE, "status": "compliant", **_ref("C1")},
             {"rule_id": peer_ok, "status": peer_status, **_ref("C2")}]}
 
-    drifted = compare_cases(RULE, run["cases"] + run["regression_cases"], job("compliant"))
+    project = lambda item: {"status": item["status"]}
+    baselines = {"job-peer": peer_job}
+    assert run["regression_cases"][0]["baseline_job_id"] == "job-peer"
+    drifted = compare_cases(RULE, run["cases"] + run["regression_cases"], job("compliant"),
+                            project=project, baseline_jobs=baselines)
     assert [(r["role"], r["comparison"]) for r in drifted] == [("candidate", "same"), ("regression", "different")]
     with pytest.raises(LookupError):
         service.review_case(run, drifted, "c2", decision="confirmed", note="x", user="r")  # 回归行不做逐例核对
@@ -283,7 +288,8 @@ def test_shared_batch_runs_with_released_peers_and_blocks_on_drift(make_service)
     with pytest.raises(ValueError, match="同族回归存在差异"):
         service.conclude(run, drifted, decision="accepted", note="通过", gap_ack="说明", user="u")
 
-    stable = compare_cases(RULE, run["cases"] + run["regression_cases"], job("non_compliant"))
+    stable = compare_cases(RULE, run["cases"] + run["regression_cases"], job("non_compliant"),
+                           project=project, baseline_jobs=baselines)
     with pytest.raises(ValueError, match="同族保护集缺口"):
         service.conclude(run, stable, decision="accepted", note="通过", gap_ack="", user="u")
     service.conclude(run, stable, decision="accepted", note="通过",
@@ -292,7 +298,9 @@ def test_shared_batch_runs_with_released_peers_and_blocks_on_drift(make_service)
     assert sheet["impact"]["impact"] == "shared_batch"
     assert sheet["family_regression"]["scope_rule_ids"] == [RULE, peer_ok, peer_gap]
     assert [(r["rule_id"], r["comparison"]) for r in sheet["family_regression"]["rows"]] == [(peer_ok, "same")]
-    assert [g["rule_id"] for g in sheet["family_regression"]["gaps"]] == [peer_gap]
+    assert [g["rule_id"] for g in sheet["family_regression"]["gaps"]] == [peer_gap, peer_ok]
+    assert sheet["family_regression"]["rows"][0]["regression_comparison"]["baseline_job_id"] == "job-peer"
+    assert "统计不完整" in sheet["family_regression"]["gaps"][1]["reason"]
 
 
 def test_legacy_run_snapshot_without_scope_still_reads(make_service):
