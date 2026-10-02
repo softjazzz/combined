@@ -3280,7 +3280,7 @@ def _sample_pools_table() -> Table:
 
 
 @lru_cache(maxsize=1)
-def _sample_pool_items_table() -> Table:
+def _sample_pool_items_table(*, ensure_schema: bool = True) -> Table:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; sample pool unavailable")
     metadata = MetaData()
@@ -3317,8 +3317,30 @@ def _sample_pool_items_table() -> Table:
         sa.Column("updated_at", sa.DateTime, nullable=False),
         schema=_schema(),
     )
-    metadata.create_all(bind=engine, checkfirst=True)
+    if ensure_schema:
+        metadata.create_all(bind=engine, checkfirst=True)
     return table
+
+
+def read_fixed_test_record_versions(
+    *, selections: Sequence[Sequence[Mapping[str, Any]]],
+) -> List[bool]:
+    """只读版本校验不触发旧服务初始化中的建表逻辑。"""
+    from .draft_test_validation_service import fixed_test_records_match
+
+    if not selections:
+        return []
+    item_ids = {item["item_id"] for selected in selections for item in selected}
+    items = _sample_pool_items_table(ensure_schema=False)
+    session = _session()
+    try:
+        rows = session.execute(select(items).where(items.c.id.in_(item_ids))).mappings().all()
+        by_id = {row["id"]: row for row in rows}
+        return [fixed_test_records_match(selected, [
+            by_id[item["item_id"]] for item in selected if item["item_id"] in by_id
+        ]) for selected in selections]
+    finally:
+        session.close()
 
 
 @lru_cache(maxsize=1)
@@ -4846,18 +4868,6 @@ class CustomQCSamplePoolService:
                 page=page,
                 page_size=page_size,
             )
-        finally:
-            session.close()
-
-    def fixed_test_records_current(self, *, selected: Sequence[Mapping[str, Any]]) -> bool:
-        from .draft_test_validation_service import fixed_test_records_match
-
-        session = _session()
-        try:
-            rows = session.execute(select(self._item_table).where(
-                self._item_table.c.id.in_([item["item_id"] for item in selected])
-            )).mappings().all()
-            return fixed_test_records_match(selected, rows)
         finally:
             session.close()
 

@@ -34,6 +34,15 @@ ITEM_UPDATED_AT = datetime(2026, 9, 28, 8, tzinfo=timezone.utc)
 RECORD_REF = {"institute_id": "CUSTOMER_TEST", "patient_id": "P1", "visit_id": "TEST-V1"}
 
 
+def test_readonly_test_case_table_description_never_creates_schema(monkeypatch):
+    def forbidden_ddl(*_args, **_kwargs):
+        raise AssertionError("只读版本核对不得建表")
+
+    monkeypatch.setattr(sa.MetaData, "create_all", forbidden_ddl)
+    table = pool_module._sample_pool_items_table.__wrapped__(ensure_schema=False)
+    assert table.name == "manual_problem_sample_pool_items"
+
+
 def _threadsafe_workspace(monkeypatch, source_drafts):
     engine = sa.create_engine(
         "sqlite://",
@@ -50,7 +59,7 @@ def _threadsafe_workspace(monkeypatch, source_drafts):
             exclude_reason="", updated_at=ITEM_UPDATED_AT.replace(tzinfo=None),
             **{f"matched_{key}": value for key, value in RECORD_REF.items()},
         ))
-    monkeypatch.setattr(pool_module, "_sample_pool_items_table", lambda: items)
+    monkeypatch.setattr(pool_module, "_sample_pool_items_table", lambda **_kwargs: items)
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr(workspace_module, "_session", sessions)
     service = object.__new__(CustomQCWorkspaceService)
@@ -62,9 +71,6 @@ class SamplePool:
     def __init__(self, *, fail: Exception | None = None) -> None:
         self.fail = fail
         self.calls = []
-
-    def fixed_test_records_current(self, *, selected):
-        return self.fail is None
 
     def load_customer_test_record_transfer_payloads(self, **kwargs):
         self.calls.append(kwargs)
@@ -311,10 +317,7 @@ def test_actual_http_runs_visual_validation_publishes_and_reads_published_state(
                 connection.execute(items.update().values(
                     include_in_batch_1=False, exclude_reason="superseded:new-item",
                 ))
-            actual_pool = object.__new__(pool_module.CustomQCSamplePoolService)
-            actual_pool._item_table = items
             monkeypatch.setattr(pool_module, "_session", sessions)
-            sample_pool.fixed_test_records_current = actual_pool.fixed_test_records_current
             stale_view = client.get(
                 f"/api/v1/custom-qc/workspace/drafts/{draft['id']}/test-validations"
             ).json()["data"]

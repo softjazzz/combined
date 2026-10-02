@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..core.final_scope_policy import UNSUPPORTED_SCOPE_DETAIL, is_executable_inpatient_scope
 from ..core.audit import audit_event
@@ -32,6 +33,7 @@ from ..services.custom_qc_sample_pool_service import (
     CustomerTestRecordConflictError,
     CustomerTestRecordNotFoundError,
     CustomQCSamplePoolService,
+    read_fixed_test_record_versions,
 )
 from ..services.draft_test_validation_service import (
     DraftTestValidationConflict,
@@ -1226,6 +1228,18 @@ async def list_workspace_drafts(
     for item in result.items:
         ready, blocked_reason = fixed_test_validation_state(item)
         items.append({**item, "publish_ready": ready, "publish_blocked_reason": blocked_reason})
+    ready_items = [item for item in items if item["publish_ready"]]
+    if ready_items:
+        try:
+            current_versions = read_fixed_test_record_versions(
+                selections=[item["last_test_summary"]["selected_items"] for item in ready_items],
+            )
+        except SQLAlchemyError as exc:
+            raise HTTPException(status_code=503, detail="测试病例版本校验暂不可用") from exc
+        for item, current in zip(ready_items, current_versions):
+            if not current:
+                item["publish_ready"] = False
+                item["publish_blocked_reason"] = "test_records_changed"
     return success_response(
         data={
             "items": items,
@@ -1377,7 +1391,7 @@ async def get_workspace_draft_test_validation(
 ):
     service = DraftTestValidationService(
         workspace=workspace,
-        sample_pool=CustomQCSamplePoolService(),
+        sample_pool=None,
         qc_service=None,
     )
     try:
@@ -1387,6 +1401,8 @@ async def get_workspace_draft_test_validation(
         )
     except DraftTestValidationNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="测试病例版本校验暂不可用") from exc
     return success_response(
         data=result,
         message="获取固定测试病历验证结果成功",

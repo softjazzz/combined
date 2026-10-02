@@ -85,6 +85,21 @@ describe('FixedTestValidationPanel', () => {
     expect(mocks.list).toHaveBeenCalledTimes(2)
   })
 
+  it('查询和重置筛选保持当前测试集及其修改标记', async () => {
+    mocks.getProof.mockResolvedValue({ success: true, data: { ...emptyState, validation: proof, publish_ready: true, unavailable_reason: null } })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper.get('[aria-label="搜索测试病例"]').setValue('其他病例')
+    await wrapper.get('[aria-label="搜索测试病例"]').trigger('keyup.enter')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已选 1 / 20')
+    await wrapper.get('.validation-toolbar .text-button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已选 1 / 20')
+    expect(wrapper.get('[data-testid="publish-validated-draft"]').attributes('disabled')).toBeDefined()
+  })
+
   it('编辑成功清除旧选择和证明并要求重新选择新版', async () => {
     const wrapper = render()
     await flushPromises()

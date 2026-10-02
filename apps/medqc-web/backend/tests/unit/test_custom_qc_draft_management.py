@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.routers import custom_qc
 from app.services import custom_qc_workspace_service as workspace_module
+from app.services import custom_qc_sample_pool_service as pool_module
 from tests.unit.test_custom_qc_draft_basic_info import workspace  # noqa: F401 - 复用隔离 SQLite 草稿 fixture。
 from tests.unit.test_draft_test_validation_service import (
     ITEM_UPDATED_AT,
@@ -53,6 +54,7 @@ def _publish_item(draft):
 def api(workspace, monkeypatch):  # noqa: F811 - pytest 注入复用 fixture。
     _old_service, _old_sessions, source_drafts = workspace
     service, sessions, drafts, engine = _threadsafe_workspace(monkeypatch, source_drafts)
+    monkeypatch.setattr(pool_module, "_session", sessions)
     rules = sa.Table(
         "qc_rules", drafts.metadata,
         sa.Column("id", sa.String, primary_key=True),
@@ -97,6 +99,21 @@ def test_list_exposes_server_publish_readiness(api):
     assert by_id[untested["id"]]["publish_blocked_reason"] == "not_tested"
 
 
+def test_missing_test_pool_returns_unavailable_without_exposing_database_error(api, monkeypatch):
+    client, service, *_ = api
+    draft = _publishable_draft(service)
+
+    def unavailable(**_kwargs):
+        raise sa.exc.SQLAlchemyError("private database details")
+
+    monkeypatch.setattr(custom_qc, "read_fixed_test_record_versions", unavailable)
+    monkeypatch.setattr(pool_module, "read_fixed_test_record_versions", unavailable)
+    for path in ("/api/v1/custom-qc/workspace/drafts", f"/api/v1/custom-qc/workspace/drafts/{draft['id']}/test-validations"):
+        response = client.get(path)
+        assert response.status_code == 503
+        assert "private database" not in response.text
+
+
 def test_batch_publish_publishes_all_in_one_transaction(api):
     client, service, sessions, drafts, rules, _user = api
     first, second = _publishable_draft(service, name="一"), _publishable_draft(service, name="二")
@@ -118,6 +135,21 @@ def test_batch_publish_rejects_replaced_test_case_without_writing_rules(api):
     items = drafts.metadata.tables["test_pool_items"]
     with sessions.begin() as session:
         session.execute(items.update().values(include_in_batch_1=False, exclude_reason="superseded:new"))
+    reads = []
+
+    def count_reads(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT") and "test_pool_items" in statement:
+            reads.append(statement)
+
+    engine = sessions.kw["bind"]
+    sa.event.listen(engine, "before_cursor_execute", count_reads)
+    try:
+        listed = client.get("/api/v1/custom-qc/workspace/drafts?status=draft").json()["data"]["items"]
+    finally:
+        sa.event.remove(engine, "before_cursor_execute", count_reads)
+    assert len(reads) == 1
+    assert all(item["publish_ready"] is False for item in listed)
+    assert all(item["publish_blocked_reason"] == "test_records_changed" for item in listed)
     response = client.post(
         "/api/v1/custom-qc/workspace/drafts/publish-batch",
         json={"items": [_publish_item(first), _publish_item(second)]},

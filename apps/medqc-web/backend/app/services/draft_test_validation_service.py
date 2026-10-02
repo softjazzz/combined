@@ -289,11 +289,15 @@ class DraftTestValidationService:
         if not draft:
             raise DraftTestValidationNotFound("草稿不存在或无权限")
         view = validation_view(draft)
-        if view["publish_ready"] and not self.sample_pool.fixed_test_records_current(
-            selected=draft["last_test_summary"]["selected_items"],
-        ):
-            view["publish_ready"] = False
-            view["unavailable_reason"] = "test_records_changed"
+        if view["publish_ready"]:
+            from .custom_qc_sample_pool_service import read_fixed_test_record_versions
+
+            current = read_fixed_test_record_versions(
+                selections=[draft["last_test_summary"]["selected_items"]],
+            )[0]
+            if not current:
+                view["publish_ready"] = False
+                view["unavailable_reason"] = "test_records_changed"
         return view
 
     async def run(

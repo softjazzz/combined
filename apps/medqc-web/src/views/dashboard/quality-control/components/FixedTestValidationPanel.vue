@@ -276,8 +276,8 @@ async function copyRecord(record: TestRecordItem) {
   notice.value = result.success ? '已创建复制病例，请在列表中选择后添加到测试集' : result.message || '复制结果无法确认，请刷新核对'
   if (result.success) { page.value = 1; appliedQuery.value = ''; draftQuery.value = ''; await loadRecords() }
 }
-function applySearch() { if (busy.value) return; appliedQuery.value = draftQuery.value.trim(); page.value = 1; selectedItems.value = []; void loadRecords() }
-function resetSearch() { if (busy.value) return; draftQuery.value = ''; appliedQuery.value = ''; page.value = 1; selectedItems.value = []; void loadRecords() }
+function applySearch() { if (busy.value) return; appliedQuery.value = draftQuery.value.trim(); page.value = 1; void loadRecords() }
+function resetSearch() { if (busy.value) return; draftQuery.value = ''; appliedQuery.value = ''; page.value = 1; void loadRecords() }
 function changePage(next: number) { if (next < 1 || busy.value) return; page.value = next; void loadRecords() }
 function refresh() { if (busy.value) return; notice.value = ''; void initialize() }
 function statusText(status: FixedTestValidationStatus) {

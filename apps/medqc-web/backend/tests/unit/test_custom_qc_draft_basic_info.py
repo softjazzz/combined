@@ -72,7 +72,7 @@ def workspace(monkeypatch):
             exclude_reason="", updated_at=datetime(2026, 9, 28, 8),
             matched_institute_id="CUSTOMER_TEST", matched_patient_id="P1", matched_visit_id="TEST-V1",
         ))
-    monkeypatch.setattr(pool_module, "_sample_pool_items_table", lambda: items)
+    monkeypatch.setattr(pool_module, "_sample_pool_items_table", lambda **_kwargs: items)
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr(service_module, "_session", sessions)
     instance = object.__new__(CustomQCWorkspaceService)

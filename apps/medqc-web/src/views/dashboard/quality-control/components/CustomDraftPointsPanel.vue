@@ -224,6 +224,7 @@ let disposed = false
 const PROOF_LABEL: Record<string, string> = {
   not_tested: '未测试',
   draft_changed: '草稿已修改，需重测',
+  test_records_changed: '测试病例已修改，需重测',
   draft_not_executable: '条件未配置',
   validation_incomplete: '测试未通过',
 }

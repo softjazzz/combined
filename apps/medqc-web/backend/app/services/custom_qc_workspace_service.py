@@ -6125,11 +6125,11 @@ class CustomQCWorkspaceService:
         # 与发布共用事务和行锁，病例编辑不能在版本核对后抢先提交。
         from .custom_qc_sample_pool_service import _sample_pool_items_table
 
-        test_items = _sample_pool_items_table()
+        test_items = _sample_pool_items_table(ensure_schema=False)
         selected_items = last_test_summary["selected_items"]
         current_items = session.execute(select(test_items).where(
             test_items.c.id.in_([item["item_id"] for item in selected_items])
-        ).with_for_update()).mappings().all()
+        ).order_by(test_items.c.id).with_for_update()).mappings().all()
         if not fixed_test_records_match(selected_items, current_items):
             raise DraftTestValidationConflict("测试病例已修改或移除，请重新测试后发布")
 
