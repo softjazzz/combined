@@ -42,6 +42,14 @@
     </nav>
 
     <div class="review-workbench-primary">
+      <QcBatchCaseActions
+        v-if="activeView === 'records'"
+        :record-refs="selectedQcRecordRefs"
+        :actor-key="actorKey"
+        :care-phase="carePhase"
+        :allowed="authStore.userRoles.some(role => ['admin', 'qc_manager'].includes(role))"
+        @completed="refreshAfterSelectedQc"
+      />
       <QcRunSelectedControl
         :care-phase="carePhase"
         :record-refs="selectedQcRecordRefs"
@@ -473,6 +481,7 @@ import {
 } from './components/qc/qcRecordColumnPreferences'
 import { resolveScoreCell, scoreSceneForCarePhase } from './components/qc/qcRecordScore'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
+import QcBatchCaseActions from './components/qc/QcBatchCaseActions.vue'
 import RecordFilterTemplateBar from './components/qc/RecordFilterTemplateBar.vue'
 import { isEmptyRecordFilter, parseRecordFilterQuery } from './composables/recordFilterQuery'
 import { useRecordFilterUrlSync } from './composables/useRecordFilterUrlSync'
