@@ -167,26 +167,34 @@ class Runner:
                 require({row["id"] for row in received["records"]} == expected, "受领视图范围不符")
         self.checks.append(method)
 
-    def run(self):
+    def run(self, phase="all"):
         self.preflight()
         if not self.execute:
             return
         require(self.manifest.get("source_sync_ready") is True,
                 "尚未确认正式任务同步将远端合成源投影至本地 CDM")
-        require(self.manifest.get("reviewer_facts_ready") is True,
-                "reviewer_id 仅为预期；尚未确认正式生产者和受领审核事实")
+        if phase in {"all", "reviewer"}:
+            require(self.manifest.get("reviewer_facts_ready") is True,
+                    "reviewer_id 仅为预期；尚未确认正式生产者和受领审核事实")
         for person in self.people:
             env_key = self.token_env(person)
             require(os.environ.get(env_key), f"写入前缺少 {env_key}")
         methods = ["all", "count"] + [f"{group}_{mode}" for group in GROUPS for mode in ("count", "ratio")]
+        if phase != "all":
+            methods = [method for method in methods if method.startswith("qc_reviewer_") == (phase == "reviewer")]
         for method in methods:
             params = {"total": 2} if method == "count" else {"total": 1} if method.endswith("_count") else {"percentage": 50, "max_per_group": 1} if method.endswith("_ratio") else {}
             task_id = self.create(self.payload(method, method, params))
             self.sample(task_id, set(self.cases), method)
             self.checks.append(method)
-        for method in ("by_ratio", "by_department", "by_original_reviewer", "by_record_type"):
+        assignments = ["by_ratio", "by_department", "by_original_reviewer", "by_record_type"]
+        if phase != "all":
+            assignments = [method for method in assignments if (method == "by_original_reviewer") == (phase == "reviewer")]
+        for method in assignments:
             task_id = self.create(self.payload(method, assignment=method))
             self.assign(task_id, method, self.sample(task_id, set(self.cases)))
+        if phase == "reviewer":
+            return
         batch_tasks = []
         for index in range(2):
             task_id = self.create(self.payload(f"batch-type-{index}", assignment="by_record_type"))
@@ -275,6 +283,8 @@ def main():
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--execute", action="store_true", help="显式执行本批任务写入；不清理")
     parser.add_argument("--review-artifacts", type=Path, help="仅审核正式受领运行前置，不启动抽样矩阵")
+    parser.add_argument("--phase", choices=("all", "independent", "reviewer"), default="all",
+                        help="独立抽样分配与依赖正式审核的三项可分阶段执行")
     args = parser.parse_args()
     parsed = urlparse(args.base_url)
     require(parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
@@ -292,7 +302,7 @@ def main():
             runner.preflight()
             runner.review_bootstrap(json.loads(args.review_artifacts.read_text(encoding="utf-8")))
         else:
-            runner.run()
+            runner.run(args.phase)
         print(json.dumps({"mode": "execute" if args.execute else "readonly_preflight",
                           "checks": runner.checks, "created_tasks": runner.tasks}, ensure_ascii=False))
     finally:
