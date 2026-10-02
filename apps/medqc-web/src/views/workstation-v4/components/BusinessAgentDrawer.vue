@@ -105,12 +105,26 @@
           <p v-if="turn.reference_scope === 'prior_turns'" class="business-agent__muted">
             本轮沿用此前读取的来源，未刷新业务结果。
           </p>
+          <p
+            v-if="turn.references.some((reference) => reference.kind === 'guideline')"
+            class="business-agent__muted"
+            data-testid="business-agent-retrieval-notice"
+          >
+            规范检索资料：以下命中或读取的资料不代表均支持上方回答，请核对条款及适用范围。
+          </p>
           <div
             v-for="(reference, index) in turn.references"
             :key="reference.id"
             class="mq-inset business-agent__reference"
           >
             <strong>{{ reference.position || index + 1 }}. {{ reference.title }}</strong>
+            <p
+              v-if="reference.kind === 'guideline'"
+              class="business-agent__muted"
+              data-testid="business-agent-guideline-candidate"
+            >
+              检索资料 · 待核对适用性
+            </p>
             <span v-if="reference.status" class="mq-status">{{
               statusLabel(reference.status)
             }}</span>

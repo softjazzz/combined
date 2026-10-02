@@ -9,6 +9,7 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   duplicateSecond: false,
+  guideline: false,
   access: vi.fn(),
   send: vi.fn(),
   activate: vi.fn(),
@@ -31,6 +32,16 @@ vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
         question: '查看问题',
         answer: '保存结论',
         references: [
+          ...(mocks.guideline
+            ? [
+                {
+                  id: 'guideline:a:0',
+                  kind: 'guideline',
+                  title: '仅相关的规范',
+                  locator: '检索片段',
+                },
+              ]
+            : []),
           { id: 'result-a', position: 1, kind: 'saved_result', title: '保存问题' },
           { id: 'result-second', position: 2, kind: 'saved_result', title: '第二条保存问题' },
           ...(mocks.duplicateSecond
@@ -100,8 +111,38 @@ describe('管理助手范围选择', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     mocks.duplicateSecond = false
+    mocks.guideline = false
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
+  })
+  it('规范候选明确提示不等于回答依据，仍可读取原文', async () => {
+    mocks.guideline = true
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    mocks.reference.mockResolvedValue({
+      id: 'guideline:a:0',
+      kind: 'guideline',
+      title: '规范',
+      text: '保存原文',
+    })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="business-agent-retrieval-notice"]').text()).toContain(
+      '不代表均支持上方回答',
+    )
+    expect(wrapper.text()).toContain('检索资料 · 待核对适用性')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '查看规范原文')!
+      .trigger('click')
+    await flushPromises()
+    expect(mocks.reference).toHaveBeenCalledWith('session-a', 'guideline:a:0')
+    expect(wrapper.text()).toContain('保存原文')
+    wrapper.unmount()
   })
   it('首页医生只从服务端授权病例选择，切换患者更新三坐标', async () => {
     mocks.access.mockResolvedValue({

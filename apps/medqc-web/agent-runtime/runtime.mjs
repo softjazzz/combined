@@ -35,6 +35,60 @@ const contextKey = (context) =>
       .sort(([a], [b]) => a.localeCompare(b)),
   )
 
+// 只约束回答展示中的地址，不改原生模型事件或保存的来源正文。
+// 精确匹配防止模型把真实域名下编造的路径、查询参数当作已核实出处。
+const sourceUrlPattern = /https?:\/\/[^\s<>"'`[\]（）【】“”，。；！？、]+/gu
+const sourceUrl = (value) => value.replace(/[).,;!?]+$/u, '')
+function verifiedSourceLinks(answer, references) {
+  const allowed = new Set(
+    references
+      .flatMap((reference) => (reference.text || '').match(sourceUrlPattern) || [])
+      .map(sourceUrl),
+  )
+  return answer.replace(sourceUrlPattern, (value) => {
+    const url = sourceUrl(value)
+    return allowed.has(url)
+      ? value
+      : `〔链接未在已读取来源中核实，已隐藏〕${value.slice(url.length)}`
+  })
+}
+
+// 对明确称为“原文”的长摘录只做字符核对，不判断其医学适用性。
+// 只允许恢复唯一的空白差异；数字、标点或否定条件变化均不能冒充原文。
+function verifiedSourceQuotes(answer, references) {
+  const texts = references.map((reference) => reference.text || '')
+  return answer.replace(
+    /(原文(?:节选|摘录|引用)?(?:\s*为)?\s*[：:]?\s*)(“[^”]*”|"[^"]*")/gu,
+    (match, prefix, quoted) => {
+      const quote = quoted.slice(1, -1)
+      if (quote.length < 40 || texts.some((text) => text.includes(quote))) return match
+      const normalizedQuote = quote.replace(/\s/gu, '')
+      if (!normalizedQuote) return `回答转述（未逐字核实）：${quoted}`
+      const originals = new Set()
+      for (const text of texts) {
+        const offsets = []
+        let normalized = ''
+        for (let index = 0; index < text.length; index++) {
+          if (/\s/u.test(text[index])) continue
+          offsets.push(index)
+          normalized += text[index]
+        }
+        for (
+          let position = normalized.indexOf(normalizedQuote);
+          position !== -1;
+          position = normalized.indexOf(normalizedQuote, position + 1)
+        )
+          originals.add(
+            text.slice(offsets[position], offsets[position + normalizedQuote.length - 1] + 1),
+          )
+      }
+      return originals.size === 1
+        ? `${prefix}${quoted[0]}${[...originals][0]}${quoted.at(-1)}`
+        : `回答转述（未逐字核实）：${quoted}`
+    },
+  )
+}
+
 export function projectTurns(events) {
   const turns = new Map()
   const inbox = []
@@ -65,6 +119,7 @@ export function projectTurns(events) {
         elapsed_ms: 0,
         start: event.time,
         seen: new Set(),
+        knowledgeQueried: false,
       })
     }
     const current =
@@ -94,7 +149,10 @@ export function projectTurns(events) {
       }
     }
     if (event.type === 'assistant/attempt') current.model_calls += 1
-    if (event.type === 'tool/call') current.tool_calls += 1
+    if (event.type === 'tool/call') {
+      current.tool_calls += 1
+      if (event.data.name?.startsWith('weknora_')) current.knowledgeQueried = true
+    }
     if (event.type === 'tool/result') {
       if (event.data.meta?.result_page) current.result_pages.push(event.data.meta.result_page)
       for (const reference of event.data.meta?.references || []) {
@@ -123,12 +181,22 @@ export function projectTurns(events) {
         current.reference_scope = 'prior_turns'
       }
       if (current.status === 'failed') current.error = '本轮未完成，已取得的来源保留在下方。'
+      const guidelines = [...priorReferences.values()].filter((r) => r.kind === 'guideline')
+      if (current.knowledgeQueried || guidelines.length)
+        current.answer = verifiedSourceLinks(
+          verifiedSourceQuotes(current.answer, guidelines),
+          guidelines,
+        )
     }
   }
   return [...turns.values()]
     .filter((t) => t.run_id)
     .map((turn) =>
-      Object.fromEntries(Object.entries(turn).filter(([key]) => !['seen', 'start'].includes(key))),
+      Object.fromEntries(
+        Object.entries(turn).filter(
+          ([key]) => !['seen', 'start', 'knowledgeQueried'].includes(key),
+        ),
+      ),
     )
 }
 
