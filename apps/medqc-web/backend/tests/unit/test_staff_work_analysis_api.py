@@ -40,6 +40,20 @@ def test_authorized_request_passes_period_and_scene(monkeypatch):
     assert captured == {"period": "last_week", "scene": "all"}
 
 
+@pytest.mark.parametrize("suffix, method", [("", "get_staff_work_analysis"), ("/export", "export_staff_work_csv")])
+def test_rank_metric_is_forwarded_to_both_report_and_export(monkeypatch, suffix, method):
+    captured = {}
+
+    def read(**kwargs):
+        captured.update(kwargs)
+        return (b"rank,user\n1,a\n", 1) if suffix else {"staff": []}
+
+    monkeypatch.setattr(service, method, read)
+    response = _client().get(BASE + suffix, params={"rank_metric": "urged_defect_count", "scene": "final"})
+    assert response.status_code == 200
+    assert captured == {"period": "this_week", "scene": "final", "rank_metric": "urged_defect_count"}
+
+
 def test_scene_unavailable_contract_preserves_nulls(monkeypatch):
     monkeypatch.setattr(service, "get_staff_work_analysis", lambda **_kwargs: {
         "period": "this_week", "scene": "final", "summary": None, "staff": None,

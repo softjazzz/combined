@@ -60,6 +60,7 @@ def _raise_service_error(exc: Exception) -> None:
 @router.get("/staff-work")
 async def get_staff_work_analysis(
     request: Request,
+    rank_metric: str | None = Query(None),
     period: Literal["this_week", "last_week", "this_month"] = Query("this_week"),
     scene: Literal["all", "running", "final"] = Query("all"),
     institute_id: str | None = Query(None),
@@ -76,6 +77,8 @@ async def get_staff_work_analysis(
         task_id=task_id, start_date=start_date, end_date=end_date, as_of=as_of,
     )
     try:
+        if rank_metric is not None:
+            filters["rank_metric"] = rank_metric
         data = await run_in_threadpool(analysis_service.get_staff_work_analysis, **filters)
     except Exception as exc:
         _raise_service_error(exc)
@@ -85,6 +88,7 @@ async def get_staff_work_analysis(
 @router.get("/staff-work/export")
 async def export_staff_work_analysis(
     request: Request,
+    rank_metric: str | None = Query(None),
     period: Literal["this_week", "last_week", "this_month"] = Query("this_week"),
     scene: Literal["all", "running", "final"] = Query("all"),
     institute_id: str | None = Query(None),
@@ -101,6 +105,8 @@ async def export_staff_work_analysis(
         task_id=task_id, start_date=start_date, end_date=end_date, as_of=as_of,
     )
     try:
+        if rank_metric is not None:
+            filters["rank_metric"] = rank_metric
         content, row_count = await run_in_threadpool(
             analysis_service.export_staff_work_csv, **filters,
         )

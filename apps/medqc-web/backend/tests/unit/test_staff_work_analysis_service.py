@@ -8,6 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from app.database.models.defect_rectification import DefectRectification, DefectRectificationEvent
 
 from app.database.models.qc import (
     QCAppeal, QCDefect, QCDefectHistory, QCAppealReview, QCRecordReview, QCTask,
@@ -89,8 +90,10 @@ def appeal_row(appeal_id: str, scene: str | None) -> dict:
 def db(monkeypatch):
     engine = sa.create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+        execution_options={"schema_translate_map": {"qc": None}},
     )
-    for model in (QCDefect, QCDefectHistory, QCAppeal, QCAppealReview, QCRecordReview, SysUser):
+    for model in (QCDefect, QCDefectHistory, QCAppeal, QCAppealReview, QCRecordReview, SysUser,
+                  DefectRectification, DefectRectificationEvent):
         model.__table__.create(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(service, "SessionLocal", factory)
@@ -479,3 +482,78 @@ def test_task_filter_requires_verified_record_and_manual_create_identity(db):
     assert details["total"] == data["summary"]["record_review_count"]
     assert row_count == len(data["staff"])
     assert "workspace-reviewer" not in exported.decode("utf-8-sig")
+
+
+def test_four_averages_and_recheck_ranking_use_personal_distinct_cases(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            review("r1", "a", 1, stage="recheck", scene="final"),
+            review("r2", "a", 2, stage="recheck", scene="final"),
+            review("r3", "b", 3, scene="final"),
+        ])
+        session.execute(QCDefect.__table__.insert(), [defect("d1", "b", scene="final")])
+        session.execute(QCDefectHistory.__table__.insert(), [
+            history("c1", "d1", "manual_create", "b", 4),
+            history("j1", "d1", "manual_review_rejected", "a", 5),
+        ])
+    filters = {"period": "this_week", "scene": "final", "as_of": NOW}
+    data = service.get_staff_work_analysis(**filters, rank_metric="rechecked_case_count")
+    assert [row["user_id"] for row in data["staff"]] == ["a", "b"]
+    assert data["staff"][0]["rechecked_case_count"] == 1
+    assert data["summary"]["avg_reviewed_cases_per_active_staff"] == 1
+    assert data["summary"]["avg_rechecked_cases_per_active_staff"] == 0.5
+    assert data["summary"]["avg_manual_defects_per_active_staff"] == 0.5
+    assert data["summary"]["avg_rejected_defects_per_active_staff"] == 0.5
+    details = service.get_staff_work_details(user_id="a", metric="rechecked_case_count", **filters)
+    assert details["total"] == 1
+    content, _ = service.export_staff_work_csv(**filters, rank_metric="rechecked_case_count")
+    assert "复审病历数" in content.decode("utf-8-sig")
+
+
+@pytest.mark.parametrize("scene", ["running", "final"])
+def test_urge_ranking_freezes_source_and_deduplicates_per_actor_defect(db, scene):
+    with db.begin() as session:
+        session.execute(DefectRectification.__table__.insert(), {
+            "id": "fix", "institute_id": "A", "patient_id": "P", "visit_id": "V",
+            "scene": scene, "target_kind": "canonical_defect", "target_id": "rule-1",
+            "root_job_id": "job-1", "envelope_id": "env-1", "rule_set_key": "r",
+            "rule_set_version": "v1", "department": "冻结科室", "creator_id": "a",
+            "assignee_id": "doctor", "assignee_name": "医生", "requirement": "合成整改",
+            "status": "approved", "version": 4, "created_at": event_time(0), "updated_at": event_time(4),
+        })
+        session.execute(DefectRectificationEvent.__table__.insert(), [
+            {"id": key, "rectification_id": "fix", "action": "urge", "actor_id": actor,
+             "new_status": "pending", "version": index, "comment": "合成催办",
+             "recipient_id": "doctor", "created_at": event_time(index)}
+            for index, (key, actor) in enumerate([("u1", "a"), ("u2", "a"), ("u3", "b")], 1)
+        ])
+    filters = {"period": "this_week", "scene": scene, "as_of": NOW}
+    data = service.get_staff_work_analysis(**filters, rank_metric="urged_defect_count")
+    assert data["summary"]["urged_defect_count"] == 2
+    assert [row["urged_defect_count"] for row in data["staff"]] == [1, 1]
+    assert [row["rank"] for row in data["staff"]] == [1, 1]
+    details = service.get_staff_work_details(user_id="a", metric="urged_defect_count", **filters)
+    assert details["total"] == 1
+    assert details["items"][0]["scene"] == scene
+    assert details["items"][0]["department"] == "冻结科室"
+    other_scene = "running" if scene == "final" else "final"
+    assert service.get_staff_work_analysis(**{**filters, "scene": other_scene})["summary"]["urged_defect_count"] == 0
+    unavailable = service.get_staff_work_analysis(**filters, task_id="t", rank_metric="urged_defect_count")
+    assert unavailable["summary"]["urged_defect_count"] is None
+    content, _ = service.export_staff_work_csv(**filters, rank_metric="urged_defect_count")
+    assert "催办缺陷数" in content.decode("utf-8-sig")
+
+
+def test_missing_urge_source_is_unknown_in_summary_rank_details_and_export(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [review("r1", "a", 1)])
+        session.execute(sa.text("DROP TABLE qc_defect_rectification_events"))
+    filters = {"period": "this_week", "as_of": NOW}
+    data = service.get_staff_work_analysis(**filters, rank_metric="urged_defect_count")
+    assert data["summary"]["urged_defect_count"] is None
+    assert data["staff"][0]["rank"] is None
+    assert data["unavailable_metrics"]["urged_defect_count"] == "source_unavailable"
+    details = service.get_staff_work_details(user_id="a", metric="urged_defect_count", **filters)
+    assert details["items"] is None and details["total"] is None
+    content, _ = service.export_staff_work_csv(**filters, rank_metric="urged_defect_count")
+    assert "未知" in content.decode("utf-8-sig")

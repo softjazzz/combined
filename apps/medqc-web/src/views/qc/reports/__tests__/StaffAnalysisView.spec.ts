@@ -51,12 +51,16 @@ const allReport = {
     active_staff_count: 2, record_reviewer_count: 2, record_review_count: 4,
     reviewed_case_count: 2, initial_count: 3, recheck_count: 1,
     avg_record_reviews_per_active_staff: 2, avg_reviewed_cases_per_reviewer: 1.5,
+    avg_reviewed_cases_per_active_staff: 1.5, avg_rechecked_cases_per_active_staff: 0.5,
+    avg_manual_defects_per_active_staff: 0.5, avg_rejected_defects_per_active_staff: 0,
+    rechecked_case_count: 1, urged_defect_count: 1,
     manual_defect_created_count: 1, manual_review_approved_count: 1,
     manual_review_rejected_count: 0, appeal_approved_count: 0, appeal_rejected_count: 1,
   },
   staff: [{
     user_id: 'staff-1', name: '张质控', rank: 1,
     record_review_count: 3, reviewed_case_count: 2, initial_count: 2, recheck_count: 1,
+    rechecked_case_count: 1, urged_defect_count: 1,
     manual_defect_created_count: 1, manual_review_approved_count: 1,
     manual_review_rejected_count: 0, appeal_approved_count: 0, appeal_rejected_count: 1,
   }],
@@ -101,6 +105,18 @@ function deferred<T>() {
 }
 
 describe('StaffAnalysisView', () => {
+  it('展示四项人均并向服务端查询所选排名指标', async () => {
+    const wrapper = render()
+    await settle()
+    for (const label of ['人均质控病历', '人均复审病历', '人均人工缺陷', '人均驳回缺陷']) {
+      expect(wrapper.text()).toContain(label)
+    }
+    await wrapper.get('[data-testid="staff-rank-metric"]').setValue('urged_defect_count')
+    await settle()
+    expect(state.getReport).toHaveBeenLastCalledWith(
+      { period: 'this_month', scene: 'all' }, 'urged_defect_count',
+    )
+  })
   it('复用既有报告页面的人工质控tab入口', async () => {
     const wrapper = render()
     await settle()
@@ -197,9 +213,9 @@ describe('StaffAnalysisView', () => {
     const wrapper = render()
     await settle()
     const cells = wrapper.get('tbody tr').findAll('td')
+    expect(cells.at(-3)?.text()).toBe('未知')
     expect(cells.at(-2)?.text()).toBe('未知')
-    expect(cells.at(-1)?.text()).toBe('未知')
-    expect(wrapper.findAll('.metric-link')).toHaveLength(7)
+    expect(wrapper.findAll('.metric-link')).toHaveLength(9)
   })
 
   it('labels filter-unattributable appeal metrics without treating them as zero', async () => {

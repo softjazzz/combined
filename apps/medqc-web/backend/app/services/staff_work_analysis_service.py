@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..database.connection import SessionLocal
+from ..database.models.defect_rectification import DefectRectification, DefectRectificationEvent
 from ..database.models.qc import (
     QCAppeal,
     QCAppealReview,
@@ -36,9 +37,10 @@ from .performance_ranking_service import (
 )
 
 COUNT_FIELDS = (
-    "record_review_count", "reviewed_case_count", "initial_count", "recheck_count",
+    "record_review_count", "reviewed_case_count", "rechecked_case_count", "initial_count", "recheck_count",
     "manual_defect_created_count", "manual_review_approved_count",
     "manual_review_rejected_count", "appeal_approved_count", "appeal_rejected_count",
+    "urged_defect_count",
 )
 APPEAL_COUNT_FIELDS = ("appeal_approved_count", "appeal_rejected_count")
 DETAIL_METRICS = frozenset(COUNT_FIELDS)
@@ -107,6 +109,7 @@ class AnalysisEvents:
     task_options: list[dict[str, str | None]]
     filter_options_unavailable_reason: str | None
     context_unavailable_count: int
+    urge_unavailable_reason: str | None
 
 
 def _optional_text(value: Any) -> str | None:
@@ -375,6 +378,48 @@ def _load_events(
     department_loader: Callable[..., dict[tuple[str, str, str], str]],
 ) -> AnalysisEvents:
     events, task_source_unavailable = _load_base_events(session, scope)
+    urge_unavailable_reason = None
+    # 催办只取整改 owner 的缺陷事件，病例级沟通不冒充缺陷催办。
+    if scope.task_id is not None:
+        urge_unavailable_reason = FILTER_NOT_ATTRIBUTABLE
+    else:
+        try:
+            with session.begin_nested():
+                statement = select(DefectRectificationEvent, DefectRectification).join(
+                    DefectRectification,
+                    DefectRectification.id == DefectRectificationEvent.rectification_id,
+                ).where(
+                    DefectRectificationEvent.action == "urge",
+                    DefectRectificationEvent.created_at >= scope.window.utc_start,
+                    DefectRectificationEvent.created_at < scope.window.utc_end,
+                )
+                if scope.scene != SCENE_ALL:
+                    statement = statement.where(DefectRectification.scene == scope.scene)
+                urges = session.execute(statement).all()
+            seen_urges = set()
+            for entry, source in sorted(urges, key=lambda pair: (pair[0].created_at, pair[0].id)):
+                source_key = (
+                    source.institute_id, source.patient_id, source.visit_id, source.scene,
+                    source.target_kind, source.target_id, source.root_job_id, source.envelope_id,
+                )
+                if not entry.actor_id or not all(source_key):
+                    raise StaffWorkAnalysisUnavailable("缺陷催办事件归属不完整")
+                key = (entry.actor_id, *source_key)
+                if key in seen_urges:
+                    continue
+                seen_urges.add(key)
+                event = _event(
+                    event_id=entry.id, event_type="defect_urged", occurred_at=entry.created_at,
+                    user_id=entry.actor_id, institute_id=source.institute_id,
+                    patient_id=source.patient_id, visit_id=source.visit_id,
+                    defect_id=source.target_id,
+                )
+                event.update(scene=source.scene, target_kind=source.target_kind,
+                             root_job_id=source.root_job_id, envelope_id=source.envelope_id,
+                             department=source.department)
+                events.append(event)
+        except SQLAlchemyError:
+            urge_unavailable_reason = "source_unavailable"
     identities = {
         (event["institute_id"], event["patient_id"], event["visit_id"])
         for event in events
@@ -391,12 +436,15 @@ def _load_events(
         department_error = DEPARTMENT_SOURCE_UNAVAILABLE
 
     department_options = sorted(
-        {(identity[0], name) for identity, name in departments.items() if identity[0] and name},
+        {(identity[0], name) for identity, name in departments.items() if identity[0] and name}
+        | {(event["institute_id"], event["department"]) for event in events
+           if event["event_type"] == "defect_urged" and event["department"]},
         key=lambda item: (item[0], item[1]),
     )
     for event in events:
         identity = (event["institute_id"], event["patient_id"], event["visit_id"])
-        event["department"] = departments.get(identity)
+        if event["event_type"] != "defect_urged":
+            event["department"] = departments.get(identity)
 
     context_unavailable_count = 0
     if scope.task_id is not None:
@@ -442,12 +490,14 @@ def _load_events(
             department_error or (TASK_SOURCE_UNAVAILABLE if task_source_unavailable else None)
         ),
         context_unavailable_count=context_unavailable_count,
+        urge_unavailable_reason=urge_unavailable_reason,
     )
 
 
 def _aggregate(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     staff: dict[str, dict[str, Any]] = {}
     personal_cases: dict[str, set[tuple[str, str, str]]] = {}
+    rechecked_cases: dict[str, set[tuple[str, str, str]]] = {}
     global_cases: set[tuple[str, str, str]] = set()
     field_by_type = {
         "manual_defect_created": "manual_defect_created_count",
@@ -455,6 +505,7 @@ def _aggregate(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]
         "manual_review_rejected": "manual_review_rejected_count",
         "appeal_approved": "appeal_approved_count",
         "appeal_rejected": "appeal_rejected_count",
+        "defect_urged": "urged_defect_count",
     }
     for event in events:
         user_id = event["user_id"]
@@ -466,11 +517,14 @@ def _aggregate(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]
             row["initial_count" if event["stage"] == "initial" else "recheck_count"] += 1
             identity = (event["institute_id"], event["patient_id"], event["visit_id"])
             personal_cases.setdefault(user_id, set()).add(identity)
+            if event["stage"] == "recheck":
+                rechecked_cases.setdefault(user_id, set()).add(identity)
             global_cases.add(identity)
         else:
             row[field_by_type[event["event_type"]]] += 1
     for user_id, cases in personal_cases.items():
         staff[user_id]["reviewed_case_count"] = len(cases)
+        staff[user_id]["rechecked_case_count"] = len(rechecked_cases.get(user_id, set()))
     return list(staff.values()), len(global_cases)
 
 
@@ -490,6 +544,15 @@ def _summary(
         "active_staff_count": active_staff,
         "record_reviewer_count": active_reviewers,
         **totals,
+        **{
+            average: round(sum(row[field] for row in staff) / active_staff, 2) if active_staff else None
+            for average, field in (
+                ("avg_reviewed_cases_per_active_staff", "reviewed_case_count"),
+                ("avg_rechecked_cases_per_active_staff", "rechecked_case_count"),
+                ("avg_manual_defects_per_active_staff", "manual_defect_created_count"),
+                ("avg_rejected_defects_per_active_staff", "manual_review_rejected_count"),
+            )
+        },
         "avg_record_reviews_per_active_staff": (
             round(totals["record_review_count"] / active_staff, 2) if active_staff else None
         ),
@@ -502,9 +565,10 @@ def _summary(
 
 def _ordered_staff(
     session: Any, rows: list[dict[str, Any]], *, appeals_attributable: bool,
+    rank_metric: str = "record_review_count",
 ) -> list[dict[str, Any]]:
     names = _display_names(session, {row["user_id"] for row in rows})
-    ordered = sorted(rows, key=lambda row: (-row["record_review_count"], row["user_id"]))
+    ordered = sorted(rows, key=lambda row: (-row[rank_metric], row["user_id"]))
     prior_count: int | None = None
     rank = 0
     for index, row in enumerate(ordered, start=1):
@@ -512,9 +576,9 @@ def _ordered_staff(
         if not appeals_attributable:
             for field in APPEAL_COUNT_FIELDS:
                 row[field] = None
-        if row["record_review_count"] != prior_count:
+        if row[rank_metric] != prior_count:
             rank = index
-            prior_count = row["record_review_count"]
+            prior_count = row[rank_metric]
         row["rank"] = rank
     return ordered
 
@@ -549,7 +613,10 @@ def get_staff_work_analysis(
     start_date: str | None = None, end_date: str | None = None,
     as_of: str | datetime | None = None, now: datetime | None = None,
     department_loader: Callable[..., dict[tuple[str, str, str], str]] = load_scoring_departments,
+    rank_metric: str = "record_review_count",
 ) -> dict[str, Any]:
+    if rank_metric not in DETAIL_METRICS:
+        raise StaffWorkAnalysisInvalid("rank_metric 无效")
     scope = _scope(
         period=period, scene=scene, institute_id=institute_id, department=department,
         task_id=task_id, start_date=start_date, end_date=end_date, as_of=as_of, now=now,
@@ -557,7 +624,20 @@ def get_staff_work_analysis(
     session, loaded = _read(scope, department_loader=department_loader)
     try:
         rows, global_case_count = _aggregate(loaded.events)
-        ordered = _ordered_staff(session, rows, appeals_attributable=scope.appeals_attributable)
+        ordered = _ordered_staff(
+            session, rows, appeals_attributable=scope.appeals_attributable,
+            rank_metric=rank_metric,
+        )
+        summary = _summary(ordered, global_case_count, appeals_attributable=scope.appeals_attributable)
+        unavailable_metrics = _unavailable_metrics(scope)
+        if loaded.urge_unavailable_reason:
+            unavailable_metrics["urged_defect_count"] = loaded.urge_unavailable_reason
+            summary["urged_defect_count"] = None
+            for row in ordered:
+                row["urged_defect_count"] = None
+        if rank_metric in unavailable_metrics:
+            for row in ordered:
+                row["rank"] = None
     finally:
         session.close()
     return {
@@ -568,6 +648,7 @@ def get_staff_work_analysis(
             "end": scope.window.local_end.isoformat(),
         },
         "scene": scope.scene,
+        "rank_metric": rank_metric,
         "filters": scope.filters(),
         "filter_options": {
             "departments": loaded.department_options,
@@ -575,12 +656,10 @@ def get_staff_work_analysis(
         },
         "filter_options_unavailable_reason": loaded.filter_options_unavailable_reason,
         "context_unavailable_count": loaded.context_unavailable_count,
-        "summary": _summary(
-            ordered, global_case_count, appeals_attributable=scope.appeals_attributable,
-        ),
+        "summary": summary,
         "staff": ordered,
         "unavailable_reason": None,
-        "unavailable_metrics": _unavailable_metrics(scope),
+        "unavailable_metrics": unavailable_metrics,
     }
 
 
@@ -606,14 +685,22 @@ def get_staff_work_details(
         }
     session, loaded = _read(scope)
     session.close()
+    if metric == "urged_defect_count" and loaded.urge_unavailable_reason:
+        return {
+            "filters": scope.filters(), "metric": metric, "user_id": user,
+            "items": None, "total": None, "page": page, "page_size": page_size,
+            "unavailable_reason": loaded.urge_unavailable_reason,
+        }
     events = [event for event in loaded.events if event["user_id"] == user]
     if metric == "record_review_count":
         selected = [event for event in events if event["event_type"] == "record_review"]
-    elif metric == "reviewed_case_count":
+    elif metric in {"reviewed_case_count", "rechecked_case_count"}:
         selected = []
         seen = set()
         for event in sorted(events, key=lambda item: (item["occurred_at"], item["event_id"]), reverse=True):
             if event["event_type"] != "record_review":
+                continue
+            if metric == "rechecked_case_count" and event["stage"] != "recheck":
                 continue
             identity = (event["institute_id"], event["patient_id"], event["visit_id"])
             if identity not in seen:
@@ -632,6 +719,7 @@ def get_staff_work_details(
             "manual_review_rejected_count": "manual_review_rejected",
             "appeal_approved_count": "appeal_approved",
             "appeal_rejected_count": "appeal_rejected",
+            "urged_defect_count": "defect_urged",
         }
         selected = [event for event in events if event["event_type"] == type_by_metric[metric]]
     selected.sort(key=lambda item: (item["occurred_at"], item["event_id"]), reverse=True)
@@ -651,11 +739,13 @@ def get_staff_work_details(
 _EXPORT_HEADERS = (
     ("rank", "排名"), ("user_id", "人员ID"), ("name", "姓名"),
     ("record_review_count", "审核决定数"), ("reviewed_case_count", "审核病历数"),
+    ("rechecked_case_count", "复审病历数"),
     ("initial_count", "初审数"), ("recheck_count", "复审数"),
     ("manual_defect_created_count", "人工缺陷录入数"),
     ("manual_review_approved_count", "人工缺陷审核通过数"),
     ("manual_review_rejected_count", "人工缺陷审核驳回数"),
     ("appeal_approved_count", "申诉通过数"), ("appeal_rejected_count", "申诉驳回数"),
+    ("urged_defect_count", "催办缺陷数"),
 )
 
 

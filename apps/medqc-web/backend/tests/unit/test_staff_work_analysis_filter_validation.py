@@ -19,6 +19,7 @@ from app.services import staff_work_analysis_service as service
     {"start_date": "9999-12-31", "end_date": "9999-12-31"},
     {"as_of": "2026-09-28T10:00:00"},
     {"as_of": "not-a-date"},
+    {"rank_metric": "unsupported"},
 ])
 def test_invalid_filters_are_rejected_before_database_access(monkeypatch, filters):
     monkeypatch.setattr(service, "SessionLocal", None)

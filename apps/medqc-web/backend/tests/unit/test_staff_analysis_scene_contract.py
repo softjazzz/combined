@@ -8,9 +8,11 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from app.database.models.defect_rectification import DefectRectification, DefectRectificationEvent
 
 from app.database.models.qc import (
     QCAppealReview,
+    QCAppeal,
     QCDefect,
     QCDefectHistory,
     QCRecordReview,
@@ -113,11 +115,15 @@ def database(monkeypatch):
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
+        execution_options={"schema_translate_map": {"qc": None}},
     )
     for model in (
         QCDefect,
         QCDefectHistory,
         QCAppealReview,
+        QCAppeal,
+        DefectRectification,
+        DefectRectificationEvent,
         QCRecordReview,
         SysUser,
     ):
@@ -250,7 +256,7 @@ def test_manual_only_staff_affect_only_the_active_staff_average(database):
     assert summary["avg_reviewed_cases_per_reviewer"] == 1
 
 
-def test_scene_excludes_appeal_only_staff_and_marks_both_metrics_unknown(database):
+def test_scene_excludes_unfrozen_appeal_only_staff(database):
     with database.begin() as session:
         session.execute(
             QCRecordReview.__table__.insert(),
@@ -265,15 +271,12 @@ def test_scene_excludes_appeal_only_staff_and_marks_both_metrics_unknown(databas
     rows = _by_user(running)
     assert set(rows) == {"reviewer"}
     assert running["summary"]["active_staff_count"] == 1
-    assert running["summary"]["appeal_approved_count"] is None
-    assert running["summary"]["appeal_rejected_count"] is None
-    assert rows["reviewer"]["appeal_approved_count"] is None
-    assert rows["reviewer"]["appeal_rejected_count"] is None
+    assert running["summary"]["appeal_approved_count"] == 0
+    assert running["summary"]["appeal_rejected_count"] == 0
+    assert rows["reviewer"]["appeal_approved_count"] == 0
+    assert rows["reviewer"]["appeal_rejected_count"] == 0
     assert running["unavailable_reason"] is None
-    assert running["unavailable_metrics"] == {
-        "appeal_approved_count": "scene_not_attributable",
-        "appeal_rejected_count": "scene_not_attributable",
-    }
+    assert running["unavailable_metrics"] == {}
 
     all_report = _report()
     assert set(_by_user(all_report)) == {"reviewer", "appeal-only"}
@@ -290,9 +293,5 @@ def test_real_empty_window_preserves_null_averages(database, scene):
     assert report["summary"]["record_reviewer_count"] == 0
     assert report["summary"]["avg_record_reviews_per_active_staff"] is None
     assert report["summary"]["avg_reviewed_cases_per_reviewer"] is None
-    if scene == "all":
-        assert report["summary"]["appeal_approved_count"] == 0
-        assert report["summary"]["appeal_rejected_count"] == 0
-    else:
-        assert report["summary"]["appeal_approved_count"] is None
-        assert report["summary"]["appeal_rejected_count"] is None
+    assert report["summary"]["appeal_approved_count"] == 0
+    assert report["summary"]["appeal_rejected_count"] == 0

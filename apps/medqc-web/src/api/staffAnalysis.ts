@@ -4,11 +4,12 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 
 export type StaffAnalysisPeriod = 'this_week' | 'last_week' | 'this_month'
 export type StaffAnalysisScene = 'all' | 'running' | 'final'
-export type StaffAnalysisUnavailableMetric = 'appeal_approved_count' | 'appeal_rejected_count'
-export type StaffAnalysisUnavailableReason = 'scene_not_attributable' | 'filter_not_attributable'
+export type StaffAnalysisUnavailableMetric = 'appeal_approved_count' | 'appeal_rejected_count' | 'urged_defect_count'
+export type StaffAnalysisUnavailableReason = 'scene_not_attributable' | 'filter_not_attributable' | 'source_unavailable'
 export type StaffAnalysisMetric =
   | 'record_review_count'
   | 'reviewed_case_count'
+  | 'rechecked_case_count'
   | 'initial_count'
   | 'recheck_count'
   | 'manual_defect_created_count'
@@ -16,6 +17,7 @@ export type StaffAnalysisMetric =
   | 'manual_review_rejected_count'
   | 'appeal_approved_count'
   | 'appeal_rejected_count'
+  | 'urged_defect_count'
 
 export interface StaffAnalysisFilters {
   period: StaffAnalysisPeriod
@@ -42,6 +44,7 @@ export interface StaffAnalysisAppliedFilters {
 export interface StaffWorkCounts {
   record_review_count: number
   reviewed_case_count: number
+  rechecked_case_count: number
   initial_count: number
   recheck_count: number
   manual_defect_created_count: number
@@ -49,6 +52,7 @@ export interface StaffWorkCounts {
   manual_review_rejected_count: number
   appeal_approved_count: number | null
   appeal_rejected_count: number | null
+  urged_defect_count: number | null
 }
 
 export interface StaffWorkSummary extends StaffWorkCounts {
@@ -56,12 +60,16 @@ export interface StaffWorkSummary extends StaffWorkCounts {
   record_reviewer_count: number
   avg_record_reviews_per_active_staff: number | null
   avg_reviewed_cases_per_reviewer: number | null
+  avg_reviewed_cases_per_active_staff: number | null
+  avg_rechecked_cases_per_active_staff: number | null
+  avg_manual_defects_per_active_staff: number | null
+  avg_rejected_defects_per_active_staff: number | null
 }
 
 export interface StaffWorkRow extends StaffWorkCounts {
   user_id: string
   name: string | null
-  rank: number
+  rank: number | null
 }
 
 export interface StaffAnalysisFilterOptions {
@@ -70,6 +78,7 @@ export interface StaffAnalysisFilterOptions {
 }
 
 export interface StaffAnalysisReport {
+  rank_metric?: StaffAnalysisMetric
   period: StaffAnalysisPeriod
   period_label: string
   range: { start: string; end: string }
@@ -87,7 +96,7 @@ export interface StaffAnalysisReport {
 export interface StaffAnalysisDetailItem {
   event_id: string
   event_type: 'record_review' | 'manual_defect_created' | 'manual_review_approved'
-    | 'manual_review_rejected' | 'appeal_approved' | 'appeal_rejected'
+    | 'manual_review_rejected' | 'appeal_approved' | 'appeal_rejected' | 'defect_urged'
   occurred_at: string
   institute_id: string | null
   patient_id: string | null
@@ -144,8 +153,8 @@ async function read<T>(url: string, params: Record<string, string | number>): Pr
   }
 }
 
-export function getStaffAnalysis(filters: StaffAnalysisFilters): Promise<StaffAnalysisResult> {
-  return read<StaffAnalysisReport>(BASE, paramsOf(filters))
+export function getStaffAnalysis(filters: StaffAnalysisFilters, rankMetric?: StaffAnalysisMetric): Promise<StaffAnalysisResult> {
+  return read<StaffAnalysisReport>(BASE, { ...paramsOf(filters), ...(rankMetric ? { rank_metric: rankMetric } : {}) })
 }
 
 export function getStaffAnalysisDetails(
@@ -163,10 +172,11 @@ export function getStaffAnalysisDetails(
 
 export async function exportStaffAnalysis(
   filters: StaffAnalysisFilters,
+  rankMetric?: StaffAnalysisMetric,
 ): Promise<StaffAnalysisResult<Blob>> {
   try {
     const response = await ApiService.requestRaw<Blob>({
-      method: 'GET', url: `${BASE}/export`, params: paramsOf(filters), responseType: 'blob',
+      method: 'GET', url: `${BASE}/export`, params: { ...paramsOf(filters), ...(rankMetric ? { rank_metric: rankMetric } : {}) }, responseType: 'blob',
     })
     const contentType = headerValue(response.headers, 'content-type')
     if (response.status !== 200 || !(response.data instanceof Blob)

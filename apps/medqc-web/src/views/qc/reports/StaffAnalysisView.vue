@@ -114,13 +114,18 @@
           </div>
           <div class="metric-note">
             病历份数按机构、患者、就诊三坐标去重；审核次数按初审和复审动作计数。
-            全局病历份数独立去重，不等于各质控员份数之和。排名按审核次数排列。
+            全局病历份数独立去重，不等于各质控员份数之和。人均以有工作记录的人员数为分母。
           </div>
         </section>
 
         <section class="details" aria-label="人员明细">
           <div class="section-title">
             <h2>人员明细</h2>
+            <label class="filter-field">排名指标
+              <select v-model="rankMetric" data-testid="staff-rank-metric" @change="loadReport">
+                <option v-for="metric in rowMetrics" :key="metric.key" :value="metric.key">{{ metric.label }}</option>
+              </select>
+            </label>
             <span>共 {{ report.staff.length }} 人有工作记录</span>
           </div>
           <div v-if="report.staff.length" class="table-scroll">
@@ -134,7 +139,7 @@
               </thead>
               <tbody>
                 <tr v-for="staff in report.staff" :key="staff.user_id">
-                  <td class="rank">{{ staff.rank }}</td>
+                  <td class="rank">{{ staff.rank ?? '未知' }}</td>
                   <td class="name">{{ staff.name || staff.user_id }}</td>
                   <td v-for="metric in rowMetrics" :key="metric.key">
                     <button
@@ -230,6 +235,7 @@ const sceneOptions: Array<{ value: StaffAnalysisScene; label: string }> = [
 ]
 const rowMetrics: Array<{ key: StaffAnalysisMetric; label: string }> = [
   { key: 'reviewed_case_count', label: '病历份数' },
+  { key: 'rechecked_case_count', label: '复审病历份数' },
   { key: 'record_review_count', label: '审核次数' },
   { key: 'initial_count', label: '初审' },
   { key: 'recheck_count', label: '复审' },
@@ -238,7 +244,9 @@ const rowMetrics: Array<{ key: StaffAnalysisMetric; label: string }> = [
   { key: 'manual_review_rejected_count', label: '缺陷驳回' },
   { key: 'appeal_approved_count', label: '申诉通过' },
   { key: 'appeal_rejected_count', label: '申诉驳回' },
+  { key: 'urged_defect_count', label: '催办缺陷' },
 ]
+const rankMetric = ref<StaffAnalysisMetric>('record_review_count')
 
 const route = useRoute()
 const router = useRouter()
@@ -286,6 +294,10 @@ const summaryMetrics = computed(() => {
   const appealTotal = summary.appeal_approved_count === null || summary.appeal_rejected_count === null
     ? null : summary.appeal_approved_count + summary.appeal_rejected_count
   return [
+    { label: '人均质控病历', value: summary.avg_reviewed_cases_per_active_staff ?? '不可用', note: '个人三坐标去重病历合计 / 活跃人员数' },
+    { label: '人均复审病历', value: summary.avg_rechecked_cases_per_active_staff ?? '不可用', note: '个人三坐标去重复审病历合计 / 活跃人员数' },
+    { label: '人均人工缺陷', value: summary.avg_manual_defects_per_active_staff ?? '不可用', note: '人工创建缺陷数 / 活跃人员数' },
+    { label: '人均驳回缺陷', value: summary.avg_rejected_defects_per_active_staff ?? '不可用', note: '人工缺陷审核驳回数 / 活跃人员数' },
     { label: '审核病历', value: summary.reviewed_case_count, note: '全局三坐标去重' },
     { label: '审核次数', value: summary.record_review_count, note: `初审 ${summary.initial_count} · 复审 ${summary.recheck_count}` },
     { label: '人均审核病历', value: summary.avg_reviewed_cases_per_reviewer ?? '不可用', note: `各人病历数合计 / ${summary.record_reviewer_count} 名审核人员` },
@@ -369,7 +381,9 @@ async function loadReport(): Promise<void> {
   loading.value = true
   errorMessage.value = ''
   report.value = null
-  const result = await getStaffAnalysis({ ...appliedFilters.value })
+  const result = rankMetric.value === 'record_review_count'
+    ? await getStaffAnalysis({ ...appliedFilters.value })
+    : await getStaffAnalysis({ ...appliedFilters.value }, rankMetric.value)
   if (request !== reportRequest || identity !== authKey.value) return
   loading.value = false
   if (!result.success || !result.data) {
@@ -433,7 +447,9 @@ async function download(): Promise<void> {
   const filters = frozenFilters(currentReport.filters)
   const fingerprint = JSON.stringify(filters)
   exporting.value = true
-  const result = await exportStaffAnalysis(filters)
+  const result = currentReport.rank_metric && currentReport.rank_metric !== 'record_review_count'
+    ? await exportStaffAnalysis(filters, currentReport.rank_metric)
+    : await exportStaffAnalysis(filters)
   if (request !== exportRequest || identity !== authKey.value || fingerprint !== JSON.stringify(frozenFilters(currentReport.filters))) return
   exporting.value = false
   if (!result.success || !result.data) {
@@ -485,6 +501,7 @@ function eventTypeText(value: StaffAnalysisDetailItem['event_type']): string {
     record_review: '病历审核', manual_defect_created: '补录人工缺陷',
     manual_review_approved: '人工缺陷审核通过', manual_review_rejected: '人工缺陷驳回',
     appeal_approved: '申诉通过', appeal_rejected: '申诉驳回',
+    defect_urged: '缺陷催办',
   } as const)[value]
 }
 function identityText(item: StaffAnalysisDetailItem): string {
