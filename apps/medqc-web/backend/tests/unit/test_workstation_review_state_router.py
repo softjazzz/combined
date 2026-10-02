@@ -59,6 +59,27 @@ def test_without_review_state_service_call_is_unchanged(client, monkeypatch):
     assert "defect_workflow" not in captured
 
 
+def test_column_query_contract_is_forwarded(client, monkeypatch):
+    _authenticate(monkeypatch)
+    captured = _capture(monkeypatch)
+    response = client.get(URL, params={"column_filters": '{"grade":"乙"}', "column_sort": "score", "column_direction": "desc"}, headers=HEADERS)
+    assert response.status_code == 200
+    assert captured["column_filters"] == '{"grade":"乙"}'
+    assert captured["column_sort"] == "score" and captured["column_direction"] == "desc"
+
+
+@pytest.mark.parametrize("kind", ["invalid", "oversized"])
+def test_column_query_errors_are_422(client, monkeypatch, kind):
+    from app.services.medical_records.workstation_column_query import WorkstationColumnInvalid, WorkstationColumnRangeTooLarge
+    _authenticate(monkeypatch)
+    def broken(**kwargs):
+        raise (WorkstationColumnInvalid("列表排序列无效") if kind == "invalid" else WorkstationColumnRangeTooLarge("范围过大"))
+    monkeypatch.setattr("app.routers.medical_records_query.get_workstation_data", broken)
+    response = client.get(URL, params={"column_sort": "patient"}, headers=HEADERS)
+    assert response.status_code == 422
+    assert "Traceback" not in response.text
+
+
 def test_workflow_filter_forwards_persistent_subject_and_rejects_record_view(client, monkeypatch):
     _authenticate(monkeypatch)
     captured = _capture(monkeypatch)

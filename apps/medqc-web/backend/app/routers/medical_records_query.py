@@ -21,6 +21,7 @@ from ..services.medical_records.query_service import (
     list_medical_records,
 )
 from ..services.scoring_service import ScoringStandardSelectionInvalid
+from ..services.medical_records.workstation_column_query import WorkstationColumnRangeTooLarge, WorkstationColumnInvalid
 from ..services.medical_records.hospitalization_status_service import (
     default_hospitalization_status_service,
 )
@@ -149,6 +150,9 @@ async def get_workstation_data_api(
     score_min: Optional[float] = Query(None, description="最低得分（含）"),
     score_max: Optional[float] = Query(None, description="最高得分（含）"),
     result_view: Literal["records", "defects"] = Query("records", description="结果视图：病历或缺陷"),
+    column_filters: Optional[str] = Query(None, max_length=2000, description="列名到关键字的JSON对象"),
+    column_sort: Optional[str] = Query(None, max_length=30),
+    column_direction: Literal["asc", "desc"] = Query("asc"),
     defect_source: Optional[Literal["all", "auto", "manual"]] = Query(
         None, description="缺陷来源：全部、Canonical 自动缺陷、任务人工缺陷",
     ),
@@ -199,6 +203,9 @@ async def get_workstation_data_api(
             score_min=score_min,
             score_max=score_max,
             result_view=result_view,
+            column_filters=column_filters,
+            column_sort=column_sort,
+            column_direction=column_direction,
             defect_source=defect_source,
             has_defect=has_defect,
             **({"defect_workflow": defect_workflow,
@@ -206,6 +213,10 @@ async def get_workstation_data_api(
                if defect_workflow is not None else {}),
             **extra,
         )
+    except WorkstationColumnRangeTooLarge:
+        raise HTTPException(status_code=422, detail="列查询范围超过5000例，请缩小范围") from None
+    except WorkstationColumnInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except WorkstationReviewStateUnavailable:
         # 带审核状态筛选却读不到审核状态：不能返回未过滤结果，固定脱敏 503。
         raise HTTPException(status_code=503, detail=_REVIEW_STATE_UNAVAILABLE_DETAIL) from None

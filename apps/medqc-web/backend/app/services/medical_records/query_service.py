@@ -1528,7 +1528,17 @@ def get_workstation_data(
     defect_workflow: Optional[str] = None,
     defect_workflow_actor_id: Optional[str] = None,
     defect_workflow_loader: Optional[Callable[..., Any]] = None,
+    column_filters: Optional[str] = None,
+    column_sort: Optional[str] = None,
+    column_direction: str = "asc",
 ) -> dict[str, Any]:
+    from .workstation_column_query import (
+        MAX_COLUMN_RECORDS, WorkstationColumnRangeTooLarge, normalize_column_query, query_columns,
+    )
+    columns, sort_column, sort_direction = normalize_column_query(
+        result_view, column_filters, column_sort, column_direction,
+    )
+    has_column_query = bool(columns or sort_column)
     session_factory = session_factory or _session_factory
     review_state_filter = _normalize_review_state_filter(review_state)
     normalized_score_status, normalized_grade, normalized_score_min, normalized_score_max = (
@@ -1971,6 +1981,7 @@ def get_workstation_data(
                 raw_qc_summary_map = summary_loader(full_record_refs)
             latest_qc_summary_map = _normalize_latest_qc_summary_map(raw_qc_summary_map)
             qc_summary = _build_qc_summary(full_record_refs, latest_qc_summary_map)
+            defect_rows = query_columns(defect_rows, view="defects", filters=columns, sort=sort_column, direction=sort_direction)
             offset = (page - 1) * page_size
             page_rows = defect_rows[offset:offset + page_size]
             department_counts = Counter(
@@ -2096,6 +2107,8 @@ def get_workstation_data(
         total_real_filtered = q.count() + len(indexed_filtered_records)
         offset = (page - 1) * page_size
         demo_count = len(visible_demos)
+        if has_column_query and total_real_filtered + demo_count > MAX_COLUMN_RECORDS:
+            raise WorkstationColumnRangeTooLarge("列查询范围超过5000例，请缩小范围")
 
         demo_page: list[dict] = []
         real_offset = offset
@@ -2109,6 +2122,10 @@ def get_workstation_data(
             real_limit = max(page_size - consumed, 0)
             real_offset = max(offset - demo_count, 0)
 
+        if has_column_query:
+            demo_page = visible_demos
+            real_offset = 0
+            real_limit = total_real_filtered
         records = []
         if real_limit > 0:
             candidate_limit = real_offset + real_limit
@@ -2433,6 +2450,14 @@ def get_workstation_data(
             for item in demo_page
         ]
         items = demo_items + real_items
+        if has_column_query:
+            items = query_columns(items, view="records", filters=columns, sort=sort_column, direction=sort_direction)
+            total_count = len(items)
+            qc_summary = _build_qc_summary([
+                {"institute_id": row.get("instituteId"), "patient_id": row.get("patientId"), "visit_id": row.get("id")}
+                for row in items
+            ], latest_qc_summary_map)
+            items = items[offset:offset + page_size]
 
     return {
         "departments": departments,

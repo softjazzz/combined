@@ -2279,6 +2279,29 @@ def test_score_filter_uses_full_set_before_paging_and_keeps_total_summary_consis
     assert calls == [(["V1", "V2", "V3", "V4", "V5"], {"strict": True})]
 
 
+def test_column_query_filters_and_sorts_before_paging(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    result = get_workstation_data(
+        page=1, page_size=1, column_filters='{"grade":"乙"}', column_sort="score", column_direction="asc",
+        session_factory=workstation_session_factory, settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy, qc_projection_loader=_review_filter_projection_loader,
+        score_state_loader=_score_filter_loader([]),
+    )
+    assert [record["id"] for record in result["records"]] == ["V3"]
+    assert result["total"] == 1 and result["qc_summary"]["total_records"] == 1
+
+
+def test_column_query_refuses_oversized_scope(workstation_session_factory, monkeypatch):
+    from app.services.medical_records import workstation_column_query as columns
+    _insert_review_filter_records(workstation_session_factory)
+    monkeypatch.setattr(columns, "MAX_COLUMN_RECORDS", 2)
+    with pytest.raises(columns.WorkstationColumnRangeTooLarge):
+        get_workstation_data(
+            column_sort="patient", session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader, demo_policy=_no_demo_policy,
+        )
+
+
 @pytest.mark.parametrize(
     ("filters", "expected"),
     [
@@ -2416,6 +2439,19 @@ def test_defect_view_returns_owner_rows_then_pages_with_exact_total(workstation_
     assert len(result["defects"]) == 1
     assert result["defects"][0]["source"] in {"auto", "manual"}
     assert result["defects"][0]["institute_id"] == "H1"
+
+
+def test_defect_column_filter_and_sort_precede_paging(workstation_session_factory):
+    _insert_review_filter_records(workstation_session_factory)
+    result = get_workstation_data(
+        result_view="defects", defect_source="all", page=2, page_size=1,
+        column_filters='{"source":"自动"}', column_sort="rule", column_direction="desc",
+        session_factory=workstation_session_factory, settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy, qc_projection_loader=_review_filter_projection_loader,
+        defect_projection_loader=_defect_projection_loader, manual_defect_loader=_manual_defect_loader,
+    )
+    assert result["total"] == 2 and result["totalPages"] == 2
+    assert [row["rule_id"] for row in result["defects"]] == ["LX0609-001"]
 
 
 def test_workflow_filter_runs_before_exact_paging_and_default_does_not_read_owner(workstation_session_factory):
