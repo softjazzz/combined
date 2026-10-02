@@ -492,7 +492,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import {
@@ -572,6 +572,8 @@ const editTaskId = ref<string | null>(null)
 const scheduleDrawerVisible = ref(false)
 const exporting = ref(false)
 let exportRequestId = 0
+let deleteRequestId = 0
+let deleteDialog: ReturnType<typeof Modal.confirm> | null = null
 type AppliedTaskFilters = Omit<TaskListFilters, 'tab'>
 const appliedFilters = ref<AppliedTaskFilters>({})
 const authStore = useAuthStore()
@@ -814,6 +816,9 @@ watch(
     editDrawerVisible.value = false
     editTaskId.value = null
     scheduleDrawerVisible.value = false
+    deleteRequestId += 1
+    deleteDialog?.destroy()
+    deleteDialog = null
     exportRequestId += 1
     exporting.value = false
     listRequestId += 1
@@ -839,6 +844,9 @@ watch([selectedScene, searchKeyword, selectedStatus, selectedDepartment, dateRan
 })
 
 onBeforeUnmount(() => {
+  deleteRequestId += 1
+  deleteDialog?.destroy()
+  deleteDialog = null
   exportRequestId += 1
   listRequestId += 1
   statsRequestId += 1
@@ -1220,20 +1228,46 @@ const handleScheduleTaskDetail = (taskId: string) => {
   detailDrawerVisible.value = true
 }
 
-const handleDelete = async (record: DashboardTaskItem) => {
-  if (!isTaskCreator(record) || record.status !== 'draft') return
-  try {
-    const res = await deleteTask(record.id)
-    if (res.success) {
-      message.success('任务已删除')
-      await fetchTasks()
-      await fetchStats()
-    } else {
-      message.error(res.message || '删除失败')
-    }
-  } catch (e) {
-    message.error('删除失败')
-  }
+const handleDelete = (record: DashboardTaskItem) => {
+  if (deleteDialog || !isTaskCreator(record) || record.status !== 'draft') return
+  const actorId = authStore.user?.id
+  const taskId = record.id
+  const requestId = ++deleteRequestId
+  const current = () => requestId === deleteRequestId && actorId === authStore.user?.id
+  let submitted = false
+  deleteDialog = Modal.confirm({
+    title: '删除草稿任务',
+    content: `确认删除“${record.task_name}”？已有病例或运行历史的任务不能删除。`,
+    okText: '删除',
+    cancelText: '取消',
+    okButtonProps: { danger: true },
+    async onOk() {
+      if (!current() || submitted) return
+      submitted = true
+      try {
+        const res = await deleteTask(taskId)
+        if (!current()) return
+        const receipt = res.data
+        if (res.success && receipt && typeof receipt === 'object'
+          && 'task_id' in receipt && receipt.task_id === taskId) {
+          message.success('任务已删除')
+          await Promise.all([fetchTasks(), fetchStats()])
+        } else {
+          message.error(!res.success && res.message
+            ? res.message : '删除结果未确认，请刷新任务列表核对，勿盲目重试')
+        }
+      } catch {
+        if (current()) message.error('删除结果未确认，请刷新任务列表核对，勿盲目重试')
+      } finally {
+        if (current()) deleteDialog = null
+      }
+    },
+    onCancel() {
+      if (!current()) return
+      deleteRequestId += 1
+      deleteDialog = null
+    },
+  })
 }
 
 const handleTableChange = (pag: any) => {

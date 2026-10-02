@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   getTaskList: vi.fn(),
   getTaskStats: vi.fn(),
   deleteTask: vi.fn(),
+  confirmDelete: vi.fn(),
+  destroyDelete: vi.fn(),
   cancelTask: vi.fn(),
   assignTask: vi.fn(),
   assignTasksBatch: vi.fn(),
@@ -33,7 +35,7 @@ vi.mock('@/api/tasks', () => ({
   assignTasksBatch: mocks.assignTasksBatch,
   getTaskAssigneeOptions: mocks.getTaskAssigneeOptions,
 }))
-vi.mock('ant-design-vue', () => ({ message: mocks.message }))
+vi.mock('ant-design-vue', () => ({ message: mocks.message, Modal: { confirm: mocks.confirmDelete } }))
 vi.mock('@/api/taskExports', () => ({ exportTasksCsv: mocks.exportTasksCsv }))
 vi.mock('@ant-design/icons-vue', () => {
   const icon = { template: '<span />' }
@@ -257,6 +259,7 @@ async function mountView() {
 describe('AllTasksView 场景口径', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.confirmDelete.mockImplementation(() => ({ destroy: mocks.destroyDelete }))
     mocks.getTaskList.mockResolvedValue(listResponse)
     mocks.getTaskStats.mockResolvedValue(statsResponse())
     mocks.getTaskAssigneeOptions.mockResolvedValue({ success: true, data: [] })
@@ -290,6 +293,88 @@ describe('AllTasksView 场景口径', () => {
     expect(wrapper.find('[data-testid="task-row-delete"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="task-row-analysis"]').exists()).toBe(true)
     expect(mocks.deleteTask).not.toHaveBeenCalled()
+  })
+
+  it('删除先二次确认，重复确认仅提交一次并核对回执后刷新', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('待删除任务'))
+    mocks.deleteTask.mockResolvedValue({ success: true, data: { task_id: '待删除任务' } })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    expect(mocks.confirmDelete).toHaveBeenCalledTimes(1)
+    expect(mocks.deleteTask).not.toHaveBeenCalled()
+    const confirmation = mocks.confirmDelete.mock.calls[0][0] as { onOk: () => Promise<void> }
+    await Promise.all([confirmation.onOk(), confirmation.onOk()])
+    expect(mocks.deleteTask).toHaveBeenCalledTimes(1)
+    expect(mocks.deleteTask).toHaveBeenCalledWith('待删除任务')
+    expect(mocks.message.success).toHaveBeenCalledWith('任务已删除')
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(2)
+    expect(mocks.getTaskStats).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('取消删除不提交，也不能再使用旧确认回调', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('待删除任务'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    const confirmation = mocks.confirmDelete.mock.calls[0][0] as {
+      onOk: () => Promise<void>; onCancel: () => void
+    }
+    confirmation.onCancel()
+    await confirmation.onOk()
+    expect(mocks.deleteTask).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('确认前切换账号不能发送旧用户删除请求', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('待删除任务'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    const confirmation = mocks.confirmDelete.mock.calls[0][0] as { onOk: () => Promise<void> }
+    authState.user = { id: 'another-user' }
+    await confirmation.onOk()
+    expect(mocks.deleteTask).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('提交后切换账号丢弃迟到删除回执', async () => {
+    const pending = deferred<{ success: boolean; data: { task_id: string } }>()
+    mocks.getTaskList.mockResolvedValue(listWith('待删除任务'))
+    mocks.deleteTask.mockReturnValue(pending.promise)
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    const confirmation = mocks.confirmDelete.mock.calls[0][0] as { onOk: () => Promise<void> }
+    const operation = confirmation.onOk()
+    authState.user = { id: 'another-user' }
+    pending.resolve({ success: true, data: { task_id: '待删除任务' } })
+    await operation
+    expect(mocks.message.success).not.toHaveBeenCalled()
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('卸载销毁确认框，旧确认不再写入', async () => {
+    mocks.getTaskList.mockResolvedValue(listWith('待删除任务'))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    const confirmation = mocks.confirmDelete.mock.calls[0][0] as { onOk: () => Promise<void> }
+    wrapper.unmount()
+    expect(mocks.destroyDelete).toHaveBeenCalledTimes(1)
+    await confirmation.onOk()
+    expect(mocks.deleteTask).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, { task_id: 'other-task' }])('缺失或错任务回执不确认删除成功：%j', async (data) => {
+    mocks.getTaskList.mockResolvedValue(listWith('待删除任务'))
+    mocks.deleteTask.mockResolvedValue({ success: true, data, message: '成功' })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-row-delete"]').trigger('click')
+    const confirmation = mocks.confirmDelete.mock.calls[0][0] as { onOk: () => Promise<void> }
+    await confirmation.onOk()
+    expect(mocks.message.success).not.toHaveBeenCalled()
+    expect(mocks.message.error).toHaveBeenCalledWith('删除结果未确认，请刷新任务列表核对，勿盲目重试')
+    expect(mocks.getTaskList).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('编辑所选任务，只有当前抽屉保存才刷新列表', async () => {
