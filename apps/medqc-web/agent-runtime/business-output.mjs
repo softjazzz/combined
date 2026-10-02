@@ -196,6 +196,14 @@ export function businessModelValue(name, _args, value) {
         ]),
       ),
     }
+  if (name === 'read_action_capabilities')
+    return {
+      id: value.references?.[0]?.id,
+      available: value.available,
+      unavailable: value.unavailable,
+      read_note:
+        '只依据此表说明能办与不能办的事项。不可办理事项说明原因并建议走对应业务流程，不承诺代办，不说已分派、已通知或已写入病历。',
+    }
   if (name === 'preview_recheck' || name === 'preview_specialist_task')
     return {
       id: value.references?.[0]?.id,

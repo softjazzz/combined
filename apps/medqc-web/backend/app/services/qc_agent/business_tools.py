@@ -11,7 +11,7 @@ import httpx
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from app.services.qc_agent import business_action_flow, business_drafts, business_rule_validation
+from app.services.qc_agent import business_action_flow, business_capabilities, business_drafts, business_rule_validation
 from app.services.qc_agent.business_source_gaps import project_saved_source_gaps, source_gaps_card_text
 
 from .business_store import BusinessSessionStore
@@ -164,7 +164,12 @@ class QueryFollowups(ToolInput):
     page_size: int = Field(default=5, ge=1, le=10)
 
 
+class ReadCapabilities(ToolInput):
+    pass
+
+
 TOOL_DEFINITIONS = {
+    "read_action_capabilities": (ReadCapabilities, "用户要求分派、催办、通知、写回病历、订阅或询问助手能办什么时先调用。返回当前视图已接通与暂不可办理的事项及原因；不可办理的只说明原因和应走的业务流程，不承诺代办、不说已通知或已分派。"),
     "preview_recheck": (business_action_flow.PreviewRecheck, "仅医生视图：用户明确要求“再检查一下/复检”时，为当前病例的明确规则生成复检预览卡；规则原样使用用户点名的编号；用户在问题卡片上选中问题时rule_ids 可只写 @selected 一项，由系统替换为该问题规则；不擅自扩大到全部规则或自行编造编号。只生成预览，不执行；需用户在卡片上点击确认后才由正式任务服务创建任务。回答说明需确认、材料同步提示和预计范围，不称已复检。"),
     "preview_specialist_task": (business_action_flow.PreviewSpecialist, "仅管理视图：用户明确要求对已列出的病例做专项质控时生成任务预览卡。record_references只能用本会话统计下钻或提醒返回的病例来源（最多20份），rule_ids为用户明确的规则。只生成预览，不执行；需用户点击确认。回答不称任务已创建或完成。"),
     "read_draft_facts": (ReadIssue, "仅医生视图：用户明确要求参考补充文字时，按已查看的不合规问题 result_id（用户已选卡片时写 @selected）读取正式建议及来源：序号0为保存结论原文，1起为前5条保存证据摘录。不读取当前文书全文，不判定是否已整改。"),
@@ -427,6 +432,10 @@ class BusinessTools:
             raise HTTPException(404, "工具未提供")
         model, _ = TOOL_DEFINITIONS[name]
         params = model.model_validate(arguments)
+        if name == "read_action_capabilities":
+            result = business_capabilities.capabilities(metadata["context"]["view"])
+            self.store.bind(metadata["session_id"], user, result["references"][0]["id"], {"kind": "capabilities"})
+            return result
         if name in {"preview_recheck", "preview_specialist_task"}:
             if self.actions is None or self.access is None:
                 raise HTTPException(503, "操作预览服务未配置；本次未生成预览")

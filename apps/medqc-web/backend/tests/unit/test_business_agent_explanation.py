@@ -36,7 +36,7 @@ def test_runtime_bridge_limits_tools_on_create_restore_chat_and_reference(tmp_pa
     assert client.get(url).status_code == 200
     assert client.post(url + "/chat", json={"run_id": str(uuid4()), "message": "解释已选问题"}).status_code == 200
     assert client.get(url + "/references/guideline:unknown").status_code == 200
-    expected = {"read_saved_results", "read_saved_issue", "read_rule", "search_rules", "query_followups"}
+    expected = {"read_saved_results", "read_saved_issue", "read_rule", "search_rules", "query_followups", "read_action_capabilities"}
     if view == "manager":
         expected.add("query_statistics")
         expected.add("compare_statistics")

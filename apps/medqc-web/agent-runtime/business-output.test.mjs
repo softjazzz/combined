@@ -629,3 +629,18 @@ test('操作预览投影只给模型可执行性与提示，并要求用户确�
   assert.ok(!JSON.stringify(value).includes('secret-hash'))
   assert.ok(!JSON.stringify(value).includes('卡片全文'))
 })
+
+test('能力说明投影只给模型可办与不可办事项', () => {
+  const value = businessModelValue(
+    'read_action_capabilities',
+    {},
+    {
+      available: ['单病例复检预览'],
+      unavailable: [{ name: '催办', reason: '未接入真实通知投递' }],
+      references: [{ id: 'capabilities:doctor', text: '卡片全文' }],
+    },
+  )
+  assert.deepEqual(value.unavailable, [{ name: '催办', reason: '未接入真实通知投递' }])
+  assert.match(value.read_note, /不承诺代办/)
+  assert.ok(!JSON.stringify(value).includes('卡片全文'))
+})
