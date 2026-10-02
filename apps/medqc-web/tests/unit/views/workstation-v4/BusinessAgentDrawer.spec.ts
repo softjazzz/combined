@@ -582,6 +582,29 @@ describe('管理助手范围选择', () => {
     expect(wrapper.text()).toContain('异议反馈需本人填写理由并提交')
     wrapper.unmount()
   })
+  it('宿主声明画像面板时医生视图可请求打开同病例面板，管理视图不显示', async () => {
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="business-agent-open-profile"]').exists()).toBe(false)
+    await wrapper.setProps({ panels: ['profile'] })
+    await wrapper.get('[data-testid="business-agent-open-profile"]').trigger('click')
+    expect(wrapper.emitted('open-panel')).toEqual([
+      [{ panel: 'profile', institute_id: 'H', patient_id: 'P', visit_id: 'V' }],
+    ])
+    expect(wrapper.text()).toContain('打开面板不会自动分析')
+    wrapper.unmount()
+    const manager = mountDrawer({ view: 'manager', institute_id: 'H', department: 'D' })
+    await manager.setProps({ panels: ['profile'] })
+    await flushPromises()
+    expect(manager.find('[data-testid="business-agent-open-profile"]').exists()).toBe(false)
+    manager.unmount()
+  })
   it('操作预览仅在用户点击后确认，确认后展示正式任务状态且不能再次确认', async () => {
     const future = new Date(Date.now() + 600000).toISOString()
     const preview: BusinessAgentReference = {

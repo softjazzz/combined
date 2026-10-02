@@ -107,6 +107,7 @@
               @toggle-expand-all-sections="toggleExpandAllSections"
               @toggle-section="toggleConcatSection"
               @select-document="selectDocumentByKey"
+              @open-assist-panel="openAssistPanelFromAgent"
             />
           </template>
           <template #frontpage>
@@ -280,10 +281,7 @@
               <span class="paste-frontpage-preset__title">{{ preset.title }}</span>
               <span class="paste-frontpage-preset__subtitle">{{ preset.subtitle }}</span>
               <span class="paste-frontpage-preset__tags">
-                <span
-                  v-for="tag in preset.tags"
-                  :key="tag"
-                >{{ tag }}</span>
+                <span v-for="tag in preset.tags" :key="tag">{{ tag }}</span>
               </span>
             </button>
           </div>
@@ -296,10 +294,7 @@
           show-count
           :disabled="frontpageGenerating"
         />
-        <div
-          v-if="frontpageGenerating"
-          class="paste-frontpage-progress"
-        >
+        <div v-if="frontpageGenerating" class="paste-frontpage-progress">
           <FrontpageWorkspacePanel
             :generating="frontpageGenerating"
             :post-processing="frontpagePostProcessing"
@@ -322,9 +317,7 @@
           >
             清空
           </a-button>
-          <a-button @click="handlePasteFrontpageCancel">
-            取消
-          </a-button>
+          <a-button @click="handlePasteFrontpageCancel"> 取消 </a-button>
           <a-button
             type="primary"
             :loading="frontpageGenerating"
@@ -1440,6 +1433,25 @@ const aiProfileModalVisible = ref(false)
 const profileAnalyzed = ref(false)
 const profileAnalyzing = ref(false)
 const drgDetailModalVisible = ref(false)
+
+// 助手只能请求打开同一病例的既有画像面板；不自动运行分析。
+function openAssistPanelFromAgent(payload: {
+  panel: 'profile'
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}) {
+  const record = selectedRecord.value
+  if (
+    payload.panel !== 'profile' ||
+    !record ||
+    payload.institute_id !== record.instituteId ||
+    payload.patient_id !== record.patientId ||
+    payload.visit_id !== (record.visitId || record.id)
+  )
+    return
+  openAiProfilePanel()
+}
 
 function openAiProfilePanel() {
   profileAnalyzing.value = true

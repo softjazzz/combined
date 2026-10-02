@@ -60,6 +60,17 @@
         <p class="business-agent__muted" data-testid="business-agent-readonly-notice">
           支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
         </p>
+        <a-button
+          v-if="canOpenProfile"
+          type="link"
+          data-testid="business-agent-open-profile"
+          @click="openProfilePanel"
+        >
+          打开本病例画像面板
+        </a-button>
+        <p v-if="canOpenProfile" class="business-agent__muted">
+          打开面板不会自动分析；是否运行画像分析由您在面板中决定。
+        </p>
       </section>
       <a-alert v-if="accessError" type="warning" :message="accessError" show-icon />
       <div class="business-agent__shortcuts">
@@ -462,7 +473,36 @@ import {
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 
 const open = defineModel<boolean>('open', { default: false })
-const props = defineProps<{ userContext?: BusinessAgentContext; allowCaseSelection?: boolean }>()
+const props = defineProps<{
+  userContext?: BusinessAgentContext
+  allowCaseSelection?: boolean
+  // 宿主声明可打开的同病例辅助面板；未声明时不显示入口。
+  panels?: 'profile'[]
+}>()
+const emitPanel = defineEmits<{
+  'open-panel': [
+    payload: { panel: 'profile'; institute_id: string; patient_id: string; visit_id: string },
+  ]
+}>()
+const canOpenProfile = computed(
+  () =>
+    !!props.panels?.includes('profile') &&
+    activeView.value === 'doctor' &&
+    !!context.value.institute_id &&
+    !!context.value.patient_id &&
+    !!context.value.visit_id,
+)
+function openProfilePanel() {
+  const current = context.value
+  if (!canOpenProfile.value || !current.institute_id || !current.patient_id || !current.visit_id)
+    return
+  emitPanel('open-panel', {
+    panel: 'profile',
+    institute_id: current.institute_id,
+    patient_id: current.patient_id,
+    visit_id: current.visit_id,
+  })
+}
 const accessScope = ref<BusinessAgentAccess>()
 const accessLoading = ref(false)
 const accessError = ref('')

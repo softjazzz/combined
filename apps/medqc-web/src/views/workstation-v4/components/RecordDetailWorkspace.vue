@@ -8,7 +8,12 @@
     >
       查看质控问题与依据
     </a-button>
-    <BusinessAgentDrawer v-model:open="businessAgentOpen" :user-context="businessAgentContext" />
+    <BusinessAgentDrawer
+      v-model:open="businessAgentOpen"
+      :user-context="businessAgentContext"
+      :panels="['profile']"
+      @open-panel="forwardPanel"
+    />
     <div
       class="relative mx-auto w-full max-w-[1200px] rounded-[18px] border border-black/10 bg-white/86 px-1 py-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.045),0_2px_8px_rgba(0,0,0,0.035)] lg:px-1.5 lg:py-2"
     >
@@ -237,7 +242,28 @@ const emit = defineEmits<{
   'toggle-expand-all-sections': []
   'toggle-section': [index: number]
   'select-document': [key: string]
+  'open-assist-panel': [
+    payload: { panel: 'profile'; institute_id: string; patient_id: string; visit_id: string },
+  ]
 }>()
+
+// 只转发与当前详情病例三坐标完全一致的请求；切换患者后的迟到请求丢弃。
+function forwardPanel(payload: {
+  panel: 'profile'
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}) {
+  const current = businessAgentContext.value
+  if (
+    payload.institute_id !== current.institute_id ||
+    payload.patient_id !== current.patient_id ||
+    payload.visit_id !== current.visit_id
+  )
+    return
+  businessAgentOpen.value = false
+  emit('open-assist-panel', payload)
+}
 
 const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRViewer.vue'))
 </script>
