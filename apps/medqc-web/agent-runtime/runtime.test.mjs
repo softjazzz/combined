@@ -997,3 +997,61 @@ test('预览规则必须是用户点名的规则，@selected 取所选问题规�
     await g.runtime.close()
   }
 })
+
+test('数组参数被写成JSON字符串时按声明类型还原，内容不变', async () => {
+  const reportSpec = {
+    name: 'compose_quality_report',
+    description: '报告',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        sections: { type: 'array', items: { type: 'object' } },
+      },
+      additionalProperties: false,
+    },
+  }
+  const sections = [{ heading: '概况', text: '有效结果6份', source_ids: ['statistics:a'] }]
+  const f = await fixture(
+    [
+      {
+        tool: 'compose_quality_report',
+        args: { title: '报告', sections: '\n' + JSON.stringify(sections) },
+      },
+      { text: '已生成。' },
+    ],
+    { references: [] },
+    reportSpec,
+  )
+  try {
+    await f.runtime.chat(f.sessionId, f.body)
+    assert.deepEqual(f.callbacks[0].args, { title: '报告', sections })
+  } finally {
+    await f.runtime.close()
+  }
+})
+
+test('预算中止进行中的业务调用时给出明确原因而非对象字符串', async () => {
+  const f = await fixture([{ tool: 'read_saved_results' }, { text: '未完成。' }])
+  const runtime = await createRuntime({
+    root: f.root,
+    adapter: f.adapter,
+    model: 'synthetic',
+    budgetMs: 50,
+    fetchImpl: (_, options) =>
+      new Promise((_, reject) =>
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+          once: true,
+        }),
+      ),
+  })
+  try {
+    await runtime.create(f.sessionId, { context: f.context, tools: [spec] })
+    const turn = await runtime.chat(f.sessionId, f.body)
+    const events = JSON.stringify(turn)
+    assert.ok(!events.includes('[object Object]'))
+  } finally {
+    await runtime.close()
+    await f.runtime.close()
+  }
+})

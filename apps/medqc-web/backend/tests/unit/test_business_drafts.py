@@ -127,3 +127,9 @@ def test_tool_specs_expose_draft_only_to_doctor():
     from app.services.qc_agent.business_tools import tool_specs
     assert {"read_draft_facts", "compose_reference_draft"} <= {spec["name"] for spec in tool_specs("doctor")}
     assert not {"read_draft_facts", "compose_reference_draft"} & {spec["name"] for spec in tool_specs("manager")}
+
+
+def test_fact_dates_compare_by_value_not_leading_zero():
+    from app.services.qc_agent import business_drafts as drafts
+    evidence = drafts.draft_evidence([{"evidence_excerpt": "检查于2025-08-03完成", "record_time": "2025-08-03 08:05"}])
+    drafts.validate_segments([drafts.DraftSegment(kind="fact", text="2025年8月3日8时5分完成检查", evidence_positions=[1])], evidence)

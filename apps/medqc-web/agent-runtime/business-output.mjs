@@ -196,6 +196,13 @@ export function businessModelValue(name, _args, value) {
         ]),
       ),
     }
+  if (name === 'compose_quality_report')
+    return {
+      id: value.references?.[0]?.id,
+      report: select(value.report, ['title', 'length']),
+      read_note:
+        '报告草稿已通过数值来源校验并在卡片完整展示；回答只简述结构和数据限制，不复述全文，不称已导出、发布或代表正式结论。',
+    }
   if (name === 'search_icd_codes')
     return {
       id: value.references?.[0]?.id,
@@ -342,6 +349,7 @@ export function businessModelValue(name, _args, value) {
     const limit = value.statistics_page?.rule_limit || 5
     const records = (value.references || []).filter((ref) => ref.kind === 'record')
     return {
+      statistics_reference: (value.references || []).find((ref) => ref.kind === 'statistics')?.id,
       filters: value.filters,
       metric_owner: value.metric_owner,
       kpis: statistics.kpis,

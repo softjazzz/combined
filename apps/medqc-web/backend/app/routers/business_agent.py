@@ -17,6 +17,7 @@ from app.services.qc_agent.business_schemas import BusinessChat, BusinessContext
 from app.services.qc_agent.business_access import BusinessAccess, get_business_access
 from app.services.qc_agent import business_reads, business_documents, business_followups
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store
+from app.services.qc_agent.business_reports import ComposeReport
 from app.services.qc_agent.business_tools import BusinessTools, SearchCodes, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
 from app.services.qc_agent import business_feedback
 from app.services.qc_agent import business_action_flow, business_capabilities
@@ -24,6 +25,17 @@ from app.services.qc_agent.business_action_store import get_action_store
 from app.services.qc_agent.business_actions import ActionConfirmation
 
 router = APIRouter(prefix="/business", tags=["business-agent"])
+
+_CONTRACT_ERRORS = {"string_too_long": "超过长度上限", "string_too_short": "不能为空", "too_long": "条目过多", "too_short": "条目不足",
+                    "missing": "缺少必填项", "extra_forbidden": "不允许的字段", "list_type": "应为数组", "string_type": "应为文本",
+                    "int_type": "应为整数", "literal_error": "取值不在允许范围", "string_pattern_mismatch": "格式不符合要求",
+                    "less_than_equal": "超过上限", "greater_than_equal": "低于下限", "value_error": "取值不合法"}
+
+
+def contract_errors(exc: ValidationError) -> str:
+    """只给字段路径与错误类型，供模型改写参数；不回显参数值。"""
+    parts = [".".join(str(part) for part in error["loc"]) + " " + _CONTRACT_ERRORS.get(error["type"], "不符合要求") for error in exc.errors()[:3]]
+    return "；".join(parts) or "参数格式不符合要求"
 
 
 @router.get("/access")
@@ -153,7 +165,7 @@ async def run_tool(session_id: UUID, name: str, arguments: dict, request: Reques
         try:
             return await BusinessTools(store, client, access=access, actions=actions() if actions else None).execute(name, arguments, metadata, user)
         except ValidationError as exc:
-            raise HTTPException(422, "工具参数不符合当前业务合同") from exc
+            raise HTTPException(422, "工具参数不符合当前业务合同：" + contract_errors(exc)) from exc
 
 
 @router.get("/sessions/{session_id}/references/{reference_id:path}")
@@ -168,6 +180,13 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return (await tools.issue(metadata, reference_id))["references"][0]
             if binding["kind"] == "rule":
                 return (await tools.execute("read_rule", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
+            if binding["kind"] == "report":
+                try:
+                    return await tools.report_reference(metadata, user, ComposeReport.model_validate(binding["arguments"]), reference_id)
+                except HTTPException as exc:
+                    if exc.status_code == 422:
+                        raise HTTPException(409, "来源统计已更新，报告草稿中的数值不再与当前统计一致；请重新生成，本次未展示旧数值") from exc
+                    raise
             if binding["kind"] == "codes":
                 return (await tools.code_search(SearchCodes.model_validate(binding["arguments"]), reference_id))["references"][0]
             if binding["kind"] == "capabilities":

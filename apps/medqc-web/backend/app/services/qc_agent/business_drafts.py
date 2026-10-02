@@ -14,6 +14,11 @@ CONCLUSION_CHARS = 600
 DRAFT_NOTE = "参考草稿：仅依据本次已读取的保存证据摘录起草，不替代正式保存建议；复制或采用草稿不等于整改完成，需医生核对原文后在病历系统中自行书写。"
 PLACEHOLDER_PREFIX = "待医生补充"
 _NUMBER = re.compile(r"\d+")
+
+
+def _numbers(text: str) -> list[str]:
+    """按数值比较，08 与 8 视为同一数，避免日期格式差异误拒。"""
+    return [str(int(value)) for value in _NUMBER.findall(text)]
 _PLACEHOLDER_LEAD = re.compile(r"^(?:[\s（(【\[]*待医生补充[\s）)】\]：:，,]*)+")
 
 
@@ -69,9 +74,9 @@ def require_draftable(issue: dict) -> dict:
 def validate_segments(segments: list[DraftSegment], evidence: list[dict], suggestion: str | None = None) -> None:
     """事实段的数字（时间、剂量、次数等）须出现在所引来源中；待补充段只可出现正式建议或来源已有的数值（如时限）。"""
     by_position = {row["evidence_position"]: row for row in evidence}
-    known = set(_NUMBER.findall("\n".join(filter(None, [suggestion, *(row.get("excerpt") for row in evidence), *(row.get("record_time") for row in evidence)]))))
+    known = set(_numbers("\n".join(filter(None, [suggestion, *(row.get("excerpt") for row in evidence), *(row.get("record_time") for row in evidence)]))))
     for index, segment in enumerate(segments, 1):
-        numbers = _NUMBER.findall(segment.text)
+        numbers = _numbers(segment.text)
         if segment.kind == "placeholder":
             if any(number not in known for number in numbers):
                 raise HTTPException(422, f"第{index}段待补充内容含正式建议和来源均未出现的时间或数值，应留给医生核实后填写")
@@ -81,7 +86,7 @@ def validate_segments(segments: list[DraftSegment], evidence: list[dict], sugges
             raise HTTPException(422, f"第{index}段引用了不存在的证据序号")
         source = "\n".join(filter(None, [part for position in segment.evidence_positions
                                           for part in (by_position[position].get("excerpt"), by_position[position].get("record_time"))]))
-        source_numbers = set(_NUMBER.findall(source))
+        source_numbers = set(_numbers(source))
         unsupported = [number for number in numbers if number not in source_numbers]
         if unsupported:
             raise HTTPException(422, f"第{index}段含所引证据未出现的数值，请改为待医生补充")

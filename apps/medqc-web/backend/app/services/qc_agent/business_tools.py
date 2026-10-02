@@ -11,7 +11,7 @@ import httpx
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from app.services.qc_agent import business_action_flow, business_capabilities, business_drafts, business_rule_validation
+from app.services.qc_agent import business_action_flow, business_capabilities, business_drafts, business_reports, business_rule_validation
 from app.services.qc_agent.business_source_gaps import project_saved_source_gaps, source_gaps_card_text
 
 from .business_store import BusinessSessionStore
@@ -187,6 +187,7 @@ def code_card_text(params: SearchCodes, data: dict) -> str:
 
 
 TOOL_DEFINITIONS = {
+    "compose_quality_report": (business_reports.ComposeReport, "仅管理视图：用户要求科室质量分析报告时，先读取1次query_statistics（需要多期时再读1次trend_statistics），不必读取提醒或整改台账，然后直接起草。body为纯文本正文（≤1500字，建议600至1000字，可用换行分段；不写具体病例、住院号或患者信息，只写统计卡中的指标与规则计数），source_ids可省略（自动使用本会话已读统计/趋势来源）。正文数值只能用来源原值，不计算比例、差值或增长率，不写比较或因果结论；服务端校验，422时按原因改写一次。报告卡完整展示，回答只简述，不复述全文，不称已导出或发布。"),
     "search_icd_codes": (SearchCodes, "按疾病/手术名称、编码或拼音首字母检索 ICD 编码字典候选（ICD-10 医保版/国临版、ICD-9-CM-3）。只读字典，不读取病例，不判断本病例应编何码；回答只说明候选和版本差异，不称“应编为”或已应用。"),
     "read_action_capabilities": (ReadCapabilities, "用户要求分派、催办、通知、写回病历、订阅或询问助手能办什么时先调用。返回当前视图已接通与暂不可办理的事项及原因；不可办理的只说明原因和应走的业务流程，不承诺代办、不说已通知或已分派。"),
     "preview_recheck": (business_action_flow.PreviewRecheck, "仅医生视图：用户明确要求“再检查一下/复检”时，为当前病例的明确规则生成复检预览卡；规则原样使用用户点名的编号；用户在问题卡片上选中问题时rule_ids 可只写 @selected 一项，由系统替换为该问题规则；不擅自扩大到全部规则或自行编造编号。只生成预览，不执行；需用户在卡片上点击确认后才由正式任务服务创建任务。回答说明需确认、材料同步提示和预计范围，不称已复检。"),
@@ -211,7 +212,7 @@ def tool_specs(view: Literal["doctor", "manager"]) -> list[dict]:
             if (name not in MANAGER_ONLY or view == "manager") and (name not in DOCTOR_ONLY or view == "doctor")]
 
 
-MANAGER_ONLY = {"query_statistics", "compare_statistics", "trend_statistics", "read_rule_validation", "preview_specialist_task"}
+MANAGER_ONLY = {"query_statistics", "compare_statistics", "trend_statistics", "read_rule_validation", "preview_specialist_task", "compose_quality_report"}
 DOCTOR_ONLY = {"read_draft_facts", "compose_reference_draft", "preview_recheck"}
 
 
@@ -223,10 +224,15 @@ def statistics_text(payload: dict) -> str:
     def value(row, field):
         count = row.get(field)
         return "未提供" if count is None else count
+    statuses = payload.get("status_distribution")
+    status_rows = [row for row in statuses if isinstance(row, dict)] if isinstance(statuses, list) else []
+    labels = {"non_compliant": "不合规", "data_gap": "资料不足", "compliant": "合规", "not_applicable": "不适用",
+              "not_executed": "未执行", "uncertain": "不确定", "needs_review": "待复核", "technical_error": "技术错误"}
     return (
         f"范围病例 {value(kpis, 'scoped_record_total')} 份\n"
         f"已保存结果 {value(kpis, 'ready_record_total')} 份\n"
         f"结果不可用 {value(kpis, 'unavailable_result_total')} 份\n"
+        + ("规则结果条数：" + "；".join(f"{labels.get(row.get('status'), row.get('status') or '未提供状态')} {value(row, 'count')}" for row in status_rows) + "\n" if status_rows else "")
         + "\n".join(
             f"{row.get('rule_name') or row.get('rule_id') or '未提供规则名称'}：不合规 {value(row, 'non_compliant_count')}；"
             f"资料不足 {value(row, 'data_gap_count')}；已评价 {value(row, 'evaluated_count')}"
@@ -446,6 +452,32 @@ class BusinessTools:
         return {"id": draft_id, "kind": "draft", "rule_id": reference.get("rule_id"), "title": f"参考草稿 · {reference.get('title')}",
                 "locator": "参考草稿，不替代正式保存建议", "text": business_drafts.draft_card_text(reference, segments)}
 
+    async def report_sources(self, metadata: dict, user: dict, source_ids: list[str]) -> dict:
+        """按会话绑定重新读取统计/趋势来源；不接受会话外或其他类型来源。"""
+        sources = {}
+        for source_id in dict.fromkeys(source_ids):
+            binding = metadata["references"].get(source_id) or {}
+            if binding.get("kind") == "statistics":
+                data = await self.read_api("/api/v1/qc-agent/business/statistics", binding["filters"])
+                scope = statistics_scope_text(binding["filters"])
+                sources[source_id] = {"title": binding.get("title") or "当前范围质控统计", "locator": scope, "text": scope + statistics_text(data)}
+            elif binding.get("kind") == "trend":
+                reference = (await self.trend_statistics(TrendStatistics.model_validate(binding["arguments"]), metadata, user, source_id))["references"][0]
+                sources[source_id] = {key: reference[key] for key in ("title", "locator", "text")}
+        return sources
+
+    async def report_reference(self, metadata: dict, user: dict, params: "business_reports.ComposeReport", reference_id: str) -> dict:
+        if metadata["context"]["view"] != "manager":
+            raise HTTPException(422, "质量分析报告草稿仅在管理工作台提供")
+        if any(metadata["references"].get(source, {}).get("kind") not in {"statistics", "trend"} for source in params.source_ids):
+            raise HTTPException(422, "报告只能引用本会话已读取的统计或趋势来源")
+        # 未指定时使用本会话最近读取的统计/趋势来源，避免模型抄写长标识。
+        source_ids = params.source_ids or [key for key, value in metadata["references"].items() if value.get("kind") in {"statistics", "trend"}][-6:]
+        sources = await self.report_sources(metadata, user, source_ids)
+        business_reports.validate_report(params, sources)
+        return {"id": reference_id, "kind": "draft", "title": f"科室质量分析报告草稿 · {params.title}",
+                "locator": "报告草稿，数值来自本会话统计来源", "text": business_reports.report_card_text(params, sources)}
+
     async def code_search(self, params: SearchCodes, reference_id: str) -> dict:
         data = await self.read_api("/api/v1/icd/search", params.model_dump())
         items = data.get("items") or []
@@ -458,6 +490,11 @@ class BusinessTools:
             raise HTTPException(404, "工具未提供")
         model, _ = TOOL_DEFINITIONS[name]
         params = model.model_validate(arguments)
+        if name == "compose_quality_report":
+            reference_id = f"report:{uuid4()}"
+            reference = await self.report_reference(metadata, user, params, reference_id)
+            self.store.bind(metadata["session_id"], user, reference_id, {"kind": "report", "arguments": params.model_dump()})
+            return {"report": {"title": params.title, "length": len(params.body)}, "references": [reference]}
         if name == "search_icd_codes":
             reference_id = f"codes:{uuid4()}"
             result = await self.code_search(params, reference_id)
