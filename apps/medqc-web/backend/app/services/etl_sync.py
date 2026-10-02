@@ -2955,7 +2955,7 @@ def upsert_to_local(
 
         # 历史调用方会传入 table_config.key_fields；这套配置未包含 institute_id 等真实主键字段。
         # 为避免 ON CONFLICT 命中不到唯一约束，写入阶段必须以本地表真实主键为准。
-        effective_primary_keys = [str(key).strip().lower() for key in local_primary_keys if str(key).strip()]
+        effective_primary_keys = [str(key).strip() for key in local_primary_keys if str(key).strip()]
         for key in effective_primary_keys:
             _safe_identifier(key)
 
@@ -2968,7 +2968,10 @@ def upsert_to_local(
             )
 
         table_ident = f"{_safe_identifier(local_schema)}.{_safe_identifier(table_name)}"
-        existing_columns = set(local_columns)
+        local_column_names = {name.lower(): name for name in local_columns}
+        if len(local_column_names) != len(local_columns):
+            raise ValueError(f"表 {table_name} 存在大小写冲突列，无法唯一映射源字段")
+        existing_columns = set(local_column_names)
         if normalized_replace_refs:
             identity_columns = {"institute_id", "patient_id", "visit_id"}
             if not identity_columns.issubset(existing_columns):
@@ -2991,7 +2994,7 @@ def upsert_to_local(
             for k, v in normalized_record.items():
                 col_name = str(k).lower()
                 if col_name in existing_columns:
-                    filtered[col_name] = v
+                    filtered[local_column_names[col_name]] = v
 
             if not filtered:
                 skipped_empty_rows += 1
@@ -3044,12 +3047,15 @@ def upsert_to_local(
         for column_shape, rows_with_same_shape in grouped_rows.items():
             columns = list(column_shape)
             placeholders = ", ".join([f":{c}" for c in columns])
-            col_list = ", ".join([_safe_identifier(c) for c in columns])
-            conflict_clause = ", ".join([_safe_identifier(k) for k in effective_primary_keys])
+            # PG的混合大小写列须保留真实名称并引用，源字段归一不能丢弃QC签名。
+            quoted_columns = {c: f'"{_safe_identifier(c)}"' if c != c.lower() else _safe_identifier(c)
+                              for c in columns + effective_primary_keys}
+            col_list = ", ".join([quoted_columns[c] for c in columns])
+            conflict_clause = ", ".join([quoted_columns[k] for k in effective_primary_keys])
             update_cols = [c for c in columns if c not in effective_primary_keys]
             if update_cols:
                 update_set = ", ".join(
-                    [f"{_safe_identifier(c)} = EXCLUDED.{_safe_identifier(c)}" for c in update_cols]
+                    [f"{quoted_columns[c]} = EXCLUDED.{quoted_columns[c]}" for c in update_cols]
                 )
                 sql = (
                     f"INSERT INTO {table_ident} ({col_list}) VALUES ({placeholders}) "

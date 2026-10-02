@@ -996,6 +996,34 @@ def test_run_sync_scope_failure_does_not_expose_source_error(monkeypatch, caplog
     assert progress_events[-1]["stage"] == "scope_resolution"
 
 
+@pytest.mark.parametrize("source_field", ["QC_physician_sign", "qc_physician_sign"])
+def test_upsert_preserves_quoted_qc_signature_without_replacing_clinical_signature(monkeypatch, source_field):
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    test_engine = create_engine("sqlite:///:memory:")
+    try:
+        with test_engine.begin() as connection:
+            connection.execute(text('CREATE TABLE mr (institute_id TEXT, patient_id TEXT, visit_id TEXT, '
+                '"QC_physician_sign" TEXT, attending_physician_sign TEXT, '
+                'PRIMARY KEY (institute_id, patient_id, visit_id))'))
+        columns = ["institute_id", "patient_id", "visit_id", "QC_physician_sign", "attending_physician_sign"]
+        monkeypatch.setattr(etl_sync, "_get_local_table_meta", lambda *_: ("main", columns, columns[:3]))
+        with Session(test_engine) as session:
+            assert etl_sync.upsert_to_local(table_name="mr", primary_keys=columns[:3], session=session,
+                records=[{"institute_id":"SYN-A", "patient_id":"SYN-P", "visit_id":"SYN-V",
+                          source_field:"合成质控医师", "attending_physician_sign":"合成主治医师"}]) == 1
+            row = session.execute(text('SELECT "QC_physician_sign", attending_physician_sign FROM mr')).one()
+            assert tuple(row) == ("合成质控医师", "合成主治医师")
+            etl_sync.upsert_to_local(table_name="mr", primary_keys=columns[:3], session=session,
+                records=[{"institute_id":"SYN-A", "patient_id":"SYN-P", "visit_id":"SYN-V",
+                          source_field:"另一合成质控医师", "attending_physician_sign":"合成主治医师"}])
+            assert tuple(session.execute(text('SELECT "QC_physician_sign", attending_physician_sign FROM mr')).one()) == (
+                "另一合成质控医师", "合成主治医师")
+    finally:
+        test_engine.dispose()
+
+
 def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):
     executed_sql: list[str] = []
 

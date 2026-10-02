@@ -43,7 +43,7 @@ def save(path, value):
 
 
 class Probe:
-    def __init__(self, manifest, base_url, artifacts, execute=False, timeout=300):
+    def __init__(self, manifest, base_url, artifacts, execute=False, timeout=300, retry_failed_sync=False):
         require(manifest.get("database") == DATABASE, "manifest 必须指定本批隔离库")
         require(manifest.get("synthetic") is True, "manifest 必须声明纯合成来源")
         require(urlparse(base_url).hostname in {"127.0.0.1", "localhost", "::1"}, "仅支持本地隔离服务")
@@ -51,6 +51,7 @@ class Probe:
         self.path = artifacts
         self.execute = execute
         self.timeout = timeout
+        self.retry_failed_sync = retry_failed_sync
         self.http = httpx.Client(base_url=base_url.rstrip("/"), timeout=60, trust_env=False)
         self.state = json.loads(artifacts.read_text(encoding="utf-8")) if artifacts.exists() else {
             "database": DATABASE, "synthetic": True, "tasks": [], "jobs": [], "defects": [], "checks": [],
@@ -255,6 +256,16 @@ class Probe:
             sync = self.request("creator", "POST", prefix + "/sync-records")
             entry["sync_job_id"] = sync["job_id"]
             self.finish_creation()
+        sync_state = self.request("creator", "GET", prefix + f"/sync-records/{entry['sync_job_id']}")
+        if sync_state["status"] == "failed":
+            require(self.retry_failed_sync, "原同步已失败；修复前置后显式 --retry-failed-sync")
+            old_sync_id = entry["sync_job_id"]
+            self.begin_creation("task_sync_retry")
+            sync = self.request("creator", "POST", prefix + "/sync-records")
+            require(sync["job_id"] != old_sync_id, "重试未生成新的同步作业")
+            entry.setdefault("failed_sync_job_ids", []).append(old_sync_id)
+            entry["sync_job_id"] = sync["job_id"]
+            self.finish_creation()
         self.wait_sync(prefix, entry["sync_job_id"], len(records))
         if not entry.get("job_id"):
             self.begin_creation("assigned_run")
@@ -416,11 +427,12 @@ def main():
     parser.add_argument("--execute", action="store_true", help="显式执行已授权的正式写 API")
     parser.add_argument("--publish-version", action="store_true", help="先以正式草稿/发布API生产manifest.version_setup版本")
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument("--retry-failed-sync", action="store_true", help="前置修复后，保留失败作业并正式重试同步")
     args = parser.parse_args()
     probe = None
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
-        probe = Probe(manifest, args.base_url, args.artifacts, args.execute, args.timeout)
+        probe = Probe(manifest, args.base_url, args.artifacts, args.execute, args.timeout, args.retry_failed_sync)
         if args.publish_version:
             probe.publish_version()
         probe.preflight()
