@@ -76,6 +76,16 @@
             </a-select-option>
           </a-select>
 
+          <a-input
+            v-model:value="scoringStandard"
+            data-testid="outpatient-scoring-standard-filter"
+            aria-label="病历源评分标准"
+            placeholder="病历源评分标准（精确匹配）"
+            class="w-64 apple-input"
+            allow-clear
+            @press-enter="handleSearch"
+          />
+
           <a-range-picker
             v-model:value="dateRange"
             class="apple-picker !rounded-xl"
@@ -306,6 +316,7 @@ const exportLoading = ref(false)
 const appliedExportFilters = ref<OutpatientEmergencyRecordFilters | null>(null)
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
+const scoringStandard = ref('')
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 let suppressAutomaticFetch = false
@@ -386,6 +397,7 @@ const loadDepartments = async () => {
 const currentListFilters = (): OutpatientEmergencyRecordFilters => ({
   keyword: searchKeyword.value || undefined,
   department: selectedDepartment.value,
+  scoring_standard: scoringStandard.value.trim() || undefined,
   start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
   end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
   sort_field: 'visit_date',
@@ -476,6 +488,7 @@ const applyTemplateFilters = async (filters: OutpatientFilterSnapshot) => {
   suppressAutomaticFetch = true
   searchKeyword.value = filters.keyword || ''
   selectedDepartment.value = filters.department || undefined
+  scoringStandard.value = ''
   dateRange.value =
     filters.start_date && filters.end_date
       ? [dayjs(filters.start_date), dayjs(filters.end_date)]
@@ -569,7 +582,7 @@ watch([selectedDepartment, dateRange], () => {
   fetchRecords()
 })
 
-watch([searchKeyword, selectedDepartment, dateRange], invalidatePendingExport)
+watch([searchKeyword, selectedDepartment, dateRange, scoringStandard], invalidatePendingExport)
 
 watch(actorKey, () => {
   recordListRequestSequence += 1

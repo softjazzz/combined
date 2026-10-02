@@ -93,6 +93,30 @@ async def test_complete_source_paging_finds_match_after_old_5000_cutoff():
     assert len(database.reads) == 6
 
 
+@pytest.mark.asyncio
+async def test_scoring_standard_filter_is_exact_and_query_export_share_same_scope():
+    database = _Database([
+        {"id": "1", "record_type": "outpatient", "record_id": "SYN-O-1", "scoring_standard": "SYN-standard"},
+        {"id": "2", "record_type": "emergency", "record_id": "SYN-E-2", "score_standard": "SYN-standard"},
+        {"id": "3", "record_type": "outpatient", "record_id": "SYN-O-3", "scoring_standard": "SYN-standard-other"},
+        {"id": "4", "record_type": "outpatient", "record_id": "SYN-O-4"},
+        {"id": "5", "record_type": "inpatient", "record_id": "SYN-I-5", "scoring_standard": "SYN-standard"},
+    ])
+    filters = service.build_filter(scoring_standard=" SYN-standard ")
+    page = await service.query_records(
+        source=database, table_name="medical_records", filters=filters,
+        page=1, page_size=20, execute=_execute,
+    )
+    exported = await service.export_records(
+        source=database, table_name="medical_records", filters=filters, execute=_execute,
+    )
+    assert page.total == exported.row_count == 2
+    assert {row["record_id"] for row in page.items} == {"SYN-O-1", "SYN-E-2"}
+    csv_rows = list(csv.DictReader(io.StringIO(exported.content.decode("utf-8-sig"))))
+    assert {row["病历号"] for row in csv_rows} == {"SYN-O-1", "SYN-E-2"}
+    assert all(row["评分标准"] == "" for row in csv_rows)
+
+
 def test_filter_sort_keeps_unknown_null_and_date_filter_excludes_unknown_date():
     rows = [
         {"id": "2", "record_type": "emergency", "record_id": "E-2", "visit_date": ""},

@@ -87,12 +87,14 @@ function render() {
 type ViewState = {
   searchKeyword: string
   selectedDepartment?: string
+  scoringStandard: string
   appliedExportFilters: OutpatientEmergencyRecordFilters | null
   exportLoading: boolean
   listError: string
   records: Array<{ id: string }>
   handleSearch: () => void
   handleExportRecords: () => Promise<void>
+  resetFilters: () => void
 }
 
 describe('门急诊病历列表导出', () => {
@@ -124,6 +126,7 @@ describe('门急诊病历列表导出', () => {
     expect(state.exportRecords).toHaveBeenLastCalledWith({
       keyword: undefined,
       department: undefined,
+      scoring_standard: undefined,
       start_date: undefined,
       end_date: undefined,
       sort_field: 'visit_date',
@@ -136,6 +139,33 @@ describe('门急诊病历列表导出', () => {
     await view.handleExportRecords()
     expect(state.exportRecords).toHaveBeenLastCalledWith(expect.objectContaining({
       keyword: '尚未查询的关键词',
+    }))
+    wrapper.unmount()
+  })
+
+  it('评分标准精确条件进入查询和导出，未查询修改不污染快照，重置清空条件', async () => {
+    const wrapper = render()
+    await flush()
+    const view = wrapper.vm as unknown as ViewState
+    expect(wrapper.find('[data-testid="outpatient-scoring-standard-filter"]').exists()).toBe(true)
+    view.scoringStandard = ' 门急诊历史标准 '
+    view.handleSearch()
+    await flush()
+    expect(state.getList).toHaveBeenLastCalledWith(expect.objectContaining({
+      scoring_standard: '门急诊历史标准',
+      page: 1,
+    }))
+    view.scoringStandard = '未查询标准'
+    await flush()
+    await view.handleExportRecords()
+    expect(state.exportRecords).toHaveBeenLastCalledWith(expect.objectContaining({
+      scoring_standard: '门急诊历史标准',
+    }))
+    view.resetFilters()
+    await flush()
+    expect(view.scoringStandard).toBe('')
+    expect(state.getList).toHaveBeenLastCalledWith(expect.objectContaining({
+      scoring_standard: undefined,
     }))
     wrapper.unmount()
   })
