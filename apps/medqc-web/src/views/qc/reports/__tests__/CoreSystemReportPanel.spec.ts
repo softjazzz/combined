@@ -1,4 +1,5 @@
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CoreSystemReportPanel from '../CoreSystemReportPanel.vue'
 
@@ -7,7 +8,8 @@ vi.mock('@/api/coreSystemReports', () => ({
   getCoreSystemReport: mocks.get,
   exportCoreSystemReport: mocks.export,
 }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'synthetic-user' } }) }))
+const actor = reactive({ id: 'synthetic-user' })
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: actor }) }))
 const systems = Array.from({ length: 18 }, (_, index) => ({
   id: `CORE-${String(index + 1).padStart(2, '0')}`,
   name: `合成制度${index + 1}`,
@@ -74,10 +76,129 @@ const render = () =>
     },
   })
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
+  actor.id = 'synthetic-user'
   mocks.get.mockResolvedValue(result)
 })
 describe('核心制度专题页面', () => {
+  it('继承共有筛选白名单，上海草稿与API保持同一时间窗口，人工来源不混入', async () => {
+    const initialFilters = {
+      scene: 'final' as const,
+      department: '内科',
+      doctor: '合成医生',
+      completed_from: '2026-10-01T08:00',
+      completed_to: '2026-10-01T01:00:30.123Z',
+      defect_source: 'manual' as const,
+      institute_id: '禁止继承机构',
+      system_id: 'CORE-01',
+    }
+    const wrapper = mount(CoreSystemReportPanel, {
+      props: { initialFilters },
+      global: { stubs: { 'a-drawer': true } },
+    })
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      {
+        scene: 'final',
+        institute_id: '',
+        department: '内科',
+        doctor: '合成医生',
+        completed_from: '2026-10-01T00:00:00.000Z',
+        completed_to: '2026-10-01T01:00:30.123Z',
+        system_id: '',
+        rule_id: '',
+        problems_only: false,
+      },
+      1,
+    )
+    const dates = wrapper.findAll('input[type="datetime-local"]')
+    expect((dates[0].element as HTMLInputElement).value).toBe('2026-10-01T08:00')
+    expect((dates[1].element as HTMLInputElement).value).toBe('2026-10-01T09:00:30.123')
+    expect(wrapper.text()).toContain('人工缺陷未纳入')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.get.mock.calls[0][0]).toEqual(mocks.get.mock.lastCall?.[0])
+    wrapper.unmount()
+  })
+  it.each(['场景', '账号'])('切换%s重置继承筛选并忽略旧请求', async (change) => {
+    let old!: (value: typeof result) => void
+    mocks.get
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            old = resolve
+          }),
+      )
+      .mockResolvedValue({ ...result, items: [], total: 0 })
+    const wrapper = mount(CoreSystemReportPanel, {
+      props: { initialFilters: { scene: 'running', doctor: '已查询医生' } },
+      global: { stubs: { 'a-drawer': true } },
+    })
+    await wrapper.findAll('input')[0].setValue('旧机构')
+    if (change === '场景')
+      await wrapper.setProps({ initialFilters: { scene: 'final', doctor: '已查询医生' } })
+    else actor.id = 'new-user'
+    await flushPromises()
+    old(result)
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scene: change === '场景' ? 'final' : 'running',
+        doctor: '已查询医生',
+        institute_id: '',
+      }),
+      1,
+    )
+    expect(wrapper.text()).not.toContain('合成患者')
+    wrapper.unmount()
+  })
+  it('场景变更隔离旧导出，旧响应不释放新导出的忙状态', async () => {
+    let old!: (value: Blob) => void
+    let current!: (value: Blob) => void
+    mocks.export
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            old = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            current = resolve
+          }),
+      )
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:synthetic'),
+      revokeObjectURL: vi.fn(),
+    })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const wrapper = mount(CoreSystemReportPanel, {
+      props: { initialFilters: { scene: 'running' } },
+      global: { stubs: { 'a-drawer': true } },
+    })
+    try {
+      await flushPromises()
+      const button = wrapper.get('header button')
+      await button.trigger('click')
+      await wrapper.setProps({ initialFilters: { scene: 'final' } })
+      await flushPromises()
+      expect(button.attributes('disabled')).toBeUndefined()
+      await button.trigger('click')
+      old(new Blob(['old']))
+      await flushPromises()
+      expect(click).not.toHaveBeenCalled()
+      expect(button.attributes('disabled')).toBeDefined()
+      current(new Blob(['current']))
+      await flushPromises()
+      expect(click).toHaveBeenCalledTimes(1)
+      expect(button.attributes('disabled')).toBeUndefined()
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
   it('制度缺陷排行按确认条目计数，下钻和导出保持仅问题病例', async () => {
     mocks.get.mockResolvedValue({
       ...result,

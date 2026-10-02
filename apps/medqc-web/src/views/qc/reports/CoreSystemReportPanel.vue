@@ -2,7 +2,7 @@
   <section class="core-report" aria-label="核心制度专题报表">
     <header>
       <h2>18项核心制度专题</h2>
-      <button type="button" :disabled="!report || exporting" @click="download">
+      <button type="button" :disabled="!report || loading || exporting" @click="download">
         <Download :size="16" /> CSV
       </button>
     </header>
@@ -17,9 +17,11 @@
       <label>科室<input v-model.trim="draft.department" /></label>
       <label>主治医师<input v-model.trim="draft.doctor" /></label>
       <label
-        >完成时间起（上海）<input v-model="draft.completed_from" type="datetime-local"
+        >完成时间起（上海）<input v-model="draft.completed_from" type="datetime-local" step="any"
       /></label>
-      <label>完成时间止（上海）<input v-model="draft.completed_to" type="datetime-local" /></label>
+      <label
+        >完成时间止（上海）<input v-model="draft.completed_to" type="datetime-local" step="any"
+      /></label>
       <label
         >明细制度<select v-model="draft.system_id">
           <option value="">全部制度</option>
@@ -36,6 +38,7 @@
       <button type="submit"><Search :size="16" />查询</button
       ><button type="button" @click="reset"><RotateCcw :size="16" />重置</button>
     </form>
+    <p>仅统计自动质控确认问题，人工缺陷未纳入；多制度归属可重叠。</p>
     <div v-if="loading" role="status">正在读取核心制度报表…</div>
     <div v-else-if="error" role="alert">{{ error }}</div>
     <template v-else-if="report">
@@ -55,7 +58,6 @@
         </button>
       </div>
       <h3>核心制度缺陷 Top20</h3>
-      <p>仅统计自动质控确认问题；多制度归属可重叠，人工缺陷未纳入。</p>
       <div class="core-summary" data-testid="core-defect-top">
         <button
           v-for="system in report.top_systems || []"
@@ -239,18 +241,22 @@ import { ChevronLeft, ChevronRight, Download, RotateCcw, Search } from 'lucide-v
 import { useAuthStore } from '@/stores/auth'
 import { getCoreSystemReport, exportCoreSystemReport } from '@/api/coreSystemReports'
 import type { CoreReportFilters, CoreReportRow, CoreSystemReport } from '@/api/coreSystemReports'
+import type { RecordQualityFilters } from '@/api/qualityReports'
 
 const auth = useAuthStore()
-const props = withDefaults(defineProps<{ initialScene?: 'running' | 'final' }>(), {
-  initialScene: 'running',
-})
+const props = withDefaults(
+  defineProps<{ initialScene?: 'running' | 'final'; initialFilters?: RecordQualityFilters }>(),
+  {
+    initialScene: 'running',
+  },
+)
 const initial = () => ({
-  scene: props.initialScene,
+  scene: props.initialFilters?.scene ?? props.initialScene,
   institute_id: '',
-  department: '',
-  doctor: '',
-  completed_from: '',
-  completed_to: '',
+  department: props.initialFilters?.department ?? '',
+  doctor: props.initialFilters?.doctor ?? '',
+  completed_from: localDate(props.initialFilters?.completed_from),
+  completed_to: localDate(props.initialFilters?.completed_to),
   system_id: '',
   rule_id: '',
   problems_only: false,
@@ -270,6 +276,14 @@ const activeReference = computed(() =>
   report.value?.reference.systems.find((s) => s.id === selectedSystem.value),
 )
 let nonce = 0
+function localDate(value?: string) {
+  if (!value) return ''
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}+08:00`
+  const date = new Date(normalized)
+  return Number.isFinite(date.getTime())
+    ? new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, -1)
+    : value
+}
 function formatTime(value: string | null) {
   return value
     ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) +
@@ -291,6 +305,7 @@ function coverage(value: string) {
 }
 async function load(page = 1) {
   const ticket = ++nonce
+  exporting.value = false
   loading.value = true
   error.value = ''
   report.value = null
@@ -325,10 +340,14 @@ function apply() {
   void load()
 }
 function reset() {
+  nonce++
+  report.value = null
+  selectedCase.value = null
+  loading.value = false
+  exporting.value = false
   draft.value = initial()
-  applied = initial()
   selectedSystem.value = ''
-  void load()
+  apply()
 }
 function openSystem(id: string) {
   selectedSystem.value = id
@@ -342,6 +361,7 @@ function drill(id: string, rule = '', problemsOnly = applied.problems_only) {
   void load()
 }
 async function download() {
+  if (!report.value || loading.value || exporting.value) return
   const ticket = nonce
   exporting.value = true
   try {
@@ -356,19 +376,12 @@ async function download() {
   } catch (cause) {
     if (ticket === nonce) error.value = cause instanceof Error ? cause.message : '导出失败'
   } finally {
-    exporting.value = false
+    if (ticket === nonce) exporting.value = false
   }
 }
-watch(
-  () => auth.user?.id,
-  () => {
-    selectedSystem.value = ''
-    reset()
-  },
-)
-watch(() => props.initialScene, reset)
+watch(() => [props.initialFilters, props.initialScene, auth.user?.id], reset, { deep: true })
 onMounted(() => {
-  void load()
+  reset()
 })
 onBeforeUnmount(() => {
   nonce++

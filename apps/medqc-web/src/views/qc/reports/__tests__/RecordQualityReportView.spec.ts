@@ -78,13 +78,41 @@ function render() {
             '<div><button data-testid="core-tab" @click="$emit(\'update:activeKey\', \'core\')">核心制度</button><slot /></div>',
         },
         'a-tab-pane': { template: '<div />' },
-        CoreSystemReportPanel: { template: '<div data-testid="core-panel">制度专题</div>' },
+        CoreSystemReportPanel: {
+          name: 'CoreSystemReportPanel',
+          props: ['initialFilters'],
+          template: '<div data-testid="core-panel">制度专题</div>',
+        },
       },
     },
   })
 }
 
 describe('RecordQualityReportView', () => {
+  it('核心制度入口传已查询过滤，不传后续未查询的草稿', async () => {
+    const wrapper = render()
+    await flush()
+    await wrapper.get('#report-department').setValue('内科')
+    await wrapper.get('#report-doctor').setValue('合成医生')
+    await wrapper.get('#report-from').setValue('2026-10-01T08:00')
+    await wrapper.get('#report-to').setValue('2026-10-01T09:00')
+    await wrapper.get('#report-source').setValue('manual')
+    await wrapper.get('.filters .primary').trigger('click')
+    await flush()
+    await wrapper.get('#report-department').setValue('未查询科室')
+    await wrapper.get('[data-testid="core-tab"]').trigger('click')
+    expect(
+      wrapper.findComponent({ name: 'CoreSystemReportPanel' }).props('initialFilters'),
+    ).toEqual({
+      scene: 'running',
+      department: '内科',
+      doctor: '合成医生',
+      completed_from: '2026-10-01T08:00',
+      completed_to: '2026-10-01T09:00',
+      defect_source: 'manual',
+    })
+    wrapper.unmount()
+  })
   it('opens the core-system report from the existing report tab', async () => {
     const wrapper = render()
     await flush()

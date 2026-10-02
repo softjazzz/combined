@@ -4,7 +4,7 @@
       <a-tab-pane key="quality" tab="病历质量分析" />
       <a-tab-pane key="core" tab="18项核心制度" />
     </a-tabs>
-    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-scene="scene" />
+    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
     <div v-show="reportTab === 'quality'">
     <header class="page-head">
       <div>
