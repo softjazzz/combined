@@ -157,6 +157,7 @@ const label = ref<string>(),
 let generation = 0
 async function load(page = 1) {
   const token = ++generation
+  exporting.value = false
   busy.value = true
   error.value = ''
   selected.value = undefined
@@ -208,6 +209,7 @@ function selectLabel(value?: string) {
   void load(1)
 }
 async function download() {
+  if (!analysis.value || busy.value || exporting.value) return
   const token = generation
   exporting.value = true
   try {
@@ -271,7 +273,6 @@ watch(
     analysis.value = undefined
     selected.value = undefined
     label.value = undefined
-    exporting.value = false
     void load(1)
   },
   { immediate: true, deep: true },

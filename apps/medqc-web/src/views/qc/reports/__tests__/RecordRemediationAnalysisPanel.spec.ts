@@ -91,7 +91,7 @@ function make() {
   })
 }
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   actor.id = 'manager'
   mocks.read.mockImplementation(async (filters) => ({
     success: true,
@@ -100,6 +100,79 @@ beforeEach(() => {
   mocks.export.mockResolvedValue({ success: true, data: new Blob(['合成CSV']) })
 })
 describe('整改分析', () => {
+  it.each(
+    ['标签', '分页', '场景', '账号'].flatMap((change) =>
+      ['成功', '失败'].map((outcome) => ({ change, outcome })),
+    ),
+  )(
+    '导出在途切$change后可再次导出，旧请求$outcome不清除新请求状态',
+    async ({ change, outcome }) => {
+      let resolveOld!: (value: { success: boolean; data: Blob }) => void
+      let rejectOld!: (reason: Error) => void
+      let resolveNew!: (value: { success: boolean; data: Blob }) => void
+      mocks.export
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              resolveOld = resolve
+              rejectOld = reject
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveNew = resolve
+            }),
+        )
+      const wrapper = make()
+      try {
+        await flushPromises()
+        const button = wrapper.get('header button')
+        await button.trigger('click')
+        expect(button.attributes('disabled')).toBeDefined()
+        if (change === '标签') {
+          await wrapper.findAll('.label-counts button')[2].trigger('click')
+        } else if (change === '分页') {
+          await wrapper.get('.next').trigger('click')
+        } else if (change === '场景') {
+          await wrapper.setProps({ filters: { scene: 'final', defect_source: 'manual' } })
+        } else {
+          actor.id = 'other'
+        }
+        await flushPromises()
+        expect(button.attributes('disabled')).toBeUndefined()
+        await button.trigger('click')
+        expect(mocks.export).toHaveBeenCalledTimes(2)
+        expect(mocks.export).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            scene: change === '场景' ? 'final' : 'running',
+            label: change === '标签' ? 'clinical_appeal' : undefined,
+          }),
+        )
+        if (outcome === '成功') resolveOld({ success: true, data: new Blob(['旧导出']) })
+        else rejectOld(new Error('旧导出失败'))
+        await flushPromises()
+        expect(mocks.download).not.toHaveBeenCalled()
+        expect(wrapper.text()).not.toContain('旧导出失败')
+        expect(button.attributes('disabled')).toBeDefined()
+        const current = new Blob(['新导出'])
+        resolveNew({ success: true, data: current })
+        await flushPromises()
+        expect(mocks.download).toHaveBeenCalledTimes(1)
+        expect(mocks.download).toHaveBeenLastCalledWith(
+          current,
+          `整改分析_${change === '场景' ? 'final' : 'running'}.csv`,
+        )
+        expect(button.attributes('disabled')).toBeUndefined()
+        await button.trigger('click')
+        await flushPromises()
+        expect(mocks.download).toHaveBeenCalledTimes(2)
+        expect(button.attributes('disabled')).toBeUndefined()
+      } finally {
+        wrapper.unmount()
+      }
+    },
+  )
   it('七标签明确已确认且可重叠，历史带冻结来源和提交提醒证据', async () => {
     const wrapper = make()
     await flushPromises()
