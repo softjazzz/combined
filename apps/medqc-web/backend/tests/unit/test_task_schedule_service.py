@@ -106,6 +106,91 @@ def _create(factory) -> dict:
     )
 
 
+@pytest.mark.parametrize("state", ["active", "paused"])
+def test_validity_update_preserves_frozen_configuration_and_state(schedule_store, state):
+    _insert_source(schedule_store)
+    created = service.create_task_schedule(
+        actor_id="owner-1", is_manager=False, request_id="validity-create",
+        source_task_id="source-1", source_configuration_version=3, timing_config=_future_daily(),
+    )
+    if state == "paused":
+        created = service.pause_task_schedule(created["id"], actor_id="owner-1", is_manager=False, expected_version=1)
+    updated = service.update_task_schedule_validity(
+        created["id"], actor_id="owner-1", is_manager=False, expected_version=created["version"],
+        start_date="2030-01-01", end_date="2030-02-01", now_utc=datetime(2029, 12, 31),
+    )
+    assert updated["state"] == state
+    assert updated["version"] == created["version"] + 1
+    assert updated["timing_config"]["end_date"] == "2030-02-01"
+    assert updated["task_config"] == created["task_config"]
+    assert updated["last_fire_at"] == created["last_fire_at"]
+    assert updated["next_fire_at"] == "2030-01-01T01:00:00Z"
+    with pytest.raises(service.TaskScheduleConflict):
+        service.update_task_schedule_validity(
+            created["id"], actor_id="owner-1", is_manager=False, expected_version=created["version"],
+            start_date="2030-01-01", end_date=None,
+        )
+
+
+@pytest.mark.parametrize("action", ["pause", "resume", "cancel", "validity"])
+def test_manager_can_read_but_cannot_change_foreign_schedule(schedule_store, action):
+    created = _create(schedule_store)
+    assert service.get_task_schedule(created["id"], actor_id="manager", is_manager=True)["id"] == created["id"]
+    with pytest.raises(service.TaskScheduleForbidden):
+        service._transition(
+            created["id"], actor_id="manager", is_manager=True, expected_version=1, action=action,
+            validity={"start_date": "2030-01-01", "end_date": None},
+        )
+    assert service.get_task_schedule(created["id"], actor_id="owner-1")["version"] == 1
+
+
+@pytest.mark.parametrize("dates", [
+    {"start_date": "2030-02-01", "end_date": "2030-01-01"},
+    {"start_date": "2020-01-01", "end_date": "2020-02-01"},
+])
+def test_invalid_or_expired_validity_cannot_change_schedule(schedule_store, dates):
+    _insert_source(schedule_store)
+    created = service.create_task_schedule(
+        actor_id="owner-1", is_manager=False, request_id="validity-create",
+        source_task_id="source-1", source_configuration_version=3, timing_config=_future_daily(),
+    )
+    with pytest.raises(service.TaskScheduleInvalid):
+        service.update_task_schedule_validity(
+            created["id"], actor_id="owner-1", is_manager=False, expected_version=1, **dates,
+        )
+    assert service.get_task_schedule(created["id"], actor_id="owner-1")["version"] == 1
+
+
+def test_once_plan_has_no_recurring_validity(schedule_store):
+    created = _create(schedule_store)
+    with pytest.raises(service.TaskScheduleConflict):
+        service.update_task_schedule_validity(
+            created["id"], actor_id="owner-1", is_manager=False, expected_version=1,
+            start_date="2030-01-01", end_date=None,
+        )
+
+
+def test_manager_cannot_create_plan_from_foreign_draft(schedule_store):
+    _insert_source(schedule_store)
+    with pytest.raises(service.TaskScheduleForbidden):
+        service.create_task_schedule(
+            actor_id="manager", is_manager=True, request_id="foreign",
+            source_task_id="source-1", source_configuration_version=3, timing_config=_future_daily(),
+        )
+
+
+@pytest.mark.parametrize("state", ["ended", "cancelled"])
+def test_terminal_plan_cannot_change_validity(schedule_store, state):
+    created = _create(schedule_store)
+    with schedule_store.begin() as session:
+        session.execute(update(QCTaskSchedule).values(state=state, next_fire_at=None))
+    with pytest.raises(service.TaskScheduleConflict):
+        service.update_task_schedule_validity(
+            created["id"], actor_id="owner-1", is_manager=False, expected_version=1,
+            start_date="2030-01-01", end_date=None,
+        )
+
+
 def test_calculate_next_fire_is_strict_and_weekly_uses_shanghai_date() -> None:
     config = {
         "kind": "weekly",

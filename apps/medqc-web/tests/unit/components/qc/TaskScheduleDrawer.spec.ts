@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pauseTaskSchedule: vi.fn(),
   resumeTaskSchedule: vi.fn(),
   cancelTaskSchedule: vi.fn(),
+  updateTaskScheduleValidity: vi.fn(),
   message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   confirm: vi.fn(),
 }))
@@ -26,6 +27,7 @@ vi.mock('@/api/taskSchedules', () => ({
   pauseTaskSchedule: mocks.pauseTaskSchedule,
   resumeTaskSchedule: mocks.resumeTaskSchedule,
   cancelTaskSchedule: mocks.cancelTaskSchedule,
+  updateTaskScheduleValidity: mocks.updateTaskScheduleValidity,
 }))
 vi.mock('ant-design-vue', () => ({
   Modal: { confirm: mocks.confirm },
@@ -162,6 +164,7 @@ function mountDrawer(props: Record<string, unknown> = {}) {
         'a-form': { template: '<form><slot /></form>' },
         'a-form-item': { template: '<div><slot /></div>' },
         'a-input-number': true,
+        'a-modal': { name: 'a-modal', props: ['open'], emits: ['ok', 'cancel'], template: '<div v-if="open"><slot /></div>' },
         'a-pagination': true,
         'a-radio-button': { template: '<label><slot /></label>' },
         'a-radio-group': { template: '<div><slot /></div>' },
@@ -208,6 +211,65 @@ describe('TaskScheduleDrawer', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('修改有效期携带原版本并核实日期回执', async () => {
+    mocks.updateTaskScheduleValidity.mockResolvedValue({ success: true, data: {
+      ...schedule, version: 2,
+      timing_config: { ...schedule.timing_config, start_date: '2030-01-01', end_date: '2030-02-01' },
+    } })
+    const wrapper = mountDrawer({ sourceTaskId: null })
+    await flushPromises()
+    await wrapper.get('[data-testid="edit-schedule-validity"]').trigger('click')
+    wrapper.findComponent('[data-testid="validity-start"]').vm.$emit('update:value', dayjs('2030-01-01'))
+    wrapper.findComponent('[data-testid="validity-end"]').vm.$emit('update:value', dayjs('2030-02-01'))
+    await flushPromises()
+    wrapper.findComponent({ name: 'a-modal' }).vm.$emit('ok')
+    await flushPromises()
+    expect(mocks.updateTaskScheduleValidity).toHaveBeenCalledWith('schedule-1', {
+      version: 1, start_date: '2030-01-01', end_date: '2030-02-01',
+    })
+    expect(wrapper.emitted('changed')).toEqual([['schedule-1']])
+  })
+
+  it('有效期回执日期不符时不假成功并阻止重复更新', async () => {
+    mocks.updateTaskScheduleValidity.mockResolvedValue({ success: true, data: { ...schedule, version: 2 } })
+    const wrapper = mountDrawer({ sourceTaskId: null })
+    await flushPromises()
+    await wrapper.get('[data-testid="edit-schedule-validity"]').trigger('click')
+    wrapper.findComponent('[data-testid="validity-start"]').vm.$emit('update:value', dayjs('2030-01-01'))
+    await flushPromises()
+    wrapper.findComponent({ name: 'a-modal' }).vm.$emit('ok')
+    await flushPromises()
+    expect(mocks.message.success).not.toHaveBeenCalled()
+    expect(wrapper.emitted('changed')).toBeUndefined()
+    expect(wrapper.find('[data-testid="edit-schedule-validity"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('核对结果')
+  })
+
+  it('有效期更新的迟到成功不串入另一账号', async () => {
+    const pending = deferred<{ success: boolean; data: TaskScheduleResponse }>()
+    mocks.updateTaskScheduleValidity.mockReturnValue(pending.promise)
+    const wrapper = mountDrawer({ sourceTaskId: null })
+    await flushPromises()
+    await wrapper.get('[data-testid="edit-schedule-validity"]').trigger('click')
+    wrapper.findComponent({ name: 'a-modal' }).vm.$emit('ok')
+    await flushPromises()
+    authState.user = { id: 'u-2' }
+    await wrapper.setProps({ open: false })
+    pending.resolve({ success: true, data: { ...schedule, version: 2 } })
+    await flushPromises()
+    expect(wrapper.emitted('changed')).toBeUndefined()
+    expect(mocks.message.success).not.toHaveBeenCalled()
+  })
+
+  it('管理员读取他人计划时不提供修改或停止入口', async () => {
+    mocks.listTaskSchedules.mockResolvedValue({ success: true, data: { items: [{ ...schedule, owner_id: 'other' }], total: 1, page: 1, page_size: 20 } })
+    const wrapper = mountDrawer({ sourceTaskId: null })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="edit-schedule-validity"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('暂停')
+    expect(wrapper.text()).toContain('历史')
   })
 
   it.each(['record_type_count', 'record_type_ratio'] as const)(

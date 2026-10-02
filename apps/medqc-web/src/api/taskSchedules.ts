@@ -64,6 +64,11 @@ export interface TaskScheduleActionRequest {
   version: number
 }
 
+export interface TaskScheduleValidityRequest extends TaskScheduleActionRequest {
+  start_date: string
+  end_date: string | null
+}
+
 export interface TaskScheduleTaskConfig {
   date_range: null
   department_filter: string[]
@@ -451,6 +456,14 @@ export const resumeTaskSchedule = (scheduleId: string, data: TaskScheduleActionR
 
 export const cancelTaskSchedule = (scheduleId: string, data: TaskScheduleActionRequest) =>
   changeScheduleState(scheduleId, 'cancel', data)
+
+export function updateTaskScheduleValidity(scheduleId: string, data: TaskScheduleValidityRequest) {
+  return request(
+    { method: 'PATCH', url: `${BASE_URL}/${encodeURIComponent(scheduleId)}/validity`, data },
+    (value) => parseSchedule(value, scheduleId),
+    true,
+  )
+}
 
 export function listTaskScheduleRuns(
   scheduleId: string,

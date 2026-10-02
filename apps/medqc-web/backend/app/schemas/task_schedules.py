@@ -118,6 +118,17 @@ class TaskScheduleActionRequest(BaseModel):
     version: int = Field(..., ge=1)
 
 
+class TaskScheduleValidityRequest(TaskScheduleActionRequest):
+    start_date: date
+    end_date: date | None
+
+    @model_validator(mode="after")
+    def validate_date_order(self) -> "TaskScheduleValidityRequest":
+        if self.end_date is not None and self.end_date < self.start_date:
+            raise ValueError("结束日期不能早于开始日期")
+        return self
+
+
 class TaskScheduleTaskConfig(BaseModel):
     """从源草稿冻结的子任务创建配置；不包含动态病例或截止时间。"""
 

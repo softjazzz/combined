@@ -67,7 +67,16 @@
               >
                 <ReloadOutlined /> 核对结果
               </a-button>
-              <template v-else>
+              <template v-else-if="item.owner_id === authStore.user?.id">
+                <a-button
+                  v-if="item.timing_config.kind !== 'once' && (item.state === 'active' || item.state === 'paused')"
+                  size="small"
+                  data-testid="edit-schedule-validity"
+                  :disabled="writingIds.has(item.id)"
+                  @click="openValidity(item)"
+                >
+                  修改有效期
+                </a-button>
                 <a-button
                   v-if="item.state === 'active'"
                   size="small"
@@ -112,7 +121,27 @@
       />
     </template>
 
-    <template v-else>
+    <a-modal
+      :open="!!validitySchedule"
+      title="修改计划有效期"
+      :confirm-loading="validitySaving"
+      :mask-closable="!validitySaving"
+      :closable="!validitySaving"
+      :cancel-button-props="{ disabled: validitySaving }"
+      @ok="saveValidity"
+      @cancel="validitySchedule = null"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="生效日期" required>
+          <a-date-picker v-model:value="validityStart" :disabled="validitySaving" data-testid="validity-start" />
+        </a-form-item>
+        <a-form-item label="结束日期">
+          <a-date-picker v-model:value="validityEnd" :disabled="validitySaving" data-testid="validity-end" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <template v-if="viewMode === 'create'">
       <a-alert
         type="info"
         show-icon
@@ -335,6 +364,7 @@ import {
   listTaskSchedules,
   pauseTaskSchedule,
   resumeTaskSchedule,
+  updateTaskScheduleValidity,
   type TaskScheduleCreateRequest,
   type TaskScheduleResponse,
   type TaskScheduleState,
@@ -371,6 +401,10 @@ const total = ref(0)
 const uncertainIds = ref(new Set<string>())
 const writingIds = ref(new Set<string>())
 const checkingId = ref<string | null>(null)
+const validitySchedule = shallowRef<TaskScheduleResponse | null>(null)
+const validityStart = ref<Dayjs | null>(null)
+const validityEnd = ref<Dayjs | null>(null)
+const validitySaving = ref(false)
 const sourceTasks = ref<TaskItem[]>([])
 const sourceListLoading = ref(false)
 const sourceListError = ref('')
@@ -928,7 +962,57 @@ async function reconcileUnknownCreate() {
   message.success('已核实计划创建成功')
 }
 
+function openValidity(item: TaskScheduleResponse) {
+  if (item.owner_id !== authStore.user?.id || item.timing_config.kind === 'once'
+    || !['active', 'paused'].includes(item.state) || uncertainIds.value.has(item.id)
+    || writingIds.value.has(item.id)) return
+  validitySchedule.value = item
+  validityStart.value = dayjs(item.timing_config.start_date)
+  validityEnd.value = item.timing_config.end_date ? dayjs(item.timing_config.end_date) : null
+}
+
+async function saveValidity() {
+  const item = validitySchedule.value
+  const actorId = authStore.user?.id
+  if (!item || item.owner_id !== actorId || validitySaving.value || !validityStart.value) return
+  const start = validityStart.value.format('YYYY-MM-DD')
+  const end = validityEnd.value?.format('YYYY-MM-DD') ?? null
+  if (end && end < start) {
+    message.error('结束日期不能早于生效日期')
+    return
+  }
+  const sequence = lifecycleSequence
+  validitySaving.value = true
+  writingIds.value = new Set([...writingIds.value, item.id])
+  const result = await updateTaskScheduleValidity(item.id, { version: item.version, start_date: start, end_date: end })
+  if (sequence !== lifecycleSequence || actorId !== authStore.user?.id || !props.open) return
+  validitySaving.value = false
+  writingIds.value = new Set([...writingIds.value].filter((id) => id !== item.id))
+  const saved = result.data
+  if (!result.success || !saved) {
+    if (result.uncertain) {
+      uncertainIds.value = new Set([...uncertainIds.value, item.id])
+      validitySchedule.value = null
+    }
+    message.error(result.message || '有效期更新未确认，请核对计划后再操作')
+    return
+  }
+  if (saved.id !== item.id || saved.owner_id !== actorId || saved.version !== item.version + 1
+    || saved.state !== item.state || saved.timing_config.kind === 'once'
+    || saved.timing_config.start_date !== start || saved.timing_config.end_date !== end) {
+    uncertainIds.value = new Set([...uncertainIds.value, item.id])
+    validitySchedule.value = null
+    message.warning('有效期回执无法核实，请重新读取')
+    return
+  }
+  replaceSchedule(saved)
+  validitySchedule.value = null
+  emit('changed', saved.id)
+  message.success('计划有效期已更新')
+}
+
 function confirmAction(item: TaskScheduleResponse, action: 'pause' | 'resume' | 'cancel') {
+  if (item.owner_id !== authStore.user?.id) return
   if (uncertainIds.value.has(item.id) || writingIds.value.has(item.id)) return
   const actorId = authStore.user?.id?.trim()
   if (!actorId) return
@@ -1096,6 +1180,8 @@ watch(
     sourceListLoading.value = false
     sourceDetailLoading.value = false
     creating.value = false
+    validitySchedule.value = null
+    validitySaving.value = false
     detailLoading.value = false
     detailOpen.value = false
     runsOpen.value = false

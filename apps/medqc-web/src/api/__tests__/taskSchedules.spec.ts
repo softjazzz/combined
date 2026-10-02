@@ -11,6 +11,7 @@ import {
   retryTaskScheduleRun,
   resumeTaskSchedule,
   runTaskScheduleNow,
+  updateTaskScheduleValidity,
   type TaskScheduleCreateRequest,
   type TaskScheduleResponse,
   type TaskScheduleRunResponse,
@@ -86,6 +87,16 @@ const run: TaskScheduleRunResponse = {
 
 describe('task schedules API', () => {
   beforeEach(() => vi.restoreAllMocks())
+
+  it('有效期更新使用独立PATCH并保留版本及空结束日期', async () => {
+    const call = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue(response({ ...schedule, version: 2 }))
+    const result = await updateTaskScheduleValidity('schedule/1', { version: 1, start_date: '2030-01-01', end_date: null })
+    expect(call).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'PATCH', url: '/api/v1/task-schedules/schedule%2F1/validity',
+      data: { version: 1, start_date: '2030-01-01', end_date: null },
+    }))
+    expect(result.success).toBe(true)
+  })
 
   it.each(['record_type_count', 'record_type_ratio'] as const)(
     '类型计划%s回执保留完整类型配置与分配方式',

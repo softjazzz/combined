@@ -24,6 +24,37 @@ def _client(user: dict) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def test_validity_route_passes_actor_version_and_dates(monkeypatch):
+    calls = []
+    def save(schedule_id, **kwargs):
+        calls.append((schedule_id, kwargs))
+        result = _schedule()
+        result["version"] = 2
+        return result
+    monkeypatch.setattr(schedule_service, "update_task_schedule_validity", save)
+    response = _client({"id": "manager-1", "roles": ["qc_manager"]}).patch(
+        f"{BASE}/schedule-1/validity",
+        json={"version": 1, "start_date": "2030-01-01", "end_date": None},
+    )
+    assert response.status_code == 200
+    assert calls == [("schedule-1", {
+        "actor_id": "manager-1", "is_manager": True, "expected_version": 1,
+        "start_date": "2030-01-01", "end_date": None,
+    })]
+
+
+@pytest.mark.parametrize("payload", [
+    {"version": 1, "start_date": "2030-02-01", "end_date": "2030-01-01"},
+    {"version": 1, "start_date": "2030-01-01"},
+    {"version": 1, "start_date": "2030-01-01", "end_date": None, "owner_id": "other"},
+])
+def test_validity_route_rejects_invalid_contract(payload):
+    response = _client({"id": "manager-1", "roles": ["qc_manager"]}).patch(
+        f"{BASE}/schedule-1/validity", json=payload,
+    )
+    assert response.status_code == 422
+
+
 def _create_payload() -> dict:
     return {
         "source_task_id": "task-source",

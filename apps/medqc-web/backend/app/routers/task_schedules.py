@@ -20,6 +20,7 @@ from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
 from ..schemas.task_schedules import (
     TaskScheduleActionRequest,
+    TaskScheduleValidityRequest,
     TaskScheduleCreateRequest,
     TaskScheduleListResponse,
     TaskScheduleResponse,
@@ -316,6 +317,38 @@ async def _change_schedule_state(
         },
     )
     return success_response(data=data, message="定时计划状态已更新", trace_id=get_trace_id(request))
+
+
+@router.patch("/{schedule_id}/validity")
+@require_permission(ResourceType.QC_TASKS, PermissionAction.UPDATE)
+async def update_task_schedule_validity(
+    request: Request,
+    schedule_id: str,
+    payload: TaskScheduleValidityRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    _reject_unexpected_query(request, set())
+    actor_id, is_manager = _request_context(current_user)
+    try:
+        result = await run_in_threadpool(
+            task_schedule_service.update_task_schedule_validity,
+            schedule_id, actor_id=actor_id, is_manager=is_manager,
+            expected_version=payload.version,
+            start_date=payload.start_date.isoformat(),
+            end_date=payload.end_date.isoformat() if payload.end_date else None,
+        )
+        data = _schedule_data(result)
+    except task_schedule_service.TaskScheduleError as exc:
+        _raise_service_error(exc)
+    except Exception as exc:
+        _raise_unavailable(exc, event="task_schedule_validity_failed")
+    audit_event(
+        request, action="task_schedules.validity",
+        resource="/api/v1/task-schedules/{schedule_id}/validity", outcome="success",
+        current_user=current_user,
+        details={"schedule_id": data["id"], "previous_version": payload.version, "version": data["version"]},
+    )
+    return success_response(data=data, message="计划有效期已更新", trace_id=get_trace_id(request))
 
 
 @router.patch("/{schedule_id}/pause")

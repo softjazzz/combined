@@ -373,7 +373,7 @@ def _creation_replay(
     timing_json: str,
 ) -> dict[str, Any]:
     existing = row._mapping
-    _authorize_owner(existing.get("owner_id"), actor_id, is_manager)
+    _authorize_owner(existing.get("owner_id"), actor_id, False)
     if (
         existing.get("source_task_id") != source_task_id
         or existing.get("source_configuration_version") != source_configuration_version
@@ -443,7 +443,7 @@ def create_task_schedule(
                         timing_json=timing_json,
                     )
                 source = source._mapping
-                owner = _authorize_owner(source.get("creator_id"), actor, bool(is_manager))
+                owner = _authorize_owner(source.get("creator_id"), actor, False)
                 if source.get("task_type") != "one_time" or source.get("status") != "draft":
                     raise TaskScheduleInvalid("源任务必须是未启动的单次草稿")
                 if source.get("configuration_version") != expected_version:
@@ -607,6 +607,7 @@ def _transition(
     expected_version: int,
     action: str,
     now_utc: datetime | None = None,
+    validity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     schedule_id = _identifier(schedule_id, field="schedule_id")
     actor = _actor_id(actor_id)
@@ -620,12 +621,25 @@ def _transition(
                 if row is None:
                     raise TaskScheduleNotFound("定时计划不存在")
                 current = row._mapping
-                _authorize_owner(current.get("owner_id"), actor, bool(is_manager))
+                _authorize_owner(current.get("owner_id"), actor, False)
                 if current.get("version") != version:
                     raise TaskScheduleConflict("定时计划已被修改，请刷新后重试", code="version_conflict")
                 state = current.get("state")
                 values: dict[str, Any]
-                if action == "pause":
+                if action == "validity":
+                    if state not in {"active", "paused"}:
+                        raise TaskScheduleConflict("只有启用或暂停的计划可以修改有效期")
+                    timing = _json_load(current.get("timing_config_json"), field="时间配置")
+                    if timing.get("kind") == "once":
+                        raise TaskScheduleConflict("单次计划没有周期有效期")
+                    if validity is None or set(validity) != {"start_date", "end_date"}:
+                        raise TaskScheduleInvalid("有效期字段不完整")
+                    timing = _timing_dict({**timing, **validity})
+                    next_fire = calculate_next_fire(timing, after_utc=now)
+                    if next_fire is None:
+                        raise TaskScheduleInvalid("修改后的有效期没有未来执行时间")
+                    values = {"timing_config_json": _json_dump(timing), "next_fire_at": next_fire}
+                elif action == "pause":
                     if state != "active":
                         raise TaskScheduleConflict("只有启用中的计划可以暂停")
                     values = {"state": "paused"}
@@ -664,6 +678,23 @@ def _transition(
     except SQLAlchemyError as exc:
         raise TaskScheduleUnavailable("定时计划状态保存失败") from exc
     return result
+
+
+def update_task_schedule_validity(
+    schedule_id: str,
+    *,
+    actor_id: str,
+    is_manager: bool,
+    expected_version: int,
+    start_date: str,
+    end_date: str | None,
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    return _transition(
+        schedule_id, actor_id=actor_id, is_manager=is_manager,
+        expected_version=expected_version, action="validity", now_utc=now_utc,
+        validity={"start_date": start_date, "end_date": end_date},
+    )
 
 
 def pause_task_schedule(
