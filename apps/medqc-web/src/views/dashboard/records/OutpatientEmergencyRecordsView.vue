@@ -231,7 +231,7 @@
           @change="handleTableChange"
         >
           <template #bodyCell="{ column, record }">
-            <template v-if="['patient_name', 'department', 'visit_type', 'visit_date'].includes(column.key) && !record[column.key]">
+            <template v-if="typeof column.key === 'string' && ['patient_name', 'department', 'visit_type', 'visit_date'].includes(column.key) && !record[column.key]">
               <span class="text-slate-500">未知</span>
             </template>
             <template v-if="column.key === 'recordNumber'">
