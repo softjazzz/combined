@@ -67,6 +67,9 @@ def test_saved_issue_keeps_formal_facts_and_rejects_replaced_job(tmp_path):
             result_id = results["references"][0]["id"]
             metadata = store.get(metadata["session_id"], USER)
             issue = await tools.execute("read_saved_issue", {"result_id": result_id}, metadata, USER)
+            assert issue["rule_set_version"] == "synthetic-v1"
+            assert issue["job_id"] == "job-a"
+            assert "未读取" in issue["version_note"]
             assert issue["references"][0]["status"] == "non_compliant"
             assert issue["references"][0]["suggestion"] == "原保存建议"
             assert "合成原文摘录" in issue["references"][0]["text"]

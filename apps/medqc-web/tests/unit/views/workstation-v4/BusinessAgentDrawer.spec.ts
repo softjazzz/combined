@@ -5,11 +5,14 @@ import type {
   BusinessAgentAccess,
   BusinessEvidenceDocument,
   BusinessAgentContext,
+  BusinessAgentTurn,
 } from '@/api/businessAgent'
 
 const mocks = vi.hoisted(() => ({
   duplicateSecond: false,
   guideline: false,
+  managerDrilldown: false,
+  history: undefined as BusinessAgentTurn[] | undefined,
   access: vi.fn(),
   send: vi.fn(),
   activate: vi.fn(),
@@ -26,48 +29,62 @@ vi.mock('@/api/businessAgent', () => ({
 vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
   useBusinessAgent: () => ({
     sessionId: ref('session-a'),
-    turns: ref([
-      {
-        run_id: 'run-a',
-        question: '查看问题',
-        answer: '保存结论',
-        references: [
-          ...(mocks.guideline
-            ? [
-                {
-                  id: 'guideline:a:0',
-                  kind: 'guideline',
-                  title: '仅相关的规范',
-                  locator: '检索片段',
-                },
-              ]
-            : []),
-          { id: 'result-a', position: 1, kind: 'saved_result', title: '保存问题' },
-          { id: 'result-second', position: 2, kind: 'saved_result', title: '第二条保存问题' },
-          ...(mocks.duplicateSecond
-            ? [{ id: 'other-second', position: 2, kind: 'saved_result', title: '另一页第二条' }]
-            : []),
-        ],
-        result_pages: [
-          {
-            job_id: 'task-a',
-            record_ref: 'record-a',
-            statuses: ['non_compliant'],
-            page: 1,
-            page_size: 2,
-            total: 75,
-            matched_total: 4,
-            returned: 2,
-            has_more: true,
-            status_counts: { compliant: 71, non_compliant: 4 },
-            reference_ids: ['result-a', 'result-second'],
-          },
-        ],
-        elapsed_ms: 100,
-        tool_calls: 1,
-        status: 'completed',
-      },
-    ]),
+    turns: ref(
+      mocks.history || [
+        {
+          run_id: 'run-a',
+          question: '查看问题',
+          answer: '保存结论',
+          references: [
+            ...(mocks.guideline
+              ? [
+                  {
+                    id: 'guideline:a:0',
+                    kind: 'guideline',
+                    title: '仅相关的规范',
+                    locator: '检索片段',
+                  },
+                ]
+              : []),
+            ...(mocks.managerDrilldown
+              ? [
+                  { id: 'stats-a', kind: 'statistics', title: '原统计' },
+                  { id: 'record-a', kind: 'record', title: '下钻病例' },
+                ]
+              : []),
+            {
+              id: 'result-a',
+              position: 1,
+              kind: 'saved_result',
+              title: '保存问题',
+              rule_id: 'LX0609-01',
+            },
+            { id: 'result-second', position: 2, kind: 'saved_result', title: '第二条保存问题' },
+            ...(mocks.duplicateSecond
+              ? [{ id: 'other-second', position: 2, kind: 'saved_result', title: '另一页第二条' }]
+              : []),
+          ],
+          result_pages: [
+            {
+              job_id: 'task-a',
+              record_ref: 'record-a',
+              statuses: ['non_compliant'],
+              page: 1,
+              page_size: 2,
+              total: 75,
+              matched_total: 4,
+              returned: 2,
+              has_more: true,
+              status_counts: { compliant: 71, non_compliant: 4 },
+              reference_ids: ['result-a', 'result-second'],
+            },
+          ],
+          elapsed_ms: 100,
+          tool_calls: 1,
+          status: 'completed',
+        },
+      ],
+    ),
     loading: ref(false),
     error: ref(''),
     activate: mocks.activate,
@@ -112,8 +129,128 @@ describe('管理助手范围选择', () => {
     vi.resetAllMocks()
     mocks.duplicateSecond = false
     mocks.guideline = false
+    mocks.managerDrilldown = false
+    mocks.history = undefined
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
+  })
+  it('管理下钻可定位原汇总，不请求刷新；切换范围清除返回位置', async () => {
+    mocks.managerDrilldown = true
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(false)
+    wrapper.findComponent(Range).vm.$emit('update:value', ['2026-09-01', '2026-09-30'])
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '查看病例问题')!
+      .trigger('click')
+    await flushPromises()
+    const target = wrapper.get('[data-run-id="run-a"]').element as HTMLElement
+    target.scrollIntoView = vi.fn()
+    target.focus = vi.fn()
+    const before = mocks.send.mock.calls.length
+    await wrapper.get('[data-testid="business-agent-return-summary"]').trigger('click')
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+    expect(target.focus).toHaveBeenCalledWith({ preventScroll: true })
+    expect(mocks.send).toHaveBeenCalledTimes(before)
+    expect(mocks.reference).not.toHaveBeenCalled()
+    wrapper.findComponent(Range).vm.$emit('update:value', ['2026-08-01', '2026-08-31'])
+    await flushPromises()
+    expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('恢复已有统计历史后不猜测下钻位置，点击病例才建立返回锚点', async () => {
+    mocks.managerDrilldown = true
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.text()).toContain('原统计')
+    expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(false)
+    expect(mocks.send).not.toHaveBeenCalled()
+    expect(mocks.reference).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it.each([false, true])(
+    '混合历史回填按病例首次来源返回；缺原轮=%s时不猜汇总',
+    async (missingOrigin) => {
+      const references = (suffix: string): BusinessAgentTurn['references'] => [
+        { id: `stats-${suffix}`, kind: 'statistics', title: `统计${suffix}` },
+        { id: `record-${suffix}`, kind: 'record', title: `病例${suffix}` },
+      ]
+      const makeTurn = (
+        run_id: string,
+        refs: BusinessAgentTurn['references'],
+      ): BusinessAgentTurn => ({
+        run_id,
+        question: run_id,
+        answer: run_id,
+        references: refs,
+        elapsed_ms: 1,
+        tool_calls: 1,
+        status: 'completed',
+      })
+      mocks.history = [
+        ...(!missingOrigin ? [makeTurn('original-a', references('a'))] : []),
+        makeTurn('original-b', references('b')),
+        {
+          ...makeTurn('explanation', [...references('a'), ...references('b')]),
+          reference_scope: 'prior_turns',
+          tool_calls: 0,
+        },
+      ]
+      mocks.access.mockResolvedValue({
+        doctor_case_count: 0,
+        manager_scopes: [{ institute_id: 'H', department: 'D' }],
+      })
+      const wrapper = mountDrawer()
+      await flushPromises()
+      wrapper.findComponent(Range).vm.$emit('update:value', ['2026-09-01', '2026-09-30'])
+      await flushPromises()
+      const buttons = wrapper.get('[data-run-id="explanation"]').findAll('button')
+      await buttons.find((node) => node.text() === '查看病例问题')!.trigger('click')
+      await flushPromises()
+      const back = wrapper.find('[data-testid="business-agent-return-summary"]')
+      if (missingOrigin) expect(back.exists()).toBe(false)
+      else {
+        const target = wrapper.get('[data-run-id="original-a"]').element as HTMLElement
+        target.scrollIntoView = vi.fn()
+        target.focus = vi.fn()
+        await back.trigger('click')
+        expect(target.focus).toHaveBeenCalled()
+        expect(mocks.send).toHaveBeenCalledTimes(1)
+        expect(mocks.reference).not.toHaveBeenCalled()
+      }
+      wrapper.unmount()
+    },
+  )
+  it('规则未读取时按明确编号及保存引用发起查询', async () => {
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '查询这条规则')!
+      .trigger('click')
+    expect(mocks.send).toHaveBeenCalledWith(
+      '查询规则 LX0609-01 的当前目录口径、启用状态与依据',
+      expect.objectContaining({ view: 'doctor' }),
+      'result-a',
+    )
+    expect(wrapper.text()).toContain('查询将发起新一轮问答')
+    wrapper.unmount()
   })
   it('规范候选明确提示不等于回答依据，仍可读取原文', async () => {
     mocks.guideline = true

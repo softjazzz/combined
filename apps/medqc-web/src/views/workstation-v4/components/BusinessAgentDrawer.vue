@@ -57,6 +57,9 @@
           /></label>
         </template>
         <p class="business-agent__muted">读取已保存结果和规范依据，保留正式结论与建议。</p>
+        <p class="business-agent__muted" data-testid="business-agent-readonly-notice">
+          当前仅支持查询与解释；提醒、整改台账和反馈办理尚未接入，暂不可用。
+        </p>
       </section>
       <a-alert v-if="accessError" type="warning" :message="accessError" show-icon />
       <div class="business-agent__shortcuts">
@@ -69,11 +72,24 @@
           {{ prompt }}
         </a-button>
       </div>
-      <section aria-live="polite" data-testid="business-agent-turns">
+      <a-button
+        v-if="summaryRunId"
+        data-testid="business-agent-return-summary"
+        @click="returnToSummary"
+      >
+        返回同一汇总（当时结果，未刷新）
+      </a-button>
+      <section ref="turnsElement" aria-live="polite" data-testid="business-agent-turns">
         <p v-if="!turns.length" class="business-agent__muted">
           先查看问题，再追问原文与规则依据。管理问数沿用现有统计口径。
         </p>
-        <article v-for="turn in turns" :key="turn.run_id" class="business-agent__turn">
+        <article
+          v-for="turn in turns"
+          :key="turn.run_id"
+          :data-run-id="turn.run_id"
+          tabindex="-1"
+          class="business-agent__turn"
+        >
           <p class="business-agent__question">
             {{ turn.question }}
           </p>
@@ -133,8 +149,41 @@
             </p>
             <p v-if="reference.suggestion">建议：{{ reference.suggestion }}</p>
             <small v-if="reference.locator">{{ reference.locator }}</small>
+            <p v-if="reference.rule_id" class="business-agent__muted">
+              规则编号：{{ reference.rule_id }}
+            </p>
+            <template v-if="reference.kind === 'saved_result'">
+              <a-button
+                v-if="linkedRule(reference)"
+                type="link"
+                @click="openReference(linkedRule(reference)!.id)"
+              >
+                查看对应规则
+              </a-button>
+              <a-button
+                v-else-if="reference.rule_id"
+                type="link"
+                :disabled="loading || !canQuery"
+                @click="queryRule(reference)"
+              >
+                查询这条规则
+              </a-button>
+              <p v-if="!linkedRule(reference)" class="business-agent__muted">
+                {{
+                  reference.rule_id
+                    ? '尚未读取对应规则，查询将发起新一轮问答。'
+                    : '保存结果未提供规则编号，暂无法关联规则详情。'
+                }}
+              </p>
+            </template>
             <a-button type="link" @click="openReference(reference.id)">
-              查看{{ reference.kind === 'guideline' ? '规范原文' : '依据与详情' }}
+              查看{{
+                reference.kind === 'guideline'
+                  ? '规范原文'
+                  : reference.kind === 'rule'
+                    ? '规则详情'
+                    : '依据与详情'
+              }}
             </a-button>
             <a-button
               v-if="reference.kind === 'saved_result'"
@@ -148,7 +197,7 @@
               v-if="reference.kind === 'record'"
               type="link"
               :disabled="loading || !canQuery"
-              @click="explainReference(reference)"
+              @click="explainReference(reference, turn.run_id)"
             >
               查看病例问题
             </a-button>
@@ -198,6 +247,9 @@
       <p v-if="referenceLoading">正在读取原文…</p>
       <a-alert v-else-if="referenceError" type="warning" :message="referenceError" />
       <template v-else-if="selectedReference">
+        <p v-if="selectedReference.kind === 'rule'" class="business-agent__muted">
+          当前规则目录口径；历史执行版本与规范原文需另行核对。
+        </p>
         <template v-if="selectedReference.evidence?.length">
           <p>{{ selectedReference.conclusion }}</p>
           <p v-if="selectedReference.suggestion">建议：{{ selectedReference.suggestion }}</p>
@@ -418,9 +470,61 @@ async function submit() {
     await send(message, context.value, candidates[0].id)
   else await send(message, context.value)
 }
-async function explainReference(reference: BusinessAgentReference) {
+const turnsElement = ref<HTMLElement>()
+const summaryRunId = ref('')
+watch([context, sessionId], () => {
+  summaryRunId.value = ''
+})
+watch(
+  turns,
+  (value) => {
+    if (!value.some((turn) => turn.run_id === summaryRunId.value)) summaryRunId.value = ''
+  },
+  { deep: true },
+)
+function returnToSummary() {
+  const target = Array.from(
+    turnsElement.value?.querySelectorAll<HTMLElement>('[data-run-id]') || [],
+  ).find((element) => element.dataset.runId === summaryRunId.value)
+  target?.scrollIntoView({ block: 'start' })
+  target?.focus({ preventScroll: true })
+}
+async function queryRule(reference: BusinessAgentReference) {
+  if (!canQuery.value || !reference.rule_id) return
+  await send(
+    `查询规则 ${reference.rule_id} 的当前目录口径、启用状态与依据`,
+    context.value,
+    reference.id,
+  )
+}
+function linkedRule(reference: BusinessAgentReference) {
+  if (!reference.rule_id) return undefined
+  return turns.value
+    .flatMap((turn) => turn.references)
+    .find((item) => item.kind === 'rule' && item.rule_id === reference.rule_id)
+}
+async function explainReference(reference: BusinessAgentReference, sourceRunId?: string) {
   if (!canQuery.value) return
   error.value = ''
+  if (reference.kind === 'record' && context.value.view === 'manager') {
+    const sourceIndex = turns.value.findIndex((turn) => turn.run_id === sourceRunId)
+    const prior = turns.value.slice(0, sourceIndex + 1)
+    // 无工具追问会混合回填此前引用；返回位置只取首次真实读取该病例的轮次。
+    const originIndex = prior.findIndex(
+      (turn) =>
+        turn.reference_scope !== 'prior_turns' &&
+        turn.references.some((item) => item.kind === 'record' && item.id === reference.id),
+    )
+    const summary = prior
+      .slice(0, originIndex + 1)
+      .reverse()
+      .find(
+        (turn) =>
+          turn.reference_scope !== 'prior_turns' &&
+          turn.references.some((item) => item.kind === 'statistics'),
+      )
+    summaryRunId.value = summary?.run_id || ''
+  }
   await send(
     reference.kind === 'record'
       ? `查看“${reference.title}”的保存质控问题`

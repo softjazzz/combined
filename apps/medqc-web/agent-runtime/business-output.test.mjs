@@ -2,6 +2,72 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { businessModelValue } from './business-output.mjs'
 
+test('规则检索只给目录候选，保存版本与当前目录版本分别透传', () => {
+  const candidate = {
+    rule_id: 'LX0609-01-01-01',
+    title: '术前讨论',
+    implementation_status: 'active',
+    phase_status: '默认启用',
+    release_scope: 'default',
+  }
+  const search = businessModelValue(
+    'search_rules',
+    {},
+    {
+      rule_candidates: [{ ...candidate, policy_summary: '候选阶段不展开全部口径' }],
+      rule_search: {
+        query: '术前讨论',
+        page: 1,
+        page_size: 5,
+        total: 1,
+        returned: 1,
+        has_more: false,
+      },
+      catalog_version: 'current-v2',
+      scope_note: '当前目录候选，不是历史规则正文',
+      internal_debug: '不进入模型',
+    },
+  )
+  assert.deepEqual(search.rule_candidates, [candidate])
+  assert.equal(search.catalog_version, 'current-v2')
+  assert.equal(search.rule_search.total, 1)
+  assert.ok(!JSON.stringify(search).includes('不进入模型'))
+  const issue = businessModelValue(
+    'read_saved_issue',
+    {},
+    {
+      references: [{ id: 'saved:a', conclusion: '原保存结论' }],
+      job_id: 'job-a',
+      rule_set_version: 'saved-v1',
+      result_time: '2026-09-01T10:00:00+08:00',
+      version_note: '保存版本标签不能代替历史规则正文',
+    },
+  )
+  assert.equal(issue.rule_set_version, 'saved-v1')
+  assert.equal(issue.version_note, '保存版本标签不能代替历史规则正文')
+  const rule = businessModelValue(
+    'read_rule',
+    {},
+    {
+      rule: {
+        ...candidate,
+        active_criteria: ['published'],
+        pending_criteria: ['pending'],
+        pending_reason_code: 'pending_definition',
+      },
+      catalog_version: 'current-v2',
+      historical_definition_available: false,
+      references: [{ id: 'rule:current' }],
+      scope_note: '当前目录',
+    },
+  )
+  assert.equal(rule.catalog_version, 'current-v2')
+  assert.equal(rule.historical_definition_available, false)
+  assert.deepEqual(rule.rule.active_criteria, ['published'])
+  assert.deepEqual(rule.rule.pending_criteria, ['pending'])
+  assert.equal(issue.rule_set_version, 'saved-v1')
+})
+
 test('保存覆盖率不能冒充任务运行状态，摘录不冒充当前文书', () => {
   const canonical = {
     state: 'ready',

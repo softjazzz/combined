@@ -40,6 +40,19 @@ class ReadRule(ToolInput):
     rule_id: str = Field(pattern=r"^LX0609-\d{2}-\d{2}-\d{2}$")
 
 
+class SearchRules(ToolInput):
+    query: str = Field(min_length=1, max_length=100)
+    page: int = Field(default=1, ge=1, le=100)
+    page_size: int = Field(default=5, ge=1, le=10)
+
+    @model_validator(mode="after")
+    def require_keywords(self):
+        self.query = self.query.strip()
+        if not self.query:
+            raise ValueError("请输入规则名称或关键词")
+        return self
+
+
 class QueryStatistics(ToolInput):
     rule_id: str | None = Field(default=None, pattern=r"^LX0609-\d{2}-\d{2}-\d{2}$")
     result_status: str | None = Field(default=None, pattern=r"^(non_compliant|data_gap|compliant|not_applicable|not_executed|uncertain)$")
@@ -51,6 +64,7 @@ TOOL_DEFINITIONS = {
     "read_saved_results": (ReadResults, "分页读取正式保存结果。statuses为空查全类别；仅列不合规时指定non_compliant。每页最多10条，index和saved_text均在卡片完整展示结论建议，模型只收到索引；列清单无需另查证据或规则。追问具体原因或依据才用read_saved_issue。后续页带已看到的expected_job_id；管理下钻用统计返回record_reference。"),
     "read_saved_issue": (ReadIssue, "按稳定 result_id 读取同一任务的具体问题、正式建议和已保存病历证据。"),
     "read_rule": (ReadRule, "读取权威规则目录中的当前启用状态和院内实施口径；不是规范原文。"),
+    "search_rules": (SearchRules, "不知道编号时按名称或关键词查当前权威目录。多个关键词用空格分开且必须全部匹配，支持中文及CT等英文；不做语义推断。选定候选后用read_rule读取口径；未命中不表示没有规范要求。"),
     "query_statistics": (QueryStatistics, "沿用会话机构/科室、病例范围和质控完成日期读取正式统计，不改口径。规则概览按不合规次数降序默认前5条；rule_limit可指定1至75。page是病例页，返回record_reference用于选择具体病例。"),
 }
 
@@ -185,7 +199,9 @@ class BusinessTools:
             reference.get("conclusion"), reference.get("suggestion"),
             *[f"{row.get('source_type', '')} · {row.get('source_ref', '')} · {row.get('record_time', '')} · {row.get('field_path', '')}\n{row.get('evidence_excerpt', '未提供原文摘录')}" for row in evidence if isinstance(row, dict)],
         ]))
-        return {"references": [reference], "evidence": evidence, "evidence_scope": "执行时保存的证据摘录；不是重新读取的完整文书", "reason_code": item.get("reason_code")}
+        return {"references": [reference], "evidence": evidence, "evidence_scope": "执行时保存的证据摘录；不是重新读取的完整文书", "reason_code": item.get("reason_code"),
+                "job_id": payload.get("job_id"), "rule_set_version": payload.get("rule_set_version"), "result_time": payload.get("completed_at"),
+                "version_note": "规则版本仅为正式保存结果的执行版本标识；未读取该版本的历史规则正文，不得用当前目录冒充当时判据"}
 
     async def execute(self, name: str, arguments: dict, metadata: dict, user: dict) -> dict:
         if name not in TOOL_DEFINITIONS:
@@ -196,15 +212,30 @@ class BusinessTools:
             return await self.saved_results(metadata, user, params.record_reference, params)
         if name == "read_saved_issue":
             return await self.issue(metadata, params.result_id)
+        if name == "search_rules":
+            from app.services.luxian_0609_rule_master import LUXIAN_0609_RULE_MASTER_VERSION, load_luxian_0609_rule_master
+            keywords = params.query.casefold().split()
+            # 目录是唯一事实来源；仅匹配文本，不推断医学同义词或发布状态。
+            rules = sorted((row for row in load_luxian_0609_rule_master()
+                            if all(word in " ".join((row.rule_id, row.title, row.policy_summary, row.definition_note)).casefold()
+                                   for word in keywords)), key=lambda row: row.rule_id)
+            offset = (params.page - 1) * params.page_size
+            candidates = [{"rule_id": row.rule_id, "title": row.title,
+                           "implementation_status": row.implementation_status, "phase_status": row.phase_status,
+                           "release_scope": row.release_scope} for row in rules[offset:offset + params.page_size]]
+            return {"rule_candidates": candidates, "catalog_version": LUXIAN_0609_RULE_MASTER_VERSION,
+                    "rule_search": {"query": params.query, "page": params.page, "page_size": params.page_size,
+                                    "total": len(rules), "returned": len(candidates), "has_more": offset + len(candidates) < len(rules)},
+                    "scope_note": "仅当前权威目录文本匹配候选，不是历史执行版本或规范原文；选定后用read_rule读取口径，多候选不得默认视为同一规则", "references": []}
         if name == "read_rule":
-            from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+            from app.services.luxian_0609_rule_master import LUXIAN_0609_RULE_MASTER_VERSION, load_luxian_0609_rule_master
             from dataclasses import asdict
             rule = next((row for row in load_luxian_0609_rule_master() if row.rule_id == params.rule_id), None)
             if rule is None:
                 raise HTTPException(404, "规则目录未找到该规则")
             reference_id = f"rule:{rule.rule_id}"
             self.store.bind(metadata["session_id"], user, reference_id, {"kind": "rule", "rule_id": rule.rule_id})
-            return {"rule": asdict(rule), "scope_note": "当前系统目录注册状态与实施口径；active_criteria/pending_criteria 是发布范围字段，空数组不表示医学判据缺失。历史执行版本及规范原文需另行核对", "references": [{"id": reference_id, "kind": "rule", "title": rule.title, "rule_id": rule.rule_id, "text": f"目录注册状态：{rule.implementation_status}\n发布阶段：{rule.phase_status}\n实施口径：{rule.policy_summary}\n{rule.definition_note}", "locator": "当前规则目录；不是历史执行版本或规范原文"}]}
+            return {"rule": asdict(rule), "catalog_version": LUXIAN_0609_RULE_MASTER_VERSION, "historical_definition_available": False, "scope_note": "当前系统目录注册状态与实施口径；active_criteria/pending_criteria 是发布范围字段，空数组不表示医学判据缺失。历史执行版本及规范原文需另行核对", "references": [{"id": reference_id, "kind": "rule", "title": rule.title, "rule_id": rule.rule_id, "text": f"目录注册状态：{rule.implementation_status}\n发布阶段：{rule.phase_status}\n发布范围：{rule.release_scope}\n已发布子项（目录标识）：{'、'.join(rule.active_criteria) or '未单列'}\n待发布子项（目录标识）：{'、'.join(rule.pending_criteria) or '未单列'}\n待发布原因（目录代码）：{rule.pending_reason_code or '未单列'}\n实施口径：{rule.policy_summary}\n{rule.definition_note}", "locator": "当前规则目录；不是历史执行版本或规范原文"}]}
         context = metadata["context"]
         if context["view"] != "manager":
             raise HTTPException(422, "请在管理工作台限定范围后问数")

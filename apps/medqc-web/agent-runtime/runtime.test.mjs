@@ -82,6 +82,122 @@ async function fixture(steps, response, toolSpec = spec) {
   return { runtime, root, adapter, callbacks, sessionId, context, body, fetchImpl }
 }
 
+test('无编号规则查询经目录候选读取详情，候选不冒充来源且恢复保留规则引用', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'medqc-rule-search-'))
+  const ruleId = 'LX0609-01-01-01'
+  const tools = [
+    {
+      name: 'search_rules',
+      description: '搜索目录',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'read_rule',
+      description: '读取当前目录',
+      parameters: {
+        type: 'object',
+        properties: { rule_id: { type: 'string' } },
+        required: ['rule_id'],
+        additionalProperties: false,
+      },
+    },
+  ]
+  const adapter = new ScriptedAdapter([
+    { tool: 'search_rules', args: { query: '首次病程' } },
+    { tool: 'read_rule', args: { rule_id: ruleId } },
+    { text: '已读取当前规则，历史执行规则正文未提供。' },
+  ])
+  const calls = []
+  const reference = {
+    id: `rule:${ruleId}`,
+    kind: 'rule',
+    rule_id: ruleId,
+    title: '首次病程记录',
+    text: '当前目录完整口径',
+    locator: '当前目录，非历史',
+  }
+  const fetchImpl = async (url, options) => {
+    calls.push({ name: url.split('/').at(-1), args: JSON.parse(options.body) })
+    return Response.json(
+      url.endsWith('/search_rules')
+        ? {
+            rule_candidates: [
+              {
+                rule_id: ruleId,
+                title: reference.title,
+                implementation_status: 'active',
+                phase_status: 'phase_1_partial',
+              },
+            ],
+            rule_search: {
+              query: '首次病程',
+              page: 1,
+              page_size: 5,
+              total: 1,
+              returned: 1,
+              has_more: false,
+            },
+            catalog_version: 'current-2',
+            scope_note: '目录候选',
+          }
+        : {
+            references: [reference],
+            rule: {
+              rule_id: ruleId,
+              title: reference.title,
+              policy_summary: reference.text,
+              release_scope: { active_criteria: ['已发布子项'], pending_criteria: ['未发布子项'] },
+            },
+            catalog_version: 'current-2',
+            historical_definition_available: false,
+            scope_note: '不是历史规则正文',
+          },
+    )
+  }
+  const runtime = await createRuntime({ root, adapter, model: 'synthetic', fetchImpl })
+  const sessionId = randomUUID()
+  const context = { view: 'doctor', institute_id: 'S', patient_id: 'A', visit_id: 'A1' }
+  try {
+    await runtime.create(sessionId, { context, tools })
+    const turn = await runtime.chat(sessionId, {
+      context,
+      tools,
+      run_id: randomUUID(),
+      message: '首次病程记录时限有什么要求？',
+      backend_url: 'http://127.0.0.1:8003',
+      authorization: 'Bearer synthetic',
+    })
+    assert.equal(turn.status, 'completed')
+    assert.deepEqual(calls, [
+      { name: 'search_rules', args: { query: '首次病程' } },
+      { name: 'read_rule', args: { rule_id: ruleId } },
+    ])
+    assert.deepEqual(turn.references, [reference])
+    assert.match(JSON.stringify(adapter.requests[2].messages), /未发布子项/)
+    assert.match(JSON.stringify(adapter.requests[2].messages), /historical_definition_available/)
+    await runtime.close()
+    const restored = await createRuntime({
+      root,
+      adapter: new ScriptedAdapter([]),
+      model: 'synthetic',
+      fetchImpl,
+    })
+    try {
+      const session = await restored.restore(sessionId, { context, tools })
+      assert.deepEqual(session.turns[0], turn)
+    } finally {
+      await restored.close()
+    }
+  } finally {
+    await runtime.close()
+  }
+})
+
 test('旧医生历史恢复后使用当前工具范围，历史统计调用不能重新执行', async () => {
   const oldStatistics = { ...spec, name: 'query_statistics' }
   const f = await fixture(

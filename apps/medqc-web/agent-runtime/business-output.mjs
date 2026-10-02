@@ -52,10 +52,38 @@ export function businessModelValue(name, _args, value) {
         'conclusion',
         'suggestion',
       ]),
-      ...select(value, ['reason_code', 'evidence_scope']),
+      ...select(value, [
+        'reason_code',
+        'evidence_scope',
+        'job_id',
+        'rule_set_version',
+        'result_time',
+        'version_note',
+      ]),
       evidence: value.evidence || [],
       evidence_read_note:
         '本工具仅回读保存问题与证据摘录，当前文书和规范原文均未读取。摘录可能不完整，不能据此重新判定已保存状态或新增原因；保存依据不足以解释细节时应说明无法确认。查看当前文书请使用该问题卡片的“查看依据与详情→查看对应文书原文”。',
+    }
+  if (name === 'search_rules')
+    return {
+      ...select(value, ['catalog_version', 'scope_note']),
+      rule_search: select(value.rule_search, [
+        'query',
+        'page',
+        'page_size',
+        'total',
+        'returned',
+        'has_more',
+      ]),
+      rule_candidates: (value.rule_candidates || []).map((rule) =>
+        select(rule, [
+          'rule_id',
+          'title',
+          'implementation_status',
+          'phase_status',
+          'release_scope',
+        ]),
+      ),
     }
   if (name === 'read_rule')
     return {
@@ -68,8 +96,12 @@ export function businessModelValue(name, _args, value) {
         'policy_summary',
         'definition_note',
         'release_scope',
+        'active_criteria',
+        'pending_criteria',
+        'pending_reason_code',
       ]),
       scope_note: value.scope_note,
+      ...select(value, ['catalog_version', 'historical_definition_available']),
     }
   if (name === 'query_statistics') {
     const statistics = value.statistics || {}
