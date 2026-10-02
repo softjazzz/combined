@@ -47,9 +47,7 @@
           </div>
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="text-[15px] font-black text-slate-900">
-                AI 深度画像
-              </div>
+              <div class="text-[15px] font-black text-slate-900">AI 深度画像</div>
               <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">
                 对病历全文进行深度阅读，生成时间轴、风险线索与结构化患者画像。
               </div>
@@ -61,9 +59,7 @@
               <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
                 状态
               </div>
-              <div class="mt-1 text-[13px] font-black text-blue-700">
-                已生成
-              </div>
+              <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
             </div>
           </div>
         </div>
@@ -77,9 +73,7 @@
           >
             <ScanOutlined class="text-[24px] text-blue-600" />
           </div>
-          <div class="mb-1 text-[15px] font-black text-slate-800">
-            AI 深度画像
-          </div>
+          <div class="mb-1 text-[15px] font-black text-slate-800">AI 深度画像</div>
           <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">
             对病历全文进行深度阅读，构建诊断时间轴与患者风险画像。
           </div>
@@ -104,7 +98,8 @@
               <span class="text-xs font-bold text-slate-700">画像摘要</span>
               <span
                 class="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600"
-              >已生成</span>
+                >已生成</span
+              >
             </div>
             <div class="space-y-1.5 text-xs text-slate-600">
               <div
@@ -154,10 +149,21 @@
           class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]"
         >
           <AsyncAIProfileDashboard
+            v-if="
+              selectedRecord?.instituteId && selectedRecord?.patientId && selectedRecord?.visitId
+            "
+            :scope-key="
+              JSON.stringify([
+                selectedRecord.instituteId,
+                selectedRecord.patientId,
+                selectedRecord.visitId,
+              ])
+            "
             :frontpage="frontpageDraft"
             :medical-text="combinedMedicalText"
             style="height: 100%; overflow-y: auto"
           />
+          <p v-else>当前病例缺少机构、患者或住院标识，暂不能分析画像。</p>
         </div>
       </a-modal>
     </template>
@@ -171,9 +177,7 @@
           </div>
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="text-[15px] font-black text-slate-900">
-                DRG 分组分析
-              </div>
+              <div class="text-[15px] font-black text-slate-900">DRG 分组分析</div>
               <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">
                 基于首页诊断与手术编码，生成分组结果、权重与支付风险判断。
               </div>
@@ -185,9 +189,7 @@
               <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
                 状态
               </div>
-              <div class="mt-1 text-[13px] font-black text-blue-700">
-                已生成
-              </div>
+              <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
             </div>
           </div>
         </div>
@@ -201,9 +203,7 @@
           >
             <NodeIndexOutlined class="text-[24px] text-blue-600" />
           </div>
-          <div class="mb-1 text-[15px] font-black text-slate-800">
-            DRG 分组分析
-          </div>
+          <div class="mb-1 text-[15px] font-black text-slate-800">DRG 分组分析</div>
           <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">
             基于诊断与手术编码进行 DRG 分组，输出分组结果与盈亏风险判断。
           </div>
@@ -221,14 +221,9 @@
           </a-button>
         </div>
 
-        <div
-          v-else-if="drgLoading"
-          class="flex flex-col items-center py-8"
-        >
+        <div v-else-if="drgLoading" class="flex flex-col items-center py-8">
           <a-spin />
-          <div class="text-xs text-slate-400 mt-3">
-            DRG 分组计算中...
-          </div>
+          <div class="text-xs text-slate-400 mt-3">DRG 分组计算中...</div>
         </div>
 
         <template v-else-if="drgResult">
@@ -365,10 +360,7 @@
             @update:value="emit('update:overviewSeverityFilter', $event as string)"
           />
         </div>
-        <div
-          v-else
-          class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2"
-        >
+        <div v-else class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2">
           <a-segmented
             :value="notificationReadFilter"
             size="small"
@@ -388,10 +380,7 @@
         >
           <a-spin />
         </div>
-        <div
-          v-else
-          class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1"
-        >
+        <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
           <template v-if="overviewViewMode === 'overview'">
             <div
               v-for="item in filteredNotificationOverviewItems"
@@ -408,10 +397,7 @@
                   <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <NotificationOutlined class="text-blue-500" />
                     <span class="truncate">{{ item.title || '病案问题集中点' }}</span>
-                    <a-tag
-                      color="blue"
-                      class="!text-[10px]"
-                    >
+                    <a-tag color="blue" class="!text-[10px]">
                       {{ item.type || 'general' }}
                     </a-tag>
                     <a-tag class="!text-[10px]">
@@ -429,10 +415,7 @@
                     <span>{{ formatRelativeTime(item.latest_created_at) }}</span>
                   </div>
                 </div>
-                <a-tag
-                  v-if="item.unread_count > 0"
-                  color="blue"
-                >
+                <a-tag v-if="item.unread_count > 0" color="blue">
                   {{ item.unread_count }} 未读
                 </a-tag>
               </div>
@@ -471,12 +454,7 @@
                     {{ formatRelativeTime(notif.created_at) }}
                   </div>
                 </div>
-                <a-tag
-                  v-if="!notif.is_read"
-                  color="blue"
-                >
-                  未读
-                </a-tag>
+                <a-tag v-if="!notif.is_read" color="blue"> 未读 </a-tag>
               </div>
               <div class="mt-2 flex items-center justify-end gap-2">
                 <a-button
@@ -501,7 +479,7 @@
           <div
             v-if="
               (overviewViewMode === 'overview' && filteredNotificationOverviewItems.length === 0) ||
-                (overviewViewMode === 'detail' && filteredAssistNotifications.length === 0)
+              (overviewViewMode === 'detail' && filteredAssistNotifications.length === 0)
             "
             class="rounded-[18px] border border-dashed border-slate-200 bg-white/70 py-8"
           >
@@ -576,10 +554,7 @@
         v-if="!suggestionsLoading && suggestions.length === 0"
         description="暂无待处理优化建议"
       />
-      <div
-        v-if="suggestionsLoading"
-        class="flex items-center justify-center py-10"
-      >
+      <div v-if="suggestionsLoading" class="flex items-center justify-center py-10">
         <a-spin />
       </div>
     </div>
@@ -613,10 +588,7 @@
             size="small"
             @update:value="emit('update:icdApplyTarget', $event)"
           />
-          <div
-            v-if="isOtherTarget"
-            class="flex items-center gap-2 text-xs text-slate-500"
-          >
+          <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
             <span>第</span>
             <a-input-number
               :value="icdApplyIndex"
