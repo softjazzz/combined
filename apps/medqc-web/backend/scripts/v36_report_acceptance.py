@@ -37,7 +37,9 @@ def identity(row):
 
 def save(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    pending = path.with_suffix(path.suffix + ".pending")
+    pending.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    pending.replace(path)
 
 
 class Probe:
@@ -64,6 +66,15 @@ class Probe:
 
     def checkpoint(self):
         save(self.path, self.state)
+
+    def begin_creation(self, operation):
+        require(not self.state.get("in_flight"), "非幂等创建结果不明，须核对原引用后再恢复")
+        self.state["in_flight"] = operation
+        self.checkpoint()
+
+    def finish_creation(self):
+        self.state.pop("in_flight", None)
+        self.checkpoint()
 
     def request(self, actor, method, path, *, params=None, body=None, csv_response=False):
         require(method == "GET" or self.execute, "写 API 默认关闭，请明确使用 --execute")
@@ -92,8 +103,12 @@ class Probe:
 
     def publish_version(self):
         require(self.execute, "发布版本需要 --execute")
+        if self.state.get("published_version"):
+            require(self.state["published_version"] == self.manifest["rule_set_version"], "版本检查点不匹配")
+            self.preflight()
+            return
+        require(not self.state.get("in_flight"), "版本创建结果不明，须核对原草稿或发布引用")
         require(not self.state["tasks"] and not self.state["jobs"], "已有生产产物不得重新发布版本")
-        require(not self.state.get("version_draft"), "已有草稿引用，请人工核对正式发布状态，禁止重建")
         setup = self.manifest["version_setup"]
         base = self.request("creator", "GET", f"/api/v1/rule-set-versions/{RULE_SET}/{setup['base_version']}")
         entries = setup.get("entries")
@@ -105,18 +120,32 @@ class Probe:
                        for row in base["resolution"]["entries"]]
         permitted = {"rule_id", "state", "department_scope_mode", "department_refs", "doctor_visible", "core_system_ids"}
         entries = [{key: value for key, value in row.items() if key in permitted} for row in entries]
+        for row in entries:
+            if any(key in row for key in {"department_scope_mode", "department_refs", "doctor_visible"}):
+                for key in ("department_scope_mode", "department_refs", "doctor_visible"):
+                    row.setdefault(key, None)
+        entries.sort(key=lambda row: row["rule_id"])
         note = "SYN-V36 报表隔离验收：仅001确定性执行，显式核心制度归属"
-        draft = self.request("creator", "POST", f"/api/v1/rule-set-versions/{RULE_SET}/draft", body={
-            "base_version": setup["base_version"], "entries": entries, "note": note,
-        })
-        self.state["version_draft"] = {"id": draft["id"], "version_seq": draft["version_seq"]}
-        self.checkpoint()
+        draft = self.state.get("version_draft")
+        if draft:
+            current = self.request("creator", "GET", f"/api/v1/rule-set-versions/{RULE_SET}/draft")
+            require(current["id"] == draft["id"] and current["version_seq"] == draft["version_seq"], "原草稿已变化")
+            restored = [{key: value for key, value in row.items() if key in permitted} for row in current["entries"]]
+            require(restored == entries, "原草稿条目与验收合同不一致")
+        else:
+            self.begin_creation("version_draft")
+            draft = self.request("creator", "POST", f"/api/v1/rule-set-versions/{RULE_SET}/draft", body={
+                "base_version": setup["base_version"], "entries": entries, "note": note,
+            })
+            self.state["version_draft"] = {"id": draft["id"], "version_seq": draft["version_seq"]}
+            self.finish_creation()
+        self.begin_creation("version_publish")
         published = self.request("creator", "POST", f"/api/v1/rule-set-versions/{RULE_SET}/draft/publish", body={
             "version": self.manifest["rule_set_version"], "version_seq": draft["version_seq"], "note": note,
         })
         require(published["version"] == self.manifest["rule_set_version"], "正式发布版本回执不符")
         self.state["published_version"] = published["version"]
-        self.checkpoint()
+        self.finish_creation()
 
     def wait_sync(self, prefix, job_id, expected_count):
         deadline = time.monotonic() + self.timeout
@@ -147,73 +176,151 @@ class Probe:
         raise AcceptanceFailure("正式质控保存结果轮询超时；保留产物，禁止重造结果")
 
     def produce(self):
-        require(not self.state["tasks"] and not self.state["jobs"] and not self.state["defects"],
-                "产物已存在，请默认只读核验；不重复创建任务")
+        require(not self.state.get("in_flight"), "非幂等创建结果不明，须核对原引用后恢复")
         running = [case for case in self.cases if case["scene"] == "running"]
-        if running:
+        for staff_actor in sorted({case.get("assignee_actor", "staff") for case in running}):
+            group = [case for case in running if case.get("assignee_actor", "staff") == staff_actor]
+            self.produce_running(group, staff_actor)
+        for case in self.cases:
+            if case["scene"] != "final":
+                continue
+            matches = [row for row in self.state["jobs"] if row["scene"] == "final" and identity(row) == identity(case)]
+            require(len(matches) <= 1, "终末生产检查点重复")
+            if matches:
+                entry = matches[0]
+            else:
+                self.begin_creation("final_workspace_job")
+                job = self.request("creator", "POST", "/api/v1/qc/sichuan/workspace/batch-jobs", body={
+                    "rule_set_key": RULE_SET, "scope": "final",
+                    "record_refs": [{key: case[key] for key in IDENTITY}],
+                })
+                entry = {"job_id": job["id"], "actor": "creator", "scene": "final", **{key: case[key] for key in IDENTITY}}
+                self.state["jobs"].append(entry)
+                self.finish_creation()
+            entry["usage"] = self.wait_job("creator", entry["job_id"])
+            self.checkpoint()
+
+    def produce_running(self, running, staff_actor):
+        matches = [row for row in self.state["tasks"] if row.get("staff_actor", "staff") == staff_actor]
+        require(len(matches) <= 1, "同一受领人的任务检查点重复")
+        if matches:
+            entry = matches[0]
+        else:
+            self.begin_creation("task_create")
             task = self.request("creator", "POST", "/api/v1/tasks", body={
                 "task_name": f"SYN-V36-REPORT-{uuid4().hex[:12]}", "scene": "running",
                 "rule_set_key": RULE_SET, "sampling_method": "all",
                 "sampling_config": {"case_scope": "active"},
                 "record_refs": [{key: case[key] for key in IDENTITY} for case in running],
             })
-            require(task.get("rule_set_version") == self.manifest["rule_set_version"], "任务未冻结指定版本")
-            entry = {"task_id": task["id"], "rule_set_version": task["rule_set_version"]}
+            entry = {"task_id": task["id"], "rule_set_version": task["rule_set_version"], "staff_actor": staff_actor}
             self.state["tasks"].append(entry)
-            self.checkpoint()
-            prefix = f"/api/v1/tasks/{task['id']}"
+            self.finish_creation()
+        prefix = f"/api/v1/tasks/{entry['task_id']}"
+        task = self.request("creator", "GET", prefix, params={"tab": "created"})
+        require(task["rule_set_version"] == self.manifest["rule_set_version"], "任务未冻结指定版本")
+        require({identity(row) for row in task["record_refs"]} == {identity(case) for case in running}, "任务冻结身份集合变化")
+        if not task["records"]:
+            require(task["status"] == "draft", "任务无保存病例且不是可抽样草稿")
             sampled = self.request("creator", "POST", prefix + "/sample")
             records = sampled["records"]
-            require({identity(row) for row in records} == {identity(case) for case in running}, "保存抽样三坐标不一致")
-            entry["records"] = [{key: row[key] for key in (*IDENTITY, "id")} for row in records]
-            self.checkpoint()
-            staff = self.manifest["actors"]["staff"]
+        else:
+            records = task["records"]
+        require({identity(row) for row in records} == {identity(case) for case in running}, "保存抽样三坐标不一致")
+        if entry.get("records"):
+            require({row["id"] for row in entry["records"]} == {row["id"] for row in records}, "抽样病例检查点引用变化")
+        entry["records"] = [{key: row[key] for key in (*IDENTITY, "id")} for row in records]
+        self.checkpoint()
+        staff = self.manifest["actors"][staff_actor]
+        if not all(row.get("assignee_id") == staff["id"] for row in records):
+            require(all(not row.get("assignee_id") for row in records), "已有分配与受领检查点不一致")
             self.request("creator", "POST", prefix + "/assign", body={
                 "method": "by_ratio", "assignees": [{"user_id": staff["id"], "user_name": "合成受领人"}],
             })
-            self.request("staff", "PUT", prefix, body={"status": "in_progress"})
-            for row in records:
-                self.request("staff", "POST", prefix + f"/records/{row['id']}/start")
+        task = self.request(staff_actor, "GET", prefix, params={"tab": "received"})
+        require({row["id"] for row in task["records"]} == {row["id"] for row in records}, "正式受领病例集合变化")
+        if task["status"] == "assigned":
+            self.request(staff_actor, "PUT", prefix, body={"status": "in_progress"})
+        else:
+            require(task["status"] == "in_progress", "原任务状态不允许继续生产")
+        for row in task["records"]:
+            if row["status"] == "pending":
+                self.request(staff_actor, "POST", prefix + f"/records/{row['id']}/start")
+            else:
+                require(row["status"] == "in_progress", "原病历状态不允许继续生产")
+        if not entry.get("sync_job_id"):
+            self.begin_creation("task_sync")
             sync = self.request("creator", "POST", prefix + "/sync-records")
             entry["sync_job_id"] = sync["job_id"]
-            self.checkpoint()
-            self.wait_sync(prefix, sync["job_id"], len(records))
-            run = self.request("staff", "POST", prefix + "/qc-runs", params={"scope": "assigned"})
+            self.finish_creation()
+        self.wait_sync(prefix, entry["sync_job_id"], len(records))
+        if not entry.get("job_id"):
+            self.begin_creation("assigned_run")
+            run = self.request(staff_actor, "POST", prefix + "/qc-runs", params={"scope": "assigned"})
             entry.update(run_number=run["run_number"], job_id=run["job_id"])
-            self.state["jobs"].append({"job_id": run["job_id"], "actor": "staff", "scene": "running"})
-            self.checkpoint()
-            entry["usage"] = self.wait_job("staff", run["job_id"])
-            for row in records:
-                result = self.request("staff", "GET", prefix + f"/qc-runs/{run['run_number']}/records/{row['id']}",
+            self.state["jobs"].append({"job_id": run["job_id"], "actor": staff_actor, "scene": "running"})
+            self.finish_creation()
+        runs = self.request(staff_actor, "GET", prefix + "/qc-runs", params={"scope": "assigned"})
+        require(any(run["run_number"] == entry["run_number"] and run["job_id"] == entry["job_id"] for run in runs),
+                "原受领运行检查点无法回读")
+        entry["usage"] = self.wait_job(staff_actor, entry["job_id"])
+        self.checkpoint()
+        for row in records:
+                result = self.request(staff_actor, "GET", prefix + f"/qc-runs/{entry['run_number']}/records/{row['id']}",
                                       params={"scope": "assigned"})
                 require(result.get("result_state") == "available" and result.get("items"), "原运行保存结果不可用")
                 expected = next(case for case in running if identity(case) == identity(row))
-                require(result.get("job_id") == run["job_id"], "原运行 job 引用错配")
+                require(result.get("job_id") == entry["job_id"], "原运行 job 引用错配")
                 points = [point for point in result["items"]
                           if (point.get("rule_id") or point.get("rule_code") or point.get("qc_point_id")) == "LX0609-001"]
                 require(len(points) == 1, "正式结果缺少唯一001")
                 expected_status = "non_compliant" if expected["expected_issue"] else "compliant"
                 require(points[0].get("status") == expected_status, "001正式结果状态与源文书时间不一致")
-                defect_id = str(uuid4())
-                defect = {"id": defect_id, "task_id": task["id"], "task_record_id": row["id"],
-                          "run_number": run["run_number"], "root_job_id": run["job_id"],
+                matches = [defect for defect in self.state["defects"] if defect["task_record_id"] == row["id"]]
+                require(len(matches) <= 1, "同病例人工缺陷检查点重复")
+                if matches:
+                    defect = matches[0]
+                else:
+                    defect = {"id": str(uuid4()), "task_id": entry["task_id"], "task_record_id": row["id"],
+                          "run_number": entry["run_number"], "root_job_id": entry["job_id"],
                           **{key: expected[key] for key in IDENTITY}, "scene": "running"}
-                self.state["defects"].append(defect)
-                self.checkpoint()
-                body = {"defect_id": defect_id, "run_number": run["run_number"],
+                    self.state["defects"].append(defect)
+                    self.checkpoint()
+                defect_id = defect["id"]
+                body = {"defect_id": defect_id, "run_number": entry["run_number"],
                         "rule_name": "SYN 人工报表验收缺陷", "description": "合成验收：文书记录需要完善。",
                         "severity": "warning", "suggestion": "合成验收：请补充完整文书记录。"}
                 path = prefix + f"/records/{row['id']}/manual-defects"
-                first = self.request("staff", "POST", path, body=body)
-                replay = self.request("staff", "POST", path, body=body)
-                require(first["id"] == replay["id"] and replay.get("idempotent") is True, "人工录入重放未幂等")
+                current = self.request(staff_actor, "GET", path)
+                matches = [item for item in current["items"] if item["id"] == defect_id]
+                require(len(matches) <= 1, "正式人工缺陷引用重复")
+                if matches:
+                    first = matches[0]
+                    require(first["run_number"] == entry["run_number"] and first["rule_name"] == body["rule_name"],
+                            "原人工缺陷载荷与检查点不一致")
+                else:
+                    require(not defect.get("created_at"), "原人工缺陷已消失，禁止重建")
+                    first = self.request(staff_actor, "POST", path, body=body)
+                if not defect.get("replay_verified"):
+                    replay = self.request(staff_actor, "POST", path, body=body)
+                    require(first["id"] == replay["id"] and replay.get("idempotent") is True, "人工录入重放未幂等")
+                    defect["replay_verified"] = True
                 defect["created_at"] = first["created_at"]
-                review = self.request("reviewer", "POST", f"/api/v1/manual-defects/{defect_id}/review", body={
-                    "decision": "approved", "expected_status": "pending",
+                self.checkpoint()
+                current = self.request("reviewer", "GET", "/api/v1/manual-defects/case", params={
+                    **{key: expected[key] for key in IDENTITY}, "scene": "running",
                 })
-                require(review.get("manual_review_status") == "approved", "人工缺陷审核未保存")
+                matches = [item for item in current["items"] if item["id"] == defect_id]
+                require(len(matches) == 1, "审核owner无法回读原人工缺陷")
+                if matches[0]["manual_review_status"] == "pending":
+                    review = self.request("reviewer", "POST", f"/api/v1/manual-defects/{defect_id}/review", body={
+                        "decision": "approved", "expected_status": "pending",
+                    })
+                    require(review.get("manual_review_status") == "approved", "人工缺陷审核未保存")
+                else:
+                    require(matches[0]["manual_review_status"] == "approved", "原人工审核状态不符合验收合同")
                 candidates = self.request("reviewer", "GET", "/api/v1/defect-rectifications/candidates", params={
-                    **{key: expected[key] for key in IDENTITY}, "expected_job_id": run["job_id"],
+                    **{key: expected[key] for key in IDENTITY}, "expected_job_id": entry["job_id"],
                 })
                 matches = [target for target in candidates["targets"]
                            if target["target_kind"] == "task_manual_defect" and target["target_id"] == defect_id]
@@ -221,18 +328,6 @@ class Probe:
                 defect.update(matches[0])
                 defect.pop("label", None)
                 self.checkpoint()
-        for case in self.cases:
-            if case["scene"] != "final":
-                continue
-            job = self.request("creator", "POST", "/api/v1/qc/sichuan/workspace/batch-jobs", body={
-                "rule_set_key": RULE_SET, "scope": "final",
-                "record_refs": [{key: case[key] for key in IDENTITY}],
-            })
-            entry = {"job_id": job["id"], "actor": "creator", "scene": "final", **{key: case[key] for key in IDENTITY}}
-            self.state["jobs"].append(entry)
-            self.checkpoint()
-            entry["usage"] = self.wait_job("creator", job["id"])
-            self.checkpoint()
 
     def verify(self):
         checks = []
@@ -299,7 +394,7 @@ class Probe:
                 selected = [row for row in report["items"] if row["institute_id"] == institute and row["department"] == department]
                 filtered = self.request("creator", "GET", "/api/v1/manual-quality-reports", params={
                     **params, "institute_id": institute, "department": department,
-                    "creator_id": self.manifest["actors"]["staff"]["id"], "page_size": 100,
+                    "creator_id": self.manifest["actors"][task.get("staff_actor", "staff")]["id"], "page_size": 100,
                 })
                 require(filtered["summary"]["entered"] == len(selected), "人工机构科室录入人组合筛选不一致")
             rows = self.request("creator", "GET", "/api/v1/manual-quality-reports/export", params=params, csv_response=True)
