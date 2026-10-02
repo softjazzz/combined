@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { projectTurns } from './runtime.mjs'
 
 const official = 'https://example.org/norm/2010.html'
-function events(answer, references = [], offset = 0, search = true) {
+function events(answer, references = [], offset = 0, tool = 'weknora_search') {
   const turn = offset + 1
   return [
     {
@@ -11,7 +11,7 @@ function events(answer, references = [], offset = 0, search = true) {
       data: { inserted: [{ source: { kind: 'user', run_id: `run-${turn}` }, content: [] }] },
     },
     { type: 'turn/start', time: 0, data: { turn } },
-    ...(search ? [{ type: 'tool/call', data: { turn, name: 'weknora_search' } }] : []),
+    ...(tool ? [{ type: 'tool/call', data: { turn, name: tool } }] : []),
     { type: 'tool/result', data: { turn, meta: { references } } },
     {
       type: 'assistant/message',
@@ -83,4 +83,52 @@ test('声称原文的长摘录仅空白不同则恢复来源原样，文字改�
       events(`原文节选：“${spacedDifferently}”`, [reference, conflict]),
     )[0].answer.includes('未逐字核实'),
   )
+})
+
+test('规范查询后的保存证据原文按实际业务来源核对，不被历史规范误标为转述', () => {
+  const excerpt =
+    '合成保存证据：本段是用于回归验证的测试 文书内容，记录时间、病程描述与检查结果均为测试文字，不对应任何真实患者。'
+  const businessUrl = 'https://example.org/records/test'
+  const saved = {
+    id: 'saved-result:test:2',
+    kind: 'saved_result',
+    text: `已保存结论\n${excerpt}\n${businessUrl}`,
+    evidence: [{ evidence_excerpt: excerpt }],
+  }
+  const answer = `保存证据原文：“${excerpt}”`
+  const baseline = projectTurns(events(answer, [saved], 0, 'read_saved_issue'))[0]
+  const input = [
+    ...events('已查规范', [source]),
+    ...events(`${answer}\n规范链接：${businessUrl}`, [saved], 1, 'read_saved_issue'),
+  ]
+  const original = JSON.stringify(input)
+  const [, restored] = projectTurns(input)
+  assert.ok(restored.answer.includes(baseline.answer))
+  assert.ok(!restored.answer.includes('回答转述'))
+  assert.ok(!restored.answer.includes(businessUrl), '业务来源不扩展规范链接允许范围')
+  assert.deepEqual(restored.references, [saved])
+  assert.equal(JSON.stringify(input), original)
+  const compact = excerpt.replace(/\s/gu, '')
+  const [, spaced] = projectTurns([
+    ...events('已查规范', [source]),
+    ...events(`保存证据原文：“${compact}”`, [saved], 1, 'read_saved_issue'),
+  ])
+  assert.equal(spaced.answer, answer)
+})
+
+test('混合来源中的改写长摘录仍明确标为转述，不能借用未来业务证据', () => {
+  const excerpt =
+    '合成保存证据：本段用于检验来源核对时的时间边界，所有描述均为固定的测试文字，不包含真实患者资料或临床判定。'
+  const saved = { id: 'saved-result:test:2', kind: 'saved_result', text: excerpt }
+  const changed = excerpt.replace('固定', '变造')
+  const [, changedTurn] = projectTurns([
+    ...events('已查规范', [source]),
+    ...events(`病历原文：“${changed}”`, [saved], 1, 'read_saved_issue'),
+  ])
+  assert.ok(changedTurn.answer.includes('回答转述（未逐字核实）'))
+  const [early] = projectTurns([
+    ...events(`原文：“${excerpt}”`, [source]),
+    ...events('随后才读取保存证据', [saved], 1, 'read_saved_issue'),
+  ])
+  assert.ok(early.answer.includes('回答转述（未逐字核实）'))
 })

@@ -181,10 +181,12 @@ export function projectTurns(events) {
         current.reference_scope = 'prior_turns'
       }
       if (current.status === 'failed') current.error = '本轮未完成，已取得的来源保留在下方。'
-      const guidelines = [...priorReferences.values()].filter((r) => r.kind === 'guideline')
+      const sources = [...priorReferences.values()]
+      const guidelines = sources.filter((r) => r.kind === 'guideline')
       if (current.knowledgeQueried || guidelines.length)
         current.answer = verifiedSourceLinks(
-          verifiedSourceQuotes(current.answer, guidelines),
+          // 长摘录也可能来自保存证据或规则；规范链接仍只使用规范来源。
+          verifiedSourceQuotes(current.answer, sources),
           guidelines,
         )
     }
