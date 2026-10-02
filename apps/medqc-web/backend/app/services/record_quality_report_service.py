@@ -463,7 +463,7 @@ def _group_metrics(ctx: ReportContext, rows: list[CaseRow], record_total: int) -
     scored = [row.score for row in rows if row.score_status == "scored" and row.score is not None]
     top_grade = _top_grade_name(ctx)
     configured = ctx.score_status == "configured"
-    review_ok = ctx.review_status == "available"
+    review_ok = ctx.review_status == "available" and all(row.review_state in REVIEW_STATES for row in rows)
     scores_complete = configured and all(row.score_status == "scored" for row in rows)
     manual_ok = ctx.manual_status == "available"
     auto_on = source in {"all", "auto"}
@@ -482,13 +482,13 @@ def _group_metrics(ctx: ReportContext, rows: list[CaseRow], record_total: int) -
         "average_score": _mean(scored) if configured else None,
         "top_grade_rate": (
             _rate(sum(1 for row in rows if row.score_status == "scored" and row.grade == top_grade), len(scored))
-            if configured and top_grade else None
+            if scores_complete and top_grade else None
         ),
         "review_approved_total": (
             sum(1 for row in rows if row.review_state == "approved") if review_ok else None
         ),
         "reviewed_total": (
-            sum(row.review_state != "pending_review" for row in rows) if review_ok else None
+            sum(row.review_state in {"approved", "doubtful", "pending_recheck"} for row in rows) if review_ok else None
         ),
         "top_grade_total": grade_counts.get(top_grade),
         "grade_rates": {
@@ -504,6 +504,7 @@ def _group_metrics(ctx: ReportContext, rows: list[CaseRow], record_total: int) -
         "veto_defect_total": sum(len(row.veto_rule_ids) for row in rows) if scores_complete else None,
         "records_with_defect": (
             sum(1 for row in rows if _defects(row, source))
+        "veto_record_total": sum(bool(row.veto_rule_ids) for row in rows) if scores_complete else None,
             if (not manual_on or manual_ok) else None
         ),
     }
@@ -752,6 +753,7 @@ def export_csv(
     ctx: ReportContext, *, sheet: str = "departments",
     department: str | None = None, doctor: str | None = None,
     rule_id: str | None = None, document: str | None = None,
+    "veto_record_total": "单否病历数",
     grade: str | None = None, has_defect: bool | None = None,
     columns: Sequence[str] | None = None,
 ) -> bytes:
@@ -776,7 +778,7 @@ def export_csv(
         fields = ("name", "record_total", "qc_ready_total", "average_score", "top_grade_rate",
                   "review_approved_total", "auto_defect_total", "manual_defect_total",
                   "veto_defect_total", "records_with_defect", "reviewed_total", "top_grade_total",
-                  "defect_total", "average_defect_total")
+                  "defect_total", "average_defect_total", "veto_record_total")
         grade_fields = tuple(f"grade_rate:{band['name']}" for band in (ctx.standard or {}).get("grade_bands") or [])
         fields += grade_fields
         if columns is not None:
@@ -786,7 +788,7 @@ def export_csv(
     output = io.StringIO(newline="")
     writer = csv.writer(output)
     writer.writerow([
-        f"{field.removeprefix('grade_rate:')}占比" if field.startswith("grade_rate:") else _CSV_HEADERS[field]
+        _csv_cell(f"{field.removeprefix('grade_rate:')}占比" if field.startswith("grade_rate:") else _CSV_HEADERS[field])
         for field in fields
     ])
     for row in rows:

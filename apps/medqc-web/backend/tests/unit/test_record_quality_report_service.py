@@ -237,6 +237,21 @@ def test_group_rates_preserve_configured_grade_names_and_partial_scores_are_unkn
     row = report.summarize(ctx)["department_rows"][0]
     assert row["top_grade_total"] is None
     assert all(value is None for value in row["grade_rates"].values())
+    assert row["top_grade_rate"] is None
+
+
+def test_group_veto_counts_cases_once_and_export_headers_escape_formulas():
+    standard = _standard()
+    standard["grade_bands"][0]["name"] = "=formula"
+    ctx = _context(standard_loader=lambda _: standard)
+    ctx.rows[0].veto_rule_ids = ["LX0609-001", "LX0609-002"]
+    row = report.summarize(ctx)["department_rows"][0]
+    assert row["veto_defect_total"] == 2
+    assert row["veto_record_total"] == 1
+    exported = report.export_csv(ctx, columns=["veto_record_total", "grade_rate:=formula"]).decode("utf-8-sig")
+    assert next(csv.reader(io.StringIO(exported))) == ["名称", "单否病历数", "'=formula占比"]
+    ctx.rows[0].review_state = None
+    assert report.summarize(ctx)["department_rows"][0]["reviewed_total"] is None
 
 
 def test_report_scoring_consumes_exact_department_scope():

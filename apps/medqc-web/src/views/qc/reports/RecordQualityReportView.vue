@@ -438,6 +438,7 @@ type ColumnKey =
   | 'auto_defect_total'
   | 'manual_defect_total'
   | 'veto_defect_total'
+  | 'veto_record_total'
   | 'records_with_defect'
   | 'reviewed_total'
   | 'top_grade_total'
@@ -457,6 +458,7 @@ const baseColumns: Array<{ key: ColumnKey; label: string }> = [
   { key: 'auto_defect_total', label: '自动缺陷' },
   { key: 'manual_defect_total', label: '人工缺陷' },
   { key: 'veto_defect_total', label: '单否缺陷' },
+  { key: 'veto_record_total', label: '单否病历数' },
   { key: 'records_with_defect', label: '有缺陷病历' },
 ]
 const route = useRoute()
