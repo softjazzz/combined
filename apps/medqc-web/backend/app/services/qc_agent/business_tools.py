@@ -102,6 +102,62 @@ class CompareStatistics(ToolInput):
         return self
 
 
+class TrendPeriod(ToolInput):
+    completed_from: str = Field(min_length=1, max_length=64)
+    completed_to: str = Field(min_length=1, max_length=64)
+
+
+class TrendStatistics(ToolInput):
+    rule_id: str | None = Field(default=None, pattern=r"^LX0609-\d{2}-\d{2}-\d{2}$")
+    periods: list[TrendPeriod] = Field(min_length=2, max_length=6)
+
+    @model_validator(mode="after")
+    def require_ordered_periods(self):
+        ranges = [comparison_range(period.completed_from, period.completed_to) for period in self.periods]
+        if any(later[0] <= earlier[1] for earlier, later in zip(ranges, ranges[1:])):
+            raise ValueError("趋势期间须按时间升序且互不重叠")
+        return self
+
+
+TREND_LIMITATIONS = [
+    "各期均读取当前授权范围内每份病例最新权威保存结果，再按质控完成时间筛选；不是期间历史快照，较新复检可能使旧期间结果不再入选。",
+    "范围病例数和结果不可用数是当前科室范围数量，不是各期病例总量；各期只比较期间内有效保存结果及其规则计数。",
+    "已评价数量包含未执行和不适用，不能当作执行覆盖率；未验证各期规则版本相同。",
+    "只列各期原值；期间长度可能不同，不计算差值、增长率或百分比，不推断原因或整改效果。",
+]
+
+
+def trend_text(fixed: dict, rule_id: str | None, periods: list[dict]) -> str:
+    def display(text):
+        value = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        offset = value.strftime("%z")
+        return value.strftime("%Y年%m月%d日 %H:%M:%S") + f"（UTC{offset[:3]}:{offset[3:]}）"
+    def count(row, field):
+        value = row.get(field) if isinstance(row, dict) else None
+        return "未提供" if value is None else value
+    phase = {"inpatient": "在院", "discharged": "出院"}[fixed["care_phase"]]
+    lines = [f"机构：{fixed['institute_id']}；科室：{fixed['department']}；病例范围：{phase}；规则：{rule_id or '全部规则'}", ""]
+    for index, period in enumerate(periods, 1):
+        filters, statistics = period["filters"], period["statistics"]
+        kpis = statistics.get("kpis")
+        lines.append(f"第{index}期 {display(filters['completed_from'])} 至 {display(filters['completed_to'])}")
+        lines.append(f"期间内有效保存结果 {count(kpis, 'ready_record_total')} 份")
+        rows = [row for row in statistics.get("rule_distribution") or [] if isinstance(row, dict)]
+        if rule_id:
+            rows = [row for row in rows if row.get("rule_id") == rule_id]
+        else:
+            # 仅展示排序：按正式不合规次数降序取前5条，同次数按规则编号。
+            rows = sorted(rows, key=lambda row: (-(row.get("non_compliant_count") or 0), str(row.get("rule_id"))))[:5]
+            if rows:
+                lines.append("不合规次数前5条规则：")
+        for row in rows:
+            lines.append(f"{row.get('rule_name') or row.get('rule_id') or '未提供规则名称'}：不合规 {count(row, 'non_compliant_count')}；"
+                         f"资料不足 {count(row, 'data_gap_count')}；已评价 {count(row, 'evaluated_count')}")
+        lines.extend(period["data_notes"])
+        lines.append("")
+    return "\n".join([*lines, *TREND_LIMITATIONS])
+
+
 class QueryFollowups(ToolInput):
     kind: Literal["notifications", "remediations"]
     page: int = Field(default=1, ge=1, le=100)
@@ -118,6 +174,7 @@ TOOL_DEFINITIONS = {
     "search_rules": (SearchRules, "不知道编号时按名称或关键词查当前权威目录。多个关键词用空格分开且必须全部匹配，支持中文及CT等英文；不做语义推断。选定候选后用read_rule读取口径；未命中不表示没有规范要求。"),
     "query_followups": (QueryFollowups, "读取既有通知或整改台账；医生仅当前病例，管理者仅授权科室。按源列表分页，无法证明病例授权的条目排除，空页不代表没有待办。仅展示保存状态与期限，不执行标记已读、催办或整改；没有全局总量。"),
     "query_statistics": (QueryStatistics, "沿用会话机构/科室、病例范围和质控完成日期读取正式统计，不改口径。规则概览按不合规次数降序默认前5条；rule_limit可指定1至75。page是病例页，返回record_reference用于选择具体病例。"),
+    "trend_statistics": (TrendStatistics, "管理者科室趋势：机构、科室、病例范围固定沿用会话；2至6个按时间升序、互不重叠的质控完成期间，起止带时区。期间必须来自用户明确的日期或月份（如“7月、8月、9月”按自然月展开为+08:00整日）；“最近几个月”等相对说法先追问。rule_id可选，不填时每期列不合规前5条规则。只读取各期正式原值，不计算差值、增长率或百分比，不推断原因或整改效果。"),
     "compare_statistics": (CompareStatistics, "管理者跨期描述：同一明确规则，当前期间沿用会话筛选，基线起止必须来自用户明确期间，带时区且跨度不超过366天。缺少基线日期或规则时先追问，不自行推断上月/同期日界。机构、科室、病例范围固定；只读取两期正式原值，不计算差值、百分比或因果。来源是当前最新保存结果，不是历史快照；不得声称历史版本相同或覆盖率改善。基线不提供病例下钻。"),
 }
 
@@ -128,7 +185,7 @@ def tool_specs(view: Literal["doctor", "manager"]) -> list[dict]:
             if (name not in MANAGER_ONLY or view == "manager") and (name not in DOCTOR_ONLY or view == "doctor")]
 
 
-MANAGER_ONLY = {"query_statistics", "compare_statistics", "read_rule_validation"}
+MANAGER_ONLY = {"query_statistics", "compare_statistics", "trend_statistics", "read_rule_validation"}
 DOCTOR_ONLY = {"read_draft_facts", "compose_reference_draft"}
 
 
@@ -274,6 +331,48 @@ class BusinessTools:
                 "job_id": payload.get("job_id"), "rule_set_version": payload.get("rule_set_version"), "result_time": payload.get("completed_at"),
                 "version_note": "规则版本仅为正式保存结果的执行版本标识；未读取该版本的历史规则正文，不得用当前目录冒充当时判据"}
 
+    async def period_statistics(self, filters: dict, rule_id: str | None) -> dict:
+        """读取一期正式统计原值并记录数据不足；不补零、不计算差值。"""
+        payload = await self.read_api("/api/v1/qc-agent/business/statistics", filters)
+        notes = []
+        kpis = payload.get("kpis")
+        ready = kpis.get("ready_record_total") if isinstance(kpis, dict) else None
+        if not isinstance(ready, int) or isinstance(ready, bool) or ready < 0:
+            notes.append("正式接口未提供期间内有效保存结果数量，不能判断该期数据是否完整")
+        elif ready == 0:
+            notes.append("该期没有期间内有效保存结果，不能将缺结果解释为零问题或改善")
+        if rule_id:
+            distribution = payload.get("rule_distribution")
+            rows = [row for row in distribution if isinstance(row, dict) and row.get("rule_id") == rule_id] if isinstance(distribution, list) else []
+            if not rows:
+                notes.append("该期未返回所选规则统计，不能补零或据此判断规则未执行")
+            elif any(row.get(field) is None for row in rows for field in ("evaluated_count", "non_compliant_count", "data_gap_count", "uncertain_count")):
+                notes.append("该期所选规则统计字段不完整，只能描述已返回字段")
+        return {"filters": filters, "data_notes": notes,
+                "statistics": {field: payload[field] for field in ("scope", "kpis", "status_distribution", "rule_distribution") if field in payload}}
+
+    async def trend_statistics(self, params: "TrendStatistics", metadata: dict, user: dict, reference_id: str | None = None) -> dict:
+        context = metadata["context"]
+        if context["view"] != "manager":
+            raise HTTPException(422, "科室趋势仅适用于已限定范围的管理工作台")
+        if not context.get("institute_id") or not context.get("department") or context.get("care_phase") not in {"inpatient", "discharged"}:
+            raise HTTPException(422, "趋势需要当前会话的完整机构、科室和病例范围")
+        fixed = {key: context[key] for key in ("institute_id", "department", "care_phase")}
+        periods = []
+        # 逐期读取正式原值；任一期失败整体失败，不保存缺期趋势。
+        for period in params.periods:
+            filters = {**fixed, **({"rule_id": params.rule_id} if params.rule_id else {}),
+                       "completed_from": period.completed_from, "completed_to": period.completed_to, "page": 1}
+            periods.append(await self.period_statistics(filters, params.rule_id))
+        reference_id = reference_id or f"trend:{uuid4()}"
+        self.store.bind(metadata["session_id"], user, reference_id, {"kind": "trend", "arguments": params.model_dump()})
+        title = f"科室趋势 · {params.rule_id or '全部规则'} · {len(periods)}期"
+        reference = {"id": reference_id, "kind": "statistics", "title": title,
+                     "locator": "各期按质控完成时间读取正式统计原值；不是历史快照，不计算差值或百分比",
+                     "text": trend_text(fixed, params.rule_id, periods)}
+        return {"trend": {"rule_id": params.rule_id, "periods": periods, "limitations": TREND_LIMITATIONS},
+                "references": [reference], "metric_owner": "LX0609 正式结果分析接口"}
+
     async def compare_statistics(self, params: CompareStatistics, metadata: dict, user: dict) -> dict:
         context = metadata["context"]
         if context["view"] != "manager":
@@ -291,23 +390,7 @@ class BusinessTools:
         # 先取得两期原始响应；读取失败不保存半组来源，不自动用其他期间替代。
         for key, label, start, end in requests:
             filters = {**fixed, "rule_id": params.rule_id, "completed_from": start, "completed_to": end, "page": 1}
-            payload = await self.read_api("/api/v1/qc-agent/business/statistics", filters)
-            notes = []
-            kpis = payload.get("kpis")
-            ready = kpis.get("ready_record_total") if isinstance(kpis, dict) else None
-            if not isinstance(ready, int) or isinstance(ready, bool) or ready < 0:
-                notes.append("正式接口未提供期间内有效保存结果数量，不能判断该期数据是否完整")
-            elif ready == 0:
-                notes.append("该期没有期间内有效保存结果，不能将缺结果解释为零问题或改善")
-            distribution = payload.get("rule_distribution")
-            rows = [row for row in distribution if isinstance(row, dict) and row.get("rule_id") == params.rule_id] if isinstance(distribution, list) else []
-            if not rows:
-                notes.append("该期未返回所选规则统计，不能补零或据此判断规则未执行")
-            elif any(row.get(field) is None for row in rows for field in ("evaluated_count", "non_compliant_count", "data_gap_count", "uncertain_count")):
-                notes.append("该期所选规则统计字段不完整，只能描述已返回字段")
-            periods.append({"key": key, "label": label, "filters": filters,
-                            "statistics": {field: payload[field] for field in ("scope", "kpis", "status_distribution", "rule_distribution") if field in payload},
-                            "data_notes": notes})
+            periods.append({"key": key, "label": label, **await self.period_statistics(filters, params.rule_id)})
         references = []
         for period in periods:
             title = f"{period['label']}规则统计 · {params.rule_id}"
@@ -372,6 +455,8 @@ class BusinessTools:
             return await self.issue(metadata, params.result_id)
         if name == "compare_statistics":
             return await self.compare_statistics(params, metadata, user)
+        if name == "trend_statistics":
+            return await self.trend_statistics(params, metadata, user)
         if name == "query_followups":
             session_id = quote(metadata["session_id"], safe="")
             payload = await self.read_api(f"/api/v1/qc-agent/business/sessions/{session_id}/followups", params.model_dump())

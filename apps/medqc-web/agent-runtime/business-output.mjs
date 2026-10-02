@@ -196,6 +196,45 @@ export function businessModelValue(name, _args, value) {
         ]),
       ),
     }
+  if (name === 'trend_statistics') {
+    const trend = value.trend || {}
+    const ruleId = trend.rule_id
+    return {
+      id: value.references?.[0]?.id,
+      rule_id: ruleId,
+      metric_owner: value.metric_owner,
+      periods: (trend.periods || []).map((period) => {
+        const statistics = period.statistics || {}
+        const rows = Array.isArray(statistics.rule_distribution) ? statistics.rule_distribution : []
+        const picked = ruleId
+          ? rows.filter((row) => row?.rule_id === ruleId)
+          : [...rows]
+              .filter((row) => row && typeof row === 'object')
+              .sort(
+                (a, b) =>
+                  (b.non_compliant_count || 0) - (a.non_compliant_count || 0) ||
+                  String(a.rule_id).localeCompare(String(b.rule_id)),
+              )
+              .slice(0, 5)
+        return {
+          completed_from: period.filters?.completed_from,
+          completed_to: period.filters?.completed_to,
+          ready_record_total: statistics.kpis?.ready_record_total,
+          rules: picked.map((row) =>
+            select(row, [
+              'rule_id',
+              'rule_name',
+              ...Object.keys(row).filter((key) => key.endsWith('_count')),
+            ]),
+          ),
+          data_notes: period.data_notes,
+        }
+      }),
+      limitations: trend.limitations,
+      read_note:
+        '趋势卡片完整列出各期原值；回答按期描述原值和数据不足，不计算差值、增长率或百分比，不说“改善/恶化”或推断原因。',
+    }
+  }
   if (name === 'read_draft_facts')
     return {
       // 保存结论已作为序号0来源提供，不再重复字段。

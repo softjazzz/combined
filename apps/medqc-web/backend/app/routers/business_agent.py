@@ -17,7 +17,7 @@ from app.services.qc_agent.business_schemas import BusinessChat, BusinessContext
 from app.services.qc_agent.business_access import BusinessAccess, get_business_access
 from app.services.qc_agent import business_reads, business_documents, business_followups
 from app.services.qc_agent.business_store import BusinessSessionStore, get_business_store
-from app.services.qc_agent.business_tools import BusinessTools, statistics_scope_text, statistics_text, tool_specs
+from app.services.qc_agent.business_tools import BusinessTools, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
 from app.services.qc_agent import business_feedback
 
 router = APIRouter(prefix="/business", tags=["business-agent"])
@@ -163,6 +163,9 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return (await tools.issue(metadata, reference_id))["references"][0]
             if binding["kind"] == "rule":
                 return (await tools.execute("read_rule", {"rule_id": binding["rule_id"]}, metadata, user))["references"][0]
+            if binding["kind"] == "trend":
+                params = TrendStatistics.model_validate(binding["arguments"])
+                return (await tools.trend_statistics(params, metadata, user, reference_id))["references"][0]
             if binding["kind"] == "draft":
                 return await tools.draft_reference(metadata, binding["result_id"], binding["segments"], reference_id)
             if binding["kind"] == "rule_validation":

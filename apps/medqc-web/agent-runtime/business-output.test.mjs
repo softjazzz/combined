@@ -565,3 +565,43 @@ test('参考草稿：模型仅收到截断摘录与校验后摘要，不收到�
   })
   assert.ok(!JSON.stringify(composed).includes('草稿全文不进入模型'))
 })
+
+test('科室趋势只把各期原值和数据不足给模型，不含病例下钻或派生比例', () => {
+  const rows = [1, 2, 3, 4, 5, 6].map((n) => ({
+    rule_id: `LX0609-01-01-0${n}`,
+    non_compliant_count: n,
+    data_gap_count: 0,
+    internal_debug: '不进入模型',
+  }))
+  const value = businessModelValue(
+    'trend_statistics',
+    {},
+    {
+      trend: {
+        rule_id: null,
+        periods: [
+          {
+            filters: { completed_from: 'a', completed_to: 'b' },
+            statistics: {
+              kpis: { ready_record_total: 3 },
+              rule_distribution: rows,
+              record_page: { items: [{ patient_id: 'p' }] },
+            },
+            data_notes: ['该期说明'],
+          },
+        ],
+        limitations: ['不计算差值'],
+      },
+      references: [{ id: 'trend:x', text: '卡片全文' }],
+    },
+  )
+  assert.equal(value.id, 'trend:x')
+  assert.deepEqual(
+    value.periods[0].rules.map((row) => row.rule_id),
+    ['LX0609-01-01-06', 'LX0609-01-01-05', 'LX0609-01-01-04', 'LX0609-01-01-03', 'LX0609-01-01-02'],
+  )
+  assert.equal(value.periods[0].ready_record_total, 3)
+  const text = JSON.stringify(value)
+  for (const forbidden of ['不进入模型', 'patient_id', '卡片全文'])
+    assert.ok(!text.includes(forbidden))
+})
