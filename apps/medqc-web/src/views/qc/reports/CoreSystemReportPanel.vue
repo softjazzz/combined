@@ -16,7 +16,9 @@
       <label>机构<input v-model.trim="draft.institute_id" /></label>
       <label>科室<input v-model.trim="draft.department" /></label>
       <label>主治医师<input v-model.trim="draft.doctor" /></label>
-      <label>完成时间起（上海）<input v-model="draft.completed_from" type="datetime-local" /></label>
+      <label
+        >完成时间起（上海）<input v-model="draft.completed_from" type="datetime-local"
+      /></label>
       <label>完成时间止（上海）<input v-model="draft.completed_to" type="datetime-local" /></label>
       <label
         >明细制度<select v-model="draft.system_id">
@@ -46,9 +48,25 @@
           >未知分类病例 <strong>{{ report.summary.unknown_records }}</strong></span
         ><span
           >未知分类质控点 <strong>{{ report.summary.unknown_points }}</strong></span
+        ><span
+          >未知分类确认缺陷 <strong>{{ report.summary.unknown_defects ?? '未知' }}</strong></span
         ><button type="button" @click="drill('unknown')">
           结果不可用 {{ report.summary.unavailable_records }} / 未知覆盖
         </button>
+      </div>
+      <h3>核心制度缺陷 Top20</h3>
+      <p>仅统计自动质控确认问题；多制度归属可重叠，人工缺陷未纳入。</p>
+      <div class="core-summary" data-testid="core-defect-top">
+        <button
+          v-for="system in report.top_systems || []"
+          :key="system.id"
+          type="button"
+          @click="drill(system.id, '', true)"
+        >
+          {{ system.name }} · {{ system.defect_total }} 条
+        </button>
+        <span v-if="report.top_systems === undefined">缺陷分布来源未接入</span>
+        <span v-else-if="!report.top_systems.length">暂无已核验分类的确认缺陷</span>
       </div>
       <h3>制度汇总（院科、医师与完成时间范围）</h3>
       <div class="table-scroll">
@@ -58,6 +76,7 @@
               <th>制度</th>
               <th>已配置点范围病例</th>
               <th>问题病例</th>
+              <th>确认缺陷</th>
               <th>问题率</th>
               <th>质控点</th>
               <th>操作</th>
@@ -68,6 +87,7 @@
               <td>{{ system.name }}</td>
               <td>{{ display(system.record_count) }}</td>
               <td>{{ display(system.problem_records) }}</td>
+              <td>{{ system.defect_total == null ? '未知或无配置数据' : system.defect_total }}</td>
               <td>
                 {{
                   system.problem_rate === null
@@ -221,8 +241,11 @@ import { getCoreSystemReport, exportCoreSystemReport } from '@/api/coreSystemRep
 import type { CoreReportFilters, CoreReportRow, CoreSystemReport } from '@/api/coreSystemReports'
 
 const auth = useAuthStore()
+const props = withDefaults(defineProps<{ initialScene?: 'running' | 'final' }>(), {
+  initialScene: 'running',
+})
 const initial = () => ({
-  scene: 'running' as const,
+  scene: props.initialScene,
   institute_id: '',
   department: '',
   doctor: '',
@@ -285,9 +308,7 @@ function apply() {
   const start = draft.value.completed_from
     ? new Date(`${draft.value.completed_from}+08:00`)
     : undefined
-  const end = draft.value.completed_to
-    ? new Date(`${draft.value.completed_to}+08:00`)
-    : undefined
+  const end = draft.value.completed_to ? new Date(`${draft.value.completed_to}+08:00`) : undefined
   if (
     (start && !Number.isFinite(start.getTime())) ||
     (end && !Number.isFinite(end.getTime())) ||
@@ -312,11 +333,12 @@ function reset() {
 function openSystem(id: string) {
   selectedSystem.value = id
 }
-function drill(id: string, rule = '') {
+function drill(id: string, rule = '', problemsOnly = applied.problems_only) {
   draft.value.system_id = id
   draft.value.rule_id = rule
+  draft.value.problems_only = problemsOnly ?? false
   selectedSystem.value = ''
-  applied = { ...applied, system_id: id, rule_id: rule || undefined }
+  applied = { ...applied, system_id: id, rule_id: rule || undefined, problems_only: problemsOnly }
   void load()
 }
 async function download() {
@@ -344,6 +366,7 @@ watch(
     reset()
   },
 )
+watch(() => props.initialScene, reset)
 onMounted(() => {
   void load()
 })

@@ -179,7 +179,9 @@ def test_unknown_null_distinct_from_explicit_noncore_and_real_zero(env):
     assert data["summary"]["unknown_points"] == 1
     assert data["systems"][0]["problem_records"] == 0
     assert data["systems"][0]["problem_rate"] == 0
+    assert data["systems"][0]["defect_total"] == 0
     assert data["systems"][2]["problem_rate"] is None
+    assert data["systems"][2]["defect_total"] is None
     unknown = service.report("admin", system_id="unknown")
     assert unknown["total"] == 1 and unknown["items"][0]["points"][0]["rule_id"] == "R1"
     results[("H1", "P1", "V1")]["rule_set_version"] = None
@@ -250,6 +252,7 @@ def test_missing_version_has_unknown_classification_not_current_fallback(env):
     data = service.report("admin")
     assert data["summary"]["unknown_records"] == 2
     assert data["summary"]["unknown_points"] == 4
+    assert data["summary"]["unknown_defects"] == 2
     assert all(row["record_count"] is None for row in data["systems"])
     assert resolver.call_args_list[0].args == ("synthetic", "v1")
     assert resolver.call_args_list[1].args == ("synthetic", "v2")
@@ -284,3 +287,22 @@ def test_version_cache_and_full_reference_and_csv_guard(env):
         for row in ref["systems"]
     )
     assert ref["reference_date"] == "2018-04-18"
+
+
+def test_core_defect_distribution_counts_points_not_cases_and_exports_same_scope(env):
+    service, _, results, versions, *_ = env
+    results[("H1", "P1", "V1")]["items"][1]["is_confirmed_issue"] = True
+    data = service.report("admin", problems_only=True)
+    assert data["systems"][0]["defect_total"] == 2
+    assert data["systems"][0]["problem_records"] == 1
+    assert data["top_systems"][0]["defect_total"] == 2
+    assert data["summary"]["unknown_defects"] == 0
+    assert "确认缺陷数" in csv_export(data)
+    assert "未知分类确认缺陷,0" in csv_export(data)
+    selected = service.report("admin", system_id="CORE-01", problems_only=True)
+    assert selected["total"] == 1
+    assert sum(p["is_confirmed_issue"] for p in selected["items"][0]["points"]) == 2
+    versions["v1"]["entries"][0]["core_system_ids"] = None
+    unknown = service.report("admin")
+    assert unknown["summary"]["unknown_defects"] == 1
+    assert unknown["systems"][0]["defect_total"] == 1

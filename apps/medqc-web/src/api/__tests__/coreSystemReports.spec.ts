@@ -62,6 +62,10 @@ describe('核心制度报表API边界', () => {
     { ...result, systems: [{ ...systems[0], problem_records: 0 }, ...systems.slice(1)] },
     { ...result, summary: { ...result.summary, unknown_points: -1 } },
     { ...result, items: [{}] },
+    { ...result, top_systems: [{ id: 'CORE-99', name: '未知制度', defect_total: 1 }] },
+    { ...result, top_systems: [{ id: 'CORE-01', name: '合成制度', defect_total: -1 }] },
+    { ...result, summary: { ...result.summary, unknown_defects: -1 } },
+    { ...result, systems: [{ ...systems[0], defect_total: -1 }, ...systems.slice(1)] },
   ])('坏回执不进入渲染或补零', async (value) => {
     mock.mockResolvedValue({ data: { success: true, data: value } })
     await expect(getCoreSystemReport({ scene: 'running' })).rejects.toThrow('回执不完整')

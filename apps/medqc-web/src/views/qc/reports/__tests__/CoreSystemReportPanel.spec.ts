@@ -78,6 +78,53 @@ beforeEach(() => {
   mocks.get.mockResolvedValue(result)
 })
 describe('核心制度专题页面', () => {
+  it('制度缺陷排行按确认条目计数，下钻和导出保持仅问题病例', async () => {
+    mocks.get.mockResolvedValue({
+      ...result,
+      summary: { ...result.summary, unknown_defects: 3 },
+      top_systems: [{ id: 'CORE-01', name: '合成制度1', defect_total: 2 }],
+      systems: systems.map((system) => ({
+        ...system,
+        defect_total: system.id === 'CORE-01' ? 2 : null,
+      })),
+    })
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:synthetic'),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    mocks.export.mockResolvedValue(new Blob(['synthetic']))
+    const wrapper = render()
+    try {
+      await flushPromises()
+      expect(wrapper.text()).toContain('未知分类确认缺陷 3')
+      expect(wrapper.get('[data-testid="core-defect-top"]').text()).toContain('合成制度1 · 2 条')
+      await wrapper.get('[data-testid="core-defect-top"] button').trigger('click')
+      await flushPromises()
+      expect(mocks.get).toHaveBeenLastCalledWith(
+        expect.objectContaining({ system_id: 'CORE-01', problems_only: true }),
+        1,
+      )
+      await wrapper.get('header button').trigger('click')
+      await flushPromises()
+      expect(mocks.export).toHaveBeenCalledWith(
+        expect.objectContaining({ system_id: 'CORE-01', problems_only: true }),
+      )
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+  it('主报表的终末场景作为制度查询初始场景', async () => {
+    const wrapper = mount(CoreSystemReportPanel, {
+      props: { initialScene: 'final' },
+      global: { stubs: { 'a-drawer': true } },
+    })
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ scene: 'final' }), 1)
+    wrapper.unmount()
+  })
   it('完成时间按上海时区提交，逆序窗口不发送查询', async () => {
     const wrapper = render()
     await flushPromises()

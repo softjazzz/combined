@@ -4,7 +4,7 @@
       <a-tab-pane key="quality" tab="病历质量分析" />
       <a-tab-pane key="core" tab="18项核心制度" />
     </a-tabs>
-    <CoreSystemReportPanel v-if="reportTab === 'core'" />
+    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-scene="scene" />
     <div v-show="reportTab === 'quality'">
     <header class="page-head">
       <div>
@@ -320,6 +320,7 @@
         <p v-for="item in report.unavailable_dimensions" :key="item.key">
           {{ item.label }}：{{ unavailableReason(item.reason_code) }}
         </p>
+        <button class="link" type="button" @click="reportTab = 'core'">核心制度自动缺陷分析</button>
       </section>
     </template>
 
@@ -579,7 +580,7 @@ function unavailableReason(code: string): string {
     (
       {
         remediation_owner_undefined: '未接入（整改状态归属尚未定义）',
-        core_system_classification_missing: '未接入（缺核心制度归类）',
+        core_system_classification_missing: '人工缺陷未接入冻结制度归类；自动缺陷可查看核心制度专题',
       } as Record<string, string>
     )[code] || '未接入'
   )

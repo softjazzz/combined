@@ -52,6 +52,7 @@ export interface CoreSystemReport {
     record_count: number | null
     problem_records: number | null
     problem_rate: number | null
+    defect_total?: number | null
     points: Array<
       Pick<CorePoint, 'rule_id' | 'rule_name' | 'system_ids'> & {
         rule_set_key: string
@@ -66,7 +67,9 @@ export interface CoreSystemReport {
     unknown_records: number
     unavailable_records: number
     unknown_points: number
+    unknown_defects?: number
   }
+  top_systems?: Array<{ id: string; name: string; defect_total: number }>
   items: CoreReportRow[]
   total: number
   page: number
@@ -125,6 +128,18 @@ function assertReport(value: unknown, page: number): asserts value is CoreSystem
       (key) => count(value.summary && object(value.summary) ? value.summary[key] : undefined),
     ) ||
     !count(value.total) ||
+    (value.top_systems !== undefined &&
+      (!Array.isArray(value.top_systems) ||
+        value.top_systems.length > 20 ||
+        !value.top_systems.every(
+          (system) =>
+            object(system) &&
+            ids.includes(String(system.id)) &&
+            typeof system.name === 'string' &&
+            count(system.defect_total) &&
+            system.defect_total > 0,
+        ))) ||
+    (value.summary.unknown_defects !== undefined && !count(value.summary.unknown_defects)) ||
     value.page !== page ||
     value.page_size !== 20 ||
     !Array.isArray(value.items) ||
@@ -146,6 +161,9 @@ function assertReport(value: unknown, page: number): asserts value is CoreSystem
         !object(system) ||
         system.id !== ids[index] ||
         typeof system.name !== 'string' ||
+        (system.defect_total !== undefined &&
+          system.defect_total !== null &&
+          !count(system.defect_total)) ||
         !Array.isArray(system.points)
       )
         return false

@@ -256,6 +256,9 @@ class CoreSystemReportService:
             issues = sum(
                 any(p["is_confirmed_issue"] for p in points) for _, points in relevant
             )
+            defects = sum(
+                p["is_confirmed_issue"] for _, points in relevant for p in points
+            )
             points_by_version = {}
             for row, points in relevant:
                 for point in points:
@@ -283,6 +286,7 @@ class CoreSystemReportService:
                     **system,
                     "record_count": len(relevant) or None,
                     "problem_records": issues if relevant else None,
+                    "defect_total": defects if relevant else None,
                     "problem_rate": issues / len(relevant) if relevant else None,
                     "points": list(points_by_version.values()),
                 }
@@ -317,6 +321,13 @@ class CoreSystemReportService:
             "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "reference": ref,
             "systems": systems,
+            "top_systems": [
+                {"id": system["id"], "name": system["name"], "defect_total": system["defect_total"]}
+                for system in sorted(
+                    (system for system in systems if system["defect_total"]),
+                    key=lambda system: (-system["defect_total"], system["id"]),
+                )[:20]
+            ],
             "summary": {
                 "candidate_records": len(cases),
                 "unknown_records": sum(row["coverage"] == "unknown" for row in cases),
@@ -325,6 +336,10 @@ class CoreSystemReportService:
                 ),
                 "unknown_points": sum(
                     p["system_ids"] is None for row in cases for p in row["points"]
+                ),
+                "unknown_defects": sum(
+                    p["system_ids"] is None and p["is_confirmed_issue"]
+                    for row in cases for p in row["points"]
                 ),
             },
             "items": selected[(page - 1) * page_size : page * page_size],
@@ -355,6 +370,8 @@ def csv_export(data):
             data.get("summary", {}).get("unknown_records"),
             "结果不可用病例",
             data.get("summary", {}).get("unavailable_records"),
+            "未知分类确认缺陷",
+            data.get("summary", {}).get("unknown_defects", "未知"),
         ]
     )
     writer.writerow(
@@ -365,6 +382,7 @@ def csv_export(data):
             "已配置点范围病例",
             "问题病例",
             "已配置质控点范围的问题率",
+            "确认缺陷数",
         ]
     )
     for system in data.get("systems", []):
@@ -382,6 +400,9 @@ def csv_export(data):
                 system["problem_rate"]
                 if system["problem_rate"] is not None
                 else "无配置数据",
+                system.get("defect_total")
+                if system.get("defect_total") is not None
+                else "未知",
             ]
         )
     writer.writerow(
