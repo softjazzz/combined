@@ -43,10 +43,19 @@
         class="px-6 py-4 border-b border-slate-100 flex flex-col gap-4"
       >
         <div class="outpatient-toolbar-row flex items-center gap-3">
+          <a-select
+            v-model:value="recordSource"
+            data-testid="outpatient-record-source"
+            aria-label="门急诊病历来源"
+            class="w-48"
+          >
+            <a-select-option value="cdm_outpat_record">CDM 门急诊文书</a-select-option>
+            <a-select-option value="legacy_medical_records">历史病历来源</a-select-option>
+          </a-select>
           <div class="relative">
             <a-input
               v-model:value="searchKeyword"
-              placeholder="搜索病案号/姓名/医生..."
+              :placeholder="recordSource === 'cdm_outpat_record' ? '搜索门急诊号/姓名/就诊号...' : '搜索病案号/姓名/医生...'"
               class="w-64 apple-input !pl-10"
               @press-enter="handleSearch"
             />
@@ -77,6 +86,7 @@
           </a-select>
 
           <a-input
+            v-if="recordSource === 'legacy_medical_records'"
             v-model:value="scoringStandard"
             data-testid="outpatient-scoring-standard-filter"
             aria-label="病历源评分标准"
@@ -101,6 +111,7 @@
         </div>
 
         <OutpatientFilterTemplateBar
+          v-if="recordSource === 'legacy_medical_records'"
           :current-filters="currentTemplateFilters"
           :disabled="loading"
           @apply="applyTemplateFilters"
@@ -135,7 +146,7 @@
           </a-button>
           <a-button
             data-testid="export-outpatient-records"
-            :disabled="!appliedExportFilters || loading || exportLoading"
+            :disabled="recordSource !== 'legacy_medical_records' || !appliedExportFilters || loading || exportLoading"
             :loading="exportLoading"
             class="!rounded-xl"
             @click="handleExportRecords"
@@ -160,7 +171,7 @@
         role="status"
         class="px-6 py-2 text-xs text-slate-600 bg-slate-50 border-b border-slate-100"
       >
-        门急诊质控关联待核实，状态、得分、缺陷及其审核、催办、导出暂不可用；病历文书仍可查看。
+        {{ recordSource === 'cdm_outpat_record' ? 'CDM 门急诊完整文书可查看；质控结果、评分筛选及导出暂不可用。' : '历史病历文书与源评分标准可查询；质控关联待核实，状态、得分及缺陷暂不可用。' }}
       </div>
 
       <div
@@ -220,10 +231,13 @@
           @change="handleTableChange"
         >
           <template #bodyCell="{ column, record }">
+            <template v-if="['patient_name', 'department', 'visit_type', 'visit_date'].includes(column.key) && !record[column.key]">
+              <span class="text-slate-500">未知</span>
+            </template>
             <template v-if="column.key === 'recordNumber'">
               <a
                 class="font-mono font-semibold text-slate-700 hover:text-[#2b6cf6]"
-                @click="openDetail(record as AdminRecordItem)"
+                @click="openDetail(record as OutpatientEmergencyRecordItem)"
               >
                 {{ record.record_id || record.id }}
               </a>
@@ -240,7 +254,7 @@
                   type="link"
                   size="small"
                   class="!px-0"
-                  @click="openDetail(record as AdminRecordItem)"
+                  @click="openDetail(record as OutpatientEmergencyRecordItem)"
                 >
                   查看病历文书
                 </a-button>
@@ -297,9 +311,11 @@ import {
   exportOutpatientEmergencyRecords,
   getDepartmentList,
   getRecordDetail,
+  getOutpatientCdmDetail,
   getOutpatientEmergencyRecordList,
-  type AdminRecordItem,
+  type OutpatientEmergencyRecordItem,
   type OutpatientEmergencyRecordFilters,
+  type OutpatientCdmDocumentRef,
 } from '@/api/qcAdmin'
 import { useAuthStore } from '@/stores/auth'
 import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
@@ -317,16 +333,17 @@ const appliedExportFilters = ref<OutpatientEmergencyRecordFilters | null>(null)
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
 const scoringStandard = ref('')
+const recordSource = ref<'cdm_outpat_record' | 'legacy_medical_records'>('cdm_outpat_record')
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 let suppressAutomaticFetch = false
 let mounted = false
-const records = ref<AdminRecordItem[]>([])
+const records = ref<OutpatientEmergencyRecordItem[]>([])
 const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 const selectedRowKeys = ref<string[]>([])
 const detailVisible = ref(false)
 const detailLoading = ref(false)
-const detailRecord = ref<AdminRecordItem | null>(null)
+const detailRecord = ref<OutpatientEmergencyRecordItem | null>(null)
 const detailData = ref<Record<string, unknown> | null>(null)
 const detailError = ref('')
 let detailRequestSequence = 0
@@ -335,7 +352,7 @@ const detailIndex = computed(() =>
 )
 const authStore = useAuthStore()
 const actorKey = computed(() => (
-  `${authStore.user?.id || ''}|${[...authStore.userRoles].sort().join(',')}`
+  `${authStore.user?.id || ''}|${[...authStore.userRoles].sort().join(',')}|${authStore.user?.institute_id || ''}|${authStore.user?.department || ''}`
 ))
 
 const pagination = ref({
@@ -376,7 +393,7 @@ const currentTemplateFilters = computed<OutpatientFilterSnapshot>(() => ({
   end_date: dateRange.value?.[1]?.format('YYYY-MM-DD'),
 }))
 
-const columns: TableColumnsType<AdminRecordItem> = [
+const columns: TableColumnsType<OutpatientEmergencyRecordItem> = [
   { title: '病历号', dataIndex: 'record_id', key: 'recordNumber', width: 140 },
   { title: '患者姓名', dataIndex: 'patient_name', key: 'patient_name', width: 120 },
   { title: '就诊类型', dataIndex: 'visit_type', key: 'visit_type', width: 100 },
@@ -389,23 +406,27 @@ const columns: TableColumnsType<AdminRecordItem> = [
 ]
 
 const loadDepartments = async () => {
+  const requestActorKey = actorKey.value
+  const source = recordSource.value
   const res = await getDepartmentList()
+  if (requestActorKey !== actorKey.value || source !== recordSource.value) return
   if (res.success && res.data) {
-    departmentOptions.value = res.data.map((d) => ({ value: d.code || d.name, label: d.name }))
+    departmentOptions.value = res.data.map((d) => ({ value: source === 'cdm_outpat_record' ? d.name : d.code || d.name, label: d.name }))
   }
 }
 
 const currentListFilters = (): OutpatientEmergencyRecordFilters => ({
+  source: recordSource.value,
   keyword: searchKeyword.value || undefined,
   department: selectedDepartment.value,
-  scoring_standard: scoringStandard.value.trim() || undefined,
+  scoring_standard: recordSource.value === 'legacy_medical_records' ? scoringStandard.value.trim() || undefined : undefined,
   start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
   end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
   sort_field: 'visit_date',
   sort_order: 'desc',
 })
 
-const isValidRecordList = (value: unknown): value is { items: AdminRecordItem[]; total: number } => {
+const isValidRecordList = (value: unknown): value is { items: OutpatientEmergencyRecordItem[]; total: number } => {
   if (!value || typeof value !== 'object') return false
   const payload = value as Record<string, unknown>
   return Array.isArray(payload.items)
@@ -466,7 +487,7 @@ const invalidatePendingExport = () => {
 }
 
 const handleExportRecords = async () => {
-  if (!appliedExportFilters.value || exportLoading.value || loading.value) return
+  if (recordSource.value !== 'legacy_medical_records' || !appliedExportFilters.value || exportLoading.value || loading.value) return
   const requestSequence = ++exportRequestSequence
   const filters = { ...appliedExportFilters.value }
   exportLoading.value = true
@@ -509,14 +530,28 @@ const handleRefresh = () => {
   fetchRecords()
 }
 
-const resolveRecordId = (record: AdminRecordItem): string => {
+const resolveRecordId = (record: OutpatientEmergencyRecordItem): string => {
   return String(record.id || '').trim()
 }
 
-const openDetail = async (record: AdminRecordItem) => {
+const resolveCdmRef = (record: OutpatientEmergencyRecordItem): OutpatientCdmDocumentRef | null => {
+  const { institute_id, patient_id, visit_id, document_id } = record
+  if (record.source !== 'cdm_outpat_record'
+    || typeof institute_id !== 'string' || !institute_id || institute_id !== institute_id.trim()
+    || typeof patient_id !== 'string' || !patient_id || patient_id !== patient_id.trim()
+    || typeof visit_id !== 'string' || !visit_id || visit_id !== visit_id.trim()
+    || typeof document_id !== 'string' || !document_id || document_id !== document_id.trim()) return null
+  return { institute_id, patient_id, visit_id, document_id }
+}
+
+const openDetail = async (record: OutpatientEmergencyRecordItem) => {
   const recordId = resolveRecordId(record)
   if (!recordId) {
     message.warning('病历ID缺失，无法打开详情')
+    return
+  }
+  if (recordSource.value === 'legacy_medical_records' && record.source === 'cdm_outpat_record') {
+    message.warning('病历来源已变化，请重新查询')
     return
   }
 
@@ -527,7 +562,14 @@ const openDetail = async (record: AdminRecordItem) => {
   detailVisible.value = true
   detailLoading.value = true
   try {
-    const res = await getRecordDetail(recordId, 'legacy_medical_records')
+    const coordinates = resolveCdmRef(record)
+    if (recordSource.value === 'cdm_outpat_record' && !coordinates) {
+      detailError.value = '门急诊文书来源或四坐标无效'
+      return
+    }
+    const res = recordSource.value === 'cdm_outpat_record' && coordinates
+      ? await getOutpatientCdmDetail(coordinates)
+      : await getRecordDetail(recordId, 'legacy_medical_records')
     if (requestSequence !== detailRequestSequence) return
     if (res.success && res.data && typeof res.data === 'object') {
       detailData.value = res.data as Record<string, unknown>
@@ -585,17 +627,33 @@ watch([selectedDepartment, dateRange], () => {
 
 watch([searchKeyword, selectedDepartment, dateRange, scoringStandard], invalidatePendingExport)
 
+watch(recordSource, () => {
+  recordListRequestSequence += 1
+  invalidatePendingExport()
+  closeDetail()
+  records.value = []
+  selectedRowKeys.value = []
+  appliedExportFilters.value = null
+  pagination.value.current = 1
+  pagination.value.total = 0
+  void loadDepartments()
+  void fetchRecords()
+})
+
 watch(actorKey, () => {
   recordListRequestSequence += 1
   detailRequestSequence += 1
+  closeDetail()
   loading.value = false
   records.value = []
   selectedRowKeys.value = []
   pagination.value.total = 0
   appliedExportFilters.value = null
   listError.value = ''
+  departmentOptions.value = []
   invalidatePendingExport()
   if (mounted && authStore.user?.id) {
+    void loadDepartments()
     void fetchRecords()
     return
   }

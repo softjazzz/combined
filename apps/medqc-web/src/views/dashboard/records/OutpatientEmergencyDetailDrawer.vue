@@ -11,7 +11,7 @@
     <template #title>
       <div class="flex items-center justify-between gap-3 pr-4">
         <div class="flex items-center gap-3">
-          <span class="text-slate-900 font-semibold">门急诊病历质控详情</span>
+          <span class="text-slate-900 font-semibold">门急诊病历文书</span>
           <a-tag
             color="blue"
             class="apple-status-tag"
@@ -43,7 +43,7 @@
 
     <div
       class="grid grid-cols-1 gap-4"
-      :class="detailData && !loading && !error ? 'lg:grid-cols-[1fr_320px]' : ''"
+      :class="detailData && !loading && !error && !qcLinkUnavailable ? 'lg:grid-cols-[1fr_320px]' : ''"
     >
       <section class="space-y-4">
         <div class="apple-drawer-panel px-4 py-3">
@@ -325,6 +325,12 @@
                 {{ item.title }}
               </summary>
               <pre class="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ item.content || '文书暂无正文' }}</pre>
+              <dl v-if="item.fields.length" class="mt-3 space-y-3" data-testid="outpatient-source-fields">
+                <div v-for="field in item.fields" :key="field.key">
+                  <dt class="text-xs text-slate-500">{{ field.label }}</dt>
+                  <dd class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ field.value }}</dd>
+                </div>
+              </dl>
             </details>
           </div>
           <a-empty
@@ -339,12 +345,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AdminRecordItem } from '@/api/qcAdmin'
+import type { OutpatientEmergencyRecordItem } from '@/api/qcAdmin'
 
 interface DetailDrawerProps {
   visible: boolean
   loading?: boolean
-  record: AdminRecordItem | null
+  record: OutpatientEmergencyRecordItem | null
   detailData: Record<string, unknown> | null
   error?: string
   remediationEnabled?: boolean
@@ -393,7 +399,7 @@ const payload = computed<Record<string, any>>(() => {
   return {}
 })
 const qcLinkUnavailable = computed(
-  () => payload.value.qc_data_status === 'unavailable_identity_contract',
+  () => ['unavailable_identity_contract', 'unavailable_outpatient_result'].includes(payload.value.qc_data_status),
 )
 
 const defects = computed<any[]>(() => payload.value.defects || [])
@@ -466,8 +472,22 @@ const rawDocumentPanels = computed(() => {
       key: String(row.id || index),
       title: String(row.document_title || row.title || row.document_type || `文书 ${index + 1}`),
       content: String(row.content || ''),
+      fields: row.source_fields && typeof row.source_fields === 'object'
+        ? Object.entries(row.source_fields).map(([key, value]) => ({
+          key, label: sourceFieldLabels[key] || key,
+          value: value === null || value === undefined || value === '' ? '未知'
+            : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value),
+        })) : [],
     }))
 })
+
+const sourceFieldLabels: Record<string, string> = {
+  institute_id: '机构编号', patient_id: '患者编号', visit_id: '就诊编号', document_id: '文书编号',
+  name: '患者姓名', visit_type: '就诊类型', dept_name: '科室', outpat_no: '门急诊号',
+  visit_datetime: '就诊时间', chief_complaint: '主诉', history_of_present_illness: '现病史',
+  past_history: '既往史', checkup: '体格检查', assist_exam: '辅助检查', treatment_advice: '诊疗意见',
+  record_content: '记录内容', submitter: '文档提交人', submitter_id: '文档提交人编号',
+}
 </script>
 
 <style scoped>

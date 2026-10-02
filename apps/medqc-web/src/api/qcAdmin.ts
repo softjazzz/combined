@@ -114,6 +114,26 @@ export interface AdminRecordItem {
   created_at: string
 }
 
+/** 门急诊源记录不承诺存在任务、评分或质控状态。 */
+export interface OutpatientEmergencyRecordItem {
+  id: string
+  record_id: string
+  source?: 'legacy_medical_records' | 'records' | 'cdm_outpat_record'
+  institute_id?: string
+  patient_id?: string
+  visit_id?: string
+  document_id?: string
+  document_count?: number
+  patient_name?: string | null
+  department?: string | null
+  doctor_name?: string | null
+  visit_type?: string | null
+  visit_date?: string | null
+  status?: string | null
+  score?: number | null
+  defect_count?: number | null
+}
+
 /** 终末病历列表查询参数 */
 export interface FinalRecordListQuery {
   keyword?: string
@@ -133,6 +153,7 @@ export type OutpatientEmergencySortField =
   | 'department'
 
 export interface OutpatientEmergencyRecordFilters {
+  source?: 'legacy_medical_records' | 'cdm_outpat_record'
   keyword?: string
   department?: string
   status?: string
@@ -261,7 +282,7 @@ export async function getOutpatientEmergencyRecordList(
     })
   }
   const url = `${RECORDS_URL}/outpatient-emergency${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-  return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({
+  return request<{ items: OutpatientEmergencyRecordItem[]; total: number; page: number; page_size: number }>({
     method: 'GET',
     url,
   })
@@ -591,6 +612,22 @@ export async function getRecordDetail(recordId: string, source: 'legacy_medical_
     method: 'GET',
     url: `${RECORDS_URL}/${encodeURIComponent(recordId)}/qc-detail`,
     params: { source },
+  })
+}
+
+export interface OutpatientCdmDocumentRef {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  document_id: string
+}
+
+/** 文书标识只作同三坐标病例内的锚点，服务端读取完整病例文书。 */
+export async function getOutpatientCdmDetail(ref: OutpatientCdmDocumentRef) {
+  return request<Record<string, unknown>>({
+    method: 'GET',
+    url: `${RECORDS_URL}/outpatient-emergency/cdm-detail`,
+    params: { ...ref, source: 'cdm_outpat_record' },
   })
 }
 

@@ -38,12 +38,10 @@ function mountDrawer(detailData: Record<string, unknown> | null, error = '') {
       loading: false,
       record: {
         id: 'row-1',
-        task_id: 'task-1',
         record_id: 'MR-1',
         patient_name: '患者甲',
         status: 'pending',
         defect_count: 0,
-        created_at: '2026-09-24T00:00:00Z',
       },
       detailData,
       error,
@@ -67,6 +65,22 @@ function mountDrawer(detailData: Record<string, unknown> | null, error = '') {
 }
 
 describe('OutpatientEmergencyDetailDrawer 详情读取状态', () => {
+  it('CDM完整结构化字段可浏览，提交人保持提交人且质控未知不显示零缺陷', () => {
+    const wrapper = mountDrawer({
+      qc_data_status: 'unavailable_outpatient_result',
+      documents: { raw_documents: [{ id: 'D', content: '合成完整正文', source_fields: {
+        chief_complaint: '合成主诉', history_of_present_illness: '合成现病史',
+        submitter: '合成提交人', extension_field: '尾字段', nullable_field: null, known_zero: 0,
+      } }] },
+    })
+    expect(wrapper.text()).toContain('合成完整正文')
+    expect(wrapper.get('[data-testid="outpatient-source-fields"]').text()).toContain('合成现病史')
+    expect(wrapper.text()).toContain('文档提交人')
+    expect(wrapper.text()).toContain('尾字段')
+    expect(wrapper.text()).toContain('未知')
+    expect(wrapper.text()).not.toContain('缺陷(0)')
+    wrapper.unmount()
+  })
   it('错误时显示病历上下文和重试，不渲染空缺陷或文书', async () => {
     const wrapper = mountDrawer(null, '详情服务暂不可用')
     expect(wrapper.text()).toContain('MR-1')

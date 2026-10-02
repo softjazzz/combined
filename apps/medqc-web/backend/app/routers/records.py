@@ -21,7 +21,8 @@ from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 from ..services.bundles.emr_view import build_documents_tree, load_bundle_documents
 from ..services.sample_validation_rule_sets import WORKSPACE_BATCH_DRAFT_IDS
-from ..services import outpatient_record_list_service
+from ..services import outpatient_record_list_service, outpatient_cdm_read_service
+from ..services.defect_rectification_service import RectificationError
 from ..core.permissions import (
     require_permission,
     ResourceType,
@@ -536,9 +537,25 @@ async def get_outpatient_emergency_records(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
+    source: Literal["legacy_medical_records", "cdm_outpat_record"] = "legacy_medical_records",
 ):
     """按授权数据范围分页读取门急诊病历。"""
     try:
+        if source == outpatient_cdm_read_service.SOURCE:
+            filters = outpatient_record_list_service.build_filter(
+                keyword=keyword, department=department, status=status,
+                start_date=start_date, end_date=end_date, scoring_standard=scoring_standard,
+                sort_field=sort_field, sort_order=sort_order,
+            )
+            result = await outpatient_cdm_read_service.query_records(
+                actor=outpatient_cdm_read_service.load_actor(current_user.get("id")),
+                source=get_supabase(), execute=async_execute, filters=filters,
+                page=page, page_size=page_size,
+            )
+            return paginated_response(
+                items=result.items, total=result.total, page=page, page_size=page_size,
+                message="获取门急诊 CDM 病历成功", trace_id=get_trace_id(request),
+            )
         scope = resolve_workstation_data_scope(current_user, department)
         filters = outpatient_record_list_service.build_filter(
             keyword=keyword,
@@ -572,6 +589,8 @@ async def get_outpatient_emergency_records(
             message="获取门急诊病历成功",
             trace_id=get_trace_id(request),
         )
+    except RectificationError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     except outpatient_record_list_service.OutpatientRecordInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (
@@ -593,6 +612,35 @@ async def get_outpatient_emergency_records(
         ) from None
 
 
+@router.get("/outpatient-emergency/cdm-detail")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_outpatient_cdm_detail(
+    request: Request,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    document_id: str,
+    source: Literal["cdm_outpat_record"] = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        payload = await outpatient_cdm_read_service.detail(
+            actor=outpatient_cdm_read_service.load_actor(current_user.get("id")),
+            source=get_supabase(), execute=async_execute,
+            coordinates={"institute_id": institute_id, "patient_id": patient_id,
+                         "visit_id": visit_id, "document_id": document_id},
+        )
+        return success_response(data=payload, message="获取门急诊文书成功", trace_id=get_trace_id(request))
+    except RectificationError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except outpatient_record_list_service.OutpatientRecordInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="门急诊 CDM 文书不可用") from None
+
+
 @router.get("/outpatient-emergency/export")
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.EXPORT)
 async def export_outpatient_emergency_records(
@@ -606,6 +654,7 @@ async def export_outpatient_emergency_records(
     sort_field: Optional[str] = "visit_date",
     sort_order: Optional[str] = "desc",
     current_user: dict = Depends(get_current_user),
+    source: Literal["legacy_medical_records"] = "legacy_medical_records",
 ):
     """导出与门急诊列表完全相同筛选和排序下的全部命中项。"""
     try:

@@ -1,6 +1,6 @@
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getRecordDetail } from '@/api/qcAdmin'
+import { getRecordDetail, getOutpatientCdmDetail } from '@/api/qcAdmin'
 import { ApiService } from '@/services/apiService'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
@@ -18,6 +18,15 @@ function response<T>(data: T): AxiosResponse<T> {
 describe('getRecordDetail 质控详情合同', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('CDM详情使用独立入口及完整四坐标，不拼接visit单键旧详情路径', async () => {
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response({ success: true, data: { documents: {} } }))
+    await getOutpatientCdmDetail({ institute_id: 'I/1', patient_id: 'P', visit_id: 'V', document_id: 'D' })
+    expect(ApiService.requestRaw).toHaveBeenCalledWith({
+      method: 'GET', url: '/api/v1/records/outpatient-emergency/cdm-detail',
+      params: { source: 'cdm_outpat_record', institute_id: 'I/1', patient_id: 'P', visit_id: 'V', document_id: 'D' },
+    })
   })
 
   it('显式旧病历来源才请求质控详情，并编码旧表主键', async () => {

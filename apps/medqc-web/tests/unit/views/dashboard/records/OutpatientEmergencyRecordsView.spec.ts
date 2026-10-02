@@ -28,7 +28,9 @@ vi.mock('@/api/qcAdmin', () => ({
   getAdminOverview: mocks.getAdminOverview,
   getDepartmentList: mocks.getDepartmentList,
   getRecordDetail: mocks.getRecordDetail,
-  getOutpatientEmergencyRecordList: mocks.getOutpatientEmergencyRecordList,
+  getOutpatientEmergencyRecordList: (params: { source?: string }) => params.source === 'cdm_outpat_record'
+    ? Promise.resolve(emptySuccess) : mocks.getOutpatientEmergencyRecordList(params),
+  getOutpatientCdmDetail: vi.fn(),
   rejectDefect: mocks.rejectDefect,
   urgeDefect: mocks.urgeDefect,
 }))
@@ -115,7 +117,7 @@ function successWith(id: string) {
 }
 
 function mountView() {
-  return shallowMount(OutpatientEmergencyRecordsView, {
+  const wrapper = shallowMount(OutpatientEmergencyRecordsView, {
     global: {
       stubs: {
         'a-button': ButtonStub,
@@ -130,6 +132,8 @@ function mountView() {
       },
     },
   })
+  ;(wrapper.vm as unknown as { recordSource: string }).recordSource = 'legacy_medical_records'
+  return wrapper
 }
 
 describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
@@ -157,6 +161,7 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     await flushPromises()
     const templateBar = wrapper.getComponent(OutpatientFilterTemplateBar)
     expect(templateBar.props('currentFilters')).toEqual({
+      scoring_standard: undefined,
       keyword: undefined,
       department: undefined,
       start_date: undefined,
@@ -254,6 +259,7 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
       .mockReturnValueOnce(newRequest.promise)
     const wrapper = mountView()
 
+    await nextTick()
     wrapper.getComponent(OutpatientFilterTemplateBar).vm.$emit('apply', { keyword: '默认模板' })
     await nextTick()
     oldRequest.resolve({ success: false, message: '旧请求失败' })
@@ -349,7 +355,7 @@ describe('OutpatientEmergencyRecordsView 列表故障语义', () => {
     vm.selectedRowKeys = ['primary-id']
     await nextTick()
 
-    expect(wrapper.text()).toContain('门急诊质控关联待核实')
+    expect(wrapper.text()).toContain('质控关联待核实')
     expect(wrapper.text()).not.toContain('已通过')
     expect(wrapper.get('[data-testid="record-actions-primary-id"]').text()).toContain('质控关联待核实')
     expect(wrapper.get('[data-testid="record-actions-primary-id"]').text()).toContain('暂不可用')

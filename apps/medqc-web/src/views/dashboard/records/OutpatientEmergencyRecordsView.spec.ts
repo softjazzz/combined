@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
   getList: vi.fn(),
+  getCdmList: vi.fn(),
+  getCdmDetail: vi.fn(),
   getDepartments: vi.fn(),
   getDetail: vi.fn(),
   exportRecords: vi.fn(),
@@ -29,7 +31,9 @@ vi.mock('@/stores/auth', async () => {
 
 vi.mock('ant-design-vue', () => ({ message: { error: state.error, warning: vi.fn() } }))
 vi.mock('@/api/qcAdmin', () => ({
-  getOutpatientEmergencyRecordList: state.getList,
+  getOutpatientEmergencyRecordList: (params: { source?: string }) => params.source === 'cdm_outpat_record'
+    ? state.getCdmList(params) : state.getList(params),
+  getOutpatientCdmDetail: state.getCdmDetail,
   getDepartmentList: state.getDepartments,
   getRecordDetail: state.getDetail,
   exportOutpatientEmergencyRecords: state.exportRecords,
@@ -39,7 +43,7 @@ vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => (
 }))
 
 import OutpatientEmergencyRecordsView from './OutpatientEmergencyRecordsView.vue'
-import type { OutpatientEmergencyRecordFilters } from '@/api/qcAdmin'
+import type { OutpatientEmergencyRecordFilters, OutpatientEmergencyRecordItem } from '@/api/qcAdmin'
 
 const ButtonStub = {
   props: ['disabled', 'loading'],
@@ -62,9 +66,9 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function render() {
+function render(source: 'cdm_outpat_record' | 'legacy_medical_records' = 'legacy_medical_records') {
   authControl.set?.({ id: 'admin-1', roles: ['admin'] })
-  return shallowMount(OutpatientEmergencyRecordsView, {
+  const wrapper = shallowMount(OutpatientEmergencyRecordsView, {
     global: {
       stubs: {
         'a-button': ButtonStub,
@@ -82,9 +86,12 @@ function render() {
       },
     },
   })
+  ;(wrapper.vm as unknown as ViewState).recordSource = source
+  return wrapper
 }
 
 type ViewState = {
+  recordSource: 'cdm_outpat_record' | 'legacy_medical_records'
   searchKeyword: string
   selectedDepartment?: string
   scoringStandard: string
@@ -96,6 +103,10 @@ type ViewState = {
   handleExportRecords: () => Promise<void>
   resetFilters: () => void
   applyTemplateFilters: (filters: { scoring_standard?: string }) => Promise<void>
+  openDetail: (record: OutpatientEmergencyRecordItem) => Promise<void>
+  detailData: Record<string, unknown> | null
+  detailVisible: boolean
+  detailError: string
 }
 
 describe('门急诊病历列表导出', () => {
@@ -103,6 +114,7 @@ describe('门急诊病历列表导出', () => {
     vi.clearAllMocks()
     authControl.set?.({ id: 'admin-1', roles: ['admin'] })
     state.getDepartments.mockResolvedValue({ success: true, data: [] })
+    state.getCdmList.mockResolvedValue({ success: true, data: { items: [], total: 0 } })
     state.getList.mockResolvedValue({
       success: true,
       data: { items: [], total: 0, page: 1, page_size: 20 },
@@ -112,6 +124,79 @@ describe('门急诊病历列表导出', () => {
       blob: new Blob(['csv'], { type: 'text/csv' }),
       filename: 'outpatient-emergency-records.csv',
     })
+  })
+
+  const cdmRecord: OutpatientEmergencyRecordItem = {
+    id: '["I","P","V"]', record_id: 'V', source: 'cdm_outpat_record',
+    institute_id: 'I', patient_id: 'P', visit_id: 'V', document_id: 'D',
+  }
+
+  it('默认CDM来源按四坐标读取，历史评分模板与导出不会进入CDM链', async () => {
+    state.getCdmDetail.mockResolvedValue({ success: true, data: { qc_data_status: 'unavailable_outpatient_result' } })
+    const wrapper = render('cdm_outpat_record')
+    await flush()
+    const view = wrapper.vm as unknown as ViewState
+    expect(state.getCdmList).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'cdm_outpat_record' }))
+    expect(wrapper.find('[data-testid="outpatient-scoring-standard-filter"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'OutpatientFilterTemplateBar' }).exists()).toBe(false)
+    view.scoringStandard = '历史标准仍保留'
+    view.handleSearch()
+    await flush()
+    expect(state.getCdmList).toHaveBeenLastCalledWith(expect.objectContaining({ scoring_standard: undefined }))
+    await view.openDetail(cdmRecord)
+    expect(state.getCdmDetail).toHaveBeenCalledWith({ institute_id: 'I', patient_id: 'P', visit_id: 'V', document_id: 'D' })
+    expect(state.getDetail).not.toHaveBeenCalled()
+    await view.handleExportRecords()
+    expect(state.exportRecords).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['source', 'account'])('%s切换关闭详情并丢弃旧文书成功响应', async (change) => {
+    const pending = deferred<{ success: true; data: Record<string, unknown> }>()
+    state.getCdmDetail.mockReturnValueOnce(pending.promise)
+    const wrapper = render('cdm_outpat_record')
+    await flush()
+    const view = wrapper.vm as unknown as ViewState
+    const detail = view.openDetail(cdmRecord)
+    if (change === 'source') view.recordSource = 'legacy_medical_records'
+    else authControl.set?.({ id: 'other-admin', roles: ['admin'] })
+    await flush()
+    expect(view.detailVisible).toBe(false)
+    pending.resolve({ success: true, data: { private_text: '旧病例全文' } })
+    await detail
+    await flush()
+    expect(view.detailData).toBeNull()
+    expect(view.detailError).toBe('')
+    wrapper.unmount()
+  })
+
+  it('来源切换保留历史评分字段，CDM迟到列表不会覆盖历史查询与导出来源', async () => {
+    const pending = deferred<{ success: true; data: { items: OutpatientEmergencyRecordItem[]; total: number } }>()
+    state.getCdmList.mockReturnValueOnce(pending.promise)
+    const wrapper = render('cdm_outpat_record')
+    const view = wrapper.vm as unknown as ViewState
+    view.scoringStandard = '历史评分标准'
+    view.recordSource = 'legacy_medical_records'
+    await flush()
+    expect(state.getList).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'legacy_medical_records', scoring_standard: '历史评分标准' }))
+    pending.resolve({ success: true, data: { items: [cdmRecord], total: 1 } })
+    await flush()
+    expect(view.records).toEqual([])
+    expect(view.appliedExportFilters?.source).toBe('legacy_medical_records')
+    expect(view.scoringStandard).toBe('历史评分标准')
+    wrapper.unmount()
+  })
+
+  it('CDM四坐标缺失或来源未知拒绝详情，不用visit单键回退旧路径', async () => {
+    const wrapper = render('cdm_outpat_record')
+    await flush()
+    const view = wrapper.vm as unknown as ViewState
+    await view.openDetail({ ...cdmRecord, document_id: undefined })
+    expect(view.detailError).toContain('四坐标无效')
+    await view.openDetail({ ...cdmRecord, source: undefined })
+    expect(state.getCdmDetail).not.toHaveBeenCalled()
+    expect(state.getDetail).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('导出最近一次成功列表的全量筛选，不读取尚未查询的关键词或分页', async () => {
@@ -125,6 +210,7 @@ describe('门急诊病历列表导出', () => {
     await flush()
 
     expect(state.exportRecords).toHaveBeenLastCalledWith({
+      source: 'legacy_medical_records',
       keyword: undefined,
       department: undefined,
       scoring_standard: undefined,
