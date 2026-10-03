@@ -292,8 +292,9 @@ async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, A
         logger.error("review_todo_counts_failed error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="待办统计暂不可用，请稍后重试") from None
     return {
-        "record_initial": int(record_counts["initial"]),
-        "record_recheck": int(record_counts["recheck"]),
+        "record_initial": record_counts["initial"],
+        "record_recheck": record_counts["recheck"],
+        "record_unavailable_reason": record_counts.get("unavailable_reason"),
         "manual_defects": manual_defects,
     }
 
@@ -347,6 +348,8 @@ async def get_todo_stats(
                 "pending_review": review_counts["record_initial"],
                 "pending_recheck": review_counts["record_recheck"],
                 "total": records.get('total', 0),
+                **({"unavailable_reason": review_counts["record_unavailable_reason"]}
+                   if review_counts["record_unavailable_reason"] else {}),
             },
             "overview": {
                 "total_records": records.get('total', 0),

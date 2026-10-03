@@ -43,6 +43,28 @@ def _request():
 
 
 @pytest.mark.asyncio
+async def test_review_source_unavailable_preserves_null_and_manual_source(monkeypatch):
+    from app.routers import record_reviews
+    from app.services import manual_defect_review_service
+
+    monkeypatch.setattr(record_reviews, "count_my_record_review_todos", lambda *_args: {
+        "initial": None, "recheck": None, "unavailable_reason": "review_source_unavailable",
+    })
+    monkeypatch.setattr(manual_defect_review_service, "count_pending_manual_defects", lambda **_kwargs: 2)
+    async def db_stats(**_kwargs):
+        return {"records": {"total": 3}, "qc": {}}
+    monkeypatch.setattr(dashboard_api, "_get_db_stats_by_scene", db_stats)
+    result = await dashboard_api.get_todo_stats(
+        _request(), scene="outpatient_emergency", current_user={"user_id": "tester", "roles": ["qc_manager"]},
+    )
+    assert result["data"]["record_stats"] == {
+        "pending_review": None, "pending_recheck": None, "total": 3,
+        "unavailable_reason": "review_source_unavailable",
+    }
+    assert result["data"]["defect_stats"]["pending_review"] == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("scene", ["all", "outpatient_emergency"])
 async def test_global_statuses_and_other_users_work_do_not_become_my_todos(monkeypatch, scene):
     rows = {

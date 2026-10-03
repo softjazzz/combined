@@ -140,11 +140,11 @@ def env(monkeypatch):
             {"id": "task-1", "task_number": "T1", "task_name": "在院任务", "task_type": "one_time",
              "status": "in_progress", "scene": "running", "rule_set_key": LX, "rule_set_version": VERSION,
              "creator_id": "creator", "created_at": base},
-            {"id": "task-2", "task_number": "T2", "task_name": "终末任务", "task_type": "one_time",
-             "status": "in_progress", "scene": "final", "rule_set_key": LX, "rule_set_version": VERSION,
+            {"id": "task-2", "task_number": "T2", "task_name": "第二个运行任务", "task_type": "one_time",
+             "status": "in_progress", "scene": "running", "rule_set_key": LX, "rule_set_version": VERSION,
              "creator_id": "creator", "created_at": base + timedelta(days=1)},
             {"id": "task-3", "task_number": "T3", "task_name": "其他规则集", "task_type": "one_time",
-             "status": "in_progress", "scene": "running", "rule_set_key": "sc_content_other",
+             "status": "not_started", "scene": "running", "rule_set_key": "sc_content_other",
              "rule_set_version": "x", "creator_id": "creator", "created_at": base},
             {"id": "task-4", "task_number": "T4", "task_name": "已完成任务", "task_type": "one_time",
              "status": "completed", "scene": "running", "rule_set_key": LX, "rule_set_version": VERSION,
@@ -301,7 +301,7 @@ def summaries(env, monkeypatch):
         session.execute(table.insert(), [
             {"id": job, "created_by": actor, "status": "completed", "filters_json": json.dumps({
                 "task_id": task, "task_run_number": number, "rule_set_key": LX,
-                "rule_set_version": VERSION, "query_scope": "final" if task == "task-2" else "running",
+                "rule_set_version": VERSION, "query_scope": "running",
             })}
             for task, number, job, actor, _ in RUNS
         ])
@@ -490,6 +490,7 @@ def test_envelope_missing_or_ambiguous(env):
 
 
 def test_unsupported_rule_set(env):
+    env.set_status(QCTask, "task-3", "in_progress")
     got = view(record="rec-e", task="task-3")
     assert got["state"] == "unavailable" and got["reason_code"] == "unsupported_rule_set"
     with pytest.raises(service.RecordReviewConflict) as exc:
@@ -561,7 +562,7 @@ def test_todo_includes_rec_a_until_decided(env):
 
 @pytest.mark.parametrize("scene,expected", [
     (None, {"rec-a", "rec-b", "rec-d"}), ("all", {"rec-a", "rec-b", "rec-d"}),
-    ("running", {"rec-a", "rec-b"}), ("final", {"rec-d"}), ("outpatient_emergency", set()),
+    ("running", {"rec-a", "rec-b", "rec-d"}), ("final", set()),
 ])
 def test_todo_scene_filter(env, scene, expected):
     listed = todos(scene=scene, page_size=100)
@@ -569,10 +570,16 @@ def test_todo_scene_filter(env, scene, expected):
     assert listed["total"] == len(expected) == sum(counts(scene=scene).values())
 
 
-def test_outpatient_emergency_maps_to_task_scene_outpatient(env):
+def test_outpatient_source_unavailable_cannot_be_faked_by_inpatient_envelope(env):
     with env.sessions.begin() as session:
         session.execute(QCTask.__table__.update().where(QCTask.id == "task-2").values(scene="outpatient"))
-    assert {item["task_record_id"] for item in todos(scene="outpatient_emergency")["items"]} == {"rec-d"}
+    assert counts(scene="outpatient_emergency") == {
+        "initial": None, "recheck": None, "unavailable_reason": "review_source_unavailable",
+    }
+    assert env.reader_calls == []
+    with pytest.raises(service.RecordReviewTodoScopeUnavailable):
+        todos(scene="outpatient_emergency")
+    assert counts(scene="all")["initial"] is None
     with pytest.raises(service.RecordReviewInvalid):
         counts(scene="unknown")
 
@@ -582,10 +589,37 @@ def test_todo_batches_queries(env):
     engine = env.sessions.kw["bind"]
     sa.event.listen(engine, "before_cursor_execute", lambda *args: statements.append(args[2]))
     counts()
-    # 服务自身：候选 1 + 运行 1 + Envelope 1 + 决定 1；其余为假读取器每次 2 条
-    assert len(statements) - 2 * len(env.reader_calls) == 4
+    # 服务自身：范围完整性 1 + 候选 1 + 运行 1 + Envelope 1 + 决定 1；其余为假读取器每次 2 条
+    assert len(statements) - 2 * len(env.reader_calls) == 5
     # 读取器只对“最新唯一 Envelope 且未决定”的运行调用：rec-a、rec-b、rec-d
     assert sorted(call["task_record_id"] for call in env.reader_calls) == ["rec-a", "rec-b", "rec-d"]
+
+
+@pytest.mark.parametrize("scene,rule", [("running", "luxian_0916_qc_v1"), ("final", "sc_content_launch_a_v1"), ("final", LX)])
+def test_unsupported_review_rule_source_keeps_full_todo_count_unknown(env, scene, rule):
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-3").values(
+            status="in_progress", scene=scene, rule_set_key=rule,
+        ))
+    for scope in (scene, "all"):
+        assert counts(scene=scope) == {
+            "initial": None, "recheck": None, "unavailable_reason": "review_source_unavailable",
+        }
+        with pytest.raises(service.RecordReviewTodoScopeUnavailable):
+            todos(scene=scope)
+    other = "final" if scene == "running" else "running"
+    assert counts(scene=other)["initial"] == (0 if other == "final" else 3)
+
+
+@pytest.mark.parametrize("changes", [{"scene": None}, {"rule_set_version": "  "}])
+def test_active_assigned_legacy_source_is_unknown_not_empty(env, changes):
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(**changes))
+    assert counts(scene="all")["initial"] is None
+    # 无本人受领运行的旧任务不造成来源缺口。
+    with env.sessions.begin() as session:
+        session.execute(QCTaskQCRun.__table__.delete().where(QCTaskQCRun.task_id == "task-1"))
+    assert counts(scene="all") == {"initial": 1, "recheck": 0}
 
 
 def test_database_error_is_unavailable(env, monkeypatch):

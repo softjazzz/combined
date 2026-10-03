@@ -43,6 +43,9 @@
     <p v-if="manualDefectUnavailable" class="review-todos__note" data-testid="manual-defect-scope-note">
       当前账号无人工缺陷审核权限，计数显示为不可用。
     </p>
+    <p v-if="counts?.record_unavailable_reason" class="review-todos__note" data-testid="record-review-scope-note">
+      当前范围的病历审核来源尚未接通，待初审和待复审数量不可用。
+    </p>
   </section>
 </template>
 

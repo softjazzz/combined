@@ -50,6 +50,7 @@ export interface TodoStats {
     pending_review: number | null
     pending_recheck: number | null
     total: number | null
+    unavailable_reason?: 'review_source_unavailable'
   }
   overview?: {
     total_records: number
@@ -65,8 +66,9 @@ export interface TodoStats {
 }
 
 export interface ReviewTodoCounts {
-  pending_record_review: number
-  pending_record_recheck: number
+  pending_record_review: number | null
+  pending_record_recheck: number | null
+  record_unavailable_reason?: 'review_source_unavailable'
   pending_manual_defect_review: number | null
   scene: DashboardScene
 }
@@ -247,8 +249,10 @@ export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promis
   const recordReview = data.record_stats.pending_review
   const recordRecheck = data.record_stats.pending_recheck
   const manualDefectReview = data.defect_stats.pending_review
-  if (!isNonNegativeInteger(recordReview)
-    || !isNonNegativeInteger(recordRecheck)
+  const recordUnavailable = data.record_stats.unavailable_reason === 'review_source_unavailable'
+  if ((recordUnavailable && (recordReview !== null || recordRecheck !== null))
+    || (!isNonNegativeInteger(recordReview) && !(recordUnavailable && recordReview === null))
+    || (!isNonNegativeInteger(recordRecheck) && !(recordUnavailable && recordRecheck === null))
     || (manualDefectReview !== null && !isNonNegativeInteger(manualDefectReview))) {
     return { success: false, message: '审核待办数据格式异常' }
   }
@@ -256,9 +260,10 @@ export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promis
   return {
     success: true,
     data: {
-      pending_record_review: recordReview,
-      pending_record_recheck: recordRecheck,
+      pending_record_review: isNonNegativeInteger(recordReview) ? recordReview : null,
+      pending_record_recheck: isNonNegativeInteger(recordRecheck) ? recordRecheck : null,
       pending_manual_defect_review: isNonNegativeInteger(manualDefectReview) ? manualDefectReview : null,
+      ...(recordUnavailable ? { record_unavailable_reason: 'review_source_unavailable' as const } : {}),
       scene,
     },
   }

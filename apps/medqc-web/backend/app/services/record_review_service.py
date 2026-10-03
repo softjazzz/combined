@@ -21,13 +21,14 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCRecordReview, QCTask, QCTaskQCRun, QCTaskRecord
 from .case_identity import CaseRef
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from .qc_rule_sets import get_sichuan_rule_set
 from .task_qc_run_service import (
     TaskQCRunConflict,
     TaskQCRunForbidden,
@@ -68,6 +69,10 @@ class RecordReviewConflict(ValueError):
 
 class RecordReviewUnavailable(RuntimeError):
     pass
+
+
+class RecordReviewTodoScopeUnavailable(RecordReviewUnavailable):
+    """请求范围存在尚未接通可信审核来源的场景或规则集。"""
 
 
 def _envelope_table() -> Any:
@@ -1101,10 +1106,38 @@ def _pending_todo_items(
 ) -> list[dict[str, Any]]:
     """待办唯一谓词：本人受领、任务进行中、最新可用的本人 assigned 运行结果尚无决定。
 
-    数据库往返：候选 1 次 + 运行 1 次 + Envelope 按 job 分块 + 决定按 visit 分块；
+    数据库往返：范围完整性 1 次 + 候选 1 次 + 运行 1 次 + Envelope 按 job 分块 + 决定按 visit 分块；
     仅对“最新有唯一 Envelope 且未决定”的运行调用一次结果读取器。
     """
     task_scene = _task_scene_filter(scene)
+    if task_scene == "outpatient":
+        raise RecordReviewTodoScopeUnavailable("门急诊病历审核来源尚未接通")
+    review_rule_set = get_sichuan_rule_set(LUXIAN_0609_RULE_SET_KEY)
+    if review_rule_set is None:
+        raise RecordReviewTodoScopeUnavailable("病历审核规则来源尚未接通")
+    unsupported = (
+        select(QCTaskRecord.id)
+        .join(QCTask, QCTask.id == QCTaskRecord.task_id)
+        .join(QCTaskQCRun, QCTaskQCRun.task_id == QCTask.id)
+        .where(
+            QCTaskRecord.assignee_id == actor_id,
+            QCTaskRecord.status.in_(("in_progress", "completed")),
+            QCTask.status == "in_progress",
+            QCTaskQCRun.run_scope == "assigned", QCTaskQCRun.triggered_by == actor_id,
+            (QCTask.rule_set_key.is_(None)
+             | (QCTask.rule_set_key != LUXIAN_0609_RULE_SET_KEY)
+             | QCTask.rule_set_version.is_(None) | (func.trim(QCTask.rule_set_version) == "")
+             | QCTask.scene.is_(None) | (QCTask.scene != review_rule_set.scope)
+             | QCTaskRecord.institute_id.is_(None) | (func.trim(QCTaskRecord.institute_id) == "")
+             | QCTaskRecord.patient_id.is_(None) | (func.trim(QCTaskRecord.patient_id) == "")
+             | QCTaskRecord.visit_id.is_(None) | (func.trim(QCTaskRecord.visit_id) == "")
+             | QCTaskRecord.record_id.is_(None) | (QCTaskRecord.record_id != QCTaskRecord.id)),
+        ).limit(1)
+    )
+    if task_scene is not None:
+        unsupported = unsupported.where(QCTask.scene == task_scene)
+    if session.execute(unsupported).first() is not None:
+        raise RecordReviewTodoScopeUnavailable("当前范围包含尚未接通审核来源的任务结果")
     statement = (
         select(
             QCTaskRecord.id, QCTaskRecord.task_id, QCTaskRecord.record_id,
@@ -1260,9 +1293,12 @@ def list_my_record_review_todos(
 def count_my_record_review_todos(
     actor_id: str, scene: str | None = None,
     workspace_factory: Callable[[], Any] | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """首页待办计数；与待办列表共用 _pending_todo_items 谓词。"""
-    items = _collect_todos(actor_id, scene, workspace_factory)
+    try:
+        items = _collect_todos(actor_id, scene, workspace_factory)
+    except RecordReviewTodoScopeUnavailable:
+        return {"initial": None, "recheck": None, "unavailable_reason": "review_source_unavailable"}
     return {
         "initial": sum(1 for item in items if item["stage"] == "initial"),
         "recheck": sum(1 for item in items if item["stage"] == "recheck"),

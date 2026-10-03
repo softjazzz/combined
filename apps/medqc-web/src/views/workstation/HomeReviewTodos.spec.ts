@@ -104,6 +104,24 @@ describe('V5 首页审核待办', () => {
     expect(mocks.info).toHaveBeenCalledWith('没有待初审病历')
   })
 
+  it('未接通病历审核来源显示不可用且不下钻、不提示零待办', async () => {
+    mocks.getReviewTodoCounts.mockResolvedValueOnce({ success: true, data: {
+      pending_record_review: null, pending_record_recheck: null, pending_manual_defect_review: 2,
+      record_unavailable_reason: 'review_source_unavailable', scene: 'outpatient_emergency',
+    } })
+    const wrapper = mount(HomeReviewTodos, { props: { scene: 'outpatient_emergency' } })
+    await flushPromises()
+    for (const key of ['record-review', 'record-recheck']) {
+      expect(wrapper.get(`[data-testid="review-todo-${key}-count"]`).text()).toBe('不可用')
+      expect(wrapper.get(`[data-testid="review-todo-${key}"]`).attributes('disabled')).toBeDefined()
+      await wrapper.get(`[data-testid="review-todo-${key}"]`).trigger('click')
+    }
+    expect(wrapper.get('[data-testid="record-review-scope-note"]').text()).toContain('审核来源尚未接通')
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect(mocks.info).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="review-todo-manual-defect-count"]').text()).toBe('2')
+  })
+
   it('失败后清空计数，重试恢复最新数据', async () => {
     mocks.getReviewTodoCounts
       .mockResolvedValueOnce({ success: false, message: '服务不可用' })
