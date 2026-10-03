@@ -46,3 +46,13 @@ def test_migration_modules_loaded_without_running_upgrade(monkeypatch):
         assert module.SCHEMAS == ("qc", "public")
     assert preflight.load_migration("083").down_revision == "20261002_000082"
     assert preflight.load_migration("084").down_revision == "20261003_000083"
+
+
+def test_after_phase_only_adapts_the_authorized_parent_scene_check():
+    before = preflight.binding_migration("before")._baseline()
+    after = preflight.binding_migration("after")._baseline()
+    frontpage = preflight.load_migration("084")
+    assert before.SPECS[frontpage.TABLE]["checks"][frontpage.CONSTRAINT] == frontpage.OLD_CHECK
+    assert after.SPECS[frontpage.TABLE]["checks"][frontpage.CONSTRAINT] == frontpage.NEW_CHECK
+    after.SPECS[frontpage.TABLE]["checks"][frontpage.CONSTRAINT] = frontpage.OLD_CHECK
+    assert before.SPECS == after.SPECS
