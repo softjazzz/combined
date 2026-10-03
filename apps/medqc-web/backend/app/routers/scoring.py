@@ -70,7 +70,8 @@ _UNAVAILABLE_DETAIL = "评分服务暂不可用，请稍后重试"
 _MANAGER_ROLES = [UserRole.ADMIN, UserRole.QC_MANAGER]
 
 Number = Union[StrictInt, StrictFloat]
-Scene = Literal["running", "final", "outpatient"]
+Scene = Literal["running", "final", "outpatient", "frontpage"]
+CaseScene = Literal["running", "final", "outpatient"]
 
 
 class GradeBand(BaseModel):
@@ -540,7 +541,7 @@ async def get_case_score(
     institute_id: str = Query(..., min_length=1, max_length=128),
     patient_id: str = Query(..., min_length=1, max_length=128),
     visit_id: str = Query(..., min_length=1, max_length=128),
-    scene: Scene = Query(...),
+    scene: CaseScene = Query(...),
     standard_id: str | None = Query(None, min_length=1, max_length=128),
     current_user: dict = Depends(get_current_user),
 ):

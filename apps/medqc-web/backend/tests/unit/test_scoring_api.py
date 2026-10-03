@@ -73,6 +73,33 @@ def test_scene_catalog_maps_rule_sets_by_scope():
     assert service.scene_rule_set_keys("outpatient") == ()
 
 
+def test_frontpage_http_scene_and_actual_default_configuration(sessions):
+    from app.services.frontpage_rule_catalog import FRONTPAGE_RULE_SET_KEY
+
+    http = client()
+    response = create(http, name="合成首页标准", scene="frontpage", rule_set_key=FRONTPAGE_RULE_SET_KEY)
+    assert response.status_code == 200, response.text
+    draft = response.json()["data"]
+    saved = http.put(f"{BASE}/standards/{draft['id']}/items", json={
+        "version_seq": draft["version_seq"], "groups": [{"group_name": "首页"}],
+        "items": [{"group_name": "首页", "rule_id": "FQ-001", "deduction": 2,
+                   "department_scope_mode": "all", "department_refs": []}],
+    })
+    assert saved.status_code == 200, saved.text
+    active = http.post(f"{BASE}/standards/{draft['id']}/activate", json={
+        "version_seq": saved.json()["data"]["version_seq"],
+    })
+    assert active.status_code == 200, active.text
+    listed = http.get(f"{BASE}/standards?scene=frontpage")
+    assert listed.status_code == 200 and listed.json()["data"]["items"][0]["is_default"] is True
+    assert service.get_default_standard("frontpage")["id"] == draft["id"]
+    assert service.get_default_standard("final") is None
+    assert http.get(f"{BASE}/case", params={
+        "institute_id": "synthetic-hospital", "patient_id": "synthetic-patient",
+        "visit_id": "synthetic-visit", "scene": "frontpage",
+    }).status_code == 422
+
+
 def test_special_report_binding_http_contract_and_role_guard(sessions):
     http = client()
     path = f"{BASE}/defaults/special-report?scene=final"

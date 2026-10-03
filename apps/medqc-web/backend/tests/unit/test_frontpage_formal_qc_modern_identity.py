@@ -42,6 +42,7 @@ if not os.environ.get("DATABASE_URL", "").strip():
     os.environ["DATABASE_URL"] = _REFUSE_DSN
 
 import app.routers.qc as qc_module  # noqa: E402
+from app.services import scoring_standard_service  # noqa: E402
 from app.services.frontpage_formal_qc import FrontpageFormalQC  # noqa: E402
 from app.services.medical_records.errors import (  # noqa: E402
     MedicalRecordsConflictError,
@@ -194,6 +195,7 @@ class _EndpointEnv:
         monkeypatch.setattr(qc_module, "default_workflow_queue_state_service", self.queue)
         monkeypatch.setattr(qc_module, "default_qc_persistence_service", self.persistence)
         monkeypatch.setattr(qc_module, "_formal_qc_engine", self.engine)
+        monkeypatch.setattr(scoring_standard_service, "get_default_standard", lambda _: None)
 
     def _read_sheet(
         self,
@@ -255,6 +257,37 @@ def _identity_payload(**extra: Any) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"patient_id": PATIENT, "visit_id": VISIT}
     payload.update(extra)
     return payload
+
+
+def test_scoring_failure_preserves_saved_formal_report(endpoint_env, monkeypatch):
+    def failed(_):
+        raise RuntimeError("合成配置不可用")
+
+    monkeypatch.setattr(scoring_standard_service, "get_default_standard", failed)
+    response = _call_endpoint(_identity_payload())
+    assert response["success"] is True
+    assert response["data"]["scoring"]["status"] == "unavailable"
+    assert response["data"]["scoring"]["score"] is None
+    assert response["data"]["persistence"]["qc_result_id"] == "persisted-frontpage-qc"
+    assert len(endpoint_env.persistence.calls) == 1 and len(endpoint_env.queue.succeeded) == 1
+    assert "scoring" not in endpoint_env.persistence.calls[0]["result"]
+
+
+def test_scoring_uses_server_discharge_department_not_client(endpoint_env, monkeypatch):
+    sheet = _sheet()
+    sheet["hospitalization"] = {"discharge_dept": "合成出院科室"}
+    endpoint_env.use_sheet(sheet)
+    contexts = []
+
+    def observed(report, **context):
+        contexts.append(context)
+        return {"status": "no_standard", "score": None}
+
+    monkeypatch.setattr(qc_module, "score_frontpage_report", observed)
+    response = _call_endpoint(_identity_payload(frontpage={"hospitalization": {"discharge_dept": "伪造科室"}}))
+    assert response["success"] is True
+    assert contexts[0]["department_name"] == "合成出院科室"
+    assert contexts[0]["institute_id"] == INSTITUTE_A
 
 
 def _modern_identity(kwargs: Dict[str, Any]) -> Tuple[Any, Any, Any, Any]:

@@ -10,6 +10,8 @@ from starlette.concurrency import run_in_threadpool
 
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
+from ..services.frontpage_rule_catalog import FRONTPAGE_RULE_SET_KEY, FRONTPAGE_RULE_SET_VERSION
+from ..services.frontpage_scoring_service import score_frontpage_report
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
 from ..core.security import get_current_user, require_roles
@@ -1003,6 +1005,13 @@ async def validate_frontpage_formal(
                     if not r.passed  # 只返回失败项
                 ],
                 "persistence": persistence,
+                "scoring": score_frontpage_report(
+                    report, institute_id=identity.institute_id,
+                    department_name=sheet["hospitalization"].get("discharge_dept")
+                    if isinstance(sheet.get("hospitalization"), dict) else None,
+                    rule_set_key=FRONTPAGE_RULE_SET_KEY,
+                    rule_set_version=FRONTPAGE_RULE_SET_VERSION,
+                ),
             },
             message=f"形式质控完成：{report.passed}/{report.total_rules} 通过",
             trace_id=get_trace_id(request),
