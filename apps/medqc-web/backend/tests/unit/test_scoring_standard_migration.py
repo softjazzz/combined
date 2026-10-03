@@ -27,7 +27,7 @@ def migration():
 
 
 def _model_contract_specs():
-    """ORM 模型对应“62 建表 + 后续增量迁移”的累计合同；目前只有 69 为评分条目加科室范围列。"""
+    """ORM对应62建表、69评分条目科室范围与84首页场景的累计合同。"""
     specs = copy.deepcopy(migration().SPECS)
     scope = _load_migration("20260928_000069_scoring_item_scope.py", "scoring_item_scope_migration")
     item_spec = specs[scope.TABLE]
@@ -35,6 +35,8 @@ def _model_contract_specs():
         size = getattr(column_type, "length", None)
         item_spec["columns"][name] = (type(column_type), size, False, default)
     item_spec["checks"].update(scope.CHECKS)
+    frontpage = _load_migration("20261003_000084_frontpage_scoring_scene.py", "frontpage_scene_migration")
+    specs[frontpage.TABLE]["checks"][frontpage.CONSTRAINT] = frontpage.NEW_CHECK
     return specs
 
 

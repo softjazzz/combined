@@ -1166,7 +1166,7 @@ class QCScoringStandard(Base):
         PrimaryKeyConstraint("id", name="pk_qc_scoring_standards"),
         UniqueConstraint("name", "scene", name="uq_qc_scoring_standards_name_scene"),
         CheckConstraint(
-            "scene IN ('running', 'final', 'outpatient')", name="ck_qc_scoring_standards_scene",
+            "scene IN ('running', 'final', 'outpatient', 'frontpage')", name="ck_qc_scoring_standards_scene",
         ),
         CheckConstraint(
             "status IN ('draft', 'active', 'archived')", name="ck_qc_scoring_standards_status",
