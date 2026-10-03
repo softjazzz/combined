@@ -152,6 +152,7 @@ const TaskRecordDocumentDrawerStub = defineComponent({
 const TaskRecordReviewPanelStub = defineComponent({
   name: 'TaskRecordReviewPanel',
   props: { taskId: String, taskRecordId: String, runNumber: Number, jobId: String, userId: String },
+  emits: ['review-submitted'],
   setup() {
     return () => h('div', { 'data-testid': 'task-record-review-stub' })
   },
@@ -2715,6 +2716,32 @@ describe('TaskDetailDrawer', () => {
     await wrapper.get('[data-testid="task-record-result-association-1"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="task-record-review-stub"]').exists()).toBe(false)
+  })
+
+  it.each(['approved', 'doubtful'])('四川终末受领结果审核确认%s后通知列表刷新，不代替处理完成', async (decision) => {
+    mocks.getTaskDetail.mockResolvedValueOnce(detailResponse('终末审核任务',
+      [modernRecord({ status: 'in_progress' })], {
+        scene: 'final', rule_set_key: 'sc_content_launch_a_v1', rule_set_version: 'sc-final-frozen',
+      }))
+    mocks.getTaskQcRuns.mockResolvedValueOnce({ success: true, data: [{
+      task_id: 'task-1', run_number: 2, job_id: 'job-final', run_scope: 'assigned',
+      triggered_by: 'creator', created_at: '2026-10-03',
+    }] })
+    mocks.getTaskQcRunRecordResult.mockResolvedValueOnce({ success: true, data: {
+      task_id: 'task-1', task_record_id: 'association-1', run_number: 2, job_id: 'job-final',
+      job_status: 'completed', result_state: 'available', rule_set_key: 'sc_content_launch_a_v1',
+      items: [{ rule_id: 'SC-001', rule_name: '终末检查项', status: 'non_compliant' }],
+    } })
+    const wrapper = mountDrawer({ focusTaskRecordId: 'association-1', focusRunNumber: 2 })
+    await flushPromises()
+    const panel = wrapper.getComponent(TaskRecordReviewPanelStub)
+    expect(panel.props()).toMatchObject({ runNumber: 2, jobId: 'job-final', taskRecordId: 'association-1' })
+    expect(wrapper.emitted('task-updated')).toBeUndefined()
+    panel.vm.$emit('review-submitted', decision)
+    await flushPromises()
+    expect(wrapper.emitted('task-updated')).toEqual([['task-1']])
+    expect(mocks.completeTaskRecord).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="task-record-complete"]').exists()).toBe(true)
   })
 
   it('下钻定位按指定运行序号选中运行并自动打开该病历结果', async () => {

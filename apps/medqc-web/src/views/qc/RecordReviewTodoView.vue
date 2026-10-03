@@ -237,6 +237,8 @@ async function goReview(item: RecordReviewTodoItem) {
       task_id: item.task_id,
       task_record_id: item.task_record_id,
       run_number: String(item.run_number),
+      scene: item.task_scene || scene.value,
+      stage: item.stage,
     },
   })
 }

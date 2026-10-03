@@ -491,6 +491,7 @@
                 :run-number="selectedRun!.run_number"
                 :job-id="selectedRun!.job_id"
                 :user-id="authStore.user!.id"
+                @review-submitted="handleReviewSubmitted"
               />
               <div
                 v-if="canCompleteRecord || completionNeedsVerification"
@@ -710,6 +711,9 @@ const canViewManualDefects = computed(() => {
     result.items.length > 0
   )
 })
+function handleReviewSubmitted() {
+  if (canViewManualDefects.value && detail.value) emit('task-updated', detail.value.id)
+}
 const canStartRun = computed(
   () =>
     canViewRuns.value &&

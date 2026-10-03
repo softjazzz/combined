@@ -1012,6 +1012,23 @@ describe('MyTasksView 我的任务口径', () => {
     expect(wrapper.find('[data-testid="task-stats-error"]').exists()).toBe(false)
   })
 
+  it.each(['initial', 'recheck'])('终末审核下钻实际消费任务定位并保留场景与阶段 %s，确认后刷新列表统计', async (stage) => {
+    routeState.query = { scene: 'final', stage, task_id: 'task-9', task_record_id: 'assoc-9', run_number: '3' }
+    const wrapper = await mountView()
+    const drawer = wrapper.getComponent(TaskDetailDrawerStub)
+    expect(drawer.props()).toMatchObject({ open: true, taskId: 'task-9', tab: 'received',
+      focusTaskRecordId: 'assoc-9', focusRunNumber: 3 })
+    expect(mocks.getTaskList).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'received', scene: 'final' }))
+    expect(mocks.getTaskStats).toHaveBeenLastCalledWith({ tab: 'received', scene: 'final' })
+    expect(activeRoute.current?.query).toEqual({ scene: 'final', stage })
+    mocks.getTaskList.mockClear()
+    mocks.getTaskStats.mockClear()
+    drawer.vm.$emit('task-updated', 'task-9')
+    await flushPromises()
+    expect(mocks.getTaskList).toHaveBeenCalledWith(expect.objectContaining({ tab: 'received', scene: 'final' }))
+    expect(mocks.getTaskStats).toHaveBeenCalledWith({ tab: 'received', scene: 'final' })
+  })
+
   it('待办下钻 query 打开指定任务并定位病历与运行，消费后移除且不改动 todo/scene 范围', async () => {
     routeState.query = { scene: 'running', task_id: 'task-9', task_record_id: 'assoc-9', run_number: '3' }
     const wrapper = await mountView()

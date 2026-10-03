@@ -80,7 +80,7 @@ describe('RecordReviewTodoView', () => {
     await wrapper.get('[data-testid="record-review-go-assoc-1"]').trigger('click')
     expect(mocks.push).toHaveBeenCalledWith({
       path: '/dashboard/tasks/my',
-      query: { task_id: 'task-1', task_record_id: 'assoc-1', run_number: '3' },
+      query: { task_id: 'task-1', task_record_id: 'assoc-1', run_number: '3', scene: 'running', stage: 'recheck' },
     })
   })
 
@@ -96,6 +96,22 @@ describe('RecordReviewTodoView', () => {
     const empty = mountView()
     await flushPromises()
     expect(empty.get('[data-testid="empty"]').text()).toContain('当前没有待审核的病历')
+  })
+
+  it.each(['initial', 'recheck'])('终末待办下钻保留场景及阶段 %s', async (stage) => {
+    mocks.route = reactive({ query: { scene: 'final', stage } })
+    mocks.todos.mockResolvedValueOnce({ success: true, data: {
+      items: [todo({ task_scene: 'final', stage, rule_set_key: 'sc_content_launch_a_v1' })],
+      total: 1, page: 1, page_size: 20, scene: 'final', stage,
+    } })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(mocks.todos).toHaveBeenCalledWith({ stage, scene: 'final', page: 1, page_size: 20 })
+    await wrapper.get('[data-testid="record-review-go-assoc-1"]').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/dashboard/tasks/my', query: {
+      task_id: 'task-1', task_record_id: 'assoc-1', run_number: '3', scene: 'final', stage,
+    } })
+    wrapper.unmount()
   })
 
   it('筛选变化后晚到的旧响应不覆盖新范围', async () => {

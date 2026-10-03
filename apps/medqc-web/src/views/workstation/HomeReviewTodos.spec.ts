@@ -64,6 +64,31 @@ describe('V5 首页审核待办', () => {
     })
   })
 
+  it('终末初审复审按同场景下钻，审核后返回首页重新读取计数', async () => {
+    mocks.getReviewTodoCounts.mockResolvedValueOnce({ success: true, data: {
+      pending_record_review: 1, pending_record_recheck: 1,
+      pending_manual_defect_review: 0, scene: 'final',
+    } })
+    const wrapper = mount(HomeReviewTodos, { props: { scene: 'final' } })
+    await flushPromises()
+    expect(mocks.getReviewTodoCounts).toHaveBeenLastCalledWith('final')
+    await wrapper.get('[data-testid="review-todo-record-review"]').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({ path: '/dashboard/qc/record-reviews', query: { scene: 'final', stage: 'initial' } })
+    await wrapper.get('[data-testid="review-todo-record-recheck"]').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({ path: '/dashboard/qc/record-reviews', query: { scene: 'final', stage: 'recheck' } })
+    wrapper.unmount()
+    mocks.getReviewTodoCounts.mockResolvedValueOnce({ success: true, data: {
+      pending_record_review: 0, pending_record_recheck: 0,
+      pending_manual_defect_review: 0, scene: 'final',
+    } })
+    const returned = mount(HomeReviewTodos, { props: { scene: 'final' } })
+    await flushPromises()
+    expect(returned.get('[data-testid="review-todo-record-review-count"]').text()).toBe('0')
+    expect(returned.get('[data-testid="review-todo-record-recheck-count"]').text()).toBe('0')
+    expect(mocks.getReviewTodoCounts).toHaveBeenCalledTimes(2)
+    returned.unmount()
+  })
+
   it('无人工缺陷审核权限时显示不可用且不下钻', async () => {
     mocks.getReviewTodoCounts.mockResolvedValueOnce({
       success: true,
