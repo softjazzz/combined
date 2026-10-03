@@ -226,6 +226,10 @@
               终末病历质量分析
             </a-menu-item>
             <a-menu-item
+              v-if="canSee('/dashboard/qc/reports/special-records')"
+              key="/dashboard/qc/reports/special-records"
+            >特殊病历报表</a-menu-item>
+            <a-menu-item
               v-if="canSee('/dashboard/qc/reports/frontpage-quality')"
               key="/dashboard/qc/reports/frontpage-quality"
             >
@@ -540,6 +544,7 @@ const SYSTEM_MENU_TARGETS = ['/dashboard/settings'] as const
 const REPORT_MENU_TARGETS = [
   '/dashboard/statistics',
   '/dashboard/qc/reports/record-quality',
+  '/dashboard/qc/reports/special-records',
   '/dashboard/qc/reports/frontpage-quality',
   '/dashboard/qc/reports/medical-record-indicators',
   '/dashboard/qc/reports/staff-analysis',
@@ -583,7 +588,9 @@ const breadcrumbItems = computed(() => {
           items.push({ title: '统计分析', path: '/dashboard/statistics' })
           items.push({
             title:
-              pathSegments[3] === 'staff-analysis'
+              pathSegments[3] === 'special-records'
+                ? '特殊病历报表'
+                : pathSegments[3] === 'staff-analysis'
                 ? '质控员工作分析'
                 : pathSegments[3] === 'frontpage-quality'
                   ? '病案首页统计分析'

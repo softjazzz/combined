@@ -751,6 +751,12 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'qc/reports/special-records',
+        name: 'SpecialRecordReport',
+        component: () => import('@/views/qc/reports/SpecialRecordReportView.vue'),
+        meta: { title: '特殊病历报表', icon: 'BarChartOutlined', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'qc/reports/frontpage-quality',
         name: 'FrontpageQualityReport',
         component: () => import('@/views/qc/reports/FrontpageQualityReportView.vue'),
