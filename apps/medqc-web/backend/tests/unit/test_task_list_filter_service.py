@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.core.security import get_current_user
 from app.routers import tasks as routes
+from app.services.task_list_summary_service import unknown_summary
 from app.services.task_list_filter_service import (
     TaskDepartmentScopeInvalid,
     TaskListFilterInvalid,
@@ -204,8 +205,11 @@ def test_list_and_stats_http_endpoints_share_exact_filters_before_pagination(mon
     stats = client.get("/api/v1/tasks/stats", params=params)
 
     assert listed.status_code == 200
-    assert listed.json()["data"] == {
-        "items": [rows[1]], "total": 2, "page": 2, "page_size": 1, "total_pages": 2,
+    data = listed.json()["data"]
+    # 列表项另带“我创建/受领”汇总字段（无汇总来源时为未知 None），此处只比对筛选与分页。
+    assert data["items"] == [{**rows[1], **unknown_summary()}]
+    assert {k: v for k, v in data.items() if k != "items"} == {
+        "total": 2, "page": 2, "page_size": 1, "total_pages": 2,
     }
     assert stats.status_code == 200
     assert stats.json()["data"] == {

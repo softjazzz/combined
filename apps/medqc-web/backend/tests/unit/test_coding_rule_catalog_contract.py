@@ -42,7 +42,11 @@ def sessions(monkeypatch):
 
 def _write_entries(entries):
     return [
-        {"rule_id": item["rule_id"], "state": item["state"]}
+        {
+            "rule_id": item["rule_id"], "state": item["state"],
+            # 发布须已配置科室范围与医生端开关；本组只验证状态语义，统一取“全院、不对医生可见”。
+            "department_scope_mode": "all", "department_refs": [], "doctor_visible": False,
+        }
         for item in entries
     ]
 

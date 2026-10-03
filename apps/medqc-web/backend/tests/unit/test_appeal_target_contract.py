@@ -128,6 +128,7 @@ def test_workspace_target_uses_full_identity_and_never_crosses_same_visit(canoni
         "envelope_id": OLD_ENVELOPE,
         "rule_set_key": RULE_SET_KEY,
         "rule_set_version": RULE_SET_VERSION,
+        "_can_show_to_doctor": False,
     }
 
     with pytest.raises(workspace_target.AppealWorkspaceTargetConflict):

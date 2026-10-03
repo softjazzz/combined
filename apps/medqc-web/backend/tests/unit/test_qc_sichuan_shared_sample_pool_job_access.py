@@ -63,6 +63,10 @@ class _WorkspaceStub:
         self.cancel_calls.append((job_id, created_by))
         return None
 
+    def _load_batch_job_canonical_items(self, *, job: dict[str, Any], allow_partial: bool = False):
+        # 详情读取会按 Envelope 重新装载结果；此处只验证访问边界，直接回放作业自带条目。
+        return deepcopy(job.get("items") or [])
+
 
 class _SharedPoolStub:
     def __init__(self, resolved: tuple[str, str] | None):
@@ -95,6 +99,8 @@ def _set_user(client, *, role: str, user_id: str = "sync-admin-001") -> None:
 def _install_services(monkeypatch, *, workspace: _WorkspaceStub, pool: _SharedPoolStub) -> None:
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "_shared_sample_pool_service", lambda: pool, raising=False)
+    # 任务重跑作业归属查询要读库；本组只验证共享样本池读取边界，按“非任务作业”处理。
+    monkeypatch.setattr(qc_sichuan, "resolve_task_qc_run_job_owner", lambda **_kwargs: None)
 
 
 @pytest.mark.unit

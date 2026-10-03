@@ -53,6 +53,10 @@ _NON_TASK_RESOURCE_ROUTES = {
         ResourceType.QC_RESULTS,
         PermissionAction.CREATE,
     ),
+    ("GET", "/{task_id}/records/{task_record_id}/manual-document-options"): (
+        ResourceType.QC_RESULTS,
+        PermissionAction.CREATE,
+    ),
 }
 
 

@@ -8,6 +8,7 @@ from tests.unit.test_rule_set_version_service import (
     EXCLUDED_RULE,
     KEY,
     _builtin_entries,
+    _configured_entries,
     _prepare_filters,
     _with_state,
     sessions,  # noqa: F401 - 复用无真实数据库访问的 SQLite fixture。
@@ -15,7 +16,7 @@ from tests.unit.test_rule_set_version_service import (
 
 
 def _publish_deleted():
-    entries = _with_state(_builtin_entries(), EXCLUDED_RULE, "deleted")
+    entries = _configured_entries(_with_state(_builtin_entries(), EXCLUDED_RULE, "deleted"))
     service.create_draft(KEY, actor=ACTOR, entries=entries)
     service.publish_draft(KEY, actor=ACTOR, version="2026-09-28.deleted")
 
@@ -31,7 +32,10 @@ def test_deletion_preserves_historical_version_and_excludes_current_execution(se
     assert EXCLUDED_RULE in current["excluded_rule_ids"]
     assert EXCLUDED_RULE not in current["active_rule_ids"]
     copied = service.create_draft(KEY, actor=ACTOR)
-    assert {"rule_id": EXCLUDED_RULE, "state": "deleted"} in copied["entries"]
+    assert any(
+        item["rule_id"] == EXCLUDED_RULE and item["state"] == "deleted"
+        for item in copied["entries"]
+    )
 
 
 def test_actual_prepare_excludes_deleted_rule(sessions):  # noqa: F811
@@ -54,7 +58,10 @@ def test_published_deleted_excel_roundtrip_preserves_tombstone(sessions):  # noq
         KEY, actor=ACTOR, base_version=parsed.base_version,
         base_content_digest=parsed.base_content_digest, entries=parsed.entries,
     )
-    assert {"rule_id": EXCLUDED_RULE, "state": "deleted"} in imported["entries"]
+    assert any(
+        item["rule_id"] == EXCLUDED_RULE and item["state"] == "deleted"
+        for item in imported["entries"]
+    )
     service.publish_draft(KEY, actor=ACTOR, version="2026-09-28.roundtrip")
     assert EXCLUDED_RULE in service.resolve_rule_set_version(
         KEY, "2026-09-28.roundtrip",

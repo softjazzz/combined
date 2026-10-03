@@ -12,6 +12,10 @@ class CaptureSession:
     def __init__(self):
         self.envelopes = []
 
+    def get_bind(self):
+        # 非 PostgreSQL 方言：Canonical 写入跳过 advisory lock。
+        return SimpleNamespace(dialect=SimpleNamespace(name='sqlite'))
+
     def execute(self, statement):
         params = statement.compile().params
         if 'envelope_json' in params:

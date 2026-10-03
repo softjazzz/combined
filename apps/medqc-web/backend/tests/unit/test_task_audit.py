@@ -121,7 +121,7 @@ def test_delete_task_emits_audit_event(client, monkeypatch):
     # 草稿删除保护由 test_task_delete_guard 覆盖；此处只验证路由审计。
     monkeypatch.setattr(
         "app.routers.tasks.delete_empty_draft_task",
-        lambda *, task_id: deleted.append(task_id),
+        lambda *, task_id, actor_id: deleted.append(task_id),
     )
     monkeypatch.setattr(
         "app.routers.tasks.audit_event",
@@ -150,7 +150,7 @@ def test_delete_task_conflict_does_not_emit_success_audit(client, monkeypatch):
     headers = _admin_headers(client)
     audit_calls: list[dict] = []
 
-    def _conflict(*, task_id):
+    def _conflict(*, task_id, actor_id):
         raise TaskDeleteConflict("任务已有关联病历，不能删除")
 
     monkeypatch.setattr("app.routers.tasks.delete_empty_draft_task", _conflict)

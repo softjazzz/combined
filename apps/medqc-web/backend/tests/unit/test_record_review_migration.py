@@ -291,9 +291,11 @@ def test_model_matches_migration_contract():
     )
     scene = importlib.util.module_from_spec(scene_spec)
     scene_spec.loader.exec_module(scene)
+    # defect_snapshot 由后续迁移 20261002_000082 新增，不属于本迁移合同。
+    SNAPSHOT_COLUMN = "defect_snapshot"
     table = QCRecordReview.__table__
     assert table.name == module.TABLE
-    assert set(table.c.keys()) == set(module.COLUMNS) | {context.CONTEXT_COLUMN, scene.COLUMN}
+    assert set(table.c.keys()) == set(module.COLUMNS) | {context.CONTEXT_COLUMN, scene.COLUMN, SNAPSHOT_COLUMN}
     for name, (kind, length, nullable) in module.COLUMNS.items():
         column = table.c[name]
         expected_nullable = True if name in context.TASK_FIELDS else nullable
