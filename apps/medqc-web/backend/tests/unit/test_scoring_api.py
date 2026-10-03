@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database.models.qc import QCScoringGroup, QCScoringItem, QCScoringStandard
+from app.database.models.qc import QCScoringDefaultBinding, QCScoringGroup, QCScoringItem, QCScoringStandard
 from app.routers import scoring as routes
 from app.services import scoring_service
 from app.services import scoring_standard_service as service
@@ -38,7 +38,7 @@ def sessions(monkeypatch):
     engine = sa.create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
     )
-    for model in (QCScoringStandard, QCScoringGroup, QCScoringItem):
+    for model in (QCScoringStandard, QCScoringGroup, QCScoringItem, QCScoringDefaultBinding):
         model.__table__.create(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(service, "SessionLocal", factory)
@@ -71,6 +71,46 @@ def test_scene_catalog_maps_rule_sets_by_scope():
     final = service.scene_rule_set_keys("final")
     assert "luxian_0609_qc_v1" in final and "sc_content_v1" in final
     assert service.scene_rule_set_keys("outpatient") == ()
+
+
+def test_special_report_binding_http_contract_and_role_guard(sessions):
+    http = client()
+    path = f"{BASE}/defaults/special-report?scene=final"
+    empty = http.get(path)
+    assert empty.status_code == 200
+    assert empty.json()["data"]["status"] == "no_standard"
+    assert empty.json()["data"]["version_seq"] == 0
+    assert http.get(f"{BASE}/defaults/special-report?scene=running").status_code == 422
+    assert client(("doctor",)).put(path, json={"version_seq": 0, "standard_id": None}).status_code == 403
+    draft = create(http, scene="final", rule_set_key="luxian_0609_qc_v1").json()["data"]
+    response = http.put(path, json={
+        "version_seq": 0, "standard_id": draft["id"], "standard_version_seq": draft["version_seq"],
+    })
+    assert response.status_code == 422
+    assert http.put(path, json={"version_seq": True, "standard_id": None}).status_code == 422
+    unbound = http.put(path, json={"version_seq": 0, "standard_id": None})
+    assert unbound.status_code == 200 and unbound.json()["data"]["version_seq"] == 1
+    stale = http.put(path, json={"version_seq": 0, "standard_id": None})
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "version_conflict"
+
+
+def test_special_report_binding_missing_migration_fails_closed(sessions):
+    with sessions() as session:
+        QCScoringDefaultBinding.__table__.drop(session.get_bind())
+    assert client().get(f"{BASE}/defaults/special-report?scene=final").status_code == 503
+
+
+def test_special_report_binding_database_rejects_missing_standard_version(sessions):
+    from datetime import datetime
+
+    from sqlalchemy.exc import IntegrityError
+
+    draft = create(client()).json()["data"]
+    with sessions() as session, pytest.raises(IntegrityError):
+        session.execute(sa.insert(QCScoringDefaultBinding.__table__).values(
+            purpose="special_report", execution_scene="final", standard_id=draft["id"],
+            standard_version_seq=None, version_seq=1, updated_by="synthetic-user", updated_at=datetime.now(),
+        ))
 
 
 def test_create_update_items_and_detail_flow(sessions):

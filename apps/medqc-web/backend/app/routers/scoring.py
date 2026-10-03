@@ -51,6 +51,7 @@ from ..services.scoring_standard_service import (
     current_rule_set_snapshot,
     delete_standard,
     get_standard,
+    get_special_report_binding,
     import_standard_draft,
     list_standards,
     rule_document_universe,
@@ -58,6 +59,7 @@ from ..services.scoring_standard_service import (
     scene_catalog,
     scene_rule_set_keys,
     set_default_standard,
+    set_special_report_binding,
     update_standard,
 )
 
@@ -161,6 +163,14 @@ class ArchiveRequest(BaseModel):
     version_seq: StrictInt = Field(..., ge=1)
 
 
+class SpecialReportBindingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_seq: StrictInt = Field(..., ge=0)
+    standard_id: Optional[StrictStr] = Field(...)
+    standard_version_seq: Optional[StrictInt] = Field(None, ge=1)
+
+
 def _actor(current_user: dict) -> str:
     """与任务路由一致：真实认证字段 id 优先，兼容历史 user_id。"""
     user_id = current_user.get("id") or current_user.get("user_id")
@@ -247,6 +257,33 @@ async def get_scoring_standards(
         data = await run_in_threadpool(list_standards, scene=scene, status=status)
     except Exception as exc:
         _raise_http(exc, "list")
+    return _ok(request, data)
+
+
+@router.get("/defaults/special-report")
+async def get_special_report_scoring_binding(
+    request: Request, scene: Literal["final"] = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        data = await run_in_threadpool(get_special_report_binding, scene)
+    except Exception as exc:
+        _raise_http(exc, "special_report_binding_read")
+    return _ok(request, data)
+
+
+@router.put("/defaults/special-report")
+@require_role(_MANAGER_ROLES)
+async def update_special_report_scoring_binding(
+    request: Request, body: SpecialReportBindingRequest, scene: Literal["final"] = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        data = await run_in_threadpool(
+            set_special_report_binding, actor=_actor(current_user), scene=scene, **body.model_dump(),
+        )
+    except Exception as exc:
+        _raise_http(exc, "special_report_binding_write")
     return _ok(request, data)
 
 

@@ -18,6 +18,10 @@ def _load_migration(filename, module_name):
     return module
 
 
+def special_report_migration():
+    return _load_migration("20261003_000083_special_report_scoring_binding.py", "special_report_binding_migration")
+
+
 def migration():
     return _load_migration("20260927_000062_scoring_standards.py", "scoring_standard_migration")
 
@@ -110,6 +114,66 @@ class Inspector:
 
     def get_check_constraints(self, table, schema):
         return [{"name": name, "sqltext": sql} for name, sql in self.data[schema][table]["checks"].items()]
+
+
+def special_report_state(deployed):
+    module = special_report_migration()
+    data = state(migration(), deployed=True)
+    for schema in module.SCHEMAS:
+        if deployed:
+            data[schema][module.TABLE] = {
+                "columns": {name: {"type": _type(spec), "nullable": spec[2], "default": spec[3]}
+                            for name, spec in module.COLUMNS.items()},
+                "pk": {"name": "pk_qc_scoring_default_bindings", "constrained_columns": ["purpose", "execution_scene"]},
+                "uniques": [], "indexes": [], "checks": dict(module.CHECKS),
+                "fks": [{"name": "fk_qc_scoring_default_bindings_standard", "constrained_columns": ["standard_id"],
+                         "referred_schema": schema, "referred_table": module.PARENT,
+                         "referred_columns": ["id"], "options": {}}],
+            }
+    return data
+
+
+@pytest.mark.parametrize("deployed", [False, True])
+def test_special_report_migration_exact_baselines(deployed):
+    assert special_report_migration().schema_state(Inspector(special_report_state(deployed))) == {
+        "qc": deployed, "public": deployed,
+    }
+
+
+@pytest.mark.parametrize("drift", ["partial_schema", "parent_column", "binding_column", "reference_check", "foreign_key"])
+def test_special_report_migration_rejects_unknown_baseline(drift):
+    module = special_report_migration()
+    data = special_report_state(True)
+    binding = data["qc"][module.TABLE]
+    if drift == "partial_schema":
+        del data["qc"][module.TABLE]
+    elif drift == "parent_column":
+        data["qc"][module.PARENT]["columns"]["scene"]["type"] = sa.String(24)
+    elif drift == "binding_column":
+        binding["columns"]["version_seq"]["nullable"] = True
+    elif drift == "reference_check":
+        binding["checks"]["ck_qc_scoring_default_bindings_reference"] = "standard_version_seq > 0"
+    else:
+        binding["fks"][0]["referred_schema"] = "other"
+    with pytest.raises(RuntimeError):
+        module.schema_state(Inspector(data))
+
+
+def test_special_report_migration_matches_orm():
+    from app.database.models.qc import QCScoringDefaultBinding
+
+    module = special_report_migration()
+    columns = QCScoringDefaultBinding.__table__.columns
+    assert set(columns.keys()) == set(module.COLUMNS)
+    for name, (kind, size, nullable, default) in module.COLUMNS.items():
+        assert isinstance(columns[name].type, kind)
+        assert getattr(columns[name].type, "length", None) == size
+        assert columns[name].nullable is nullable
+        assert columns[name].server_default is default
+    checks = {constraint.name: module._baseline().normalized_check(str(constraint.sqltext))
+              for constraint in QCScoringDefaultBinding.__table__.constraints
+              if isinstance(constraint, sa.CheckConstraint)}
+    assert checks == {name: module._baseline().normalized_check(sql) for name, sql in module.CHECKS.items()}
 
 
 class Scalar:

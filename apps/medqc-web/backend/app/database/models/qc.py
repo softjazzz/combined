@@ -1197,6 +1197,33 @@ class QCScoringStandard(Base):
     )
 
 
+class QCScoringDefaultBinding(Base):
+    """特殊报表消费绑定；execution_scene 保留规则实际执行场景。"""
+
+    __tablename__ = "qc_scoring_default_bindings"
+
+    purpose = Column(String(32), nullable=False)
+    execution_scene = Column(String(16), nullable=False)
+    standard_id = Column(String(36), nullable=True)
+    standard_version_seq = Column(Integer, nullable=True)
+    version_seq = Column(Integer, nullable=False)
+    updated_by = Column(String(64), nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("purpose", "execution_scene", name="pk_qc_scoring_default_bindings"),
+        ForeignKeyConstraint(["standard_id"], ["qc_scoring_standards.id"],
+                             name="fk_qc_scoring_default_bindings_standard"),
+        CheckConstraint("purpose = 'special_report' AND execution_scene = 'final'",
+                        name="ck_qc_scoring_default_bindings_scope"),
+        CheckConstraint("version_seq > 0", name="ck_qc_scoring_default_bindings_seq"),
+        CheckConstraint("(standard_id IS NULL AND standard_version_seq IS NULL) OR "
+                        "(standard_id IS NOT NULL AND standard_version_seq IS NOT NULL "
+                        "AND standard_version_seq > 0)",
+                        name="ck_qc_scoring_default_bindings_reference"),
+    )
+
+
 class QCScoringGroup(Base):
     """评分标准项目组（迁移 62）：max_deduction 为空表示该组不封顶。"""
 

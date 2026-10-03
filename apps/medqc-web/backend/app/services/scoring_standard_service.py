@@ -25,7 +25,7 @@ from sqlalchemy import delete, insert, select, text, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..database.connection import SessionLocal
-from ..database.models.qc import QCScoringGroup, QCScoringItem, QCScoringStandard
+from ..database.models.qc import QCScoringDefaultBinding, QCScoringGroup, QCScoringItem, QCScoringStandard
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY, load_luxian_0609_rules
 from .qc_rule_sets import SICHUAN_RULE_SETS
 from .rule_set_version_service import (
@@ -66,6 +66,7 @@ _CENT = Decimal("0.01")
 _STANDARDS = QCScoringStandard.__table__
 _GROUPS = QCScoringGroup.__table__
 _ITEMS = QCScoringItem.__table__
+_BINDINGS = QCScoringDefaultBinding.__table__
 
 
 class ScoringStandardNotFound(LookupError):
@@ -565,6 +566,117 @@ def get_default_standard(scene: Any) -> dict[str, Any] | None:
             return None if row is None else _detail(session, row)
     except SQLAlchemyError as exc:
         raise ScoringStandardUnavailable("评分标准读取失败") from exc
+
+
+def _special_report_scene(scene: Any) -> str:
+    if scene != "final":
+        raise ScoringStandardInvalid("特殊病历报表当前仅支持 final 执行场景")
+    return scene
+
+
+def _special_report_binding(session: Any, *, detail: bool = False) -> dict[str, Any]:
+    binding = session.execute(select(*_BINDINGS.c).where(
+        _BINDINGS.c.purpose == "special_report", _BINDINGS.c.execution_scene == "final",
+    )).first()
+    data = {
+        "purpose": "special_report", "execution_scene": "final",
+        "version_seq": int(binding.version_seq) if binding else 0,
+        "standard_id": binding.standard_id if binding else None,
+        "standard_version_seq": binding.standard_version_seq if binding else None,
+        "status": "no_standard", "standard": None,
+    }
+    if binding is None or binding.standard_id is None:
+        return data
+    row = _standard_row(session, binding.standard_id)
+    if (row is None or row.status != STATUS_ACTIVE or row.scene != "final"
+            or int(row.version_seq) != binding.standard_version_seq
+            or row.rule_set_key not in scene_rule_set_keys("final")):
+        data["status"] = "unavailable"
+        return data
+    data["status"] = "configured"
+    data["standard"] = _detail(session, row) if detail else _row_item(row)
+    return data
+
+
+def get_special_report_binding(scene: Any = "final") -> dict[str, Any]:
+    """读取消费绑定，不借用终末默认；迁移缺失和数据库故障失败关闭。"""
+    _special_report_scene(scene)
+    try:
+        with _require_session_factory()() as session:
+            return _special_report_binding(session)
+    except SQLAlchemyError as exc:
+        raise ScoringStandardUnavailable("特殊报表评分绑定读取失败") from exc
+
+
+def get_special_report_default_standard(scene: Any = "final") -> dict[str, Any] | None:
+    """报表专用消费读取；返回固定标准版本，不修改历史评分或 Canonical。"""
+    _special_report_scene(scene)
+    try:
+        with _require_session_factory()() as session:
+            binding = _special_report_binding(session, detail=True)
+            if binding["status"] == "unavailable":
+                raise ScoringStandardUnavailable("特殊报表评分绑定已失效")
+            standard = binding["standard"]
+            if standard is not None:
+                standard["binding_version_seq"] = binding["version_seq"]
+                standard["binding_purpose"] = "special_report"
+            return standard
+    except SQLAlchemyError as exc:
+        raise ScoringStandardUnavailable("特殊报表评分绑定读取失败") from exc
+
+
+def set_special_report_binding(
+    *, actor: Any, scene: Any, version_seq: Any, standard_id: Any,
+    standard_version_seq: Any = None,
+) -> dict[str, Any]:
+    """绑定CAS与目标版本在同一事务核对；替换仅移动消费指针。"""
+    scene = _special_report_scene(scene)
+    actor = _actor(actor)
+    if isinstance(version_seq, bool) or not isinstance(version_seq, int) or version_seq < 0:
+        raise ScoringStandardInvalid("绑定 version_seq 必须是非负整数")
+    if standard_id is not None:
+        if not isinstance(standard_id, str) or not standard_id.strip() or len(standard_id) > 36:
+            raise ScoringStandardInvalid("评分标准 ID 无效")
+        standard_version_seq = _version_seq(standard_version_seq)
+    elif standard_version_seq is not None:
+        raise ScoringStandardInvalid("解除绑定时不能传标准版本")
+    try:
+        with _require_session_factory()() as session:
+            with session.begin():
+                # 锁顺序与启用/切换默认一致；归档竞争由目标标准行锁串行。
+                _lock_scene(session, scene)
+                if standard_id is not None:
+                    row = _standard_row(session, standard_id, for_update=True)
+                    if row is None:
+                        raise ScoringStandardNotFound("评分标准不存在")
+                    if (row.status != STATUS_ACTIVE or row.scene != scene
+                            or row.rule_set_key not in scene_rule_set_keys(scene)):
+                        raise ScoringStandardInvalid("特殊报表必须绑定同执行场景的已启用标准")
+                    if int(row.version_seq) != standard_version_seq:
+                        raise ScoringStandardConflict("目标评分标准版本已变化，请刷新", code="version_conflict")
+                binding = session.execute(select(*_BINDINGS.c).where(
+                    _BINDINGS.c.purpose == "special_report", _BINDINGS.c.execution_scene == scene,
+                ).with_for_update()).first()
+                if (int(binding.version_seq) if binding else 0) != version_seq:
+                    raise ScoringStandardConflict("特殊报表默认绑定已变化，请刷新", code="version_conflict")
+                values = {"standard_id": standard_id, "standard_version_seq": standard_version_seq,
+                          "version_seq": version_seq + 1, "updated_by": actor, "updated_at": _now()}
+                if binding is None:
+                    session.execute(insert(_BINDINGS).values(
+                        purpose="special_report", execution_scene=scene, **values,
+                    ))
+                else:
+                    changed = session.execute(update(_BINDINGS).where(
+                        _BINDINGS.c.purpose == "special_report", _BINDINGS.c.execution_scene == scene,
+                        _BINDINGS.c.version_seq == version_seq,
+                    ).values(**values))
+                    if changed.rowcount != 1:
+                        raise ScoringStandardConflict("特殊报表默认绑定已变化，请刷新", code="version_conflict")
+                return _special_report_binding(session)
+    except IntegrityError as exc:
+        raise ScoringStandardConflict("特殊报表默认绑定并发冲突", code="version_conflict") from exc
+    except SQLAlchemyError as exc:
+        raise ScoringStandardUnavailable("特殊报表评分绑定保存失败") from exc
 
 
 def _reference_time(value: Any) -> datetime:
@@ -1088,6 +1200,8 @@ __all__ = [
     "get_default_standard",
     "get_exact_default_standard_in_session",
     "get_standard",
+    "get_special_report_binding",
+    "get_special_report_default_standard",
     "import_standard_draft",
     "list_standards",
     "normalize_groups_items",
@@ -1096,6 +1210,7 @@ __all__ = [
     "scene_catalog",
     "scene_rule_set_keys",
     "set_default_standard",
+    "set_special_report_binding",
     "update_standard",
     "validate_grade_bands",
 ]
