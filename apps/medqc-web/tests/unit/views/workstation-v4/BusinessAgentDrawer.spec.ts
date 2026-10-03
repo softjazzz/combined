@@ -118,6 +118,7 @@ function mountDrawer(
     props: { open: true, userContext, allowCaseSelection },
     global: {
       stubs: {
+        BusinessAgentAnswer: false,
         'a-drawer': { template: '<div><slot /></div>' },
         'a-modal': { template: '<div><slot /></div>' },
         'a-button': {

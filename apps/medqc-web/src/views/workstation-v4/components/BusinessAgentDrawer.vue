@@ -206,9 +206,9 @@
                 {{ turnSummary(turn) }}
               </span>
               <div class="ba-bubble ba-bubble--assistant">
-                <p class="business-agent__answer">
-                  {{ turn.answer || turn.error || '本轮未完成，可重新查询。' }}
-                </p>
+                <BusinessAgentAnswer
+                  :text="turn.answer || turn.error || '本轮未完成，可重新查询。'"
+                />
                 <div
                   v-for="(page, pageIndex) in turn.result_pages || []"
                   :key="pageIndex"
@@ -661,6 +661,7 @@ import {
   type BusinessFeedbackPreview,
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
+import BusinessAgentAnswer from './BusinessAgentAnswer.vue'
 import {
   followupIntents,
   statusTone,
