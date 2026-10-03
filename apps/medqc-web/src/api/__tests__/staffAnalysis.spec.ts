@@ -6,6 +6,20 @@ import { exportStaffAnalysis, getStaffAnalysis, getStaffAnalysisDetails } from '
 describe('staff analysis API', () => {
   beforeEach(() => vi.restoreAllMocks())
 
+  it('保留初审缺陷未知总体、已知明细与覆盖字段', async () => {
+    const coverage = { initial_review_count: 2, covered_initial_review_count: 1, missing_initial_review_count: 1, known_defect_count: 3 }
+    const data = { metric: 'confirmed_defect_count', items: [], total: null, known_total: 3,
+      total_complete: false, defect_snapshot_coverage: coverage, unavailable_reason: 'snapshot_incomplete' }
+    const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue({
+      status: 200, data: { success: true, data },
+    } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+    const result = await getStaffAnalysisDetails('staff', { period: 'this_week', scene: 'final' }, 'confirmed_defect_count', 2, 1)
+    expect(result.data).toEqual(data)
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ params: {
+      period: 'this_week', scene: 'final', metric: 'confirmed_defect_count', page: 2, page_size: 1,
+    } }))
+  })
+
   it('passes period and scene to the protected report endpoint', async () => {
     const request = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue({
       status: 200,

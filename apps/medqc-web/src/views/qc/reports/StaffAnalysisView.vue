@@ -102,6 +102,10 @@
             <span>{{ report.period_label }} · {{ sceneWorkLabel }}</span>
           </div>
           <p class="range-label">{{ rangeLabel(report.range) }}</p>
+          <p v-if="report.defect_snapshot_coverage" class="context-notice" data-testid="staff-defect-snapshot-coverage">
+            可核实初审记录 {{ report.defect_snapshot_coverage.covered_initial_review_count }} / {{ report.defect_snapshot_coverage.initial_review_count }}，已知 {{ report.defect_snapshot_coverage.known_defect_count }} 项缺陷。
+            <template v-if="report.defect_snapshot_coverage.missing_initial_review_count > 0">{{ report.defect_snapshot_coverage.missing_initial_review_count }} 次初审缺少完整缺陷明细，总数及该项排名未知。</template>
+          </p>
           <div class="metric-grid">
             <div v-for="metric in summaryMetrics" :key="metric.label" class="metric">
               <span>{{ metric.label }}</span>
@@ -143,12 +147,12 @@
                   <td class="name">{{ staff.name || staff.user_id }}</td>
                   <td v-for="metric in rowMetrics" :key="metric.key">
                     <button
-                      v-if="metricValue(staff, metric.key) !== null"
+                      v-if="metricValue(staff, metric.key) !== null || (metric.key === 'confirmed_defect_count' && staff.defect_snapshot_coverage)"
                       class="metric-link"
                       type="button"
                       :aria-label="`查看${staff.name || staff.user_id}的${metric.label}明细`"
                       @click="openDetails(staff, metric.key, metric.label)"
-                    >{{ metricValue(staff, metric.key) }}</button>
+                    >{{ metricValue(staff, metric.key) ?? '未知' }}<small v-if="metric.key === 'confirmed_defect_count' && metricValue(staff, metric.key) === null">（已知 {{ staff.defect_snapshot_coverage?.known_defect_count ?? '未知' }}）</small></button>
                     <span v-else class="unknown">未知</span>
                   </td>
                 </tr>
@@ -167,30 +171,34 @@
       </p>
       <p v-else-if="detailsLoading" class="state-message" role="status">正在读取人员工作明细…</p>
       <template v-else-if="detailsPage">
-        <p v-if="detailsPage.unavailable_reason" class="state-message unavailable">
+        <p v-if="detailsPage.unavailable_reason && detailsPage.unavailable_reason !== 'snapshot_incomplete'" class="state-message unavailable">
           该指标在当前筛选条件下无法可靠下钻。
         </p>
         <template v-else>
-          <div class="drawer-summary">共 {{ detailsPage.total ?? '未知' }} 条可核实记录</div>
+          <div v-if="detailsPage.total_complete === false" class="drawer-summary" data-testid="staff-details-known-only">
+            总数未知，可核实 {{ detailsPage.known_total ?? '未知' }} 条已知缺陷；{{ detailsPage.defect_snapshot_coverage?.missing_initial_review_count ?? '未知' }} 次初审缺少完整缺陷明细。
+          </div>
+          <div v-else class="drawer-summary">共 {{ detailsPage.total ?? '未知' }} 条可核实记录</div>
           <div class="table-scroll drawer-table">
             <table>
-              <thead><tr><th>发生时间</th><th>工作动作</th><th>病例</th><th>科室 / 任务</th><th>阶段 / 决策</th></tr></thead>
+              <thead><tr><th>发生时间</th><th>工作动作</th><th v-if="detailsPage.metric === 'confirmed_defect_count'">缺陷来源 / 标识</th><th>病例</th><th>科室 / 任务</th><th>阶段 / 决策</th></tr></thead>
               <tbody>
                 <tr v-for="item in detailsPage.items || []" :key="item.event_id">
                   <td>{{ formatTime(item.occurred_at) }}</td>
                   <td>{{ eventTypeText(item.event_type) }}</td>
+                  <td v-if="detailsPage.metric === 'confirmed_defect_count'">{{ item.source === 'auto' ? '自动' : item.source === 'manual' ? '人工' : '未知' }} · {{ item.defect_id || '未知' }}</td>
                   <td>{{ identityText(item) }}</td>
                   <td>{{ item.department || '未知' }}<small>{{ item.task_id || '任务未知' }}</small></td>
                   <td>{{ stageText(item.stage) }}<small>{{ decisionText(item.decision) }}</small></td>
                 </tr>
-                <tr v-if="!detailsPage.items?.length"><td colspan="5" class="empty-state">暂无明细</td></tr>
+                <tr v-if="!detailsPage.items?.length"><td :colspan="detailsPage.metric === 'confirmed_defect_count' ? 6 : 5" class="empty-state">暂无明细</td></tr>
               </tbody>
             </table>
           </div>
-          <div v-if="detailsPage.total !== null && detailsPage.total > detailsPage.page_size" class="pager">
+          <div v-if="detailPaginationTotal > detailsPage.page_size" class="pager">
             <button class="secondary" type="button" :disabled="detailsPage.page <= 1 || detailsLoading" @click="loadDetails(detailsPage.page - 1)">上一页</button>
-            <span>{{ detailsPage.page }} / {{ Math.ceil(detailsPage.total / detailsPage.page_size) }}</span>
-            <button class="secondary" type="button" :disabled="detailsPage.page * detailsPage.page_size >= detailsPage.total || detailsLoading" @click="loadDetails(detailsPage.page + 1)">下一页</button>
+            <span>{{ detailsPage.page }} / {{ Math.ceil(detailPaginationTotal / detailsPage.page_size) }}</span>
+            <button class="secondary" type="button" :disabled="detailsPage.page * detailsPage.page_size >= detailPaginationTotal || detailsLoading" @click="loadDetails(detailsPage.page + 1)">下一页</button>
           </div>
         </template>
       </template>
@@ -234,6 +242,7 @@ const sceneOptions: Array<{ value: StaffAnalysisScene; label: string }> = [
   { value: 'final', label: '终末质控' },
 ]
 const rowMetrics: Array<{ key: StaffAnalysisMetric; label: string }> = [
+  { key: 'confirmed_defect_count', label: '质控缺陷' },
   { key: 'reviewed_case_count', label: '病历份数' },
   { key: 'rechecked_case_count', label: '复审病历份数' },
   { key: 'record_review_count', label: '审核次数' },
@@ -276,6 +285,8 @@ const exporting = ref(false)
 const drawerOpen = ref(false)
 const drawerTitle = ref('人员工作明细')
 const detailsPage = ref<StaffAnalysisDetailsPage | null>(null)
+const detailPaginationTotal = computed(() => detailsPage.value?.total_complete === false
+  ? detailsPage.value.known_total ?? 0 : detailsPage.value?.total ?? 0)
 const detailsLoading = ref(false)
 const detailsError = ref('')
 const detailSelection = ref<{ userId: string; metric: StaffAnalysisMetric } | null>(null)
@@ -303,6 +314,7 @@ const summaryMetrics = computed(() => {
     { label: '人均审核病历', value: summary.avg_reviewed_cases_per_reviewer ?? '不可用', note: `各人病历数合计 / ${summary.record_reviewer_count} 名审核人员` },
     { label: '活跃工作人数', value: summary.active_staff_count, note: '筛选范围内有可核实工作动作' },
     { label: '补录人工缺陷', value: summary.manual_defect_created_count, note: '按创建动作计数' },
+    { label: '初审确认质控缺陷', value: summary.confirmed_defect_count ?? '未知', note: '按初审记录统计，复审不重复' },
     { label: '人工缺陷审核', value: summary.manual_review_approved_count + summary.manual_review_rejected_count, note: `通过 ${summary.manual_review_approved_count} · 驳回 ${summary.manual_review_rejected_count}` },
     { label: '申诉处理', value: appealTotal ?? '未知', note: appealTotal === null ? appealUnavailableText() : `通过 ${summary.appeal_approved_count} · 驳回 ${summary.appeal_rejected_count}` },
   ]
@@ -410,10 +422,11 @@ function setScene(value: StaffAnalysisScene): void {
   if (scene.value !== value) void router.replace({ path: route.path, query: { ...route.query, scene: value } })
 }
 function metricValue(row: StaffWorkRow, metric: StaffAnalysisMetric): number | null {
-  return row[metric]
+  return row[metric] ?? null
 }
 function openDetails(row: StaffWorkRow, metric: StaffAnalysisMetric, label: string): void {
-  if (metricValue(row, metric) === null || !report.value) return
+  if (!report.value || (metricValue(row, metric) === null
+    && !(metric === 'confirmed_defect_count' && row.defect_snapshot_coverage))) return
   detailSelection.value = { userId: row.user_id, metric }
   drawerTitle.value = `${row.name || row.user_id} · ${label}`
   drawerOpen.value = true
@@ -502,6 +515,7 @@ function eventTypeText(value: StaffAnalysisDetailItem['event_type']): string {
     manual_review_approved: '人工缺陷审核通过', manual_review_rejected: '人工缺陷驳回',
     appeal_approved: '申诉通过', appeal_rejected: '申诉驳回',
     defect_urged: '缺陷催办',
+    initial_defect_confirmed: '初审确认缺陷',
   } as const)[value]
 }
 function identityText(item: StaffAnalysisDetailItem): string {

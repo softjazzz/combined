@@ -4,8 +4,8 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 
 export type StaffAnalysisPeriod = 'this_week' | 'last_week' | 'this_month'
 export type StaffAnalysisScene = 'all' | 'running' | 'final'
-export type StaffAnalysisUnavailableMetric = 'appeal_approved_count' | 'appeal_rejected_count' | 'urged_defect_count'
-export type StaffAnalysisUnavailableReason = 'scene_not_attributable' | 'filter_not_attributable' | 'source_unavailable'
+export type StaffAnalysisUnavailableMetric = 'appeal_approved_count' | 'appeal_rejected_count' | 'urged_defect_count' | 'confirmed_defect_count'
+export type StaffAnalysisUnavailableReason = 'scene_not_attributable' | 'filter_not_attributable' | 'source_unavailable' | 'snapshot_incomplete'
 export type StaffAnalysisMetric =
   | 'record_review_count'
   | 'reviewed_case_count'
@@ -18,6 +18,7 @@ export type StaffAnalysisMetric =
   | 'appeal_approved_count'
   | 'appeal_rejected_count'
   | 'urged_defect_count'
+  | 'confirmed_defect_count'
 
 export interface StaffAnalysisFilters {
   period: StaffAnalysisPeriod
@@ -53,9 +54,18 @@ export interface StaffWorkCounts {
   appeal_approved_count: number | null
   appeal_rejected_count: number | null
   urged_defect_count: number | null
+  confirmed_defect_count: number | null
+}
+
+export interface StaffDefectSnapshotCoverage {
+  initial_review_count: number
+  covered_initial_review_count: number
+  missing_initial_review_count: number
+  known_defect_count: number
 }
 
 export interface StaffWorkSummary extends StaffWorkCounts {
+  defect_snapshot_coverage?: StaffDefectSnapshotCoverage
   active_staff_count: number
   record_reviewer_count: number
   avg_record_reviews_per_active_staff: number | null
@@ -67,6 +77,7 @@ export interface StaffWorkSummary extends StaffWorkCounts {
 }
 
 export interface StaffWorkRow extends StaffWorkCounts {
+  defect_snapshot_coverage?: StaffDefectSnapshotCoverage
   user_id: string
   name: string | null
   rank: number | null
@@ -78,6 +89,7 @@ export interface StaffAnalysisFilterOptions {
 }
 
 export interface StaffAnalysisReport {
+  defect_snapshot_coverage?: StaffDefectSnapshotCoverage
   rank_metric?: StaffAnalysisMetric
   period: StaffAnalysisPeriod
   period_label: string
@@ -96,7 +108,14 @@ export interface StaffAnalysisReport {
 export interface StaffAnalysisDetailItem {
   event_id: string
   event_type: 'record_review' | 'manual_defect_created' | 'manual_review_approved'
-    | 'manual_review_rejected' | 'appeal_approved' | 'appeal_rejected' | 'defect_urged'
+    | 'manual_review_rejected' | 'appeal_approved' | 'appeal_rejected' | 'defect_urged' | 'initial_defect_confirmed'
+  source?: 'auto' | 'manual'
+  rule_id?: string | null
+  job_id?: string
+  envelope_id?: string
+  rule_set_key?: string
+  rule_set_version?: string
+  scene?: string
   occurred_at: string
   institute_id: string | null
   patient_id: string | null
@@ -110,6 +129,9 @@ export interface StaffAnalysisDetailItem {
 }
 
 export interface StaffAnalysisDetailsPage {
+  known_total?: number
+  total_complete?: boolean
+  defect_snapshot_coverage?: StaffDefectSnapshotCoverage
   filters: StaffAnalysisAppliedFilters
   metric: StaffAnalysisMetric
   user_id: string

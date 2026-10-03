@@ -276,13 +276,13 @@ def test_scene_excludes_unfrozen_appeal_only_staff(database):
     assert rows["reviewer"]["appeal_approved_count"] == 0
     assert rows["reviewer"]["appeal_rejected_count"] == 0
     assert running["unavailable_reason"] is None
-    assert running["unavailable_metrics"] == {}
+    assert running["unavailable_metrics"] == {"confirmed_defect_count": "snapshot_incomplete"}
 
     all_report = _report()
     assert set(_by_user(all_report)) == {"reviewer", "appeal-only"}
     assert all_report["summary"]["appeal_approved_count"] == 1
     assert all_report["summary"]["appeal_rejected_count"] == 1
-    assert all_report["unavailable_metrics"] == {}
+    assert all_report["unavailable_metrics"] == {"confirmed_defect_count": "snapshot_incomplete"}
 
 
 @pytest.mark.parametrize("scene", ["all", "running", "final"])

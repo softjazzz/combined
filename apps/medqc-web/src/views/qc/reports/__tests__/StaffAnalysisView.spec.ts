@@ -53,14 +53,14 @@ const allReport = {
     avg_record_reviews_per_active_staff: 2, avg_reviewed_cases_per_reviewer: 1.5,
     avg_reviewed_cases_per_active_staff: 1.5, avg_rechecked_cases_per_active_staff: 0.5,
     avg_manual_defects_per_active_staff: 0.5, avg_rejected_defects_per_active_staff: 0,
-    rechecked_case_count: 1, urged_defect_count: 1,
+    rechecked_case_count: 1, urged_defect_count: 1, confirmed_defect_count: null,
     manual_defect_created_count: 1, manual_review_approved_count: 1,
     manual_review_rejected_count: 0, appeal_approved_count: 0, appeal_rejected_count: 1,
   },
   staff: [{
     user_id: 'staff-1', name: '张质控', rank: 1,
     record_review_count: 3, reviewed_case_count: 2, initial_count: 2, recheck_count: 1,
-    rechecked_case_count: 1, urged_defect_count: 1,
+    rechecked_case_count: 1, urged_defect_count: 1, confirmed_defect_count: null,
     manual_defect_created_count: 1, manual_review_approved_count: 1,
     manual_review_rejected_count: 0, appeal_approved_count: 0, appeal_rejected_count: 1,
   }],
@@ -105,6 +105,47 @@ function deferred<T>() {
 }
 
 describe('StaffAnalysisView', () => {
+  it('初审缺陷缺少明细时显示未知并分页展示已知部分', async () => {
+    const coverage = { initial_review_count: 3, covered_initial_review_count: 1, missing_initial_review_count: 2, known_defect_count: 21 }
+    state.getReport.mockResolvedValue({ success: true, data: {
+      ...allReport, defect_snapshot_coverage: coverage,
+      staff: [{ ...allReport.staff[0], defect_snapshot_coverage: coverage }],
+    } })
+    state.getDetails.mockResolvedValue({ success: true, data: {
+      ...detailsPage, metric: 'confirmed_defect_count', total: null, known_total: 21,
+      total_complete: false, unavailable_reason: 'snapshot_incomplete', defect_snapshot_coverage: coverage,
+      items: [{ ...detailsPage.items[0], event_type: 'initial_defect_confirmed', source: 'auto', defect_id: 'rule-1' }],
+    } })
+    const wrapper = render()
+    await settle()
+    expect(wrapper.get('[data-testid="staff-defect-snapshot-coverage"]').text()).toContain('可核实初审记录 1 / 3')
+    expect(wrapper.get('[data-testid="staff-defect-snapshot-coverage"]').text()).toContain('排名未知')
+    await wrapper.get('[aria-label="查看张质控的质控缺陷明细"]').trigger('click')
+    await settle()
+    expect(wrapper.get('[data-testid="staff-details-known-only"]').text()).toContain('总数未知，可核实 21')
+    expect(wrapper.get('.drawer').text()).toContain('自动 · rule-1')
+    await wrapper.findAll('.pager button')[1]!.trigger('click')
+    await settle()
+    expect(state.getDetails).toHaveBeenLastCalledWith('staff-1', expect.objectContaining({ as_of: appliedFilters.as_of }), 'confirmed_defect_count', 2, 20)
+    await wrapper.get('[data-testid="staff-rank-metric"]').setValue('confirmed_defect_count')
+    await settle()
+    expect(state.getReport).toHaveBeenLastCalledWith({ period: 'this_month', scene: 'all' }, 'confirmed_defect_count')
+  })
+  it('缺少已知明细总数时不显示为零', async () => {
+    const coverage = { initial_review_count: 1, covered_initial_review_count: 0, missing_initial_review_count: 1, known_defect_count: 0 }
+    state.getReport.mockResolvedValue({ success: true, data: {
+      ...allReport, staff: [{ ...allReport.staff[0], defect_snapshot_coverage: coverage }],
+    } })
+    state.getDetails.mockResolvedValue({ success: true, data: {
+      ...detailsPage, metric: 'confirmed_defect_count', total: null, total_complete: false, unavailable_reason: 'snapshot_incomplete',
+    } })
+    const wrapper = render()
+    await settle()
+    await wrapper.get('[aria-label="查看张质控的质控缺陷明细"]').trigger('click')
+    await settle()
+    expect(wrapper.get('[data-testid="staff-details-known-only"]').text()).toContain('可核实 未知')
+    expect(wrapper.find('.pager').exists()).toBe(false)
+  })
   it('展示四项人均并向服务端查询所选排名指标', async () => {
     const wrapper = render()
     await settle()

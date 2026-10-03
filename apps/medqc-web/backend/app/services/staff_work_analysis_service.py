@@ -35,12 +35,17 @@ from .performance_ranking_service import (
     RankingWindow,
     compute_window,
 )
+from .record_review_defect_snapshot_service import (
+    SOURCE_KEYS as _SNAPSHOT_SOURCE_FIELDS,
+    DefectSnapshotInvalid,
+    validate_snapshot,
+)
 
 COUNT_FIELDS = (
     "record_review_count", "reviewed_case_count", "rechecked_case_count", "initial_count", "recheck_count",
     "manual_defect_created_count", "manual_review_approved_count",
     "manual_review_rejected_count", "appeal_approved_count", "appeal_rejected_count",
-    "urged_defect_count",
+    "urged_defect_count", "confirmed_defect_count",
 )
 APPEAL_COUNT_FIELDS = ("appeal_approved_count", "appeal_rejected_count")
 DETAIL_METRICS = frozenset(COUNT_FIELDS)
@@ -50,6 +55,10 @@ FILTER_NOT_ATTRIBUTABLE = "filter_not_attributable"
 DEPARTMENT_SOURCE_UNAVAILABLE = "department_source_unavailable"
 TASK_SOURCE_UNAVAILABLE = "task_source_unavailable"
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
+_COVERAGE_FIELDS = (
+    "initial_review_count", "covered_initial_review_count",
+    "missing_initial_review_count", "known_defect_count",
+)
 
 
 class StaffWorkAnalysisInvalid(ValueError):
@@ -231,16 +240,51 @@ def _load_base_events(session: Any, scope: AnalysisScope) -> tuple[list[dict[str
     if scope.scene != SCENE_ALL:
         review_predicates.append(QCRecordReview.scene == scope.scene)
     reviews = session.execute(select(QCRecordReview).where(*review_predicates)).scalars().all()
-    events = [
-        _event(
+    events = []
+    confirmed_keys = set()
+    for row in sorted(reviews, key=lambda item: (item.created_at, item.id)):
+        event = _event(
             event_id=row.id, event_type="record_review", occurred_at=row.created_at,
             user_id=str(row.reviewer_id), institute_id=str(row.institute_id),
             patient_id=str(row.patient_id), visit_id=str(row.visit_id),
             task_id=str(row.task_id) if row.task_id else None,
             stage=row.stage, decision=row.decision,
         )
-        for row in reviews
-    ]
+        if row.stage == "initial":
+            try:
+                snapshot = validate_snapshot(
+                    getattr(row, "defect_snapshot", None),
+                    source={**{field: getattr(row, field) for field in _SNAPSHOT_SOURCE_FIELDS},
+                            "created_at": row.created_at},
+                )
+            except DefectSnapshotInvalid:
+                snapshot = None
+            event["defect_snapshot_complete"] = snapshot is not None
+            if snapshot is not None:
+                # 缺陷只搬运初审冻结结果；不读取当前 Envelope 或人工缺陷状态补齐历史。
+                source = snapshot["source"]
+                for kind in ("auto", "manual"):
+                    for item in snapshot[kind]["items"]:
+                        key = (str(row.reviewer_id), *(source[field] for field in _SNAPSHOT_SOURCE_FIELDS),
+                               kind, item["defect_id"])
+                        if key in confirmed_keys:
+                            continue
+                        confirmed_keys.add(key)
+                        confirmed = _event(
+                            event_id=f"{row.id}:{kind}:{item['defect_id']}",
+                            event_type="initial_defect_confirmed", occurred_at=row.created_at,
+                            user_id=str(row.reviewer_id),
+                            institute_id=source["institute_id"], patient_id=source["patient_id"],
+                            visit_id=source["visit_id"], task_id=event["task_id"],
+                            stage="initial", decision=row.decision, defect_id=item["defect_id"],
+                        )
+                        confirmed.update(source=kind, rule_id=item.get("rule_id"),
+                                         job_id=source["job_id"], envelope_id=source["envelope_id"],
+                                         rule_set_key=source["rule_set_key"],
+                                         rule_set_version=source["rule_set_version"],
+                                         scene=source["scene"])
+                        events.append(confirmed)
+        events.append(event)
 
     event_histories = session.execute(select(QCDefectHistory).where(
         QCDefectHistory.action.in_((
@@ -452,7 +496,8 @@ def _load_events(
         for event in events:
             if event["task_id"] == scope.task_id:
                 filtered.append(event)
-            elif event["task_id"] is None and not event["event_type"].startswith("appeal_"):
+            elif (event["task_id"] is None and not event["event_type"].startswith("appeal_")
+                  and event["event_type"] != "initial_defect_confirmed"):
                 context_unavailable_count += 1
         events = filtered
     if scope.department is not None:
@@ -460,7 +505,8 @@ def _load_events(
         for event in events:
             if event["institute_id"] == scope.institute_id and event["department"] == scope.department:
                 filtered.append(event)
-            elif event["department"] is None and not event["event_type"].startswith("appeal_"):
+            elif (event["department"] is None and not event["event_type"].startswith("appeal_")
+                  and event["event_type"] != "initial_defect_confirmed"):
                 context_unavailable_count += 1
         events = filtered
 
@@ -506,15 +552,23 @@ def _aggregate(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]
         "appeal_approved": "appeal_approved_count",
         "appeal_rejected": "appeal_rejected_count",
         "defect_urged": "urged_defect_count",
+        "initial_defect_confirmed": "confirmed_defect_count",
     }
     for event in events:
         user_id = event["user_id"]
         row = staff.setdefault(
-            user_id, {"user_id": user_id, "name": None, **dict.fromkeys(COUNT_FIELDS, 0)},
+            user_id, {"user_id": user_id, "name": None, **dict.fromkeys(COUNT_FIELDS, 0),
+                      "defect_snapshot_coverage": dict.fromkeys(_COVERAGE_FIELDS, 0)},
         )
         if event["event_type"] == "record_review":
             row["record_review_count"] += 1
             row["initial_count" if event["stage"] == "initial" else "recheck_count"] += 1
+            if event["stage"] == "initial":
+                coverage = row["defect_snapshot_coverage"]
+                coverage["initial_review_count"] += 1
+                field = ("covered_initial_review_count" if event.get("defect_snapshot_complete")
+                         else "missing_initial_review_count")
+                coverage[field] += 1
             identity = (event["institute_id"], event["patient_id"], event["visit_id"])
             personal_cases.setdefault(user_id, set()).add(identity)
             if event["stage"] == "recheck":
@@ -522,9 +576,14 @@ def _aggregate(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]
             global_cases.add(identity)
         else:
             row[field_by_type[event["event_type"]]] += 1
+            if event["event_type"] == "initial_defect_confirmed":
+                row["defect_snapshot_coverage"]["known_defect_count"] += 1
     for user_id, cases in personal_cases.items():
         staff[user_id]["reviewed_case_count"] = len(cases)
         staff[user_id]["rechecked_case_count"] = len(rechecked_cases.get(user_id, set()))
+    for row in staff.values():
+        if row["defect_snapshot_coverage"]["missing_initial_review_count"]:
+            row["confirmed_defect_count"] = None
     return list(staff.values()), len(global_cases)
 
 
@@ -534,7 +593,10 @@ def _summary(
     known_fields = COUNT_FIELDS if appeals_attributable else tuple(
         field for field in COUNT_FIELDS if field not in APPEAL_COUNT_FIELDS
     )
-    totals = {field: sum(row[field] for row in staff) for field in known_fields}
+    totals = {
+        field: None if any(row[field] is None for row in staff) else sum(row[field] for row in staff)
+        for field in known_fields
+    }
     if not appeals_attributable:
         totals.update(dict.fromkeys(APPEAL_COUNT_FIELDS))
     totals["reviewed_case_count"] = global_case_count
@@ -568,7 +630,9 @@ def _ordered_staff(
     rank_metric: str = "record_review_count",
 ) -> list[dict[str, Any]]:
     names = _display_names(session, {row["user_id"] for row in rows})
-    ordered = sorted(rows, key=lambda row: (-row[rank_metric], row["user_id"]))
+    ordered = sorted(rows, key=lambda row: (
+        row[rank_metric] is None, -(row[rank_metric] or 0), row["user_id"],
+    ))
     prior_count: int | None = None
     rank = 0
     for index, row in enumerate(ordered, start=1):
@@ -630,6 +694,13 @@ def get_staff_work_analysis(
         )
         summary = _summary(ordered, global_case_count, appeals_attributable=scope.appeals_attributable)
         unavailable_metrics = _unavailable_metrics(scope)
+        coverage = {
+            field: sum(row["defect_snapshot_coverage"][field] for row in ordered)
+            for field in _COVERAGE_FIELDS
+        }
+        summary["defect_snapshot_coverage"] = coverage
+        if coverage["missing_initial_review_count"]:
+            unavailable_metrics["confirmed_defect_count"] = "snapshot_incomplete"
         if loaded.urge_unavailable_reason:
             unavailable_metrics["urged_defect_count"] = loaded.urge_unavailable_reason
             summary["urged_defect_count"] = None
@@ -657,6 +728,7 @@ def get_staff_work_analysis(
         "filter_options_unavailable_reason": loaded.filter_options_unavailable_reason,
         "context_unavailable_count": loaded.context_unavailable_count,
         "summary": summary,
+        "defect_snapshot_coverage": coverage,
         "staff": ordered,
         "unavailable_reason": None,
         "unavailable_metrics": unavailable_metrics,
@@ -692,6 +764,10 @@ def get_staff_work_details(
             "unavailable_reason": loaded.urge_unavailable_reason,
         }
     events = [event for event in loaded.events if event["user_id"] == user]
+    coverage = None
+    if metric == "confirmed_defect_count":
+        rows, _ = _aggregate(events)
+        coverage = rows[0]["defect_snapshot_coverage"] if rows else dict.fromkeys(_COVERAGE_FIELDS, 0)
     if metric == "record_review_count":
         selected = [event for event in events if event["event_type"] == "record_review"]
     elif metric in {"reviewed_case_count", "rechecked_case_count"}:
@@ -720,19 +796,24 @@ def get_staff_work_details(
             "appeal_approved_count": "appeal_approved",
             "appeal_rejected_count": "appeal_rejected",
             "urged_defect_count": "defect_urged",
+            "confirmed_defect_count": "initial_defect_confirmed",
         }
         selected = [event for event in events if event["event_type"] == type_by_metric[metric]]
     selected.sort(key=lambda item: (item["occurred_at"], item["event_id"]), reverse=True)
     total = len(selected)
     offset = (page - 1) * page_size
     items = [
-        {key: value for key, value in event.items() if key != "user_id"}
+        {key: value for key, value in event.items() if key not in {"user_id", "defect_snapshot_complete"}}
         for event in selected[offset:offset + page_size]
     ]
+    snapshot_incomplete = coverage is not None and coverage["missing_initial_review_count"] > 0
     return {
         "filters": scope.filters(), "metric": metric, "user_id": user,
-        "items": items, "total": total, "page": page, "page_size": page_size,
-        "unavailable_reason": None,
+        "items": items, "total": None if snapshot_incomplete else total,
+        "page": page, "page_size": page_size,
+        "unavailable_reason": "snapshot_incomplete" if snapshot_incomplete else None,
+        **({"known_total": total, "total_complete": not snapshot_incomplete,
+            "defect_snapshot_coverage": coverage} if coverage is not None else {}),
     }
 
 
@@ -746,6 +827,11 @@ _EXPORT_HEADERS = (
     ("manual_review_rejected_count", "人工缺陷审核驳回数"),
     ("appeal_approved_count", "申诉通过数"), ("appeal_rejected_count", "申诉驳回数"),
     ("urged_defect_count", "催办缺陷数"),
+    ("confirmed_defect_count", "初审确认质控缺陷数"),
+    ("initial_review_count", "缺陷统计初审数"),
+    ("covered_initial_review_count", "完整缺陷记录初审数"),
+    ("missing_initial_review_count", "缺少完整缺陷记录初审数"),
+    ("known_defect_count", "已知初审确认缺陷数"),
 )
 
 
@@ -767,5 +853,6 @@ def export_staff_work_csv(**filters: Any) -> tuple[bytes, int]:
     writer = csv.DictWriter(output, fieldnames=[label for _, label in _EXPORT_HEADERS])
     writer.writeheader()
     for row in rows:
-        writer.writerow({label: _csv_safe(row.get(key)) for key, label in _EXPORT_HEADERS})
+        values = {**row, **row["defect_snapshot_coverage"]}
+        writer.writerow({label: _csv_safe(values.get(key)) for key, label in _EXPORT_HEADERS})
     return output.getvalue().encode("utf-8-sig"), len(rows)

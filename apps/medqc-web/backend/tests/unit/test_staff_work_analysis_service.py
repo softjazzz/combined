@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import sqlalchemy as sa
@@ -155,7 +155,7 @@ def test_counts_events_by_actor_and_occurrence_time_with_distinct_case_identity(
     assert data["summary"]["record_reviewer_count"] == 2
     assert data["summary"]["avg_record_reviews_per_active_staff"] == 0.8
     assert data["summary"]["avg_reviewed_cases_per_reviewer"] == 1.5
-    assert data["unavailable_metrics"] == {}
+    assert data["unavailable_metrics"] == {"confirmed_defect_count": "snapshot_incomplete"}
 
 
 def test_more_than_ten_staff_are_not_truncated_before_summary(db):
@@ -245,7 +245,7 @@ def test_scene_filters_events_and_counts_only_frozen_scene_appeals(db):
     assert data["summary"]["appeal_approved_count"] == 1
     assert data["summary"]["appeal_rejected_count"] == 0
     assert rows["appeal-run"]["appeal_approved_count"] == 1
-    assert data["unavailable_metrics"] == {}
+    assert data["unavailable_metrics"] == {"confirmed_defect_count": "snapshot_incomplete"}
     assert data["unavailable_reason"] is None
 
     final_data = scene_report("final")
@@ -557,3 +557,125 @@ def test_missing_urge_source_is_unknown_in_summary_rank_details_and_export(db):
     assert details["items"] is None and details["total"] is None
     content, _ = service.export_staff_work_csv(**filters, rank_metric="urged_defect_count")
     assert "未知" in content.decode("utf-8-sig")
+
+
+def frozen_review(key, actor, minutes, *, stage="initial", scene="final", auto=(), manual=()):
+    row = review(key, actor, minutes, stage=stage, scene=scene)
+    row["defect_snapshot"] = {
+        "schema_version": 1, "complete": True,
+        "captured_at": row["created_at"].replace(tzinfo=timezone.utc).isoformat(),
+        "source": {field: row[field] for field in service._SNAPSHOT_SOURCE_FIELDS},
+        "auto": {"count": len(auto), "items": [
+            {"defect_id": rule, "rule_id": rule} for rule in auto
+        ]},
+        "manual": {"count": len(manual), "items": [
+            {"defect_id": key, "created_by": creator,
+             "creation_history_id": f"create-{key}", "approval_history_id": f"approve-{key}"}
+            for key, creator in manual
+        ]},
+    }
+    return row
+
+
+def test_confirmed_defects_use_frozen_initial_result_and_reviewer_not_creator(db):
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            frozen_review("initial", "reviewer", 1, auto=("rule-1",), manual=(("manual-1", "creator"),)),
+            frozen_review("recheck", "rechecker", 2, stage="recheck", auto=("rule-1", "rule-2")),
+            frozen_review("empty", "zero", 3),
+            frozen_review("running", "run", 4, scene="running", auto=("rule-run",)),
+        ])
+    filters = {"period": "this_week", "scene": "final", "as_of": NOW}
+    data = service.get_staff_work_analysis(**filters, rank_metric="confirmed_defect_count")
+    rows = {row["user_id"]: row for row in data["staff"]}
+    assert rows["reviewer"]["confirmed_defect_count"] == 2
+    assert rows["rechecker"]["confirmed_defect_count"] == rows["zero"]["confirmed_defect_count"] == 0
+    assert "creator" not in rows and "run" not in rows
+    assert data["summary"]["confirmed_defect_count"] == 2
+    assert data["defect_snapshot_coverage"] == {
+        "initial_review_count": 2, "covered_initial_review_count": 2,
+        "missing_initial_review_count": 0, "known_defect_count": 2,
+    }
+    detail = service.get_staff_work_details(user_id="reviewer", metric="confirmed_defect_count", **filters)
+    assert detail["total"] == detail["known_total"] == 2 and detail["total_complete"] is True
+    assert {(item["source"], item["defect_id"]) for item in detail["items"]} == {
+        ("auto", "rule-1"), ("manual", "manual-1"),
+    }
+    assert all((item["institute_id"], item["patient_id"], item["visit_id"]) == ("A", "P", "V")
+               for item in detail["items"])
+    content, _ = service.export_staff_work_csv(**filters, rank_metric="confirmed_defect_count")
+    assert "初审确认质控缺陷数" in content.decode("utf-8-sig")
+
+
+@pytest.mark.parametrize("corrupt", ["null", "count", "identity", "scene", "duplicate", "future"])
+def test_missing_or_invalid_snapshot_keeps_totals_unknown_and_known_details_pageable(db, corrupt):
+    bad = frozen_review("bad", "reviewer", 2, auto=("rule-bad",))
+    if corrupt == "null":
+        bad["defect_snapshot"] = None
+    elif corrupt == "count":
+        bad["defect_snapshot"]["auto"]["count"] = 0
+    elif corrupt == "identity":
+        bad["defect_snapshot"]["source"]["institute_id"] = "B"
+    elif corrupt == "scene":
+        bad["defect_snapshot"]["source"]["scene"] = "running"
+    elif corrupt == "future":
+        bad["defect_snapshot"]["captured_at"] = "2099-01-01T00:00:00+00:00"
+    else:
+        bad["defect_snapshot"]["auto"]["items"] *= 2
+        bad["defect_snapshot"]["auto"]["count"] = 2
+    with db.begin() as session:
+        session.execute(QCRecordReview.__table__.insert(), [
+            frozen_review("known", "reviewer", 1, auto=("rule-1", "rule-2")), bad,
+            frozen_review("other", "complete", 3, auto=("rule-3",)),
+        ])
+    filters = {"period": "this_week", "scene": "final", "as_of": NOW}
+    data = service.get_staff_work_analysis(**filters, rank_metric="confirmed_defect_count")
+    assert data["summary"]["confirmed_defect_count"] is None
+    assert data["defect_snapshot_coverage"]["known_defect_count"] == 3
+    assert data["defect_snapshot_coverage"]["missing_initial_review_count"] == 1
+    assert all(row["rank"] is None for row in data["staff"])
+    rows = {row["user_id"]: row for row in data["staff"]}
+    assert rows["reviewer"]["confirmed_defect_count"] is None
+    assert rows["complete"]["confirmed_defect_count"] == 1
+    detail = service.get_staff_work_details(
+        user_id="reviewer", metric="confirmed_defect_count", page=2, page_size=1, **filters,
+    )
+    assert detail["total"] is None and detail["known_total"] == 2
+    assert detail["total_complete"] is False and len(detail["items"]) == 1
+    assert detail["unavailable_reason"] == "snapshot_incomplete"
+    content, _ = service.export_staff_work_csv(**filters, rank_metric="confirmed_defect_count")
+    assert "未知" in content.decode("utf-8-sig")
+
+
+def test_empty_initial_range_is_known_zero(db):
+    data = report()
+    assert data["summary"]["confirmed_defect_count"] == 0
+    assert data["defect_snapshot_coverage"] == dict.fromkeys(service._COVERAGE_FIELDS, 0)
+
+
+def test_confirmed_event_dedup_keeps_full_result_identity_and_actor():
+    from types import SimpleNamespace
+
+    first = frozen_review("first", "reviewer", 1, auto=("rule",))
+    duplicate = {**first, "id": "duplicate"}
+    other_actor = {**first, "id": "actor", "reviewer_id": "other"}
+    new_result = frozen_review("new", "reviewer", 3, auto=("rule",))
+    other_institute = frozen_review("cross", "reviewer", 4, auto=("rule",))
+    other_institute["institute_id"] = "B"
+    other_institute["defect_snapshot"]["source"]["institute_id"] = "B"
+    batches = iter([[SimpleNamespace(**row) for row in (
+        duplicate, first, other_actor, new_result, other_institute,
+    )], [], []])
+    session = SimpleNamespace(
+        execute=lambda *_args, **_kwargs: SimpleNamespace(
+            scalars=lambda: SimpleNamespace(all=lambda: next(batches)),
+        ),
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="sqlite")),
+    )
+    events, _ = service._load_base_events(session, service._scope(period="this_week", now=NOW))
+    rows, _ = service._aggregate(events)
+    counts = {row["user_id"]: row for row in rows}
+    assert counts["reviewer"]["confirmed_defect_count"] == 3
+    assert counts["reviewer"]["defect_snapshot_coverage"]["initial_review_count"] == 4
+    assert counts["other"]["confirmed_defect_count"] == 1
+    assert len([event for event in events if event["event_type"] == "initial_defect_confirmed"]) == 4
