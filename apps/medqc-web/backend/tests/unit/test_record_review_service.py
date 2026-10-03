@@ -11,7 +11,9 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database.models.qc import QCRecordReview, QCTask, QCTaskQCRun, QCTaskRecord
+from app.database.models.qc import QCDefect, QCDefectHistory, QCRecordReview, QCTask, QCTaskQCRun, QCTaskRecord
+from app.services.luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
+from app.services.qc_workspace.canonical_result_store import RECORD_RESULT_ENVELOPE_SCHEMA
 from app.services import record_review_service as service
 from app.services import task_list_summary_service as list_summary
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
@@ -89,7 +91,11 @@ class Env:
             session.execute(self.envelopes.insert().values(
                 id=envelope_id, job_id=job_id, root_job_id=job_id, created_by="qc-1",
                 record_id=visit, institute_id="H", patient_id=patient, visit_id=visit,
-                rule_set_key=rule, rule_set_version=version, envelope_json="{}",
+                rule_set_key=rule, rule_set_version=version, envelope_json=json.dumps({
+                    "schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
+                    "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+                    "items": [{"rule_id": "LX0609-001", "status": "not_applicable"}],
+                }),
                 result_count=1, created_at=now, updated_at=now,
             ))
 
@@ -117,10 +123,11 @@ class Env:
 
 @pytest.fixture
 def env(monkeypatch):
+    monkeypatch.setenv("QC_CUSTOMER_SAFE_HMAC_KEY", "synthetic-review-snapshot-key")
     engine = sa.create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
     )
-    for table in (QCTask.__table__, QCTaskRecord.__table__, QCTaskQCRun.__table__, QCRecordReview.__table__):
+    for table in (QCTask.__table__, QCTaskRecord.__table__, QCTaskQCRun.__table__, QCRecordReview.__table__, QCDefect.__table__, QCDefectHistory.__table__):
         table.create(engine)
     envelopes = _envelope_table()
     envelopes.create(engine)

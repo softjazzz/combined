@@ -977,6 +977,7 @@ class QCRecordReview(Base):
     created_at = Column(DateTime, nullable=False)
     review_context = Column(String(16), nullable=False, server_default="task")
     scene = Column(String(24), nullable=True)
+    defect_snapshot = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_qc_record_reviews"),

@@ -556,6 +556,22 @@ def _insert_decision(
     if any(row.job_id == job_id and row.envelope_id == req.envelope_id for row in decisions):
         raise RecordReviewConflict("already_decided", "该结果已有审核决定")
     stage = _stage_from_decisions(decisions, job_id, req.envelope_id)
+    captured_at = _now()
+    snapshot = None
+    if stage == "initial":
+        from .record_review_defect_snapshot_service import DefectSnapshotInvalid, capture_snapshot
+
+        try:
+            snapshot = capture_snapshot(
+                session, source={"job_id": job_id, "envelope_id": req.envelope_id,
+                                 "institute_id": identity[0], "patient_id": identity[1],
+                                 "visit_id": identity[2], "rule_set_key": rule_set_key,
+                                 "rule_set_version": rule_set_version, "scene": scene},
+                captured_at=captured_at, envelope_table=_envelope_table(),
+                batch_job_table_factory=_batch_job_table,
+            )
+        except DefectSnapshotInvalid as exc:
+            raise RecordReviewConflict("defect_snapshot_unavailable", str(exc)) from exc
     row = QCRecordReview(
         id=str(uuid4()), request_id=req.request_id, review_context=req.review_context,
         scene=scene,
@@ -564,7 +580,8 @@ def _insert_decision(
         job_id=job_id, envelope_id=req.envelope_id,
         task_id=req.task_id, task_record_id=req.task_record_id,
         run_number=req.run_number, stage=stage, decision=req.decision,
-        reason=req.reason, reviewer_id=req.actor_id, created_at=_now(),
+        reason=req.reason, reviewer_id=req.actor_id, created_at=captured_at,
+        defect_snapshot=snapshot,
     )
     session.add(row)
     session.flush()
