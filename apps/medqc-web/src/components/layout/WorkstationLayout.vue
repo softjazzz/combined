@@ -1,32 +1,15 @@
 <template>
   <!-- v7.1 主题只作用于工作台，旧版后台沿用 App.vue 的全局主题 -->
   <ConfigProvider :theme="WORKSTATION_THEME">
-    <div
-      class="ws-shell"
-      :class="{ 'ws-shell--collapsed': collapsed }"
-    >
+    <div class="ws-shell" :class="{ 'ws-shell--collapsed': collapsed }">
       <!-- 侧栏：分组标题 + 平铺入口（配置见 workstationNav.ts） -->
       <aside class="ws-sider">
         <div class="ws-sider__head">
-          <RouterLink
-            :to="WORKSTATION_BASE"
-            class="ws-brand"
-            aria-label="病案质控系统首页"
-          >
-            <span
-              class="ws-brand__mark"
-              aria-hidden="true"
-            >
-              <MqIcon
-                name="rules"
-                color="#FFFFFF"
-                :size="18"
-              />
+          <RouterLink :to="WORKSTATION_BASE" class="ws-brand" aria-label="病案质控系统首页">
+            <span class="ws-brand__mark" aria-hidden="true">
+              <MqIcon name="rules" color="#FFFFFF" :size="18" />
             </span>
-            <span
-              v-if="!collapsed"
-              class="ws-brand__copy"
-            >
+            <span v-if="!collapsed" class="ws-brand__copy">
               <span class="ws-brand__title">病案质控系统</span>
               <span class="ws-brand__subtitle">Medical Record QC</span>
             </span>
@@ -38,32 +21,15 @@
             :aria-expanded="!collapsed"
             @click="toggleCollapsed"
           >
-            <PanelLeftOpen
-              v-if="collapsed"
-              aria-hidden="true"
-            />
-            <PanelLeftClose
-              v-else
-              aria-hidden="true"
-            />
+            <PanelLeftOpen v-if="collapsed" aria-hidden="true" />
+            <PanelLeftClose v-else aria-hidden="true" />
           </button>
         </div>
 
-        <nav
-          class="ws-nav"
-          aria-label="主导航"
-        >
-          <section
-            v-for="group in visibleNav"
-            :key="group.key"
-            class="ws-nav__group"
-          >
+        <nav class="ws-nav" aria-label="主导航">
+          <section v-for="group in visibleNav" :key="group.key" class="ws-nav__group">
             <!-- 收起侧栏时分组标题退化为分隔线；展开时为可折叠的一级菜单 -->
-            <div
-              v-if="group.label && collapsed"
-              class="ws-nav__group-label"
-              aria-hidden="true"
-            />
+            <div v-if="group.label && collapsed" class="ws-nav__group-label" aria-hidden="true" />
             <button
               v-else-if="group.label"
               type="button"
@@ -104,10 +70,7 @@
                     :size="24"
                     :icon-size="16"
                   />
-                  <span
-                    v-if="!collapsed"
-                    class="ws-nav__label"
-                  >{{ item.label }}</span>
+                  <span v-if="!collapsed" class="ws-nav__label">{{ item.label }}</span>
                 </RouterLink>
               </a-tooltip>
             </div>
@@ -116,30 +79,14 @@
 
         <!-- 账号区：版本状态、通知、账号菜单（原顶栏内容） -->
         <div class="ws-sider__footer">
-          <div
-            v-if="!collapsed"
-            class="ws-sider__build"
-          >
+          <div v-if="!collapsed" class="ws-sider__build">
             <RuntimeBuildStatus placement="rightBottom" />
           </div>
           <div class="ws-account">
-            <a-dropdown
-              :trigger="['click']"
-              placement="topLeft"
-            >
-              <button
-                type="button"
-                class="ws-user"
-                aria-label="账号菜单"
-              >
-                <span
-                  class="ws-user__avatar"
-                  aria-hidden="true"
-                >{{ roleLabel.slice(0, 1) }}</span>
-                <span
-                  v-if="!collapsed"
-                  class="ws-user__meta"
-                >
+            <a-dropdown :trigger="['click']" placement="topLeft">
+              <button type="button" class="ws-user" aria-label="账号菜单">
+                <span class="ws-user__avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
+                <span v-if="!collapsed" class="ws-user__meta">
                   <span class="ws-user__role">{{ roleLabel }}</span>
                   <span class="ws-user__email">{{ authStore.user?.email || '' }}</span>
                 </span>
@@ -147,9 +94,7 @@
               <template #overlay>
                 <a-menu class="ws-user-menu">
                   <div class="ws-user-menu__who">
-                    <div class="ws-user-menu__hint">
-                      当前账号
-                    </div>
+                    <div class="ws-user-menu__hint">当前账号</div>
                     <div class="ws-user-menu__email">
                       {{ authStore.user?.email || '未登录' }}
                     </div>
@@ -164,11 +109,7 @@
                     账户设置
                   </a-menu-item>
                   <a-menu-divider />
-                  <a-menu-item
-                    key="logout"
-                    class="ws-user-menu__logout"
-                    @click="handleLogout"
-                  >
+                  <a-menu-item key="logout" class="ws-user-menu__logout" @click="handleLogout">
                     <LogOut class="ws-user-menu__icon" />
                     退出登录
                   </a-menu-item>
@@ -176,25 +117,14 @@
               </template>
             </a-dropdown>
 
-            <a-popover
-              placement="rightBottom"
-              trigger="click"
-            >
+            <a-popover placement="rightBottom" trigger="click">
               <template #content>
                 <div class="ws-notice">
-                  <div class="ws-notice__title">
-                    通知
-                  </div>
-                  <p class="ws-notice__empty">
-                    暂无通知
-                  </p>
+                  <div class="ws-notice__title">通知</div>
+                  <p class="ws-notice__empty">暂无通知</p>
                 </div>
               </template>
-              <button
-                type="button"
-                class="ws-icon-button"
-                aria-label="通知"
-              >
+              <button type="button" class="ws-icon-button" aria-label="通知">
                 <Bell aria-hidden="true" />
               </button>
             </a-popover>
@@ -204,11 +134,7 @@
 
       <div class="ws-main">
         <!-- DRG/DIP 分析：一个导航入口，子页在此切换，地址不变 -->
-        <nav
-          v-if="drgActiveTab"
-          class="ws-section-tabs"
-          aria-label="DRG/DIP 分析"
-        >
+        <nav v-if="drgActiveTab" class="ws-section-tabs" aria-label="DRG/DIP 分析">
           <RouterLink
             v-for="tab in DRG_SECTION_TABS"
             :key="tab.key"
@@ -223,24 +149,16 @@
 
         <main class="ws-content">
           <router-view v-slot="{ Component }">
-            <transition
-              name="fade"
-              mode="out-in"
-            >
-              <div
-                :key="route.fullPath"
-                class="workstation-route-view"
-              >
-                <component
-                  :is="Component"
-                  v-if="Component"
-                />
+            <transition name="fade" mode="out-in">
+              <div :key="route.fullPath" class="workstation-route-view">
+                <component :is="Component" v-if="Component" />
               </div>
             </transition>
           </router-view>
         </main>
       </div>
     </div>
+    <GlobalAssistantHost />
   </ConfigProvider>
 </template>
 
@@ -259,6 +177,7 @@ import {
 } from 'lucide-vue-next'
 import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssistantHost.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -355,7 +274,9 @@ function readClosedGroups(): Set<string> {
   try {
     const raw = window.localStorage.getItem(GROUP_STORAGE_KEY)
     const parsed: unknown = raw ? JSON.parse(raw) : []
-    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [])
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [],
+    )
   } catch {
     return new Set()
   }
@@ -891,7 +812,6 @@ const handleLogout = async () => {
 .ws-content :deep(.running-qc-refined) {
   background: transparent !important;
 }
-
 
 .fade-enter-active,
 .fade-leave-active {

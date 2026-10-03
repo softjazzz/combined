@@ -1,5 +1,4 @@
-import { defineComponent, h, type PropType } from 'vue'
-import type { BusinessAgentContext } from '@/api/businessAgent'
+import { defineComponent, h } from 'vue'
 import { shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -28,28 +27,6 @@ vi.mock('@/stores/auth', () => ({
 
 import WorkstationV4HomeEntry from '@/views/workstation-v4/WorkstationV4HomeEntry.vue'
 
-const BusinessAgentDrawerStub = defineComponent({
-  name: 'BusinessAgentDrawer',
-  props: {
-    open: {
-      type: Boolean,
-      default: false,
-    },
-    userContext: {
-      type: Object as PropType<BusinessAgentContext>,
-      required: true,
-    },
-  },
-  setup(props) {
-    return () =>
-      h('div', {
-        'data-testid': 'qc-agent-home-drawer',
-        open: props.open,
-        'data-scope': props.userContext.view,
-      })
-  },
-})
-
 function mountHomeEntry() {
   return shallowMount(WorkstationV4HomeEntry, {
     global: {
@@ -66,31 +43,15 @@ function mountHomeEntry() {
             return () => h('section', { 'data-testid': 'workstation-v4-view' }, '列表页')
           },
         }),
-        BusinessAgentDrawer: BusinessAgentDrawerStub,
       },
     },
   })
 }
 
-describe('WorkstationV4HomeEntry qc agent entry', () => {
+describe('WorkstationV4HomeEntry', () => {
   beforeEach(() => {
     routeState.query = {}
     authState.roles = []
-  })
-
-  it('renders qc agent entry on workstation home and opens drawer', async () => {
-    const wrapper = mountHomeEntry()
-
-    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(true)
-    const entry = wrapper.find('[data-testid="qc-agent-home-entry"]')
-    expect(entry.exists()).toBe(true)
-    expect(entry.text()).toContain('智能助手')
-
-    await entry.trigger('click')
-
-    const drawer = wrapper.find('[data-testid="qc-agent-home-drawer"]')
-    expect(drawer.attributes('open')).toBe('true')
-    expect(drawer.attributes('data-scope')).toBe('manager')
   })
 
   it('shows the all-hospital home for any authenticated session without an admin role gate', () => {
@@ -100,12 +61,18 @@ describe('WorkstationV4HomeEntry qc agent entry', () => {
     expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(false)
   })
 
-  it('does not render qc agent entry when route enters workstation list mode', () => {
+  it('首页不再自带助手入口（由布局层的全局智能助手统一提供）', () => {
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="qc-agent-home-entry"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'BusinessAgentDrawer' }).exists()).toBe(false)
+  })
+
+  it('带启动参数时进入工作台列表模式', () => {
     routeState.query = { stage: 'frontpage_generate' }
 
     const wrapper = mountHomeEntry()
 
     expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="qc-agent-home-entry"]').exists()).toBe(false)
   })
 })

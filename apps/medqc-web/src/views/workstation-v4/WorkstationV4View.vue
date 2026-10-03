@@ -397,6 +397,7 @@ import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
+import { useLocalAssistantRegistration } from './composables/useAssistantRegistry'
 import { pasteFrontpagePresets } from './data/pasteFrontpagePresets'
 import {
   canGenerateFrontpageDraft,
@@ -2008,6 +2009,9 @@ const selectedRecord = computed(() => {
       : null)
   )
 })
+
+// 选中病例后本页自带带病例上下文的智能助手面板，布局层的全局助手让位。
+useLocalAssistantRegistration(computed(() => !!selectedRecord.value))
 
 const {
   assistIssues,

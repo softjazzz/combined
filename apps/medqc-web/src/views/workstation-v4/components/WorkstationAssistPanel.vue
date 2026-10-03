@@ -1,16 +1,31 @@
 <template>
   <div class="assist-wrapper">
-    <button v-if="!mergedVisible" type="button" class="assist-trigger" @click="setVisible(true)">
+    <button
+      v-if="!mergedVisible"
+      type="button"
+      :class="[
+        'assist-trigger',
+        { 'assist-trigger--collapsed': !triggerExpanded, 'assist-trigger--pulse': pulsing },
+      ]"
+      aria-label="智能助手"
+      title="智能助手（Ctrl+/）"
+      @click="setVisible(true)"
+      @mouseenter="expandTrigger"
+      @mouseleave="scheduleCollapse(1500)"
+      @focus="expandTrigger"
+      @blur="scheduleCollapse(1500)"
+    >
       <span class="assist-trigger__icon">
         <RobotOutlined />
       </span>
       <span class="assist-trigger__text">&#x667A;&#x80FD;&#x52A9;&#x624B;</span>
-      <span v-if="totalBadgeCount > 0" class="assist-trigger__badge">{{ totalBadgeCount }}</span>
+      <span v-if="totalBadgeCount > 0" class="assist-trigger__badge">{{ badgeText }}</span>
     </button>
 
     <Transition name="assist-slide">
       <section
         v-if="mergedVisible"
+        ref="panelEl"
         :class="['assist-panel', { 'assist-panel--wide': currentTab === 'chat' }]"
       >
         <header class="assist-panel__header">
@@ -80,7 +95,7 @@
         </div>
 
         <div class="assist-panel__main">
-          <nav class="assist-sidebar">
+          <nav v-if="tabs.length > 1" class="assist-sidebar">
             <button
               v-for="tab in tabs"
               :key="tab.key"
@@ -175,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   CheckCircleOutlined,
   CloseOutlined,
@@ -206,6 +221,9 @@ const props = withDefaults(
     defaultVisible?: boolean
     defaultTab?: AssistTabKey
     patientInfo?: PatientInfo | null
+    // 只显示这些页签（缺省为全部）；用于没有病例上下文的页面，仅保留对话。
+    availableTabs?: AssistTabKey[]
+    chatLabel?: string
     contentCount?: number
     qcCount?: number
     codingCount?: number
@@ -236,7 +254,12 @@ const emit = defineEmits<{
 }>()
 
 const innerVisible = ref(props.defaultVisible)
-const currentTab = ref<AssistTabKey>(props.defaultTab)
+// 宿主限定了可用页签时，初始/外部指定的页签落在不可用项上，则回到第一个可用页签。
+function resolveTab(tab: AssistTabKey): AssistTabKey {
+  const allowed = props.availableTabs
+  return !allowed || allowed.includes(tab) ? tab : (allowed[0] ?? tab)
+}
+const currentTab = ref<AssistTabKey>(resolveTab(props.defaultTab))
 
 watch(
   () => props.visible,
@@ -249,7 +272,7 @@ watch(
 watch(
   () => props.defaultTab,
   (value) => {
-    currentTab.value = value
+    currentTab.value = resolveTab(value)
   },
 )
 
@@ -257,7 +280,7 @@ const mergedVisible = computed(() =>
   props.visible === undefined ? innerVisible.value : props.visible,
 )
 
-const tabs = [
+const ALL_TABS = [
   { key: 'chat' as const, label: '对话', icon: MessageOutlined },
   { key: 'content' as const, label: '\u5185\u6DB5\n\u8D28\u63A7', icon: SafetyCertificateOutlined },
   { key: 'form' as const, label: '\u9996\u9875\n\u8D28\u63A7', icon: FileTextOutlined },
@@ -267,6 +290,12 @@ const tabs = [
   { key: 'drg' as const, label: 'DRG', icon: NodeIndexOutlined },
   { key: 'message' as const, label: '\u6D88\u606F', icon: NotificationOutlined },
 ]
+
+const tabs = computed(() =>
+  ALL_TABS.filter((tab) => !props.availableTabs || props.availableTabs.includes(tab.key)).map(
+    (tab) => (tab.key === 'chat' && props.chatLabel ? { ...tab, label: props.chatLabel } : tab),
+  ),
+)
 
 const totalBadgeCount = computed(
   () =>
@@ -289,6 +318,56 @@ function getBadge(tab: AssistTabKey): number {
   if (tab === 'drg') return props.drgCount
   return props.messageCount
 }
+
+const badgeText = computed(() => (totalBadgeCount.value > 9 ? '9+' : String(totalBadgeCount.value)))
+
+// 胶囊：3 秒无操作收起为图标，悬停/聚焦展开；未读数增加时展开并扩散一次。
+const triggerExpanded = ref(true)
+const pulsing = ref(false)
+let collapseTimer: ReturnType<typeof setTimeout> | undefined
+let pulseTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleCollapse(delay = 3000) {
+  clearTimeout(collapseTimer)
+  collapseTimer = setTimeout(() => (triggerExpanded.value = false), delay)
+}
+function expandTrigger() {
+  clearTimeout(collapseTimer)
+  triggerExpanded.value = true
+}
+watch(totalBadgeCount, (next, previous) => {
+  if (next <= previous) return
+  expandTrigger()
+  pulsing.value = true
+  clearTimeout(pulseTimer)
+  pulseTimer = setTimeout(() => {
+    pulsing.value = false
+    scheduleCollapse()
+  }, 1800)
+})
+
+// Ctrl+/ 开关面板；Esc 仅在焦点位于面板内且没有打开的下拉时收起。
+const panelEl = ref<HTMLElement | null>(null)
+function onKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+    event.preventDefault()
+    setVisible(!mergedVisible.value)
+    return
+  }
+  if (event.key !== 'Escape' || !mergedVisible.value || event.defaultPrevented) return
+  const target = event.target as Node | null
+  if (!panelEl.value || !target || !panelEl.value.contains(target)) return
+  if (document.querySelector('.ant-select-open')) return
+  setVisible(false)
+}
+onMounted(() => {
+  scheduleCollapse()
+  window.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  clearTimeout(collapseTimer)
+  clearTimeout(pulseTimer)
+  window.removeEventListener('keydown', onKeydown)
+})
 
 function setVisible(value: boolean) {
   innerVisible.value = value
@@ -348,8 +427,49 @@ function changeTab(tab: AssistTabKey) {
 }
 
 .assist-trigger__text {
+  max-width: 80px;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 700;
+  transition:
+    max-width 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.assist-trigger--collapsed {
+  gap: 0;
+}
+
+.assist-trigger--collapsed .assist-trigger__text {
+  max-width: 0;
+  opacity: 0;
+}
+
+.assist-trigger--pulse {
+  animation: assist-trigger-pulse 0.9s ease-out 2;
+}
+
+@keyframes assist-trigger-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(37, 99, 235, 0.45),
+      0 14px 30px rgba(29, 78, 216, 0.26);
+  }
+  100% {
+    box-shadow:
+      0 0 0 14px rgba(37, 99, 235, 0),
+      0 14px 30px rgba(29, 78, 216, 0.26);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assist-trigger--pulse {
+    animation: none;
+  }
+  .assist-trigger__text {
+    transition: none;
+  }
 }
 
 .assist-trigger__badge {
