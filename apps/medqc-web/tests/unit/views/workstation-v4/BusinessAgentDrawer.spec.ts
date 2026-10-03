@@ -521,6 +521,27 @@ describe('管理助手范围选择', () => {
     expect(bare.find('[data-testid="business-agent-todo"]').exists()).toBe(false)
     bare.unmount()
   })
+  it('回答下方可复制回答文字，复制后显示已复制', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    })
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    const button = wrapper.get('[data-testid="business-agent-copy-answer"]')
+    expect(button.text()).toBe('复制回答')
+    await button.trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('保存结论')
+    expect(button.text()).toBe('已复制')
+    wrapper.unmount()
+  })
   it('统计卡带图表数据时在卡片内显示图表，没有图表数据时不显示', async () => {
     mocks.managerDrilldown = true
     mocks.statisticsChart = true

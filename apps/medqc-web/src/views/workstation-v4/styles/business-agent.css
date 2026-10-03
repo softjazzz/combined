@@ -727,3 +727,18 @@ button.ba-card__head {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* 回答下方的轻量操作 */
+.ba-copy {
+  align-self: flex-start;
+  margin-top: var(--mq-space-1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ba-copy:hover {
+  color: var(--mq-info-text);
+}

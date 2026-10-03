@@ -188,6 +188,15 @@
                 <BusinessAgentAnswer
                   :text="turn.answer || turn.error || '本轮未完成，可重新查询。'"
                 />
+                <button
+                  v-if="turn.answer"
+                  type="button"
+                  class="ba-copy"
+                  data-testid="business-agent-copy-answer"
+                  @click="copyAnswer(turn)"
+                >
+                  {{ copiedAnswerId === turn.run_id ? '已复制' : '复制回答' }}
+                </button>
                 <div
                   v-for="(page, pageIndex) in turn.result_pages || []"
                   :key="pageIndex"
@@ -999,6 +1008,16 @@ function returnToSummary() {
 const { actionBusy, actionView, canConfirm, confirmAction, refreshAction } =
   useBusinessAgentActions(sessionId, error)
 const copiedDraftId = ref('')
+// 只复制回答文字本身（不含卡片）；复制不代表整改完成。
+const copiedAnswerId = ref('')
+async function copyAnswer(turn: BusinessAgentTurn) {
+  try {
+    await navigator.clipboard.writeText(turn.answer)
+    copiedAnswerId.value = turn.run_id
+  } catch {
+    error.value = '复制失败，请手动选择回答文字复制'
+  }
+}
 async function copyDraft(reference: BusinessAgentReference) {
   if (!reference.text) return
   try {

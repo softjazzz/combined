@@ -73,7 +73,7 @@ describe('智能助手面板外壳', () => {
       defaultTab: 'chat',
     })
     expect(wrapper.find('.assist-sidebar').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="chat-slot"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chat-slot"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
