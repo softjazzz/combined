@@ -185,7 +185,7 @@ export function parseFrontpageFormalScore(value: unknown): FrontpageFormalScore 
   if (row.status === 'scored') {
     if (typeof row.score !== 'number' || !Number.isFinite(row.score) || typeof row.veto_hit !== 'boolean'
       || typeof row.standard_id !== 'string' || !row.standard_id || row.standard_version_seq === null
-      || typeof row.rule_set_key !== 'string' || !row.rule_set_key || typeof row.rule_set_version !== 'string' || !row.rule_set_version
+      || row.rule_set_key !== 'frontpage_formal_v1' || row.rule_set_version !== '2026-10-03'
       || !Array.isArray(row.deductions) || !Array.isArray(row.group_deductions)
       || !Array.isArray(row.unscored_rule_ids) || !row.unscored_rule_ids.every((id) => typeof id === 'string')) return null
     const object = (item: unknown): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)

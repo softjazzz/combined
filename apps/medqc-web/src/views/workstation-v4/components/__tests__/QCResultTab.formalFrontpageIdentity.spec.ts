@@ -113,6 +113,57 @@ describe('QCResultTab 正式首页身份与失败关闭', () => {
     expect(wrapper.text()).not.toContain('frontpage-standard')
     wrapper.unmount()
   })
+  it.each([
+    ['form', 'form'], ['form', 'all'], ['all', 'form'], ['all', 'all'],
+  ])('同身份旧%s失败晚到，不清除新%s的分数与问题', async (oldKind, newKind) => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    let rejectOld!: (error: Error) => void
+    let calls = 0
+    postMock.mockImplementation((url: string) => {
+      if (url === FORM_QC_URL) {
+        if (++calls === 1) return new Promise((_, reject) => { rejectOld = reject })
+        return Promise.resolve({ data: { data: { ...FORM_SUCCESS.data.data, scoring: { ...CURRENT_SCORE, score: 55 }, results: [{ severity: 'warning', category: '首页', message: '新问题' }] } } })
+      }
+      if (url.includes('coding-qc')) return Promise.resolve({ data: { data: { rule_issues: [], llm_issues: [], persistence: {} } } })
+      return Promise.resolve({ data: { results: [], summary: {}, persistence: {} } })
+    })
+    const wrapper = mountFormQc('H1')
+    const old = oldKind === 'form' ? runFormQC(wrapper) : runAllQC(wrapper)
+    await flushPromises()
+    await (newKind === 'form' ? runFormQC(wrapper) : runAllQC(wrapper))
+    const errors = errorMock.mock.calls.length
+    rejectOld(new Error('旧请求失败'))
+    await old
+    expect(wrapper.get('[data-testid="frontpage-current-scoring"]').text()).toContain('55')
+    expect(wrapper.text()).toContain('新问题')
+    expect(errorMock).toHaveBeenCalledTimes(errors)
+    wrapper.unmount()
+  })
+  it.each([
+    ['form', 'form'], ['form', 'all'], ['all', 'form'], ['all', 'all'],
+  ])('同身份旧%s成功晚到，不覆盖新%s的失败分析态', async (oldKind, newKind) => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    let resolveOld!: (value: unknown) => void
+    let calls = 0
+    postMock.mockImplementation((url: string) => {
+      if (url === FORM_QC_URL) {
+        if (++calls === 1) return new Promise((resolve) => { resolveOld = resolve })
+        return Promise.reject(new Error('新请求失败'))
+      }
+      if (url.includes('coding-qc')) return Promise.resolve({ data: { data: { rule_issues: [], llm_issues: [], persistence: {} } } })
+      return Promise.resolve({ data: { results: [], summary: {}, persistence: {} } })
+    })
+    const wrapper = mountFormQc('H1')
+    const old = oldKind === 'form' ? runFormQC(wrapper) : runAllQC(wrapper)
+    await flushPromises()
+    await (newKind === 'form' ? runFormQC(wrapper) : runAllQC(wrapper))
+    resolveOld({ data: { data: { ...FORM_SUCCESS.data.data, scoring: CURRENT_SCORE, results: [{ message: '旧问题', severity: 'warning' }] } } })
+    await old
+    expect(wrapper.find('[data-testid="frontpage-current-scoring"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('旧问题')
+    expect(wrapper.text()).not.toContain('frontpage-standard')
+    wrapper.unmount()
+  })
 
   it('instituteId 非空时以 URLSearchParams 编码后作为消歧参数', async () => {
     getMock.mockResolvedValue({ data: OFFICIAL_SHEET })

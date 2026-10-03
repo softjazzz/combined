@@ -7,7 +7,7 @@ describe('本次首页配置评分API边界', () => {
     expect(parseFrontpageFormalScore(score)).toEqual(score)
     expect(parseFrontpageFormalScore({ ...score, score: 0 })).toMatchObject({ score: 0 })
   })
-  it.each([undefined, {}, { ...score, score: null }, { ...score, standard_version_seq: null }, { ...score, status: 'unavailable', score: 100 }])('缺失或损坏回执保持未知', (value) => {
+  it.each([undefined, {}, { ...score, score: null }, { ...score, standard_version_seq: null }, { ...score, status: 'unavailable', score: 100 }, { ...score, rule_set_key: 'luxian_0609_qc_v1' }, { ...score, rule_set_version: 'wrong-version' }])('缺失或损坏回执保持未知', (value) => {
     expect(parseFrontpageFormalScore(value)).toBeNull()
   })
   it('未配置回执明确无分数', () => {

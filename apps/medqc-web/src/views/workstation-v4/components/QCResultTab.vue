@@ -336,6 +336,7 @@ const costQCLoading = ref(false)
 const formAnalyzed = ref(false)
 const formScoring = ref<FrontpageFormalScore | null>(null)
 let formScoringEpoch = 0
+let allQCEpoch = 0
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
 /** 当前就诊是否已成功读到服务端正式首页；草稿存在不代表可以执行正式首页质控。 */
@@ -812,7 +813,7 @@ async function fetchCostQCFromBackend() {
   throw lastError
 }
 
-async function loadFrontpageData(): Promise<Record<string, any> | null> {
+async function loadFrontpageData(scoreEpoch: number): Promise<Record<string, any> | null> {
   if (!props.visitId || !props.patientId) {
     officialFrontpageAvailable.value = false
     return null
@@ -825,7 +826,7 @@ async function loadFrontpageData(): Promise<Record<string, any> | null> {
     buildFormalFrontpageSheetUrl(props.patientId, props.visitId, props.instituteId),
   )
   // 迟到响应不得改写当前就诊的门槛状态：返回 null 交给调用方按失效处理。
-  if (epoch !== requestEpoch) return null
+  if (epoch !== requestEpoch || scoreEpoch !== formScoringEpoch) return null
   officialFrontpageAvailable.value = Boolean(resp.data)
   return resp.data ?? null
 }
@@ -851,12 +852,13 @@ function dropFormIssues() {
 async function runFormQC() {
   const epoch = requestEpoch
   const scoreEpoch = ++formScoringEpoch
+  const current = () => epoch === requestEpoch && scoreEpoch === formScoringEpoch
   formScoring.value = null
   formQCLoading.value = true
   let succeeded = false
   try {
-    const fpData = await loadFrontpageData()
-    if (epoch !== requestEpoch) return
+    const fpData = await loadFrontpageData(scoreEpoch)
+    if (!current()) return
     if (!fpData) {
       // 没有正式首页就没有可质控对象：失败关闭，不能拿 AI 草稿或空首页顶替。
       dropFormIssues()
@@ -864,8 +866,8 @@ async function runFormQC() {
       return
     }
     const result = await fetchFrontpageQCFromBackend()
-    if (epoch !== requestEpoch) return
-    if (scoreEpoch === formScoringEpoch) formScoring.value = result.scoring
+    if (!current()) return
+    formScoring.value = result.scoring
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
     issues.value = kept
@@ -874,12 +876,12 @@ async function runFormQC() {
     notifyPersistence('form', result.persistence)
     succeeded = true
   } catch (err) {
-    if (epoch !== requestEpoch) return
+    if (!current()) return
     console.error('首页质控引擎异常', err)
     dropFormIssues()
     message.error(describeFrontpageQcError(err))
   } finally {
-    if (epoch === requestEpoch) {
+    if (current()) {
       formQCLoading.value = false
       // 仅成功才算已分析；404/409/503 等失败必须回到未分析态，否则会渲染绿色“未发现质控问题”假通过。
       formAnalyzed.value = succeeded
@@ -942,6 +944,9 @@ async function runCostQC() {
 async function runAllQC() {
   const epoch = requestEpoch
   const scoreEpoch = ++formScoringEpoch
+  const allEpoch = ++allQCEpoch
+  const current = () => epoch === requestEpoch && allEpoch === allQCEpoch
+  const currentForm = () => current() && scoreEpoch === formScoringEpoch
   formScoring.value = null
   formQCLoading.value = true
   codingQCLoading.value = true
@@ -950,9 +955,9 @@ async function runAllQC() {
   try {
     let fpData: Record<string, any> | null = null
     try {
-      fpData = await loadFrontpageData()
+      fpData = await loadFrontpageData(scoreEpoch)
     } catch (error) {
-      if (epoch !== requestEpoch) return
+      if (!currentForm()) return
       // 首页读取失败必须按首页口径提示，不能被结算口径吞掉。
       console.error('首页质控引擎异常', error)
       issues.value = []
@@ -960,7 +965,7 @@ async function runAllQC() {
       message.error(describeFrontpageQcError(error))
       return
     }
-    if (epoch !== requestEpoch) return
+    if (!currentForm()) return
     if (!fpData) {
       issues.value = []
       emit('issues-change', [])
@@ -973,33 +978,33 @@ async function runAllQC() {
       fetchCodingQCFromBackend(),
       fetchCostQCFromBackend(),
     ])
-    if (epoch !== requestEpoch) return
+    if (!current()) return
     const newIssues: QCIssue[] = [
-      ...formResult.issues,
+      ...(currentForm() ? formResult.issues : issues.value.filter((issue) => issue.category === 'form')),
       ...codingResult.issues,
       ...costResult.issues,
     ]
-    if (scoreEpoch === formScoringEpoch) formScoring.value = formResult.scoring
+    if (currentForm()) formScoring.value = formResult.scoring
     issues.value = newIssues
     emit('issues-change', newIssues.slice())
-    notifyPersistence('form', formResult.persistence)
+    if (currentForm()) notifyPersistence('form', formResult.persistence)
     notifyPersistence('coding', codingResult.persistence)
     notifyPersistence('cost', costResult.persistence)
-    message.success('全部质控执行完成，结果已保存')
+    if (currentForm()) message.success('全部质控执行完成，结果已保存')
     succeeded = true
   } catch (error) {
-    if (epoch !== requestEpoch) return
+    if (!current()) return
     console.error('质控引擎执行异常', error)
-    issues.value = []
-    emit('issues-change', [])
-    message.error(describeSettlementQcError(error, '全部质控执行失败'))
+    issues.value = currentForm() ? [] : issues.value.filter((issue) => issue.category === 'form')
+    emit('issues-change', issues.value.slice())
+    if (currentForm()) message.error(describeSettlementQcError(error, '全部质控执行失败'))
   } finally {
-    if (epoch === requestEpoch) {
-      formQCLoading.value = false
+    if (current()) {
+      if (currentForm()) formQCLoading.value = false
       codingQCLoading.value = false
       costQCLoading.value = false
       // 用整体成功标志统一收口：任一环节失败（含结算 409）都不得标记已分析。
-      formAnalyzed.value = succeeded
+      if (currentForm()) formAnalyzed.value = succeeded
       codingAnalyzed.value = succeeded
       costAnalyzed.value = succeeded
     }
