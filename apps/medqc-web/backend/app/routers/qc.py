@@ -1005,8 +1005,8 @@ async def validate_frontpage_formal(
                     if not r.passed  # 只返回失败项
                 ],
                 "persistence": persistence,
-                "scoring": score_frontpage_report(
-                    report, institute_id=identity.institute_id,
+                "scoring": await run_in_threadpool(
+                    score_frontpage_report, report, institute_id=identity.institute_id,
                     department_name=sheet["hospitalization"].get("discharge_dept")
                     if isinstance(sheet.get("hospitalization"), dict) else None,
                     rule_set_key=FRONTPAGE_RULE_SET_KEY,

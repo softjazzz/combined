@@ -220,7 +220,7 @@ import CaseOperationTimeline from '@/components/qc/CaseOperationTimeline.vue'
 import CaseScorePanel from '@/components/qc/CaseScorePanel.vue'
 import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
 import QcRunSelectedControl from '../components/qc/QcRunSelectedControl.vue'
-import type { ScoringScene } from '@/api/scoring'
+import type { CaseScoreQuery } from '@/api/scoring'
 import type { RecordReviewDecision } from '@/api/recordReviews'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -266,7 +266,7 @@ const props = withDefaults(
     initialDefectTarget?: (CaseDefectTarget & { rootJobId?: string; envelopeId?: string }) | null
     rectificationIntent?: number
     /** 得分场景：运行列表 running、终末列表 final；未传时不显示得分分区。 */
-    scoreScene?: ScoringScene
+    scoreScene?: CaseScoreQuery['scene']
   }>(),
   {
     presentationMode: 'flat',
