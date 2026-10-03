@@ -347,6 +347,14 @@ async function pollJob(jobId: string, revision: number, owner: string, sceneValu
         sceneValue,
         owner,
       )
+      const deliveredCount = response.data.success_count ?? response.data.summary?.success_count
+      if (!caseMode.value && status === 'failed'
+        && response.data.summary?.execution_status === 'partial_failed'
+        && typeof deliveredCount === 'number' && Number.isSafeInteger(deliveredCount)
+        && deliveredCount > 0) {
+        // 部分交付仍更新成功病例，失败提示与逐例结果保持由任务 owner 提供。
+        emitCompletedOnce(jobId)
+      }
       return
     }
     state.value = 'running'

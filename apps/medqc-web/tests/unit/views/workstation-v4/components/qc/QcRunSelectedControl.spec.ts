@@ -141,6 +141,56 @@ describe('QcRunSelectedControl', () => {
     expect(wrapper.text()).toContain('质控所选')
   })
 
+  it('批量部分交付保留失败提示并刷新已经保存的病例', async () => {
+    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'partial-job', status: 'queued' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: {
+      id: 'partial-job', status: 'failed', success_count: 1,
+      summary: { execution_status: 'partial_failed' }, error_message: '另一病例未交付',
+    } })
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(wrapper.text()).toContain('另一病例未交付')
+    expect(wrapper.emitted('completed')).toHaveLength(1)
+    expect(mocks.createJob).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it.each([undefined, 0, -1, '1'])('部分交付成功数不明确时不刷新成功结果 %s', async success_count => {
+    mocks.createJob.mockResolvedValue({ success: true, data: { id: 'partial-job', status: 'queued' } })
+    mocks.getJob.mockResolvedValue({ success: true, data: {
+      id: 'partial-job', status: 'failed', success_count,
+      summary: { execution_status: 'partial_failed' },
+    } })
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
+    await confirmRun(wrapper)
+    await flushPromises()
+    expect(wrapper.emitted('completed')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('轮询到部分交付终态后只刷新一次且停止后续轮询', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const wrapper = mountControl({ carePhase: 'inpatient', recordRefs })
+    try {
+      mocks.createJob.mockResolvedValue({ success: true, data: { id: 'partial-polled', status: 'queued' } })
+      mocks.getJob.mockResolvedValueOnce({ success: true, data: { id: 'partial-polled', status: 'running' } })
+        .mockResolvedValue({ success: true, data: { id: 'partial-polled', status: 'failed',
+          success_count: 1, summary: { execution_status: 'partial_failed' } } })
+      await confirmRun(wrapper)
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(3000)
+      await flushPromises()
+      expect(wrapper.emitted('completed')).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(mocks.getJob).toHaveBeenCalledTimes(2)
+      expect(wrapper.emitted('completed')).toHaveLength(1)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
   it('已出院列表按终末口径 B 用三坐标创建终末任务并标注未核验归档', async () => {
     mocks.createJob.mockResolvedValue({
       success: true,
