@@ -315,6 +315,7 @@
                     >
                       {{ reference.locator.split('\n')[0] }}
                     </p>
+                    <BusinessAgentChart v-if="reference.chart" :chart="reference.chart" />
                     <template v-if="reference.kind === 'action'">
                       <p class="ba-block" data-testid="business-agent-action-text">
                         {{ actionView(reference).text }}
@@ -685,6 +686,7 @@ import {
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 import BusinessAgentAnswer from './BusinessAgentAnswer.vue'
+import BusinessAgentChart from './BusinessAgentChart.vue'
 import { useBusinessAgentActions } from '../composables/useBusinessAgentActions'
 import {
   followupIntents,

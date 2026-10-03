@@ -11,7 +11,7 @@ import httpx
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from app.services.qc_agent import business_action_flow, business_capabilities, business_drafts, business_reports, business_rule_validation
+from app.services.qc_agent import business_action_flow, business_capabilities, business_charts, business_drafts, business_reports, business_rule_validation
 from app.services.qc_agent.business_source_gaps import project_saved_source_gaps, source_gaps_card_text
 
 from .business_store import BusinessSessionStore
@@ -403,6 +403,8 @@ class BusinessTools:
         reference = {"id": reference_id, "kind": "statistics", "title": title,
                      "locator": "各期按质控完成时间读取正式统计原值；不是历史快照，不计算差值或百分比",
                      "text": trend_text(fixed, params.rule_id, periods)}
+        if chart := business_charts.trend_chart(periods, params.rule_id):
+            reference["chart"] = chart
         return {"trend": {"rule_id": params.rule_id, "periods": periods, "limitations": TREND_LIMITATIONS},
                 "references": [reference], "metric_owner": "LX0609 正式结果分析接口"}
 
@@ -599,6 +601,7 @@ class BusinessTools:
             references.append({"id": reference_id, "kind": "record", "title": f"{record.get('patient_name') or '病例'} · {record['visit_id']}", "locator": f"{record.get('department', '')} · 当前统计病例下钻"})
         statistics_id = f"statistics:{uuid4()}"
         self.store.bind(metadata["session_id"], user, statistics_id, {"kind": "statistics", "filters": filters})
-        references.insert(0, {"id": statistics_id, "kind": "statistics", "title": "当前范围质控统计", "locator": "按质控完成时间；每份病例最新 Canonical 结果", "text": statistics_text(payload)})
+        references.insert(0, {"id": statistics_id, "kind": "statistics", "title": "当前范围质控统计", "locator": "按质控完成时间；每份病例最新 Canonical 结果", "text": statistics_text(payload),
+                                         **({"chart": chart} if (chart := business_charts.ranking_chart(payload)) else {})})
         # 正式统计值与明细原样搬运，不在助手中另行聚合。
         return {"statistics": payload, "filters": filters, "metric_owner": "LX0609 正式结果分析接口", "references": references, "statistics_page": {"rule_limit": params.rule_limit}}

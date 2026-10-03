@@ -20,7 +20,7 @@ from app.services.qc_agent.business_store import BusinessSessionStore, get_busin
 from app.services.qc_agent.business_reports import ComposeReport
 from app.services.qc_agent.business_tools import BusinessTools, SearchCodes, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
 from app.services.qc_agent import business_feedback
-from app.services.qc_agent import business_action_flow, business_capabilities
+from app.services.qc_agent import business_action_flow, business_capabilities, business_charts
 from app.services.qc_agent.business_action_store import get_action_store
 from app.services.qc_agent.business_actions import ActionConfirmation
 
@@ -208,7 +208,8 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
                 return {"id": reference_id, "kind": "evidence", "title": "病例保存结果", "text": scope + ("\n\n".join(f"{row['rule_id']} · {row['title']}\n{row.get('conclusion', '')}\n{row.get('suggestion', '')}" for row in data.get("references", [])) or "当前病例暂无可读取的保存结果")}
             if binding["kind"] == "statistics":
                 data = await tools.read_api("/api/v1/qc-agent/business/statistics", binding["filters"])
-                return {"id": reference_id, "kind": "statistics", "title": binding.get("title") or "正式统计口径与规则分布", "locator": "按原筛选条件刷新读取；数据可能较上一轮更新", "text": statistics_scope_text(binding["filters"]) + statistics_text(data)}
+                return {"id": reference_id, "kind": "statistics", "title": binding.get("title") or "正式统计口径与规则分布", "locator": "按原筛选条件刷新读取；数据可能较上一轮更新", "text": statistics_scope_text(binding["filters"]) + statistics_text(data),
+                        **({"chart": chart} if (chart := business_charts.ranking_chart(data)) else {})}
     return await runtime_call("POST", f"/sessions/{session_id}/reference", {"reference_id": reference_id, "context": metadata["context"], "tools": tool_specs(metadata["context"]["view"])})
 
 

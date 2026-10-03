@@ -12,6 +12,14 @@ export interface BusinessAgentContext {
   completed_from?: string
   completed_to?: string
 }
+// 统计卡附带的图表数据：数值是正式统计原值，缺失为 null（不补零）。
+export interface BusinessAgentChart {
+  type: 'line' | 'bar'
+  metric: string
+  unit: string
+  points: { label: string; value: number | null; rule_id?: string }[]
+  caption: string
+}
 export interface BusinessAgentReference {
   id: string
   title: string
@@ -25,6 +33,7 @@ export interface BusinessAgentReference {
     | 'draft'
     | 'action'
   text?: string
+  chart?: BusinessAgentChart
   locator?: string
   rule_id?: string
   entry_path?: string

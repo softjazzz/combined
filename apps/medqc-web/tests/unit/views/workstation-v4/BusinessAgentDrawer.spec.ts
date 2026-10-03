@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   duplicateSecond: false,
   guideline: false,
   managerDrilldown: false,
+  statisticsChart: false,
   history: undefined as BusinessAgentTurn[] | undefined,
   access: vi.fn(),
   send: vi.fn(),
@@ -57,7 +58,22 @@ vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
               : []),
             ...(mocks.managerDrilldown
               ? [
-                  { id: 'stats-a', kind: 'statistics', title: '原统计' },
+                  {
+                    id: 'stats-a',
+                    kind: 'statistics',
+                    title: '原统计',
+                    ...(mocks.statisticsChart
+                      ? {
+                          chart: {
+                            type: 'bar',
+                            metric: '不合规次数',
+                            unit: '次',
+                            points: [{ label: '图表规则甲', value: 9 }],
+                            caption: '按正式不合规次数降序展示前 5 条规则，不计算占比。',
+                          },
+                        }
+                      : {}),
+                  },
                   { id: 'record-a', kind: 'record', title: '下钻病例' },
                 ]
               : []),
@@ -119,6 +135,7 @@ function mountDrawer(
     global: {
       stubs: {
         BusinessAgentAnswer: false,
+        BusinessAgentChart: false,
         'a-drawer': { template: '<div><slot /></div>' },
         'a-modal': { template: '<div><slot /></div>' },
         'a-button': {
@@ -141,6 +158,7 @@ describe('管理助手范围选择', () => {
     mocks.duplicateSecond = false
     mocks.guideline = false
     mocks.managerDrilldown = false
+    mocks.statisticsChart = false
     mocks.history = undefined
     mocks.activate.mockResolvedValue(undefined)
     mocks.send.mockResolvedValue(undefined)
@@ -442,6 +460,24 @@ describe('管理助手范围选择', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(false)
     wrapper.unmount()
+  })
+  it('统计卡带图表数据时在卡片内显示图表，没有图表数据时不显示', async () => {
+    mocks.managerDrilldown = true
+    mocks.statisticsChart = true
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="business-agent-chart"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('图表规则甲')
+    wrapper.unmount()
+    mocks.statisticsChart = false
+    const plain = mountDrawer()
+    await flushPromises()
+    expect(plain.find('[data-testid="business-agent-chart"]').exists()).toBe(false)
+    plain.unmount()
   })
   it('恢复已有统计历史后不猜测下钻位置，点击病例才建立返回锚点', async () => {
     mocks.managerDrilldown = true
