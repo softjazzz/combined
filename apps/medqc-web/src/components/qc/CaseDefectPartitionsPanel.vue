@@ -367,6 +367,16 @@ async function locateManualEvidence(item: ManualDefectReviewItem) {
     return
   }
   const anchor = data.anchor
+  if (
+    typeof anchor.source_ref !== 'string' ||
+    !/^[a-z0-9][a-z0-9:_-]{1,127}$/i.test(anchor.source_ref) ||
+    [anchor.source_type, anchor.field_path, anchor.quote, anchor.frozen_content].some(
+      (value) => typeof value !== 'string' || !value.trim(),
+    )
+  ) {
+    manualLocationError.value = '人工文书证据缺少完整来源或冻结正文，无法精确定位'
+    return
+  }
   emit('locate-evidence', {
     instituteId: props.instituteId, patientId: props.patientId, visitId: props.visitId,
     jobId: item.job_id, ruleId: '', manualDefectId: item.id, source: 'task_manual_defect',

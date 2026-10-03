@@ -109,6 +109,52 @@ function tab(wrapper: ReturnType<typeof mountPanel>, label: string) {
 }
 
 describe('CaseDefectPartitionsPanel', () => {
+  it.each([
+    ['frozen_content', undefined], ['frozen_content', ''], ['frozen_content', 123],
+    ['source_ref', 'invalid source'], ['source_type', null], ['field_path', ''], ['quote', '   '],
+  ])('损坏人工锚点 %s=%j 不发送定位，不能跳过冻结全文核验', async (field, value) => {
+    const anchor = { source_ref: 'src_' + 'a'.repeat(24), source_type: 'course_record',
+      field_path: 'text', quote: '摘录', frozen_content: '原文摘录' }
+    getManual.mockResolvedValue({ success: true, data: { items: [{
+      id: 'manual-1', institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1', job_id: 'job-1',
+      manual_review_status: 'approved', rule_name: '合成问题', document_anchor: anchor,
+    }], total: 1, offset: 0, limit: 200 } })
+    getAnchor.mockResolvedValue({ success: true, data: {
+      available: true, defect_id: 'manual-1', job_id: 'job-1', institute_id: 'H-1',
+      patient_id: 'P-1', visit_id: 'V-1', scene: 'running', source: 'task_manual_defect',
+      anchor: { ...anchor, [field]: value },
+    } })
+    const wrapper = mountPanel({ initialTab: 'manual' })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('人工录入原文'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('人工文书证据缺少完整来源或冻结正文')
+    expect(wrapper.emitted('locate-evidence')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('完整人工锚点保留录入时冻结全文并发送定位', async () => {
+    const anchor = { source_ref: 'src_' + 'a'.repeat(24), source_type: 'course_record',
+      field_path: 'text', quote: '摘录', frozen_content: '原文摘录' }
+    getManual.mockResolvedValue({ success: true, data: { items: [{
+      id: 'manual-1', institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1', job_id: 'job-1',
+      manual_review_status: 'approved', rule_name: '合成问题', document_anchor: anchor,
+    }], total: 1, offset: 0, limit: 200 } })
+    getAnchor.mockResolvedValue({ success: true, data: {
+      available: true, defect_id: 'manual-1', job_id: 'job-1', institute_id: 'H-1',
+      patient_id: 'P-1', visit_id: 'V-1', scene: 'running', source: 'task_manual_defect', anchor,
+    } })
+    const wrapper = mountPanel({ initialTab: 'manual' })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('人工录入原文'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('locate-evidence')?.[0]?.[0]).toMatchObject({
+      source: 'task_manual_defect', manualDefectId: 'manual-1',
+      evidence: { manual_frozen_content: '原文摘录', evidence_excerpt: '摘录' },
+    })
+    wrapper.unmount()
+  })
+
   it('人工锚点点击才读取单条正文，当前文书变化不发送定位', async () => {
     getManual.mockResolvedValue({ success: true, data: { items: [{
       id: 'manual-1', institute_id: 'H-1', patient_id: 'P-1', visit_id: 'V-1', job_id: 'job-1',
