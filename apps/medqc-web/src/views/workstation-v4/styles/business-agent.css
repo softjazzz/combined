@@ -11,6 +11,22 @@
   background: var(--mq-bg-mesh);
 }
 
+/* 内嵌到智能助手面板的“对话”页签：沿用面板高度，不带抽屉外壳 */
+.ba-embedded {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.business-agent--embedded {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+.ba-head--embedded {
+  padding: var(--mq-space-2) var(--mq-space-4);
+}
+
 /* 头部 */
 .ba-head {
   display: flex;

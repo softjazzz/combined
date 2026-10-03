@@ -107,7 +107,7 @@
               @toggle-expand-all-sections="toggleExpandAllSections"
               @toggle-section="toggleConcatSection"
               @select-document="selectDocumentByKey"
-              @open-assist-panel="openAssistPanelFromAgent"
+              @open-assist-chat="openAssistChat"
             />
           </template>
           <template #frontpage>
@@ -162,6 +162,7 @@
           ref="assistViewRef"
           :visible="assistPanelVisible"
           :assist-tab="assistTab"
+          :active-doc-type="activeDocType"
           :selected-record="selectedRecord"
           :assist-patient-info="assistPatientInfo"
           :content-q-c-count="contentQCCount"
@@ -1435,22 +1436,10 @@ const profileAnalyzing = ref(false)
 const drgDetailModalVisible = ref(false)
 
 // 助手只能请求打开同一病例的既有画像面板；不自动运行分析。
-function openAssistPanelFromAgent(payload: {
-  panel: 'profile'
-  institute_id: string
-  patient_id: string
-  visit_id: string
-}) {
-  const record = selectedRecord.value
-  if (
-    payload.panel !== 'profile' ||
-    !record ||
-    payload.institute_id !== record.instituteId ||
-    payload.patient_id !== record.patientId ||
-    payload.visit_id !== (record.visitId || record.id)
-  )
-    return
-  openAiProfilePanel()
+// 详情页入口与悬浮入口合并：只打开智能助手面板并停在“对话”页签。
+function openAssistChat() {
+  assistTab.value = 'chat'
+  assistPanelVisible.value = true
 }
 
 function openAiProfilePanel() {

@@ -1,22 +1,15 @@
 <template>
-  <a-drawer
-    :open="open"
-    :width="drawerWidth"
-    :closable="false"
-    :body-style="{ padding: 0 }"
-    root-class-name="business-agent-drawer"
-    @close="open = false"
-  >
-    <div class="business-agent">
-      <header class="ba-head">
-        <span class="ba-avatar ba-avatar--lg" aria-hidden="true">
+  <component :is="embedded ? 'div' : 'a-drawer'" v-bind="hostProps" @close="open = false">
+    <div class="business-agent" :class="{ 'business-agent--embedded': embedded }">
+      <header class="ba-head" :class="{ 'ba-head--embedded': embedded }">
+        <span v-if="!embedded" class="ba-avatar ba-avatar--lg" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
             <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
           </svg>
         </span>
         <div class="ba-head__copy">
-          <strong class="ba-head__title">{{
+          <strong v-if="!embedded" class="ba-head__title">{{
             context.view === 'doctor' ? '病历助手' : '质控分析助手'
           }}</strong>
           <span class="ba-head__sub"><i class="ba-dot" />{{ contextLabel }} · 只读</span>
@@ -52,7 +45,13 @@
             <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
           </svg>
         </button>
-        <button type="button" class="ba-icon-btn" aria-label="关闭" @click="open = false">
+        <button
+          v-if="!embedded"
+          type="button"
+          class="ba-icon-btn"
+          aria-label="关闭"
+          @click="open = false"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
@@ -670,7 +669,7 @@ v-if="documentSegments.quote"
         >{{ documentSegments.quote }}</mark>{{ documentSegments.after }}</pre>
       </template>
     </a-modal>
-  </a-drawer>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -695,10 +694,13 @@ import {
   type FollowupIntent,
 } from './businessAgentPresentation'
 
+// open：抽屉模式表示是否打开；内嵌模式（embedded）表示所在页签当前是否可见。
 const open = defineModel<boolean>('open', { default: false })
 const props = defineProps<{
   userContext?: BusinessAgentContext
   allowCaseSelection?: boolean
+  // 内嵌到宿主面板（如智能助手的“对话”页签）时不渲染抽屉外壳和自带标题。
+  embedded?: boolean
   // 宿主声明可打开的同病例辅助面板；未声明时不显示入口。
   panels?: 'profile'[]
 }>()
@@ -859,6 +861,17 @@ function toggleCard(turn: BusinessAgentTurn, reference: BusinessAgentReference) 
   cardToggles.value = { ...cardToggles.value, [key]: !cardOpen(turn, reference) }
 } // 窄窗口不超出视口，避免内容被裁切。
 const drawerWidth = 'min(600px, 100vw)'
+const hostProps = computed(() =>
+  props.embedded
+    ? { class: 'ba-embedded' }
+    : {
+        open: open.value,
+        width: drawerWidth,
+        closable: false,
+        bodyStyle: { padding: 0 },
+        rootClassName: 'business-agent-drawer',
+      },
+)
 function followups(turn: BusinessAgentTurn) {
   return followupIntents(turn, context.value.view).map((intent: FollowupIntent) => ({
     label: intent.label,

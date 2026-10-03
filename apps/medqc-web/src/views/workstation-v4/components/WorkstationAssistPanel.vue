@@ -1,33 +1,23 @@
 <template>
   <div class="assist-wrapper">
-    <button
-      v-if="!mergedVisible"
-      type="button"
-      class="assist-trigger"
-      @click="setVisible(true)"
-    >
+    <button v-if="!mergedVisible" type="button" class="assist-trigger" @click="setVisible(true)">
       <span class="assist-trigger__icon">
-        <AppstoreOutlined />
+        <RobotOutlined />
       </span>
-      <span class="assist-trigger__text">&#x5206;&#x6790;&#x9762;&#x677F;</span>
-      <span
-        v-if="totalBadgeCount > 0"
-        class="assist-trigger__badge"
-      >{{ totalBadgeCount }}</span>
+      <span class="assist-trigger__text">&#x667A;&#x80FD;&#x52A9;&#x624B;</span>
+      <span v-if="totalBadgeCount > 0" class="assist-trigger__badge">{{ totalBadgeCount }}</span>
     </button>
 
     <Transition name="assist-slide">
       <section
         v-if="mergedVisible"
-        class="assist-panel"
+        :class="['assist-panel', { 'assist-panel--wide': currentTab === 'chat' }]"
       >
         <header class="assist-panel__header">
           <div class="assist-panel__title-wrap">
             <RobotOutlined class="assist-panel__title-icon" />
             <div>
-              <div class="assist-panel__title">
-                &#x667A;&#x80FD;&#x5206;&#x6790;&#x9762;&#x677F;
-              </div>
+              <div class="assist-panel__title">&#x667A;&#x80FD;&#x52A9;&#x624B;</div>
             </div>
           </div>
           <div class="assist-panel__actions">
@@ -54,10 +44,7 @@
           </div>
         </header>
 
-        <div
-          v-if="patientInfo"
-          class="assist-panel__patient"
-        >
+        <div v-if="patientInfo" class="assist-panel__patient">
           <div class="assist-panel__patient-strip">
             <div class="assist-panel__patient-avatar">
               {{ (patientInfo.name || '?').charAt(0) }}
@@ -73,30 +60,21 @@
                   {{ patientInfo.age || '-' }}
                 </span>
               </div>
-              <div
-                v-if="patientInfo.visitId"
-                class="assist-panel__patient-id"
-              >
+              <div v-if="patientInfo.visitId" class="assist-panel__patient-id">
                 <span class="assist-panel__patient-id-label">&#x4F4F;&#x9662;&#x53F7;</span>
                 <span class="assist-panel__patient-id-value">{{ patientInfo.visitId }}</span>
               </div>
             </div>
-            <div
-              v-if="totalBadgeCount > 0"
-              class="assist-panel__summary"
-            >
+            <div v-if="totalBadgeCount > 0" class="assist-panel__summary">
               <span class="assist-panel__summary-label">&#x5F85;&#x5904;&#x7406;</span>
               <strong class="assist-panel__summary-value">{{ totalBadgeCount }}</strong>
             </div>
           </div>
-          <div
-            class="assist-panel__patient-diagnosis"
-            :title="patientInfo.diagnosis || ''"
-          >
+          <div class="assist-panel__patient-diagnosis" :title="patientInfo.diagnosis || ''">
             <span class="assist-panel__patient-diag-pulse"><span /></span>
             {{
               patientInfo.diagnosis ||
-                '\u6682\u65E0\u4E3B\u8BCA\u65AD\u4FE1\u606F\uFF0C\u5EFA\u8BAE\u901A\u8FC7 AI \u63D0\u53D6'
+              '\u6682\u65E0\u4E3B\u8BCA\u65AD\u4FE1\u606F\uFF0C\u5EFA\u8BAE\u901A\u8FC7 AI \u63D0\u53D6'
             }}
           </div>
         </div>
@@ -117,16 +95,20 @@
                 <component :is="tab.icon" />
               </span>
               <span class="assist-sidebar__label">{{ tab.label }}</span>
-              <span
-                v-if="getBadge(tab.key) > 0"
-                class="assist-sidebar__badge"
-              >{{
+              <span v-if="getBadge(tab.key) > 0" class="assist-sidebar__badge">{{
                 getBadge(tab.key)
               }}</span>
             </button>
           </nav>
 
           <div class="assist-panel__content">
+            <div
+              v-show="currentTab === 'chat'"
+              class="assist-panel__slot assist-panel__slot--contained"
+            >
+              <slot name="chat" :active="mergedVisible && currentTab === 'chat'" />
+            </div>
+
             <div
               v-if="currentTab === 'content'"
               class="assist-panel__slot assist-panel__slot--contained"
@@ -145,10 +127,7 @@
               v-else-if="currentTab === 'form' || currentTab === 'coding' || currentTab === 'cost'"
               class="assist-panel__slot assist-panel__slot--contained"
             >
-              <slot
-                name="qc"
-                :active-sub-tab="currentTab"
-              >
+              <slot name="qc" :active-sub-tab="currentTab">
                 <div class="assist-empty">
                   <CheckCircleOutlined class="assist-empty__icon" />
                   <div class="assist-empty__title">
@@ -158,24 +137,16 @@
               </slot>
             </div>
 
-            <div
-              v-else-if="currentTab === 'profile'"
-              class="assist-panel__slot"
-            >
+            <div v-else-if="currentTab === 'profile'" class="assist-panel__slot">
               <slot name="profile">
                 <div class="assist-empty">
                   <RobotOutlined class="assist-empty__icon" />
-                  <div class="assist-empty__title">
-                    AI &#x753B;&#x50CF;&#x5F85;&#x63A5;&#x5165;
-                  </div>
+                  <div class="assist-empty__title">AI &#x753B;&#x50CF;&#x5F85;&#x63A5;&#x5165;</div>
                 </div>
               </slot>
             </div>
 
-            <div
-              v-else-if="currentTab === 'drg'"
-              class="assist-panel__slot"
-            >
+            <div v-else-if="currentTab === 'drg'" class="assist-panel__slot">
               <slot name="drg">
                 <div class="assist-empty">
                   <NodeIndexOutlined class="assist-empty__icon" />
@@ -186,10 +157,7 @@
               </slot>
             </div>
 
-            <div
-              v-else
-              class="assist-panel__slot"
-            >
+            <div v-else-if="currentTab === 'message'" class="assist-panel__slot">
               <slot name="message">
                 <div class="assist-empty">
                   <NotificationOutlined class="assist-empty__icon" />
@@ -209,12 +177,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
-  AppstoreOutlined,
   CheckCircleOutlined,
   CloseOutlined,
   CodeOutlined,
   DollarOutlined,
   FileTextOutlined,
+  MessageOutlined,
   NodeIndexOutlined,
   NotificationOutlined,
   ReloadOutlined,
@@ -222,7 +190,7 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 
-type AssistTabKey = 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PatientInfo {
   name?: string
@@ -290,6 +258,7 @@ const mergedVisible = computed(() =>
 )
 
 const tabs = [
+  { key: 'chat' as const, label: '对话', icon: MessageOutlined },
   { key: 'content' as const, label: '\u5185\u6DB5\n\u8D28\u63A7', icon: SafetyCertificateOutlined },
   { key: 'form' as const, label: '\u9996\u9875\n\u8D28\u63A7', icon: FileTextOutlined },
   { key: 'coding' as const, label: '\u7F16\u7801\n\u8D28\u63A7', icon: CodeOutlined },
@@ -311,6 +280,7 @@ const totalBadgeCount = computed(
 )
 
 function getBadge(tab: AssistTabKey): number {
+  if (tab === 'chat') return 0
   if (tab === 'content') return props.contentCount
   if (tab === 'form') return props.qcCount
   if (tab === 'coding') return props.codingCount
@@ -393,6 +363,10 @@ function changeTab(tab: AssistTabKey) {
   line-height: 18px;
   text-align: center;
   font-weight: 700;
+}
+
+.assist-panel.assist-panel--wide {
+  width: min(600px, calc(100vw - 36px));
 }
 
 .assist-panel {

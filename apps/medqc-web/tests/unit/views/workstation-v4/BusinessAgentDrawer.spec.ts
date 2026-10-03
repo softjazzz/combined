@@ -461,6 +461,32 @@ describe('管理助手范围选择', () => {
     expect(wrapper.find('[data-testid="business-agent-return-summary"]').exists()).toBe(false)
     wrapper.unmount()
   })
+  it('内嵌模式不渲染抽屉外壳、自带标题和关闭按钮，仍保留新建会话', async () => {
+    const wrapper = shallowMount(BusinessAgentDrawer, {
+      props: { open: true, embedded: true, userContext: { view: 'manager' } },
+      global: {
+        stubs: {
+          BusinessAgentAnswer: false,
+          BusinessAgentChart: false,
+          'a-drawer': { template: '<aside data-testid="drawer-shell"><slot /></aside>' },
+          'a-modal': { template: '<div><slot /></div>' },
+          'a-button': { template: '<button><slot /></button>' },
+          'a-select': Select,
+          'a-range-picker': Range,
+          'a-alert': { props: ['message'], template: '<div>{{ message }}</div>' },
+          'a-textarea': true,
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="drawer-shell"]').exists()).toBe(false)
+    expect(wrapper.find('.business-agent--embedded').exists()).toBe(true)
+    expect(wrapper.find('.ba-head__title').exists()).toBe(false)
+    expect(wrapper.find('.ba-avatar--lg').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="关闭"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="新建会话"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
   it('统计卡带图表数据时在卡片内显示图表，没有图表数据时不显示', async () => {
     mocks.managerDrilldown = true
     mocks.statisticsChart = true

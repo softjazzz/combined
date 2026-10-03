@@ -13,6 +13,15 @@
     @tab-change="emit('tab-change', $event)"
     @refresh-tab="emit('refresh-tab', $event)"
   >
+    <template #chat="{ active }">
+      <BusinessAgentDrawer
+        embedded
+        :open="active"
+        :user-context="chatContext"
+        :panels="['profile']"
+        @open-panel="openProfileFromChat"
+      />
+    </template>
     <template #content>
       <ContentQCTab
         :patient-id="selectedRecord?.patientId"
@@ -618,7 +627,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import {
   CheckOutlined,
   EyeOutlined,
@@ -630,13 +639,15 @@ import {
 } from '@ant-design/icons-vue'
 
 import WorkstationAssistPanel from './WorkstationAssistPanel.vue'
+import BusinessAgentDrawer from './BusinessAgentDrawer.vue'
+import type { BusinessAgentContext } from '@/api/businessAgent'
 import QCResultTab from './QCResultTab.vue'
 import ContentQCTab from './ContentQCTab.vue'
 import ICDSearchPanel from './ICDSearchPanel.vue'
 import type { ICDCodeDetail } from './ICDDetailPanel.vue'
 import type { DocItem, PatientRecord } from '../types'
 
-type AssistTabKey = 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 const AsyncAIProfileDashboard = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/AIProfileDashboard.vue'),
@@ -645,9 +656,10 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/DRGGroupingTab.vue'),
 )
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
   assistTab: AssistTabKey
+  activeDocType?: string
   selectedRecord?: PatientRecord | null
   assistPatientInfo?: Record<string, unknown> | null
   contentQCCount: number
@@ -720,6 +732,33 @@ const emit = defineEmits<{
   'update:icdApplyIndex': [number]
   'apply-icd-code': [ICDCodeDetail]
 }>()
+
+// 对话页签沿用详情页同一病例坐标；未选病例时面板本身不渲染。
+const chatContext = computed<BusinessAgentContext>(() => ({
+  view: 'doctor',
+  institute_id: props.selectedRecord?.instituteId,
+  patient_id: props.selectedRecord?.patientId,
+  visit_id: props.selectedRecord?.visitId || props.selectedRecord?.id,
+  patient_name: props.selectedRecord?.name,
+  document_id: props.activeDocType,
+}))
+
+// 只切换到同一病例的 AI 画像页签（不自动分析）；病例已变化的迟到请求丢弃。
+function openProfileFromChat(payload: {
+  panel: 'profile'
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}) {
+  const current = chatContext.value
+  if (
+    payload.institute_id !== current.institute_id ||
+    payload.patient_id !== current.patient_id ||
+    payload.visit_id !== current.visit_id
+  )
+    return
+  emit('tab-change', 'profile')
+}
 
 const qcResultTabRef = ref<InstanceType<typeof QCResultTab> | null>(null)
 

@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import type { IcdApplyTarget } from '../types'
 
 type ViewMode = 'list' | 'detail' | 'rules'
-type AssistTabKey = 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'chat' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PersistedState {
   frontpageTab: 'fields' | 'preview' | 'official'
@@ -14,7 +14,15 @@ interface PersistedState {
 }
 
 const STORAGE_KEY = 'workstation_v4_session'
-const VALID_ASSIST_TABS: AssistTabKey[] = ['form', 'coding', 'cost', 'profile', 'drg', 'message']
+const VALID_ASSIST_TABS: AssistTabKey[] = [
+  'chat',
+  'form',
+  'coding',
+  'cost',
+  'profile',
+  'drg',
+  'message',
+]
 
 function loadState(): PersistedState {
   try {
@@ -29,7 +37,7 @@ function loadState(): PersistedState {
             ? 'official'
             : 'fields',
       assistPanelVisible: !!parsed.assistPanelVisible,
-      assistTab: VALID_ASSIST_TABS.includes(parsed.assistTab) ? parsed.assistTab : 'form',
+      assistTab: VALID_ASSIST_TABS.includes(parsed.assistTab) ? parsed.assistTab : 'chat',
       icdDrawerVisible: !!parsed.icdDrawerVisible,
       icdApplyTarget: parsed.icdApplyTarget || 'mainDiagnosis',
       icdApplyIndex: Math.max(1, Number(parsed.icdApplyIndex || 1)),
@@ -38,7 +46,7 @@ function loadState(): PersistedState {
     return {
       frontpageTab: 'fields',
       assistPanelVisible: false,
-      assistTab: 'form',
+      assistTab: 'chat',
       icdDrawerVisible: false,
       icdApplyTarget: 'mainDiagnosis',
       icdApplyIndex: 1,
