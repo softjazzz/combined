@@ -332,6 +332,63 @@ async function request<T>(
 
 const BASE = '/api/v1/scoring'
 
+export interface SpecialReportDefaultBinding {
+  purpose: 'special_report'
+  execution_scene: 'final'
+  version_seq: number
+  standard_id: string | null
+  standard_version_seq: number | null
+  status: 'no_standard' | 'configured' | 'unavailable'
+  standard: ScoringStandardItem | null
+}
+
+export interface SpecialReportDefaultWrite {
+  version_seq: number
+  standard_id: string | null
+  standard_version_seq?: number | null
+}
+
+function validSpecialBinding(value: unknown): value is SpecialReportDefaultBinding {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Record<string, unknown>
+  if (row.purpose !== 'special_report' || row.execution_scene !== 'final'
+    || !Number.isSafeInteger(row.version_seq) || Number(row.version_seq) < 0
+    || !['no_standard', 'configured', 'unavailable'].includes(String(row.status))) return false
+  if (row.status === 'no_standard') return row.standard_id === null && row.standard_version_seq === null && row.standard === null
+  if (typeof row.standard_id !== 'string' || !row.standard_id
+    || !Number.isSafeInteger(row.standard_version_seq) || Number(row.standard_version_seq) < 1) return false
+  if (row.status === 'unavailable') return row.standard === null
+  if (!row.standard || typeof row.standard !== 'object') return false
+  const standard = row.standard as Record<string, unknown>
+  return standard.id === row.standard_id && standard.scene === 'final' && standard.status === 'active'
+    && standard.version_seq === row.standard_version_seq && typeof standard.name === 'string'
+}
+
+async function specialBindingRequest(config: Parameters<typeof ApiService.requestRaw>[0], fallback: string) {
+  const result = await request<unknown>(config, fallback)
+  if (!result.success) return result as ScoringApiResult<SpecialReportDefaultBinding>
+  if (!validSpecialBinding(result.data)) return { success: false, status: result.status, message: '专用默认标准回执不完整，请刷新核对' }
+  return { ...result, data: result.data }
+}
+
+export function getSpecialReportDefault() {
+  return specialBindingRequest({
+    method: 'GET', url: `${BASE}/defaults/special-report`, params: { scene: 'final' },
+  }, '读取特殊病历报表默认标准失败')
+}
+
+export function setSpecialReportDefault(payload: SpecialReportDefaultWrite) {
+  return specialBindingRequest({
+    method: 'PUT', url: `${BASE}/defaults/special-report`, params: { scene: 'final' },
+    data: {
+      version_seq: payload.version_seq,
+      standard_id: payload.standard_id,
+      ...(payload.standard_version_seq !== undefined
+        ? { standard_version_seq: payload.standard_version_seq } : {}),
+    },
+  }, '保存特殊病历报表默认标准失败')
+}
+
 function standardPath(id: string): string {
   return `${BASE}/standards/${encodeURIComponent(id)}`
 }

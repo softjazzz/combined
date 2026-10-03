@@ -11,6 +11,8 @@
       </div>
     </header>
 
+    <SpecialReportDefaultPanel :can-write="canWrite" />
+
     <a-tabs
       :active-key="scene"
       class="scoring-standards-page__tabs"
@@ -434,6 +436,7 @@ import type {
 } from '@/api/scoring'
 import { useAuthStore } from '@/stores/auth'
 import ScoringStandardEditor from './scoring/ScoringStandardEditor.vue'
+import SpecialReportDefaultPanel from './scoring/SpecialReportDefaultPanel.vue'
 import {
   SCENE_LABELS,
   SCENE_ORDER,
