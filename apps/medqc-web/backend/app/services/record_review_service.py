@@ -21,14 +21,14 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCRecordReview, QCTask, QCTaskQCRun, QCTaskRecord
 from .case_identity import CaseRef
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
-from .qc_rule_sets import get_sichuan_rule_set
+from .qc_rule_sets import SICHUAN_RULE_SETS
 from .task_qc_run_service import (
     TaskQCRunConflict,
     TaskQCRunForbidden,
@@ -73,6 +73,23 @@ class RecordReviewUnavailable(RuntimeError):
 
 class RecordReviewTodoScopeUnavailable(RecordReviewUnavailable):
     """请求范围存在尚未接通可信审核来源的场景或规则集。"""
+
+
+def _task_review_scopes() -> dict[str, str]:
+    """任务审核只消费已有运行LX与四川终末结果owner。"""
+    return {
+        key: rule.scope for key, rule in SICHUAN_RULE_SETS.items()
+        if (key == LUXIAN_0609_RULE_SET_KEY and rule.scope == "running")
+        or (key.startswith("sc_content_") and rule.scope == "final")
+    }
+
+
+def _task_review_supported(task: Any) -> bool:
+    version = task.get("rule_set_version")
+    scopes = _task_review_scopes()
+    return (isinstance(version, str) and bool(version.strip())
+            and task.get("rule_set_key") in scopes
+            and scopes[task["rule_set_key"]] == task.get("scene"))
 
 
 def _envelope_table() -> Any:
@@ -201,8 +218,7 @@ def task_approved_counts(session: Any, tasks: Iterable[Any], records: Iterable[A
     task_map = {task["id"]: task for task in tasks}
     record_rows = list(records)
     counts: dict[str, int | None] = {
-        key: 0 if task.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
-        and task.get("rule_set_version") else None
+        key: 0 if _task_review_supported(task) else None
         for key, task in task_map.items()
     }
     if not task_map or not record_rows:
@@ -216,8 +232,38 @@ def task_approved_counts(session: Any, tasks: Iterable[Any], records: Iterable[A
         ).mappings().all():
             runs.setdefault((run["task_id"], run["triggered_by"]), []).append(run)
     job_ids = {run["job_id"] for rows in runs.values() for run in rows}
+    sc_job_ids = {run["job_id"] for rows in runs.values() for run in rows
+                  if str(task_map[run["task_id"]].get("rule_set_key") or "").startswith("sc_content_")}
+    sc_refs: dict[str, set[tuple[str, str, str]] | None] = {}
+    sc_pending: set[str] = set()
+    if sc_job_ids:
+        from .task_list_summary_service import _job_status_table
+
+        job_table = _job_status_table()
+        for chunk in _chunks(sc_job_ids):
+            for job in session.execute(select(job_table.c.id, job_table.c.filters_json, job_table.c.status).where(
+                job_table.c.id.in_(chunk),
+            )).mappings().all():
+                if job["status"] in {"queued", "pending", "running", "processing"}:
+                    sc_pending.add(job["id"])
+                try:
+                    filters = json.loads(job["filters_json"] or "{}")
+                    if not isinstance(filters, dict):
+                        raise ValueError()
+                    refs = filters.get("record_refs")
+                    if not isinstance(refs, list) or not refs:
+                        raise ValueError()
+                    sc_refs[job["id"]] = {tuple(ref[key] for key in _IDENTITY_KEYS) for ref in refs}
+                except (KeyError, TypeError, ValueError):
+                    sc_refs[job["id"]] = None
     envelopes: dict[tuple[str, tuple[str, str, str], str, str], list[tuple[str, str]]] = {}
     table = _envelope_table()
+    sc_envelopes: dict[str, Any] = {}
+    for chunk in _chunks(sc_job_ids):
+        for env in session.execute(select(table).where(
+            table.c.root_job_id.in_(chunk), table.c.rule_set_key.like("sc_content_%"),
+        )).mappings().all():
+            sc_envelopes[env["id"]] = env
     for chunk in _chunks(job_ids):
         for env in session.execute(select(
             table.c.id, table.c.root_job_id, table.c.created_by,
@@ -227,7 +273,16 @@ def task_approved_counts(session: Any, tasks: Iterable[Any], records: Iterable[A
             key = (env["root_job_id"],
                    (env["institute_id"], env["patient_id"], env["visit_id"]),
                    env["rule_set_key"], env["rule_set_version"])
-            envelopes.setdefault(key, []).append((env["id"], env["created_by"]))
+            owner = env["created_by"]
+            if str(env["rule_set_key"]).startswith("sc_content_"):
+                from .sc_final_task_review_envelope_service import load_items
+
+                try:
+                    load_items(sc_envelopes[env["id"]], source={"job_id": env["root_job_id"], "scene": "final",
+                                            **{k: env[k] for k in (*_IDENTITY_KEYS, "rule_set_key", "rule_set_version")}})
+                except (KeyError, TypeError, ValueError):
+                    owner = None
+            envelopes.setdefault(key, []).append((env["id"], owner))
     decisions: dict[tuple[str, str, str], list[Any]] = {}
     for chunk in _chunks(job_ids):
         for review in session.execute(
@@ -250,6 +305,13 @@ def task_approved_counts(session: Any, tasks: Iterable[Any], records: Iterable[A
             ids = envelopes.get((run["job_id"], identity,
                                  task["rule_set_key"], task["rule_set_version"]), [])
             if not ids:
+                if task["rule_set_key"].startswith("sc_content_"):
+                    if run["job_id"] in sc_pending:
+                        continue
+                    refs = sc_refs.get(run["job_id"])
+                    if refs is None or identity in refs:
+                        counts[task_id] = None
+                        break
                 continue  # 所选病例子集没有本病例：保留其更早的当前结果。
             if len(ids) != 1 or ids[0][1] != run["triggered_by"]:
                 counts[task_id] = None
@@ -280,6 +342,66 @@ def _envelope_ids(
         )
     ).all()
     return [str(row.id) for row in rows]
+
+
+def _validate_task_envelope(session: Any, *, envelope_id: str, identity: tuple[str, str, str],
+                            task: Any, result: dict, actor_id: str) -> None:
+    if not task["rule_set_key"].startswith("sc_content_"):
+        return
+    from .sc_final_task_review_envelope_service import load_items
+
+    table = _envelope_table()
+    row = session.execute(select(table).where(
+        table.c.id == envelope_id,
+    ).with_for_update(read=True)).mappings().first()
+    if row is None or row["created_by"] != actor_id:
+        raise TaskQCRunConflict("审核结果信封不存在或不属于本人")
+    try:
+        load_items(row, source={"job_id": result["job_id"], "institute_id": identity[0],
+                               "patient_id": identity[1], "visit_id": identity[2],
+                               "rule_set_key": task["rule_set_key"],
+                               "rule_set_version": task["rule_set_version"], "scene": task["scene"]},
+                   result=result)
+    except (TypeError, ValueError) as exc:
+        raise TaskQCRunConflict("审核信封内容或来源无效") from exc
+
+
+def _assert_current_sc_result(session: Any, *, task: Any, identity: tuple[str, str, str],
+                              task_record_id: str, run_number: int, actor_id: str,
+                              factory: Callable[[], Any]) -> None:
+    """子集重跑不遮蔽其他病例；只拒绝本病例更新的可用结果对象。"""
+    if not task["rule_set_key"].startswith("sc_content_"):
+        return
+    runs = session.execute(select(QCTaskQCRun.__table__).where(
+        QCTaskQCRun.task_id == task["id"], QCTaskQCRun.run_scope == "assigned",
+        QCTaskQCRun.triggered_by == actor_id, QCTaskQCRun.run_number > run_number,
+    ).order_by(QCTaskQCRun.run_number.desc())).mappings().all()
+    for run in runs:
+        ids = _envelope_ids(session, job_id=run["job_id"], identity=identity,
+                            rule_set_key=task["rule_set_key"], rule_set_version=task["rule_set_version"])
+        if not ids:
+            try:
+                result = _read_result(task_id=task["id"], task_record_id=task_record_id,
+                                      run_number=run["run_number"], actor_id=actor_id, workspace_factory=factory)
+            except TaskQCRunNotFound:
+                continue
+            except (TaskQCRunForbidden, TaskQCRunConflict) as exc:
+                raise RecordReviewConflict("result_unavailable", "较新结果来源不可核实") from exc
+            if result.get("result_state") == "available":
+                raise RecordReviewConflict("result_unavailable", "较新结果缺少可信审核信封")
+            continue
+        if len(ids) != 1:
+            raise RecordReviewConflict("result_unavailable", "较新结果对象不唯一")
+        try:
+            result = _read_result(task_id=task["id"], task_record_id=task_record_id,
+                                  run_number=run["run_number"], actor_id=actor_id, workspace_factory=factory)
+            if result.get("result_state") != "available":
+                continue
+            _validate_task_envelope(session, envelope_id=ids[0], identity=identity,
+                                    task=task, result=result, actor_id=actor_id)
+        except (TaskQCRunNotFound, TaskQCRunForbidden, TaskQCRunConflict) as exc:
+            raise RecordReviewConflict("result_unavailable", "较新结果来源不可核实") from exc
+        raise RecordReviewConflict("result_changed", "已有较新质控结果，请刷新后审核")
 
 
 def _case_decisions(session: Any, identity: tuple[str, str, str], rule_set_key: str, limit: int | None) -> list[Any]:
@@ -375,7 +497,7 @@ def get_record_review(
     if identity is None:
         view["reason_code"] = "identity_incomplete"
         return view
-    if rule_set_key != LUXIAN_0609_RULE_SET_KEY or not rule_set_version:
+    if not _task_review_supported(task):
         view["reason_code"] = "unsupported_rule_set"
         return view
 
@@ -407,6 +529,15 @@ def get_record_review(
                 view["reason_code"] = "envelope_missing" if not envelope_ids else "envelope_ambiguous"
                 return view
             envelope_id = envelope_ids[0]
+            try:
+                _validate_task_envelope(session, envelope_id=envelope_id, identity=identity,
+                                        task=task, result=result, actor_id=actor_id)
+                _assert_current_sc_result(session, task=task, identity=identity,
+                                          task_record_id=task_record_id, run_number=run_number,
+                                          actor_id=actor_id, factory=factory)
+            except (TaskQCRunConflict, RecordReviewConflict):
+                view["reason_code"] = "result_invalid"
+                return view
             view["result"]["envelope_id"] = envelope_id
             decisions = _case_decisions(session, identity, rule_set_key, None)
     except SQLAlchemyError as exc:
@@ -694,6 +825,10 @@ def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]
                 select(QCTask.rule_set_key).where(QCTask.id == req.task_id)
             ).scalar_one_or_none()
             _advisory_lock(session, identity, str(task_rule or ""))
+            if str(task_rule or "").startswith("sc_content_"):
+                from .qc_workspace.canonical_result_store import lock_case_result_mutations
+
+                lock_case_result_mutations(session, [CaseRef(*identity)], rule_set_key=task_rule)
             existing = _find_by_request(session, req.request_id)
             if existing is not None:
                 return _replay(existing, req)
@@ -704,7 +839,7 @@ def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]
                 raise RecordReviewConflict("state_conflict", "任务或病历当前状态不允许审核")
             rule_set_key = task["rule_set_key"]
             rule_set_version = task["rule_set_version"]
-            if rule_set_key != LUXIAN_0609_RULE_SET_KEY or not rule_set_version:
+            if not _task_review_supported(task):
                 raise RecordReviewConflict("unsupported_rule_set", "当前规则集不支持病历审核")
             run = session.execute(
                 select(QCTaskQCRun.__table__).where(
@@ -746,6 +881,14 @@ def _submit(req: _DecisionRequest, factory: Callable[[], Any]) -> dict[str, Any]
                 )
             if envelope_ids[0] != req.envelope_id:
                 raise RecordReviewConflict("result_changed", "质控结果已被替换，请刷新后重新审核")
+            try:
+                _validate_task_envelope(session, envelope_id=req.envelope_id, identity=identity,
+                                        task=task, result=result, actor_id=req.actor_id)
+            except TaskQCRunConflict as exc:
+                raise RecordReviewConflict("result_unavailable", "审核信封不可核实") from exc
+            _assert_current_sc_result(session, task=task, identity=identity,
+                                      task_record_id=req.task_record_id, run_number=req.run_number,
+                                      actor_id=req.actor_id, factory=factory)
 
             response = _insert_decision(
                 session, req, identity=identity, rule_set_key=rule_set_key,
@@ -1112,9 +1255,11 @@ def _pending_todo_items(
     task_scene = _task_scene_filter(scene)
     if task_scene == "outpatient":
         raise RecordReviewTodoScopeUnavailable("门急诊病历审核来源尚未接通")
-    review_rule_set = get_sichuan_rule_set(LUXIAN_0609_RULE_SET_KEY)
-    if review_rule_set is None:
+    review_scopes = _task_review_scopes()
+    if not review_scopes:
         raise RecordReviewTodoScopeUnavailable("病历审核规则来源尚未接通")
+    supported_source = or_(*(and_(QCTask.rule_set_key == key, QCTask.scene == scope)
+                             for key, scope in review_scopes.items()))
     unsupported = (
         select(QCTaskRecord.id)
         .join(QCTask, QCTask.id == QCTaskRecord.task_id)
@@ -1125,9 +1270,9 @@ def _pending_todo_items(
             QCTask.status == "in_progress",
             QCTaskQCRun.run_scope == "assigned", QCTaskQCRun.triggered_by == actor_id,
             (QCTask.rule_set_key.is_(None)
-             | (QCTask.rule_set_key != LUXIAN_0609_RULE_SET_KEY)
+             | ~supported_source
              | QCTask.rule_set_version.is_(None) | (func.trim(QCTask.rule_set_version) == "")
-             | QCTask.scene.is_(None) | (QCTask.scene != review_rule_set.scope)
+             | QCTask.scene.is_(None)
              | QCTaskRecord.institute_id.is_(None) | (func.trim(QCTaskRecord.institute_id) == "")
              | QCTaskRecord.patient_id.is_(None) | (func.trim(QCTaskRecord.patient_id) == "")
              | QCTaskRecord.visit_id.is_(None) | (func.trim(QCTaskRecord.visit_id) == "")
@@ -1151,7 +1296,7 @@ def _pending_todo_items(
             QCTaskRecord.assignee_id == actor_id,
             QCTaskRecord.status.in_(("in_progress", "completed")),
             QCTask.status == "in_progress",
-            QCTask.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+            supported_source,
             QCTask.rule_set_version.is_not(None),
         )
         .order_by(QCTask.created_at.desc(), QCTask.id, QCTaskRecord.created_at, QCTaskRecord.id)
@@ -1184,33 +1329,33 @@ def _pending_todo_items(
         return []
 
     table = _envelope_table()
-    envelopes: dict[tuple[str, tuple[str, str, str], str], list[str]] = {}
+    envelopes: dict[tuple[str, tuple[str, str, str], str, str], list[str]] = {}
     for chunk in _chunks(job_ids):
         for env in session.execute(
             select(
                 table.c.id, table.c.root_job_id, table.c.institute_id,
-                table.c.patient_id, table.c.visit_id, table.c.rule_set_version,
+                table.c.patient_id, table.c.visit_id, table.c.rule_set_key, table.c.rule_set_version,
             ).where(
                 table.c.root_job_id.in_(chunk),
-                table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                table.c.rule_set_key.in_(review_scopes),
             )
         ).all():
-            key = (env.root_job_id, (env.institute_id, env.patient_id, env.visit_id), env.rule_set_version)
+            key = (env.root_job_id, (env.institute_id, env.patient_id, env.visit_id), env.rule_set_key, env.rule_set_version)
             envelopes.setdefault(key, []).append(str(env.id))
 
     visit_ids = sorted({identity[2] for _, identity in candidates})
-    decisions_by_case: dict[tuple[str, str, str], list[Any]] = {}
+    decisions_by_case: dict[tuple[tuple[str, str, str], str], list[Any]] = {}
     for chunk in _chunks(visit_ids):
         for decision in session.execute(
             select(QCRecordReview)
             .where(
                 QCRecordReview.visit_id.in_(chunk),
-                QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                QCRecordReview.rule_set_key.in_(review_scopes),
             )
             .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
         ).scalars().all():
             case = (decision.institute_id, decision.patient_id, decision.visit_id)
-            decisions_by_case.setdefault(case, []).append(decision)
+            decisions_by_case.setdefault((case, decision.rule_set_key), []).append(decision)
 
     shared_workspace: list[Any] = []
 
@@ -1223,14 +1368,28 @@ def _pending_todo_items(
 
     items: list[dict[str, Any]] = []
     for row, identity in candidates:
-        decisions = decisions_by_case.get(identity, [])
+        decisions = decisions_by_case.get((identity, row["rule_set_key"]), [])
         decided = {(item.job_id, item.envelope_id) for item in decisions}
         for run in runs_by_task.get(row["task_id"], []):
-            ids = envelopes.get((run.job_id, identity, row["rule_set_version"]), [])
+            ids = envelopes.get((run.job_id, identity, row["rule_set_key"], row["rule_set_version"]), [])
             if len(ids) != 1:
+                if row["rule_set_key"].startswith("sc_content_"):
+                    if ids:
+                        raise RecordReviewTodoScopeUnavailable("当前终末任务审核信封不唯一")
+                    try:
+                        missing_result = _read_result(
+                            task_id=row["task_id"], task_record_id=row["id"],
+                            run_number=run.run_number, actor_id=actor_id, workspace_factory=shared_factory,
+                        )
+                    except TaskQCRunNotFound:
+                        continue
+                    except (TaskQCRunForbidden, TaskQCRunConflict):
+                        raise RecordReviewTodoScopeUnavailable("当前终末任务结果来源不可核实") from None
+                    if missing_result.get("result_state") == "available":
+                        raise RecordReviewTodoScopeUnavailable("历史终末结果缺少可信审核信封")
                 continue  # Envelope 缺失或不唯一：本运行结果不可用，退回更早运行
             envelope_id = ids[0]
-            if (run.job_id, envelope_id) in decided:
+            if (run.job_id, envelope_id) in decided and not row["rule_set_key"].startswith("sc_content_"):
                 break  # 最新结果对象已有决定：不在待办中
             try:
                 result = _read_result(
@@ -1239,9 +1398,18 @@ def _pending_todo_items(
                     workspace_factory=shared_factory,
                 )
             except (TaskQCRunNotFound, TaskQCRunForbidden, TaskQCRunConflict):
+                if row["rule_set_key"].startswith("sc_content_"):
+                    raise RecordReviewTodoScopeUnavailable("当前终末任务结果来源不可核实") from None
                 continue
             if result.get("result_state") != "available" or result.get("job_id") != run.job_id:
                 continue
+            try:
+                _validate_task_envelope(session, envelope_id=envelope_id, identity=identity,
+                                        task=row, result=result, actor_id=actor_id)
+            except TaskQCRunConflict:
+                raise RecordReviewTodoScopeUnavailable("当前终末任务审核信封不可核实") from None
+            if (run.job_id, envelope_id) in decided:
+                break
             stage = _stage_from_decisions(decisions, run.job_id, envelope_id)
             items.append({
                 "task_id": row["task_id"], "task_name": row["task_name"],

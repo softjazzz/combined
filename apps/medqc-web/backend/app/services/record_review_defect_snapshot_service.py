@@ -82,17 +82,24 @@ def capture_snapshot(session: Any, *, source: Mapping[str, Any], captured_at: da
         row = rows[0]
         if any(row.get(k) != source[k] for k in SOURCE_KEYS if k not in {"job_id", "envelope_id", "scene"}) or row.get("root_job_id") != source["job_id"]:
             raise DefectSnapshotInvalid("审核结果信封来源不一致")
-        payload, envelope_id = CanonicalResultStore(envelope_table).load_selected_with_id(
-            session, root_job_id=source["job_id"],
-            **{k: source[k] for k in ("institute_id", "patient_id", "visit_id", "rule_set_key", "rule_set_version")},
-        )
-        raw = payload.get("items")
+        if source["rule_set_key"].startswith("sc_content_") and source["scene"] == "final":
+            from .sc_final_task_review_envelope_service import load_items
+
+            projected = load_items(row, source=dict(source))
+            raw = projected
+            envelope_id = row["id"]
+        else:
+            payload, envelope_id = CanonicalResultStore(envelope_table).load_selected_with_id(
+                session, root_job_id=source["job_id"],
+                **{k: source[k] for k in ("institute_id", "patient_id", "visit_id", "rule_set_key", "rule_set_version")},
+            )
+            raw = payload.get("items")
+            projected = project_customer_items(raw) if isinstance(raw, list) else None
         if envelope_id != source["envelope_id"] or not isinstance(raw, list) or not raw or type(row.get("result_count")) is not int or row["result_count"] != len(raw):
             raise DefectSnapshotInvalid("审核结果信封内容无效")
         raw_ids = [item.get("rule_id") if isinstance(item, dict) else None for item in raw]
         if any(not _text(item) for item in raw_ids) or len(set(raw_ids)) != len(raw_ids):
             raise DefectSnapshotInvalid("质控规则身份缺失或重复")
-        projected = project_customer_items(raw)
         if not isinstance(projected, list) or len(projected) != len(raw):
             raise DefectSnapshotInvalid("质控条目投影不完整")
         auto = []

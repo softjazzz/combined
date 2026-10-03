@@ -52,6 +52,7 @@ def _batch_job_table():
         sa.Column("scene", sa.String(20), nullable=False),
         sa.Column("scope", sa.String(20), nullable=False),
         sa.Column("filters_json", sa.Text, nullable=False),
+        sa.Column("status", sa.String(20), default="completed"),
     )
 
 
@@ -184,6 +185,7 @@ def env(monkeypatch):
     monkeypatch.setattr(service, "SessionLocal", sessions)
     monkeypatch.setattr(service, "_envelope_table", lambda: envelopes)
     monkeypatch.setattr(service, "_batch_job_table", lambda: jobs)
+    monkeypatch.setattr(list_summary, "_job_status_table", lambda: jobs)
     states: dict[tuple[str, int], str] = {}
     environment = Env(sessions, envelopes, jobs, states)
 
@@ -279,6 +281,30 @@ def test_task_approved_counts_identity_incomplete_without_run_is_unknown(env):
             institute_id=None, patient_id=None, visit_id=None,
         ))
     assert task_counts(env)["task-1"] is None
+
+
+def test_task_approved_counts_legacy_null_rule_with_assigned_run_is_unknown(env):
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-1").values(rule_set_key=None))
+    assert task_counts(env)["task-1"] is None
+
+
+@pytest.mark.parametrize("filters", [[], {"record_refs": [{"institute_id": "H", "patient_id": "P5", "visit_id": "V5"}]}])
+def test_sc_task_approved_counts_missing_source_is_readonly_unknown(env, monkeypatch, filters):
+    from app.services import custom_qc_workspace_service as workspace_service
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("只读统计不得初始化workspace或执行DDL")
+
+    monkeypatch.setattr(workspace_service, "CustomQCWorkspaceService", forbidden)
+    monkeypatch.setattr(workspace_service, "_batch_jobs_table", forbidden)
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-3").values(
+            scene="final", rule_set_key="sc_content_launch_a_v1",
+        ))
+        session.execute(env.jobs.insert().values(id="job-4", scene="final", scope="final",
+                                                 filters_json=json.dumps(filters)))
+    assert task_counts(env)["task-3"] is None
 
 
 def test_task_approved_counts_foreign_envelope_owner_cannot_replace_current_result(env):
@@ -595,7 +621,7 @@ def test_todo_batches_queries(env):
     assert sorted(call["task_record_id"] for call in env.reader_calls) == ["rec-a", "rec-b", "rec-d"]
 
 
-@pytest.mark.parametrize("scene,rule", [("running", "luxian_0916_qc_v1"), ("final", "sc_content_launch_a_v1"), ("final", LX)])
+@pytest.mark.parametrize("scene,rule", [("running", "luxian_0916_qc_v1"), ("final", LX)])
 def test_unsupported_review_rule_source_keeps_full_todo_count_unknown(env, scene, rule):
     with env.sessions.begin() as session:
         session.execute(QCTask.__table__.update().where(QCTask.id == "task-3").values(
@@ -609,6 +635,17 @@ def test_unsupported_review_rule_source_keeps_full_todo_count_unknown(env, scene
             todos(scene=scope)
     other = "final" if scene == "running" else "running"
     assert counts(scene=other)["initial"] == (0 if other == "final" else 3)
+
+
+def test_legacy_sc_final_available_result_without_envelope_is_unknown(env):
+    with env.sessions.begin() as session:
+        session.execute(QCTask.__table__.update().where(QCTask.id == "task-3").values(
+            status="in_progress", scene="final", rule_set_key="sc_content_launch_a_v1",
+        ))
+    assert counts(scene="final")["initial"] is None
+    assert counts(scene="all")["initial"] is None
+    with pytest.raises(service.RecordReviewTodoScopeUnavailable):
+        todos(scene="final")
 
 
 @pytest.mark.parametrize("changes", [{"scene": None}, {"rule_set_version": "  "}])

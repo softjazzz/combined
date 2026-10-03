@@ -5184,6 +5184,13 @@ class CustomQCWorkspaceService:
                 session.rollback()
                 self.refresh_parent_batch_job(parent_job_id=parent_job_id)
                 return
+            if persist_record_envelopes and is_sc_content_rule_set:
+                from .sc_final_task_review_envelope_service import save_task_envelopes
+
+                save_task_envelopes(
+                    session, table=self._record_result_envelope_table, job_row=dict(row),
+                    summary=summary, items=items, failures=failed_records, now=now,
+                )
             envelope_items: Sequence[Dict[str, Any]] = (
                 items
                 if persist_record_envelopes
