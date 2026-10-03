@@ -257,6 +257,20 @@ describe('特殊病历报表页面', () => {
     expect(wrapper.text()).not.toContain('合成病例')
     wrapper.unmount()
   })
+  it('下载病例后切换下钻，旧错误不污染新下钻', async () => {
+    let reject!: (reason: Error) => void
+    mocks.export.mockImplementationOnce(
+      () => new Promise((_resolve, fail) => { reject = fail }),
+    )
+    const wrapper = render()
+    await flushPromises()
+    await button(wrapper, '下载病例').trigger('click')
+    await button(wrapper, '合成科室').trigger('click')
+    reject(new Error('旧下钻导出失败'))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('旧下钻导出失败')
+    wrapper.unmount()
+  })
   it('下载病例后切换下钻，旧导出不触发保存', async () => {
     let done!: (value: Blob) => void
     mocks.export.mockImplementationOnce(

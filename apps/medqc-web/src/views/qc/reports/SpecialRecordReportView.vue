@@ -531,7 +531,9 @@ async function download(kind: 'records' | 'defects' | 'summary' = 'summary') {
     anchor.click()
     URL.revokeObjectURL(url)
   } catch (cause) {
-    if (ticket === nonce) exportError.value = message(cause)
+    if (ticket === nonce && (kind !== 'records' || drillTicket === recordsNonce)) {
+      exportError.value = message(cause)
+    }
   } finally {
     if (ticket === nonce) exporting.value = false
   }
@@ -547,8 +549,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 @import './reportPage.css';
+.report-page :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.filters .field {
+  min-width: 0;
+  flex: 1 1 170px;
+}
 .type-select {
-  width: 190px;
+  width: 100%;
 }
 .type-summary {
   display: grid;

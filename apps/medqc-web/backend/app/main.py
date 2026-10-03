@@ -159,6 +159,12 @@ def create_app() -> FastAPI:
         allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
+        expose_headers=[
+            "X-Special-Classification-Version",
+            "X-Special-Standard-Id",
+            "X-Special-Standard-Version",
+            "X-Special-Binding-Version",
+        ],
     )
 
     # API Version middleware (with backward compatibility)

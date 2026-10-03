@@ -2,7 +2,7 @@
 
 ## 基线与结论
 
-**2026-10-03最新映射：60完整 / 8部分 / 12未实现，代码完整率75%。** 第141节固定十项Goal已完成48/49的核准合同，总表此前未同步；本次补记这两项已有代码证据，不算本批新增交付。下段58/80保留为第134节历史结论；05仍部分，真实库与浏览器验收不随代码映射提升。
+**2026-10-03最新映射：61完整 / 8部分 / 11未实现，代码完整率76.25%。** 第145节按用户确认的八类、实际实施来源和独立评分合同收口52；60仅补特殊报表消费，其他场景仍部分。第141节的48/49已在第143节补记，不重复计数。下段58/80保留为历史结论；真实库与浏览器业务验收不随代码映射提升。
 
 **第134节历史基线（不代表当前累计）。** 第129–134节复用v36a/v36b/v36c并行推进、3fa6集中集成。当时58完整/10部分/12未实现。2026-10-01新长程Goal以`c9cab874e`的48/80为基线，本Goal新增10/10（23、24、29、40、41、42、45、46、54、55），达到58/80（72.5%），不沿用旧64/80目标。28编码质控按用户要求暂停，以54核心制度报表替补；40–42以显式院方源码配置完成筛选/抽样/冻结分配，未配置时不猜类型。用户已明确确认45/46与55统计合同，代码及聚焦回归齐备，按代码口径收口。未逐项重审的完整项不冒称本次重新验收。全量前端曾2512/2514通过，两个失败独立通过但套件顺序问题未根治，不称全量全绿；数据库迁移、真实病例和浏览器尚未验收，原PRD矩阵业务验收状态不变。
 
@@ -28,20 +28,20 @@
 
 | 代码状态 | 项数 | 占全部80项 |
 | -------- | ---: | ---------: |
-| 代码完整 |   60 |        75% |
+| 代码完整 |   61 |     76.25% |
 | 部分实现 |    8 |        10% |
-| 未实现   |   12 |        15% |
+| 未实现   |   11 |     13.75% |
 | 合计     |   80 |       100% |
 
-**当前账本代码完整率为60/80 = 75%，不是对全部80项新一轮独立验收。** 有直接实现的68项不等于完成率；各项工作量不同，不据此推算剩余工时。
+**当前账本代码完整率为61/80 = 76.25%，不是对全部80项新一轮独立验收。** 有直接实现的69项不等于完成率；各项工作量不同，不据此推算剩余工时。
 
-代码完整项：01、02、03、04、06、07、08、10、18、21、22、23、24、25、26、27、29、30、31、32、34、35、37、38、39、40、41、42、43、45、46、47、48、49、50、51、54、55、58、59、61、62、63、64、65、66、67、68、69、70、71、72、73、74、75、76、77、78、79、80。
+代码完整项：01、02、03、04、06、07、08、10、18、21、22、23、24、25、26、27、29、30、31、32、34、35、37、38、39、40、41、42、43、45、46、47、48、49、50、51、52、54、55、58、59、61、62、63、64、65、66、67、68、69、70、71、72、73、74、75、76、77、78、79、80。
 
 | 模块                          | 完整 | 部分 | 未实现 | 总数 |
 | ----------------------------- | ---: | ---: | -----: | ---: |
 | 登录、工作台、门急诊（01–20） |    9 |    3 |      8 |   20 |
 | 运行、终末、任务（21–43）     |   20 |    2 |      1 |   23 |
-| 统计分析（44–56）             |    9 |    1 |      3 |   13 |
+| 统计分析（44–56）             |   10 |    1 |      2 |   13 |
 | 规则、文书、测试病历（57–80） |   22 |    2 |      0 |   24 |
 
 ## 判定方法
@@ -118,7 +118,7 @@
 | 49 | 全院各科室病历质量详情 | 代码完整 | 按已核准运行/终末范围：病例数、均分、质控/审核数、单否、甲级数、动态等级率、平均缺陷数及缺陷数、列配置和同筛选导出已接；未知来源不伪造0。门急诊统计属44，不作为本项手册基线前置。 | `backend/app/services/record_quality_report_service.py`；`src/views/qc/reports/RecordQualityReportView.vue` | `30f39380b`、`251761618`、`f7be22e3d`；第141节 |
 | 50  | 运行质控员分析                 | 代码完整 | 冻结运行场景的真实工作量、快捷周期/自定义日期、机构内当前病例科室、可信任务筛选、人员指标分页下钻与CSV已接通；汇总/明细/导出同一事件口径与as_of截止。申诉不可归属时保持未知，不冒认任务或跨院科室。补齐外部评审指出的原PRD351–358通用报表缺口；迁移67/68部署及真实病例验收仍未完成。                                                                              | `backend/app/services/staff_work_analysis_service.py:1`；`backend/app/routers/staff_work_analysis.py:1`；`src/views/qc/reports/StaffAnalysisView.vue:1`                                           | 第96、104节；外部评审纠正后补齐 |
 | 51  | 终末质控员分析                 | 代码完整 | 已返回冻结final审核/人工缺陷及申诉通过/驳回的真实事件工作量；申诉按审核事件时间与创建时冻结scene归属，历史NULL仅all，不按当前出院状态猜场景。机构/科室/任务无法归属时仍明确未知，沿用50的筛选边界。迁移72/76及真实病例验收未完成。                                                                                                                                | `backend/app/services/staff_work_analysis_service.py:1`                                                                                                                                           | 第124节；`ca9075b14`            |
-| 52  | 特殊病历报表 | 未实现 | 手册八类名称已明确，院方分类码、实际实施来源和计分视图口径待确认；独立查询、统计、下钻、导出及页面未实现，不以60专用绑定代替报表交付。 | `docs/plans/2026-10-03-v36-special-report-scoring.md` | 第144节，未提升状态 |
+| 52 | 特殊病历报表 | 代码完整 | 按确认合同接八类可重叠、机构/科室/出院日期查询、Top5/等级/Top10、病例与缺陷分页、CSV及院方代码CAS配置。实际事件来源，未知单列；消费独立标准不改历史分数。当前缺陷限已核实LX0609自动确认结果，人工未纳入、无兼容结果未知；医院代码与供数待真实验收，082/083未执行。 | `backend/app/services/special_record_report_service.py`；`src/views/qc/reports/SpecialRecordReportView.vue`；`docs/plans/2026-10-03-v36-special-record-report.md` | `f242a36e1`、`390ad2d30`、`4297b6bfc`；第145节，本地合成验证 |
 | 53  | 病案管理 27 项指标             | 部分实现 | 27项原文定义、报表、科室/医生下钻、病例和CSV已接；仅入院/手术记录24小时两项可展示出院队列已核实子集率，official_rate为空，其余25项明确来源缺口，计数API/CSV/UI统一未知而非0；已核实零保留，不算完整指标交付。                                                                                                                                                                                                | `backend/app/services/medical_record_indicator_service.py`；`src/views/qc/reports/MedicalRecordIndicatorsView.vue`                                                                                | `0066f32e6`；指标合同第5节            |
 | 54  | 18 项医疗核心制度              | 代码完整 | 既有病历质量分析页接18制度列表、2018官方参考全文、冻结版本质控点详情、三坐标病例去重问题数/问题率、筛选下钻和CSV。口径明确为已配置质控点范围，不冒称全院合规率；未配置null、明确非核心[]、未知和真实0分开，版本不存在不回退最新版本。 | `backend/app/services/core_system_report_service.py`；`src/views/qc/reports/CoreSystemReportPanel.vue` | `6bfc9bf36`；第133节 |
 | 55  | 人工质控报表（手册仅列名称）   | 代码完整 | 已接既有工作分析页面，用户确认按上海创建日期统计人工录入、审核与现代整改各取当前状态，院科/录入人/场景/可信任务筛选、分页明细及CSV同口径；批量核验冻结来源，来源不完整单列未知，同缺陷多次操作不重复计数。 | `backend/app/services/manual_quality_report_service.py`；`src/views/qc/reports/ManualQualityReportPanel.vue` | `2161fba03`、`61f9b8ef1`；第134节 |
@@ -131,7 +131,7 @@
 | 57  | 门急诊规则配置                     | 部分实现 | 通用标准服务识别场景，但门急诊目录无可评分规则集，页面禁止新建，无法完成项目组配置。                                                                                                                                                                                                                    | `backend/app/services/scoring_standard_service.py:112`；`src/views/qc/ScoringStandardsView.vue:35`                                                                                    | `10f2a9592`、`8e1af54e9`                                           |
 | 58  | 住院规则配置                       | 代码完整 | 版本entry配置精确院科范围与医生端开关；实际批量执行按病例选择适用规则，医生首页/分析/申诉与原安全标记AND。旧版本执行兼容、医生未配置失败关闭；Excel V2往返，V1仅导入未配置草稿，发布须明确配置。                                                                                                        | `backend/app/services/rule_set_version_service.py`；`backend/app/services/doctor_rule_visibility_service.py`；`src/views/dashboard/quality-control/QualityControlPointManagement.vue` | `380200055`；第125节，未做真实病例和浏览器验收                     |
 | 59  | 评分标准新增、编辑、删除           | 代码完整 | 草稿CRUD、任意等级名称及区间校验、界面和测试已做；已启用版本通过复制草稿再改。                                                                                                                                                                                                                          | `backend/app/routers/scoring.py:190`；`backend/app/services/scoring_standard_service.py:221`                                                                                          | `10f2a9592`、`8e1af54e9`                                           |
-| 60  | 默认评分标准配置 | 部分实现 | 运行/终末默认替换已接；新增special_report/final独立用途绑定、双版本CAS、失效重绑和配置面板，不改执行默认/历史分数。特殊报表实际消费、首页及门急诊仍缺；083未执行。 | `backend/app/services/scoring_standard_service.py`；`src/views/qc/scoring/SpecialReportDefaultPanel.vue`；`docs/plans/2026-10-03-v36-special-report-scoring.md` | `f235e73d4`、`956d4295f`、`483ac9670`；第144节 |
+| 60 | 默认评分标准配置 | 部分实现 | 运行/终末默认替换、special_report/final独立用途绑定及报表实际消费已接，保留标准与绑定版本，不改执行默认/历史分数。首页及门急诊仍缺；083未执行。 | `backend/app/services/scoring_standard_service.py`；`backend/app/services/special_report_scoring_service.py`；`src/views/qc/scoring/SpecialReportDefaultPanel.vue` | `f235e73d4`、`956d4295f`、`483ac9670`、`f242a36e1`；第144–145节 |
 | 61  | 评分项目组配置                     | 代码完整 | 项目组、扣分、启用、显式全部/指定科室及机构内精确科室引用贯通API、编辑器、复制和Excel；规则文书只读引用权威目录，导入不可篡改。单例、批量、工作台、报表与申诉快照统一计分；指定范围缺可信科室或配置损坏时不可用，不伪造满分。迁移69仅编写与合成测试，未部署。                                           | `src/views/qc/scoring/ScoringStandardEditor.vue:219`；`backend/app/services/scoring_standard_service.py:317`；`backend/app/services/scoring_service.py:1`                             | `10f2a9592`、`8e1af54e9`；第103节                                  |
 | 62  | 规则导入/导出                      | 代码完整 | 新评分标准与规则集版本均有版本化Excel模板、导出、导入草稿及逐Sheet/行/字段错误和成功回执。评分标准只新建草稿；生命周期只导入已登记规则状态，不导入新执行器或规则定义。资源/公式/外链、版本竞争、草稿删除重建、事务回滚和未知响应有反例。                                                                | `backend/app/services/scoring_standard_excel_service.py:1`；`backend/app/services/rule_set_version_excel_service.py:1`                                                                | 第92节两条Excel专项提交                                            |
 | 63  | 非编码质控点已上线列表             | 代码完整 | 当前版本真实条目，开启/暂停/下线写草稿并发布，已有组件与服务测试。                                                                                                                                                                                                                                      | `src/views/dashboard/quality-control/QualityControlPointManagement.vue:69`；`backend/app/services/rule_set_version_service.py:421`                                                    | `25340aec6`                                                        |

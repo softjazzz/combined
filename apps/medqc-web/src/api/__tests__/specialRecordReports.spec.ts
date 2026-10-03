@@ -127,6 +127,7 @@ describe('特殊病历报表API边界', () => {
   })
   it('CSV已知版本header漂移拒绝下载，不冒称整体病例快照', async () => {
     const spy = vi.spyOn(ApiService, 'requestRaw').mockResolvedValue({
+      ...envelope(null),
       data: new Blob(['synthetic']),
       headers: {
         'x-special-classification-version': '1',
@@ -134,15 +135,16 @@ describe('特殊病历报表API边界', () => {
         'x-special-standard-version': '',
         'x-special-binding-version': '',
       },
-    } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+    })
     const expected = report as unknown as import('../specialRecordReports').SpecialRecordReport
     await expect(exportSpecialRecordReport(filters, 'summary', expected)).resolves.toBeInstanceOf(
       Blob,
     )
     spy.mockResolvedValue({
+      ...envelope(null),
       data: new Blob(['synthetic']),
       headers: { 'x-special-classification-version': '2' },
-    } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
+    })
     await expect(exportSpecialRecordReport(filters, 'summary', expected)).rejects.toThrow(
       '版本已变化',
     )

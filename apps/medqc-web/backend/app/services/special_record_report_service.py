@@ -125,8 +125,11 @@ class SpecialRecordReportService:
                         rid = item.get("rule_id")
                         meta = versions[version].get(rid, {})
                         display = rule_metadata.get(rid, {})
+                        name = item.get("rule_name")
+                        if not name or name == rid:
+                            name = display.get("rule_name") or rid
                         defects_by_case[identity].append({
-                            "rule_id": rid, "name": item.get("rule_name") or display.get("rule_name") or rid,
+                            "rule_id": rid, "name": name,
                             "severity": meta.get("reminder_level") or display.get("defect_level"),
                             "category": meta.get("defect_category"), "type": meta.get("defect_type"),
                             "document": display.get("document"),
