@@ -576,7 +576,6 @@ describe('管理助手范围选择', () => {
       expect.objectContaining({ view: 'doctor' }),
       'result-a',
     )
-    expect(wrapper.text()).toContain('查询将发起新一轮问答')
     expect(wrapper.get('[data-testid="business-agent-readonly-notice"]').text()).toContain(
       '查看提醒与整改记录',
     )
@@ -962,7 +961,7 @@ describe('管理助手范围选择', () => {
     const wrapper = mountDrawer(context)
     await flushPromises()
     expect(wrapper.get('[data-testid="business-agent-result-page"]').text()).toContain(
-      '本页 2 条，匹配共 4 条，保存结果共 75 条',
+      '本页 2 / 匹配 4 条',
     )
     expect(wrapper.get('[data-testid="business-agent-result-page"]').text()).toContain('后续页')
     await wrapper

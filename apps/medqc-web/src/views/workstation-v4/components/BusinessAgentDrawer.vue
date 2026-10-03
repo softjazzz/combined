@@ -131,23 +131,35 @@
           <p class="ba-welcome__lead">
             {{
               context.view === 'doctor'
-                ? '我会读取这份病历最近一次的正式质控结果，帮你看懂问题、找到原文和规范，再协助你修改。'
-                : '我会沿用正式统计口径回答指标问题，可以下钻到病例、比较期间，或起草质量分析报告。'
+                ? '帮你看懂质控问题、找到原文和规范，再协助修改。'
+                : '问指标、下钻病例、比较期间，或起草质量报告。'
             }}
           </p>
-          <p class="ba-welcome__note" data-testid="business-agent-readonly-notice">
+          <p class="ba-sr-only" data-testid="business-agent-readonly-notice">
             支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
           </p>
-          <div v-if="canOpenProfile" class="ba-welcome__extra">
-            <a-button
-              type="link"
-              data-testid="business-agent-open-profile"
-              @click="openProfilePanel"
+          <div class="ba-welcome__cards">
+            <button
+              v-for="prompt in prompts"
+              :key="prompt"
+              type="button"
+              class="ba-welcome__card"
+              :disabled="loading || !canQuery"
+              @click="draft = prompt"
             >
-              打开本病例画像面板
-            </a-button>
-            <span class="ba-muted">打开面板不会自动分析；是否运行画像分析由您在面板中决定。</span>
+              {{ prompt }}
+            </button>
           </div>
+          <a-button
+            v-if="canOpenProfile"
+            type="link"
+            size="small"
+            data-testid="business-agent-open-profile"
+            @click="openProfilePanel"
+          >
+            打开本病例画像面板
+          </a-button>
+          <span v-if="canOpenProfile" class="ba-muted">打开面板不会自动分析</span>
         </div>
         <template v-else>
           <p class="ba-sr-only" data-testid="business-agent-readonly-notice">
@@ -215,23 +227,22 @@
                   class="ba-page"
                   data-testid="business-agent-result-page"
                 >
-                  <p>
-                    读取范围：{{
-                      page.statuses.length ? page.statuses.map(statusLabel).join('、') : '全部状态'
-                    }}
-                    · 第 {{ page.page }} 页；本页 {{ page.returned }} 条，匹配共
-                    {{ page.matched_total }} 条，保存结果共 {{ page.total }} 条。
-                  </p>
                   <p class="ba-chips">
                     <span
                       v-for="[status, count] in Object.entries(page.status_counts)"
                       :key="status"
                       class="mq-status"
                       :class="statusTone(status)"
-                      >{{ statusLabel(status) }} {{ count }} 条</span
+                      >{{ statusLabel(status) }} {{ count }}</span
                     >
                   </p>
-                  <p v-if="page.has_more" class="ba-muted">此范围还有后续页，可继续查询下一页。</p>
+                  <p class="ba-muted">
+                    {{
+                      page.statuses.length ? page.statuses.map(statusLabel).join('、') : '全部状态'
+                    }}
+                    · 第 {{ page.page }} 页，本页 {{ page.returned }} / 匹配
+                    {{ page.matched_total }} 条{{ page.has_more ? '，还有后续页' : '' }}
+                  </p>
                 </div>
                 <p v-if="turn.reference_scope === 'prior_turns'" class="ba-muted">
                   本轮沿用此前读取的来源，未刷新业务结果。
@@ -252,7 +263,15 @@
                     statusTone(reference.status || '').replace('mq-status--', 'ba-tone--'),
                   ]"
                 >
-                  <div class="ba-card__head">
+                  <component
+                    :is="reference.kind === 'saved_result' ? 'button' : 'div'"
+                    :type="reference.kind === 'saved_result' ? 'button' : undefined"
+                    class="ba-card__head"
+                    :aria-expanded="
+                      reference.kind === 'saved_result' ? cardOpen(turn, reference) : undefined
+                    "
+                    @click="reference.kind === 'saved_result' && toggleCard(turn, reference)"
+                  >
                     <span class="ba-card__index">{{ reference.position || index + 1 }}</span>
                     <strong class="ba-card__title">{{ reference.title }}</strong>
                     <span
@@ -261,166 +280,170 @@
                       :class="statusTone(reference.status)"
                       >{{ statusLabel(reference.status) }}</span
                     >
-                  </div>
-                  <p
-                    v-if="reference.kind === 'guideline'"
-                    class="ba-muted"
-                    data-testid="business-agent-guideline-candidate"
-                  >
-                    检索资料 · 待核对适用性
-                  </p>
-                  <div v-if="reference.conclusion || reference.suggestion" class="ba-card__body">
-                    <p v-if="reference.conclusion">
-                      {{ reference.conclusion }}
-                    </p>
-                    <p v-if="reference.suggestion" class="ba-card__suggestion">
-                      建议：{{ reference.suggestion }}
-                    </p>
-                  </div>
-                  <p v-if="reference.locator || reference.rule_id" class="ba-card__meta">
-                    <span v-if="reference.locator">{{ reference.locator }}</span>
-                    <span v-if="reference.rule_id" class="ba-mono"
-                      >规则编号：{{ reference.rule_id }}</span
+                    <svg
+                      v-if="reference.kind === 'saved_result'"
+                      class="ba-card__chevron"
+                      :class="{ 'is-open': cardOpen(turn, reference) }"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.4"
+                      aria-hidden="true"
                     >
-                  </p>
-                  <template v-if="reference.kind === 'action'">
-                    <p class="ba-block" data-testid="business-agent-action-text">
-                      {{ actionView(reference).text }}
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </component>
+                  <div v-show="cardOpen(turn, reference)" class="ba-card__detail">
+                    <p
+                      v-if="reference.kind === 'guideline'"
+                      class="ba-muted"
+                      data-testid="business-agent-guideline-candidate"
+                    >
+                      检索资料 · 待核对适用性
                     </p>
-                    <div class="ba-card__confirm">
-                      <a-button
-                        v-if="canConfirm(actionView(reference))"
-                        type="primary"
-                        :loading="actionBusy === reference.id"
-                        :disabled="!!actionBusy"
-                        data-testid="business-agent-action-confirm"
-                        @click="confirmAction(reference)"
-                      >
-                        确认执行
-                      </a-button>
-                      <a-button
-                        v-else-if="actionView(reference).status !== 'previewed'"
-                        :loading="actionBusy === reference.id"
-                        :disabled="!!actionBusy"
-                        data-testid="business-agent-action-refresh"
-                        @click="refreshAction(reference)"
-                      >
-                        刷新任务进度
-                      </a-button>
+                    <div v-if="reference.conclusion || reference.suggestion" class="ba-card__body">
+                      <p v-if="reference.conclusion">
+                        {{ reference.conclusion }}
+                      </p>
+                      <p v-if="reference.suggestion" class="ba-card__suggestion">
+                        建议：{{ reference.suggestion }}
+                      </p>
                     </div>
-                    <p class="ba-muted">
-                      助手不会自行执行；确认后由正式质控任务服务创建任务，停止对话不会取消已创建任务。
+                    <p
+                      v-if="reference.locator && reference.kind !== 'saved_result'"
+                      class="ba-card__meta"
+                    >
+                      {{ reference.locator.split('\n')[0] }}
                     </p>
-                  </template>
-                  <template v-if="reference.kind === 'draft'">
-                    <p class="ba-block ba-block--draft" data-testid="business-agent-draft-text">
-                      {{ reference.text }}
-                    </p>
+                    <template v-if="reference.kind === 'action'">
+                      <p class="ba-block" data-testid="business-agent-action-text">
+                        {{ actionView(reference).text }}
+                      </p>
+                      <div class="ba-card__confirm">
+                        <a-button
+                          v-if="canConfirm(actionView(reference))"
+                          type="primary"
+                          :loading="actionBusy === reference.id"
+                          :disabled="!!actionBusy"
+                          data-testid="business-agent-action-confirm"
+                          @click="confirmAction(reference)"
+                        >
+                          确认执行
+                        </a-button>
+                        <a-button
+                          v-else-if="actionView(reference).status !== 'previewed'"
+                          :loading="actionBusy === reference.id"
+                          :disabled="!!actionBusy"
+                          data-testid="business-agent-action-refresh"
+                          @click="refreshAction(reference)"
+                        >
+                          刷新任务进度
+                        </a-button>
+                      </div>
+                      <p class="ba-muted">
+                        助手不会自行执行；确认后由正式质控任务服务创建任务，停止对话不会取消已创建任务。
+                      </p>
+                    </template>
+                    <template v-if="reference.kind === 'draft'">
+                      <p class="ba-block ba-block--draft" data-testid="business-agent-draft-text">
+                        {{ reference.text }}
+                      </p>
+                      <div class="ba-card__actions">
+                        <a-button
+                          size="small"
+                          :disabled="!reference.text"
+                          data-testid="business-agent-draft-copy"
+                          @click="copyDraft(reference)"
+                        >
+                          复制参考草稿
+                        </a-button>
+                        <span
+                          v-if="copiedDraftId === reference.id"
+                          class="ba-muted"
+                          data-testid="business-agent-draft-copied"
+                        >
+                          已复制；复制不等于整改完成，请核对原文后在病历系统中书写。
+                        </span>
+                      </div>
+                    </template>
                     <div class="ba-card__actions">
                       <a-button
+                        type="link"
                         size="small"
-                        :disabled="!reference.text"
-                        data-testid="business-agent-draft-copy"
-                        @click="copyDraft(reference)"
+                        class="ba-link--primary"
+                        @click="openReference(reference.id)"
                       >
-                        复制参考草稿
+                        查看{{
+                          reference.kind === 'guideline'
+                            ? '规范原文'
+                            : isRuleValidation(reference)
+                              ? '验收记录'
+                              : reference.kind === 'rule'
+                                ? '规则详情'
+                                : reference.kind === 'draft'
+                                  ? '最新校验的草稿'
+                                  : reference.kind === 'action'
+                                    ? '操作最新状态'
+                                    : '依据与详情'
+                        }}
                       </a-button>
-                      <span
-                        v-if="copiedDraftId === reference.id"
-                        class="ba-muted"
-                        data-testid="business-agent-draft-copied"
+                      <template v-if="reference.kind === 'saved_result'">
+                        <a-button
+                          v-if="linkedRule(reference)"
+                          type="link"
+                          size="small"
+                          @click="openReference(linkedRule(reference)!.id)"
+                        >
+                          查看对应规则
+                        </a-button>
+                        <a-button
+                          v-else-if="reference.rule_id"
+                          type="link"
+                          size="small"
+                          :disabled="loading || !canQuery"
+                          @click="queryRule(reference)"
+                        >
+                          查询这条规则
+                        </a-button>
+                        <a-button
+                          type="link"
+                          size="small"
+                          :disabled="loading || !canQuery"
+                          @click="explainReference(reference)"
+                        >
+                          解释这条
+                        </a-button>
+                        <a-button
+                          v-if="reference.status === 'non_compliant' && activeView === 'doctor'"
+                          type="link"
+                          size="small"
+                          :disabled="loading || !canQuery"
+                          data-testid="business-agent-draft-request"
+                          @click="requestDraft(reference)"
+                        >
+                          生成参考补充文字
+                        </a-button>
+                        <a-button
+                          type="link"
+                          size="small"
+                          class="ba-link--muted"
+                          :disabled="!sessionId || feedbackSubmitting"
+                          data-testid="business-agent-feedback-open"
+                          @click="openFeedback(reference.id)"
+                        >
+                          提交异议反馈
+                        </a-button>
+                      </template>
+                      <a-button
+                        v-if="reference.kind === 'record'"
+                        type="link"
+                        size="small"
+                        :disabled="loading || !canQuery"
+                        @click="explainReference(reference, turn.run_id)"
                       >
-                        已复制；复制不等于整改完成，请核对原文后在病历系统中书写。
-                      </span>
+                        查看病例问题
+                      </a-button>
                     </div>
-                  </template>
-                  <p
-                    v-if="reference.kind === 'saved_result' && !linkedRule(reference)"
-                    class="ba-muted"
-                  >
-                    {{
-                      reference.rule_id
-                        ? '尚未读取对应规则，查询将发起新一轮问答。'
-                        : '保存结果未提供规则编号，暂无法关联规则详情。'
-                    }}
-                  </p>
-                  <div class="ba-card__actions">
-                    <a-button
-                      type="link"
-                      size="small"
-                      class="ba-link--primary"
-                      @click="openReference(reference.id)"
-                    >
-                      查看{{
-                        reference.kind === 'guideline'
-                          ? '规范原文'
-                          : isRuleValidation(reference)
-                            ? '验收记录'
-                            : reference.kind === 'rule'
-                              ? '规则详情'
-                              : reference.kind === 'draft'
-                                ? '最新校验的草稿'
-                                : reference.kind === 'action'
-                                  ? '操作最新状态'
-                                  : '依据与详情'
-                      }}
-                    </a-button>
-                    <template v-if="reference.kind === 'saved_result'">
-                      <a-button
-                        v-if="linkedRule(reference)"
-                        type="link"
-                        size="small"
-                        @click="openReference(linkedRule(reference)!.id)"
-                      >
-                        查看对应规则
-                      </a-button>
-                      <a-button
-                        v-else-if="reference.rule_id"
-                        type="link"
-                        size="small"
-                        :disabled="loading || !canQuery"
-                        @click="queryRule(reference)"
-                      >
-                        查询这条规则
-                      </a-button>
-                      <a-button
-                        type="link"
-                        size="small"
-                        :disabled="loading || !canQuery"
-                        @click="explainReference(reference)"
-                      >
-                        解释这条
-                      </a-button>
-                      <a-button
-                        v-if="reference.status === 'non_compliant' && activeView === 'doctor'"
-                        type="link"
-                        size="small"
-                        :disabled="loading || !canQuery"
-                        data-testid="business-agent-draft-request"
-                        @click="requestDraft(reference)"
-                      >
-                        生成参考补充文字
-                      </a-button>
-                      <a-button
-                        type="link"
-                        size="small"
-                        class="ba-link--muted"
-                        :disabled="!sessionId || feedbackSubmitting"
-                        data-testid="business-agent-feedback-open"
-                        @click="openFeedback(reference.id)"
-                      >
-                        提交异议反馈
-                      </a-button>
-                    </template>
-                    <a-button
-                      v-if="reference.kind === 'record'"
-                      type="link"
-                      size="small"
-                      :disabled="loading || !canQuery"
-                      @click="explainReference(reference, turn.run_id)"
-                    >
-                      查看病例问题
-                    </a-button>
                   </div>
                 </div>
               </div>
@@ -464,7 +487,7 @@
 
       <footer class="ba-composer">
         <a-alert v-if="error" type="warning" :message="error" show-icon />
-        <div class="ba-prompts">
+        <div v-if="turns.length || loading" class="ba-prompts">
           <button
             v-for="prompt in prompts"
             :key="prompt"
@@ -662,6 +685,7 @@ import {
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 import BusinessAgentAnswer from './BusinessAgentAnswer.vue'
+import { useBusinessAgentActions } from '../composables/useBusinessAgentActions'
 import {
   followupIntents,
   statusTone,
@@ -818,7 +842,20 @@ const prompts = computed(() =>
     : ['当前范围哪些质控问题最多？', '列出这些问题对应的病例', '查询规则的当前启用状态'],
 )
 const draft = ref('')
-// 窄窗口不超出视口，避免内容被裁切。
+// 问题卡默认只展开每轮第一条不合规（或唯一一条），其余折叠成一行，按需展开。
+const cardToggles = ref<Record<string, boolean>>({})
+function cardOpen(turn: BusinessAgentTurn, reference: BusinessAgentReference) {
+  if (reference.kind !== 'saved_result') return true
+  const toggled = cardToggles.value[`${turn.run_id}|${reference.id}`]
+  if (toggled !== undefined) return toggled
+  const issues = turn.references.filter((item) => item.kind === 'saved_result')
+  const first = issues.find((item) => item.status === 'non_compliant') || issues[0]
+  return issues.length === 1 || first?.id === reference.id
+}
+function toggleCard(turn: BusinessAgentTurn, reference: BusinessAgentReference) {
+  const key = `${turn.run_id}|${reference.id}`
+  cardToggles.value = { ...cardToggles.value, [key]: !cardOpen(turn, reference) }
+} // 窄窗口不超出视口，避免内容被裁切。
 const drawerWidth = 'min(600px, 100vw)'
 function followups(turn: BusinessAgentTurn) {
   return followupIntents(turn, context.value.view).map((intent: FollowupIntent) => ({
@@ -962,68 +999,8 @@ function returnToSummary() {
   target?.scrollIntoView({ block: 'start' })
   target?.focus({ preventScroll: true })
 }
-// 操作卡的最新状态只来自确认/回读接口，不改写会话历史中的原卡片。
-const actionUpdates = ref<Record<string, BusinessAgentReference>>({})
-const actionBusy = ref('')
-function actionView(reference: BusinessAgentReference) {
-  return actionUpdates.value[reference.id] || reference
-}
-function canConfirm(reference: BusinessAgentReference) {
-  return (
-    reference.status === 'previewed' &&
-    reference.allowed === true &&
-    !!reference.confirmation_hash &&
-    !!reference.expires_at &&
-    Date.parse(reference.expires_at) > Date.now()
-  )
-}
-watch(sessionId, () => {
-  actionUpdates.value = {}
-  actionBusy.value = ''
-})
-async function confirmAction(reference: BusinessAgentReference) {
-  const current = actionView(reference)
-  const owner = sessionId.value
-  if (!owner || !current.action_id || !current.confirmation_hash) return
-  actionBusy.value = reference.id
-  error.value = ''
-  try {
-    const updated = await businessAgentApi.confirmAction(
-      owner,
-      current.action_id,
-      current.confirmation_hash,
-    )
-    // 切换会话后迟到的响应不写入新会话。
-    if (owner === sessionId.value)
-      actionUpdates.value = { ...actionUpdates.value, [reference.id]: updated }
-  } catch (cause) {
-    if (owner !== sessionId.value) return
-    const status = (cause as { response?: { status?: number } })?.response?.status
-    error.value =
-      status === 409
-        ? '授权、范围、规则或材料状态已变化，预览已失效；请重新发起预览。本次未提交任务。'
-        : '确认请求未完成，未能确认是否已提交；请点击刷新查看该操作状态，不要重复发起新预览。'
-  } finally {
-    actionBusy.value = ''
-  }
-}
-async function refreshAction(reference: BusinessAgentReference) {
-  const current = actionView(reference)
-  const owner = sessionId.value
-  if (!owner || !current.action_id) return
-  actionBusy.value = reference.id
-  error.value = ''
-  try {
-    const updated = await businessAgentApi.readAction(owner, current.action_id)
-    if (owner === sessionId.value)
-      actionUpdates.value = { ...actionUpdates.value, [reference.id]: updated }
-  } catch {
-    if (owner !== sessionId.value) return
-    error.value = '任务进度读取失败；任务状态以正式任务列表为准。'
-  } finally {
-    actionBusy.value = ''
-  }
-}
+const { actionBusy, actionView, canConfirm, confirmAction, refreshAction } =
+  useBusinessAgentActions(sessionId, error)
 const copiedDraftId = ref('')
 async function copyDraft(reference: BusinessAgentReference) {
   if (!reference.text) return
