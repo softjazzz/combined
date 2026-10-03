@@ -136,6 +136,7 @@ function mountDrawer(
       stubs: {
         BusinessAgentAnswer: false,
         BusinessAgentChart: false,
+        BusinessAgentWelcome: false,
         'a-drawer': { template: '<div><slot /></div>' },
         'a-modal': { template: '<div><slot /></div>' },
         'a-button': {
@@ -468,6 +469,7 @@ describe('管理助手范围选择', () => {
         stubs: {
           BusinessAgentAnswer: false,
           BusinessAgentChart: false,
+          BusinessAgentWelcome: false,
           'a-drawer': { template: '<aside data-testid="drawer-shell"><slot /></aside>' },
           'a-modal': { template: '<div><slot /></div>' },
           'a-button': { template: '<button><slot /></button>' },
@@ -486,6 +488,38 @@ describe('管理助手范围选择', () => {
     expect(wrapper.find('button[aria-label="关闭"]').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="新建会话"]').exists()).toBe(true)
     wrapper.unmount()
+  })
+  it('欢迎页显示宿主给的待办摘要，点未读消息请求宿主切到消息页签；无摘要时不显示', async () => {
+    const mountWith = (summary: { pending: number; unread: number } | null) =>
+      shallowMount(BusinessAgentDrawer, {
+        props: { open: true, embedded: true, userContext: { view: 'manager' }, summary },
+        global: {
+          stubs: {
+            BusinessAgentAnswer: false,
+            BusinessAgentWelcome: false,
+            'a-select': Select,
+            'a-range-picker': Range,
+            'a-button': { template: '<button><slot /></button>' },
+            'a-modal': { template: '<div><slot /></div>' },
+            'a-textarea': true,
+          },
+        },
+      })
+    mocks.history = []
+    mocks.access.mockResolvedValue({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: 'D' }],
+    })
+    const wrapper = mountWith({ pending: 31, unread: 30 })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="business-agent-todo"]').text()).toContain('31')
+    await wrapper.get('[data-testid="business-agent-todo-messages"]').trigger('click')
+    expect(wrapper.emitted('open-tab')).toEqual([['message']])
+    wrapper.unmount()
+    const bare = mountWith(null)
+    await flushPromises()
+    expect(bare.find('[data-testid="business-agent-todo"]').exists()).toBe(false)
+    bare.unmount()
   })
   it('统计卡带图表数据时在卡片内显示图表，没有图表数据时不显示', async () => {
     mocks.managerDrilldown = true

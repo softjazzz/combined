@@ -19,7 +19,10 @@
         :open="active"
         :user-context="chatContext"
         :panels="['profile']"
+        :summary="chatSummary"
+        :prefill="chatPrefill"
         @open-panel="openProfileFromChat"
+        @open-tab="emit('tab-change', $event)"
       />
     </template>
     <template #content>
@@ -30,6 +33,7 @@
         :scene="resolveContentScene(selectedRecord)"
         :documents="documentsList"
         @issues-change="emit('content-issues-change', $event)"
+        @ask-assistant="askAboutRule"
       />
     </template>
     <template #qc="{ activeSubTab }">
@@ -467,6 +471,15 @@
               </div>
               <div class="mt-2 flex items-center justify-end gap-2">
                 <a-button
+                  v-if="isCurrentRecordNotification(notif)"
+                  size="small"
+                  class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
+                  data-testid="assist-notification-ask"
+                  @click="askAboutNotification(notif)"
+                >
+                  问助手
+                </a-button>
+                <a-button
                   size="small"
                   class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
                   @click="emit('assist-notification-click', notif)"
@@ -743,6 +756,36 @@ const chatContext = computed<BusinessAgentContext>(() => ({
   document_id: props.activeDocType,
 }))
 
+// 对话页欢迎页的待办摘要：沿用面板上的计数，不另行统计。
+const chatSummary = computed(() => ({
+  pending: props.contentQCCount + props.assistBadgeCount,
+  unread: props.notificationUnreadCount,
+}))
+
+// 预填只写入对话输入框，不自动发送；nonce 保证相同文字也能再次预填。
+const chatPrefill = ref<{ text: string; nonce: number } | null>(null)
+function prefillChat(text: string) {
+  chatPrefill.value = { text, nonce: (chatPrefill.value?.nonce || 0) + 1 }
+  emit('tab-change', 'chat')
+}
+
+// 助手绑定当前选中的病例，因此只对当前病例的消息提供“问助手”；其它病例先“去处理”打开。
+function isCurrentRecordNotification(notification: Record<string, any>) {
+  const id = String(notification.record_id || '')
+  const record = props.selectedRecord
+  return !!id && !!record && (id === record.id || id === record.visitId)
+}
+// 内涵质控只带规则标识：助手从规则目录和本病例已保存结果读取，页面上的实时结果不当作依据。
+function askAboutRule(payload: { ruleId: string; ruleName: string }) {
+  const name = payload.ruleName ? `「${payload.ruleName}」` : ''
+  prefillChat(`规则 ${payload.ruleId}${name}在这份病历里的已保存结果是什么？规则要求是什么？`)
+}
+function askAboutNotification(notification: Record<string, any>) {
+  const title = String(notification.title || '质控消息').trim()
+  const content = String(notification.content || '').trim()
+  prefillChat(`质控消息「${title}」${content ? `：${content}` : ''}。这是什么问题，应该怎么处理？`)
+}
+
 // 只切换到同一病例的 AI 画像页签（不自动分析）；病例已变化的迟到请求丢弃。
 function openProfileFromChat(payload: {
   panel: 'profile'
@@ -768,6 +811,7 @@ function resolveContentScene(record?: PatientRecord | null): 'running' | 'final'
 }
 
 defineExpose({
+  prefillChat,
   runFormQC: () => qcResultTabRef.value?.runFormQC(),
   runCodingQC: () => qcResultTabRef.value?.runCodingQC(),
 })

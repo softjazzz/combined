@@ -3,17 +3,11 @@
     <!-- 顶部操作栏 -->
     <div class="content-qc-tab__header">
       <div class="content-qc-tab__header-main">
-        <div class="content-qc-tab__eyebrow">
-          当前质控
-        </div>
+        <div class="content-qc-tab__eyebrow">当前质控</div>
         <div class="header-left">
           <SafetyCertificateOutlined class="header-icon" />
           <span class="header-title">内涵质控</span>
-          <a-tag
-            v-if="totalCount > 0"
-            color="error"
-            size="small"
-          >
+          <a-tag v-if="totalCount > 0" color="error" size="small">
             {{ totalCount }}
           </a-tag>
         </div>
@@ -34,19 +28,14 @@
     </div>
 
     <!-- 加载态 — 实时进度时间线 -->
-    <div
-      v-if="loading"
-      class="content-qc-tab__progress"
-    >
+    <div v-if="loading" class="content-qc-tab__progress">
       <!-- 进度头部 -->
       <div class="progress-header">
         <div class="progress-avatar">
           <ThunderboltOutlined class="text-white text-lg" />
         </div>
         <div>
-          <div class="progress-title">
-            正在执行整份病历质控评估
-          </div>
+          <div class="progress-title">正在执行整份病历质控评估</div>
           <div class="progress-sub">
             已完成 {{ completedSections.length }} / {{ totalSections }} 个阶段
           </div>
@@ -57,10 +46,7 @@
       <!-- 进度条 -->
       <div class="progress-bar-wrap">
         <div class="progress-bar-bg">
-          <div
-            class="progress-bar-fill"
-            :style="{ width: `${progressPercent}%` }"
-          />
+          <div class="progress-bar-fill" :style="{ width: `${progressPercent}%` }" />
         </div>
       </div>
 
@@ -77,40 +63,19 @@
           }"
         >
           <!-- 状态图标 -->
-          <div
-            class="timeline-dot"
-            :class="`timeline-dot--${sec.status}`"
-          >
-            <CheckCircleOutlined
-              v-if="sec.status === 'done'"
-              class="text-white text-[10px]"
-            />
-            <span
-              v-else-if="sec.status === 'active'"
-              class="dot-ping"
-            />
-            <span
-              v-else
-              class="dot-idle"
-            />
+          <div class="timeline-dot" :class="`timeline-dot--${sec.status}`">
+            <CheckCircleOutlined v-if="sec.status === 'done'" class="text-white text-[10px]" />
+            <span v-else-if="sec.status === 'active'" class="dot-ping" />
+            <span v-else class="dot-idle" />
           </div>
           <!-- 内容 -->
           <div class="timeline-content">
             <div class="timeline-title-row">
-              <span
-                class="timeline-label"
-                :class="`timeline-label--${sec.status}`"
-              >{{
+              <span class="timeline-label" :class="`timeline-label--${sec.status}`">{{
                 sec.label
               }}</span>
-              <span
-                v-if="sec.duration"
-                class="timeline-time"
-              >{{ sec.duration }}s</span>
-              <span
-                v-if="sec.status === 'active'"
-                class="timeline-active-hint"
-              >分析中...</span>
+              <span v-if="sec.duration" class="timeline-time">{{ sec.duration }}s</span>
+              <span v-if="sec.status === 'active'" class="timeline-active-hint">分析中...</span>
             </div>
             <!-- 已完成的质控结果预览 -->
             <div
@@ -118,38 +83,23 @@
               class="timeline-result"
             >
               <span class="result-tag result-tag--rules">{{ sec.ruleCount }} 条规则</span>
-              <span
-                v-if="(sec.issueCount ?? 0) > 0"
-                class="result-tag result-tag--issues"
-              >{{ sec.issueCount }} 个问题</span>
-              <span
-                v-else
-                class="result-tag result-tag--pass"
-              >全部通过</span>
+              <span v-if="(sec.issueCount ?? 0) > 0" class="result-tag result-tag--issues"
+                >{{ sec.issueCount }} 个问题</span
+              >
+              <span v-else class="result-tag result-tag--pass">全部通过</span>
             </div>
             <!-- 发现的问题逐条展示 -->
             <div
               v-if="sec.status === 'done' && sec.issues && sec.issues.length > 0"
               class="timeline-issues"
             >
-              <div
-                v-for="(iss, i) in sec.issues.slice(0, 3)"
-                :key="i"
-                class="timeline-issue-item"
-              >
-                <a-tag
-                  :color="severityTagColor(iss.severity)"
-                  size="small"
-                  class="!text-[10px]"
-                >
+              <div v-for="(iss, i) in sec.issues.slice(0, 3)" :key="i" class="timeline-issue-item">
+                <a-tag :color="severityTagColor(iss.severity)" size="small" class="!text-[10px]">
                   {{ severityLabel(iss.severity) }}
                 </a-tag>
                 <span class="issue-text">{{ iss.description }}</span>
               </div>
-              <div
-                v-if="sec.issues.length > 3"
-                class="timeline-issue-more"
-              >
+              <div v-if="sec.issues.length > 3" class="timeline-issue-more">
                 +{{ sec.issues.length - 3 }} 条...
               </div>
             </div>
@@ -159,16 +109,11 @@
     </div>
 
     <!-- 空态 - 未分析 -->
-    <div
-      v-else-if="!analyzed && issues.length === 0"
-      class="content-qc-tab__empty"
-    >
+    <div v-else-if="!analyzed && issues.length === 0" class="content-qc-tab__empty">
       <div class="empty-icon-wrap">
         <SafetyCertificateOutlined class="empty-icon" />
       </div>
-      <div class="empty-title">
-        内涵质控分析
-      </div>
+      <div class="empty-title">内涵质控分析</div>
       <div class="empty-desc">
         基于 LLM 对病历全文进行深度语义校验，聚焦诊疗逻辑、病程记录完整性与知情同意等内涵质量。
       </div>
@@ -187,32 +132,19 @@
     </div>
 
     <!-- 结构化结果 -->
-    <div
-      v-else
-      class="content-qc-tab__body custom-scrollbar"
-    >
+    <div v-else class="content-qc-tab__body custom-scrollbar">
       <!-- 汇总卡片 -->
-      <div
-        v-if="summary"
-        class="summary-card"
-      >
+      <div v-if="summary" class="summary-card">
         <div class="summary-card__hero">
           <div>
-            <div class="summary-card__eyebrow">
-              本次内涵质控
-            </div>
-            <div class="summary-card__title">
-              病历语义校验结果
-            </div>
+            <div class="summary-card__eyebrow">本次内涵质控</div>
+            <div class="summary-card__title">病历语义校验结果</div>
           </div>
           <div class="summary-card__progress">
             {{ complianceRateText }}
           </div>
         </div>
-        <div
-          v-if="isNoRulesResult"
-          class="summary-card__warning"
-        >
+        <div v-if="isNoRulesResult" class="summary-card__warning">
           本次未加载到可执行规则（总规则数=0），当前结果不可作为“质控通过”依据。
         </div>
         <div class="summary-row">
@@ -221,25 +153,15 @@
         </div>
         <div class="summary-row">
           <span class="summary-label">合规率</span>
-          <span
-            class="summary-value"
-            :class="complianceClass"
-          >{{ complianceRateText }}</span>
+          <span class="summary-value" :class="complianceClass">{{ complianceRateText }}</span>
         </div>
         <div class="summary-row">
           <span class="summary-label">发现问题</span>
           <span class="summary-value text-red-500">{{ summary.issueCount }}</span>
         </div>
-        <div
-          v-if="subitemAnchorCount > 0"
-          class="summary-row summary-row--action"
-        >
+        <div v-if="subitemAnchorCount > 0" class="summary-row summary-row--action">
           <span class="summary-label">专项检查项</span>
-          <button
-            type="button"
-            class="summary-link"
-            @click="subitemAnchorDetailOpen = true"
-          >
+          <button type="button" class="summary-link" @click="subitemAnchorDetailOpen = true">
             {{ subitemAnchorCount }} 项待复核
           </button>
         </div>
@@ -270,34 +192,18 @@
       </div>
 
       <div class="result-toolbar">
-        <a-radio-group
-          v-model:value="viewMode"
-          size="small"
-          class="result-view-switch"
-        >
-          <a-radio-button value="business">
-            业务视图
-          </a-radio-button>
-          <a-radio-button value="advanced">
-            高级视图
-          </a-radio-button>
+        <a-radio-group v-model:value="viewMode" size="small" class="result-view-switch">
+          <a-radio-button value="business"> 业务视图 </a-radio-button>
+          <a-radio-button value="advanced"> 高级视图 </a-radio-button>
         </a-radio-group>
         <div class="result-toolbar-meta">
-          <a-switch
-            v-model:checked="showAllStatuses"
-            size="small"
-          />
+          <a-switch v-model:checked="showAllStatuses" size="small" />
           <span>{{ showAllStatuses ? '显示全部状态' : '仅显示问题项' }}</span>
         </div>
       </div>
 
-      <div
-        v-if="visibleGroups.length"
-        class="group-panel"
-      >
-        <div class="group-panel-title">
-          分组聚合（点击联动筛选）
-        </div>
+      <div v-if="visibleGroups.length" class="group-panel">
+        <div class="group-panel-title">分组聚合（点击联动筛选）</div>
         <div class="group-grid">
           <button
             v-for="group in visibleGroups"
@@ -349,12 +255,7 @@
           :options="defectLevelOptions"
           @change="detailPagination.current = 1"
         />
-        <a-button
-          size="small"
-          @click="resetIssueFilter"
-        >
-          重置筛选
-        </a-button>
+        <a-button size="small" @click="resetIssueFilter"> 重置筛选 </a-button>
       </div>
 
       <template v-if="filteredIssues.length > 0">
@@ -366,10 +267,7 @@
             :class="`issue-card--${record.status}`"
           >
             <header class="issue-card__header">
-              <a-tag
-                class="issue-card__status"
-                :color="statusTagColor(record.status)"
-              >
+              <a-tag class="issue-card__status" :color="statusTagColor(record.status)">
                 {{ record.statusLabel }}
               </a-tag>
               <span class="issue-card__code">{{ record.ruleCode || record.ruleId || '-' }}</span>
@@ -383,10 +281,7 @@
               {{ record.findings || '未提供结论' }}
             </div>
 
-            <div
-              v-if="record.metadata.subitemAnchors.length"
-              class="issue-card__subitem-anchors"
-            >
+            <div v-if="record.metadata.subitemAnchors.length" class="issue-card__subitem-anchors">
               <div class="subitem-anchor-head">
                 <span>父规则专项检查项</span>
                 <span>{{ record.metadata.subitemAnchors.length }} 项</span>
@@ -405,73 +300,65 @@
                     {{ subitemAnchorDisplayLabel(anchor) }}
                   </a-tag>
                 </div>
-                <div
-                  v-if="anchor.anchorEvidence"
-                  class="subitem-anchor__evidence"
-                >
+                <div v-if="anchor.anchorEvidence" class="subitem-anchor__evidence">
                   {{ anchor.anchorEvidence }}
                 </div>
-                <div
-                  v-if="anchor.anchorDecisionReason"
-                  class="subitem-anchor__reason"
-                >
+                <div v-if="anchor.anchorDecisionReason" class="subitem-anchor__reason">
                   判定原因：{{ anchor.anchorDecisionReason }}
                 </div>
               </div>
             </div>
 
-            <div
-              v-if="record.suggestion"
-              class="issue-card__suggestion"
-            >
+            <div v-if="record.suggestion" class="issue-card__suggestion">
               建议：{{ record.suggestion }}
             </div>
 
             <div class="issue-card__meta">
-              <a-tag
-                v-if="record.documentType"
-                class="issue-card__chip"
-              >
+              <a-tag v-if="record.documentType" class="issue-card__chip">
                 文书域：{{ record.documentType }}
               </a-tag>
-              <a-tag
-                v-if="record.executionDomain"
-                class="issue-card__chip"
-              >
+              <a-tag v-if="record.executionDomain" class="issue-card__chip">
                 规则域：{{ record.executionDomain }}
               </a-tag>
-              <a-tag
-                v-if="record.defectLevel"
-                class="issue-card__chip"
-              >
+              <a-tag v-if="record.defectLevel" class="issue-card__chip">
                 缺陷等级：{{ record.defectLevel }}
               </a-tag>
-              <a-tag
-                v-if="Number(record.confidence || 0) > 0"
-                class="issue-card__chip"
-              >
+              <a-tag v-if="Number(record.confidence || 0) > 0" class="issue-card__chip">
                 置信度：{{ formatConfidence(record.confidence) }}
               </a-tag>
             </div>
 
-            <div
-              v-if="viewMode === 'advanced'"
-              class="issue-card__advanced"
-            >
+            <div v-if="viewMode === 'advanced'" class="issue-card__advanced">
               <span>trace: {{ record.metadata.traceId || '-' }}</span>
-              <span>cache:
+              <span
+                >cache:
                 {{
                   record.metadata.cacheHit === null
                     ? '-'
                     : record.metadata.cacheHit
                       ? '命中'
                       : '未命中'
-                }}</span>
+                }}</span
+              >
               <span>prompt: {{ record.metadata.promptVersion || '-' }}</span>
               <span>model: {{ record.metadata.modelVersion || '-' }}</span>
             </div>
 
             <footer class="issue-card__actions">
+              <a-button
+                v-if="record.ruleId"
+                type="link"
+                size="small"
+                data-testid="content-qc-ask-assistant"
+                @click="
+                  emit('ask-assistant', {
+                    ruleId: record.ruleId,
+                    ruleName: record.ruleName || '',
+                  })
+                "
+              >
+                问助手
+              </a-button>
               <a-button
                 type="link"
                 size="small"
@@ -502,10 +389,7 @@
       </template>
 
       <!-- 无问题 -->
-      <div
-        v-else
-        class="content-qc-tab__empty-result"
-      >
+      <div v-else class="content-qc-tab__empty-result">
         <CheckCircleOutlined class="empty-result-icon" />
         <div class="empty-result-text">
           {{ showAllStatuses ? '暂无匹配明细' : '当前仅问题视图下未发现问题' }}
@@ -520,10 +404,7 @@
       :footer="null"
       destroy-on-close
     >
-      <div
-        v-if="issueDetailRecord"
-        class="issue-detail"
-      >
+      <div v-if="issueDetailRecord" class="issue-detail">
         <div class="issue-detail-grid">
           <div class="issue-detail-item">
             <span class="issue-detail-label">规则</span>
@@ -557,36 +438,25 @@
           </div>
         </div>
         <div class="issue-detail-block">
-          <div class="issue-detail-block__title">
-            结论
-          </div>
+          <div class="issue-detail-block__title">结论</div>
           <div class="issue-detail-block__content">
             {{ issueDetailRecord.findings || '-' }}
           </div>
         </div>
         <div class="issue-detail-block">
-          <div class="issue-detail-block__title">
-            证据
-          </div>
+          <div class="issue-detail-block__title">证据</div>
           <div class="issue-detail-block__content">
             {{ issueDetailRecord.evidence || '-' }}
           </div>
         </div>
         <div class="issue-detail-block">
-          <div class="issue-detail-block__title">
-            建议
-          </div>
+          <div class="issue-detail-block__title">建议</div>
           <div class="issue-detail-block__content">
             {{ issueDetailRecord.suggestion || '-' }}
           </div>
         </div>
-        <div
-          v-if="issueDetailRecord.metadata.subitemAnchors.length"
-          class="issue-detail-block"
-        >
-          <div class="issue-detail-block__title">
-            专项检查项
-          </div>
+        <div v-if="issueDetailRecord.metadata.subitemAnchors.length" class="issue-detail-block">
+          <div class="issue-detail-block__title">专项检查项</div>
           <div class="issue-detail-subitem-list">
             <div
               v-for="anchor in issueDetailRecord.metadata.subitemAnchors"
@@ -599,36 +469,27 @@
                   {{ subitemAnchorDisplayLabel(anchor) }}
                 </a-tag>
               </div>
-              <div
-                v-if="anchor.anchorEvidence"
-                class="subitem-anchor__evidence"
-              >
+              <div v-if="anchor.anchorEvidence" class="subitem-anchor__evidence">
                 {{ anchor.anchorEvidence }}
               </div>
-              <div
-                v-if="anchor.anchorDecisionReason"
-                class="subitem-anchor__reason"
-              >
+              <div v-if="anchor.anchorDecisionReason" class="subitem-anchor__reason">
                 判定原因：{{ anchor.anchorDecisionReason }}
               </div>
             </div>
           </div>
         </div>
-        <div
-          v-if="viewMode === 'advanced'"
-          class="issue-detail-block"
-        >
-          <div class="issue-detail-block__title">
-            高级追溯
-          </div>
+        <div v-if="viewMode === 'advanced'" class="issue-detail-block">
+          <div class="issue-detail-block__title">高级追溯</div>
           <div class="advanced-cell advanced-cell--detail">
             <span>trace_id: {{ issueDetailRecord.metadata.traceId || '-' }}</span>
-            <span>cache_hit:
+            <span
+              >cache_hit:
               {{
                 issueDetailRecord.metadata.cacheHit === null
                   ? '-'
                   : issueDetailRecord.metadata.cacheHit
-              }}</span>
+              }}</span
+            >
             <span>prompt_version: {{ issueDetailRecord.metadata.promptVersion || '-' }}</span>
             <span>model_version: {{ issueDetailRecord.metadata.modelVersion || '-' }}</span>
             <span>rule_version: {{ issueDetailRecord.metadata.ruleVersion || '-' }}</span>
@@ -636,12 +497,14 @@
             <span>cache_key: {{ issueDetailRecord.metadata.cacheKey || '-' }}</span>
             <span>doc_scope: {{ issueDetailRecord.metadata.docScope || '-' }}</span>
             <span>cost_class: {{ issueDetailRecord.metadata.costClass || '-' }}</span>
-            <span>llm_fallback:
+            <span
+              >llm_fallback:
               {{
                 issueDetailRecord.metadata.llmFallback === null
                   ? '-'
                   : issueDetailRecord.metadata.llmFallback
-              }}</span>
+              }}</span
+            >
           </div>
         </div>
       </div>
@@ -669,19 +532,11 @@
               {{ subitemAnchorDisplayLabel(anchor) }}
             </a-tag>
           </div>
-          <div class="subitem-anchor__parent">
-            父规则：{{ anchor.parentRuleId || '-' }}
-          </div>
-          <div
-            v-if="anchor.anchorEvidence"
-            class="subitem-anchor__evidence"
-          >
+          <div class="subitem-anchor__parent">父规则：{{ anchor.parentRuleId || '-' }}</div>
+          <div v-if="anchor.anchorEvidence" class="subitem-anchor__evidence">
             {{ anchor.anchorEvidence }}
           </div>
-          <div
-            v-if="anchor.anchorDecisionReason"
-            class="subitem-anchor__reason"
-          >
+          <div v-if="anchor.anchorDecisionReason" class="subitem-anchor__reason">
             判定原因：{{ anchor.anchorDecisionReason }}
           </div>
         </div>
@@ -689,17 +544,11 @@
     </a-modal>
 
     <!-- 底部 -->
-    <footer
-      v-if="analyzed && !loading"
-      class="content-qc-tab__footer"
-    >
-      <span>共 <strong>{{ totalCount }}</strong> 个问题</span>
-      <a-button
-        type="link"
-        size="small"
-        :loading="loading"
-        @click="runContentQC"
+    <footer v-if="analyzed && !loading" class="content-qc-tab__footer">
+      <span
+        >共 <strong>{{ totalCount }}</strong> 个问题</span
       >
+      <a-button type="link" size="small" :loading="loading" @click="runContentQC">
         <ReloadOutlined /> 重新分析
       </a-button>
     </footer>
@@ -808,6 +657,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'issues-change', count: number): void
+  // 请求在智能助手“对话”页签中就某条规则提问（只带规则标识，由助手读取权威数据）。
+  (e: 'ask-assistant', payload: { ruleId: string; ruleName: string }): void
 }>()
 
 // ==================== 状态 ====================

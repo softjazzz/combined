@@ -117,49 +117,17 @@
         aria-live="polite"
         data-testid="business-agent-turns"
       >
-        <div v-if="!turns.length && !loading" class="ba-welcome">
-          <span class="ba-avatar ba-avatar--xl" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-              <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
-              <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
-            </svg>
-          </span>
-          <h2 class="ba-welcome__title">
-            {{ context.view === 'doctor' ? '你好，我是病历助手' : '你好，我是质控分析助手' }}
-          </h2>
-          <p class="ba-welcome__lead">
-            {{
-              context.view === 'doctor'
-                ? '帮你看懂质控问题、找到原文和规范，再协助修改。'
-                : '问指标、下钻病例、比较期间，或起草质量报告。'
-            }}
-          </p>
-          <p class="ba-sr-only" data-testid="business-agent-readonly-notice">
-            支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
-          </p>
-          <div class="ba-welcome__cards">
-            <button
-              v-for="prompt in prompts"
-              :key="prompt"
-              type="button"
-              class="ba-welcome__card"
-              :disabled="loading || !canQuery"
-              @click="draft = prompt"
-            >
-              {{ prompt }}
-            </button>
-          </div>
-          <a-button
-            v-if="canOpenProfile"
-            type="link"
-            size="small"
-            data-testid="business-agent-open-profile"
-            @click="openProfilePanel"
-          >
-            打开本病例画像面板
-          </a-button>
-          <span v-if="canOpenProfile" class="ba-muted">打开面板不会自动分析</span>
-        </div>
+        <BusinessAgentWelcome
+          v-if="!turns.length && !loading"
+          :view="context.view"
+          :prompts="prompts"
+          :disabled="loading || !canQuery"
+          :can-open-profile="canOpenProfile"
+          :summary="summary"
+          @pick="draft = $event"
+          @open-profile="openProfilePanel"
+          @open-tab="emitPanel('open-tab', $event)"
+        />
         <template v-else>
           <p class="ba-sr-only" data-testid="business-agent-readonly-notice">
             支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
@@ -673,7 +641,7 @@ v-if="documentSegments.quote"
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   businessAgentApi,
   type BusinessAgentContext,
@@ -686,6 +654,7 @@ import {
 import { useBusinessAgent } from '../composables/useBusinessAgent'
 import BusinessAgentAnswer from './BusinessAgentAnswer.vue'
 import BusinessAgentChart from './BusinessAgentChart.vue'
+import BusinessAgentWelcome from './BusinessAgentWelcome.vue'
 import { useBusinessAgentActions } from '../composables/useBusinessAgentActions'
 import {
   followupIntents,
@@ -701,10 +670,15 @@ const props = defineProps<{
   allowCaseSelection?: boolean
   // 内嵌到宿主面板（如智能助手的“对话”页签）时不渲染抽屉外壳和自带标题。
   embedded?: boolean
+  // 宿主提供的待办摘要（待处理问题 / 未读消息），仅在对话欢迎页显示。
+  summary?: { pending: number; unread: number } | null
+  // 宿主预填输入框（不自动发送）；nonce 变化即视为一次新的预填。
+  prefill?: { text: string; nonce: number } | null
   // 宿主声明可打开的同病例辅助面板；未声明时不显示入口。
   panels?: 'profile'[]
 }>()
 const emitPanel = defineEmits<{
+  'open-tab': [tab: 'message']
   'open-panel': [
     payload: { panel: 'profile'; institute_id: string; patient_id: string; visit_id: string },
   ]
@@ -846,6 +820,14 @@ const prompts = computed(() =>
     : ['当前范围哪些质控问题最多？', '列出这些问题对应的病例', '查询规则的当前启用状态'],
 )
 const draft = ref('')
+// 预填放到下一个渲染周期，避免被同一时刻的上下文切换清空。
+watch(
+  () => props.prefill?.nonce,
+  () => {
+    const text = props.prefill?.text
+    if (text) void nextTick(() => (draft.value = text))
+  },
+)
 // 问题卡默认只展开每轮第一条不合规（或唯一一条），其余折叠成一行，按需展开。
 const cardToggles = ref<Record<string, boolean>>({})
 function cardOpen(turn: BusinessAgentTurn, reference: BusinessAgentReference) {

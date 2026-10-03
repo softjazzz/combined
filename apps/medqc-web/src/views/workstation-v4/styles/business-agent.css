@@ -687,3 +687,43 @@ button.ba-card__head {
 .ba-inline-tools .ba-muted {
   align-self: center;
 }
+
+/* 对话欢迎页的待办摘要（待处理问题 / 未读消息） */
+.ba-todo {
+  display: flex;
+  gap: var(--mq-space-3);
+  width: 100%;
+  max-width: 420px;
+}
+.ba-todo__item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--mq-space-3) var(--mq-space-4);
+  border: 1px solid var(--mq-border);
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-surface-card, #fff);
+  color: var(--mq-text-primary);
+  text-align: left;
+}
+.ba-todo__item--danger .ba-todo__value {
+  color: var(--mq-danger-text);
+}
+.ba-todo__item--link {
+  cursor: pointer;
+}
+.ba-todo__label {
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+}
+.ba-todo__value {
+  font-size: 20px;
+  line-height: 28px;
+}
+.ba-todo__go {
+  margin-left: 8px;
+  color: var(--mq-info-text);
+  font-size: 12px;
+  font-weight: 600;
+}
