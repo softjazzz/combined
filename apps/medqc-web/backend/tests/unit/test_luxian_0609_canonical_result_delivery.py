@@ -9,6 +9,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 
 import app.services.custom_qc_workspace_service as workspace_module
@@ -80,6 +82,10 @@ class _ReadSession:
 class _WriteSession:
     def __init__(self):
         self.statements: list[Any] = []
+        self.bind = create_engine("sqlite://")
+
+    def get_bind(self) -> Engine:
+        return self.bind
 
     def execute(self, statement: Any) -> None:
         self.statements.append(statement)
