@@ -27,6 +27,12 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCScoringDefaultBinding, QCScoringGroup, QCScoringItem, QCScoringStandard
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY, load_luxian_0609_rules
+from .frontpage_rule_catalog import (
+    FRONTPAGE_DOCUMENT_TYPE,
+    FRONTPAGE_RULE_IDS,
+    FRONTPAGE_RULE_SET,
+    FRONTPAGE_RULE_SET_KEY,
+)
 from .qc_rule_sets import SICHUAN_RULE_SETS
 from .rule_set_version_service import (
     RuleSetVersionNotFound,
@@ -35,7 +41,7 @@ from .rule_set_version_service import (
     resolve_rule_set_version,
 )
 
-SCENES = ("running", "final", "outpatient")
+SCENES = ("running", "final", "outpatient", "frontpage")
 STATUS_DRAFT = "draft"
 STATUS_ACTIVE = "active"
 STATUS_ARCHIVED = "archived"
@@ -114,6 +120,8 @@ def scene_rule_set_keys(scene: Any) -> tuple[str, ...]:
     """场景可用规则集（目录顺序）：scope 与场景一致者，加上场景额外允许的规则集。"""
     if scene not in SCENES:
         return ()
+    if scene == "frontpage":
+        return (FRONTPAGE_RULE_SET_KEY,)
     extra = _SCENE_EXTRA_RULE_SET_KEYS.get(scene, ())
     return tuple(
         key for key, rule_set in SICHUAN_RULE_SETS.items()
@@ -127,7 +135,9 @@ def scene_catalog() -> list[dict[str, Any]]:
         {
             "scene": scene,
             "rule_sets": [
-                {"rule_set_key": key, "rule_set_name": SICHUAN_RULE_SETS[key].name}
+                {"rule_set_key": key, "rule_set_name": (
+                    FRONTPAGE_RULE_SET.name if key == FRONTPAGE_RULE_SET_KEY else SICHUAN_RULE_SETS[key].name
+                )}
                 for key in scene_rule_set_keys(scene)
             ],
         }
@@ -137,7 +147,7 @@ def scene_catalog() -> list[dict[str, Any]]:
 
 def _scene(value: Any) -> str:
     if not isinstance(value, str) or value.strip() not in SCENES:
-        raise ScoringStandardInvalid("scene 只能是 running、final 或 outpatient")
+        raise ScoringStandardInvalid("scene 只能是 running、final、outpatient 或 frontpage")
     return value.strip()
 
 
@@ -166,6 +176,8 @@ def rule_set_universe(rule_set_key: str) -> frozenset[str]:
 
 def rule_document_universe(rule_set_key: str) -> dict[str, frozenset[str]]:
     """评分文书范围只引用现代规则目录，不另造文书归属。"""
+    if rule_set_key == FRONTPAGE_RULE_SET_KEY:
+        return {rule_id: frozenset({FRONTPAGE_DOCUMENT_TYPE}) for rule_id in FRONTPAGE_RULE_IDS}
     if rule_set_key != LUXIAN_0609_RULE_SET_KEY:
         return {}
     return {

@@ -42,6 +42,11 @@ from .coding_rule_catalog import (
     coding_rule_metadata,
     get_coding_rule_set,
 )
+from .frontpage_rule_catalog import (
+    FRONTPAGE_RULE_SET_KEY,
+    frontpage_rule_metadata,
+    get_frontpage_rule_set,
+)
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .medical_core_system_catalog import CORE_SYSTEM_IDS
 
@@ -120,7 +125,11 @@ def _clean(value: Any) -> str:
 
 
 def _rule_set(rule_set_key: Any) -> QCRuleSet:
-    rule_set = get_coding_rule_set(rule_set_key) or get_sichuan_rule_set(rule_set_key)
+    rule_set = (
+        get_frontpage_rule_set(rule_set_key)
+        or get_coding_rule_set(rule_set_key)
+        or get_sichuan_rule_set(rule_set_key)
+    )
     if rule_set is None:
         raise RuleSetVersionNotFound("规则集不存在")
     return rule_set
@@ -201,6 +210,8 @@ def _rule_display_metadata(rule_set_key: str) -> dict[str, dict[str, str | None]
     """
     if rule_set_key == CODING_RULE_SET_KEY:
         return coding_rule_metadata()
+    if rule_set_key == FRONTPAGE_RULE_SET_KEY:
+        return frontpage_rule_metadata()
     if rule_set_key != LUXIAN_0609_RULE_SET_KEY:
         return {}
     return {
