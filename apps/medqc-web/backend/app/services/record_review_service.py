@@ -213,7 +213,7 @@ def task_approved_counts(session: Any, tasks: Iterable[Any], records: Iterable[A
     """任务列表审核通过数：每病例只看当前受领结果对象，部分重跑不遮蔽其他病例。
 
     输入由任务列表 owner 完成权限过滤；这里只读运行、Envelope 和审核决定。
-    不实例化 workspace，也不读取或初始化旧 job 表。任一病例身份或结果歧义使整任务未知。
+    SC额外读取job冻结范围，不实例化workspace或初始化表；身份或结果歧义使整任务未知。
     """
     task_map = {task["id"]: task for task in tasks}
     record_rows = list(records)
