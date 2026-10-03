@@ -10,6 +10,8 @@ export function useBusinessAgent() {
   const sessionId = ref('')
   const turns = ref<BusinessAgentTurn[]>([])
   const loading = ref(false)
+  // 已发出、尚未返回的问题，仅用于界面先显示用户气泡；不进入会话历史。
+  const pendingQuestion = ref('')
   const error = ref('')
   let generation = 0
   let storageKey = ''
@@ -135,6 +137,7 @@ export function useBusinessAgent() {
     if (restorePending) return
     const epoch = generation
     loading.value = true
+    pendingQuestion.value = message.trim()
     error.value = ''
     try {
       if (!sessionId.value) {
@@ -164,6 +167,7 @@ export function useBusinessAgent() {
       if (epoch === generation) {
         active = undefined
         loading.value = false
+        pendingQuestion.value = ''
       }
     }
   }
@@ -180,5 +184,5 @@ export function useBusinessAgent() {
   onScopeDispose(() => {
     void stop()
   })
-  return { sessionId, turns, loading, error, activate, send, stop, reset }
+  return { sessionId, turns, loading, pendingQuestion, error, activate, send, stop, reset }
 }

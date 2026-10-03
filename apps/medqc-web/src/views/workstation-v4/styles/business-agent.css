@@ -141,6 +141,9 @@
 .ba-scope__select--wide {
   flex: 1 1 220px;
 }
+.ba-scope :deep(.ant-picker-range) {
+  flex: 1 1 100%;
+}
 .ba-alert {
   margin: var(--mq-space-3) var(--mq-space-5) 0;
 }
@@ -311,9 +314,22 @@
   font-size: 12px;
   font-weight: 700;
 }
+/* 序号徽标跟随数据状态，中性状态保持灰色 */
 .ba-card--saved_result .ba-card__index {
+  color: var(--mq-neutral-text);
+  background: var(--mq-neutral-bg);
+}
+.ba-card.ba-tone--danger .ba-card__index {
   color: var(--mq-danger-text);
   background: var(--mq-danger-bg);
+}
+.ba-card.ba-tone--warning .ba-card__index {
+  color: var(--mq-warning-text);
+  background: var(--mq-warning-bg);
+}
+.ba-card.ba-tone--success .ba-card__index {
+  color: var(--mq-success-text);
+  background: var(--mq-success-bg);
 }
 .ba-card__title {
   flex: 1;
@@ -452,6 +468,22 @@
 }
 .ba-chip:hover:not(:disabled) {
   background: var(--mq-info-bg);
+}
+/* 通用快捷提问用中性色，与本轮的追问建议区分 */
+.ba-chip--quiet {
+  border-color: var(--mq-border);
+  color: var(--mq-text-secondary);
+}
+.ba-chip--quiet:hover:not(:disabled) {
+  color: var(--mq-text-primary);
+  background: var(--mq-neutral-bg);
+}
+.ba-followups {
+  align-items: center;
+}
+.ba-followups__label {
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
 }
 .ba-chip:disabled {
   opacity: 0.45;

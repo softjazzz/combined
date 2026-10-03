@@ -118,7 +118,7 @@
         aria-live="polite"
         data-testid="business-agent-turns"
       >
-        <div v-if="!turns.length" class="ba-welcome">
+        <div v-if="!turns.length && !loading" class="ba-welcome">
           <span class="ba-avatar ba-avatar--xl" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
               <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
@@ -247,7 +247,10 @@
                   v-for="(reference, index) in turn.references"
                   :key="reference.id"
                   class="ba-card"
-                  :class="`ba-card--${reference.kind}`"
+                  :class="[
+                    `ba-card--${reference.kind}`,
+                    statusTone(reference.status || '').replace('mq-status--', 'ba-tone--'),
+                  ]"
                 >
                   <div class="ba-card__head">
                     <span class="ba-card__index">{{ reference.position || index + 1 }}</span>
@@ -426,6 +429,7 @@
                 class="ba-followups"
                 data-testid="business-agent-followups"
               >
+                <span class="ba-followups__label">接着问</span>
                 <button
                   v-for="item in followups(turn)"
                   :key="item.label"
@@ -440,6 +444,11 @@
             </div>
           </div>
         </article>
+        <div v-if="loading && pendingQuestion" class="ba-msg ba-msg--user">
+          <p class="ba-bubble ba-bubble--user">
+            {{ pendingQuestion }}
+          </p>
+        </div>
         <div v-if="loading" class="ba-msg ba-msg--assistant" role="status">
           <span class="ba-avatar ba-avatar--pulse" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -460,7 +469,7 @@
             v-for="prompt in prompts"
             :key="prompt"
             type="button"
-            class="ba-chip"
+            class="ba-chip ba-chip--quiet"
             :disabled="loading || !canQuery"
             @click="draft = prompt"
           >
@@ -823,7 +832,8 @@ function followups(turn: BusinessAgentTurn) {
             : explainReference(intent.reference),
   }))
 }
-const { sessionId, turns, loading, error, activate, send, stop, reset } = useBusinessAgent()
+const { sessionId, turns, loading, pendingQuestion, error, activate, send, stop, reset } =
+  useBusinessAgent()
 const feedbackOpen = ref(false)
 const feedbackLoading = ref(false)
 const feedbackSubmitting = ref(false)
