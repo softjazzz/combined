@@ -1,6 +1,6 @@
 <template>
   <div class="ba-answer">
-    <template v-for="(block, blockIndex) in blocks" :key="blockIndex">
+    <template v-for="(block, blockIndex) in visibleBlocks" :key="blockIndex">
       <h4 v-if="block.type === 'heading'" class="ba-answer__heading">
         <template v-for="(part, partIndex) in block.inline" :key="partIndex">
           <strong v-if="part.bold">{{ part.text }}</strong>
@@ -25,15 +25,50 @@
         </li>
       </component>
     </template>
+    <button
+      v-if="foldable"
+      type="button"
+      class="ba-answer__toggle"
+      data-testid="business-agent-answer-toggle"
+      @click="expanded = !expanded"
+    >
+      {{ expanded ? '收起' : '展开全文' }}
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { parseAnswer } from './businessAgentMarkdown'
+import { computed, ref } from 'vue'
+import { parseAnswer, type AnswerBlock } from './businessAgentMarkdown'
 
 const props = defineProps<{ text: string }>()
 const blocks = computed(() => parseAnswer(props.text))
+
+// 长回答默认只显示开头结论（约 120 字内的前几块），避免挤占卡片区域；正式结论以卡片为准。
+const FOLD_CHARS = 200
+const PREVIEW_CHARS = 120
+function blockChars(block: AnswerBlock) {
+  const parts = block.type === 'list' ? block.items.flat() : block.inline
+  return parts.reduce((total, part) => total + part.text.length, 0)
+}
+const previewCount = computed(() => {
+  let chars = 0
+  let count = 0
+  for (const block of blocks.value) {
+    if (count > 0 && chars + blockChars(block) > PREVIEW_CHARS) break
+    chars += blockChars(block)
+    count += 1
+  }
+  return count
+})
+const foldable = computed(() => {
+  const chars = blocks.value.reduce((total, block) => total + blockChars(block), 0)
+  return chars > FOLD_CHARS && previewCount.value < blocks.value.length
+})
+const expanded = ref(false)
+const visibleBlocks = computed(() =>
+  foldable.value && !expanded.value ? blocks.value.slice(0, previewCount.value) : blocks.value,
+)
 </script>
 
 <style scoped>
@@ -66,6 +101,18 @@ const blocks = computed(() => parseAnswer(props.text))
 .ba-answer strong {
   font-weight: 600;
   color: var(--mq-text-primary);
+}
+.ba-answer__toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mq-info-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ba-answer__toggle:hover {
+  text-decoration: underline;
 }
 .ba-answer code {
   padding: 0 4px;

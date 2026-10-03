@@ -44,4 +44,24 @@ describe('助手回答 Markdown 渲染', () => {
     const wrapper = mount(BusinessAgentAnswer, { props: { text: '共**7条**不合规' } })
     expect(wrapper.find('p').text()).toBe('共7条不合规')
   })
+
+  it('超过 200 字的回答默认只显示开头结论，可展开与收起；短回答不显示折叠按钮', async () => {
+    const long = [
+      `结论段${'甲'.repeat(60)}`,
+      `第二段说明${'乙'.repeat(40)}`,
+      `第三段证据${'丙'.repeat(80)}`,
+      `第四段局限${'丁'.repeat(60)}`,
+    ].join('\n\n')
+    const wrapper = mount(BusinessAgentAnswer, { props: { text: long } })
+    expect(wrapper.text()).toContain('第二段说明')
+    expect(wrapper.text()).not.toContain('第三段证据')
+    const toggle = wrapper.get('[data-testid="business-agent-answer-toggle"]')
+    expect(toggle.text()).toBe('展开全文')
+    await toggle.trigger('click')
+    expect(wrapper.text()).toContain('第四段局限')
+    expect(toggle.text()).toBe('收起')
+
+    const short = mount(BusinessAgentAnswer, { props: { text: '结论一句。\n\n第二段。' } })
+    expect(short.find('[data-testid="business-agent-answer-toggle"]').exists()).toBe(false)
+  })
 })
