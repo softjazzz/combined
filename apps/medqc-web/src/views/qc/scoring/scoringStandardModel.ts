@@ -17,9 +17,10 @@ export const SCENE_LABELS: Record<ScoringScene, string> = {
   running: '运行病历',
   final: '终末病历',
   outpatient: '门急诊',
+  frontpage: '病案首页',
 }
 
-export const SCENE_ORDER: ScoringScene[] = ['running', 'final', 'outpatient']
+export const SCENE_ORDER: ScoringScene[] = ['running', 'final', 'frontpage', 'outpatient']
 
 export const STATUS_LABELS: Record<ScoringStandardStatus, string> = {
   draft: '草稿',

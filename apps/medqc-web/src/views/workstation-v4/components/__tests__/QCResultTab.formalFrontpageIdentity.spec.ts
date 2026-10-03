@@ -62,6 +62,11 @@ async function runAllQC(wrapper: ReturnType<typeof mountFormQc>) {
 
 const OFFICIAL_SHEET = { basic_info: { age: 60 } }
 const FORM_SUCCESS = { data: { data: { results: [], persistence: {}, passed: 5, total_rules: 5 } } }
+const CURRENT_SCORE = {
+  status: 'scored', score: 83, grade: '乙', veto_hit: false, standard_id: 'frontpage-standard', standard_version_seq: 3,
+  standard_updated_at: '2026-10-03T00:00:00Z', rule_set_key: 'frontpage_formal_v1', rule_set_version: '2026-10-03',
+  reason_code: null, deductions: [], group_deductions: [], unscored_rule_ids: [],
+}
 
 describe('QCResultTab 正式首页身份与失败关闭', () => {
   beforeEach(() => {
@@ -69,6 +74,44 @@ describe('QCResultTab 正式首页身份与失败关闭', () => {
     postMock.mockReset()
     successMock.mockReset()
     errorMock.mockReset()
+  })
+  it('本次配置评分独立于旧规则通过率，标准版本从响应搬运', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    postMock.mockResolvedValue({ data: { data: { ...FORM_SUCCESS.data.data, pass_rate: 100, scoring: CURRENT_SCORE } } })
+    const wrapper = mountFormQc('H1')
+    await runFormQC(wrapper)
+    expect(wrapper.get('[data-testid="frontpage-current-scoring"]').text()).toContain('83')
+    expect(wrapper.text()).toContain('frontpage-standard / 3')
+    expect(wrapper.get('[data-testid="frontpage-current-scoring"]').text()).not.toContain('100')
+    wrapper.unmount()
+  })
+  it('旧响应没有scoring时显示未知，重跑立即清旧分且失败不保留旧分', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    postMock.mockResolvedValueOnce({ data: { data: { ...FORM_SUCCESS.data.data, scoring: CURRENT_SCORE } } }).mockResolvedValueOnce(FORM_SUCCESS)
+    const wrapper = mountFormQc('H1')
+    await runFormQC(wrapper)
+    const rerun = runFormQC(wrapper)
+    await flushPromises()
+    await rerun
+    expect(wrapper.get('[data-testid="frontpage-current-scoring"]').text()).toContain('未知')
+    expect(wrapper.text()).not.toContain('frontpage-standard')
+    postMock.mockRejectedValueOnce(new Error('unavailable'))
+    await runFormQC(wrapper)
+    expect(wrapper.find('[data-testid="frontpage-current-scoring"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('病例身份变化废弃晚到本次分数', async () => {
+    getMock.mockResolvedValue({ data: OFFICIAL_SHEET })
+    let done!: (value: unknown) => void
+    postMock.mockImplementationOnce(() => new Promise((resolve) => { done = resolve }))
+    const wrapper = mountFormQc('H1')
+    const pending = runFormQC(wrapper)
+    await flushPromises()
+    await wrapper.setProps({ patientId: 'patient-2', visitId: 'visit-2' })
+    done({ data: { data: { ...FORM_SUCCESS.data.data, scoring: CURRENT_SCORE } } })
+    await pending
+    expect(wrapper.text()).not.toContain('frontpage-standard')
+    wrapper.unmount()
   })
 
   it('instituteId 非空时以 URLSearchParams 编码后作为消歧参数', async () => {

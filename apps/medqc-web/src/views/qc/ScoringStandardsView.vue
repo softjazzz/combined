@@ -410,7 +410,7 @@
 <script setup lang="ts">
 /**
  * 评分标准管理页（沿用 qc/scoring-config 路由）。
- * 场景页签：运行/终末/门急诊；无可用规则集的场景不可新建。写操作仅 admin/qc_manager，
+ * 场景页签：运行/终末/首页/门急诊；无可用规则集的场景不可新建。写操作仅 admin/qc_manager，
  * 其余角色只读。active 标准只读，修改须复制为新草稿；active 非默认可直接设回默认。
  */
 import { computed, onMounted, reactive, ref } from 'vue'

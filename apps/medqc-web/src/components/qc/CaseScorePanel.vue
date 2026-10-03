@@ -120,20 +120,21 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { getCaseScore, listScoringStandards } from '@/api/scoring'
 import { useAuthStore } from '@/stores/auth'
-import type { CaseScore, CaseScoreScored, ScoringDeduction, ScoringScene } from '@/api/scoring'
+import type { CaseScore, CaseScoreScored, ScoringDeduction, CaseScoreQuery } from '@/api/scoring'
+type CaseScoreScene = CaseScoreQuery['scene']
 
 const props = defineProps<{
   instituteId: string
   patientId: string
   visitId: string
-  scene: ScoringScene
+  scene: CaseScoreScene
 }>()
 
 const emit = defineEmits<{
   forbidden: []
 }>()
 
-const SCENE_LABELS: Record<ScoringScene, string> = {
+const SCENE_LABELS: Record<CaseScoreScene, string> = {
   running: '运行病历',
   final: '终末病历',
   outpatient: '门急诊',

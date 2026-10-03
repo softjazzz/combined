@@ -51,6 +51,8 @@
         </div>
       </div>
 
+      <FrontpageScoringSummary v-if="currentTab === 'form' && formAnalyzed" :scoring="formScoring" />
+
       <div
         v-if="currentTab === 'coding' && !isTabEmpty"
         class="qc-coding-summary"
@@ -266,6 +268,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { parseFrontpageFormalScore } from '@/api/scoring'
+import type { FrontpageFormalScore } from '@/api/scoring'
+import FrontpageScoringSummary from './frontpage/FrontpageScoringSummary.vue'
 import { message } from 'ant-design-vue'
 import {
   CheckCircleOutlined,
@@ -329,6 +334,8 @@ const codingQCLoading = ref(false)
 const formQCLoading = ref(false)
 const costQCLoading = ref(false)
 const formAnalyzed = ref(false)
+const formScoring = ref<FrontpageFormalScore | null>(null)
+let formScoringEpoch = 0
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
 /** 当前就诊是否已成功读到服务端正式首页；草稿存在不代表可以执行正式首页质控。 */
@@ -740,6 +747,7 @@ async function fetchFrontpageQCFromBackend() {
 
   return {
     issues,
+    scoring: parseFrontpageFormalScore(data.scoring),
     persistence: data.persistence || null,
     passed: Number(data.passed || 0),
     total: Number(data.total_rules || 0),
@@ -842,6 +850,8 @@ function dropFormIssues() {
 
 async function runFormQC() {
   const epoch = requestEpoch
+  const scoreEpoch = ++formScoringEpoch
+  formScoring.value = null
   formQCLoading.value = true
   let succeeded = false
   try {
@@ -855,6 +865,7 @@ async function runFormQC() {
     }
     const result = await fetchFrontpageQCFromBackend()
     if (epoch !== requestEpoch) return
+    if (scoreEpoch === formScoringEpoch) formScoring.value = result.scoring
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
     issues.value = kept
@@ -930,6 +941,8 @@ async function runCostQC() {
 
 async function runAllQC() {
   const epoch = requestEpoch
+  const scoreEpoch = ++formScoringEpoch
+  formScoring.value = null
   formQCLoading.value = true
   codingQCLoading.value = true
   costQCLoading.value = true
@@ -966,6 +979,7 @@ async function runAllQC() {
       ...codingResult.issues,
       ...costResult.issues,
     ]
+    if (scoreEpoch === formScoringEpoch) formScoring.value = formResult.scoring
     issues.value = newIssues
     emit('issues-change', newIssues.slice())
     notifyPersistence('form', formResult.persistence)
@@ -1006,6 +1020,8 @@ watch(
   () => props.frontpage,
   (newVal) => {
     if (!newVal) {
+      formScoringEpoch++
+      formScoring.value = null
       issues.value = []
       emit('issues-change', [])
       formAnalyzed.value = false
@@ -1021,6 +1037,8 @@ watch(
   () => {
     // 身份变化即换代次：在途请求的迟到响应不得再写入结果或渲染“已分析”。
     requestEpoch += 1
+    formScoringEpoch++
+    formScoring.value = null
     officialFrontpageAvailable.value = false
     formAnalyzed.value = false
     codingAnalyzed.value = false

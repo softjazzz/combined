@@ -10,7 +10,7 @@ import { isAxiosError } from 'axios'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
-export type ScoringScene = 'running' | 'final' | 'outpatient'
+export type ScoringScene = 'running' | 'final' | 'outpatient' | 'frontpage'
 export type ScoringStandardStatus = 'draft' | 'active' | 'archived'
 /** 启用时原默认标准的处理：archive 归档；undefault 只取消默认标记。 */
 export type ScoringReplaceMode = 'archive' | 'undefault'
@@ -158,6 +158,47 @@ export interface ScoringGroupDeduction {
   max_deduction: number | null
 }
 
+/** 仅对应本次正式首页形式质控响应，不从历史总分或规则通过率推算。 */
+export interface FrontpageFormalScore {
+  status: 'scored' | 'no_standard' | 'unavailable'
+  score: number | null
+  grade: string | null
+  veto_hit: boolean | null
+  standard_id: string | null
+  standard_version_seq: number | null
+  standard_updated_at: string | null
+  rule_set_key: string | null
+  rule_set_version: string | null
+  reason_code: string | null
+  deductions: ScoringDeduction[] | null
+  group_deductions: ScoringGroupDeduction[] | null
+  unscored_rule_ids: string[] | null
+}
+
+export function parseFrontpageFormalScore(value: unknown): FrontpageFormalScore | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const row = value as Record<string, unknown>
+  if (!['scored', 'no_standard', 'unavailable'].includes(String(row.status))) return null
+  const text = (input: unknown) => input === null || typeof input === 'string'
+  if (!['grade', 'standard_id', 'standard_updated_at', 'rule_set_key', 'rule_set_version', 'reason_code'].every((key) => text(row[key]))) return null
+  if (!(row.standard_version_seq === null || (typeof row.standard_version_seq === 'number' && Number.isSafeInteger(row.standard_version_seq) && row.standard_version_seq > 0))) return null
+  if (row.status === 'scored') {
+    if (typeof row.score !== 'number' || !Number.isFinite(row.score) || typeof row.veto_hit !== 'boolean'
+      || typeof row.standard_id !== 'string' || !row.standard_id || row.standard_version_seq === null
+      || typeof row.rule_set_key !== 'string' || !row.rule_set_key || typeof row.rule_set_version !== 'string' || !row.rule_set_version
+      || !Array.isArray(row.deductions) || !Array.isArray(row.group_deductions)
+      || !Array.isArray(row.unscored_rule_ids) || !row.unscored_rule_ids.every((id) => typeof id === 'string')) return null
+    const object = (item: unknown): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)
+    if (!row.deductions.every((item) => object(item) && typeof item.rule_id === 'string' && typeof item.group_name === 'string'
+      && typeof item.deduction === 'number' && Number.isFinite(item.deduction) && typeof item.is_veto === 'boolean')
+      || !row.group_deductions.every((item) => object(item) && typeof item.group_name === 'string'
+        && typeof item.raw_deduction === 'number' && Number.isFinite(item.raw_deduction)
+        && typeof item.applied_deduction === 'number' && Number.isFinite(item.applied_deduction)
+        && (item.max_deduction === null || (typeof item.max_deduction === 'number' && Number.isFinite(item.max_deduction))))) return null
+  } else if (row.score !== null || row.grade !== null || row.veto_hit !== null || row.deductions !== null || row.group_deductions !== null || row.unscored_rule_ids !== null) return null
+  return row as unknown as FrontpageFormalScore
+}
+
 /** Canonical 结果的完整只读引用；缺失时前端不得用当前页面上下文补齐。 */
 export interface CaseScoreResultRef {
   envelope_id: string
@@ -218,7 +259,7 @@ export interface CaseScoreQuery {
   institute_id: string
   patient_id: string
   visit_id: string
-  scene: ScoringScene
+  scene: Exclude<ScoringScene, 'frontpage'>
   standard_id?: string
 }
 
@@ -400,7 +441,7 @@ function isImportedDraft(value: unknown): value is ScoringStandardDetail {
   const items = data.items
   return typeof data.id === 'string' && Boolean(data.id.trim())
     && typeof data.name === 'string' && Boolean(data.name.trim())
-    && (data.scene === 'running' || data.scene === 'final' || data.scene === 'outpatient')
+    && (data.scene === 'running' || data.scene === 'final' || data.scene === 'outpatient' || data.scene === 'frontpage')
     && typeof data.rule_set_key === 'string' && Boolean(data.rule_set_key.trim())
     && data.status === 'draft'
     && data.is_default === false
