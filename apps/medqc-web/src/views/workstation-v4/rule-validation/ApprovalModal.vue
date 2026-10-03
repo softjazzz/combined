@@ -173,7 +173,7 @@ const caseSummary = computed(() => {
 })
 const coverageSummary = computed(() =>
   EXPECTED_STATUSES.map((s) => {
-    const n = props.detail.coverage.counts[s]
+    const n = props.detail.coverage.counts[s] ?? { synthetic: 0, real_copy: 0 }
     return `${STATUS[s].label} ${n.synthetic + n.real_copy}`
   }).join(' · '),
 )

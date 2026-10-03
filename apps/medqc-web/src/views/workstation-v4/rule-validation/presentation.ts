@@ -24,11 +24,17 @@ export const STAGES: Record<ValidationStage, Labeled> = {
 
 export const EXPECTED_STATUSES: ExpectedStatus[] = ['compliant', 'non_compliant', 'not_applicable', 'data_gap']
 
+/** 只选择各规则集原生状态选项，不转换实际结果。 */
+export function expectedStatuses(ruleId: string): ExpectedStatus[] {
+  return ruleId.startsWith('LX0916-') ? ['compliant', 'non_compliant', 'not_applicable', 'data_quality_gap'] : EXPECTED_STATUSES
+}
+
 export const STATUS: Record<ExpectedStatus, Labeled> = {
   compliant: { label: '合规', tone: 'success' },
   non_compliant: { label: '不合规', tone: 'danger' },
   not_applicable: { label: '不适用', tone: '' },
   data_gap: { label: '资料不足', tone: 'warning' },
+  data_quality_gap: { label: '资料不足', tone: 'warning' },
 }
 
 export const COMPARISONS: Record<Comparison, Labeled> = {
@@ -55,6 +61,7 @@ export function statusLabel(value: string | null | undefined): Labeled {
 }
 
 export function buildLabel(run: Pick<ValidationRun, 'build_kind' | 'execution_version'> | null | undefined): string {
+  if (run?.execution_version?.rule_set_key === 'luxian_0916_qc_v1') return '模型版本未冻结 · 仅测试'
   if (!run?.build_kind) return '版本未记录'
   if (run.build_kind !== 'release') return '开发版本'
   const impl = run.execution_version?.lx0609_task_runtime?.implementation

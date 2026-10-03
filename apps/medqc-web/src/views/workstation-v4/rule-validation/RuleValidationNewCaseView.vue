@@ -259,7 +259,7 @@
                 aria-label="预期状态"
               >
                 <button
-                  v-for="status in EXPECTED_STATUSES"
+                  v-for="status in expectedStatuses(ruleId)"
                   :key="status"
                   type="button"
                   role="radio"
@@ -358,7 +358,7 @@ import { getValidationRule, saveCaseAnswer } from '@/services/rule-validation-se
 import type { RuleInfo, ValidationCase } from '@/services/rule-validation-service'
 import { createManualTestMedicalRecord, getEditableMedicalRecordDocuments } from '@/services/manual-case-sample-service'
 import { testRecordDocumentTypeOptions } from '@/views/workstation-v4/customer-sample-validation/syntheticCaseBuilder'
-import { EXPECTED_STATUSES, STATUS } from './presentation'
+import { expectedStatuses, STATUS } from './presentation'
 import {
   CASE_TITLE_PREFIX,
   blankDocument,

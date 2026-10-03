@@ -6,7 +6,7 @@
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">
-          <router-link :to="{ name: 'WorkstationV4RuleValidation' }">规则验收</router-link>
+          <router-link :to="{ name: 'WorkstationV4RuleValidation', query: { ruleSetKey: detail?.rule.rule_set_key } }">规则验收</router-link>
           <template v-if="detail"> · {{ detail.rule.source_document }}</template>
         </span>
         <h1 class="mq-page-title rv-title">
@@ -22,7 +22,7 @@
         >{{ STAGES[detail.stage].label }}</span>
         <router-link
           class="mq-btn"
-          :to="{ name: 'WorkstationV4RuleValidation' }"
+          :to="{ name: 'WorkstationV4RuleValidation', query: { ruleSetKey: detail?.rule.rule_set_key } }"
         >
           返回列表
         </router-link>
@@ -73,7 +73,7 @@
             </div>
             <div class="rv-facts">
               <div class="mq-inset rv-fact">
-                <small class="rv-muted">发布范围</small><b>{{ detail.rule.release_scope === 'default' ? '已上线' : '待验收' }}</b>
+                <small class="rv-muted">发布范围</small><b>{{ detail.rule.publication_supported === false ? '测试接入' : detail.rule.release_scope === 'default' ? '已上线' : '待验收' }}</b>
               </div>
               <div class="mq-inset rv-fact">
                 <small class="rv-muted">影响范围</small><b data-testid="impact-label">{{ detail.rule.impact?.label || '未声明' }}</b>
@@ -109,7 +109,7 @@
                 </thead>
                 <tbody>
                   <tr
-                    v-for="status in EXPECTED_STATUSES"
+                    v-for="status in expectedStatuses(ruleId)"
                     :key="status"
                   >
                     <td>
@@ -120,15 +120,15 @@
                       >缺口</span>
                     </td>
                     <td class="rv-num">
-                      {{ detail.coverage.counts[status].synthetic }}
+                      {{ (detail.coverage.counts[status]?.synthetic ?? 0) }}
                     </td>
                     <td class="rv-num">
-                      {{ detail.coverage.counts[status].real_copy }}
+                      {{ (detail.coverage.counts[status]?.real_copy ?? 0) }}
                     </td>
                     <td class="rv-num rv-strong">
                       {{
-                        detail.coverage.counts[status].synthetic +
-                          detail.coverage.counts[status].real_copy
+                        (detail.coverage.counts[status]?.synthetic ?? 0) +
+                          (detail.coverage.counts[status]?.real_copy ?? 0)
                       }}
                     </td>
                   </tr>
@@ -273,7 +273,10 @@
                 </h2>
               </div>
               <p class="mq-card__desc">
-                只运行本规则，走正式执行、保存和读取链路；人工预期不进入任务。新运行会使旧结论和批准失效。
+                {{ detail.rule.execution_mode === 'full_pack'
+                  ? `实际运行0916完整规则包（${detail.rule.execution_rule_ids?.length}条），只对照本规则；执行模型版本尚未冻结。`
+                  : '按本规则及所需同族范围运行，走正式执行、保存和读取链路。' }}
+                人工预期不进入任务。新运行会使旧结论和批准失效。
               </p>
               <p
                 v-if="sharedBatch"
@@ -294,7 +297,7 @@
                   ? '正在创建运行…'
                   : runInProgress
                     ? '运行中…'
-                    : `运行本规则（${detail.cases.length} 例）`
+                    : `运行${detail.rule.execution_mode === 'full_pack' ? '整包并对照本规则' : '本规则'}（${detail.cases.length} 例）`
               }}
             </button>
           </div>
@@ -315,7 +318,7 @@
               <span class="rv-run__note">{{ i === 0 ? '当前运行 · 比较与复核基于此次' : '已被后续运行取代'
               }}{{
                 run.scope_rule_ids.length > 1
-                  ? ` · 上线后范围 ${run.scope_rule_ids.length} 条规则`
+                  ? ` · 实际范围 ${run.scope_rule_ids.length} 条规则`
                   : ''
               }}</span>
               <span class="mq-mono rv-muted">{{ run.job_id || '—' }}</span>
@@ -596,7 +599,7 @@
                 <b>{{ approval?.decision === 'approved' ? '已批准，待开发发布' : '批准上线' }}</b>
                 <div class="rv-muted">
                   {{
-                    approval?.decision === 'approved'
+                    detail.rule.publication_supported === false ? detail.rule.publication_note : approval?.decision === 'approved'
                       ? '按发布单修改规则目录并随版本部署，部署后复验'
                       : '验收通过后由批准人审阅，生成发布单交开发修改规则目录'
                   }}
@@ -606,7 +609,7 @@
                 type="button"
                 class="mq-btn"
                 data-testid="open-approval"
-                :disabled="!['pending_approval', 'approved_pending_release'].includes(detail.stage)"
+                :disabled="detail.rule.publication_supported === false || !['pending_approval', 'approved_pending_release'].includes(detail.stage)"
                 @click="approvalOpen = true"
               >
                 {{ approval?.decision === 'approved' ? '查看发布单' : '批准…' }}
@@ -668,7 +671,7 @@ import RegressionComparison from './RegressionComparison.vue'
 import ApprovalModal from './ApprovalModal.vue'
 import {
   COMPARISONS,
-  EXPECTED_STATUSES,
+  expectedStatuses,
   PURPOSES,
   SOURCE_KINDS,
   STAGES,

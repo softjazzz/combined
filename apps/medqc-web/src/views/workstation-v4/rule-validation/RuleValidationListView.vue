@@ -11,6 +11,19 @@
         </h1>
       </div>
       <div class="mq-page-head__actions">
+        <select
+          v-model="ruleSetKey"
+          class="mq-btn"
+          aria-label="选择规则集"
+          data-testid="rule-set-select"
+        >
+          <option value="luxian_0609_qc_v1">
+            泸县0609
+          </option>
+          <option value="luxian_0916_qc_v1">
+            泸县0916
+          </option>
+        </select>
         <div
           class="mq-segmented"
           role="tablist"
@@ -42,9 +55,12 @@
 
     <section class="rv-hero">
       <div class="rv-hero__copy">
-        <span class="rv-hero__eyebrow">泸县0609规则集 · luxian_0609_qc_v1</span>
+        <span class="rv-hero__eyebrow">{{ ruleSetKey === 'luxian_0916_qc_v1' ? '泸县0916' : '泸县0609' }}规则集 · {{ ruleSetKey }}</span>
         <strong class="rv-hero__title">{{ pendingCount }} 条规则待验收</strong>
-        <p>
+        <p v-if="ruleSetKey === 'luxian_0916_qc_v1'">
+          关联病例与人工预期 → 整包运行 → 比较本规则 → 逐例复核。当前仅接入测试，整包其他规则不因此视为已验收；逐规则批准上线尚未接通。
+        </p>
+        <p v-else>
           准备测试病例并标注人工预期 → 运行 → 逐例核对证据与建议 → 验收结论与批准。批准后生成发布单，由开发修改规则目录并随版本上线；平台不直接改变执行范围。
         </p>
       </div>
@@ -139,7 +155,7 @@
                     :aria-label="coverageLabel(row)"
                   >
                     <span
-                      v-for="status in EXPECTED_STATUSES"
+                      v-for="status in expectedStatuses(row.rule_id)"
                       :key="status"
                       class="rv-dot"
                       :class="{ 'is-on': covered(row, status) }"
@@ -185,9 +201,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { listValidationRules } from '@/services/rule-validation-service'
 import type { ExpectedStatus, RuleListItem, ValidationStage } from '@/services/rule-validation-service'
-import { EXPECTED_STATUSES, STAGES, STATUS, buildLabel, formatTime, statusClass } from './presentation'
+import { expectedStatuses, STAGES, STATUS, buildLabel, formatTime, statusClass } from './presentation'
 import type { StatusTone } from './presentation'
 
 type Scope = 'pending' | 'released' | 'all'
@@ -203,6 +220,10 @@ const error = ref('')
 const scope = ref<Scope>('pending')
 const familyFilter = ref('')
 const keyword = ref('')
+const route = useRoute()
+const router = useRouter()
+const ruleSetKey = ref(route.query.ruleSetKey === 'luxian_0916_qc_v1' ? 'luxian_0916_qc_v1' : 'luxian_0609_qc_v1')
+let loadSequence = 0
 
 const pendingRows = computed(() => rows.value.filter((r) => r.release_scope === 'acceptance_only'))
 const pendingCount = computed(() => pendingRows.value.length)
@@ -236,10 +257,10 @@ function covered(row: RuleListItem, status: ExpectedStatus) {
   return !row.coverage.gaps.includes(status)
 }
 function coverageLabel(row: RuleListItem) {
-  return EXPECTED_STATUSES.map((s) => `${STATUS[s].label}${covered(row, s) ? '有' : '缺'}`).join('，')
+  return expectedStatuses(row.rule_id).map((s) => `${STATUS[s].label}${covered(row, s) ? '有' : '缺'}`).join('，')
 }
 function caseNote(row: RuleListItem) {
-  const real = EXPECTED_STATUSES.reduce((sum, s) => sum + row.coverage.counts[s].real_copy, 0)
+  const real = expectedStatuses(row.rule_id).reduce((sum, s) => sum + (row.coverage.counts[s]?.real_copy ?? 0), 0)
   if (!row.case_count) return '尚未关联'
   if (!real) return '全部为合成病例'
   return `真实副本 ${real} · 验收集 ${row.coverage.acceptance_cases}`
@@ -249,9 +270,12 @@ function detailLink(ruleId: string) {
 }
 
 async function load() {
+  const sequence = ++loadSequence
   loading.value = true
   error.value = ''
-  const response = await listValidationRules(scope.value !== 'pending')
+  rows.value = []
+  const response = await listValidationRules(scope.value !== 'pending', ruleSetKey.value)
+  if (sequence !== loadSequence) return
   loading.value = false
   if (!response.success) {
     error.value = response.error || '规则验收列表加载失败'
@@ -260,8 +284,9 @@ async function load() {
   rows.value = response.data.items
 }
 
-watch(scope, () => {
+watch([scope, ruleSetKey], () => {
   familyFilter.value = ''
+  void router.replace({ query: { ...route.query, ruleSetKey: ruleSetKey.value } })
   void load()
 })
 onMounted(load)

@@ -14,6 +14,9 @@ from ..services.rule_validation import (
     RuleValidationService,
     compare_cases,
     derive_stage,
+    RULE_SET_0609,
+    RULE_SET_0916,
+    RULE_SETS,
 )
 
 router = APIRouter(
@@ -25,7 +28,7 @@ router = APIRouter(
 
 class CaseAnswerRequest(BaseModel):
     revision: int = Field(ge=0, description="当前预期修订号；新关联为 0")
-    expected_status: Literal["compliant", "non_compliant", "not_applicable", "data_gap"]
+    expected_status: Literal["compliant", "non_compliant", "not_applicable", "data_gap", "data_quality_gap"]
     human_reason: str = Field(min_length=1, max_length=4000)
     purpose: Literal["development", "acceptance"] = "development"
 
@@ -77,6 +80,18 @@ async def _read_job(request: Request, job_id: str | None, current_user: Dict[str
     job = await run_in_threadpool(workspace.get_batch_job_for_processing, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="验收运行对应的质控任务不存在")
+    filters = job.get("filters") or {}
+    if filters.get("rule_set_key") == RULE_SET_0916:
+        from ..services.luxian_0916.execution_integrity import validate_luxian_0916_task_delivery
+        if job.get("status") == "completed" or job.get("items"):
+            try:
+                validate_luxian_0916_task_delivery(
+                    summary=job.get("summary") or {}, items=job.get("items") or [],
+                    failures=job.get("failed_records") or [], expected_rule_ids=filters.get("rule_ids") or [],
+                    expected_record_refs=filters.get("record_refs") or [])
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail="0916 已保存结果不符合交付合同，无法比较") from exc
+        return job
     return await run_in_threadpool(_hydrate_luxian_canonical_batch_job_or_409, workspace=workspace, job=job)
 
 
@@ -106,6 +121,15 @@ _RESULT_FIELDS = ("status", "display_status", "reason_code", "customer_conclusio
 
 def _project_result(item: dict) -> dict:
     """逐例核对只展示客户安全投影字段，不回传病历身份或内部审计字段。"""
+    if str(item.get("rule_id") or "").startswith("LX0916-"):
+        # 0916 保存层已按原生合同验证。读取其公开事实，不套用 0609 Renderer 重写文案。
+        # 只给有权限的验收者返回复核字段，排除诊断日志、模型原响应和病例身份。
+        return {"status": item.get("status"), "reason_code": item.get("reason_code"),
+                "findings": item.get("findings"), "conclusion": item.get("findings"),
+                "suggestion": item.get("suggestion"),
+                "evidence": item.get("evidence"),
+                "customer_display_facts": item.get("decision_facts") or {},
+                "document_anchors": item.get("document_anchors") or []}
     from ..services.custom_qc_workspace_service import customer_safe_projection_key, project_customer_safe_result_item
     projected = project_customer_safe_result_item(item, hmac_key=customer_safe_projection_key())
     return {k: projected.get(k) for k in _RESULT_FIELDS}
@@ -133,10 +157,15 @@ async def _detail(request: Request, service: RuleValidationService, rule_id: str
 
 @router.get("/rules")
 async def list_rules(request: Request, include_released: bool = False,
+                     rule_set_key: str = RULE_SET_0609,
                      current_user: Dict[str, Any] = Depends(get_current_user)):
+    if rule_set_key not in RULE_SETS:
+        raise HTTPException(status_code=422, detail="不支持的规则集")
     service = _service()
     items = []
     for rule_id, rule in sorted(service.catalog().items()):
+        if rule.get("rule_set_key", RULE_SET_0609) != rule_set_key:
+            continue
         if rule["release_scope"] != "acceptance_only" and not include_released:
             continue
         cases = service.list_cases(rule_id)
@@ -208,6 +237,7 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
     from ..services.custom_qc_sample_pool_service import CUSTOMER_TEST_POOL_ID
     service = _service()
     try:
+        rule = service._rule(rule_id)
         run = service.begin_run(rule_id, payload.item_ids, _user(current_user))
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
@@ -215,7 +245,9 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
     unique_cases = list({c["item_id"]: c for c in run["cases"] + run["regression_cases"]}.values())
     item_ids = [c["item_id"] for c in unique_cases]
     try:
-        request.state.rule_validation_reference = {"kind": "rule", "run_id": run["id"], "item_ids": item_ids}
+        rule_set_key = rule.get("rule_set_key", RULE_SET_0609)
+        request.state.rule_validation_reference = {
+            "kind": "rule", "run_id": run["id"], "item_ids": item_ids, "rule_set_key": rule_set_key}
         # 人工预期不进入运行请求；只传病例和目标规则，走正式样本池执行链。
         result = await pools_api.run_sample_pool_intrinsic_validation(
             request, CUSTOMER_TEST_POOL_ID,
@@ -223,7 +255,8 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
                 sample_item_ids=item_ids,
                 record_refs=[pools_api.SamplePoolRunRecordRef(**c["record_ref"]) for c in unique_cases],
                 # 共享抽取批次规则按“上线后范围”执行：本规则 + 同执行器已上线规则
-                selected_rule_ids=run["scope_rule_ids"], rule_set_key=pools_api.LUXIAN_0609_QC_RULE_SET_KEY,
+                **({"selected_rule_ids": run["scope_rule_ids"]} if rule_set_key != RULE_SET_0916 else {}),
+                rule_set_key=rule_set_key,
                 group_by_luxian_family=False),
             current_user, activation)
     except Exception:

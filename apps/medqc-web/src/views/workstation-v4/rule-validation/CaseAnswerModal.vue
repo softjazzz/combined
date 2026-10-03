@@ -59,7 +59,7 @@
           aria-label="预期状态"
         >
           <a-radio-button
-            v-for="status in EXPECTED_STATUSES"
+            v-for="status in expectedStatuses(ruleId)"
             :key="status"
             :value="status"
           >
@@ -131,7 +131,7 @@
 import { computed, ref, watch } from 'vue'
 import { listCandidateCases, removeCaseAnswer, saveCaseAnswer } from '@/services/rule-validation-service'
 import type { CandidateCase, CasePurpose, ExpectedStatus, ValidationCase } from '@/services/rule-validation-service'
-import { EXPECTED_STATUSES, SOURCE_KINDS, STATUS } from './presentation'
+import { expectedStatuses, SOURCE_KINDS, STATUS } from './presentation'
 
 const props = defineProps<{ open: boolean; ruleId: string; current: ValidationCase | null }>()
 const emit = defineEmits<{ close: []; saved: [] }>()

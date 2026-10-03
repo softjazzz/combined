@@ -11,6 +11,7 @@ import type {
 import RuleValidationListView from '@/views/workstation-v4/rule-validation/RuleValidationListView.vue'
 import RuleValidationDetailView from '@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'
 import CaseReviewDrawer from '@/views/workstation-v4/rule-validation/CaseReviewDrawer.vue'
+import { expectedStatuses, statusLabel } from '@/views/workstation-v4/rule-validation/presentation'
 
 vi.mock('@/services/rule-validation-service', () => ({
   listValidationRules: vi.fn(),
@@ -27,7 +28,7 @@ vi.mock('@/services/rule-validation-service', () => ({
 const push = vi.fn()
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { ruleId: 'LX0609-06-01-01' }, query: {} }),
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace: vi.fn() }),
 }))
 vi.mock('ant-design-vue', () => ({ message: { success: vi.fn(), warning: vi.fn() } }))
 
@@ -176,6 +177,21 @@ beforeEach(() => {
 })
 
 describe('规则验收列表', () => {
+  it('资料不足选项使用各规则集原生编码，不转换执行结果', () => {
+    expect(expectedStatuses('LX0916-001')).toEqual(['compliant', 'non_compliant', 'not_applicable', 'data_quality_gap'])
+    expect(expectedStatuses('LX0609-06-01-03')).toEqual(['compliant', 'non_compliant', 'not_applicable', 'data_gap'])
+    expect(statusLabel('data_quality_gap').label).toBe('资料不足')
+  })
+  it('切换到0916请求独立目录并说明只接入测试', async () => {
+    vi.mocked(api.listValidationRules).mockResolvedValue({ success: true, data: { items: [] } })
+    const wrapper = mount(RuleValidationListView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="rule-set-select"]').setValue('luxian_0916_qc_v1')
+    await flushPromises()
+    expect(api.listValidationRules).toHaveBeenLastCalledWith(false, 'luxian_0916_qc_v1')
+    expect(wrapper.text()).toContain('逐规则批准上线尚未接通')
+    wrapper.unmount()
+  })
   it('只列待验收规则，按阶段汇总并链接到详情', async () => {
     vi.mocked(api.listValidationRules).mockResolvedValue({
       success: true,
@@ -201,7 +217,7 @@ describe('规则验收列表', () => {
     const wrapper = mount(RuleValidationListView, { global: { stubs } })
     await flushPromises()
 
-    expect(api.listValidationRules).toHaveBeenCalledWith(false)
+    expect(api.listValidationRules).toHaveBeenCalledWith(false, 'luxian_0609_qc_v1')
     const rowsText = wrapper.findAll('[data-testid="rule-row"]').map((r) => r.text())
     expect(rowsText).toHaveLength(2)
     expect(rowsText[0]).toContain('待复核')
@@ -231,13 +247,28 @@ describe('规则验收列表', () => {
     await wrapper.find('[data-testid="scope-released"]').trigger('click')
     await flushPromises()
 
-    expect(api.listValidationRules).toHaveBeenLastCalledWith(true)
+    expect(api.listValidationRules).toHaveBeenLastCalledWith(true, 'luxian_0609_qc_v1')
     const rowsText = wrapper.findAll('[data-testid="rule-row"]').map((r) => r.text())
     expect(rowsText).toEqual([expect.stringContaining('已上线规则')])
   })
 })
 
 describe('规则验收详情', () => {
+  it('0916 明示整包执行并阻止生成0609发布单', async () => {
+    const data = detail({ stage: 'pending_approval' })
+    data.rule = { ...data.rule, rule_id: 'LX0916-001', rule_set_key: 'luxian_0916_qc_v1',
+      publication_supported: false, publication_note: '0916 逐规则发布尚未接通',
+      execution_mode: 'full_pack', execution_rule_ids: Array.from({ length: 32 }, (_, i) => `LX0916-${i + 1}`) }
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data })
+    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('完整规则包（32条）')
+    expect(wrapper.text()).toContain('只对照本规则')
+    expect(wrapper.text()).toContain('模型版本尚未冻结')
+    expect(wrapper.text()).toContain('0916 逐规则发布尚未接通')
+    expect(wrapper.get('[data-testid="open-approval"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
   it('展示病例、逐例对照与未满足的通过条件；存在阻碍时不能验收通过', async () => {
     vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail() })
     const wrapper = mount(RuleValidationDetailView, { global: { stubs } })

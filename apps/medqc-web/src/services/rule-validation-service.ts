@@ -2,7 +2,7 @@ import { ApiService } from './apiService'
 
 /** 规则验收接口（/api/v1/qc/rule-validation）的数据契约，与后端 rule_validation 路由一一对应。 */
 
-export type ExpectedStatus = 'compliant' | 'non_compliant' | 'not_applicable' | 'data_gap'
+export type ExpectedStatus = 'compliant' | 'non_compliant' | 'not_applicable' | 'data_gap' | 'data_quality_gap'
 export type CasePurpose = 'development' | 'acceptance'
 export type SourceKind = 'synthetic' | 'real_copy'
 export type ValidationStage =
@@ -34,11 +34,16 @@ export type RuleInfo = {
   release_scope: 'default' | 'acceptance_only'
   policy_summary: string
   impact?: RuleImpact | null
+  rule_set_key?: string
+  publication_supported?: boolean
+  publication_note?: string
+  execution_mode?: 'full_pack'
+  execution_rule_ids?: string[]
 }
 
 export type RegressionGap = { rule_id: string; name: string; reason: string }
 
-export type CoverageCounts = Record<ExpectedStatus, Record<SourceKind, number>>
+export type CoverageCounts = Partial<Record<ExpectedStatus, Record<SourceKind, number>>>
 export type Coverage = { counts: CoverageCounts; gaps: ExpectedStatus[]; acceptance_cases: number }
 
 export type RecordRef = { institute_id: string; patient_id: string; visit_id: string }
@@ -64,6 +69,7 @@ export type CandidateCase = Pick<
 >
 
 export type ExecutionVersion = {
+  rule_set_key?: string
   lx0609_task_runtime?: {
     implementation?: { kind: string; build_id?: string; git_commit?: string; id?: string }
     first_pass?: { provider?: string; model?: string }
@@ -89,6 +95,7 @@ export type ValidationRun = {
 
 /** 结果的客户安全投影，仅用于逐例核对展示。 */
 export type CaseResult = {
+  document_anchors?: Record<string, unknown>[]
   status?: string
   display_status?: string
   reason_code?: string
@@ -173,8 +180,10 @@ export type CaseAnswerPayload = {
 const BASE = '/api/v1/qc/rule-validation'
 const rule = (id: string) => `${BASE}/rules/${encodeURIComponent(id)}`
 
-export const listValidationRules = (includeReleased = false) =>
-  ApiService.get<{ items: RuleListItem[] }>(`${BASE}/rules`, { include_released: includeReleased })
+export const listValidationRules = (includeReleased = false, ruleSetKey = 'luxian_0609_qc_v1') =>
+  ApiService.get<{ items: RuleListItem[] }>(`${BASE}/rules`, {
+    include_released: includeReleased, rule_set_key: ruleSetKey,
+  })
 export const getValidationRule = (ruleId: string) => ApiService.get<RuleDetail>(rule(ruleId))
 export const listCandidateCases = (ruleId: string) =>
   ApiService.get<{ items: CandidateCase[] }>(`${rule(ruleId)}/candidate-cases`)

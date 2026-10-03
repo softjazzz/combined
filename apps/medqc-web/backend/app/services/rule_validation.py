@@ -26,6 +26,13 @@ EXPECTED_STATUSES = ("compliant", "non_compliant", "not_applicable", "data_gap")
 PURPOSES = ("development", "acceptance")
 DEVELOPMENT_ENVS = frozenset({"development", "dev", "local", "test"})
 MAX_CASES_PER_RUN = 50
+RULE_SET_0609 = "luxian_0609_qc_v1"
+RULE_SET_0916 = "luxian_0916_qc_v1"
+RULE_SETS = (RULE_SET_0609, RULE_SET_0916)
+
+
+def expected_statuses(rule: dict) -> tuple[str, ...]:
+    return ("compliant", "non_compliant", "not_applicable", "data_quality_gap") if rule.get("rule_set_key") == RULE_SET_0916 else EXPECTED_STATUSES
 
 
 _decision_session = ContextVar("rule_validation_decision_session", default=None)
@@ -121,14 +128,30 @@ def rule_catalog() -> dict[str, dict]:
 
     selectable = set(get_luxian_0609_sample_validation_rule_set().rule_ids)
     impacts = rule_impacts()
-    return {
+    catalog = {
         e.rule_id: {"rule_id": e.rule_id, "name": e.qc_point, "source_document": e.source_document,
                     "release_scope": e.release_scope, "policy_summary": e.policy_summary,
+                    "rule_set_key": RULE_SET_0609, "publication_supported": True,
                     "impact": impacts.get(e.rule_id)}
         for e in load_luxian_0609_rule_master()
         if e.rule_id in selectable
         and e.implementation_status == "active" and e.phase_status == "phase_1_target"
     }
+    from .luxian_0916.rule_catalog import get_luxian_0916_rule_catalog
+    rules = get_luxian_0916_rule_catalog()
+    # 0916 为显式整包验证入口；这里的待验收标签不改变其执行目录或发布配置。
+    for entry in rules:
+        catalog[entry.rule_id] = {
+            "rule_id": entry.rule_id, "name": entry.name,
+            "source_document": entry.target_document,
+            "policy_summary": "适用触发：" + entry.trigger_type + "；所需依据：" + "、".join(entry.required_evidence),
+            "release_scope": "acceptance_only", "rule_set_key": RULE_SET_0916,
+            "publication_supported": False,
+            "publication_note": "0916 当前仅接入测试与复核；逐规则发布配置和执行版本冻结尚未接通，不能批准上线。",
+            "execution_mode": "full_pack", "execution_rule_ids": [r.rule_id for r in rules],
+            "impact": None,
+        }
+    return catalog
 
 
 def build_kind(execution_version: dict | None) -> str:
@@ -189,7 +212,7 @@ class RuleValidationService:
     def _rule(self, rule_id: str) -> dict:
         rule = self.catalog().get(rule_id)
         if rule is None:
-            raise LookupError("规则不存在或不是当前可执行的四段式规则")
+            raise LookupError("规则不存在或不在当前可执行目录中")
         return rule
 
     def _customer_items(self, session) -> list[dict]:
@@ -250,8 +273,8 @@ class RuleValidationService:
 
     def upsert_answer(self, rule_id: str, item_id: str, *, revision: int, expected_status: str,
                       human_reason: str, purpose: str, user: str) -> dict:
-        self._rule(rule_id)
-        if expected_status not in EXPECTED_STATUSES:
+        rule = self._rule(rule_id)
+        if expected_status not in expected_statuses(rule):
             raise ValueError("预期状态仅支持合规、不合规、不适用、资料不足")
         if purpose not in PURPOSES:
             raise ValueError("病例用途仅支持开发集或独立验收集")
@@ -329,6 +352,11 @@ class RuleValidationService:
         impact = (catalog[rule_id].get("impact") or {}) if rule_id in catalog else {}
         kind = impact.get("impact") or IMPACT_INDEPENDENT
         plan = {"impact": impact or None, "scope_rule_ids": [rule_id], "regression_cases": [], "regression_gaps": []}
+        if catalog[rule_id].get("execution_mode") == "full_pack":
+            plan["scope_rule_ids"] = list(catalog[rule_id]["execution_rule_ids"])
+            plan["regression_gaps"] = [{"rule_id": rule_id, "name": catalog[rule_id]["name"],
+                                        "reason": "0916 整包执行，仅比较本规则；其他规则未纳入本次人工验收"}]
+            return plan
         if not requires_family_regression(kind):
             return plan
         for peer in impact.get("peer_rule_ids") or []:
@@ -365,7 +393,7 @@ class RuleValidationService:
         if filters is not None:
             version = {k: deepcopy(filters.get(k)) for k in (
                 "lx0609_task_runtime", "lx0609_task_settings", "record_evaluation_snapshot",
-                "task_frozen_date", "scoped_customer_rule_ids")}
+                "task_frozen_date", "scoped_customer_rule_ids", "rule_set_key", "rule_set_version", "rule_ids")}
         with self.sessions() as session:
             result = session.execute(update(self.runs).where(
                 self.runs.c.id == run_id, self.runs.c.state == "creating").values(
@@ -459,6 +487,8 @@ class RuleValidationService:
         events = self.list_events(rule_id)
         conclusion = next((e for e in reversed(events) if e["kind"] == "conclusion"), None)
         if decision == "approved":
+            if rule.get("publication_supported") is False:
+                raise ValueError(rule["publication_note"])
             if not conclusion or conclusion["decision"] != "accepted":
                 raise ValueError("最近一次验收结论不是通过，不能批准")
             runs = self.list_runs(rule_id)
@@ -520,7 +550,7 @@ class RuleValidationService:
     def summarize(self, rule_id: str, *, run: dict | None = None, rows: list[dict] | None = None) -> dict:
         """覆盖、复核完成度与通过阻碍；rows 为该 run 的比较结果。"""
         cases = run["cases"] if run is not None else self.list_cases(rule_id)
-        coverage = _coverage(cases)
+        coverage = _coverage(cases, expected_statuses(self._rule(rule_id)))
         blockers: list[str] = []
         regression_gaps = list((run or {}).get("regression_gaps") or [])
         if run is not None and rows is not None:
@@ -601,12 +631,12 @@ def _item_ref(item: dict) -> CaseRef | None:
     return ref if all(ref) else None
 
 
-def _coverage(cases: list[dict]) -> dict:
-    counts = {s: {"synthetic": 0, "real_copy": 0} for s in EXPECTED_STATUSES}
+def _coverage(cases: list[dict], statuses=EXPECTED_STATUSES) -> dict:
+    counts = {s: {"synthetic": 0, "real_copy": 0} for s in statuses}
     for c in cases:
         if c["expected_status"] in counts:
             counts[c["expected_status"]][c["source_kind"]] += 1
-    gaps = [s for s in EXPECTED_STATUSES if not sum(counts[s].values())]
+    gaps = [s for s in statuses if not sum(counts[s].values())]
     return {"counts": counts, "gaps": gaps,
             "acceptance_cases": sum(1 for c in cases if c["purpose"] == "acceptance")}
 

@@ -127,6 +127,18 @@
           </p>
         </section>
 
+        <section v-if="row.result?.document_anchors?.length">
+          <h3>来源定位</h3>
+          <ul class="mq-soft rv-review__list">
+            <li
+              v-for="(anchor, i) in row.result.document_anchors"
+              :key="i"
+            >
+              {{ typeLabel(String(anchor.document_type || '')) || anchor.document_type }} · {{ anchor.document_id }}
+              {{ anchor.field_name || anchor.field_path || '' }}
+            </li>
+          </ul>
+        </section>
         <section>
           <h3>修改建议</h3>
           <p class="mq-soft rv-review__text">

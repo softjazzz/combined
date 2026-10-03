@@ -25,7 +25,7 @@ def test_catalog_uses_formal_selectable_scope():
     )
 
     catalog = rule_catalog()
-    assert set(catalog) <= set(get_luxian_0609_sample_validation_rule_set().rule_ids)
+    assert {rid for rid in catalog if rid.startswith("LX0609-")} <= set(get_luxian_0609_sample_validation_rule_set().rule_ids)
     assert not set(catalog) & LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     assert catalog["LX0609-06-01-03"]["release_scope"] == "acceptance_only"
 

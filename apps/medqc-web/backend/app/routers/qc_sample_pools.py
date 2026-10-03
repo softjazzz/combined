@@ -1430,9 +1430,10 @@ async def run_sample_pool_intrinsic_validation(
     if validation_ref is not None and (
         pool_id != CUSTOMER_TEST_POOL_ID or payload.group_by_luxian_family
         or sorted(requested_sample_item_ids) != sorted(validation_ref["item_ids"])
-        or rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY
+        or rule_set_key not in {LUXIAN_0609_QC_RULE_SET_KEY, LUXIAN_0916_QC_RULE_SET_KEY}
+        or rule_set_key != validation_ref.get("rule_set_key", LUXIAN_0609_QC_RULE_SET_KEY)
     ):
-        raise HTTPException(status_code=422, detail="规则验收仅支持自建测试池的LX0609任务，且病例须与验收运行一致")
+        raise HTTPException(status_code=422, detail="规则验收仅支持自建测试池的0609或0916任务，且病例、规则集须与验收运行一致")
     job_filters = {
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
         **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
