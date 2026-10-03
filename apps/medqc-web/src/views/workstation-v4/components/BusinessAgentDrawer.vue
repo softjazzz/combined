@@ -1,328 +1,508 @@
 <template>
-  <a-drawer :open="open" :width="760" title="智能业务助手" @close="open = false">
+  <a-drawer
+    :open="open"
+    :width="drawerWidth"
+    :closable="false"
+    :body-style="{ padding: 0 }"
+    root-class-name="business-agent-drawer"
+    @close="open = false"
+  >
     <div class="business-agent">
-      <section class="mq-soft">
+      <header class="ba-head">
+        <span class="ba-avatar ba-avatar--lg" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
+            <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+          </svg>
+        </span>
+        <div class="ba-head__copy">
+          <strong class="ba-head__title">{{
+            context.view === 'doctor' ? '病历助手' : '质控分析助手'
+          }}</strong>
+          <span class="ba-head__sub"><i class="ba-dot" />{{ contextLabel }} · 只读</span>
+        </div>
         <div
           v-if="allowCaseSelection && caseOptions.length && scopeOptions.length"
-          class="business-agent__shortcuts"
+          class="ba-segmented"
         >
-          <a-button
-            :type="activeView === 'doctor' ? 'primary' : 'default'"
+          <button
+            type="button"
+            :class="{ 'is-active': activeView === 'doctor' }"
             @click="selectedView = 'doctor'"
           >
             病例问题
-          </a-button>
-          <a-button
-            :type="activeView === 'manager' ? 'primary' : 'default'"
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-active': activeView === 'manager' }"
             @click="selectedView = 'manager'"
           >
             科室问数
-          </a-button>
+          </button>
         </div>
-        <strong>{{ context.view === 'doctor' ? '当前病例' : '管理问数范围' }}</strong>
-        <p>{{ contextLabel }}</p>
-        <label v-if="allowCaseSelection && context.view === 'doctor'" class="mq-field"
-          >授权病例
+        <button
+          type="button"
+          class="ba-icon-btn"
+          aria-label="新建会话"
+          title="新建会话"
+          @click="reset(context)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+          </svg>
+        </button>
+        <button type="button" class="ba-icon-btn" aria-label="关闭" @click="open = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </header>
+
+      <section
+        v-if="(allowCaseSelection && context.view === 'doctor') || context.view === 'manager'"
+        class="ba-scope"
+      >
+        <template v-if="allowCaseSelection && context.view === 'doctor'">
+          <span class="ba-scope__label">授权病例</span>
           <a-select
             v-model:value="selectedCase"
+            class="ba-scope__select ba-scope__select--wide"
             :options="caseOptions"
             :loading="accessLoading"
             placeholder="选择已授权病例"
+            aria-label="授权病例"
             data-testid="business-agent-case-scope"
           />
-        </label>
-        <p
-          v-if="
-            allowCaseSelection && context.view === 'doctor' && !caseOptions.length && !accessLoading
-          "
-          class="business-agent__muted"
-        >
-          当前入口没有可选择的授权病例，请从已授权病历详情进入或核对访问范围。
-        </p>
-        <template v-if="context.view === 'manager'">
-          <label class="mq-field"
-            >机构/科室
-            <a-select
-              v-model:value="selectedScope"
-              :options="scopeOptions"
-              :loading="accessLoading"
-              placeholder="选择已授权科室"
-              data-testid="business-agent-manager-scope"
-          /></label>
-          <label class="mq-field"
-            >病例范围 <a-select v-model:value="carePhase" :options="carePhaseOptions"
-          /></label>
-          <label class="mq-field"
-            >质控完成日期 <a-range-picker v-model:value="dates" value-format="YYYY-MM-DD"
-          /></label>
+          <p v-if="!caseOptions.length && !accessLoading" class="ba-muted">
+            当前入口没有可选择的授权病例，请从已授权病历详情进入或核对访问范围。
+          </p>
         </template>
-        <p class="business-agent__muted">读取已保存结果和规范依据，保留正式结论与建议。</p>
-        <p class="business-agent__muted" data-testid="business-agent-readonly-notice">
-          支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
-        </p>
-        <a-button
-          v-if="canOpenProfile"
-          type="link"
-          data-testid="business-agent-open-profile"
-          @click="openProfilePanel"
-        >
-          打开本病例画像面板
-        </a-button>
-        <p v-if="canOpenProfile" class="business-agent__muted">
-          打开面板不会自动分析；是否运行画像分析由您在面板中决定。
-        </p>
+        <template v-if="context.view === 'manager'">
+          <span class="ba-scope__label">管理问数范围</span>
+          <a-select
+            v-model:value="selectedScope"
+            class="ba-scope__select ba-scope__select--wide"
+            :options="scopeOptions"
+            :loading="accessLoading"
+            placeholder="选择已授权科室"
+            aria-label="机构/科室"
+            data-testid="business-agent-manager-scope"
+          />
+          <a-select
+            v-model:value="carePhase"
+            class="ba-scope__select"
+            :options="carePhaseOptions"
+            aria-label="病例范围"
+          />
+          <a-range-picker
+            v-model:value="dates"
+            class="ba-scope__select"
+            value-format="YYYY-MM-DD"
+            aria-label="质控完成日期"
+            :placeholder="['质控完成起', '质控完成止']"
+          />
+        </template>
       </section>
-      <a-alert v-if="accessError" type="warning" :message="accessError" show-icon />
-      <div class="business-agent__shortcuts">
-        <a-button
-          v-for="prompt in prompts"
-          :key="prompt"
-          :disabled="loading || !canQuery"
-          @click="draft = prompt"
-        >
-          {{ prompt }}
-        </a-button>
-      </div>
-      <a-button
-        v-if="summaryRunId"
-        data-testid="business-agent-return-summary"
-        @click="returnToSummary"
+      <a-alert
+        v-if="accessError"
+        class="ba-alert"
+        type="warning"
+        :message="accessError"
+        show-icon
+      />
+
+      <section
+        ref="turnsElement"
+        class="ba-thread"
+        aria-live="polite"
+        data-testid="business-agent-turns"
       >
-        返回同一汇总（当时结果，未刷新）
-      </a-button>
-      <section ref="turnsElement" aria-live="polite" data-testid="business-agent-turns">
-        <p v-if="!turns.length" class="business-agent__muted">
-          先查看问题，再追问原文与规则依据。管理问数沿用现有统计口径。
-        </p>
+        <div v-if="!turns.length" class="ba-welcome">
+          <span class="ba-avatar ba-avatar--xl" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+              <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
+              <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+            </svg>
+          </span>
+          <h2 class="ba-welcome__title">
+            {{ context.view === 'doctor' ? '你好，我是病历助手' : '你好，我是质控分析助手' }}
+          </h2>
+          <p class="ba-welcome__lead">
+            {{
+              context.view === 'doctor'
+                ? '我会读取这份病历最近一次的正式质控结果，帮你看懂问题、找到原文和规范，再协助你修改。'
+                : '我会沿用正式统计口径回答指标问题，可以下钻到病例、比较期间，或起草质量分析报告。'
+            }}
+          </p>
+          <p class="ba-welcome__note" data-testid="business-agent-readonly-notice">
+            支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
+          </p>
+          <div v-if="canOpenProfile" class="ba-welcome__extra">
+            <a-button
+              type="link"
+              data-testid="business-agent-open-profile"
+              @click="openProfilePanel"
+            >
+              打开本病例画像面板
+            </a-button>
+            <span class="ba-muted">打开面板不会自动分析；是否运行画像分析由您在面板中决定。</span>
+          </div>
+        </div>
+        <template v-else>
+          <p class="ba-sr-only" data-testid="business-agent-readonly-notice">
+            支持查询与解释、查看提醒与整改记录；异议反馈需本人填写理由并提交，不改变质控结论。
+          </p>
+          <div v-if="canOpenProfile" class="ba-inline-tools">
+            <a-button
+              type="link"
+              size="small"
+              data-testid="business-agent-open-profile"
+              @click="openProfilePanel"
+            >
+              打开本病例画像面板
+            </a-button>
+            <span class="ba-muted">打开面板不会自动分析</span>
+          </div>
+        </template>
+        <a-button
+          v-if="summaryRunId"
+          class="ba-return"
+          size="small"
+          data-testid="business-agent-return-summary"
+          @click="returnToSummary"
+        >
+          返回同一汇总（当时结果，未刷新）
+        </a-button>
         <article
-          v-for="turn in turns"
+          v-for="(turn, turnIndex) in turns"
           :key="turn.run_id"
           :data-run-id="turn.run_id"
           tabindex="-1"
-          class="business-agent__turn"
+          class="ba-turn"
         >
-          <p class="business-agent__question">
-            {{ turn.question }}
-          </p>
-          <p class="business-agent__answer">
-            {{ turn.answer || turn.error || '本轮未完成，可重新查询。' }}
-          </p>
-          <div
-            v-for="(page, pageIndex) in turn.result_pages || []"
-            :key="pageIndex"
-            class="mq-inset business-agent__reference"
-            data-testid="business-agent-result-page"
-          >
-            <p>
-              读取范围：{{
-                page.statuses.length ? page.statuses.map(statusLabel).join('、') : '全部状态'
-              }}
-              · 第 {{ page.page }} 页；本页 {{ page.returned }} 条，匹配共
-              {{ page.matched_total }} 条，保存结果共 {{ page.total }} 条。
+          <div class="ba-msg ba-msg--user">
+            <p class="ba-bubble ba-bubble--user">
+              {{ turn.question }}
             </p>
-            <p class="business-agent__muted">
-              {{
-                Object.entries(page.status_counts)
-                  .map(([status, count]) => `${statusLabel(status)} ${count} 条`)
-                  .join(' · ')
-              }}
-            </p>
-            <p v-if="page.has_more">此范围还有后续页，可继续查询下一页。</p>
           </div>
-          <p v-if="turn.reference_scope === 'prior_turns'" class="business-agent__muted">
-            本轮沿用此前读取的来源，未刷新业务结果。
-          </p>
-          <p
-            v-if="turn.references.some((reference) => reference.kind === 'guideline')"
-            class="business-agent__muted"
-            data-testid="business-agent-retrieval-notice"
-          >
-            规范检索资料：以下命中或读取的资料不代表均支持上方回答，请核对条款及适用范围。
-          </p>
-          <div
-            v-for="(reference, index) in turn.references"
-            :key="reference.id"
-            class="mq-inset business-agent__reference"
-          >
-            <strong>{{ reference.position || index + 1 }}. {{ reference.title }}</strong>
-            <p
-              v-if="reference.kind === 'guideline'"
-              class="business-agent__muted"
-              data-testid="business-agent-guideline-candidate"
-            >
-              检索资料 · 待核对适用性
-            </p>
-            <span v-if="reference.status" class="mq-status">{{
-              statusLabel(reference.status)
-            }}</span>
-            <p v-if="reference.conclusion">
-              {{ reference.conclusion }}
-            </p>
-            <p v-if="reference.suggestion">建议：{{ reference.suggestion }}</p>
-            <small v-if="reference.locator">{{ reference.locator }}</small>
-            <p v-if="reference.rule_id" class="business-agent__muted">
-              规则编号：{{ reference.rule_id }}
-            </p>
-            <template v-if="reference.kind === 'action'">
-              <p class="business-agent__draft" data-testid="business-agent-action-text">
-                {{ actionView(reference).text }}
-              </p>
-              <a-button
-                v-if="canConfirm(actionView(reference))"
-                type="primary"
-                :loading="actionBusy === reference.id"
-                :disabled="!!actionBusy"
-                data-testid="business-agent-action-confirm"
-                @click="confirmAction(reference)"
-              >
-                确认执行
-              </a-button>
-              <a-button
-                v-else-if="actionView(reference).status !== 'previewed'"
-                type="link"
-                :loading="actionBusy === reference.id"
-                :disabled="!!actionBusy"
-                data-testid="business-agent-action-refresh"
-                @click="refreshAction(reference)"
-              >
-                刷新任务进度
-              </a-button>
-              <p class="business-agent__muted">
-                助手不会自行执行；确认后由正式质控任务服务创建任务，停止对话不会取消已创建任务。
-              </p>
-            </template>
-            <template v-if="reference.kind === 'draft'">
-              <p class="business-agent__draft" data-testid="business-agent-draft-text">
-                {{ reference.text }}
-              </p>
-              <a-button
-                type="link"
-                :disabled="!reference.text"
-                data-testid="business-agent-draft-copy"
-                @click="copyDraft(reference)"
-              >
-                复制参考草稿
-              </a-button>
-              <span
-                v-if="copiedDraftId === reference.id"
-                class="business-agent__muted"
-                data-testid="business-agent-draft-copied"
-              >
-                已复制；复制不等于整改完成，请核对原文后在病历系统中书写。
+          <div class="ba-msg ba-msg--assistant">
+            <span class="ba-avatar" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
+              </svg>
+            </span>
+            <div class="ba-msg__body">
+              <span class="ba-steps" :class="`ba-steps--${turn.status}`">
+                <svg
+                  v-if="turn.status === 'completed'"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.6"
+                >
+                  <path d="M5 12l5 5L20 7" />
+                </svg>
+                {{ turnSummary(turn) }}
               </span>
-            </template>
-            <template v-if="reference.kind === 'saved_result'">
-              <a-button
-                v-if="linkedRule(reference)"
-                type="link"
-                @click="openReference(linkedRule(reference)!.id)"
+              <div class="ba-bubble ba-bubble--assistant">
+                <p class="business-agent__answer">
+                  {{ turn.answer || turn.error || '本轮未完成，可重新查询。' }}
+                </p>
+                <div
+                  v-for="(page, pageIndex) in turn.result_pages || []"
+                  :key="pageIndex"
+                  class="ba-page"
+                  data-testid="business-agent-result-page"
+                >
+                  <p>
+                    读取范围：{{
+                      page.statuses.length ? page.statuses.map(statusLabel).join('、') : '全部状态'
+                    }}
+                    · 第 {{ page.page }} 页；本页 {{ page.returned }} 条，匹配共
+                    {{ page.matched_total }} 条，保存结果共 {{ page.total }} 条。
+                  </p>
+                  <p class="ba-chips">
+                    <span
+                      v-for="[status, count] in Object.entries(page.status_counts)"
+                      :key="status"
+                      class="mq-status"
+                      :class="statusTone(status)"
+                      >{{ statusLabel(status) }} {{ count }} 条</span
+                    >
+                  </p>
+                  <p v-if="page.has_more" class="ba-muted">此范围还有后续页，可继续查询下一页。</p>
+                </div>
+                <p v-if="turn.reference_scope === 'prior_turns'" class="ba-muted">
+                  本轮沿用此前读取的来源，未刷新业务结果。
+                </p>
+                <p
+                  v-if="turn.references.some((reference) => reference.kind === 'guideline')"
+                  class="ba-muted"
+                  data-testid="business-agent-retrieval-notice"
+                >
+                  规范检索资料：以下命中或读取的资料不代表均支持上方回答，请核对条款及适用范围。
+                </p>
+                <div
+                  v-for="(reference, index) in turn.references"
+                  :key="reference.id"
+                  class="ba-card"
+                  :class="`ba-card--${reference.kind}`"
+                >
+                  <div class="ba-card__head">
+                    <span class="ba-card__index">{{ reference.position || index + 1 }}</span>
+                    <strong class="ba-card__title">{{ reference.title }}</strong>
+                    <span
+                      v-if="reference.status && reference.kind !== 'action'"
+                      class="mq-status"
+                      :class="statusTone(reference.status)"
+                      >{{ statusLabel(reference.status) }}</span
+                    >
+                  </div>
+                  <p
+                    v-if="reference.kind === 'guideline'"
+                    class="ba-muted"
+                    data-testid="business-agent-guideline-candidate"
+                  >
+                    检索资料 · 待核对适用性
+                  </p>
+                  <div v-if="reference.conclusion || reference.suggestion" class="ba-card__body">
+                    <p v-if="reference.conclusion">
+                      {{ reference.conclusion }}
+                    </p>
+                    <p v-if="reference.suggestion" class="ba-card__suggestion">
+                      建议：{{ reference.suggestion }}
+                    </p>
+                  </div>
+                  <p v-if="reference.locator || reference.rule_id" class="ba-card__meta">
+                    <span v-if="reference.locator">{{ reference.locator }}</span>
+                    <span v-if="reference.rule_id" class="ba-mono"
+                      >规则编号：{{ reference.rule_id }}</span
+                    >
+                  </p>
+                  <template v-if="reference.kind === 'action'">
+                    <p class="ba-block" data-testid="business-agent-action-text">
+                      {{ actionView(reference).text }}
+                    </p>
+                    <div class="ba-card__confirm">
+                      <a-button
+                        v-if="canConfirm(actionView(reference))"
+                        type="primary"
+                        :loading="actionBusy === reference.id"
+                        :disabled="!!actionBusy"
+                        data-testid="business-agent-action-confirm"
+                        @click="confirmAction(reference)"
+                      >
+                        确认执行
+                      </a-button>
+                      <a-button
+                        v-else-if="actionView(reference).status !== 'previewed'"
+                        :loading="actionBusy === reference.id"
+                        :disabled="!!actionBusy"
+                        data-testid="business-agent-action-refresh"
+                        @click="refreshAction(reference)"
+                      >
+                        刷新任务进度
+                      </a-button>
+                    </div>
+                    <p class="ba-muted">
+                      助手不会自行执行；确认后由正式质控任务服务创建任务，停止对话不会取消已创建任务。
+                    </p>
+                  </template>
+                  <template v-if="reference.kind === 'draft'">
+                    <p class="ba-block ba-block--draft" data-testid="business-agent-draft-text">
+                      {{ reference.text }}
+                    </p>
+                    <div class="ba-card__actions">
+                      <a-button
+                        size="small"
+                        :disabled="!reference.text"
+                        data-testid="business-agent-draft-copy"
+                        @click="copyDraft(reference)"
+                      >
+                        复制参考草稿
+                      </a-button>
+                      <span
+                        v-if="copiedDraftId === reference.id"
+                        class="ba-muted"
+                        data-testid="business-agent-draft-copied"
+                      >
+                        已复制；复制不等于整改完成，请核对原文后在病历系统中书写。
+                      </span>
+                    </div>
+                  </template>
+                  <p
+                    v-if="reference.kind === 'saved_result' && !linkedRule(reference)"
+                    class="ba-muted"
+                  >
+                    {{
+                      reference.rule_id
+                        ? '尚未读取对应规则，查询将发起新一轮问答。'
+                        : '保存结果未提供规则编号，暂无法关联规则详情。'
+                    }}
+                  </p>
+                  <div class="ba-card__actions">
+                    <a-button
+                      type="link"
+                      size="small"
+                      class="ba-link--primary"
+                      @click="openReference(reference.id)"
+                    >
+                      查看{{
+                        reference.kind === 'guideline'
+                          ? '规范原文'
+                          : isRuleValidation(reference)
+                            ? '验收记录'
+                            : reference.kind === 'rule'
+                              ? '规则详情'
+                              : reference.kind === 'draft'
+                                ? '最新校验的草稿'
+                                : reference.kind === 'action'
+                                  ? '操作最新状态'
+                                  : '依据与详情'
+                      }}
+                    </a-button>
+                    <template v-if="reference.kind === 'saved_result'">
+                      <a-button
+                        v-if="linkedRule(reference)"
+                        type="link"
+                        size="small"
+                        @click="openReference(linkedRule(reference)!.id)"
+                      >
+                        查看对应规则
+                      </a-button>
+                      <a-button
+                        v-else-if="reference.rule_id"
+                        type="link"
+                        size="small"
+                        :disabled="loading || !canQuery"
+                        @click="queryRule(reference)"
+                      >
+                        查询这条规则
+                      </a-button>
+                      <a-button
+                        type="link"
+                        size="small"
+                        :disabled="loading || !canQuery"
+                        @click="explainReference(reference)"
+                      >
+                        解释这条
+                      </a-button>
+                      <a-button
+                        v-if="reference.status === 'non_compliant' && activeView === 'doctor'"
+                        type="link"
+                        size="small"
+                        :disabled="loading || !canQuery"
+                        data-testid="business-agent-draft-request"
+                        @click="requestDraft(reference)"
+                      >
+                        生成参考补充文字
+                      </a-button>
+                      <a-button
+                        type="link"
+                        size="small"
+                        class="ba-link--muted"
+                        :disabled="!sessionId || feedbackSubmitting"
+                        data-testid="business-agent-feedback-open"
+                        @click="openFeedback(reference.id)"
+                      >
+                        提交异议反馈
+                      </a-button>
+                    </template>
+                    <a-button
+                      v-if="reference.kind === 'record'"
+                      type="link"
+                      size="small"
+                      :disabled="loading || !canQuery"
+                      @click="explainReference(reference, turn.run_id)"
+                    >
+                      查看病例问题
+                    </a-button>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="turnIndex === turns.length - 1 && !loading && followups(turn).length"
+                class="ba-followups"
+                data-testid="business-agent-followups"
               >
-                查看对应规则
-              </a-button>
-              <a-button
-                v-else-if="reference.rule_id"
-                type="link"
-                :disabled="loading || !canQuery"
-                @click="queryRule(reference)"
-              >
-                查询这条规则
-              </a-button>
-              <p v-if="!linkedRule(reference)" class="business-agent__muted">
-                {{
-                  reference.rule_id
-                    ? '尚未读取对应规则，查询将发起新一轮问答。'
-                    : '保存结果未提供规则编号，暂无法关联规则详情。'
-                }}
-              </p>
-            </template>
-            <a-button type="link" @click="openReference(reference.id)">
-              查看{{
-                reference.kind === 'guideline'
-                  ? '规范原文'
-                  : isRuleValidation(reference)
-                    ? '验收记录'
-                    : reference.kind === 'rule'
-                      ? '规则详情'
-                      : reference.kind === 'draft'
-                        ? '最新校验的草稿'
-                        : reference.kind === 'action'
-                          ? '操作最新状态'
-                          : '依据与详情'
-              }}
-            </a-button>
-            <a-button
-              v-if="
-                reference.kind === 'saved_result' &&
-                reference.status === 'non_compliant' &&
-                activeView === 'doctor'
-              "
-              type="link"
-              :disabled="loading || !canQuery"
-              data-testid="business-agent-draft-request"
-              @click="requestDraft(reference)"
-            >
-              生成参考补充文字
-            </a-button>
-            <a-button
-              v-if="reference.kind === 'saved_result'"
-              type="link"
-              :disabled="loading || !canQuery"
-              @click="explainReference(reference)"
-            >
-              解释这条
-            </a-button>
-            <a-button
-              v-if="reference.kind === 'saved_result'"
-              type="link"
-              :disabled="!sessionId || feedbackSubmitting"
-              data-testid="business-agent-feedback-open"
-              @click="openFeedback(reference.id)"
-            >
-              提交异议反馈
-            </a-button>
-            <a-button
-              v-if="reference.kind === 'record'"
-              type="link"
-              :disabled="loading || !canQuery"
-              @click="explainReference(reference, turn.run_id)"
-            >
-              查看病例问题
-            </a-button>
+                <button
+                  v-for="item in followups(turn)"
+                  :key="item.label"
+                  type="button"
+                  class="ba-chip"
+                  :disabled="!canQuery"
+                  @click="item.run()"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </div>
           </div>
-          <small class="business-agent__muted"
-            >{{
-              turn.status === 'stopped'
-                ? '已停止'
-                : turn.status === 'failed'
-                  ? '部分步骤失败'
-                  : '本轮完成'
-            }}
-            · {{ turn.tool_calls }} 次查询 · {{ (turn.elapsed_ms / 1000).toFixed(1) }} 秒</small
-          >
         </article>
-        <p v-if="loading">正在查询结果和依据…</p>
+        <div v-if="loading" class="ba-msg ba-msg--assistant" role="status">
+          <span class="ba-avatar ba-avatar--pulse" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" />
+            </svg>
+          </span>
+          <div class="ba-bubble ba-bubble--thinking">
+            <span>正在读取结果和依据</span>
+            <span class="ba-typing" aria-hidden="true"><i /><i /><i /></span>
+          </div>
+        </div>
       </section>
-      <a-alert v-if="error" type="warning" :message="error" show-icon />
-      <div class="business-agent__composer">
-        <a-textarea
-          v-model:value="draft"
-          :disabled="loading || !canQuery"
-          :auto-size="{ minRows: 2, maxRows: 5 }"
-          placeholder="查看当前病例问题，或追问某条结果的依据"
-          @keydown.enter.exact.prevent="submit"
-        />
-        <div class="business-agent__shortcuts">
-          <a-button @click="reset(context)"> 新建会话 </a-button>
-          <a-button v-if="loading" @click="stop"> 停止 </a-button>
-          <a-button
-            type="primary"
+
+      <footer class="ba-composer">
+        <a-alert v-if="error" type="warning" :message="error" show-icon />
+        <div class="ba-prompts">
+          <button
+            v-for="prompt in prompts"
+            :key="prompt"
+            type="button"
+            class="ba-chip"
+            :disabled="loading || !canQuery"
+            @click="draft = prompt"
+          >
+            {{ prompt }}
+          </button>
+        </div>
+        <div class="ba-input">
+          <a-textarea
+            v-model:value="draft"
+            class="ba-input__field"
+            :bordered="false"
+            :disabled="loading || !canQuery"
+            :auto-size="{ minRows: 1, maxRows: 5 }"
+            :placeholder="
+              context.view === 'doctor'
+                ? '问我这份病历的问题、依据，或让我帮你写补充…'
+                : '问指标、比较期间、下钻病例，或让我写报告…'
+            "
+            aria-label="向助手提问"
+            @keydown.enter.exact.prevent="submit"
+          />
+          <button v-if="loading" type="button" class="ba-stop" @click="stop">
+            <i aria-hidden="true" />停止
+          </button>
+          <button
+            v-else
+            type="button"
+            class="ba-send"
             :disabled="loading || !canQuery || !draft.trim()"
             @click="submit"
           >
             发送
-          </a-button>
+          </button>
         </div>
-      </div>
+        <p class="ba-footnote">
+          {{
+            context.view === 'doctor'
+              ? '回答基于正式保存结果与规范原文，结论以质控系统为准'
+              : '数值来自正式统计并可回查，不含因果推断'
+          }}
+        </p>
+      </footer>
     </div>
     <a-modal
       :open="feedbackOpen"
@@ -466,11 +646,18 @@ import {
   businessAgentApi,
   type BusinessAgentContext,
   type BusinessAgentReference,
+  type BusinessAgentTurn,
   type BusinessAgentAccess,
   type BusinessEvidenceDocument,
   type BusinessFeedbackPreview,
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
+import {
+  followupIntents,
+  statusTone,
+  turnSummary,
+  type FollowupIntent,
+} from './businessAgentPresentation'
 
 const open = defineModel<boolean>('open', { default: false })
 const props = defineProps<{
@@ -621,6 +808,21 @@ const prompts = computed(() =>
     : ['当前范围哪些质控问题最多？', '列出这些问题对应的病例', '查询规则的当前启用状态'],
 )
 const draft = ref('')
+// 窄窗口不超出视口，避免内容被裁切。
+const drawerWidth = 'min(600px, 100vw)'
+function followups(turn: BusinessAgentTurn) {
+  return followupIntents(turn, context.value.view).map((intent: FollowupIntent) => ({
+    label: intent.label,
+    run: () =>
+      intent.kind === 'ask'
+        ? send(intent.message, context.value)
+        : intent.kind === 'draft'
+          ? requestDraft(intent.reference)
+          : intent.kind === 'rule'
+            ? queryRule(intent.reference)
+            : explainReference(intent.reference),
+  }))
+}
 const { sessionId, turns, loading, error, activate, send, stop, reset } = useBusinessAgent()
 const feedbackOpen = ref(false)
 const feedbackLoading = ref(false)
