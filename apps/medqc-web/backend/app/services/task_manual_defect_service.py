@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCDefect, QCDefectHistory, QCTask, QCTaskQCRun, QCTaskRecord
 from .manual_document_anchor import document_options, freeze_anchor
+from .qc_workspace.canonical_result_store import CanonicalResultStore
 from .task_qc_run_service import (
     TaskQCRunConflict,
     TaskQCRunForbidden,
@@ -86,7 +87,7 @@ def _context(session: Any, task_id: str, task_record_id: str, actor_id: str, *, 
 def _verified_result(
     *, task_id: str, task_record_id: str, actor_id: str,
     run_number: int, workspace_factory: Callable[[], Any],
-) -> str:
+) -> tuple[str, str]:
     try:
         result = get_task_qc_run_record_result(
             task_id=task_id, task_record_id=task_record_id,
@@ -115,7 +116,48 @@ def _verified_result(
     job_id = result.get("job_id")
     if not isinstance(job_id, str) or not job_id.strip():
         raise TaskManualDefectConflict("任务病历质控结果缺少运行身份")
-    return job_id
+    with SessionLocal() as session:
+        task, record = _context(session, task_id, task_record_id, actor_id, lock=False)
+        envelope_id = _selected_envelope(session, task=task, record=record,
+                                         job_id=job_id, actor_id=actor_id, lock=False)
+    return job_id, envelope_id
+
+
+def _selected_envelope(session: Any, *, task: Any, record: Any,
+                       job_id: str, actor_id: str, lock: bool) -> str:
+    from .custom_qc_workspace_service import _record_result_envelopes_table
+
+    key, version = task.get("rule_set_key"), task.get("rule_set_version")
+    if any(not isinstance(value, str) or not value.strip() for value in (key, version)):
+        raise TaskManualDefectConflict("任务缺少冻结规则集版本")
+    table = _record_result_envelopes_table()
+    query = select(table).where(
+        table.c.root_job_id == job_id,
+        *(getattr(table.c, field) == record[field]
+          for field in ("institute_id", "patient_id", "visit_id")),
+        table.c.rule_set_key == key, table.c.rule_set_version == version,
+    ).limit(2)
+    rows = session.execute(query.with_for_update(read=True) if lock else query).mappings().all()
+    if len(rows) != 1:
+        raise TaskManualDefectConflict("人工缺陷对应的结果信封缺失或不唯一")
+    row = rows[0]
+    try:
+        payload, envelope_id = CanonicalResultStore(table).load_selected_with_id(
+            session, root_job_id=job_id,
+            institute_id=record["institute_id"], patient_id=record["patient_id"],
+            visit_id=record["visit_id"], rule_set_key=key, rule_set_version=version,
+        )
+    except ValueError as exc:
+        raise TaskManualDefectConflict("人工缺陷对应的结果信封无效") from exc
+    if (
+        not isinstance(envelope_id, str) or not envelope_id.strip()
+        or row["id"] != envelope_id or row["created_by"] != actor_id
+        or not isinstance(payload, dict) or not isinstance(payload.get("items"), list)
+        or not payload["items"] or type(row["result_count"]) is not int
+        or row["result_count"] != len(payload["items"])
+    ):
+        raise TaskManualDefectConflict("人工缺陷对应的结果信封无效")
+    return envelope_id
 
 
 def _history_details(session: Any, defect_id: str, actor_id: str) -> dict[str, Any] | None:
@@ -235,7 +277,7 @@ def create_task_manual_defect(
                 document_anchor=document_anchor,
             )
 
-    job_id = _verified_result(
+    job_id, envelope_id = _verified_result(
         task_id=task_id, task_record_id=task_record_id,
         actor_id=actor_id, run_number=run_number, workspace_factory=workspace_factory,
     )
@@ -244,7 +286,7 @@ def create_task_manual_defect(
             task_id=task_id, task_record_id=task_record_id,
             actor_id=actor_id, defect_id=defect_id, run_number=run_number,
             rule_name=rule_name, description=description, severity=severity,
-            suggestion=suggestion, evidence=evidence, job_id=job_id,
+            suggestion=suggestion, evidence=evidence, job_id=job_id, envelope_id=envelope_id,
             document_anchor=document_anchor,
         )
     except IntegrityError:
@@ -267,7 +309,7 @@ def create_task_manual_defect(
 def _insert_verified_defect(
     *, task_id: str, task_record_id: str, actor_id: str, defect_id: str,
     run_number: int, rule_name: str, description: str, severity: str,
-    suggestion: str | None, evidence: str | None, job_id: str,
+    suggestion: str | None, evidence: str | None, job_id: str, envelope_id: str,
     document_anchor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
@@ -298,6 +340,9 @@ def _insert_verified_defect(
                 raise TaskManualDefectForbidden("仅受领运行人可添加人工缺陷")
             if run["job_id"] != job_id:
                 raise TaskManualDefectConflict("任务运行身份已变化")
+            if _selected_envelope(session, task=task, record=record, job_id=job_id,
+                                  actor_id=actor_id, lock=True) != envelope_id:
+                raise TaskManualDefectConflict("人工缺陷对应的结果信封已变化")
             if document_anchor is not None and scene == "outpatient_emergency":
                 raise TaskManualDefectConflict("门急诊可信文书来源尚未接通")
             try:
@@ -311,7 +356,8 @@ def _insert_verified_defect(
                 raise TaskManualDefectUnavailable("可信文书暂不可用") from exc
             details = {
                 "task_id": task_id, "task_record_id": task_record_id,
-                "run_number": run_number, "job_id": job_id, "scene": scene,
+                "run_number": run_number, "job_id": job_id, "envelope_id": envelope_id,
+                "scene": scene,
                 "document_anchor": anchor,
             }
             now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -435,7 +481,7 @@ def list_task_manual_document_options(*, task_id: str, task_record_id: str, acto
         if _frozen_scene(task) == "outpatient_emergency":
             raise TaskManualDefectConflict("门急诊可信文书来源尚未接通")
         identity = {key: record[key] for key in ("institute_id", "patient_id", "visit_id")}
-    job_id = _verified_result(task_id=task_id, task_record_id=task_record_id, actor_id=actor_id,
+    job_id, envelope_id = _verified_result(task_id=task_id, task_record_id=task_record_id, actor_id=actor_id,
                               run_number=run_number, workspace_factory=workspace_factory)
     try:
         documents = [{key: value for key, value in item.items() if key != "content"}
@@ -443,9 +489,12 @@ def list_task_manual_document_options(*, task_id: str, task_record_id: str, acto
     except (ValueError, RuntimeError) as exc:
         raise TaskManualDefectUnavailable("可信完整文书暂不可用") from exc
     with SessionLocal() as session:
-        _context(session, task_id, task_record_id, actor_id, lock=False)
+        task, record = _context(session, task_id, task_record_id, actor_id, lock=False)
         run = session.get(QCTaskQCRun, (task_id, run_number))
         if run is None or run.job_id != job_id or run.run_scope != "assigned" or run.triggered_by != actor_id:
             raise TaskManualDefectConflict("任务运行身份已变化")
+        if _selected_envelope(session, task=task, record=record, job_id=job_id,
+                              actor_id=actor_id, lock=False) != envelope_id:
+            raise TaskManualDefectConflict("人工缺陷对应的结果信封已变化")
     return {"task_id": task_id, "task_record_id": task_record_id, "run_number": run_number,
             "job_id": job_id, "documents": documents}

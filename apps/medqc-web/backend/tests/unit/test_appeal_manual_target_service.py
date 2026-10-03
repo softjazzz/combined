@@ -286,3 +286,31 @@ def test_maps_workspace_table_failure_to_unavailable_without_detail(env):
         )
 
     assert "private database detail" not in str(captured.value)
+
+
+@pytest.mark.parametrize("anchor", ["envelope-history", "wrong-envelope", None, "", 123])
+def test_explicit_creation_envelope_anchor_is_checked(env, anchor):
+    sessions, _, _, workspace = env
+    with sessions.begin() as session:
+        history = session.get(QCDefectHistory, "history-1")
+        details = json.loads(history.details)
+        details["envelope_id"] = anchor
+        history.details = json.dumps(details)
+    if anchor == "envelope-history":
+        result = service.resolve_task_manual_defect_target(defect_id=DEFECT_ID, workspace_factory=lambda: workspace)
+        assert result["envelope_id"] == anchor
+    else:
+        with pytest.raises(service.AppealManualTargetConflict):
+            service.resolve_task_manual_defect_target(defect_id=DEFECT_ID, workspace_factory=lambda: workspace)
+
+
+def test_explicit_anchor_rejects_same_job_envelope_replacement(env):
+    sessions, envelopes, _, workspace = env
+    with sessions.begin() as session:
+        history = session.get(QCDefectHistory, "history-1")
+        details = json.loads(history.details)
+        details["envelope_id"] = "envelope-history"
+        history.details = json.dumps(details)
+        session.execute(envelopes.update().where(envelopes.c.id == "envelope-history").values(id="replacement-envelope"))
+    with pytest.raises(service.AppealManualTargetConflict):
+        service.resolve_task_manual_defect_target(defect_id=DEFECT_ID, workspace_factory=lambda: workspace)

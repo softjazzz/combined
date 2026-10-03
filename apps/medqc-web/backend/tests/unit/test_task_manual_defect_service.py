@@ -6,6 +6,7 @@ import json
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 import pytest
 import sqlalchemy as sa
@@ -15,6 +16,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database.models.qc import QCDefect, QCDefectHistory, QCTask, QCTaskQCRun, QCTaskRecord
 from app.services import task_manual_defect_service as service
+from app.services import custom_qc_workspace_service as workspace_owner
+from app.services.luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
+from app.services.qc_workspace.canonical_result_store import RECORD_RESULT_ENVELOPE_SCHEMA
+from tests.unit.test_appeal_manual_target_service import _envelope_table
 
 
 @pytest.fixture
@@ -26,14 +31,19 @@ def env(monkeypatch):
                   QCDefect.__table__, QCDefectHistory.__table__):
         table.create(engine)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
+    envelopes = _envelope_table()
+    envelopes.create(engine)
+    monkeypatch.setattr(workspace_owner, "_record_result_envelopes_table", lambda: envelopes)
     with sessions.begin() as session:
         session.execute(QCTask.__table__.insert(), [
             {"id": "task-1", "task_number": "TASK-1", "task_name": "任务一",
              "task_type": "one_time", "scene": "running",
-             "status": "in_progress", "creator_id": "creator"},
+             "status": "in_progress", "creator_id": "creator",
+             "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "frozen-v1"},
             {"id": "task-2", "task_number": "TASK-2", "task_name": "任务二",
              "task_type": "one_time", "scene": "outpatient",
-             "status": "in_progress", "creator_id": "creator"},
+             "status": "in_progress", "creator_id": "creator",
+             "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "frozen-v1"},
         ])
         session.execute(QCTaskRecord.__table__.insert(), [
             {"id": "record-a", "task_id": "task-1", "record_id": "record-a",
@@ -59,6 +69,16 @@ def env(monkeypatch):
             {"task_id": "task-2", "run_number": 1, "job_id": "job-other",
              "triggered_by": "qc-1", "run_scope": "assigned"},
         ])
+        now = datetime(2026, 10, 1)
+        session.execute(envelopes.insert().values(
+            id="envelope-1", job_id="job-1", root_job_id="job-1", created_by="qc-1",
+            record_id="visit", institute_id="hospital-A", patient_id="patient", visit_id="visit",
+            rule_set_key="luxian_0609_qc_v1", rule_set_version="frozen-v1",
+            envelope_json=json.dumps({"schema_version": RECORD_RESULT_ENVELOPE_SCHEMA,
+                                      "delivery_mode": CANONICAL_RESULT_DELIVERY_MODE,
+                                      "items": [{"rule_id": "LX0609-001", "status": "compliant"}]}),
+            result_count=1, created_at=now, updated_at=now,
+        ))
     monkeypatch.setattr(service, "SessionLocal", sessions)
     verified = {
         "task_id": "task-1", "task_record_id": "record-a", "run_number": 1,
@@ -129,6 +149,32 @@ def test_manual_document_options_rechecks_assignment_after_source_read(env, monk
     with pytest.raises(service.TaskManualDefectForbidden):
         service.list_task_manual_document_options(task_id="task-1", task_record_id="record-a",
             actor_id="qc-1", run_number=1, workspace_factory=lambda: object())
+
+
+def test_manual_document_options_preserves_job_receipt_and_omits_content(env, monkeypatch):
+    monkeypatch.setattr(service, "document_options", lambda _: [
+        {"source_ref": "synthetic-document", "content": "合成隐私正文"},
+    ])
+    result = service.list_task_manual_document_options(
+        task_id="task-1", task_record_id="record-a", actor_id="qc-1",
+        run_number=1, workspace_factory=lambda: object(),
+    )
+    assert result["job_id"] == "job-1"
+    assert result["documents"] == [{"source_ref": "synthetic-document"}]
+
+
+def test_manual_document_options_rejects_changed_envelope_after_source_read(env, monkeypatch):
+    def options(_):
+        with env[0].begin() as session:
+            session.execute(workspace_owner._record_result_envelopes_table().update()
+                            .values(id="replacement-envelope"))
+        return [{"source_ref": "synthetic-document", "content": "合成隐私正文"}]
+    monkeypatch.setattr(service, "document_options", options)
+    with pytest.raises(service.TaskManualDefectConflict, match="信封已变化"):
+        service.list_task_manual_document_options(
+            task_id="task-1", task_record_id="record-a", actor_id="qc-1",
+            run_number=1, workspace_factory=lambda: object(),
+        )
 
 
 def test_outpatient_does_not_borrow_inpatient_document_owner(env, monkeypatch):
@@ -202,6 +248,9 @@ def test_create_persists_exact_identity_pending_review_and_history(env):
         "manual", "pending", "qc-1", "running",
     )]
     assert history == [(result["id"], "manual_create", "qc-1")]
+    with env[0]() as session:
+        details = json.loads(session.execute(sa.select(QCDefectHistory.details)).scalar_one())
+    assert details["envelope_id"] == "envelope-1"
     calls = env[2]
     assert len(calls) == 1
     assert {key: value for key, value in calls[0].items() if key != "workspace_factory"} == {
@@ -568,7 +617,7 @@ def test_row_appearing_after_initial_read_replays_after_locked_read(env, monkeyp
     original_verify = service._verified_result
 
     def winner_first(**kwargs):
-        job_id = original_verify(**kwargs)
+        job_id, envelope_id = original_verify(**kwargs)
         with env[0].begin() as session:
             session.execute(
                 QCTask.__table__.update().where(QCTask.id == "task-1").values(scene=None)
@@ -585,9 +634,9 @@ def test_row_appearing_after_initial_read_replays_after_locked_read(env, monkeyp
                 id="history-1", defect_id="00000000-0000-4000-8000-000000000001",
                 action="manual_create", actor_id="qc-1",
                 details=json.dumps({"task_id": "task-1", "task_record_id": "record-a",
-                                    "run_number": 1, "job_id": job_id}),
+                                    "run_number": 1, "job_id": job_id, "envelope_id": envelope_id}),
             ))
-        return job_id
+        return job_id, envelope_id
 
     monkeypatch.setattr(service, "_verified_result", winner_first)
     result = create(env)
@@ -606,3 +655,57 @@ def test_insert_integrity_error_rechecks_winning_id(env, monkeypatch):
     result = create(env)
     assert result["idempotent"] is True
     assert len(snapshot(env)[0]) == len(snapshot(env)[1]) == 1
+
+
+@pytest.mark.parametrize("failure", ["missing", "duplicate", "actor", "identity", "version", "payload", "count", "task_version"])
+def test_creation_rejects_missing_or_damaged_frozen_envelope(env, failure):
+    table = workspace_owner._record_result_envelopes_table()
+    with env[0].begin() as session:
+        if failure == "missing":
+            session.execute(table.delete())
+        elif failure == "duplicate":
+            row = dict(session.execute(sa.select(table)).mappings().one())
+            row["id"] = "duplicate-envelope"
+            session.execute(table.insert().values(**row))
+        elif failure == "task_version":
+            session.execute(sa.update(QCTask).where(QCTask.id == "task-1").values(rule_set_version=None))
+        else:
+            changes = {
+                "actor": {"created_by": "other"}, "identity": {"patient_id": "other"},
+                "version": {"rule_set_version": "other"}, "payload": {"envelope_json": "{}"},
+                "count": {"result_count": 2},
+            }
+            session.execute(table.update().values(**changes[failure]))
+    with pytest.raises(service.TaskManualDefectConflict):
+        create(env)
+    assert snapshot(env) == ([], [])
+
+
+def test_envelope_replacement_between_verify_and_insert_rolls_back(env, monkeypatch):
+    original_verify = service._verified_result
+    table = workspace_owner._record_result_envelopes_table()
+
+    def replace_after_read(**kwargs):
+        anchor = original_verify(**kwargs)
+        with env[0].begin() as session:
+            session.execute(table.update().values(id="replaced-envelope"))
+        return anchor
+
+    monkeypatch.setattr(service, "_verified_result", replace_after_read)
+    with pytest.raises(service.TaskManualDefectConflict, match="信封已变化"):
+        create(env)
+    assert snapshot(env) == ([], [])
+
+
+def test_history_replay_survives_envelope_replacement_without_rereading_source(env):
+    result = create(env)
+    table = workspace_owner._record_result_envelopes_table()
+    with env[0].begin() as session:
+        session.execute(table.update().values(id="replaced-envelope", envelope_json="{}"))
+    assert create(env)["idempotent"] is True
+    assert len(env[2]) == 1
+    with env[0]() as session:
+        details = json.loads(session.execute(sa.select(QCDefectHistory.details).where(
+            QCDefectHistory.defect_id == result["id"],
+        )).scalar_one())
+    assert details["envelope_id"] == "envelope-1"

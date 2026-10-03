@@ -214,6 +214,11 @@ def _resolve(
         raise AppealManualTargetConflict("人工缺陷对应的结果信封缺失或不唯一")
     row = rows[0]
     locked_envelope_id = _text(row.get("id"), maximum=36)
+    if "envelope_id" in details and (
+        _text(details.get("envelope_id"), maximum=36) is None
+        or details["envelope_id"] != locked_envelope_id
+    ):
+        raise AppealManualTargetConflict("人工缺陷创建时的结果信封已变化")
     envelope_payload, parsed_envelope_id = CanonicalResultStore(
         envelope
     ).load_selected_with_id(
