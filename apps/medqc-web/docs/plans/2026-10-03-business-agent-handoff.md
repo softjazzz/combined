@@ -1,0 +1,138 @@
+# 2026-10-03 业务助手（MedQC）交接文档
+
+本文给接手的开发者或 Agent 使用：说明当前做到哪、怎么跑、怎么测、代码在哪、哪些约束不能破、下一步做什么。更早的交接见 [2026-09-30 工作树交接](2026-09-30-business-agent-worktree-handoff.md)；各专题的验证细节见 `docs/plans/` 下的同名记录，本文只做索引和结论。
+
+## 1. 当前状态
+
+- **分支**：`codex/medqc-business-agent`（独立工作树，位于 `~/.codex/worktrees/medqc-agent/LX888`）。最新提交见 `git log`，**未 push、未合并、未部署**。
+- **完成范围**：
+  - **M1**：病例问答、规则检索与解释、统计下钻、提醒/整改台账只读查询、实名异议反馈、会话恢复与停止、真实知识库（WeKnora）规范检索。
+  - **M2**：参考修改草稿、科室趋势、单病例复检与专项任务的“预览、确认、建任务、回读”、能力说明工具。
+  - **M3**：编码字典只读查询、科室质量分析报告草稿、同病例画像面板入口。
+  - **界面**：对话式面板、Markdown 结构化渲染、问题卡折叠、回答收短并折叠、统计图表（趋势折线与规则排行条形）。
+  - **合并改造**：分析面板与助手合并为“智能助手”，全局常驻入口。
+- **未做**（缺外部条件，详见 [对接清单](2026-10-03-business-agent-external-dependencies.md)）：整改分派、催办、医生本人趋势、EMR 内嵌与写回、主动订阅、SQLBot 自由问数、编码建议/DRG、完整联调环境。
+- **未做**（产品取舍，见 [滚动待办](PROJECT_ROLLING_TODO.md) 顶部两条）：回答“有帮助/不准确”反馈、历史会话与全屏、首页质控/编码/控费页签的“问助手”、管理者消息页签。
+
+## 2. 架构总览
+
+```
+浏览器（Vue 3 + Ant Design Vue）
+  └─ /api/v1/qc-agent/business/*        FastAPI 路由 business_agent.py
+        ├─ 业务工具 BusinessTools（读正式接口、校验、写动作）
+        └─ 模型运行时 agent-runtime（Node，DSH）
+              └─ 通过工具回调到 FastAPI，模型只起草措辞
+```
+
+**核心原则（不能破）**：
+
+1. **数字、状态、原因只来自正式业务接口，由 Python 判定**；模型只写措辞，且回答/草稿/报告里的数值要通过“来源核验”（归一化，09 等于 9；比较或因果措辞逐句拒绝，否定句豁免）。
+2. **写操作必须“预览、用户点击确认、正式接口、回读”**，幂等靠 `qc_business_actions` 表和条件更新；模型没有确认工具。
+3. **授权**：医生只能看被授权的病例，管理者限定在授权科室；会话绑定上下文，切换病例会重置。
+4. **只读优先**：反馈写入开关 `MEDQC_AGENT_FEEDBACK_WRITE_ENABLED` 默认 0；任务写入开关 `MEDQC_AGENT_TASK_WRITE_ENABLED` 只在专用手动应用里为 1。
+
+## 3. 代码地图
+
+### 后端（`backend/`）
+
+| 路径                                                                                       | 作用                                                                                                               |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `app/routers/business_agent.py`                                                            | 路由：会话、对话、回读（含草稿/趋势/报告/编码/能力/动作/规则验收分支）、反馈、动作确认；`contract_errors` 返回 422 |
+| `app/services/qc_agent/business_tools.py`                                                  | 工具定义 `TOOL_DEFINITIONS` 与 `MANAGER_ONLY/DOCTOR_ONLY`，读统计、趋势、跨期比较、规则等                          |
+| `business_drafts.py` / `business_reports.py`                                               | 参考草稿与质量报告：来源与数值核验                                                                                 |
+| `business_charts.py`                                                                       | 图表数据：只整理正式原值（折线/条形），缺失不补零                                                                  |
+| `business_action_flow.py` / `business_action_store.py` / `business_actions.py`             | 复检与专项任务的预览、确认、对账、幂等                                                                             |
+| `business_capabilities.py`                                                                 | 能力说明的唯一来源（可办理/不可办理及原因），改状态须同步改测试                                                    |
+| `business_followups.py` / `business_feedback.py`                                           | 提醒与整改只读查询、实名异议反馈                                                                                   |
+| `business_rule_validation.py` / `business_source_gaps.py`                                  | 规则验收摘要、保存来源缺口安全投影                                                                                 |
+| `business_access.py` / `business_store.py` / `business_reads.py` / `business_documents.py` | 授权、会话存储、病例读取、证据文书定位                                                                             |
+| `alembic/versions/20261002_000045_*`、`20261003_000046_*`                                  | 反馈表、`qc_business_actions` 表                                                                                   |
+| `tests/manual/business_agent_*_app.py`                                                     | 本地手动应用：只读（8003）、任务写入（8023）、验证用                                                               |
+
+### 模型运行时（`agent-runtime/`）
+
+`runtime.mjs`（提示词 INSTRUCTIONS 等、工具回调、规则守卫、`@selected` 别名、4xx 透传、预算与超时）、`business-output.mjs`（各工具给模型的投影，**模型只收索引，完整卡片只在前端展示**）、`server.mjs`（8013 端口）。
+
+### 前端（`src/views/workstation-v4/`）
+
+| 路径                                                                                             | 作用                                                                                            |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `components/WorkstationAssistPanel.vue`                                                          | 智能助手面板外壳：页签、胶囊入口、Ctrl+/、Esc；`availableTabs` 可限定页签                       |
+| `components/WorkstationV4AssistView.vue`                                                         | 病历池里的面板：对话页签、消息“问助手”、内涵质控“问助手”、画像切换                              |
+| `components/GlobalAssistantHost.vue` + `composables/useAssistantRegistry.ts`                     | 布局层全局入口；页面有本地面板时让位                                                            |
+| `components/BusinessAgentDrawer.vue`                                                             | 对话主体（抽屉模式与 `embedded` 内嵌模式），约 1190 行，**上限 1200 行，再加功能先拆分**        |
+| `components/BusinessAgentWelcome.vue` / `BusinessAgentAnswer.vue` / `BusinessAgentChart.vue`     | 欢迎页与待办摘要、Markdown 渲染（不使用 v-html）、图表（内联 SVG 与 HTML 条形）                 |
+| `components/businessAgentPresentation.ts` / `businessAgentMarkdown.ts` / `businessAgentChart.ts` | 步骤摘要与追问建议、Markdown 解析、图表几何                                                     |
+| `composables/useBusinessAgent.ts` / `useBusinessAgentActions.ts`                                 | 会话与流式状态、动作卡确认与刷新                                                                |
+| `styles/business-agent.css`                                                                      | `ba-*` 样式，**只用 `--mq-*` 令牌**；设计规范见 `docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md` |
+| `src/api/businessAgent.ts`                                                                       | 前端接口与类型                                                                                  |
+
+## 4. 数据库与真实数据（已发生的写入）
+
+只发生过用户明确授权的写入，**不得扩大**：
+
+- 迁移 44→45（反馈表）、45→46（`qc_business_actions`）。
+- 一条标注“联调验收”的实名反馈行。
+- 一次真实的单病例复检任务（两次确认只建了一个任务）。
+
+其余联调均为只读。共享库地址、口令等**不写入文档和提交**，只从本地环境读取。
+
+## 5. 怎么跑
+
+> 凭据只来自本机环境与 `backend/.env`；下面只写变量名。
+
+- **一键重启本工作树自己的服务**：`.tmp/0910-full-audit/business-agent-validation-private/restart-own-services-private.ps1`（私有目录，不提交）。它只会停止并重启自己的 8003 只读后端与 8013 运行时，停之前会核对进程命令行，且保持反馈写入关闭。
+- **前端开发服务**：在应用根目录用 `VITE_BACKEND_TARGET=http://127.0.0.1:8003 npx vite --port 3003`。**不要占用 3000/8001**（主服务），Vite 配置了 `strictPort`。
+- **登录**：本地开发用演示账号一键登录；管理员口令只通过环境变量传入，不写文件。
+- **任务写入验证**：`tests/manual/business_agent_task_app.py`（8023，`MEDQC_AGENT_TASK_WRITE_ENABLED=1`），需要用户再次明确授权才可真实写。
+- **运行时需要 Node 24**（含 `zstd`）：本机 codex 运行时自带的 Node 可用，系统 Node 20 会因缺 zstd 失败。
+
+## 6. 怎么测
+
+| 范围     | 命令（在 `apps/medqc-web`）                                           | 备注                                                                                         |
+| -------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 前端聚焦 | `npx vitest run tests/unit/views/workstation-v4/`                     | 当前约 710 项                                                                                |
+| 前端全量 | `npx vitest run`                                                      | 约 1240 项                                                                                   |
+| 类型检查 | `npm run type-check`                                                  | 偶发 Node 崩溃，重跑即可                                                                     |
+| 后端业务 | `py -3.10 -m pytest tests/unit/test_business*.py -q`（在 `backend/`） | 约 230 项；需 `JWT_SECRET` 和指向临时 SQLite 的 `DATABASE_URL`（用一次性测试值，不连共享库） |
+| 运行时   | 用 Node 24 执行 `node --test agent-runtime/*.test.mjs`                | 59 项                                                                                        |
+| e2e      | `tests/e2e/workstation-v4-rules-icd-notifications.spec.ts`            | 需完整后端；已改名但**未运行**                                                               |
+
+**已知坑**：
+
+- **时区**：Git Bash 下 `TZ=Asia/Shanghai` 无效，会导致 `date-utils` 与 `QCOverviewView` 共 3 个用例失败；用 PowerShell 设置 `$env:TZ='Asia/Shanghai'` 重跑即通过。
+- **偶发用例**：`CustomerSampleValidationView.spec.ts` 在全量里偶尔失败 1 个用例，每次不同，单独跑全部通过。
+- **vitest 与被拒绝的 Promise**：对 `vi.fn()` 使用 `mockRejectedValue` 会让测试框架报未处理拒绝；改用普通函数返回拒绝的 Promise。
+- **提交钩子**：`lint-staged` 会对暂存文件执行 eslint --fix 与 prettier，**触碰旧文件会整体重排格式**（如 `ContentQCTab.vue` 一次重排数百行）。只暂存本任务文件；不要对全仓跑 `lint --fix`。
+- **测试里 `data-testid`**：属性会透传到子组件根节点并覆盖其原有值，断言时用透传后的值。
+
+## 7. 开发约束（用户明确要求，必须遵守）
+
+- 不 push、不合并、不部署；不修改主 3000/8001 服务；不启动共享 Worker；不向主开发 Agent 发消息。
+- 共享库写入只做被明确授权的；**患者原文与身份只放 `.tmp/0910-full-audit/*-private`**，不进文档、提交或聊天。
+- 不输出 DSN、密钥或口令。
+- 中文沟通与注释，提交信息用中文，UTF-8 无 BOM、LF；只暂存本任务文件。
+- 不使用宽泛 `any`、`@ts-ignore`，不新增 `.vue.ts` 镜像文件；单个 `.vue` 不超过 1200 行。
+- UI 改版先出设计稿让用户确认，再开发；样式遵循 v7.1 液态玻璃设计文档，只用 `--mq-*` 令牌。
+
+## 8. 设计稿
+
+- 统计图表设计稿、智能助手悬浮入口与提醒集成设计稿为 Claude 设计画布（链接在会话中给出，私有）。稿中有两处与实现不同：快捷键实际是 **Ctrl+/**（Ctrl+K 被 ICD 检索占用）；“有帮助/不准确”未实现。**以滚动待办的完成记录为准**。
+
+## 9. 建议的下一步（按优先级）
+
+1. **搭联调环境并做端到端验收**（对接清单 E8）：病历池、病历详情、管理首页三个入口走一遍，运行 e2e。这是合并前最重要的一步。
+2. **推进整改分派与催办**（E1、E2）：业务价值最大；接入时沿用现有预览确认模式，不新建架构。
+3. **统一各分析页签的视觉**：目前是新壳加旧内容。
+4. **补回答反馈**：需要先有后端接口。
+5. **图表扩展**：只在有正式统计来源时加；若加饼图、多序列或交互，再评估换 ECharts（后端图表数据与渲染器无关，只改 `BusinessAgentChart.vue`）。
+6. **回答长度**：解释类回答约 190 字、列表类约 150 字，已通过提示词和折叠控制；若需更短，先改运行时提示词，注意不得删掉否定条件、时间要求与“依据不足”说明。
+
+## 10. 合并前检查清单
+
+- [ ] 在完整环境完成第 9 节第 1 项并运行 e2e。
+- [ ] 前端全量（上海时区）、类型检查、后端业务测试、运行时测试全部通过。
+- [ ] 确认迁移 45、46 在目标库的执行顺序与回滚方案。
+- [ ] 确认 `MEDQC_AGENT_FEEDBACK_WRITE_ENABLED`、`MEDQC_AGENT_TASK_WRITE_ENABLED` 在目标环境的取值与审批。
+- [ ] 检查没有私有证据、口令或患者信息进入提交（`git diff` 与 `docs/` 抽查）。
+- [ ] 与用户确认外部依赖的对接时间表。
