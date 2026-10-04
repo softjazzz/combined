@@ -113,6 +113,7 @@ vi.mock('@/views/workstation-v4/composables/useBusinessAgent', () => ({
     loading: ref(false),
     error: ref(''),
     activate: mocks.activate,
+    suspend: vi.fn(),
     send: mocks.send,
     stop: vi.fn(),
     reset: vi.fn(),
@@ -541,6 +542,38 @@ describe('管理助手范围选择', () => {
     expect(writeText).toHaveBeenCalledWith('保存结论')
     expect(button.text()).toBe('已复制')
     wrapper.unmount()
+  })
+  it('授权返回前不激活会话（不恢复历史），返回且上下文确定后才激活；授权失败时不激活', async () => {
+    let release: (value: unknown) => void = () => undefined
+    mocks.access.mockImplementation(() => new Promise((resolve) => (release = resolve)))
+    mocks.activate.mockClear()
+    const wrapper = mountDrawer({
+      view: 'manager',
+      institute_id: 'H',
+      department: 'D',
+      care_phase: 'inpatient',
+    })
+    await flushPromises()
+    expect(mocks.activate).not.toHaveBeenCalled()
+    release({ doctor_case_count: 0, manager_scopes: [{ institute_id: 'H', department: 'D' }] })
+    await flushPromises()
+    expect(mocks.activate).toHaveBeenCalledTimes(1)
+    expect(mocks.activate.mock.calls[0][0]).toMatchObject({
+      view: 'manager',
+      department: 'D',
+      care_phase: 'inpatient',
+    })
+    wrapper.unmount()
+
+    mocks.activate.mockClear()
+    mocks.access.mockImplementation(async () => {
+      throw new Error('403')
+    })
+    const failed = mountDrawer({ view: 'manager', institute_id: 'H', department: 'D' })
+    await flushPromises()
+    expect(failed.text()).toContain('访问范围读取失败')
+    expect(mocks.activate).not.toHaveBeenCalled()
+    failed.unmount()
   })
   it('统计卡带图表数据时在卡片内显示图表，没有图表数据时不显示', async () => {
     mocks.managerDrilldown = true
@@ -1049,7 +1082,8 @@ describe('管理助手范围选择', () => {
       .trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('授权病例')
-    expect(mocks.activate).toHaveBeenLastCalledWith({ view: 'doctor' })
+    // 病例尚未选定、上下文不完整时不激活会话（不恢复、不创建）。
+    expect(mocks.activate).not.toHaveBeenCalledWith({ view: 'doctor' })
     wrapper.unmount()
     mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
     const legacy = mountDrawer({ view: 'manager' }, true)

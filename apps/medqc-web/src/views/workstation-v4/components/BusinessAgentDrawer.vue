@@ -84,6 +84,7 @@
             class="ba-scope__select ba-scope__select--wide"
             :options="scopeOptions"
             :loading="accessLoading"
+            :disabled="hostFixed"
             placeholder="选择已授权科室"
             aria-label="机构/科室"
             data-testid="business-agent-manager-scope"
@@ -92,6 +93,7 @@
             v-model:value="carePhase"
             class="ba-scope__select"
             :options="carePhaseOptions"
+            :disabled="hostFixed"
             aria-label="病例范围"
           />
           <a-range-picker
@@ -656,11 +658,11 @@ import {
   type BusinessAgentContext,
   type BusinessAgentReference,
   type BusinessAgentTurn,
-  type BusinessAgentAccess,
   type BusinessEvidenceDocument,
   type BusinessFeedbackPreview,
 } from '@/api/businessAgent'
 import { useBusinessAgent } from '../composables/useBusinessAgent'
+import { useBusinessAgentScope } from '../composables/useBusinessAgentScope'
 import BusinessAgentAnswer from './BusinessAgentAnswer.vue'
 import BusinessAgentChart from './BusinessAgentChart.vue'
 import BusinessAgentWelcome from './BusinessAgentWelcome.vue'
@@ -683,6 +685,10 @@ const props = defineProps<{
   summary?: { pending: number; unread: number } | null
   // 宿主预填输入框（不自动发送）；nonce 变化即视为一次新的预填。
   prefill?: { text: string; nonce: number } | null
+  // 宿主给定的会话边界（病例入口的当前病例）：切换边界即停止旧轮次并使用独立会话；缺省为科室级会话。
+  caseKey?: string
+  // 边界的可读标签，只用于展示。
+  caseLabel?: string
   // 宿主声明可打开的同病例辅助面板；未声明时不显示入口。
   panels?: 'profile'[]
 }>()
@@ -711,117 +717,28 @@ function openProfilePanel() {
     visit_id: current.visit_id,
   })
 }
-const accessScope = ref<BusinessAgentAccess>()
-const accessLoading = ref(false)
-const accessError = ref('')
-const selectedScope = ref('')
-const selectedCase = ref('')
-const selectedView = ref<'doctor' | 'manager'>('manager')
-const activeView = computed(() =>
-  props.allowCaseSelection ? selectedView.value : props.userContext?.view || 'manager',
-)
-const caseOptions = computed(() =>
-  (accessScope.value?.doctor_cases || []).map((record) => ({
-    value: JSON.stringify([record.institute_id, record.patient_id, record.visit_id]),
-    label: `住院 ${record.visit_id} · 患者 ${record.patient_id} · ${record.institute_id}`,
-  })),
-)
-const doctorCase = computed(() =>
-  accessScope.value?.doctor_cases?.find(
-    (record) =>
-      JSON.stringify([record.institute_id, record.patient_id, record.visit_id]) ===
-      selectedCase.value,
-  ),
-)
-const scopeOptions = computed(() =>
-  (accessScope.value?.manager_scopes || []).map((scope) => ({
-    value: JSON.stringify([scope.institute_id, scope.department]),
-    label: `${scope.department} · ${scope.institute_id}`,
-  })),
-)
-const managerScope = computed(() =>
-  accessScope.value?.manager_scopes.find(
-    (scope) => JSON.stringify([scope.institute_id, scope.department]) === selectedScope.value,
-  ),
-)
-let accessGeneration = 0
-watch(
-  open,
-  async (visible) => {
-    const epoch = ++accessGeneration
-    accessScope.value = undefined
-    selectedScope.value = ''
-    selectedCase.value = ''
-    accessError.value = ''
-    accessLoading.value = false
-    if (!visible) return
-    accessLoading.value = true
-    try {
-      const result = await businessAgentApi.access()
-      if (epoch !== accessGeneration) return
-      accessScope.value = result
-      if (props.allowCaseSelection)
-        selectedView.value = result.manager_scopes.length ? 'manager' : 'doctor'
-      const requested = result.manager_scopes.find(
-        (scope) =>
-          scope.institute_id === props.userContext?.institute_id &&
-          scope.department === props.userContext?.department,
-      )
-      const initial =
-        requested || (result.manager_scopes.length === 1 ? result.manager_scopes[0] : undefined)
-      if (initial) selectedScope.value = JSON.stringify([initial.institute_id, initial.department])
-      if (
-        props.allowCaseSelection
-          ? !result.doctor_case_count && !result.manager_scopes.length
-          : props.userContext?.view === 'doctor'
-            ? !result.doctor_case_count
-            : !result.manager_scopes.length
-      )
-        accessError.value = '当前账号没有此入口的明确授权范围。'
-    } catch {
-      if (epoch === accessGeneration) accessError.value = '访问范围读取失败，请确认账号授权配置。'
-    } finally {
-      if (epoch === accessGeneration) accessLoading.value = false
-    }
-  },
-  { immediate: true },
-)
-const carePhase = ref<'inpatient' | 'discharged'>('discharged')
-const dates = ref<[string, string]>()
-const carePhaseOptions = [
-  { value: 'inpatient', label: '在院' },
-  { value: 'discharged', label: '已出院' },
-]
-const context = computed<BusinessAgentContext>(() =>
-  activeView.value === 'doctor'
-    ? props.allowCaseSelection
-      ? { view: 'doctor', ...doctorCase.value }
-      : props.userContext || { view: 'doctor' }
-    : {
-        view: 'manager',
-        institute_id: managerScope.value?.institute_id,
-        department: managerScope.value?.department,
-        care_phase: carePhase.value,
-        completed_from: dates.value ? `${dates.value[0]}T00:00:00+08:00` : undefined,
-        completed_to: dates.value ? `${dates.value[1]}T23:59:59+08:00` : undefined,
-      },
-)
-const canQuery = computed(
-  () =>
-    !!accessScope.value &&
-    !accessError.value &&
-    (context.value.view === 'doctor'
-      ? !!accessScope.value.doctor_case_count &&
-        !!context.value.institute_id &&
-        !!context.value.patient_id &&
-        !!context.value.visit_id &&
-        (!props.allowCaseSelection || !!doctorCase.value)
-      : !!managerScope.value && !!dates.value?.[0] && !!dates.value?.[1]),
-)
+const {
+  accessScope,
+  accessLoading,
+  accessError,
+  selectedScope,
+  selectedCase,
+  selectedView,
+  activeView,
+  hostFixed,
+  caseOptions,
+  scopeOptions,
+  carePhase,
+  carePhaseOptions,
+  dates,
+  context,
+  contextReady,
+  canQuery,
+} = useBusinessAgentScope(props, open)
 const contextLabel = computed(() =>
   context.value.view === 'doctor'
     ? `${context.value.patient_name || '当前患者'} · 住院 ${context.value.visit_id || '未选定'}`
-    : `${context.value.department || '当前账号可见科室'} · 按质控完成时间统计`,
+    : `${context.value.department || '当前账号可见科室'} · 按质控完成时间统计${props.caseLabel ? ` · 来自病例 ${props.caseLabel}` : ''}`,
 )
 const prompts = computed(() =>
   context.value.view === 'doctor'
@@ -876,8 +793,8 @@ function followups(turn: BusinessAgentTurn) {
             : explainReference(intent.reference),
   }))
 }
-const { sessionId, turns, loading, pendingQuestion, error, activate, send, stop, reset } =
-  useBusinessAgent()
+const { sessionId, turns, loading, pendingQuestion, error, activate, suspend, send, stop, reset } =
+  useBusinessAgent(() => props.caseKey || '')
 const feedbackOpen = ref(false)
 const feedbackLoading = ref(false)
 const feedbackSubmitting = ref(false)
@@ -959,11 +876,22 @@ async function submitFeedback() {
     if (epoch === feedbackGeneration) feedbackSubmitting.value = false
   }
 }
+// 打开且授权与上下文都已确定才激活（可能恢复历史会话）；授权读取中或失败时停止旧轮次并清空展示，
+// 不在授权确认前恢复、创建或发送，也不沿用旧身份。边界（病例）变化同样重新激活。
+let activated = false
 watch(
-  context,
-  (value) => {
+  [context, contextReady, () => props.caseKey, open],
+  ([value, ready, , visible]) => {
+    if (!visible) return
     draft.value = ''
-    void activate(value)
+    if (ready) {
+      activated = true
+      void activate(value as BusinessAgentContext)
+    } else if (activated) {
+      // 曾经激活过才需要清理；从未激活（授权尚未返回）时没有任何会话状态，什么也不做。
+      activated = false
+      suspend()
+    }
   },
   { immediate: true, deep: true },
 )
@@ -1139,7 +1067,7 @@ const documentSegments = computed(() => {
     after: chars.slice(document.end).join(''),
   }
 })
-watch([context, open, sessionId], () => {
+watch([context, open, sessionId, () => props.caseKey], () => {
   referenceGeneration += 1
   documentGeneration += 1
   referenceOpen.value = false

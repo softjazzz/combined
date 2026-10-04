@@ -18,6 +18,8 @@
         embedded
         :open="active && accessSettled"
         :user-context="chatContext"
+        :case-key="chatCaseKey"
+        :case-label="chatCaseLabel"
         :panels="['profile']"
         :summary="chatSummary"
         :prefill="chatPrefill"
@@ -794,6 +796,18 @@ const chatContext = computed<BusinessAgentContext>(() => {
     department: scope.department,
     care_phase: String(record.dischargeDate || '').trim() ? 'discharged' : 'inpatient',
   }
+})
+
+// 病例入口的会话边界：切换病例（含同科室）即停止旧轮次并使用独立会话，旧引用与待确认操作不会带入新病例。
+const chatCaseKey = computed(() => {
+  const record = props.selectedRecord
+  return record
+    ? JSON.stringify([record.instituteId, record.patientId, record.visitId || record.id])
+    : ''
+})
+const chatCaseLabel = computed(() => {
+  const visit = props.selectedRecord?.visitId || props.selectedRecord?.id
+  return visit ? `住院 ${visit}` : ''
 })
 
 // 对话页欢迎页的待办摘要：沿用面板上的计数，不另行统计。

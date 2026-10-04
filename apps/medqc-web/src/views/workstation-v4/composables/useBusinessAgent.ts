@@ -6,7 +6,9 @@ import {
 } from '@/api/businessAgent'
 
 // 标签页只保留会话定位；执行历史由 DSH 提供。
-export function useBusinessAgent() {
+// boundary：宿主给定的会话边界（例如病例入口的当前病例）。不同边界使用各自独立的会话定位，
+// 即使发送给后端的上下文相同（管理者只有科室级上下文），切换边界也会停止旧轮次并换新会话。
+export function useBusinessAgent(boundary: () => string = () => '') {
   const sessionId = ref('')
   const turns = ref<BusinessAgentTurn[]>([])
   const loading = ref(false)
@@ -46,12 +48,16 @@ export function useBusinessAgent() {
   }
   function storageScope(context: BusinessAgentContext) {
     const account = currentAccount()
-    return `medqc-business-agent:v2:${JSON.stringify([accountIdentity(account) || account, contextKey(context)])}`
+    const parts = [accountIdentity(account) || account, contextKey(context)]
+    // 无边界时保持原有定位键，已有会话仍可恢复。
+    const scoped = boundary() ? [...parts, boundary()] : parts
+    return `medqc-business-agent:v2:${JSON.stringify(scoped)}`
   }
   function legacySession(context: BusinessAgentContext) {
     const uid = accountIdentity(currentAccount())
     const candidates: { key: string; id: string }[] = []
-    if (!uid) return candidates
+    // 旧版定位没有边界概念，带边界的入口不迁移旧定位。
+    if (!uid || boundary()) return candidates
     for (let index = 0; index < sessionStorage.length; index++) {
       const key = sessionStorage.key(index)
       if (!key?.startsWith('medqc-business-agent:')) continue
@@ -87,6 +93,21 @@ export function useBusinessAgent() {
       if (epoch === generation) error.value = '停止请求未确认，请刷新查看实际执行状态。'
     }
   }
+  // 授权或上下文尚未确定时调用：停止旧轮次并清空展示，不恢复、不创建、不发送。
+  function suspend() {
+    const current = active
+    generation += 1
+    active = undefined
+    current?.controller.abort()
+    if (current) void businessAgentApi.stop(current.sessionId, current.runId).catch(() => undefined)
+    loading.value = false
+    pendingQuestion.value = ''
+    sessionId.value = ''
+    turns.value = []
+    error.value = ''
+    storageKey = ''
+    restorePending = false
+  }
   async function activate(context: BusinessAgentContext) {
     const current = active
     const epoch = ++generation
@@ -94,6 +115,8 @@ export function useBusinessAgent() {
     current?.controller.abort()
     if (current) void businessAgentApi.stop(current.sessionId, current.runId).catch(() => undefined)
     loading.value = false
+    // 旧轮次已被替换：它的待显示问题和迟到响应都不能再出现在新的会话里。
+    pendingQuestion.value = ''
     sessionId.value = ''
     turns.value = []
     error.value = ''
@@ -184,5 +207,5 @@ export function useBusinessAgent() {
   onScopeDispose(() => {
     void stop()
   })
-  return { sessionId, turns, loading, pendingQuestion, error, activate, send, stop, reset }
+  return { sessionId, turns, loading, pendingQuestion, error, activate, suspend, send, stop, reset }
 }
