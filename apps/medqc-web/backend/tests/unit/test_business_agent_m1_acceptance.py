@@ -248,3 +248,10 @@ def test_feedback_http_isolated_submit_replay_and_denial(tmp_path, monkeypatch, 
                 missing_engine.dispose()
     finally:
         engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _writes_enabled(monkeypatch):
+    # 这些用例验证写入逻辑本身；开关默认关闭的行为见 test_business_write_switch.py。
+    monkeypatch.setenv("MEDQC_AGENT_TASK_WRITE_ENABLED", "1")
+    monkeypatch.setenv("MEDQC_AGENT_FEEDBACK_WRITE_ENABLED", "1")

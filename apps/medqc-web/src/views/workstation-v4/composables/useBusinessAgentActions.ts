@@ -40,9 +40,11 @@ export function useBusinessAgentActions(sessionId: Ref<string | undefined>, erro
       if (owner !== sessionId.value) return
       const status = (cause as { response?: { status?: number } })?.response?.status
       error.value =
-        status === 409
-          ? '授权、范围、规则或材料状态已变化，预览已失效；请重新发起预览。本次未提交任务。'
-          : '确认请求未完成，未能确认是否已提交；请点击刷新查看该操作状态，不要重复发起新预览。'
+        status === 423
+          ? '当前环境未启用助手创建质控任务，本次未提交任务；如需复检请在正式任务页面发起。'
+          : status === 409
+            ? '授权、范围、规则或材料状态已变化，预览已失效；请重新发起预览。本次未提交任务。'
+            : '确认请求未完成，未能确认是否已提交；请点击刷新查看该操作状态，不要重复发起新预览。'
     } finally {
       actionBusy.value = ''
     }

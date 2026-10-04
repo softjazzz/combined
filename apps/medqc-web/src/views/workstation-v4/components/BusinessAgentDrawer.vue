@@ -904,6 +904,7 @@ watch([context, sessionId, open], closeFeedback, { deep: true, flush: 'sync' })
 onBeforeUnmount(closeFeedback)
 function feedbackFailure(cause: unknown) {
   const status = (cause as { response?: { status?: number } })?.response?.status
+  if (status === 423) return '当前环境未启用实名异议反馈，本次未提交。'
   if (status === 403 || status === 404) return '反馈对象或授权已失效，请重新读取该问题。'
   if (status === 409) return '结果版本或已提交反馈发生变化，请关闭后重新核对。'
   if (status === 503) return '反馈服务暂不可用，未确认提交成功，请稍后重试。'

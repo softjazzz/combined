@@ -1,6 +1,11 @@
 import { defineComponent } from 'vue'
-import { shallowMount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { flushPromises, shallowMount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// 用普通函数而非 vi.fn：避免测试框架给被拒绝的 Promise 再挂一条无人处理的分支。
+const handler = vi.hoisted(() => ({ run: async (): Promise<unknown> => ({}) }))
+vi.mock('@/api/businessAgent', () => ({ businessAgentApi: { access: () => handler.run() } }))
+
 import WorkstationV4AssistView from '@/views/workstation-v4/components/WorkstationV4AssistView.vue'
 
 // 面板外壳只负责渲染 chat 插槽，便于单独验证“对话”页签的上下文与跨页签请求。
@@ -22,35 +27,55 @@ const ChatStub = defineComponent({
   template: '<div data-testid="chat-stub" />',
 })
 
-function mountView() {
-  return shallowMount(WorkstationV4AssistView, {
-    props: {
-      visible: true,
-      assistTab: 'chat',
-      activeDocType: 'progress_note',
-      documentsList: [],
-      suggestions: [],
-      icdTargetOptions: [],
-      filteredAssistNotifications: [],
-      filteredNotificationOverviewItems: [],
-      overviewDepartments: [],
-      overviewTypes: [],
-      overviewSeverities: [],
-      selectedRecord: {
-        id: 'V',
-        instituteId: 'H',
-        patientId: 'P',
-        visitId: 'V',
-        name: '合成患者',
-      } as never,
-    } as never,
+const RECORD = {
+  id: 'V',
+  instituteId: 'H',
+  patientId: 'P',
+  visitId: 'V',
+  name: '合成患者',
+  department: '外一科',
+  dischargeDate: '2026-09-30',
+}
+
+function baseProps(extra: Record<string, unknown> = {}) {
+  return {
+    visible: true,
+    assistTab: 'chat',
+    activeDocType: 'progress_note',
+    documentsList: [],
+    suggestions: [],
+    icdTargetOptions: [],
+    filteredAssistNotifications: [],
+    filteredNotificationOverviewItems: [],
+    overviewDepartments: [],
+    overviewTypes: [],
+    overviewSeverities: [],
+    selectedRecord: RECORD as never,
+    ...extra,
+  } as never
+}
+
+async function mountView(extra: Record<string, unknown> = {}) {
+  const wrapper = shallowMount(WorkstationV4AssistView, {
+    props: baseProps(extra),
     global: { stubs: { WorkstationAssistPanel: PanelStub, BusinessAgentDrawer: ChatStub } },
   })
+  await flushPromises()
+  return wrapper
 }
 
 describe('智能助手面板的对话页签', () => {
-  it('以内嵌方式沿用当前病例坐标、当前文书和画像入口声明', () => {
-    const chat = mountView().findComponent(ChatStub)
+  beforeEach(() => {
+    handler.run = async () => ({ doctor_case_count: 1, doctor_cases: [] })
+  })
+
+  it('以内嵌方式沿用当前病例坐标、当前文书和画像入口声明', async () => {
+    handler.run = async () => ({
+      doctor_case_count: 1,
+      doctor_cases: [{ institute_id: 'H', patient_id: 'P', visit_id: 'V' }],
+      manager_scopes: [],
+    })
+    const chat = (await mountView()).findComponent(ChatStub)
     expect(chat.props('embedded')).toBe(true)
     expect(chat.props('open')).toBe(true)
     expect(chat.props('panels')).toEqual(['profile'])
@@ -64,8 +89,81 @@ describe('智能助手面板的对话页签', () => {
     })
   })
 
-  it('只响应与当前病例三坐标一致的画像请求，并仅切换页签', () => {
-    const wrapper = mountView()
+  it('授权返回前不初始化对话，避免先按医生身份请求再切换', async () => {
+    let release: (value: unknown) => void = () => undefined
+    handler.run = () => new Promise((resolve) => (release = resolve))
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps(),
+      global: { stubs: { WorkstationAssistPanel: PanelStub, BusinessAgentDrawer: ChatStub } },
+    })
+    await flushPromises()
+    expect(wrapper.findComponent(ChatStub).props('open')).toBe(false)
+    release({ doctor_case_count: 0, manager_scopes: [] })
+    await flushPromises()
+    expect(wrapper.findComponent(ChatStub).props('open')).toBe(true)
+  })
+
+  it('纯管理账号（只有科室授权）进入病例时保留管理者身份和科室授权', async () => {
+    handler.run = async () => ({
+      doctor_case_count: 0,
+      doctor_cases: [],
+      manager_scopes: [{ institute_id: 'H', department: '外一科' }],
+    })
+    const context = (await mountView()).findComponent(ChatStub).props('userContext')
+    expect(context).toEqual({
+      view: 'manager',
+      institute_id: 'H',
+      department: '外一科',
+      care_phase: 'discharged',
+    })
+  })
+
+  it('没有出院日期的病例视为在院，管理者上下文按在院范围', async () => {
+    handler.run = async () => ({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: '外一科' }],
+    })
+    const wrapper = await mountView({ selectedRecord: { ...RECORD, dischargeDate: '' } })
+    expect(wrapper.findComponent(ChatStub).props('userContext')).toMatchObject({
+      view: 'manager',
+      care_phase: 'inpatient',
+    })
+  })
+
+  it('同时有该病例的医生授权时仍按医生模式', async () => {
+    handler.run = async () => ({
+      doctor_case_count: 1,
+      doctor_cases: [{ institute_id: 'H', patient_id: 'P', visit_id: 'V' }],
+      manager_scopes: [{ institute_id: 'H', department: '外一科' }],
+    })
+    const context = (await mountView()).findComponent(ChatStub).props('userContext')
+    expect(context).toMatchObject({ view: 'doctor', patient_id: 'P' })
+  })
+
+  it('管理授权的科室与病例科室不一致时不冒用管理身份，仍按医生模式由后端判定', async () => {
+    handler.run = async () => ({
+      doctor_case_count: 0,
+      manager_scopes: [{ institute_id: 'H', department: '内科' }],
+    })
+    const context = (await mountView()).findComponent(ChatStub).props('userContext')
+    expect(context).toMatchObject({ view: 'doctor' })
+  })
+
+  it('授权读取失败时按医生模式尝试，不阻塞对话', async () => {
+    handler.run = async () => {
+      throw new Error('403')
+    }
+    const chat = (await mountView()).findComponent(ChatStub)
+    expect(chat.props('open')).toBe(true)
+    expect(chat.props('userContext')).toMatchObject({ view: 'doctor' })
+  })
+
+  it('只响应与当前病例三坐标一致的画像请求，并仅切换页签', async () => {
+    handler.run = async () => ({
+      doctor_case_count: 1,
+      doctor_cases: [{ institute_id: 'H', patient_id: 'P', visit_id: 'V' }],
+    })
+    const wrapper = await mountView()
     const chat = wrapper.findComponent(ChatStub)
     chat.vm.$emit('open-panel', {
       panel: 'profile',
@@ -84,25 +182,11 @@ describe('智能助手面板的对话页签', () => {
     expect(wrapper.emitted('open-ai-profile')).toBeUndefined()
   })
 
-  it('待办摘要沿用面板计数，并把未读消息入口交给面板切页签', () => {
-    const wrapper = shallowMount(WorkstationV4AssistView, {
-      props: {
-        visible: true,
-        assistTab: 'chat',
-        contentQCCount: 2,
-        assistBadgeCount: 29,
-        notificationUnreadCount: 30,
-        documentsList: [],
-        suggestions: [],
-        icdTargetOptions: [],
-        filteredAssistNotifications: [],
-        filteredNotificationOverviewItems: [],
-        overviewDepartments: [],
-        overviewTypes: [],
-        overviewSeverities: [],
-        selectedRecord: { id: 'V', instituteId: 'H', patientId: 'P', visitId: 'V' } as never,
-      } as never,
-      global: { stubs: { WorkstationAssistPanel: PanelStub, BusinessAgentDrawer: ChatStub } },
+  it('待办摘要沿用面板计数，并把未读消息入口交给面板切页签', async () => {
+    const wrapper = await mountView({
+      contentQCCount: 2,
+      assistBadgeCount: 29,
+      notificationUnreadCount: 30,
     })
     const chat = wrapper.findComponent(ChatStub)
     expect(chat.props('summary')).toEqual({ pending: 31, unread: 30 })
@@ -110,8 +194,8 @@ describe('智能助手面板的对话页签', () => {
     expect(wrapper.emitted('tab-change')).toEqual([['message']])
   })
 
-  it('预填对话输入并切到对话页签；相同文字再次预填也有新的标记', () => {
-    const wrapper = mountView()
+  it('预填对话输入并切到对话页签；相同文字再次预填也有新的标记', async () => {
+    const wrapper = await mountView()
     const exposed = wrapper.vm as unknown as { prefillChat: (text: string) => void }
     exposed.prefillChat('问一下')
     exposed.prefillChat('问一下')
@@ -129,19 +213,7 @@ describe('智能助手面板的对话页签', () => {
       template: '<div />',
     })
     const wrapper = shallowMount(WorkstationV4AssistView, {
-      props: {
-        visible: true,
-        assistTab: 'content',
-        documentsList: [],
-        suggestions: [],
-        icdTargetOptions: [],
-        filteredAssistNotifications: [],
-        filteredNotificationOverviewItems: [],
-        overviewDepartments: [],
-        overviewTypes: [],
-        overviewSeverities: [],
-        selectedRecord: { id: 'V', instituteId: 'H', patientId: 'P', visitId: 'V' } as never,
-      } as never,
+      props: baseProps({ assistTab: 'content' }),
       global: {
         stubs: {
           WorkstationAssistPanel: AllSlotsPanel,
@@ -150,6 +222,7 @@ describe('智能助手面板的对话页签', () => {
         },
       },
     })
+    await flushPromises()
     wrapper
       .findComponent(ContentStub)
       .vm.$emit('ask-assistant', { ruleId: 'LX0609-01-01-01', ruleName: '首次病程记录' })

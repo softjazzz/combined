@@ -20,7 +20,7 @@ from app.services.qc_agent.business_store import BusinessSessionStore, get_busin
 from app.services.qc_agent.business_reports import ComposeReport
 from app.services.qc_agent.business_tools import BusinessTools, SearchCodes, TrendStatistics, statistics_scope_text, statistics_text, tool_specs
 from app.services.qc_agent import business_feedback
-from app.services.qc_agent import business_action_flow, business_capabilities, business_charts
+from app.services.qc_agent import business_action_flow, business_capabilities, business_charts, business_write_switch
 from app.services.qc_agent.business_action_store import get_action_store
 from app.services.qc_agent.business_actions import ActionConfirmation
 
@@ -124,6 +124,7 @@ async def read_session_feedback(session_id: UUID, reference_id: str = Query(...,
 
 @router.post("/sessions/{session_id}/feedback")
 async def submit_session_feedback(session_id: UUID, payload: business_feedback.FeedbackSubmit, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access), feedback_store=Depends(business_feedback.get_feedback_store)):
+    business_write_switch.require_feedback_write()
     metadata = store.get(str(session_id), user)
     target = await run_in_threadpool(business_feedback.resolve_target, metadata, user, access, payload.reference_id)
     data = await run_in_threadpool(feedback_store.submit, uid=metadata["owner_id"], session_id=str(session_id), target=target, payload=payload)
@@ -215,7 +216,8 @@ async def get_reference(session_id: UUID, reference_id: str, request: Request, u
 
 @router.post("/sessions/{session_id}/actions/{action_id}/confirm")
 async def confirm_action(session_id: UUID, action_id: UUID, payload: ActionConfirmation, request: Request, user: dict = Depends(get_current_user), store: BusinessSessionStore = Depends(get_business_store), access: BusinessAccess = Depends(get_business_access), actions=Depends(get_action_store)):
-    # 确认只来自用户按钮的独立请求；模型没有确认工具。
+    # 确认只来自用户按钮的独立请求；模型没有确认工具。写入开关关闭时即使已有预览也不提交。
+    business_write_switch.require_task_write()
     metadata = store.get(str(session_id), user)
     access.require_context(user, BusinessContext.model_validate(metadata["context"]))
     async with api_client(request) as client:

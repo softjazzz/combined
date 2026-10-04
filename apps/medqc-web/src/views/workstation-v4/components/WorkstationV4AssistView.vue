@@ -16,7 +16,7 @@
     <template #chat="{ active }">
       <BusinessAgentDrawer
         embedded
-        :open="active"
+        :open="active && accessSettled"
         :user-context="chatContext"
         :panels="['profile']"
         :summary="chatSummary"
@@ -640,7 +640,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import {
   CheckOutlined,
   EyeOutlined,
@@ -653,7 +653,8 @@ import {
 
 import WorkstationAssistPanel from './WorkstationAssistPanel.vue'
 import BusinessAgentDrawer from './BusinessAgentDrawer.vue'
-import type { BusinessAgentContext } from '@/api/businessAgent'
+import { businessAgentApi } from '@/api/businessAgent'
+import type { BusinessAgentAccess, BusinessAgentContext } from '@/api/businessAgent'
 import QCResultTab from './QCResultTab.vue'
 import ContentQCTab from './ContentQCTab.vue'
 import ICDSearchPanel from './ICDSearchPanel.vue'
@@ -746,15 +747,54 @@ const emit = defineEmits<{
   'apply-icd-code': [ICDCodeDetail]
 }>()
 
-// 对话页签沿用详情页同一病例坐标；未选病例时面板本身不渲染。
-const chatContext = computed<BusinessAgentContext>(() => ({
-  view: 'doctor',
-  institute_id: props.selectedRecord?.instituteId,
-  patient_id: props.selectedRecord?.patientId,
-  visit_id: props.selectedRecord?.visitId || props.selectedRecord?.id,
-  patient_name: props.selectedRecord?.name,
-  document_id: props.activeDocType,
-}))
+// 授权先读后用：授权未返回前不初始化对话，避免先按医生身份请求再被切换而重置会话。
+const access = ref<BusinessAgentAccess | null>(null)
+const accessSettled = ref(false)
+onMounted(() => {
+  businessAgentApi.access().then(
+    (value) => {
+      access.value = value
+      accessSettled.value = true
+    },
+    // 读取失败时按医生身份尝试，由后端给出真实的授权结果。
+    () => {
+      accessSettled.value = true
+    },
+  )
+})
+
+// 对话页签沿用详情页同一病例坐标。账号对该病例没有医生授权、但对其所在科室有管理授权时，
+// 保留管理者身份（科室问数），不再强行按医生模式请求而被拒绝。
+const chatContext = computed<BusinessAgentContext>(() => {
+  const record = props.selectedRecord
+  const visitId = record?.visitId || record?.id
+  const doctor: BusinessAgentContext = {
+    view: 'doctor',
+    institute_id: record?.instituteId,
+    patient_id: record?.patientId,
+    visit_id: visitId,
+    patient_name: record?.name,
+    document_id: props.activeDocType,
+  }
+  const granted = access.value
+  if (!record || !granted) return doctor
+  const doctorAllowed = !!granted.doctor_cases?.some(
+    (item) =>
+      item.institute_id === record.instituteId &&
+      item.patient_id === record.patientId &&
+      item.visit_id === visitId,
+  )
+  const scope = granted.manager_scopes?.find(
+    (item) => item.institute_id === record.instituteId && item.department === record.department,
+  )
+  if (doctorAllowed || !scope) return doctor
+  return {
+    view: 'manager',
+    institute_id: scope.institute_id,
+    department: scope.department,
+    care_phase: String(record.dischargeDate || '').trim() ? 'discharged' : 'inpatient',
+  }
+})
 
 // 对话页欢迎页的待办摘要：沿用面板上的计数，不另行统计。
 const chatSummary = computed(() => ({

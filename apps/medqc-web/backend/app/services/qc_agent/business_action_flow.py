@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import business_reads
+from . import business_reads, business_write_switch
 from .business_action_store import PREVIEWED, REJECTED, SUBMITTED, SUBMITTING, UNKNOWN, BusinessActionStore
 from .business_actions import (
     ActionConfirmation, ActionPreview, ActionRecordRef, ActionRequest, MaterialVersion,
@@ -137,6 +137,8 @@ def _sync_preview(metadata, user, access, operation, rule_ids, identities):
 
 
 async def create_preview(store, action_store: BusinessActionStore, metadata, user, access, operation, rule_ids, record_references=None) -> dict:
+    # 写入未启用时不生成点了也无法执行的确认卡，直接说明原因。
+    business_write_switch.require_task_write()
     identities = _identities(metadata, operation, record_references)
     preview, baseline, titles = await run_in_threadpool(_sync_preview, metadata, user, access, operation, rule_ids, identities)
     action_id = str(uuid4())

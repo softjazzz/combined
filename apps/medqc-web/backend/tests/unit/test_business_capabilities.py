@@ -1,4 +1,5 @@
 """能力说明：只列已接通操作，未接通事项给原因；回读一致。"""
+import pytest
 from app.services.qc_agent import business_capabilities as caps
 
 
@@ -37,3 +38,10 @@ def test_capability_tool_binds_and_rereads(tmp_path, monkeypatch):
     url = f"/business/sessions/{session['session_id']}"
     card = client.post(url + "/tools/read_action_capabilities", json={}).json()["references"][0]
     assert client.get(url + "/references/" + card["id"]).json() == card
+
+
+@pytest.fixture(autouse=True)
+def _writes_enabled(monkeypatch):
+    # 这些用例验证写入逻辑本身；开关默认关闭的行为见 test_business_write_switch.py。
+    monkeypatch.setenv("MEDQC_AGENT_TASK_WRITE_ENABLED", "1")
+    monkeypatch.setenv("MEDQC_AGENT_FEEDBACK_WRITE_ENABLED", "1")

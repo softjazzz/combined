@@ -831,6 +831,45 @@ describe('管理助手范围选择', () => {
     expect(wrapper.text()).not.toContain('正式任务')
     wrapper.unmount()
   })
+  it('写入开关关闭时确认提示未启用且不显示成功', async () => {
+    mocks.history = [
+      {
+        run_id: 'action',
+        question: '复检',
+        answer: '预览',
+        references: [
+          {
+            id: 'action:1',
+            kind: 'action',
+            action_id: '1',
+            title: '单病例复检',
+            status: 'previewed',
+            allowed: true,
+            confirmation_hash: 'b'.repeat(64),
+            expires_at: new Date(Date.now() + 600000).toISOString(),
+            text: '待确认',
+          },
+        ],
+        status: 'completed',
+        elapsed_ms: 0,
+        tool_calls: 1,
+      },
+    ]
+    mocks.access.mockResolvedValue({ doctor_case_count: 1, manager_scopes: [] })
+    mocks.confirmAction.mockRejectedValue({ response: { status: 423 } })
+    const wrapper = mountDrawer({
+      view: 'doctor',
+      institute_id: 'H',
+      patient_id: 'P',
+      visit_id: 'V',
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="business-agent-action-confirm"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前环境未启用助手创建质控任务，本次未提交任务')
+    expect(wrapper.text()).not.toContain('已创建正式任务')
+    wrapper.unmount()
+  })
   it('医生不合规问题可请求参考草稿，草稿卡复制后提示不等于整改', async () => {
     const draftText = '参考草稿：不替代正式保存建议\n草稿：\n【待医生补充：检查原因】'
     mocks.history = [

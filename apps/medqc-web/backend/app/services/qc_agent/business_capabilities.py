@@ -1,6 +1,8 @@
 """助手可办理能力的权威说明：只列出已接通的操作，未接通的给出明确原因，不放静默无效入口。"""
 from __future__ import annotations
 
+from .business_write_switch import FEEDBACK_SWITCH, TASK_SWITCH, enabled
+
 # 每项均对应已核查的真实调用链；状态变化须同步修改此表及其测试。
 AVAILABLE = {
     "doctor": [
@@ -28,10 +30,24 @@ UNAVAILABLE = [
 ]
 
 
+# 受写入开关控制的能力：开关关闭时从“可办理”移到“暂不可办理”，避免说明与实际不一致。
+SWITCHED = {
+    "单病例复检预览": (TASK_SWITCH, "当前环境未启用助手创建质控任务，请在正式任务页面发起"),
+    "专项质控任务预览": (TASK_SWITCH, "当前环境未启用助手创建质控任务，请在正式任务页面发起"),
+    "异议反馈": (FEEDBACK_SWITCH, "当前环境未启用实名异议反馈写入"),
+}
+
+
 def capabilities(view: str) -> dict:
-    available = AVAILABLE.get(view, [])
+    available, unavailable = [], list(UNAVAILABLE)
+    for name, note in AVAILABLE.get(view, []):
+        switch = SWITCHED.get(name)
+        if switch and not enabled(switch[0]):
+            unavailable.insert(0, (name, switch[1]))
+        else:
+            available.append((name, note))
     lines = ["可办理：", *[f"· {name}：{note}" for name, note in available], "", "暂不可办理：",
-             *[f"· {name}：{reason}" for name, reason in UNAVAILABLE]]
-    return {"available": [name for name, _ in available], "unavailable": [{"name": name, "reason": reason} for name, reason in UNAVAILABLE],
+             *[f"· {name}：{reason}" for name, reason in unavailable]]
+    return {"available": [name for name, _ in available], "unavailable": [{"name": name, "reason": reason} for name, reason in unavailable],
             "references": [{"id": f"capabilities:{view}", "kind": "evidence", "title": "助手可办理事项说明",
                             "locator": "按当前已接通的业务服务说明；不可办理事项不提供入口", "text": "\n".join(lines)}]}

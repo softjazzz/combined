@@ -213,3 +213,10 @@ def test_tool_specs_split_preview_by_view():
     from app.services.qc_agent.business_tools import tool_specs
     assert "preview_recheck" in {s["name"] for s in tool_specs("doctor")} and "preview_recheck" not in {s["name"] for s in tool_specs("manager")}
     assert "preview_specialist_task" in {s["name"] for s in tool_specs("manager")} and "preview_specialist_task" not in {s["name"] for s in tool_specs("doctor")}
+
+
+@pytest.fixture(autouse=True)
+def _writes_enabled(monkeypatch):
+    # 这些用例验证写入逻辑本身；开关默认关闭的行为见 test_business_write_switch.py。
+    monkeypatch.setenv("MEDQC_AGENT_TASK_WRITE_ENABLED", "1")
+    monkeypatch.setenv("MEDQC_AGENT_FEEDBACK_WRITE_ENABLED", "1")
