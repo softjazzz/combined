@@ -164,7 +164,7 @@ def test_formal_rejection_is_recorded_and_not_resubmitted(env):
     assert len(env["formal"].posts) == 1
 
 
-def test_unknown_result_reconciles_only_unique_match_without_resubmit(env):
+def test_unknown_result_never_claims_unproven_unique_match_or_resubmits(env):
     url, _ = session(env, {"view": "doctor", **IDENTITY})
     env["formal"].create = lambda body: httpx.Response(502)
     card = preview(env, url)["references"][0]
@@ -178,7 +178,7 @@ def test_unknown_result_reconciles_only_unique_match_without_resubmit(env):
     assert env["client"].get(f"{url}/actions/{card['action_id']}").json()["status"] == "unknown"
     env["formal"].listing = [matching]
     view = env["client"].get(f"{url}/actions/{card['action_id']}").json()
-    assert view["status"] == "submitted" and view["job_id"] == "job-9" and len(env["formal"].posts) == 1
+    assert view["status"] == "unknown" and view["job_id"] is None and len(env["formal"].posts) == 1
 
 
 def test_completed_job_shows_saved_before_and_after_without_rejudging(env):
@@ -220,3 +220,103 @@ def _writes_enabled(monkeypatch):
     # 这些用例验证写入逻辑本身；开关默认关闭的行为见 test_business_write_switch.py。
     monkeypatch.setenv("MEDQC_AGENT_TASK_WRITE_ENABLED", "1")
     monkeypatch.setenv("MEDQC_AGENT_FEEDBACK_WRITE_ENABLED", "1")
+
+
+@pytest.mark.parametrize("response", [httpx.Response(200, text="not-json"), httpx.Response(200, json=[1]),
+    httpx.Response(200, json={"data": []}), httpx.Response(200, json=None)])
+def test_invalid_creation_receipt_is_unknown_and_never_resubmitted(env, response):
+    url, metadata = session(env, {"view": "doctor", **IDENTITY})
+    env["formal"].create = lambda body: response
+    card = preview(env, url)["references"][0]
+    endpoint = f"{url}/actions/{card['action_id']}"
+    payload = {"confirmed": True, "confirmation_hash": card["confirmation_hash"]}
+    first = env["client"].post(endpoint + "/confirm", json=payload)
+    assert first.status_code == 200 and first.json()["status"] == "unknown"
+    for result in (env["client"].get(endpoint), env["client"].post(endpoint + "/confirm", json=payload)):
+        assert result.status_code == 200 and result.json()["status"] == "unknown"
+    row = env["actions"].get(action_id=card["action_id"], owner_id=USER["id"], session_id=metadata["session_id"])
+    assert row["status"] == "unknown" and row["job_id"] is None
+    assert len(env["formal"].posts) == 1
+
+
+@pytest.mark.parametrize("age,expected", [(0, "submitting"), (61, "unknown")])
+def test_interrupted_claim_expires_to_unknown_without_resubmission(env, age, expected):
+    from datetime import datetime, timedelta, timezone
+    url, metadata = session(env, {"view": "doctor", **IDENTITY})
+    card = preview(env, url)["references"][0]
+    store = env["actions"]
+    assert store.claim(action_id=card["action_id"], owner_id=USER["id"], session_id=metadata["session_id"])
+    with store.session_factory() as db:
+        db.execute(store.table.update().where(store.table.c.id == card["action_id"]).values(
+            claimed_at=datetime.now(timezone.utc) - timedelta(seconds=age)))
+        db.commit()
+    endpoint = f"{url}/actions/{card['action_id']}"
+    assert env["client"].get(endpoint).json()["status"] == expected
+    response = env["client"].post(endpoint + "/confirm", json={"confirmed": True, "confirmation_hash": card["confirmation_hash"]})
+    assert response.json()["status"] == expected and env["formal"].posts == []
+
+
+def test_late_valid_receipt_can_resolve_expired_claim(env):
+    url, metadata = session(env, {"view": "doctor", **IDENTITY})
+    card = preview(env, url)["references"][0]
+    def expire_then_reply(body):
+        assert env["actions"].finish(action_id=card["action_id"], status="unknown", message="回执尚未确认")
+        return httpx.Response(200, json={"data": {"id": "job-1"}})
+    env["formal"].create = expire_then_reply
+    result = env["client"].post(f"{url}/actions/{card['action_id']}/confirm",
+        json={"confirmed": True, "confirmation_hash": card["confirmation_hash"]})
+    assert result.json()["status"] == "submitted" and result.json()["job_id"] == "job-1"
+    assert len(env["formal"].posts) == 1
+
+
+@pytest.mark.parametrize("code", [500, 502, 503, 504])
+def test_all_server_errors_are_unknown_not_rejected(env, code):
+    url, _ = session(env, {"view": "doctor", **IDENTITY})
+    env["formal"].create = lambda body: httpx.Response(code, json=["unexpected"])
+    card = preview(env, url)["references"][0]
+    result = env["client"].post(f"{url}/actions/{card['action_id']}/confirm",
+        json={"confirmed": True, "confirmation_hash": card["confirmation_hash"]})
+    assert result.status_code == 200 and result.json()["status"] == "unknown"
+
+
+@pytest.mark.parametrize("candidate", [
+    {"record_refs": [OTHER]},
+    {"record_refs": [IDENTITY], "scope": "running"},
+    {"record_refs": [IDENTITY], "task_runtime": "another-version"},
+    {"record_refs": [IDENTITY]},
+])
+def test_unknown_never_uses_similar_scope_as_request_identity(env, candidate):
+    url, _ = session(env, {"view": "doctor", **IDENTITY})
+    env["formal"].create = lambda body: httpx.Response(502)
+    env["formal"].listing = [{"id": "another-request", "draft_ids": [RULE], "total_records": 1,
+                               "created_at": "2999-01-01T00:00:00", **candidate}]
+    card = preview(env, url)["references"][0]
+    response = env["client"].post(f"{url}/actions/{card['action_id']}/confirm",
+        json={"confirmed": True, "confirmation_hash": card["confirmation_hash"]})
+    assert response.json()["status"] == "unknown" and response.json()["job_id"] is None
+    assert len(env["formal"].posts) == 1
+
+
+def test_commit_failure_after_formal_success_does_not_claim_no_submission(env):
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy.exc import OperationalError
+    url, metadata = session(env, {"view": "doctor", **IDENTITY})
+    card = preview(env, url)["references"][0]
+    store = env["actions"]
+    engine = store.session_factory.kw["bind"]
+    def fail_finish(_conn, _cursor, statement, parameters, _context, _many):
+        if statement.startswith("UPDATE") and "submitted" in parameters:
+            raise OperationalError(statement, parameters, RuntimeError("synthetic write failure"))
+    sa.event.listen(engine, "before_cursor_execute", fail_finish)
+    try:
+        response = env["client"].post(f"{url}/actions/{card['action_id']}/confirm",
+            json={"confirmed": True, "confirmation_hash": card["confirmation_hash"]})
+        assert response.status_code == 503 and "未提交任务" not in response.text
+    finally:
+        sa.event.remove(engine, "before_cursor_execute", fail_finish)
+    with store.session_factory() as db:
+        db.execute(store.table.update().where(store.table.c.id == card["action_id"]).values(
+            claimed_at=datetime.now(timezone.utc) - timedelta(seconds=61)))
+        db.commit()
+    result = env["client"].get(f"{url}/actions/{card['action_id']}")
+    assert result.json()["status"] == "unknown" and len(env["formal"].posts) == 1

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
+from unicodedata import normalize
 from typing import Literal
 
 from fastapi import HTTPException
@@ -13,12 +15,43 @@ EXCERPT_CHARS = 300
 CONCLUSION_CHARS = 600
 DRAFT_NOTE = "参考草稿：仅依据本次已读取的保存证据摘录起草，不替代正式保存建议；复制或采用草稿不等于整改完成，需医生核对原文后在病历系统中自行书写。"
 PLACEHOLDER_PREFIX = "待医生补充"
-_NUMBER = re.compile(r"\d+")
+# 不拆分小数、符号及科学计数；Decimal比较避免浮点舍入。
+_NUMBER = re.compile(r"[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?")
+_DATE = re.compile(r"(?<!\d)(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?(?!\d)")
+_TIME = re.compile(r"(?<!\d)(\d{1,2})[:时](\d{1,2})(?:[:分](\d{1,2})秒?|分)?(?!\d)")
+_CLAUSE = re.compile(r"[，,。；;！!？?\n]+")
 
 
-def _numbers(text: str) -> list[str]:
-    """按数值比较，08 与 8 视为同一数，避免日期格式差异误拒。"""
-    return [str(int(value)) for value in _NUMBER.findall(text)]
+def _without_dates(text: str) -> tuple[str, set[tuple]]:
+    text = normalize("NFKC", text).replace("−", "-")
+    dates = set()
+    def take(kind):
+        def replace(match):
+            dates.add((kind, *(int(value) if value is not None else 0 for value in match.groups())))
+            return " "
+        return replace
+    return _TIME.sub(take("time"), _DATE.sub(take("date"), text)), dates
+
+
+def _decimal(value: str) -> Decimal:
+    try:
+        return Decimal(value.replace(",", ""))
+    except InvalidOperation as exc:
+        raise HTTPException(422, "草稿含无法核验的数值，请保留来源原文或标为待医生补充") from exc
+
+
+def _numbers(text: str) -> set:
+    remaining, dates = _without_dates(text)
+    return dates | {("number", _decimal(value)) for value in _NUMBER.findall(remaining)}
+
+
+def _numeric_clauses(text: str) -> list[str]:
+    remaining, _ = _without_dates(text)
+    # 数值所在分句原文一起核对，不能将另一个字段/药物的相同数值借来使用。
+    protected = _NUMBER.sub(lambda m: "⟦" + str(_decimal(m.group())) + "⟧", remaining)
+    return [re.sub(r"\s+", "", part).strip("：:") for part in _CLAUSE.split(protected) if "⟦" in part]
+
+
 _PLACEHOLDER_LEAD = re.compile(r"^(?:[\s（(【\[]*待医生补充[\s）)】\]：:，,]*)+")
 
 
@@ -90,6 +123,9 @@ def validate_segments(segments: list[DraftSegment], evidence: list[dict], sugges
         unsupported = [number for number in numbers if number not in source_numbers]
         if unsupported:
             raise HTTPException(422, f"第{index}段含所引证据未出现的数值，请改为待医生补充")
+        source_clauses = _numeric_clauses(source)
+        if any(not any(re.search(re.escape(clause) + r"(?![A-Za-zµμ/%])", original) for original in source_clauses) for clause in _numeric_clauses(segment.text)):
+            raise HTTPException(422, f"第{index}段数值所在分句须沿用所引来源原文（含字段与单位），不能拼接或改写；无法确认时请去掉数值并标为待医生补充")
 
 
 def draft_card_text(reference: dict, segments: list[DraftSegment]) -> str:

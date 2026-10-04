@@ -46,7 +46,7 @@ def test_saved_conclusion_is_position_zero_source(tmp_path, monkeypatch):
     assert facts["evidence"][0] == {"evidence_position": 0, "source_type": "saved_conclusion", "record_time": None,
                                     "excerpt": "报告后24小时内未记录，间隔16.01小时"}
     ok = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id, "segments": [
-        {"kind": "fact", "text": "保存结论记录间隔16.01小时。", "evidence_positions": [0]}]})
+        {"kind": "fact", "text": "间隔16.01小时。", "evidence_positions": [0]}]})
     assert ok.status_code == 200 and "［依据保存结论］" in ok.json()["references"][0]["text"]
     # 结论里的数值不能挂到未包含该数值的证据上。
     bad = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id, "segments": [
@@ -133,3 +133,34 @@ def test_fact_dates_compare_by_value_not_leading_zero():
     from app.services.qc_agent import business_drafts as drafts
     evidence = drafts.draft_evidence([{"evidence_excerpt": "检查于2025-08-03完成", "record_time": "2025-08-03 08:05"}])
     drafts.validate_segments([drafts.DraftSegment(kind="fact", text="2025年8月3日8时5分完成检查", evidence_positions=[1])], evidence)
+
+@pytest.mark.parametrize("source,text", [
+    ("剂量为0.5 mg。", "剂量为5 mg。"),
+    ("剂量为0.5 mg。", "剂量为5.0 mg。"),
+    ("数值为-0.5。", "数值为0.5。"),
+    ("剂量为0.5 mg。", "剂量为0.5 g。"),
+    ("剂量为0.5 mg，用药5天。", "5 mg。"),
+    ("剂量为0.5 mg。", "剂量为0.5 m。"),
+    ("数值为+0.5。", "数值为-0.5。"),
+    ("剂量为1,000 mg。", "0 mg。"),
+    ("数值为−0.5。", "数值为0.5。"),
+    ("甲药剂量为0.5 mg，乙药剂量为5 mg。", "甲药剂量为5 mg。"),
+])
+def test_numeric_fact_cannot_change_value_unit_or_field(tmp_path, monkeypatch, source, text):
+    saved = saved_payload()
+    saved["items"][0]["evidence"] = [{"evidence_excerpt": source}]
+    client, url, store, metadata, user = build(tmp_path, monkeypatch, saved)
+    result_id = viewed(client, url)
+    response = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id,
+        "segments": [{"kind": "fact", "text": text, "evidence_positions": [1]}]})
+    assert response.status_code == 422
+    assert not any(ref["kind"] == "draft" for ref in store.get(metadata["session_id"], user)["references"].values())
+
+
+@pytest.mark.parametrize("text", ["剂量为0.5 mg。", "数值为-0.5。", "数值为+0.5。", "间隔16.01小时。"])
+def test_supported_complete_numeric_clause_is_preserved(text):
+    from app.services.qc_agent import business_drafts as drafts
+    evidence = drafts.draft_evidence([{"evidence_excerpt": text}])
+    segments = [drafts.DraftSegment(kind="fact", text=text, evidence_positions=[1])]
+    drafts.validate_segments(segments, evidence)
+    assert text + "［依据保存证据1］" in drafts.draft_card_text({}, segments)

@@ -23,6 +23,8 @@ from .business_schemas import BusinessContext
 from .business_store import owner_id
 
 PREVIEW_MINUTES = 15
+# 正式HTTP客户端超时15秒；超过该宽限只标记未知，绝不重新取得提交权。
+SUBMISSION_GRACE_SECONDS = 60
 SPECIALIST_LIMIT = 20
 TASK_PATH = "/api/v1/qc/sichuan/workspace/batch-jobs"
 ACTION_LABELS = {"single_recheck": "单病例复检", "specialist_batch": "专项质控任务"}
@@ -221,9 +223,9 @@ async def confirm(store, action_store: BusinessActionStore, client: httpx.AsyncC
         response = await client.post(TASK_PATH, json=_formal_body(preview.model_copy(update={"formal_request": formal})))
     except httpx.HTTPError:
         await run_in_threadpool(action_store.finish, action_id=action_id, status=UNKNOWN,
-                                message="提交时连接中断，无法确认是否已创建任务；未自动重试，刷新时将按本人任务列表回查")
+                                message="提交时连接中断，无法确认是否已创建任务；未自动重试，请在正式质控记录核对，不能根据相似任务确认归属")
         return await view(action_store, client, metadata, user, action_id)
-    if response.status_code in {500, 502, 504}:
+    if response.status_code >= 500:
         await run_in_threadpool(action_store.finish, action_id=action_id, status=UNKNOWN,
                                 message=f"正式任务服务返回 HTTP {response.status_code}，无法确认是否已创建任务；未自动重试")
         return await view(action_store, client, metadata, user, action_id)
@@ -232,21 +234,35 @@ async def confirm(store, action_store: BusinessActionStore, client: httpx.AsyncC
         await run_in_threadpool(action_store.finish, action_id=action_id, status=REJECTED,
                                 message=f"正式任务服务拒绝创建（HTTP {response.status_code}）" + (f"：{detail}" if detail else ""))
         return await view(action_store, client, metadata, user, action_id)
-    data = (response.json() or {}).get("data") or {}
+    data = _response_data(response)
     job_id = data.get("id") if isinstance(data, dict) else None
     if not isinstance(job_id, str) or not job_id:
-        await run_in_threadpool(action_store.finish, action_id=action_id, status=UNKNOWN, message="正式任务服务未返回任务标识；未自动重试")
+        await run_in_threadpool(action_store.finish, action_id=action_id, status=UNKNOWN, message="正式任务服务未返回有效任务回执；提交结果未知，未自动重试，请在正式质控记录核对")
     else:
         message = "正式任务服务复用了同范围排队或运行中的任务" if data.get("idempotency_reused") else None
-        await run_in_threadpool(action_store.finish, action_id=action_id, status=SUBMITTED, job_id=job_id, message=message)
+        finished = await run_in_threadpool(action_store.finish, action_id=action_id, status=SUBMITTED, job_id=job_id, message=message)
+        if not finished:
+            # 刷新可能已将超时的submitting转为unknown；同一次POST的有效回执仍是可靠归属依据。
+            await run_in_threadpool(action_store.finish, action_id=action_id, status=SUBMITTED, job_id=job_id,
+                                    message=message, expected=UNKNOWN)
     return await view(action_store, client, metadata, user, action_id)
 
 
-def _detail(response) -> str:
+def _response_object(response) -> dict:
     try:
-        detail = response.json().get("detail")
-    except ValueError:
-        return ""
+        payload = response.json()
+    except (ValueError, UnicodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _response_data(response) -> dict:
+    data = _response_object(response).get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def _detail(response) -> str:
+    detail = _response_object(response).get("detail")
     return detail if isinstance(detail, str) and len(detail) <= 200 else ""
 
 
@@ -257,40 +273,10 @@ async def _read_job(client, job_id: str) -> dict | None:
         return None
     if response.status_code >= 400:
         return None
-    data = (response.json() or {}).get("data")
-    if not isinstance(data, dict):
+    data = _response_data(response)
+    if data.get("id") != job_id:
         return None
     return {key: data.get(key) for key in ("id", "status", "total_records", "success_count", "failed_count", "error_message", "finished_at")}
-
-
-async def _reconcile(action_store, client, row, preview) -> None:
-    """未知状态只按本人任务列表回查唯一匹配；无法唯一确认时保持未知，不重发。"""
-    try:
-        response = await client.get(TASK_PATH, params={"page": 1, "page_size": 20})
-    except httpx.HTTPError:
-        return
-    if response.status_code >= 400:
-        return
-    items = ((response.json() or {}).get("data") or {}).get("items") or []
-    rules = sorted(preview.request.rule_ids)
-    count = len(preview.request.record_refs)
-    # 列表为客户安全投影，不含病例三坐标，record_ref 亦按任务生成不可对照；
-    # 只认本人在确认后创建、规则集合与病例数相同的唯一候选，多个即保持未知。
-    claimed = row.get("claimed_at")
-    matches = []
-    for item in items:
-        if sorted(item.get("draft_ids") or []) == rules and item.get("total_records") == count:
-            created = item.get("created_at")
-            try:
-                created_at = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                created_at = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
-            if claimed is not None and created_at >= _aware(claimed) - timedelta(seconds=60):
-                matches.append(item.get("id"))
-    if len(matches) == 1 and matches[0]:
-        await run_in_threadpool(action_store.finish, action_id=row["id"], status=SUBMITTED, job_id=matches[0],
-                                message="提交结果曾未知，已按本人任务列表唯一匹配到该任务", expected=UNKNOWN)
 
 
 def _aware(value: datetime) -> datetime:
@@ -301,9 +287,13 @@ async def view(action_store: BusinessActionStore, client: httpx.AsyncClient, met
     owner = owner_id(user)
     row = await run_in_threadpool(action_store.get, action_id=action_id, owner_id=owner, session_id=metadata["session_id"])
     preview, document = _document(row)
-    if row["status"] == UNKNOWN:
-        await _reconcile(action_store, client, row, preview)
-        row = await run_in_threadpool(action_store.get, action_id=action_id, owner_id=owner, session_id=metadata["session_id"])
+    if row["status"] == SUBMITTING:
+        claimed = row.get("claimed_at") or row["updated_at"]
+        if datetime.now(timezone.utc) - _aware(claimed) >= timedelta(seconds=SUBMISSION_GRACE_SECONDS):
+            await run_in_threadpool(action_store.finish, action_id=action_id, status=UNKNOWN,
+                                    message="提交回执未能确认；未自动重试，请在正式质控记录核对")
+            row = await run_in_threadpool(action_store.get, action_id=action_id, owner_id=owner, session_id=metadata["session_id"])
+    # 正式任务列表没有请求关联，规则/数量/时间相同也不能证明归属；unknown保持未知。
     job = await _read_job(client, row["job_id"]) if row.get("job_id") else None
     comparison = None
     if job and job.get("status") in {"completed", "partial_success", "partial"} and preview.request.operation == "single_recheck":

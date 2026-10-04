@@ -37,7 +37,7 @@ class BusinessActionStore:
 
     @staticmethod
     def _unavailable(exc):
-        return HTTPException(503, "动作记录存储尚未就绪或暂不可用，请管理员完成20261003_000046迁移后重试；本次未提交任务")
+        return HTTPException(503, "动作记录存储尚未就绪或暂不可用，请管理员核对存储与20261003_000046迁移；如已确认过操作，提交结果可能未知，请勿重复创建")
 
     def create(self, *, action_id, owner_id, session_id, operation, preview_json, confirmation_hash, expires_at):
         now = datetime.now(timezone.utc)
