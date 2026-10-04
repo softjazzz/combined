@@ -107,6 +107,7 @@
               @toggle-expand-all-sections="toggleExpandAllSections"
               @toggle-section="toggleConcatSection"
               @select-document="selectDocumentByKey"
+              @open-assist-chat="openAssistChat"
             />
           </template>
           <template #frontpage>
@@ -161,6 +162,7 @@
           ref="assistViewRef"
           :visible="assistPanelVisible"
           :assist-tab="assistTab"
+          :active-doc-type="activeDocType"
           :selected-record="selectedRecord"
           :assist-patient-info="assistPatientInfo"
           :content-q-c-count="contentQCCount"
@@ -280,10 +282,7 @@
               <span class="paste-frontpage-preset__title">{{ preset.title }}</span>
               <span class="paste-frontpage-preset__subtitle">{{ preset.subtitle }}</span>
               <span class="paste-frontpage-preset__tags">
-                <span
-                  v-for="tag in preset.tags"
-                  :key="tag"
-                >{{ tag }}</span>
+                <span v-for="tag in preset.tags" :key="tag">{{ tag }}</span>
               </span>
             </button>
           </div>
@@ -296,10 +295,7 @@
           show-count
           :disabled="frontpageGenerating"
         />
-        <div
-          v-if="frontpageGenerating"
-          class="paste-frontpage-progress"
-        >
+        <div v-if="frontpageGenerating" class="paste-frontpage-progress">
           <FrontpageWorkspacePanel
             :generating="frontpageGenerating"
             :post-processing="frontpagePostProcessing"
@@ -322,9 +318,7 @@
           >
             清空
           </a-button>
-          <a-button @click="handlePasteFrontpageCancel">
-            取消
-          </a-button>
+          <a-button @click="handlePasteFrontpageCancel"> 取消 </a-button>
           <a-button
             type="primary"
             :loading="frontpageGenerating"
@@ -403,6 +397,7 @@ import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
+import { useLocalAssistantRegistration } from './composables/useAssistantRegistry'
 import { pasteFrontpagePresets } from './data/pasteFrontpagePresets'
 import {
   canGenerateFrontpageDraft,
@@ -1441,6 +1436,13 @@ const profileAnalyzed = ref(false)
 const profileAnalyzing = ref(false)
 const drgDetailModalVisible = ref(false)
 
+// 助手只能请求打开同一病例的既有画像面板；不自动运行分析。
+// 详情页入口与悬浮入口合并：只打开智能助手面板并停在“对话”页签。
+function openAssistChat() {
+  assistTab.value = 'chat'
+  assistPanelVisible.value = true
+}
+
 function openAiProfilePanel() {
   profileAnalyzing.value = true
   void ensureFullDocumentsLoaded().finally(() => {
@@ -2007,6 +2009,9 @@ const selectedRecord = computed(() => {
       : null)
   )
 })
+
+// 选中病例后本页自带带病例上下文的智能助手面板，布局层的全局助手让位。
+useLocalAssistantRegistration(computed(() => !!selectedRecord.value))
 
 const {
   assistIssues,

@@ -2456,6 +2456,8 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         sa.Column("parent_job_id", sa.String(36)),
         sa.Column("finished_at", sa.DateTime()),
         sa.Column("created_at", sa.DateTime()),
+        sa.Column("filters_json", sa.Text()),
+        sa.Column("record_ids_json", sa.Text()),
     )
     latest = service.build_latest_single_record_result_dto(
         institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
@@ -2802,6 +2804,8 @@ def test_invalid_published_json_type_is_controlled_through_store_and_single_reco
         sa.Column("parent_job_id", sa.String(36)),
         sa.Column("finished_at", sa.DateTime()),
         sa.Column("created_at", sa.DateTime()),
+        sa.Column("filters_json", sa.Text()),
+        sa.Column("record_ids_json", sa.Text()),
     )
     result = service.build_latest_single_record_result_dto(
         institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
@@ -3598,6 +3602,8 @@ def test_stopping_new_execution_keeps_saved_results_readable(monkeypatch, stop_n
         sa.Column("id", sa.String(36)), sa.Column("status", sa.String(20)),
         sa.Column("parent_job_id", sa.String(36)), sa.Column("finished_at", sa.DateTime()),
         sa.Column("created_at", sa.DateTime()),
+        sa.Column("filters_json", sa.Text()),
+        sa.Column("record_ids_json", sa.Text()),
     )
     latest = service.build_latest_single_record_result_dto(
         institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",

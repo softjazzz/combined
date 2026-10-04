@@ -9,9 +9,7 @@
       >
         <ScanOutlined class="text-4xl text-blue-500" />
       </div>
-      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-3">
-        AI 深度画像分析
-      </h3>
+      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-3">AI 深度画像分析</h3>
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 max-w-sm leading-relaxed">
         对病历全文进行深度阅读，构建诊断发生发展时间轴，验证手术闭环完整性，并自动发现首页填报差异。
       </p>
@@ -31,18 +29,8 @@
       class="h-full flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-900/50"
     >
       <div class="relative w-28 h-28 mb-8">
-        <svg
-          class="w-full h-full animate-spin text-blue-500/20"
-          viewBox="0 0 100 100"
-          fill="none"
-        >
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            stroke="currentColor"
-            stroke-width="8"
-          />
+        <svg class="w-full h-full animate-spin text-blue-500/20" viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="8" />
           <path
             d="M50 5 a45 45 0 0 1 45 45"
             stroke="currentColor"
@@ -58,9 +46,7 @@
           </div>
         </div>
       </div>
-      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-2">
-        AI 智能分析中...
-      </h3>
+      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-2">AI 智能分析中...</h3>
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 text-center max-w-[280px]">
         正在深度阅读病历记录并构建诊断时间轴映射...
       </p>
@@ -83,10 +69,7 @@
         </div>
       </div>
     </div>
-    <div
-      v-else
-      class="h-full overflow-hidden flex flex-col"
-    >
+    <div v-else class="h-full overflow-hidden flex flex-col">
       <!-- Dashboard grid -->
       <div class="h-full p-4 overflow-y-auto custom-scrollbar flex flex-col">
         <!-- Stats Cards Removed as per request -->
@@ -106,33 +89,33 @@
                 class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900/30 cursor-pointer hover:shadow-md transition-all"
               >
                 <div class="flex justify-between items-start mb-1">
-                  <span class="font-medium text-red-700 dark:text-red-300 text-sm">高血压3级 极高危</span>
+                  <span class="font-medium text-red-700 dark:text-red-300 text-sm"
+                    >高血压3级 极高危</span
+                  >
                   <ExclamationCircleOutlined class="text-red-500" />
                 </div>
-                <div class="text-xs text-red-500/80">
-                  I10.x00
-                </div>
+                <div class="text-xs text-red-500/80">I10.x00</div>
               </div>
               <div
                 class="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:shadow-md transition-all"
               >
                 <div class="flex justify-between items-start mb-1">
-                  <span class="font-medium text-slate-700 dark:text-slate-200 text-sm">2型糖尿病</span>
+                  <span class="font-medium text-slate-700 dark:text-slate-200 text-sm"
+                    >2型糖尿病</span
+                  >
                 </div>
-                <div class="text-xs text-slate-500">
-                  E11.900
-                </div>
+                <div class="text-xs text-slate-500">E11.900</div>
               </div>
               <div
                 class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-900/30 cursor-pointer hover:shadow-md transition-all"
               >
                 <div class="flex justify-between items-start mb-1">
-                  <span class="font-medium text-yellow-700 dark:text-yellow-300 text-sm">冠心病 (待查)</span>
+                  <span class="font-medium text-yellow-700 dark:text-yellow-300 text-sm"
+                    >冠心病 (待查)</span
+                  >
                   <QuestionCircleOutlined class="text-yellow-500" />
                 </div>
-                <div class="text-xs text-yellow-500/80">
-                  疑似诊断
-                </div>
+                <div class="text-xs text-yellow-500/80">疑似诊断</div>
               </div>
             </div>
           </div>
@@ -167,13 +150,10 @@
                 :src="bodySchematicPng"
                 class="h-[85%] object-contain opacity-90 drop-shadow-lg"
                 alt="Body Map"
-              >
+              />
 
               <!-- Dynamic Hotspots with Staggered Animation -->
-              <template
-                v-for="(marker, index) in currentBodyMarkers"
-                :key="index"
-              >
+              <template v-for="(marker, index) in currentBodyMarkers" :key="index">
                 <!-- Marker Container with Staggered Entry -->
                 <div
                   class="absolute cursor-pointer z-20 transition-all duration-500"
@@ -281,9 +261,7 @@
               </div>
 
               <div class="mb-4">
-                <div class="text-xs text-slate-400 mb-1">
-                  识别问题
-                </div>
+                <div class="text-xs text-slate-400 mb-1">识别问题</div>
                 <p class="text-base font-medium text-slate-700 dark:text-slate-200 leading-relaxed">
                   {{ currentBodyMarkers[activeMarkerIndex].condition }}
                 </p>
@@ -293,13 +271,11 @@
               <div
                 v-if="
                   getRelatedTimelineEvents(currentBodyMarkers[activeMarkerIndex].condition).length >
-                    0
+                  0
                 "
                 class="flex-1 overflow-y-auto custom-scrollbar min-h-0"
               >
-                <div class="text-xs font-semibold text-slate-500 mb-2">
-                  相关诊疗事件
-                </div>
+                <div class="text-xs font-semibold text-slate-500 mb-2">相关诊疗事件</div>
                 <div class="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3">
                   <ul class="space-y-3">
                     <li
@@ -333,9 +309,7 @@
               class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/80 p-8 h-full flex flex-col items-center justify-center text-center text-slate-400 border-dashed"
             >
               <ScanOutlined class="text-4xl mb-3 opacity-20" />
-              <p class="text-sm">
-                点击左侧人体部位<br>查看详细分析
-              </p>
+              <p class="text-sm">点击左侧人体部位<br />查看详细分析</p>
             </div>
           </div>
 
@@ -382,7 +356,8 @@
               </div>
               <span
                 class="bg-slate-50 dark:bg-slate-700/50 text-slate-500 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200 dark:border-slate-600"
-              >{{ profile.diagnosis_timeline.length }} 个事件</span>
+                >{{ profile.diagnosis_timeline.length }} 个事件</span
+              >
             </div>
             <!-- Kanban-style Multi-column Timeline -->
             <div
@@ -520,10 +495,7 @@
                     <ExclamationCircleOutlined class="text-yellow-600 text-xs" />
                     <span class="text-xs text-yellow-600 font-medium">异常指标</span>
                   </div>
-                  <div
-                    v-else
-                    class="flex items-center gap-1"
-                  >
+                  <div v-else class="flex items-center gap-1">
                     <CheckCircleOutlined class="text-green-500 text-xs" />
                     <span class="text-xs text-slate-500">正常</span>
                   </div>
@@ -540,10 +512,7 @@
             :footer="null"
           >
             <a-tabs default-active-key="1">
-              <a-tab-pane
-                key="1"
-                tab="诊断发生发展时间轴"
-              >
+              <a-tab-pane key="1" tab="诊断发生发展时间轴">
                 <div class="max-h-[500px] overflow-y-auto p-4">
                   <a-timeline mode="left">
                     <a-timeline-item
@@ -570,10 +539,7 @@
                   </a-timeline>
                 </div>
               </a-tab-pane>
-              <a-tab-pane
-                key="2"
-                tab="首页填报差异验证"
-              >
+              <a-tab-pane key="2" tab="首页填报差异验证">
                 <div class="max-h-[500px] overflow-y-auto p-4">
                   <div
                     v-if="!profile?.discrepancies || profile.discrepancies.length === 0"
@@ -582,11 +548,7 @@
                     <CheckCircleOutlined class="text-4xl text-green-500 mb-2" />
                     <div>未发现显著填报问题</div>
                   </div>
-                  <a-list
-                    v-else
-                    item-layout="horizontal"
-                    :data-source="profile.discrepancies"
-                  >
+                  <a-list v-else item-layout="horizontal" :data-source="profile.discrepancies">
                     <template #renderItem="{ item }">
                       <a-list-item
                         class="border-b border-slate-100 dark:border-slate-700 px-2 py-3"
@@ -659,6 +621,7 @@ const emit = defineEmits<{
 }>()
 
 const props = defineProps<{
+  scopeKey?: string
   medicalText?: string
   frontpage?: any | null
 }>()
@@ -667,6 +630,14 @@ const frontpage = computed(() => props.frontpage || null)
 
 const profile = ref<any>(null)
 const profileLoading = ref(false)
+let profileGeneration = 0
+let profileController: AbortController | undefined
+function invalidateProfileRequest() {
+  profileGeneration += 1
+  profileController?.abort()
+  profileController = undefined
+  profileLoading.value = false
+}
 
 // Group events by type for the 4-column timeline layout
 const sortOrder = ref<'asc' | 'desc'>('asc')
@@ -929,6 +900,9 @@ const getRelatedTimelineEvents = (markerCondition: string) => {
 const analyzeProfile = async () => {
   if (!props.medicalText) return
 
+  invalidateProfileRequest()
+  const generation = profileGeneration
+  profileController = new AbortController()
   profileLoading.value = true
   try {
     const token = getAccessToken()
@@ -941,6 +915,7 @@ const analyzeProfile = async () => {
 
     const response = await fetch('/api/v1/frontpage/profile/analyze', {
       method: 'POST',
+      signal: profileController.signal,
       headers,
       body: JSON.stringify({
         medical_text: props.medicalText,
@@ -954,6 +929,7 @@ const analyzeProfile = async () => {
     })
 
     const data = await response.json()
+    if (generation !== profileGeneration) return
 
     if (data.success && data.data) {
       // 转换后端数据格式为前端期望的格式
@@ -1062,36 +1038,25 @@ const analyzeProfile = async () => {
 
       message.success('AI 画像分析完成')
       startMarkerAnimation()
-      setTimeout(() => emit('expand'), 500)
+      setTimeout(() => {
+        if (generation === profileGeneration) emit('expand')
+      }, 500)
     } else {
-      profile.value = {
-        diagnosis_timeline: [
-          { date: '2026-01-01', event: '因胸闷心悸入院', type: 'symptom', severity: 'moderate' },
-        ],
-        vital_signs: {},
-        lab_results: {},
-        risk_assessment: {
-          overall_risk_score: 85,
-          risk_level: 'high',
-          primary_risks: [],
-          recommendations: [],
-        },
-        body_markers: [],
-        discrepancies: [],
-      }
-      message.warning('使用模拟分析结果')
+      message.error('画像分析未成功，请重试；未生成分析结果。')
     }
   } catch (error) {
+    if (generation !== profileGeneration) return
     console.error('Profile analysis error:', error)
     message.error('分析失败，请检查网络连接')
   } finally {
-    profileLoading.value = false
+    if (generation === profileGeneration) profileLoading.value = false
   }
 }
 
 watch(
-  () => props.medicalText,
+  () => [props.scopeKey, props.medicalText, props.frontpage],
   () => {
+    invalidateProfileRequest()
     profile.value = null
     isQCModalVisible.value = false
     visibleMarkerIndices.value = []
@@ -1101,6 +1066,7 @@ watch(
 )
 
 onUnmounted(() => {
+  invalidateProfileRequest()
   stopMarkerAnimation()
 })
 </script>

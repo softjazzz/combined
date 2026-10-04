@@ -1443,8 +1443,8 @@ def _normalize_string_list(values: Any) -> List[str]:
     return normalized
 
 
-@lru_cache(maxsize=1)
-def _drafts_table() -> Table:
+@lru_cache(maxsize=2)
+def _drafts_table(*, readonly: bool = False) -> Table:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
     metadata = MetaData()
@@ -1477,12 +1477,13 @@ def _drafts_table() -> Table:
         sa.Column("updated_at", sa.DateTime, nullable=False),
         schema=schema,
     )
-    metadata.create_all(bind=engine, checkfirst=True)
+    if not readonly:
+        metadata.create_all(bind=engine, checkfirst=True)
     return table
 
 
-@lru_cache(maxsize=1)
-def _batch_jobs_table() -> Table:
+@lru_cache(maxsize=2)
+def _batch_jobs_table(*, readonly: bool = False) -> Table:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
     metadata = MetaData()
@@ -1523,8 +1524,9 @@ def _batch_jobs_table() -> Table:
         sa.Column("family_name", sa.String(64)),
         schema=schema,
     )
-    metadata.create_all(bind=engine, checkfirst=True)
-    _sync_batch_job_parent_columns(schema=schema)
+    if not readonly:
+        metadata.create_all(bind=engine, checkfirst=True)
+        _sync_batch_job_parent_columns(schema=schema)
     return table
 
 
@@ -2174,11 +2176,12 @@ class WorkspaceBatchJobListResult:
 
 
 class CustomQCWorkspaceService:
-    def __init__(self) -> None:
+    def __init__(self, *, readonly: bool = False) -> None:
         if engine is None:
             raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
-        self._draft_table = _drafts_table()
-        self._batch_job_table = _batch_jobs_table()
+        # 新只读入口仅构造表定义；旧写入口仍保留既有兼容初始化行为。
+        self._draft_table = _drafts_table(readonly=True) if readonly else _drafts_table()
+        self._batch_job_table = _batch_jobs_table(readonly=True) if readonly else _batch_jobs_table()
         self._record_result_envelope_table = _record_result_envelopes_table()
 
     @staticmethod
@@ -3366,7 +3369,13 @@ class CustomQCWorkspaceService:
         try:
             root_rows = (
                 session.execute(
-                    select(self._batch_job_table)
+                    select(
+                        self._batch_job_table.c.id,
+                        self._batch_job_table.c.filters_json,
+                        self._batch_job_table.c.record_ids_json,
+                        self._batch_job_table.c.finished_at,
+                        self._batch_job_table.c.created_at,
+                    )
                     .join(
                         self._record_result_envelope_table,
                         self._record_result_envelope_table.c.root_job_id
@@ -3403,10 +3412,20 @@ class CustomQCWorkspaceService:
             )
             candidates = []
             for row in root_rows:
-                candidate = self._aggregate_parent_job(
-                    session,
-                    _row_to_batch_job(dict(row)),
-                )
+                # 代次选择只需要任务身份、病例范围和时间，不读取历史结果大字段。
+                # 父任务聚合不改变这些字段；当前病例完成性已由精确 Envelope 确认。
+                candidate = _row_to_batch_job(dict(row))
+                filters = candidate.get("filters") or {}
+                if not all(filters.get(key) for key in ("rule_set_key", "rule_set_version")):
+                    # 仅旧任务缺少 filters 身份时加载 summary，保留逐字段兼容回退。
+                    summary_rows = session.execute(
+                        select(self._batch_job_table.c.summary_json)
+                        .where(self._batch_job_table.c.id == candidate["id"])
+                    ).mappings().all()
+                    summary = _safe_json_loads(
+                        summary_rows[0].get("summary_json") if summary_rows else None, None
+                    )
+                    candidate["summary"] = summary if isinstance(summary, dict) else None
                 if _safe_text(candidate.get("status")).lower() != "completed":
                     # 批次可因其他病历失败、取消或仍在收尾，但精确 Envelope 的
                     # 存在已证明当前病历独立交付完成。这里只投影读取状态，不改库。

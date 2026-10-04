@@ -170,7 +170,8 @@ async function collectFiles(mode) {
     // 静默空转是危险的：此前路径解析失效时该门禁永远报 passed。
     throw new Error(
       `staged 模式解析到 ${textCandidates.length} 个暂存文本文件，但 0 个可读；` +
-        '路径解析可能失效，禁止静默通过',
+        `路径解析可能失效，禁止静默通过；cwd=${ROOT}；repo=${REPO_ROOT}；` +
+        `first=${textCandidates[0]}`,
     )
   }
   return files

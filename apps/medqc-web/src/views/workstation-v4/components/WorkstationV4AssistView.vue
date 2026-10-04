@@ -13,6 +13,20 @@
     @tab-change="emit('tab-change', $event)"
     @refresh-tab="emit('refresh-tab', $event)"
   >
+    <template #chat="{ active }">
+      <BusinessAgentDrawer
+        embedded
+        :open="active && accessSettled"
+        :user-context="chatContext"
+        :case-key="chatCaseKey"
+        :case-label="chatCaseLabel"
+        :panels="['profile']"
+        :summary="chatSummary"
+        :prefill="chatPrefill"
+        @open-panel="openProfileFromChat"
+        @open-tab="emit('tab-change', $event)"
+      />
+    </template>
     <template #content>
       <ContentQCTab
         :patient-id="selectedRecord?.patientId"
@@ -21,6 +35,7 @@
         :scene="resolveContentScene(selectedRecord)"
         :documents="documentsList"
         @issues-change="emit('content-issues-change', $event)"
+        @ask-assistant="askAboutRule"
       />
     </template>
     <template #qc="{ activeSubTab }">
@@ -47,9 +62,7 @@
           </div>
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="text-[15px] font-black text-slate-900">
-                AI 深度画像
-              </div>
+              <div class="text-[15px] font-black text-slate-900">AI 深度画像</div>
               <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">
                 对病历全文进行深度阅读，生成时间轴、风险线索与结构化患者画像。
               </div>
@@ -61,9 +74,7 @@
               <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
                 状态
               </div>
-              <div class="mt-1 text-[13px] font-black text-blue-700">
-                已生成
-              </div>
+              <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
             </div>
           </div>
         </div>
@@ -77,9 +88,7 @@
           >
             <ScanOutlined class="text-[24px] text-blue-600" />
           </div>
-          <div class="mb-1 text-[15px] font-black text-slate-800">
-            AI 深度画像
-          </div>
+          <div class="mb-1 text-[15px] font-black text-slate-800">AI 深度画像</div>
           <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">
             对病历全文进行深度阅读，构建诊断时间轴与患者风险画像。
           </div>
@@ -104,7 +113,8 @@
               <span class="text-xs font-bold text-slate-700">画像摘要</span>
               <span
                 class="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600"
-              >已生成</span>
+                >已生成</span
+              >
             </div>
             <div class="space-y-1.5 text-xs text-slate-600">
               <div
@@ -154,10 +164,21 @@
           class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]"
         >
           <AsyncAIProfileDashboard
+            v-if="
+              selectedRecord?.instituteId && selectedRecord?.patientId && selectedRecord?.visitId
+            "
+            :scope-key="
+              JSON.stringify([
+                selectedRecord.instituteId,
+                selectedRecord.patientId,
+                selectedRecord.visitId,
+              ])
+            "
             :frontpage="frontpageDraft"
             :medical-text="combinedMedicalText"
             style="height: 100%; overflow-y: auto"
           />
+          <p v-else>当前病例缺少机构、患者或住院标识，暂不能分析画像。</p>
         </div>
       </a-modal>
     </template>
@@ -171,9 +192,7 @@
           </div>
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="text-[15px] font-black text-slate-900">
-                DRG 分组分析
-              </div>
+              <div class="text-[15px] font-black text-slate-900">DRG 分组分析</div>
               <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">
                 基于首页诊断与手术编码，生成分组结果、权重与支付风险判断。
               </div>
@@ -185,9 +204,7 @@
               <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
                 状态
               </div>
-              <div class="mt-1 text-[13px] font-black text-blue-700">
-                已生成
-              </div>
+              <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
             </div>
           </div>
         </div>
@@ -201,9 +218,7 @@
           >
             <NodeIndexOutlined class="text-[24px] text-blue-600" />
           </div>
-          <div class="mb-1 text-[15px] font-black text-slate-800">
-            DRG 分组分析
-          </div>
+          <div class="mb-1 text-[15px] font-black text-slate-800">DRG 分组分析</div>
           <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">
             基于诊断与手术编码进行 DRG 分组，输出分组结果与盈亏风险判断。
           </div>
@@ -221,14 +236,9 @@
           </a-button>
         </div>
 
-        <div
-          v-else-if="drgLoading"
-          class="flex flex-col items-center py-8"
-        >
+        <div v-else-if="drgLoading" class="flex flex-col items-center py-8">
           <a-spin />
-          <div class="text-xs text-slate-400 mt-3">
-            DRG 分组计算中...
-          </div>
+          <div class="text-xs text-slate-400 mt-3">DRG 分组计算中...</div>
         </div>
 
         <template v-else-if="drgResult">
@@ -365,10 +375,7 @@
             @update:value="emit('update:overviewSeverityFilter', $event as string)"
           />
         </div>
-        <div
-          v-else
-          class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2"
-        >
+        <div v-else class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2">
           <a-segmented
             :value="notificationReadFilter"
             size="small"
@@ -388,10 +395,7 @@
         >
           <a-spin />
         </div>
-        <div
-          v-else
-          class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1"
-        >
+        <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
           <template v-if="overviewViewMode === 'overview'">
             <div
               v-for="item in filteredNotificationOverviewItems"
@@ -408,10 +412,7 @@
                   <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <NotificationOutlined class="text-blue-500" />
                     <span class="truncate">{{ item.title || '病案问题集中点' }}</span>
-                    <a-tag
-                      color="blue"
-                      class="!text-[10px]"
-                    >
+                    <a-tag color="blue" class="!text-[10px]">
                       {{ item.type || 'general' }}
                     </a-tag>
                     <a-tag class="!text-[10px]">
@@ -429,10 +430,7 @@
                     <span>{{ formatRelativeTime(item.latest_created_at) }}</span>
                   </div>
                 </div>
-                <a-tag
-                  v-if="item.unread_count > 0"
-                  color="blue"
-                >
+                <a-tag v-if="item.unread_count > 0" color="blue">
                   {{ item.unread_count }} 未读
                 </a-tag>
               </div>
@@ -471,14 +469,18 @@
                     {{ formatRelativeTime(notif.created_at) }}
                   </div>
                 </div>
-                <a-tag
-                  v-if="!notif.is_read"
-                  color="blue"
-                >
-                  未读
-                </a-tag>
+                <a-tag v-if="!notif.is_read" color="blue"> 未读 </a-tag>
               </div>
               <div class="mt-2 flex items-center justify-end gap-2">
+                <a-button
+                  v-if="isCurrentRecordNotification(notif)"
+                  size="small"
+                  class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
+                  data-testid="assist-notification-ask"
+                  @click="askAboutNotification(notif)"
+                >
+                  问助手
+                </a-button>
                 <a-button
                   size="small"
                   class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
@@ -501,7 +503,7 @@
           <div
             v-if="
               (overviewViewMode === 'overview' && filteredNotificationOverviewItems.length === 0) ||
-                (overviewViewMode === 'detail' && filteredAssistNotifications.length === 0)
+              (overviewViewMode === 'detail' && filteredAssistNotifications.length === 0)
             "
             class="rounded-[18px] border border-dashed border-slate-200 bg-white/70 py-8"
           >
@@ -576,10 +578,7 @@
         v-if="!suggestionsLoading && suggestions.length === 0"
         description="暂无待处理优化建议"
       />
-      <div
-        v-if="suggestionsLoading"
-        class="flex items-center justify-center py-10"
-      >
+      <div v-if="suggestionsLoading" class="flex items-center justify-center py-10">
         <a-spin />
       </div>
     </div>
@@ -613,10 +612,7 @@
             size="small"
             @update:value="emit('update:icdApplyTarget', $event)"
           />
-          <div
-            v-if="isOtherTarget"
-            class="flex items-center gap-2 text-xs text-slate-500"
-          >
+          <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
             <span>第</span>
             <a-input-number
               :value="icdApplyIndex"
@@ -646,7 +642,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import {
   CheckOutlined,
   EyeOutlined,
@@ -658,13 +654,16 @@ import {
 } from '@ant-design/icons-vue'
 
 import WorkstationAssistPanel from './WorkstationAssistPanel.vue'
+import BusinessAgentDrawer from './BusinessAgentDrawer.vue'
+import { businessAgentApi } from '@/api/businessAgent'
+import type { BusinessAgentAccess, BusinessAgentContext } from '@/api/businessAgent'
 import QCResultTab from './QCResultTab.vue'
 import ContentQCTab from './ContentQCTab.vue'
 import ICDSearchPanel from './ICDSearchPanel.vue'
 import type { ICDCodeDetail } from './ICDDetailPanel.vue'
 import type { DocItem, PatientRecord } from '../types'
 
-type AssistTabKey = 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 const AsyncAIProfileDashboard = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/AIProfileDashboard.vue'),
@@ -673,9 +672,10 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/DRGGroupingTab.vue'),
 )
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
   assistTab: AssistTabKey
+  activeDocType?: string
   selectedRecord?: PatientRecord | null
   assistPatientInfo?: Record<string, unknown> | null
   contentQCCount: number
@@ -749,6 +749,114 @@ const emit = defineEmits<{
   'apply-icd-code': [ICDCodeDetail]
 }>()
 
+// 授权先读后用：授权未返回前不初始化对话，避免先按医生身份请求再被切换而重置会话。
+const access = ref<BusinessAgentAccess | null>(null)
+const accessSettled = ref(false)
+onMounted(() => {
+  businessAgentApi.access().then(
+    (value) => {
+      access.value = value
+      accessSettled.value = true
+    },
+    // 读取失败时按医生身份尝试，由后端给出真实的授权结果。
+    () => {
+      accessSettled.value = true
+    },
+  )
+})
+
+// 对话页签沿用详情页同一病例坐标。账号对该病例没有医生授权、但对其所在科室有管理授权时，
+// 保留管理者身份（科室问数），不再强行按医生模式请求而被拒绝。
+const chatContext = computed<BusinessAgentContext>(() => {
+  const record = props.selectedRecord
+  const visitId = record?.visitId || record?.id
+  const doctor: BusinessAgentContext = {
+    view: 'doctor',
+    institute_id: record?.instituteId,
+    patient_id: record?.patientId,
+    visit_id: visitId,
+    patient_name: record?.name,
+    document_id: props.activeDocType,
+  }
+  const granted = access.value
+  if (!record || !granted) return doctor
+  const doctorAllowed = !!granted.doctor_cases?.some(
+    (item) =>
+      item.institute_id === record.instituteId &&
+      item.patient_id === record.patientId &&
+      item.visit_id === visitId,
+  )
+  const scope = granted.manager_scopes?.find(
+    (item) => item.institute_id === record.instituteId && item.department === record.department,
+  )
+  if (doctorAllowed || !scope) return doctor
+  return {
+    view: 'manager',
+    institute_id: scope.institute_id,
+    department: scope.department,
+    care_phase: String(record.dischargeDate || '').trim() ? 'discharged' : 'inpatient',
+  }
+})
+
+// 病例入口的会话边界：切换病例（含同科室）即停止旧轮次并使用独立会话，旧引用与待确认操作不会带入新病例。
+const chatCaseKey = computed(() => {
+  const record = props.selectedRecord
+  return record
+    ? JSON.stringify([record.instituteId, record.patientId, record.visitId || record.id])
+    : ''
+})
+const chatCaseLabel = computed(() => {
+  const visit = props.selectedRecord?.visitId || props.selectedRecord?.id
+  return visit ? `住院 ${visit}` : ''
+})
+
+// 对话页欢迎页的待办摘要：沿用面板上的计数，不另行统计。
+const chatSummary = computed(() => ({
+  pending: props.contentQCCount + props.assistBadgeCount,
+  unread: props.notificationUnreadCount,
+}))
+
+// 预填只写入对话输入框，不自动发送；nonce 保证相同文字也能再次预填。
+const chatPrefill = ref<{ text: string; nonce: number } | null>(null)
+function prefillChat(text: string) {
+  chatPrefill.value = { text, nonce: (chatPrefill.value?.nonce || 0) + 1 }
+  emit('tab-change', 'chat')
+}
+
+// 助手绑定当前选中的病例，因此只对当前病例的消息提供“问助手”；其它病例先“去处理”打开。
+function isCurrentRecordNotification(notification: Record<string, any>) {
+  const id = String(notification.record_id || '')
+  const record = props.selectedRecord
+  return !!id && !!record && (id === record.id || id === record.visitId)
+}
+// 内涵质控只带规则标识：助手从规则目录和本病例已保存结果读取，页面上的实时结果不当作依据。
+function askAboutRule(payload: { ruleId: string; ruleName: string }) {
+  const name = payload.ruleName ? `「${payload.ruleName}」` : ''
+  prefillChat(`规则 ${payload.ruleId}${name}在这份病历里的已保存结果是什么？规则要求是什么？`)
+}
+function askAboutNotification(notification: Record<string, any>) {
+  const title = String(notification.title || '质控消息').trim()
+  const content = String(notification.content || '').trim()
+  prefillChat(`质控消息「${title}」${content ? `：${content}` : ''}。这是什么问题，应该怎么处理？`)
+}
+
+// 只切换到同一病例的 AI 画像页签（不自动分析）；病例已变化的迟到请求丢弃。
+function openProfileFromChat(payload: {
+  panel: 'profile'
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}) {
+  const current = chatContext.value
+  if (
+    payload.institute_id !== current.institute_id ||
+    payload.patient_id !== current.patient_id ||
+    payload.visit_id !== current.visit_id
+  )
+    return
+  emit('tab-change', 'profile')
+}
+
 const qcResultTabRef = ref<InstanceType<typeof QCResultTab> | null>(null)
 
 function resolveContentScene(record?: PatientRecord | null): 'running' | 'final' {
@@ -757,6 +865,7 @@ function resolveContentScene(record?: PatientRecord | null): 'running' | 'final'
 }
 
 defineExpose({
+  prefillChat,
   runFormQC: () => qcResultTabRef.value?.runFormQC(),
   runCodingQC: () => qcResultTabRef.value?.runCodingQC(),
 })

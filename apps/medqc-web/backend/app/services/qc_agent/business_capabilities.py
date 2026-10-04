@@ -1,0 +1,53 @@
+"""助手可办理能力的权威说明：只列出已接通的操作，未接通的给出明确原因，不放静默无效入口。"""
+from __future__ import annotations
+
+from .business_write_switch import FEEDBACK_SWITCH, TASK_SWITCH, enabled
+
+# 每项均对应已核查的真实调用链；状态变化须同步修改此表及其测试。
+AVAILABLE = {
+    "doctor": [
+        ("单病例复检预览", "为当前病例的明确规则生成预览，用户点击确认后由正式质控任务服务创建任务；材料同步未证实时会提示"),
+        ("参考补充草稿", "仅不合规问题，依据保存结论与证据摘录起草，不写入病历、不等于整改"),
+        ("异议反馈", "对已查看的保存问题提交实名异议理由，不改变质控结论"),
+        ("同病例画像面板", "在病历详情页的助手中打开本病例既有画像面板；打开不自动分析，是否分析由医生在面板中决定"),
+        ("编码字典查询", "检索ICD编码字典候选，不是本病例编码建议"),
+    ],
+    "manager": [
+        ("专项质控任务预览", "对本会话已下钻的病例（最多20份）与明确规则生成预览，用户点击确认后由正式质控任务服务创建任务"),
+        ("科室趋势与跨期描述", "只读取正式统计原值，不计算差值或推断原因"),
+        ("统计图表", "趋势折线图与规则排行条形图，数值来自正式统计原值，可切换查看数据表；不计算占比或变化"),
+        ("科室质量分析报告草稿", "依据本会话已读统计起草，数值逐项校验来源，不导出、不发布"),
+        ("编码字典查询", "检索ICD编码字典候选，不是本病例编码建议"),
+    ],
+}
+UNAVAILABLE = [
+    ("整改分派", "现有整改服务尚未提供保存问题到缺陷记录的权威映射、责任科室目录、逐病例授权和重复提交保护；助手不能代替业务流程分派"),
+    ("催办", "现有催办接口只更新缺陷状态，未接入真实通知投递；助手不能把状态修改说成已送达"),
+    ("写回 EMR 或修改病历", "首版不直接写入电子病历；修改需医生在病历系统中完成"),
+    ("主动订阅与定期推送", "尚无调度、投递目标与停用合同；未配置时不会自动后台执行"),
+    ("自定义图表", "只支持趋势折线图和规则排行条形图；饼图、散点图、按医生或自由维度的图表没有正式统计来源，不由助手自行绘制"),
+    ("医生本人趋势", "缺少账号与医生工号的授权映射，正式统计也无按医生过滤的合同"),
+]
+
+
+# 受写入开关控制的能力：开关关闭时从“可办理”移到“暂不可办理”，避免说明与实际不一致。
+SWITCHED = {
+    "单病例复检预览": (TASK_SWITCH, "当前环境未启用助手创建质控任务，请在正式任务页面发起"),
+    "专项质控任务预览": (TASK_SWITCH, "当前环境未启用助手创建质控任务，请在正式任务页面发起"),
+    "异议反馈": (FEEDBACK_SWITCH, "当前环境未启用实名异议反馈写入"),
+}
+
+
+def capabilities(view: str) -> dict:
+    available, unavailable = [], list(UNAVAILABLE)
+    for name, note in AVAILABLE.get(view, []):
+        switch = SWITCHED.get(name)
+        if switch and not enabled(switch[0]):
+            unavailable.insert(0, (name, switch[1]))
+        else:
+            available.append((name, note))
+    lines = ["可办理：", *[f"· {name}：{note}" for name, note in available], "", "暂不可办理：",
+             *[f"· {name}：{reason}" for name, reason in unavailable]]
+    return {"available": [name for name, _ in available], "unavailable": [{"name": name, "reason": reason} for name, reason in unavailable],
+            "references": [{"id": f"capabilities:{view}", "kind": "evidence", "title": "助手可办理事项说明",
+                            "locator": "按当前已接通的业务服务说明；不可办理事项不提供入口", "text": "\n".join(lines)}]}

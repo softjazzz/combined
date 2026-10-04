@@ -87,12 +87,12 @@ test.describe('Workstation V4 rules / ICD / notifications', () => {
     await expect(page.getByText('优先处理池')).toBeVisible()
     await expect(page.getByText('批量工作台')).toBeVisible()
 
-    const assistTrigger = page.getByRole('button', { name: '分析面板' })
+    const assistTrigger = page.getByRole('button', { name: '智能助手' })
     await expect(assistTrigger).toBeVisible()
     await assistTrigger.click()
 
     const assistPanel = page.locator('.assist-panel')
-    await expect(assistPanel.getByText('智能分析面板')).toBeVisible()
+    await expect(assistPanel.getByText('智能助手')).toBeVisible()
 
     const messageTab = assistPanel.getByRole('button', { name: '消息' })
     await expect(messageTab).toBeVisible()

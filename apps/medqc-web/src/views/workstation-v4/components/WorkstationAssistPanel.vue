@@ -3,31 +3,36 @@
     <button
       v-if="!mergedVisible"
       type="button"
-      class="assist-trigger"
+      :class="[
+        'assist-trigger',
+        { 'assist-trigger--collapsed': !triggerExpanded, 'assist-trigger--pulse': pulsing },
+      ]"
+      aria-label="智能助手"
+      title="智能助手（Ctrl+/）"
       @click="setVisible(true)"
+      @mouseenter="expandTrigger"
+      @mouseleave="scheduleCollapse(1500)"
+      @focus="expandTrigger"
+      @blur="scheduleCollapse(1500)"
     >
       <span class="assist-trigger__icon">
-        <AppstoreOutlined />
+        <RobotOutlined />
       </span>
-      <span class="assist-trigger__text">&#x5206;&#x6790;&#x9762;&#x677F;</span>
-      <span
-        v-if="totalBadgeCount > 0"
-        class="assist-trigger__badge"
-      >{{ totalBadgeCount }}</span>
+      <span class="assist-trigger__text">&#x667A;&#x80FD;&#x52A9;&#x624B;</span>
+      <span v-if="totalBadgeCount > 0" class="assist-trigger__badge">{{ badgeText }}</span>
     </button>
 
     <Transition name="assist-slide">
       <section
         v-if="mergedVisible"
-        class="assist-panel"
+        ref="panelEl"
+        :class="['assist-panel', { 'assist-panel--wide': currentTab === 'chat' }]"
       >
         <header class="assist-panel__header">
           <div class="assist-panel__title-wrap">
             <RobotOutlined class="assist-panel__title-icon" />
             <div>
-              <div class="assist-panel__title">
-                &#x667A;&#x80FD;&#x5206;&#x6790;&#x9762;&#x677F;
-              </div>
+              <div class="assist-panel__title">&#x667A;&#x80FD;&#x52A9;&#x624B;</div>
             </div>
           </div>
           <div class="assist-panel__actions">
@@ -54,10 +59,7 @@
           </div>
         </header>
 
-        <div
-          v-if="patientInfo"
-          class="assist-panel__patient"
-        >
+        <div v-if="patientInfo" class="assist-panel__patient">
           <div class="assist-panel__patient-strip">
             <div class="assist-panel__patient-avatar">
               {{ (patientInfo.name || '?').charAt(0) }}
@@ -73,36 +75,27 @@
                   {{ patientInfo.age || '-' }}
                 </span>
               </div>
-              <div
-                v-if="patientInfo.visitId"
-                class="assist-panel__patient-id"
-              >
+              <div v-if="patientInfo.visitId" class="assist-panel__patient-id">
                 <span class="assist-panel__patient-id-label">&#x4F4F;&#x9662;&#x53F7;</span>
                 <span class="assist-panel__patient-id-value">{{ patientInfo.visitId }}</span>
               </div>
             </div>
-            <div
-              v-if="totalBadgeCount > 0"
-              class="assist-panel__summary"
-            >
+            <div v-if="totalBadgeCount > 0" class="assist-panel__summary">
               <span class="assist-panel__summary-label">&#x5F85;&#x5904;&#x7406;</span>
               <strong class="assist-panel__summary-value">{{ totalBadgeCount }}</strong>
             </div>
           </div>
-          <div
-            class="assist-panel__patient-diagnosis"
-            :title="patientInfo.diagnosis || ''"
-          >
+          <div class="assist-panel__patient-diagnosis" :title="patientInfo.diagnosis || ''">
             <span class="assist-panel__patient-diag-pulse"><span /></span>
             {{
               patientInfo.diagnosis ||
-                '\u6682\u65E0\u4E3B\u8BCA\u65AD\u4FE1\u606F\uFF0C\u5EFA\u8BAE\u901A\u8FC7 AI \u63D0\u53D6'
+              '\u6682\u65E0\u4E3B\u8BCA\u65AD\u4FE1\u606F\uFF0C\u5EFA\u8BAE\u901A\u8FC7 AI \u63D0\u53D6'
             }}
           </div>
         </div>
 
         <div class="assist-panel__main">
-          <nav class="assist-sidebar">
+          <nav v-if="tabs.length > 1" class="assist-sidebar">
             <button
               v-for="tab in tabs"
               :key="tab.key"
@@ -117,16 +110,20 @@
                 <component :is="tab.icon" />
               </span>
               <span class="assist-sidebar__label">{{ tab.label }}</span>
-              <span
-                v-if="getBadge(tab.key) > 0"
-                class="assist-sidebar__badge"
-              >{{
+              <span v-if="getBadge(tab.key) > 0" class="assist-sidebar__badge">{{
                 getBadge(tab.key)
               }}</span>
             </button>
           </nav>
 
           <div class="assist-panel__content">
+            <div
+              v-show="currentTab === 'chat'"
+              class="assist-panel__slot assist-panel__slot--contained"
+            >
+              <slot name="chat" :active="mergedVisible && currentTab === 'chat'" />
+            </div>
+
             <div
               v-if="currentTab === 'content'"
               class="assist-panel__slot assist-panel__slot--contained"
@@ -145,10 +142,7 @@
               v-else-if="currentTab === 'form' || currentTab === 'coding' || currentTab === 'cost'"
               class="assist-panel__slot assist-panel__slot--contained"
             >
-              <slot
-                name="qc"
-                :active-sub-tab="currentTab"
-              >
+              <slot name="qc" :active-sub-tab="currentTab">
                 <div class="assist-empty">
                   <CheckCircleOutlined class="assist-empty__icon" />
                   <div class="assist-empty__title">
@@ -158,24 +152,16 @@
               </slot>
             </div>
 
-            <div
-              v-else-if="currentTab === 'profile'"
-              class="assist-panel__slot"
-            >
+            <div v-else-if="currentTab === 'profile'" class="assist-panel__slot">
               <slot name="profile">
                 <div class="assist-empty">
                   <RobotOutlined class="assist-empty__icon" />
-                  <div class="assist-empty__title">
-                    AI &#x753B;&#x50CF;&#x5F85;&#x63A5;&#x5165;
-                  </div>
+                  <div class="assist-empty__title">AI &#x753B;&#x50CF;&#x5F85;&#x63A5;&#x5165;</div>
                 </div>
               </slot>
             </div>
 
-            <div
-              v-else-if="currentTab === 'drg'"
-              class="assist-panel__slot"
-            >
+            <div v-else-if="currentTab === 'drg'" class="assist-panel__slot">
               <slot name="drg">
                 <div class="assist-empty">
                   <NodeIndexOutlined class="assist-empty__icon" />
@@ -186,10 +172,7 @@
               </slot>
             </div>
 
-            <div
-              v-else
-              class="assist-panel__slot"
-            >
+            <div v-else-if="currentTab === 'message'" class="assist-panel__slot">
               <slot name="message">
                 <div class="assist-empty">
                   <NotificationOutlined class="assist-empty__icon" />
@@ -207,14 +190,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  AppstoreOutlined,
   CheckCircleOutlined,
   CloseOutlined,
   CodeOutlined,
   DollarOutlined,
   FileTextOutlined,
+  MessageOutlined,
   NodeIndexOutlined,
   NotificationOutlined,
   ReloadOutlined,
@@ -222,7 +205,7 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 
-type AssistTabKey = 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PatientInfo {
   name?: string
@@ -238,6 +221,9 @@ const props = withDefaults(
     defaultVisible?: boolean
     defaultTab?: AssistTabKey
     patientInfo?: PatientInfo | null
+    // 只显示这些页签（缺省为全部）；用于没有病例上下文的页面，仅保留对话。
+    availableTabs?: AssistTabKey[]
+    chatLabel?: string
     contentCount?: number
     qcCount?: number
     codingCount?: number
@@ -268,7 +254,12 @@ const emit = defineEmits<{
 }>()
 
 const innerVisible = ref(props.defaultVisible)
-const currentTab = ref<AssistTabKey>(props.defaultTab)
+// 宿主限定了可用页签时，初始/外部指定的页签落在不可用项上，则回到第一个可用页签。
+function resolveTab(tab: AssistTabKey): AssistTabKey {
+  const allowed = props.availableTabs
+  return !allowed || allowed.includes(tab) ? tab : (allowed[0] ?? tab)
+}
+const currentTab = ref<AssistTabKey>(resolveTab(props.defaultTab))
 
 watch(
   () => props.visible,
@@ -281,7 +272,7 @@ watch(
 watch(
   () => props.defaultTab,
   (value) => {
-    currentTab.value = value
+    currentTab.value = resolveTab(value)
   },
 )
 
@@ -289,7 +280,8 @@ const mergedVisible = computed(() =>
   props.visible === undefined ? innerVisible.value : props.visible,
 )
 
-const tabs = [
+const ALL_TABS = [
+  { key: 'chat' as const, label: '对话', icon: MessageOutlined },
   { key: 'content' as const, label: '\u5185\u6DB5\n\u8D28\u63A7', icon: SafetyCertificateOutlined },
   { key: 'form' as const, label: '\u9996\u9875\n\u8D28\u63A7', icon: FileTextOutlined },
   { key: 'coding' as const, label: '\u7F16\u7801\n\u8D28\u63A7', icon: CodeOutlined },
@@ -298,6 +290,12 @@ const tabs = [
   { key: 'drg' as const, label: 'DRG', icon: NodeIndexOutlined },
   { key: 'message' as const, label: '\u6D88\u606F', icon: NotificationOutlined },
 ]
+
+const tabs = computed(() =>
+  ALL_TABS.filter((tab) => !props.availableTabs || props.availableTabs.includes(tab.key)).map(
+    (tab) => (tab.key === 'chat' && props.chatLabel ? { ...tab, label: props.chatLabel } : tab),
+  ),
+)
 
 const totalBadgeCount = computed(
   () =>
@@ -311,6 +309,7 @@ const totalBadgeCount = computed(
 )
 
 function getBadge(tab: AssistTabKey): number {
+  if (tab === 'chat') return 0
   if (tab === 'content') return props.contentCount
   if (tab === 'form') return props.qcCount
   if (tab === 'coding') return props.codingCount
@@ -319,6 +318,56 @@ function getBadge(tab: AssistTabKey): number {
   if (tab === 'drg') return props.drgCount
   return props.messageCount
 }
+
+const badgeText = computed(() => (totalBadgeCount.value > 9 ? '9+' : String(totalBadgeCount.value)))
+
+// 胶囊：3 秒无操作收起为图标，悬停/聚焦展开；未读数增加时展开并扩散一次。
+const triggerExpanded = ref(true)
+const pulsing = ref(false)
+let collapseTimer: ReturnType<typeof setTimeout> | undefined
+let pulseTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleCollapse(delay = 3000) {
+  clearTimeout(collapseTimer)
+  collapseTimer = setTimeout(() => (triggerExpanded.value = false), delay)
+}
+function expandTrigger() {
+  clearTimeout(collapseTimer)
+  triggerExpanded.value = true
+}
+watch(totalBadgeCount, (next, previous) => {
+  if (next <= previous) return
+  expandTrigger()
+  pulsing.value = true
+  clearTimeout(pulseTimer)
+  pulseTimer = setTimeout(() => {
+    pulsing.value = false
+    scheduleCollapse()
+  }, 1800)
+})
+
+// Ctrl+/ 开关面板；Esc 仅在焦点位于面板内且没有打开的下拉时收起。
+const panelEl = ref<HTMLElement | null>(null)
+function onKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+    event.preventDefault()
+    setVisible(!mergedVisible.value)
+    return
+  }
+  if (event.key !== 'Escape' || !mergedVisible.value || event.defaultPrevented) return
+  const target = event.target as Node | null
+  if (!panelEl.value || !target || !panelEl.value.contains(target)) return
+  if (document.querySelector('.ant-select-open')) return
+  setVisible(false)
+}
+onMounted(() => {
+  scheduleCollapse()
+  window.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  clearTimeout(collapseTimer)
+  clearTimeout(pulseTimer)
+  window.removeEventListener('keydown', onKeydown)
+})
 
 function setVisible(value: boolean) {
   innerVisible.value = value
@@ -378,8 +427,49 @@ function changeTab(tab: AssistTabKey) {
 }
 
 .assist-trigger__text {
+  max-width: 80px;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 700;
+  transition:
+    max-width 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.assist-trigger--collapsed {
+  gap: 0;
+}
+
+.assist-trigger--collapsed .assist-trigger__text {
+  max-width: 0;
+  opacity: 0;
+}
+
+.assist-trigger--pulse {
+  animation: assist-trigger-pulse 0.9s ease-out 2;
+}
+
+@keyframes assist-trigger-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(37, 99, 235, 0.45),
+      0 14px 30px rgba(29, 78, 216, 0.26);
+  }
+  100% {
+    box-shadow:
+      0 0 0 14px rgba(37, 99, 235, 0),
+      0 14px 30px rgba(29, 78, 216, 0.26);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assist-trigger--pulse {
+    animation: none;
+  }
+  .assist-trigger__text {
+    transition: none;
+  }
 }
 
 .assist-trigger__badge {
@@ -393,6 +483,10 @@ function changeTab(tab: AssistTabKey) {
   line-height: 18px;
   text-align: center;
   font-weight: 700;
+}
+
+.assist-panel.assist-panel--wide {
+  width: min(600px, calc(100vw - 36px));
 }
 
 .assist-panel {

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.core.audit import audit_event
 from app.core.security import get_current_user
+from app.routers.business_agent import router as business_router
 from app.services.qc_agent.intent_router import get_intent_router_health
 from app.services.qc_agent.orchestrator import run_intent
 from app.services.llm_observability import (
@@ -30,6 +31,9 @@ from app.services.qc_agent.tool_registry import AgentToolRegistry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/qc-agent", tags=["qc-agent"])
+
+# 新业务主链独立挂载，不改变旧固定意图入口与工具实现。
+router.include_router(business_router, prefix="")
 
 _registry = create_default_registry()
 

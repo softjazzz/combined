@@ -1,5 +1,13 @@
 <template>
   <div class="record-detail-workspace px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+    <a-button
+      v-if="selectedRecord"
+      class="mq-btn"
+      data-testid="business-agent-record-entry"
+      @click="emit('open-assist-chat')"
+    >
+      查看质控问题与依据
+    </a-button>
     <div
       class="relative mx-auto w-full max-w-[1200px] rounded-[18px] border border-black/10 bg-white/86 px-1 py-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.045),0_2px_8px_rgba(0,0,0,0.035)] lg:px-1.5 lg:py-2"
     >
@@ -53,14 +61,9 @@
       />
 
       <template v-else>
-        <div
-          v-if="concatLoading"
-          class="flex flex-col items-center py-20"
-        >
+        <div v-if="concatLoading" class="flex flex-col items-center py-20">
           <a-spin size="large" />
-          <div class="text-sm text-slate-400 mt-4">
-            加载病历文书中...
-          </div>
+          <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
         </div>
 
         <div
@@ -119,26 +122,20 @@
             >
               <pre
                 class="medical-record-document__content m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.05] text-slate-700"
-              >{{ section.content }}</pre>
+                >{{ section.content }}</pre
+              >
             </div>
           </div>
         </div>
 
-        <div
-          v-else
-          class="flex flex-col items-center justify-center py-20 text-slate-300"
-        >
+        <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
           <div
             class="w-20 h-20 rounded-full bg-white/74 flex items-center justify-center mb-4 border-2 border-dashed border-black/10"
           >
             <FileTextOutlined class="text-3xl" />
           </div>
-          <div class="text-sm font-medium mb-1">
-            暂无病历文书
-          </div>
-          <div class="text-xs text-slate-400">
-            该患者当前暂无可展示的病历文书内容。
-          </div>
+          <div class="text-sm font-medium mb-1">暂无病历文书</div>
+          <div class="text-xs text-slate-400">该患者当前暂无可展示的病历文书内容。</div>
         </div>
       </template>
     </div>
@@ -146,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { defineAsyncComponent } from 'vue'
 import {
   CheckCircleOutlined,
@@ -227,6 +224,8 @@ const emit = defineEmits<{
   'toggle-expand-all-sections': []
   'toggle-section': [index: number]
   'select-document': [key: string]
+  // 打开智能助手面板的“对话”页签（面板由宿主统一持有）。
+  'open-assist-chat': []
 }>()
 
 const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRViewer.vue'))
