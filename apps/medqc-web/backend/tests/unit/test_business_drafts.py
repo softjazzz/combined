@@ -46,11 +46,11 @@ def test_saved_conclusion_is_position_zero_source(tmp_path, monkeypatch):
     assert facts["evidence"][0] == {"evidence_position": 0, "source_type": "saved_conclusion", "record_time": None,
                                     "excerpt": "报告后24小时内未记录，间隔16.01小时"}
     ok = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id, "segments": [
-        {"kind": "fact", "text": "间隔16.01小时。", "evidence_positions": [0]}]})
+        {"kind": "fact", "text": "报告后24小时内未记录，间隔16.01小时", "evidence_positions": [0]}]})
     assert ok.status_code == 200 and "［依据保存结论］" in ok.json()["references"][0]["text"]
     # 结论里的数值不能挂到未包含该数值的证据上。
     bad = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id, "segments": [
-        {"kind": "fact", "text": "间隔16.01小时。", "evidence_positions": [1]}]})
+        {"kind": "fact", "text": "报告后24小时内未记录，间隔16.01小时", "evidence_positions": [1]}]})
     assert bad.status_code == 422
 
 
@@ -65,7 +65,7 @@ def test_facts_then_validated_draft_card_and_reread(tmp_path, monkeypatch):
     facts = client.post(url + "/tools/read_draft_facts", json={"result_id": result_id}).json()
     assert facts["evidence"][1]["excerpt"] == EVIDENCE[0]["evidence_excerpt"]
     assert facts["suggestion"] == "补记CT检查原因"
-    segments = [{"kind": "fact", "text": "2026-09-03 08:30 行胸部CT检查，示右下肺斑片影。", "evidence_positions": [1]},
+    segments = [{"kind": "fact", "text": "患者行胸部CT检查，结果示右下肺斑片影。", "evidence_positions": [1]},
                 {"kind": "placeholder", "text": "待医生补充：本次CT检查的临床指征及申请原因"}]
     response = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id, "segments": segments})
     assert response.status_code == 200
@@ -132,7 +132,7 @@ def test_tool_specs_expose_draft_only_to_doctor():
 def test_fact_dates_compare_by_value_not_leading_zero():
     from app.services.qc_agent import business_drafts as drafts
     evidence = drafts.draft_evidence([{"evidence_excerpt": "检查于2025-08-03完成", "record_time": "2025-08-03 08:05"}])
-    drafts.validate_segments([drafts.DraftSegment(kind="fact", text="2025年8月3日8时5分完成检查", evidence_positions=[1])], evidence)
+    drafts.validate_segments([drafts.DraftSegment(kind="fact", text="检查于2025年8月3日完成", evidence_positions=[1])], evidence)
 
 @pytest.mark.parametrize("source,text", [
     ("剂量为0.5 mg。", "剂量为5 mg。"),
@@ -164,3 +164,47 @@ def test_supported_complete_numeric_clause_is_preserved(text):
     segments = [drafts.DraftSegment(kind="fact", text=text, evidence_positions=[1])]
     drafts.validate_segments(segments, evidence)
     assert text + "［依据保存证据1］" in drafts.draft_card_text({}, segments)
+
+
+@pytest.mark.parametrize("source,text", [
+    ("甲药剂量为0.5 mg，乙药剂量为5 mg。", "甲药，剂量为5 mg。"),
+    ("甲药剂量为0.5 mg，乙药剂量为5 mg。", "甲药给药方案：\n剂量为5 mg。"),
+    ("给药时间08:30，采血时间10:30。", "给药时间10:30。"),
+    ("入院时间2026-10-01，出院时间2026-10-03。", "入院时间2026-10-03。"),
+    ("入院时间2026-10-01 08:30，出院时间2026-10-03 10:30。", "入院时间2026-10-03 08:30。"),
+    ("剂量为0.5毫克每千克。", "剂量为0.5毫克。"),
+    ("剂量为0.5毫克。", "剂量为0.5。"),
+])
+def test_review_numeric_source_relation(tmp_path, monkeypatch, source, text):
+    test_numeric_fact_cannot_change_value_unit_or_field(tmp_path, monkeypatch, source, text)
+
+
+@pytest.mark.parametrize("source,text", [
+    ("给药时间08:30。", "给药时间8时30分。"),
+    ("入院时间2026-10-01 08:30。", "入院时间2026年10月1日8时30分。"),
+    ("剂量为0.50 mg。", "剂量为0.5 mg。"),
+    ("剂量为1e3 mg。", "剂量为1000 mg。"),
+    ("剂量为1,000 mg。", "剂量为1000 mg。"),
+    ("剂量为.5 mg。", "剂量为0.5 mg。"),
+    ("剂量为0.5毫克每千克。", "剂量为0.5毫克每千克。"),
+    ("甲药剂量为0.5 mg，乙药剂量为5 mg。", "甲药剂量为0.5 mg，乙药剂量为5 mg。"),
+])
+def test_complete_source_quote_roundtrip(tmp_path, monkeypatch, source, text):
+    saved = saved_payload()
+    saved["items"][0]["evidence"] = [{"evidence_excerpt": source}]
+    client, url, *_ = build(tmp_path, monkeypatch, saved)
+    result_id = viewed(client, url)
+    response = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id,
+        "segments": [{"kind": "fact", "text": text, "evidence_positions": [1]}]})
+    assert response.status_code == 200, response.text
+    card = response.json()["references"][0]
+    assert text + "［依据保存证据1］" in card["text"]
+    assert client.get(url + "/references/" + card["id"]).json() == card
+
+
+def test_metadata_time_cannot_become_event_time(tmp_path, monkeypatch):
+    client, url, *_ = build(tmp_path, monkeypatch, saved_payload())
+    result_id = viewed(client, url)
+    response = client.post(url + "/tools/compose_reference_draft", json={"result_id": result_id,
+        "segments": [{"kind": "fact", "text": "2026-09-03 08:30 行胸部CT检查，示右下肺斑片影。", "evidence_positions": [1]}]})
+    assert response.status_code == 422

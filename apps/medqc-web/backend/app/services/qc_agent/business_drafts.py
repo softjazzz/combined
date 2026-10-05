@@ -17,9 +17,9 @@ DRAFT_NOTE = "参考草稿：仅依据本次已读取的保存证据摘录起草
 PLACEHOLDER_PREFIX = "待医生补充"
 # 不拆分小数、符号及科学计数；Decimal比较避免浮点舍入。
 _NUMBER = re.compile(r"[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?")
-_DATE = re.compile(r"(?<!\d)(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?(?!\d)")
+_DATE = re.compile(r"(?<!\d)(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})(?:日|(?!\d))")
 _TIME = re.compile(r"(?<!\d)(\d{1,2})[:时](\d{1,2})(?:[:分](\d{1,2})秒?|分)?(?!\d)")
-_CLAUSE = re.compile(r"[，,。；;！!？?\n]+")
+_VALUE = re.compile(f"(?P<date>{_DATE.pattern})|(?P<time>{_TIME.pattern})|(?P<number>{_NUMBER.pattern})")
 
 
 def _without_dates(text: str) -> tuple[str, set[tuple]]:
@@ -45,11 +45,23 @@ def _numbers(text: str) -> set:
     return dates | {("number", _decimal(value)) for value in _NUMBER.findall(remaining)}
 
 
-def _numeric_clauses(text: str) -> list[str]:
-    remaining, _ = _without_dates(text)
-    # 数值所在分句原文一起核对，不能将另一个字段/药物的相同数值借来使用。
-    protected = _NUMBER.sub(lambda m: "⟦" + str(_decimal(m.group())) + "⟧", remaining)
-    return [re.sub(r"\s+", "", part).strip("：:") for part in _CLAUSE.split(protected) if "⟦" in part]
+def _source_quote(text: str) -> str:
+    """完整摘录比较：值归一化后仍保留其字段、单位与相邻上下文。"""
+    text = normalize("NFKC", text).replace("−", "-")
+    def replace(match):
+        raw = match.group()
+        if match.lastgroup == "date":
+            return "⟦日期:" + repr(tuple(int(v) for v in _DATE.fullmatch(raw).groups())) + "⟧"
+        if match.lastgroup == "time":
+            return "⟦时间:" + repr(tuple(int(v or 0) for v in _TIME.fullmatch(raw).groups())) + "⟧"
+        # 不用Decimal.normalize()，避免默认精度截断长数值。
+        sign, digits, exponent = _decimal(raw).as_tuple()
+        digits = list(digits)
+        while digits and digits[-1] == 0:
+            digits.pop()
+            exponent += 1
+        return "⟦数值:" + repr((sign if digits else 0, tuple(digits), exponent if digits else 0)) + "⟧"
+    return re.sub(r"\s+", "", _VALUE.sub(replace, text)).strip().rstrip("。")
 
 
 _PLACEHOLDER_LEAD = re.compile(r"^(?:[\s（(【\[]*待医生补充[\s）)】\]：:，,]*)+")
@@ -123,9 +135,12 @@ def validate_segments(segments: list[DraftSegment], evidence: list[dict], sugges
         unsupported = [number for number in numbers if number not in source_numbers]
         if unsupported:
             raise HTTPException(422, f"第{index}段含所引证据未出现的数值，请改为待医生补充")
-        source_clauses = _numeric_clauses(source)
-        if any(not any(re.search(re.escape(clause) + r"(?![A-Za-zµμ/%])", original) for original in source_clauses) for clause in _numeric_clauses(segment.text)):
-            raise HTTPException(422, f"第{index}段数值所在分句须沿用所引来源原文（含字段与单位），不能拼接或改写；无法确认时请去掉数值并标为待医生补充")
+        if numbers:
+            # record_time是文书元数据，不能作为正文中的给药/检查时间。
+            quotes = [by_position[position].get("excerpt") for position in segment.evidence_positions]
+            if not any(isinstance(quote, str) and _source_quote(segment.text) == _source_quote(quote) for quote in quotes):
+                raise HTTPException(422, f"第{index}段含数值或日期时间，须完整引用单条来源摘录（保留字段、单位与上下文），不能拆句拼接；无法确认时请改为待医生补充")
+
 
 
 def draft_card_text(reference: dict, segments: list[DraftSegment]) -> str:
