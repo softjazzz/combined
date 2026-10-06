@@ -442,6 +442,24 @@ if (Test-Path -LiteralPath $sheet2AcceptanceSource) {
 }
 
 Write-Step "Write deployment README"
+Write-Step "Copy business agent runtime allowlist"
+$agentRuntimeSource = Join-Path $projectRoot "agent-runtime"
+$agentRuntimeTarget = Join-Path $releaseDir "agent-runtime"
+New-Item -ItemType Directory -Force -Path $agentRuntimeTarget | Out-Null
+$agentRuntimeFiles = @(
+  "package.json", "package-lock.json", "server.mjs", "runtime.mjs",
+  "model-adapter.mjs", "business-output.mjs"
+)
+foreach ($fileName in $agentRuntimeFiles) {
+  $sourceFile = Join-Path $agentRuntimeSource $fileName
+  if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
+    throw "Required business agent runtime file is missing: $fileName"
+  }
+  Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $agentRuntimeTarget $fileName) -Force
+}
+# The locked runtime dependency file:.. needs the unchanged parent manifest.
+Copy-Item -LiteralPath (Join-Path $projectRoot "package.json") -Destination (Join-Path $releaseDir "package.json") -Force
+
 $generatedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $readmeLines = @(
   "# Customer deployment package",
@@ -453,6 +471,7 @@ $readmeLines = @(
   "## Directory layout",
   "- frontend/dist: frontend static assets",
   "- backend: backend source code",
+  "- agent-runtime: business assistant Node source and locked dependencies (no installed dependencies or sessions)",
   "- backend/start_dev_backend.ps1: customer backend launcher (default port 8001)",
   "- tools/customer-db-preflight.ps1: PostgreSQL and Alembic read-only preflight",
   "- docs/0418/QC/sheet2_exact_review_acceptance_package.json: runtime acceptance-package artifact",
@@ -483,6 +502,14 @@ $readmeLines = @(
   "5. After an authorized operator confirms the backup and version gap, run from backend: python -m alembic -c alembic.ini upgrade head",
   "6. Rule validation additionally requires qc.rule_validation_runs and qc.rule_validation_events. Alembic head alone is insufficient. An authorized administrator may create missing tables from backend using python -c `"from app.services.rule_validation import _tables; _tables()`". Existing tables with missing columns must be investigated, not silently repaired. Confirm application SELECT/INSERT/UPDATE privileges and rerun preflight.",
   "7. Restart the backend and smoke-test the workstation, notifications, sample-pool list, and sample-pool upload endpoints.",
+  "",
+  "## Business assistant setup (optional; required for assistant conversations)",
+  "1. Install Node.js >=22.19 on the customer host. In agent-runtime run npm ci --ignore-scripts using package-lock.json. Offline hosts require dependencies prepared on a compatible OS/architecture; this source package does not bundle Node or npm dependencies.",
+  "2. In backend/.env configure the existing model endpoint/key/model, MEDQC_AGENT_RUNTIME_KEY, MEDQC_AGENT_RUNTIME_URL=http://127.0.0.1:8013, and MEDQC_AGENT_BACKEND_URL=http://127.0.0.1:8001 (adjust to the actual backend port). Never use the isolated development callback 8003.",
+  "3. Configure MEDQC_AGENT_ACCESS_FILE with approved account/case/department scopes. No authorization file or credentials are bundled. Keep MEDQC_AGENT_TASK_WRITE_ENABLED and MEDQC_AGENT_FEEDBACK_WRITE_ENABLED unset unless business writes are separately authorized.",
+  "4. From agent-runtime start node server.mjs. It listens only on loopback 8013. Both services must use the same runtime key. Persist and restrict access to .tmp/0910-full-audit/business-agent-dsh-private and the Python session storage; do not overwrite them during upgrades.",
+  "5. WeKnora is optional and not bundled. If configured, provide its URL/key and explicit allowed knowledge-base IDs. Without it, do not claim knowledge retrieval is available.",
+  "6. Verify doctor and department-manager reads, document location, refresh and stop before customer acceptance. Feedback/action tables require migrations 45/46; writing remains disabled by default.",
   "",
   "## Core API smoke tests",
   "Use an authenticated browser session or an authorized API client. Expected result is not HTTP 500:",
