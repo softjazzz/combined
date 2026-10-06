@@ -344,6 +344,11 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         """应用启动时初始化"""
+        from .core.acceptance_startup import resolve_startup_mode, validate_acceptance_schema
+
+        startup_mode = resolve_startup_mode(
+            os.getenv("MEDQC_STARTUP_MODE"), environment=settings.ENV,
+        )
         runtime_build_router.initialize_runtime_build(app)
         logger.info("🚀 应用启动中...")
         strict_startup_checks = (
@@ -358,6 +363,14 @@ def create_app() -> FastAPI:
         # 前置校验 DATA_SOURCE（ADR-2026-03-16：启动即失败）
         from .database.repository import validate_data_source
         validate_data_source()
+
+        if startup_mode == "acceptance":
+            from .database.connection import DB_SCHEMA_MODE, engine
+
+            validate_acceptance_schema(engine, schema_mode=DB_SCHEMA_MODE)
+            app.state.startup_mode = startup_mode
+            logger.info("验收启动结构检查通过；不执行DDL、后台预热或旧任务恢复")
+            return
 
         try:
             # 初始化 CDM 数据库
