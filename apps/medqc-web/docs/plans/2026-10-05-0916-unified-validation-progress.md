@@ -336,3 +336,13 @@ C01本次合同合法且三条合规，但C06-013由H19/H21合规变不合规，
 迁移公开红→绿33项，root含原门禁117项通过（首次导入路径错误留痕后修命令重跑）、ruff通过，未运行全前端type-check/test:unit。此处只是结构工程修复；没有创建023副本、写预期/正式任务、调用模型或临床批准。两副本/一次任务/八调用额度仍未使用，runner身份/成本与证据合同审核进行中。
 
 依据与证据见[结构修复及023计划](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-06-0916-visit-index-schema-repair-023.md)。分类9+2+3+18、限定工程成果4、临床签认0、上线批准0均不增加，不把SQL修复或门禁通过当新增质控点验收。
+
+## 二十六、结构修复提交完成，023创建阶段护栏停止
+
+结构修复提交`0b7e4a39e`，117项聚焦回归及真实PG结构/原值回读通过。随后正式验证准备中纠正两个私有假设：正常非生产认证可用既有内存qc_manager，不要求新增PG账号；刷新裸SQL实际owner为qc，public仅存在性gate，不是需要再迁表。formal1/2分别17 SELECT+3 SET、56 SELECT+3 SET，均0写入/任务/模型；不覆盖旧产物或把准备误判列为生产缺陷。护栏最终47项离线反例由root独立重跑通过，正式预算未放宽。
+
+formal3两次新副本创建请求已使用，正常启动及API login/me成功；创建阶段因`sample_update_old_or_unbound_id`硬停止。两次工程预期PUT、一次run POST、模型generate/SDK/provider调用均0，无023结果或页面回读验收。被拦statement/context未保存，原因码不足以证明真实旧对象更新或私有护栏误报；暂不作因果结论。hard exit未执行finally，不用离线join替身冒称实际退出已核验。
+
+root独立37 SELECT/1 SET只读回读：两新身份原始材料、索引及全部Bundle均已保存；C02样本ready/synced，C03 pending/synced，无latest_job_id。两例冻结原麻醉/手术及旧raw_payload、冻结源码逐值不变，仅保护该明确集合。副本保留，不删除、补状态或重新创建；临时8003/3003和浏览器页关闭。日志放行868 SELECT/6 SET/28 INSERT/10 UPDATE、0 DDL，不等同全部提交凭证。
+
+023仍为准备/创建阶段未闭环，不增加专项通过。分类9+2+3+18、限定工程成果4、临床签认0、上线批准0保持；结构修复不能代替023验收。后续先只读定位护栏边界并复用现有副本，不自动执行剩余额度。具体停止、纠错与私有证据见[本批计划实际结果](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-06-0916-visit-index-schema-repair-023.md)。

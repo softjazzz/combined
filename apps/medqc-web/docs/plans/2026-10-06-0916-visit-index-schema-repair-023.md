@@ -58,3 +58,23 @@ root受控实际事务成功提交：3ADD仅qc.visit_index，1UPDATE仅public.al
 独立[迁移与事务审查](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-schema-repair-review-result-private.md)未发现剩余阻断。root另外解析其原JSON核迁移源码逐字绑定，8不兼容反例全在DDL前拒绝，3ADD+1版本UPDATE编译精确，外部事务true/框架自身commit0。独立离线探针root源码冻结早于最后两个版本触发器/规则SELECT；代理及root对最后增量另亲读核定，未把较早探针写成完整最终源码执行。实际迁移及回读由root真实PG产物证明。
 
 提交前只检查lint已通过；编码手动补跑。因暂存区有他人两文档，本次仅4路径限定提交并关闭本地Husky，避免lint-staged改写他人文件，理由写提交说明；不改CI。完整前端type-check/test:unit未跑，使用仓库允许的编码/lint及117聚焦Python回归。
+
+## 正式验证实际停止与纠错
+
+结构迁移及测试已提交为`0b7e4a39e`，此前验收只读门禁为`4e23ff55c`。以下是私有验收脚本的准备及执行记录，不另算生产引擎缺陷或质控点通过。
+
+初次子进程在应用导入前因继承的模型凭据与项目环境不一致而停止，0外部调用；后续仅在该子进程绑定项目现有配置，不改全局环境或模型配置。formal1要求PG持久化qc_manager账号，17 SELECT/3 SET后停止。root反查auth_store.py:218–235及storage/memory.py:46–59，确认当前非生产正常认证支持既有内存测试账号，并独立核不存在PG账号/ID/email冲突及现有密码匹配；没有创建账号或绕过认证。formal2又因私有护栏误把刷新记录owner设为public而停止，56 SELECT/3 SET。root用实际源码refresh_manager.py:275–286及连接解析核裸SQL指向qc.bundle_refresh_failures(OID200356)，public同名表(OID207742)只供既有存在性gate，两表字段相同；这不是新增结构缺陷，不迁表。两次均0 DDL/DML、创建、工程预期、任务及模型，旧产物保留。
+
+正式护栏离线曾发现NOT和跨schema反例；修正后最终v5为47/47，root独立重跑root-v5同样通过。认证ORM及返回合同另有15项保护；正常SDK返回是dict而不是root初稿误设的str，已按qc_llm_client.py:189–198/322–342纠正。root亲自逐字符核formal2→formal3差分仅唯一qc刷新owner、新身份fresh检查及新的产物路径；预算/身份/来源冻结/生命周期未放宽。代理延迟worker替身证明正常finally要在guard内join再检查旧材料，但不是实际hard exit的退出证明。
+
+formal3真实执行通过正常acceptance启动、401保护和既有内存qc_manager正常login/me；这不代表生产持久账号链已验证。两次新副本POST已发出，C02响应200，C03响应未完成。护栏随后因`sample_update_old_or_unbound_id`硬停止，尚未进行两次工程答案PUT、一次run POST或任何generate/SDK/provider调用。停止前记录868 SELECT/6 SET/28 INSERT/10 UPDATE，0 DDL；这些是before_cursor_execute放行记录，不能直接等同已提交数量。没有sys用户、任务、结果或模型事件写记录。runner记录4个完成HTTP200，另有未认证GET401和一次浏览器正常登录尝试，不能把4当全部网络请求数。
+
+被拦截语句/context没有保存，不能由原因码断言本次试图修改旧对象，也不能直接断言编译缓存导致误报。hard exit未经过finally，产物没有退出来源检查/worker join字段，不冒称实际退出核验已完成。本批不放宽护栏、重跑创建、补写C03状态或删除副本。
+
+独立离线反例发现私有护栏的确定性缺陷：相同形状Core UPDATE第二个新ID命中SQLAlchemy编译缓存时，cached BindParameter.value仍为第一个新ID，实际绑定已是第二个新ID；护栏要求二者相同而拒绝合法更新。禁缓存对照两条均通过。root亲读实际创建尾部custom_qc_sample_pool_service.py:4516–4521确为Session.execute(Core UPDATE)，并核保存反例源码逐字等于formal3冻结guard、同一compiled对象、actual/bind差异和禁缓存对照；只确认合成机制，不把它倒推成本次正式停止的已确认根因。该私有工具缺陷不归到生产质控引擎，仍需被拦现场证据；本批不继续扩大修复或运行。
+
+root另开独立只读进程37 SELECT/1 SET、重复读事务回滚，核两新身份各有patient/registration/mr/anesthesia、qc索引、running/final及六领域Bundle；两样本均已存在，C02 ready/synced、C03 pending/synced，均无latest_job_id。冻结两例原麻醉/手术及旧raw_payload逐值未变，冻结生产及私有源也未变。保护范围只是这两例冻结集合，不声称全库或未保存的环境快照不变。临时8003后端、3003 Vite与本批浏览器页已关闭，未触碰8001；没有023结果页面证明。
+
+023仍未完成正式工程验收：两次创建额度已使用；工程预期、任务及八模型额度未使用，不据此自行再执行。后续只读定位私有护栏的拦截边界，优先复用现有副本；任何新写入/重跑均需新的明确闭环。患者原文、标识及脚本全部私有保留，不提交；临床签认/启用/上线批准均未写。
+
+私有证据：[formal3停止](C:/Users/Coldplay/.codex/worktrees/lx0916-independent-regression-20261004/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-formal3-result-private.json)、[root独立停机回读](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-poststop-root-private.json)、[独立日志复核](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-runner-review-formal3-stop-private.md)。
