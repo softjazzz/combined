@@ -447,6 +447,7 @@ async def _execute_record(
             identity=identity,
             record=record,
             execution=execution,
+            semantic_diagnostic=_mapping(extracted.get("diagnostic")),
         )
         return _RecordExecution(
             items=outcome.items,
@@ -490,11 +491,21 @@ def _execution_to_record_outcome(
     identity: Mapping[str, str],
     record: Mapping[str, Any],
     execution: Luxian0916Execution,
+    semantic_diagnostic: Mapping[str, Any],
 ) -> _RecordExecution:
-    items = [
-        _transport_item(identity=identity, record=record, result=result)
-        for result in execution.results
-    ]
+    extraction_failed = (
+        semantic_diagnostic.get("code") == "semantic_extraction_invalid"
+        and isinstance(semantic_diagnostic.get("failure_stage"), str)
+        and semantic_diagnostic.get("failure_stage") in _SEMANTIC_FAILURE_STAGES
+    )
+    failed_rule_ids = semantic_diagnostic.get("failed_rule_ids")
+    failed_rule_ids = (
+        set(failed_rule_ids).intersection(_SHARED_SEMANTIC_RULE_IDS)
+        if isinstance(failed_rule_ids, (list, tuple))
+        and all(isinstance(rule_id, str) for rule_id in failed_rule_ids)
+        else set()
+    )
+    items = []
     failures = [
         {
             **identity,
@@ -504,7 +515,49 @@ def _execution_to_record_outcome(
         }
         for failure in execution.failures
     ]
+    for result in execution.results:
+        if (
+            extraction_failed
+            and result.rule_id in failed_rule_ids
+            and result.status == "data_quality_gap"
+            and result.reason_code in {"semantic_fact_unavailable", "event_fact_unavailable"}
+            and not _has_existing_gap_facts(result)
+        ):
+            failures.append(
+                {
+                    **identity,
+                    "record_id": str(record.get("record_id") or identity["visit_id"]),
+                    "error_phase": "semantic_extraction",
+                    "rule_id": result.rule_id,
+                    "error_type": (
+                        "SemanticGenerationError"
+                        if semantic_diagnostic.get("failure_stage") == "generation"
+                        else "SemanticExtractionError"
+                    ),
+                }
+            )
+            continue
+        items.append(_transport_item(identity=identity, record=record, result=result))
     return _RecordExecution(items=items, rule_failures=failures)
+
+
+def _has_existing_gap_facts(result: Luxian0916RuleResult) -> bool:
+    """已有来源缺口或合法未知事实不归因于本次抽取失败。"""
+    facts = result.decision_facts
+    return (
+        (result.rule_id == "LX0916-002" and facts.get("history_narrator_available") is False)
+        or (result.rule_id == "LX0916-008" and facts.get("age_years_available") is False)
+        or "semantic_state" in facts
+        or "item_states" in facts
+        or facts.get("document_completeness") in ("complete", "incomplete", "unknown")
+        or (
+            result.rule_id == "LX0916-017"
+            and any(
+                isinstance(event, Mapping) and event.get("appropriateness") == "unknown"
+                for event in facts.get("events", ())
+            )
+        )
+    )
 
 
 def _transport_item(

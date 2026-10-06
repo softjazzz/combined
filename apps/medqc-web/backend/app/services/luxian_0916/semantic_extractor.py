@@ -1059,6 +1059,18 @@ async def extract_luxian_0916_facts(
     """执行受控提取；仅合同校验失败时再提取一次，其余异常返回空事实。"""
 
     documents = _selected_documents(evidence_payload, rule_ids)
+    selected_sources = {document["source_type"] for document in documents}
+    failed_rule_ids = [
+        rule_id for raw_rule_id in rule_ids
+        if (rule_id := str(raw_rule_id).strip().upper()) in _SOURCES_BY_RULE
+        and selected_sources.intersection(_SOURCES_BY_RULE[rule_id])
+    ]
+
+    def failed_facts(**kwargs: Any) -> dict[str, Any]:
+        facts = _empty_facts(**kwargs)
+        facts["diagnostic"]["failed_rule_ids"] = failed_rule_ids
+        return facts
+
     event_source_state_by_rule = _event_source_state_by_rule(
         evidence_payload=evidence_payload,
         documents=documents,
@@ -1078,7 +1090,7 @@ async def extract_luxian_0916_facts(
             response_format={"type": "json_object"},
         )
     except Exception:  # 模型调用异常只保留稳定阶段码，不泄露接口或患者内容。
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=1,
@@ -1090,7 +1102,7 @@ async def extract_luxian_0916_facts(
         finish_reason = choice.get("finish_reason")
         content = choice["message"]["content"]
     except Exception:
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=1,
@@ -1098,7 +1110,7 @@ async def extract_luxian_0916_facts(
             failure_stage="response_shape",
         )
     if finish_reason == "length":
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=1,
@@ -1106,7 +1118,7 @@ async def extract_luxian_0916_facts(
             failure_stage="output_truncated",
         )
     if not isinstance(content, str):
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=1,
@@ -1119,7 +1131,7 @@ async def extract_luxian_0916_facts(
     try:
         validated = _validate_facts(content, rule_ids=rule_ids)
     except json.JSONDecodeError:
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=1,
@@ -1141,7 +1153,7 @@ async def extract_luxian_0916_facts(
                 response_format={"type": "json_object"},
             )
         except Exception:
-            return _empty_facts(
+            return failed_facts(
                 code="semantic_extraction_invalid",
                 document_count=len(documents),
                 llm_call_count=2,
@@ -1155,7 +1167,7 @@ async def extract_luxian_0916_facts(
             repaired_finish_reason = repaired_choice.get("finish_reason")
             repaired_content = repaired_choice["message"]["content"]
         except Exception:
-            return _empty_facts(
+            return failed_facts(
                 code="semantic_extraction_invalid",
                 document_count=len(documents),
                 llm_call_count=2,
@@ -1164,7 +1176,7 @@ async def extract_luxian_0916_facts(
                 contract_retry_detail=failure_detail,
             )
         if repaired_finish_reason == "length":
-            return _empty_facts(
+            return failed_facts(
                 code="semantic_extraction_invalid",
                 document_count=len(documents),
                 llm_call_count=2,
@@ -1173,7 +1185,7 @@ async def extract_luxian_0916_facts(
                 contract_retry_detail=failure_detail,
             )
         if not isinstance(repaired_content, str):
-            return _empty_facts(
+            return failed_facts(
                 code="semantic_extraction_invalid",
                 document_count=len(documents),
                 llm_call_count=2,
@@ -1184,7 +1196,7 @@ async def extract_luxian_0916_facts(
         try:
             validated = _validate_facts(repaired_content, rule_ids=rule_ids)
         except json.JSONDecodeError:
-            return _empty_facts(
+            return failed_facts(
                 code="semantic_extraction_invalid",
                 document_count=len(documents),
                 llm_call_count=2,
@@ -1193,7 +1205,7 @@ async def extract_luxian_0916_facts(
                 contract_retry_detail=failure_detail,
             )
         except ValueError as repaired_exc:
-            return _empty_facts(
+            return failed_facts(
                 code="semantic_extraction_invalid",
                 document_count=len(documents),
                 llm_call_count=2,
@@ -1204,7 +1216,7 @@ async def extract_luxian_0916_facts(
             )
         contract_retry_applied = True
     except Exception as exc:
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=llm_call_count,
@@ -1220,7 +1232,7 @@ async def extract_luxian_0916_facts(
             event_facts.pop(event_key, None)
         facts["event_facts"] = event_facts
     except Exception:
-        return _empty_facts(
+        return failed_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=llm_call_count,

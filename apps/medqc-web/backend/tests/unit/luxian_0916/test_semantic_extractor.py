@@ -844,6 +844,7 @@ async def test_rejects_unknown_keys_and_illegal_enum_values(
         "failure_stage": "contract_validation",
         "failure_detail": failure_detail,
         "contract_retry_detail": failure_detail,
+        "failed_rule_ids": ["LX0916-011"],
     }
 
 
@@ -867,6 +868,7 @@ async def test_unknown_event_fact_has_safe_contract_failure_detail() -> None:
         "failure_stage": "contract_validation",
         "failure_detail": "unknown_event_fact",
         "contract_retry_detail": "unknown_event_fact",
+        "failed_rule_ids": ["LX0916-011"],
     }
 
 
@@ -1145,6 +1147,7 @@ async def test_rejects_course_event_invalid_on_both_attempts(item: dict[str, Any
         "failure_stage": "contract_validation",
         "failure_detail": detail,
         "contract_retry_detail": detail,
+        "failed_rule_ids": ["LX0916-015"],
     }
 
 
@@ -1337,6 +1340,7 @@ async def test_model_generation_failure_keeps_safe_failure_stage() -> None:
         "document_count": 1,
         "llm_call_count": 1,
         "failure_stage": "generation",
+        "failed_rule_ids": ["LX0916-011"],
     }
     assert "private endpoint detail" not in json.dumps(result, ensure_ascii=False)
 
@@ -1370,6 +1374,7 @@ async def test_contract_retry_generation_failure_is_closed_with_two_calls() -> N
         "llm_call_count": 2,
         "failure_stage": "generation",
         "contract_retry_detail": "unknown_event_fact",
+        "failed_rule_ids": ["LX0916-011"],
     }
     assert '"unknown_event": true' not in prompts[1]
     assert "unknown_event_fact" in prompts[1]
