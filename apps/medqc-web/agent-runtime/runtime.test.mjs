@@ -710,6 +710,41 @@ test('停止实际中断 DSH 原生请求；停止先到时不发模型请求', 
   }
 })
 
+test('连续停止并重启恢复后，模型最后一条用户消息仍是当前追问', async () => {
+  const f = await fixture([{ delay: true }, { delay: true }])
+  try {
+    for (const message of ['旧请求：列出状态', '旧请求：列出问题']) {
+      const body = { ...f.body, run_id: randomUUID(), message }
+      const running = f.runtime.chat(f.sessionId, body)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      f.runtime.stop(f.sessionId, body.run_id)
+      assert.equal((await running).status, 'stopped')
+    }
+    await f.runtime.close()
+    const adapter = new ScriptedAdapter([{ text: '处理当前草稿。' }])
+    const restored = await createRuntime({
+      root: f.root,
+      adapter,
+      model: 'synthetic',
+      fetchImpl: f.fetchImpl,
+    })
+    try {
+      const message = '当前请求：调整参考草稿'
+      const result = await restored.chat(f.sessionId, { ...f.body, run_id: randomUUID(), message })
+      const users = adapter.requests[0].messages.filter((item) => item.source?.kind === 'user')
+      assert.equal(users.at(-1).source.display_question, message)
+      assert.ok(
+        users.at(-1).content.some((block) => block.type === 'text' && block.text === message),
+      )
+      assert.equal(result.question, message)
+    } finally {
+      await restored.close()
+    }
+  } finally {
+    await f.runtime.close()
+  }
+})
+
 test('供应商请求在首个流片段前取消仍保存停止状态', async () => {
   const f = await fixture([])
   await f.runtime.close()
@@ -903,9 +938,29 @@ test('工具4xx时把后端简短中文原因交给模型改写，5xx不透传',
     description: '提交参考草稿',
     parameters: { type: 'object', properties: {}, additionalProperties: true },
   }
-  for (const [status, detail, expected] of [
-    [422, '第1段含所引证据未出现的数值，请改为待医生补充', /HTTP 422：第1段含所引证据未出现的数值/],
-    [503, '内部连接串不应出现', /HTTP 503(?!：)/],
+  for (const [status, body, expected] of [
+    [
+      422,
+      { detail: '第1段含所引证据未出现的数值，请改为待医生补充' },
+      /HTTP 422：第1段含所引证据未出现的数值/,
+    ],
+    [
+      422,
+      {
+        success: false,
+        error: '第1段含数值的事实须完整引用单条来源',
+        code: 'HTTP_422',
+        trace_id: 'private-trace',
+      },
+      /HTTP 422：第1段含数值的事实须完整引用单条来源/,
+    ],
+    [
+      422,
+      { success: false, error: { input: '不应透传原始参数' }, code: 'HTTP_422' },
+      /HTTP 422(?!：)/,
+    ],
+    [503, { detail: '内部连接串不应出现' }, /HTTP 503(?!：)/],
+    [503, { success: false, error: '内部连接串不应出现', code: 'HTTP_503' }, /HTTP 503(?!：)/],
   ]) {
     const f = await fixture(
       [{ tool: 'compose_reference_draft' }, { text: '已改写。' }],
@@ -916,14 +971,16 @@ test('工具4xx时把后端简短中文原因交给模型改写，5xx不透传',
       root: f.root,
       adapter: f.adapter,
       model: 'synthetic',
-      fetchImpl: async () => Response.json({ detail }, { status }),
+      fetchImpl: async () => Response.json(body, { status }),
     })
     try {
       await runtime.create(f.sessionId, { context: f.context, tools: [draftSpec] })
       await runtime.chat(f.sessionId, f.body)
       const followup = JSON.stringify(f.adapter.requests.at(-1).messages)
       assert.match(followup, expected)
-      if (status >= 500) assert.ok(!followup.includes(detail))
+      assert.ok(!followup.includes('private-trace'))
+      assert.ok(!followup.includes('不应透传原始参数'))
+      if (status >= 500) assert.ok(!followup.includes('内部连接串不应出现'))
     } finally {
       await runtime.close()
       await f.runtime.close()
@@ -949,6 +1006,33 @@ test('@selected 只替换为本轮用户所选来源，未选择时原样交后�
     } finally {
       await f.runtime.close()
     }
+  }
+})
+
+test('卡片操作后的自由追问明确没有本轮选择，不沿用历史来源替换占位符', async () => {
+  const f = await fixture([
+    { text: '已查看所选问题。' },
+    { tool: 'read_saved_results', args: { result_id: '@selected' } },
+    { text: '请重新选择问题。' },
+  ])
+  try {
+    await f.runtime.chat(f.sessionId, {
+      ...f.body,
+      reference_id: 'result:job:rec:LX0609-01-01-01',
+    })
+    await f.runtime.chat(f.sessionId, {
+      ...f.body,
+      run_id: randomUUID(),
+      message: '请调整刚才的参考草稿。',
+    })
+    const currentUser = f.adapter.requests
+      .at(-1)
+      .messages.filter((message) => message.source?.kind === 'user')
+      .at(-1)
+    assert.match(JSON.stringify(currentUser), /本轮未从结果卡片选择来源/)
+    assert.equal(f.callbacks[0].args.result_id, '@selected')
+  } finally {
+    await f.runtime.close()
   }
 })
 

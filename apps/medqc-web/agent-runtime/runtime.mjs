@@ -483,7 +483,13 @@ export async function createRuntime({
                 response.status < 500
                   ? await response
                       .json()
-                      .then((body) => body?.detail)
+                      .then(
+                        (body) =>
+                          body?.detail ??
+                          (body?.success === false && body?.code === `HTTP_${response.status}`
+                            ? body.error
+                            : undefined),
+                      )
                       .catch(() => undefined)
                   : undefined
               throw new Error(
@@ -576,7 +582,12 @@ export async function createRuntime({
                       text: `用户在结果卡片中明确选择本会话来源 ${body.reference_id}，本轮解释或下钻绑定该来源；工具参数需要该来源标识（result_id 或 record_reference）时直接写 @selected，由系统替换为该来源，不要自行抄写或拼接。`,
                     },
                   ]
-                : []),
+                : [
+                    {
+                      type: 'text',
+                      text: '本轮未从结果卡片选择来源，@selected 没有绑定；历史轮次的卡片选择不延续到本轮。追问时使用历史工具返回的完整 result_id 或 record_reference，无法确认完整标识时重新读取结果或统计；对象不唯一时请用户选择，不猜测或拼接标识。',
+                    },
+                  ]),
             ],
           }),
         )
