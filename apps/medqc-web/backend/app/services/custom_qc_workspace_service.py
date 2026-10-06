@@ -1572,6 +1572,16 @@ def _sync_batch_job_parent_columns(*, schema: Optional[str]) -> None:
         "family_key": "VARCHAR(64)",
         "family_name": "VARCHAR(64)",
     }
+    inspector = sa.inspect(engine)
+    columns = {
+        column["name"] for column in inspector.get_columns("custom_qc_batch_jobs", schema=schema)
+    }
+    indexes = {
+        index["name"] for index in inspector.get_indexes("custom_qc_batch_jobs", schema=schema)
+    }
+    # 已齐备的库不重复发DDL；缺项时保留既有迁移职责。
+    if column_sql.keys() <= columns and "idx_custom_qc_batch_jobs_parent_job_id" in indexes:
+        return
     with engine.begin() as conn:
         for column_name, column_type in column_sql.items():
             conn.execute(
