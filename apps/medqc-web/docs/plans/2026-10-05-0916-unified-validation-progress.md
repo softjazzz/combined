@@ -174,3 +174,15 @@ C两例三事件当前五事实工程草案准备完毕，232分句偏移由主�
 独立审读补查全部原检验子项后显式更正：六值组合唯一属于原PL报告，不再把未逐字写原双PL值当必要条件，三项最早坐标需改、分析/处置可作工程候选。主协调另执行inventory+fallback投影，两例90/184分句，15草案和8主要引用精确保留；后一例因现有首程重复栏目拼接，窗口增加1513字符、Prompt增加11677字符，均未触发门禁，未实测Token或医学收益。本次只记录观察，不顺手改变正文/坐标；完整scene/权威覆盖与正式回放仍未放行。
 
 本阶段工程修复增加，32条分类和临床完成数不变；历史段落保留各自时点，不用最新D合入倒写早期验收成果。长程证据与范围见[持续修复文档](C:/Users/Coldplay/.codex/worktrees/lx0916-validation-handoff/LX888/apps/medqc-web/docs/plans/2026-10-05-0916-long-running-validation.md)。
+
+## 十一、最终D共享失败交付与剩余事件准备
+
+D随后提交031d53252，将共享抽取技术失败的可读来源/规则投影和运输分类受控迁入，不迁007/008或提交他人005/006。主协调独立复现提交基线的合成API故障：任务错误地completed、失败清单为空；修复后29有效结果和3技术失败可实际SQLite保存与API回读，成功010目标same、发布批准仍拒绝。工作区235项聚焦回归及3API通过；不含005/006的候选提交源码另有176项和3API通过；实际提交031d又复跑3API通过。这些不是新增临床通过规则或生产认证/PG/页面证据。
+
+依据：[受控合入范围、红绿与差分保护](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-05-0916-shared-extraction-delivery-integration.md)、[实际提交API验证](C:/Users/Coldplay/.codex/worktrees/lx0916-validation-handoff/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-d-delivery-chain-committed-v3-private.json)。原两份他人暂存文档的索引blob保持，工作区005/006在移除本补丁后与实施前文本精确相同。独立只读审核未发现阻断缺陷，017直接构造unknown仅作运输分支保护，不能据此宣称真实原生017未知事实已验证；005/006引用重试异常不在本闭环。
+
+015/016其余四例当前inventory+fallback投影已准备，主协调亲自复跑：C01/C04/C07/C21分别60/176/58/206个分句，500个偏移精确；窗口字符4667/7546/3478/7621，Prompt字符21419/53167/20152/60490，各未触发当前字符/分句门禁。与前两例合起来，原6例7事件ID和数量完全一致。归档投影不是原运行完整恢复，scene和权威覆盖保持空，replay_allowed=false；四例五事实草案另行准备、关联争议保留，不凑全部present。
+
+四例随后形成20项五事实草案：作者候选15 present、5 unknown，均待复核；结合前两例现已覆盖6例7事件的35事实草案准备，不等于35项已验收。主协调独立反查20事实和27引用，坐标/切片/时间全部精确，但没有冻结最早坐标：早期ICU措施是否支持独立management、C07同时间更早分句是否支持record/content、C21症状真实时序和独立分析引文均有争议。C04五unknown是同事件关联未确认，不是认定五项缺失或标准未定；当前实现并不要求医嘱写明触发原因。作者草案不覆盖旧结果、人工预期或当前临床结论。
+
+依据：[四例当前材料](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-remaining-material-private.json)、[主协调独立复跑](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-remaining-projection-private.json)、[四例工程草案](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-remaining-draft-facts-private.json)、[主协调独立审读](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-remaining-draft-review-v2-private.json)。本阶段真实模型/PG访问0，不重跑模型补统计；后续010/012限定正式运行的PG写入和最多16次generate额度已集中请求，尚未获新授权，不挪用历史已消费额度。长程目标保持，9专项+2历史专项+3历史实验+18整包/审计分类及临床签认/上线批准数量均不增加。
