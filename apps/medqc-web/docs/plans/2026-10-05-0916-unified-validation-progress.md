@@ -75,8 +75,8 @@ H0和H1是每条共同历史证据；其余证据代号的绝对路径见第五�
 | LX0916-012 首程三要素存在性 | 本轮专项 | H0/H1/H6/H10/H13/H15；2真+2合成后4真例正式任务；第十章D补充 | V3；D fdda9ce1f已补嵌套取值，当前直接回放非正式链验收 | 最新4真例工程预期，均三栏非空；此前缺鉴别负例仅合成 | A09bf离线重放128有效+0失败；D当前4/4与保存全字段/冻结预期一致，主协调另复跑；无新PG/页面 | 真实缺项、当前D完整worker/保存、最新认证HTTP/页面；不评价充分性 | 存在性及当前D直接回放阶段达成；未完成 | 待签 | 未批准 |
 | LX0916-013 诊断鉴别依据充分性 | 整包/审计 | H0/H1/H8；H10/S1及第十一章D合成故障保护，不是充分性专项 | V3，D031d已迁入失败交付，首程取值也已修复；当前模型/医学结果未复验 | 未找到独立充分性专项预期；技术异常样本不是临床负例 | 无本轮医学专项；D29有效/3技术失败的合成API保护不补计为013验收 | 充分性理由/证据及临床答案；当前D真实故障保存/认证页面 | 整包/故障工程证据；未完成 | 待签 | 未批准 |
 | LX0916-014 诊疗计划全面具体 | 本轮专项 | H0/H1/H9；2真例本地抽取；H10/S1有非目标故障保护 | V3 | C01/C30均在运行前保留人工复核；无确定临床金标准/真负例 | 两例输出合规，均没有质量理由/直接evidence，不计临床通过 | 剂量/疗程等标准维度与Prompt检查范围需复核；证据及正式保存 | 有本地结果，未闭环；未完成 | 待签 | 未批准 |
-| LX0916-015 病情变化记录完整 | 历史专项 | H0/H1/H5/H13/H14/H15/H16；旧文本盲测、结构化30例、Stage2两轮30例及六例当前草案 | V4，Stage2已接线；4a8时点新只读冻结6例原始两触发源/五病程源，非旧运行恢复 | 结构化24无触发+6触发7事件；现35事实工程草案已独立审读，关联/最早坐标争议保留，未转gold | 新冻结按当前Python复算6例7事件ID及归一化事实与旧输入相同；五病程原始查询未超限，正式bundle未核，完整模型回放0 | 当前五事实预期冻结、实际bundle覆盖/scene、独立未见病例及临床签认；旧原响应仍缺 | 历史回归/当前原文与草案审读；完整未完成 | 待签 | 未批准 |
-| LX0916-016 病情变化分析处理 | 历史专项 | H0/H1/H5/H13/H14/H15/H16，同一专属抽取、Python分别判定 | V4，Stage2已实现；六例当前工程坐标已核，新只读原始来源冻结不替代正式投影 | 同015；当前35事实草案含分析/处理，独立审读异议保留，不自动作临床答案 | 历史两轮24不适用+6合规；6例7事件当前归一化事实一致，未新生成QC模型事实 | 分析/处理和事件归属预期冻结、完整源投影/覆盖、真实缺陷和临床签认 | 历史回归/当前草案审读；完整未完成 | 待签 | 未批准 |
+| LX0916-015 病情变化记录完整 | 历史专项 | H0/H1/H5/H13/H14/H15/H16/H17；旧文本盲测、结构化30例、Stage2两轮30例及六例当前草案 | V4，Stage2已接线；df199时点六例同快照核实两候选缓存、触发和五源实际宽查询；非旧运行恢复 | 结构化24无触发+6触发7事件；现35事实工程草案已独立审读，关联/最早坐标争议保留，未转gold | 12候选五源complete、输入门禁无缺口，完整目录/Prompt/归一化事实与此前材料精确相同；新模型0 | 当前五事实预期冻结、正式任务scene、独立未见病例及临床签认；旧原响应仍缺；完整Worker未验收 | 历史回归/当前输入覆盖及草案审读；完整未完成 | 待签 | 未批准 |
+| LX0916-016 病情变化分析处理 | 历史专项 | H0/H1/H5/H13/H14/H15/H16/H17，同一专属抽取、Python分别判定 | V4，Stage2已实现；六例当前五源实际查询覆盖已核，不证明完整evidence/历史场景 | 同015；当前35事实草案含分析/处理，独立审读异议保留，不自动作临床答案 | 历史两轮24不适用+6合规；当前两候选scene的完整目录/Prompt/触发事实相同，未新生成QC模型事实 | 分析/处理和事件归属预期冻结、正式场景、真实缺陷与临床签认；原merge不保证医学冲突校验 | 历史回归/当前输入覆盖及草案审读；完整未完成 | 待签 | 未批准 |
 | LX0916-017 检查用药合理性 | 整包/审计 | H0/H1/H8，30真例整包 | V4，事件执行模块同但共享抽取/失败分类不同 | 未找到独立合理性专项预期 | 未找到本轮专项结果 | 独立临床合理性答案、医嘱触发/覆盖与证据解释 | 整包历史；未完成 | 待签 | 未批准 |
 | LX0916-018 危急值报告处理 | 整包/审计 | H0/H1/H8/H12；专用Stage1/Stage2代码和回放脚本存在，未找到保存结果 | V4，专属模块D/A同且有接线；脚本不等于执行通过 | 未找到独立冻结专项答案/保存通过产物；015/016危急触发不能代替018验收 | 专用实施成果保留；本次不能证明专用回放已通过 | 找回原运行产物优先；若不存在再另立独立报告/处置及覆盖专项 | 有实施/工具，验收证据不足；未完成 | 待签 | 未批准 |
 | LX0916-019 重要操作记录规范 | 整包/审计 | H0/H1/H8，30真例整包 | V4，事件模块同，旧响应版本未等价 | 未找到独立操作专项预期 | 未找到本轮专项结果 | 真实操作触发、记录缺陷、时间/关联及资料缺口验证 | 整包历史；未完成 | 待签 | 未批准 |
@@ -118,6 +118,7 @@ H0和H1是每条共同历史证据；其余证据代号的绝对路径见第五�
 | H14 | [下一批第一阶段及主协调独立复现](C:/Users/Coldplay/.codex/worktrees/lx0916-validation-handoff/LX888/apps/medqc-web/docs/plans/2026-10-05-0916-next-acceptance-preflight.md)。A比较污染/DDL合成证伪，B单候选未批准，C找到6例7事件离线材料、35旧引用定位；均09bf，0新模型/PG，不增验收完成数 |
 | H15 | [长程修复及独立审查](C:/Users/Coldplay/.codex/worktrees/lx0916-validation-handoff/LX888/apps/medqc-web/docs/plans/2026-10-05-0916-long-running-validation.md)。A1/A2两项修复提交，106单测+3合成API，真实结构/初始化只读；C两例三事件15工程事实草案、232分句定位、4处旧解析更正。A/B/C为d680，D未合入；模型0、PG业务写0，不增临床完成数 |
 | H16 | [当前PG六例来源新冻结](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-current-readonly-freeze-private.json)；[主协调独立纯Python反算](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-current-freeze-check-private.json)。4a8时点52条只读查询，六例七事件归一化事实与旧材料相同；来源新时点不是旧运行恢复，正式bundle/scene/模型仍未放行 |
+| H17 | [六例同快照五源实际查询](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-five-source-live-freeze-private.json)；[主协调独立目录/Prompt/首程形态核查](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-five-source-freeze-check-private.json)。df199时点220条只读SQL，12候选五源输入覆盖已核；未覆盖其他21源或认证生产Worker，不计临床通过 |
 
 ### 本轮直接反查的关键结果
 
@@ -213,3 +214,13 @@ A2补充两个真实SQLite冷构造保护例，专用测试共13项通过：[测
 主协调及独立审核分别比较完整有序(source_type、document_id、clause_id、authored_at、text)：12候选均与此前归档官方投影精确相同，无新增、删除或同坐标正文/时间变化。C16/C25/C01/C04/C07/C21分别90/184/60/176/58/206分句，两个候选场景一致；Prompt字符分别41381/54511/21419/53167/20152/60490，不是Token或实测耗时。该比较不冻结最早临床位置、解除关联争议或产生新模型事实。
 
 依据：[缓存只读冻结](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-cache-readonly-freeze-private.json)、[主协调限定候选投影及SQL日志反查](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-current-candidate-projection-private.json)。产物均忽略且私有，不提交患者正文。Stage2不消费locatable_document_coordinates或medical_text来补齐五源覆盖；真实门控见[disease_change_stage2.py:310](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/disease_change_stage2.py:310)。生产非strict查询按院区+就诊、空结果后再放宽，现冻结未覆盖该域，见[sample_programmatic_evidence.py:731](D:/LLM/LX888/apps/medqc-web/backend/app/services/sample_programmatic_evidence.py:731)。下一步仅补该五源实际查询域的证据，不扩大规则或反复调Prompt；32条分类、临床签认和上线批准数量不变。
+
+## 十五、五源实际宽查询覆盖补齐
+
+随后在df199e96e时点完成H17。主协调亲自执行已审查的有界只读脚本：六例、两个候选scene共用一个REPEATABLE READ/readonly=on事务，记录220条SQL（217 SELECT、2 SHOW、1 SET），源代码未变化，业务写入/DDL/模型调用均为0。原缓存读取包含年龄合并、禁止装配/upsert；触发沿原两条SQL及201行上限；五源沿原宽谓词和3/51/51/11/11行哨兵，空响应才放宽、不增加ORDER BY、不过滤返回行。未出现读取失败、跨三坐标行或五源超限。独立审核逐条反查SQL/实际绑定参数及216份响应对应关系；其余21源共252次在PG前拒绝，不补造空表。
+
+12候选的五源readiness均complete，Stage1、事件、目录和输入门禁均无缺口。主协调另一进程及独立审核分别对比完整有序目录、全归一化触发事实及重建Prompt，逐字相同。本次关闭的仅是“该新快照下五正式源实际查询覆盖未核实”的准备缺口：不覆盖其他规则资料、整体evidence/Worker、历史任务scene或登记归属。登记原SQL未返回身份字段，registration_identity_verified保持false，不增加查询假装验过。
+
+原merge前80项同源同ID观察中有12项正文/章节差异，全部首程cache与source。主协调独立按保存文书ID绑定本次raw行，调用当前纯assemble_document，确认12份缓存的ID、正文、sections和source_fields与重建值精确相同，证明是同一保存文书可对应的两种投影形态；验证产物见H17。原拼接及缓存取值路径见[assembler.py:729](D:/LLM/LX888/apps/medqc-web/backend/app/services/document_assembly/assembler.py:729)、[assembly.py:1713](D:/LLM/LX888/apps/medqc-web/backend/app/services/bundles/assembly.py:1713)。这不证明历史缓存生成版本，也不把较长正文优先merge当医学冲突校验；差异记录完整保留，不顺手去重或修改坐标。
+
+015/016工程标注仍为6例7事件35草案，最早位置及关联异议未转gold。下一步是冻结独立预期及正式场景，而不是继续扩大只读扫描或重复未变单测。当前新模型预算及正式任务PG写入授权仍待回应；不挪用旧额度、不更改人工预期/启用/批准状态。9专项+2历史专项+3历史实验+18整包/审计分类、临床签认和上线批准数量均保持。
