@@ -1,9 +1,86 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.luxian_0916.critical_value_018 import (
     build_critical_value_018_facts,
     merge_critical_value_018_facts,
 )
+
+
+def _strict_raw_rows() -> list[dict[str, object]]:
+    return [
+        {"document_id": detail_id, "test_id": "TEST-1", "item_id": "SHARED-CODE",
+         "item_name": name, "result": "1.0", "abnormal_indicator": "PL",
+         "report_time": "2026-09-16 08:00:00"}
+        for detail_id, name in (("DETAIL-1", "pH"), ("DETAIL-2", "PCO2"))
+    ]
+
+
+def _strict_facts(rows: list[dict[str, object]]) -> dict[str, object]:
+    return build_critical_value_018_facts(bundle={}, evidence_payload=_evidence(
+        structured_source_rows={"labtest_item_report": rows, "labtest_master": [
+            {"test_id": "TEST-1", "report_datetime": "2026-09-16 08:00:00"}
+        ]}))
+
+
+def test_raw_identity_is_detail_document_not_shared_item_code() -> None:
+    events = _strict_facts(_strict_raw_rows())["event_facts"]["critical_values"]
+    assert len(events) == 1
+    assert events[0]["related_source_ids"] == ["DETAIL-1", "DETAIL-2"]
+    assert [item["item_id"] for item in events[0]["critical_items"]] == ["DETAIL-1", "DETAIL-2"]
+    reversed_events = _strict_facts(list(reversed(_strict_raw_rows())))["event_facts"]["critical_values"]
+    assert reversed_events[0]["event_id"] == events[0]["event_id"]
+    assert set(reversed_events[0]["related_source_ids"]) == set(events[0]["related_source_ids"])
+
+
+@pytest.mark.parametrize("conflict", [False, True])
+def test_raw_duplicate_detail_identity_rejected_without_dedup(conflict: bool) -> None:
+    row = _strict_raw_rows()[0]
+    duplicate = dict(row)
+    if conflict:
+        duplicate["result"] = "2.0"
+        duplicate["item_id"] = "DIFFERENT-CODE"
+    result = _strict_facts([row, duplicate])
+    assert result["event_source_state_by_rule"]["LX0916-018"] == "critical_value_source_invalid"
+
+
+def test_raw_missing_document_identity_does_not_fall_back_to_item_code() -> None:
+    row = _strict_raw_rows()[0]
+    row.pop("document_id")
+    assert _strict_facts([row])["event_source_state_by_rule"]["LX0916-018"] == "critical_value_source_invalid"
+
+
+def test_raw_duplicate_identity_across_reports_is_rejected() -> None:
+    first = _strict_raw_rows()[0]
+    second = {**first, "test_id": "TEST-2"}
+    evidence = _evidence(structured_source_rows={
+        "labtest_item_report": [first, second],
+        "labtest_master": [{"test_id": test_id} for test_id in ("TEST-1", "TEST-2")],
+    })
+    result = build_critical_value_018_facts(bundle={}, evidence_payload=evidence)
+    assert result["event_source_state_by_rule"]["LX0916-018"] == "critical_value_source_invalid"
+
+
+def test_grouped_parent_document_is_not_detail_identity() -> None:
+    report = _report(items=[{"item_name": "pH", "result": "1.0", "abnormal_indicator": "PL"}])
+    result = build_critical_value_018_facts(bundle=_bundle(reports=[report]), evidence_payload=_evidence())
+    assert result["event_source_state_by_rule"]["LX0916-018"] == "critical_value_source_invalid"
+
+
+def test_grouped_item_no_remains_stable_identity() -> None:
+    report = _report(items=[{"item_no": "LEGACY-1", "item_name": "pH", "result": "1.0", "abnormal_indicator": "PL"}])
+    result = build_critical_value_018_facts(bundle=_bundle(reports=[report]), evidence_payload=_evidence())
+    assert result["event_facts"]["critical_values"][0]["related_source_ids"] == ["LEGACY-1"]
+
+
+def test_raw_cancelled_report_remains_excluded_before_identity_check() -> None:
+    row = _strict_raw_rows()[0]
+    row.pop("document_id")
+    row["report_status"] = "cancelled"
+    result = _strict_facts([row])
+    assert result["event_source_state_by_rule"]["LX0916-018"] == "critical_value_source_complete"
+    assert result["event_facts"]["critical_values"] == []
 
 
 def _source_field(name: str, value: str) -> dict[str, object]:
@@ -214,6 +291,7 @@ def test_shared_structured_rows_are_preferred_over_stale_bundle_projection() -> 
                     {
                         "test_id": "TEST-2",
                         "test_no": "REPORT-2",
+                        "document_id": "ITEM-2",
                         "item_id": "ITEM-2",
                         "item_name": "血钙",
                         "result": "1.5",
@@ -260,7 +338,7 @@ def test_top_inventory_uses_matching_raw_rows_when_bundle_keeps_them() -> None:
     )
 
     item = result["event_facts"]["critical_values"][0]["critical_items"][0]
-    assert item["item_id"] == "RAW-ITEM-1"
+    assert item["item_id"] == "ITEM-DOC-1"
     assert item["result"] == "7.0"
 
 
