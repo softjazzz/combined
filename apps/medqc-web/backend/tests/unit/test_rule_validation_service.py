@@ -1,5 +1,6 @@
 """以规则为中心的验收服务：预期、运行、逐例复核、结论、批准与阶段推导。"""
 import json
+from copy import deepcopy
 
 import pytest
 from sqlalchemy import Column, MetaData, String, Table, Text, create_engine
@@ -99,6 +100,76 @@ def test_compare_matches_by_record_and_never_passes_missing(make_service):
     assert rows == {"c1": "different", "c2": "same"}
     assert {r["comparison"] for r in compare_cases(RULE, cases, {"status": "running"})} == {"pending"}
     assert {r["comparison"] for r in compare_cases(RULE, cases, {"status": "failed"})} == {"failed"}
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "partial_failed"])
+@pytest.mark.parametrize("execution_status", ["completed", "partial_failed"])
+@pytest.mark.parametrize("actual_status", ["compliant", "non_compliant", "data_quality_gap"])
+def test_0916_terminal_delivery_compares_valid_target_despite_other_rule_failure(
+    status, execution_status, actual_status,
+):
+    rule, ref = "LX0916-010", _ref("SYNTHETIC")
+    case = {"item_id": "synthetic", "record_ref": ref, "expected_status": actual_status}
+    item = {**ref, "rule_id": rule, "status": actual_status, "evidence": ["合成证据"],
+            "suggestion": "", "decision_facts": {"synthetic": True}}
+    job = {"status": status, "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+           "summary": {"execution_status": execution_status}, "items": [item],
+           "failed_records": [{**ref, "rule_id": "LX0916-011", "error_phase": "semantic_extraction"}]}
+    before = deepcopy((case, job))
+    row = compare_cases(rule, [case], job, project=deepcopy)[0]
+    assert row["comparison"] == "same"
+    assert row["actual_status"] == actual_status
+    assert row["result"] == item
+    assert (case, job) == before
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "partial_failed"])
+@pytest.mark.parametrize("shape,expected", [
+    ("missing", "missing"), ("duplicate", "ambiguous"), ("target_failed", "failed"),
+    ("other_rule", "missing"), ("other_visit", "missing"), ("conflict", "ambiguous"),
+    ("different", "different"), ("other_visit_failure", "same"),
+])
+def test_0916_terminal_delivery_isolates_pair_boundaries(status, shape, expected):
+    rule, ref = "LX0916-010", _ref("SYNTHETIC")
+    item = {**ref, "rule_id": rule, "status": "compliant"}
+    failure = {**ref, "rule_id": rule, "error_phase": "semantic_extraction"}
+    items = {"missing": [], "duplicate": [item, item], "target_failed": [],
+             "other_rule": [{**item, "rule_id": "LX0916-011"}],
+             "other_visit": [{**item, "visit_id": "OTHER"}], "conflict": [item],
+             "different": [{**item, "status": "non_compliant"}], "other_visit_failure": [item]}[shape]
+    failures = ([failure] if shape in {"target_failed", "conflict"} else
+                [{**failure, "visit_id": "OTHER"}] if shape == "other_visit_failure" else [])
+    job = {"status": status, "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+           "summary": {"execution_status": "partial_failed"}, "items": items, "failed_records": failures}
+    case = {"item_id": "synthetic", "record_ref": ref, "expected_status": "compliant"}
+    row = compare_cases(rule, [case], job)[0]
+    assert row["comparison"] == expected
+
+
+@pytest.mark.parametrize("status,execution_status,rule_set,expected", [
+    ("running", "partial_failed", "luxian_0916_qc_v1", "pending"),
+    ("queued", "completed", "luxian_0916_qc_v1", "pending"),
+    ("canceled", "partial_failed", "luxian_0916_qc_v1", "failed"),
+    ("creation_failed", "completed", "luxian_0916_qc_v1", "failed"),
+    ("failed", "running", "luxian_0916_qc_v1", "failed"),
+    ("failed", None, "luxian_0916_qc_v1", "failed"),
+    ("partial_failed", None, "luxian_0916_qc_v1", "pending"),
+    ("completed", None, "luxian_0916_qc_v1", "pending"),
+    ("completed", "running", "luxian_0916_qc_v1", "pending"),
+    ("failed", "partial_failed", "luxian_0609_qc_v1", "failed"),
+    ("partial_failed", "partial_failed", "luxian_0609_qc_v1", "pending"),
+    ("canceled", "partial_failed", "luxian_0609_qc_v1", "failed"),
+    ("completed", None, "luxian_0609_qc_v1", "same"),
+    ("failed", "partial_failed", None, "failed"),
+])
+def test_terminal_pair_comparison_requires_0916_task_contract(status, execution_status, rule_set, expected):
+    rule = "LX0916-010" if rule_set == "luxian_0916_qc_v1" else RULE
+    ref = _ref("SYNTHETIC")
+    case = {"item_id": "synthetic", "record_ref": ref, "expected_status": "compliant"}
+    job = {"status": status, "filters": {"rule_set_key": rule_set},
+           "summary": {"execution_status": execution_status},
+           "items": [{**ref, "rule_id": rule, "status": "compliant"}]}
+    assert compare_cases(rule, [case], job)[0]["comparison"] == expected
 
 
 def test_full_flow_stages_conclusion_and_release_sheet(make_service):

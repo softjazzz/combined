@@ -168,16 +168,25 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
     """
     status = (job or {}).get("status")
     items = (job or {}).get("items") or []
+    is_0916 = ((job or {}).get("filters") or {}).get("rule_set_key") == RULE_SET_0916
+    # 0916 部分失败仍有完整逐规则交付；任务失败不能覆盖其它规则的有效结果。
+    comparable = (
+        status in {"completed", "failed", "partial_failed"}
+        and ((job or {}).get("summary") or {}).get("execution_status") in {"completed", "partial_failed"}
+    ) if is_0916 else status == "completed"
+    failures = ((job or {}).get("failed_records") or []) if is_0916 else []
     rows = []
     for case in cases:
         # 同族回归病例带自己的 rule_id，其余按本规则比较
         case_rule = case.get("rule_id") or rule_id
         ref = CaseRef.from_mapping(case["record_ref"])
         matches = [x for x in items if x.get("rule_id") == case_rule and _item_ref(x) == ref]
+        matching_failures = [x for x in failures if x.get("rule_id") == case_rule and _item_ref(x) == ref]
         actual = matches[0].get("status") if len(matches) == 1 else None
         outcome = "pending"
-        if status == "completed":
-            outcome = ("missing" if not matches else "ambiguous" if len(matches) > 1
+        if comparable:
+            outcome = ("ambiguous" if len(matches) > 1 or (matches and matching_failures)
+                       else "failed" if matching_failures else "missing" if not matches
                        else "same" if actual == case["expected_status"] else "different")
         elif status in {"failed", "canceled", "creation_failed"}:
             outcome = "failed"
@@ -185,7 +194,7 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
                "actual_status": actual, "comparison": outcome}
         if project is not None and len(matches) == 1:
             row["result"] = project(matches[0])
-        if row["role"] == "regression" and status == "completed" and len(matches) == 1:
+        if row["role"] == "regression" and comparable and len(matches) == 1 and not matching_failures:
             from .rule_validation_comparison import compare_regression
             comparison = compare_regression(
                 {**case, "rule_id": case_rule}, row.get("result") or {}, job,

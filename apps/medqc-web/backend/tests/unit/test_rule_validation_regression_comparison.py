@@ -65,6 +65,48 @@ def test_missing_invalid_or_other_visit_baseline_does_not_pass(baseline):
     assert row["comparison"] == "baseline_missing"
 
 
+@pytest.mark.parametrize("status", ["failed", "partial_failed"])
+@pytest.mark.parametrize("changed", [False, True])
+def test_0916_partial_delivery_still_checks_regression_content(status, changed):
+    rule = "LX0916-010"
+    case = {**CASE, "rule_id": rule}
+    before = {**ITEM, "rule_id": rule}
+    after = {**before, "evidence": ["另一合成证据"]} if changed else before
+    baseline = job(before)
+    current = {**job(after), "status": status, "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+               "summary": {"execution_status": "partial_failed"}}
+    frozen = deepcopy((case, current, baseline))
+    row = compare_cases(rule, [case], current, project=project, baseline_jobs={"old": baseline})[0]
+    assert row["comparison"] == ("different" if changed else "same")
+    assert row["regression_comparison"]["changed_fields"] == (["evidence"] if changed else [])
+    assert (case, current, baseline) == frozen
+
+
+@pytest.mark.parametrize("baseline_status", ["failed", "partial_failed", "running"])
+def test_0916_partial_delivery_does_not_relax_historical_baseline(baseline_status):
+    rule = "LX0916-010"
+    item = {**ITEM, "rule_id": rule}
+    current = {**job(item), "status": "failed", "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+               "summary": {"execution_status": "partial_failed"}}
+    baseline = {**job(item), "status": baseline_status,
+                "summary": {"execution_status": "partial_failed"}}
+    row = compare_cases(rule, [{**CASE, "rule_id": rule}], current, project=project,
+                        baseline_jobs={"old": baseline})[0]
+    assert row["comparison"] == "baseline_missing"
+
+
+def test_0916_item_failure_conflict_cannot_enter_successful_regression_comparison():
+    rule = "LX0916-010"
+    item = {**ITEM, "rule_id": rule}
+    current = {**job(item), "status": "failed", "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+               "summary": {"execution_status": "partial_failed"},
+               "failed_records": [{**REF, "rule_id": rule, "error_phase": "semantic_extraction"}]}
+    row = compare_cases(rule, [{**CASE, "rule_id": rule}], current, project=project,
+                        baseline_jobs={"old": job(item)})[0]
+    assert row["comparison"] == "ambiguous"
+    assert "regression_comparison" not in row
+
+
 def test_scope_and_missing_statistics_are_not_zero_cost():
     current = job()
     current["filters"]["scoped_customer_rule_ids"].append("LX0609-06-01-03")
