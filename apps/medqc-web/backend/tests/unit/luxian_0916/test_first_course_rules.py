@@ -131,6 +131,106 @@ def test_first_course_can_use_controlled_semantic_presence_when_raw_row_has_no_s
     assert [result.status for result in results] == ["compliant"] * 5
 
 
+def test_first_course_presence_rules_read_projected_structured_sections():
+    sections = {
+        "case_characteristic": "病例特点内容",
+        "diagnose_based_on": "诊断依据内容",
+        "differential_diagnosis": "鉴别诊断内容",
+        "treatment_plan": "诊疗计划内容",
+    }
+    context = {
+        "documents": {
+            "first_course_record": [
+                {"document_id": "fc-projected", "content": "装配后的首程正文", "structured_sections": sections}
+            ]
+        }
+    }
+    for rule_id, reason, fields in (
+        ("LX0916-010", "case_characteristic_present", {"case_characteristic": "present"}),
+        ("LX0916-012", "first_course_required_sections_present",
+         {field: "present" for field in ("diagnose_based_on", "differential_diagnosis", "treatment_plan")}),
+    ):
+        result = _run(rule_id, context)
+        assert (result.status, result.reason_code) == ("compliant", reason)
+        assert result.decision_facts["document_id"] == "fc-projected"
+        assert result.decision_facts["field_states"] == fields
+
+
+@pytest.mark.parametrize(
+    ("row", "semantic_facts", "expected_status", "expected_reason", "expected_state"),
+    (
+        ({"structured_sections": {"case_characteristic": ""}},
+         {"case_characteristic_present": True},
+         "non_compliant", "case_characteristic_missing", "empty"),
+        ({"case_characteristic": "", "structured_sections": {"case_characteristic": "有内容"}},
+         {"case_characteristic_present": True},
+         "non_compliant", "case_characteristic_missing", "empty"),
+        ({"case_characteristic": None, "structured_sections": {"case_characteristic": "有内容"}},
+         {"case_characteristic_present": True},
+         "non_compliant", "case_characteristic_missing", "empty"),
+        ({"structured_sections": {"case_characteristic": True}}, {},
+         "data_quality_gap", "first_course_structured_field_missing", "unavailable"),
+        ({"structured_sections": {"case_characteristic": None}}, {},
+         "data_quality_gap", "first_course_structured_field_missing", "unavailable"),
+        ({"structured_sections": {"case_characteristic": None}},
+         {"case_characteristic_present": True},
+         "compliant", "case_characteristic_present", "present"),
+        ({"structured_sections": {"unknown_section": "有内容"}}, {},
+         "data_quality_gap", "first_course_structured_field_missing", "unavailable"),
+    ),
+)
+def test_first_course_nested_section_respects_field_priority_and_unknowns(
+    row, semantic_facts, expected_status, expected_reason, expected_state
+):
+    context = {
+        "documents": {"first_course_record": [{"document_id": "fc-projected", **row}]},
+        "semantic_facts": semantic_facts,
+    }
+    result = _run("LX0916-010", context)
+    assert (result.status, result.reason_code) == (expected_status, expected_reason)
+    assert result.decision_facts["field_states"] == {"case_characteristic": expected_state}
+
+
+def test_first_course_nested_section_does_not_bypass_multiple_document_gate():
+    context = {
+        "documents": {
+            "first_course_record": [
+                {"document_id": "fc-1", "structured_sections": {"case_characteristic": "有内容"}},
+                {"document_id": "fc-2", "structured_sections": {"case_characteristic": "有内容"}},
+            ]
+        }
+    }
+    result = _run("LX0916-010", context)
+    assert (result.status, result.reason_code) == (
+        "data_quality_gap", "first_course_document_ambiguous"
+    )
+
+
+def test_first_course_012_reports_explicitly_empty_nested_section():
+    context = {
+        "documents": {
+            "first_course_record": [{
+                "document_id": "fc-projected",
+                "structured_sections": {
+                    "diagnose_based_on": "诊断依据内容",
+                    "differential_diagnosis": "",
+                    "treatment_plan": "诊疗计划内容",
+                },
+            }]
+        },
+        "semantic_facts": {"differential_diagnosis_present": True},
+    }
+    result = _run("LX0916-012", context)
+    assert (result.status, result.reason_code) == (
+        "non_compliant", "first_course_required_section_missing"
+    )
+    assert result.decision_facts["field_states"] == {
+        "diagnose_based_on": "present",
+        "differential_diagnosis": "empty",
+        "treatment_plan": "present",
+    }
+
+
 @pytest.mark.parametrize(
     ("rule_id", "context", "expected_fields", "expected_quality"),
     (

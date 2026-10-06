@@ -235,6 +235,11 @@ def _field_state(
     context: Mapping[str, Any], row: Mapping[str, Any], field_name: str
 ) -> tuple[bool, str]:
     if field_name not in row:
+        sections = row.get("structured_sections")
+        if isinstance(sections, Mapping):
+            section_value = sections.get(field_name)
+            if isinstance(section_value, str):
+                return True, _text(section_value)
         semantic_facts = context.get("semantic_facts")
         presence_key = _PRESENCE_FACT_BY_FIELD[field_name]
         if isinstance(semantic_facts, Mapping) and type(semantic_facts.get(presence_key)) is bool:
