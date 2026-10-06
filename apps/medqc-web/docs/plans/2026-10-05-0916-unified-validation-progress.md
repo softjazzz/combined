@@ -186,3 +186,11 @@ D随后提交031d53252，将共享抽取技术失败的可读来源/规则投影
 四例随后形成20项五事实草案：作者候选15 present、5 unknown，均待复核；结合前两例现已覆盖6例7事件的35事实草案准备，不等于35项已验收。主协调独立反查20事实和27引用，坐标/切片/时间全部精确，但没有冻结最早坐标：早期ICU措施是否支持独立management、C07同时间更早分句是否支持record/content、C21症状真实时序和独立分析引文均有争议。C04五unknown是同事件关联未确认，不是认定五项缺失或标准未定；当前实现并不要求医嘱写明触发原因。作者草案不覆盖旧结果、人工预期或当前临床结论。
 
 依据：[四例当前材料](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-remaining-material-private.json)、[主协调独立复跑](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-remaining-projection-private.json)、[四例工程草案](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-remaining-draft-facts-private.json)、[主协调独立审读](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-remaining-draft-review-v2-private.json)。本阶段真实模型/PG访问0，不重跑模型补统计；后续010/012限定正式运行的PG写入和最多16次generate额度已集中请求，尚未获新授权，不挪用历史已消费额度。长程目标保持，9专项+2历史专项+3历史实验+18整包/审计分类及临床签认/上线批准数量均不增加。
+
+## 十二、当前D回放保真门禁与真实构造保护
+
+在7fe2ef7d7时点，主协调独立复跑H10纯模型边界预检：两个历史任务、四副本的8个初次Prompt，在D工作区及提交源码中均不同。旧合同005–008为items；工作区仅005/006为items、007/008为state，每次少645字符；提交源码001–009均为state，每次少2320字符。实际选材JSON、正文、共享规则和抽取函数调用kwargs精确相同，但这不证明provider内部模型配置相同。主协调验证方式为纯源码加载、逐份Prompt与选材比较、合同全文断言；[独立结果](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-d-h10-fidelity-check-v2-private.json)保留失败的旧断言产物，不覆盖历史响应。
+
+因此旧响应消费0，未执行完整Worker、重试边界或253项原生结果比较。不能将S1/A的253项历史回归写为当前D模型事实复验，也不能仅因选材相同而跳过正式运行。后续预算获准时须冻结实际工作区版本及Prompt，明确005/006未提交实现是否纳入，不能默认以HEAD取代客户将运行的源码。
+
+A2补充两个真实SQLite冷构造保护例，专用测试共13项通过：[测试结果](C:/Users/Coldplay/.codex/worktrees/lx0916-validation-handoff/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-d-ready-constructor-green-private.json)。不替换sync/Inspector，准备阶段建齐父列和指定父索引后清空三缓存；可写构造观察到真实反射且0DDL/DML，只读构造严格0SQL。独立静态审查未发现缓存/监听污染；范围仅single模式SQLite，不扩为PG、split模式或认证HTTP证明。本次不改生产代码、模型/PG访问0，32条验收统计及批准状态不变。

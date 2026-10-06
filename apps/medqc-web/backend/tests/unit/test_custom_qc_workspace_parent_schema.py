@@ -99,3 +99,43 @@ def test_reflection_failure_does_not_fall_back_to_ddl(monkeypatch):
     with pytest.raises(RuntimeError, match="synthetic reflection failure"):
         workspace._sync_batch_job_parent_columns(schema="qc")
     assert recorder.statements == []
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_ready_sqlite_constructor_uses_real_reflection_without_ddl(monkeypatch, readonly):
+    engine = workspace.sa.create_engine("sqlite:///:memory:")
+    monkeypatch.setattr(workspace, "engine", engine)
+    monkeypatch.setattr(workspace, "DB_SCHEMA_MODE", "single")
+    caches = (workspace._drafts_table, workspace._batch_jobs_table,
+              workspace._record_result_envelopes_table)
+    for cached in caches:
+        cached.cache_clear()
+    try:
+        drafts = workspace._drafts_table(readonly=True)
+        jobs = workspace._batch_jobs_table(readonly=True)
+        drafts.metadata.create_all(bind=engine)
+        jobs.metadata.create_all(bind=engine)
+        workspace.sa.Index(PARENT_INDEX, jobs.c.parent_job_id).create(bind=engine)
+        for cached in caches:
+            cached.cache_clear()
+        statements = []
+
+        def capture(_conn, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        workspace.sa.event.listen(engine, "before_cursor_execute", capture)
+        # 不替换同步函数、Inspector或构造入口；建测试表阶段不计入初始化SQL。
+        service = workspace.CustomQCWorkspaceService(readonly=readonly)
+        assert service._batch_job_table.name == "custom_qc_batch_jobs"
+        assert not any(statement.lstrip().upper().startswith(
+            ("ALTER ", "CREATE ", "DROP ", "INSERT ", "UPDATE ", "DELETE "))
+            for statement in statements)
+        if readonly:
+            assert statements == []
+        else:
+            assert any("table_info" in statement.lower() for statement in statements)
+            assert any("index_list" in statement.lower() for statement in statements)
+    finally:
+        for cached in caches:
+            cached.cache_clear()
+        engine.dispose()
