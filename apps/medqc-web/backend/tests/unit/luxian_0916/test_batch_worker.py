@@ -621,7 +621,7 @@ async def test_batch_worker_runs_018_family_and_summarizes_actual_model_usage(
 
     assert len(captured) == 1
     assert captured[0]["scene"] == "running"
-    assert captured[0]["generate"] is _semantic_generate
+    assert callable(captured[0]["generate"])
     assert observed_contexts[0]["event_facts"]["critical_values"][0][
         "stage2_state_by_rule"
     ] == {"LX0916-018": "ready"}
@@ -855,7 +855,7 @@ async def test_batch_worker_runs_stage2_only_for_structured_triggers_and_summari
     assert len(captured) == 1
     assert captured[0]["evidence_payload"]["programmatic_timeline"]["documents"] == {}
     assert captured[0]["scene"] == "running"
-    assert captured[0]["generate"] is _semantic_generate
+    assert callable(captured[0]["generate"])
     assert observed_contexts[0]["event_facts"]["disease_changes"][0][
         "stage2_state_by_rule"
     ] == {"LX0916-015": "ready", "LX0916-016": "ready"}

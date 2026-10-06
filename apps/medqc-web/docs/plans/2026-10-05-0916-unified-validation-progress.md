@@ -121,6 +121,7 @@ H0和H1是每条共同历史证据；其余证据代号的绝对路径见第五�
 | H17 | [六例同快照五源实际查询](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-five-source-live-freeze-private.json)；[主协调独立目录/Prompt/首程形态核查](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-five-source-freeze-check-private.json)。df199时点220条只读SQL，12候选五源输入覆盖已核；未覆盖其他21源或认证生产Worker，不计临床通过 |
 | H18 | [七事件工程审读交接表v2](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-seven-event-annotation-handoff-v2-private.md)；[原草案、独立异议与新覆盖索引v2](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-seven-event-annotation-handoff-v2-private.json)。099b时点6例7事件35原事实/注释精确保留，30项引用两候选scene匹配；零新模型/PG，不转gold，v1保留 |
 | H19 | [当前版本正式认证/PG/页面回读](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-06-0916-a3-formal-readback.md)。b5fb15f76实际工作区：2次POST、1 creation_failed run、1正常010整包job；128有效/0失败、四模型调用/20487Token，010四例认证页面回读；012仅整包结果。job成本错误保存0单列待修，不增临床通过 |
+| H20 | [离线并发闭环及最小成本修复](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-06-0916-offline-parallel-batch.md)。Worker新摘要累计可见generate成本；73项聚焦回归及主协调8个独立探针通过。新增索引历史真实正例/合成负例，018有限准备完成；0新模型/PG，不回填旧job，不增加临床通过 |
 
 ### 本轮直接反查的关键结果
 
@@ -262,3 +263,13 @@ A1/A2修复证据保持，A2不等于全应用零DDL；A3正式运行/保存/认
 主协调亲自反查投影代码、PG产物及四例页面，独立审查另重建128计划对。API保留公开事实/证据/建议，不暴露内部diagnostics；不能声称内部字段全经API回传。012仅该010整包中的原生结果，未完成独立012本轮认证验收。真实模型qwen3.8-flash，开启思考/budget256，四generate/四attempt/四HTTP、重试0，累计20487Token、86.848秒API时间；任务HTTP elapsed34.812秒，不与累计API时间混算。
 
 进程退出后只读PG核实两run/一job/四事件；事件Token=20487，job成本两列为0。主协调按worker未传统计字段及保存层缺省0的当前代码反推确认，单列下一独立最小修复，不覆盖旧任务。新正式部分失败分支、独立012运行、成本修复、真实负例/临床复核和发布冻结仍未闭环。证据、预算及更正见H19；32条9+2+3+18分类、临床签认和上线批准数均不增加。
+
+## 二十、成本修复离线闭环与验收准备
+
+经用户批准，复用三棵工作树，Sol6.1 medium三路并发，未整树合并或覆盖历史修改。主协调先冻结当前D Worker副本，再审查候选与SDK/保存语义，最后在D整合69行净增及16项聚焦测试；原测试两处函数身份断言改为可调用性，实际参数/响应/异常保持另验。最终73项聚焦回归、ruff、编码和只检查lint通过；主协调独立重跑8个探针，其中六份合成交付除7新增统计字段外与不可变pre-edit Worker逐值相同。以上不是真实病例整包重放或临床准确率证明。
+
+新任务摘要累计已知Token和API秒，所有generate入口同一任务局部包装，不叠加族诊断、不用壁钟补API时间；缺失/非法统计和异常标不完整。已保存的H19 job不回填。新增完整性只说明可见响应，SDK内部缺失attempt仍不可追溯；安全API投影尚未展示新完整性字段，不扩为页面已经可见。关闭的是成本摘要缺字段的离线实现缺口，真实新任务PG/API回读仍待限定验收。
+
+B找回C09/C12历史真实正例及预先冻结S10/S12合成负例，主协调反查归档空栏/答案。30例旧只读字段盘点经主协调重算均单文书且四栏非空，仍不能补真实缺项覆盖；不重复加算六正例或两合成例。C完成018有限历史索引及触发/无触发/报告处置/覆盖/关联/尾部矩阵。两个专属脚本不能替代独立保存结果，015/016材料不能替代018严格检验来源；下一轮先冻结一个真实PL触发及一个完整无触发病例的权威输入和独立预期，不立即调用模型。
+
+本批产物见H20及其私有索引。010/012成本剩余门禁改为“修复后新任务PG成本回读”；012独立正式任务、真实缺项、临床复核和发布配置仍未完成，018只完成准备，不升级专项通过。32条9本轮专项+2历史专项+3历史实验+18整包/审计分类、临床签认和上线批准数量不变；真实模型/PG访问/新验收任务均0。

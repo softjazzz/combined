@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
@@ -116,7 +117,68 @@ async def run_luxian_0916_batch_job(
             filter_value=filters.get("max_parallel_records"),
             total_records=total_records,
         )
-        generate = semantic_generate or await _build_semantic_generate(filters)
+        raw_generate = semantic_generate or await _build_semantic_generate(filters)
+        total_tokens = 0
+        total_api_time = 0.0
+        generate_call_count = 0
+        usage_incomplete_count = 0
+        time_incomplete_count = 0
+
+        async def generate(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            nonlocal total_tokens, total_api_time, generate_call_count
+            nonlocal usage_incomplete_count, time_incomplete_count
+            generate_call_count += 1
+            try:
+                response = await raw_generate(*args, **kwargs)
+            except BaseException:
+                usage_incomplete_count += 1
+                time_incomplete_count += 1
+                raise
+
+            response_stats = response if isinstance(response, Mapping) else {}
+            sdk_usage = _mapping(response_stats.get("_usage_breakdown"))
+            raw_usage = _mapping(response_stats.get("usage"))
+            tokens = (
+                sdk_usage["total_tokens"]
+                if "total_tokens" in sdk_usage
+                else raw_usage.get("total_tokens")
+            )
+            valid_tokens = (
+                isinstance(tokens, int)
+                and not isinstance(tokens, bool)
+                and tokens >= 0
+            )
+            if valid_tokens:
+                total_tokens += tokens
+            # SDK 在完全没有上游 usage 时也合成零汇总，不能将其视为真实零成本。
+            raw_tokens = raw_usage.get("total_tokens")
+            synthetic_zero = (
+                "total_tokens" in sdk_usage
+                and valid_tokens
+                and tokens == 0
+                and not (
+                    isinstance(raw_tokens, int)
+                    and not isinstance(raw_tokens, bool)
+                    and raw_tokens >= 0
+                )
+            )
+            if not valid_tokens or synthetic_zero:
+                usage_incomplete_count += 1
+            api_time = response_stats.get("_api_time")
+            try:
+                valid_time = (
+                    isinstance(api_time, (int, float))
+                    and not isinstance(api_time, bool)
+                    and math.isfinite(api_time)
+                    and api_time >= 0
+                )
+            except OverflowError:
+                valid_time = False
+            if valid_time:
+                total_api_time += api_time
+            else:
+                time_incomplete_count += 1
+            return response
         workspace.update_batch_job_progress(
             job_id=job_id,
             step_key="prepare",
@@ -222,6 +284,13 @@ async def run_luxian_0916_batch_job(
         semantic_extraction_failures = _semantic_extraction_failures(outcomes)
         semantic_contract_retries = _semantic_contract_retries(outcomes)
         summary = {
+            "total_tokens": total_tokens,
+            "total_processing_time": total_api_time,
+            "llm_generate_call_count": generate_call_count,
+            "llm_usage_incomplete_count": usage_incomplete_count,
+            "llm_time_incomplete_count": time_incomplete_count,
+            "llm_usage_complete": usage_incomplete_count == 0,
+            "llm_time_complete": time_incomplete_count == 0,
             "execution_status": (
                 "partial_failed"
                 if all_failures and items
