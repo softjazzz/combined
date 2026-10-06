@@ -5,6 +5,7 @@ visit_index 轻量写入服务。
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Optional
 
@@ -12,6 +13,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..database.connection import engine
+from ..core import acceptance_startup
+from ..core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +61,14 @@ def ingest_sync_rows(
 ) -> dict[str, int]:
     """
     将同步到的病例键轻量 upsert 到 visit_index。
-    该函数设计为“尽量成功”，异常只记录日志，不向上抛出。
+    normal 尽量成功；acceptance 不发DDL且结构/写入异常向上传播。
     """
+    acceptance = acceptance_startup.resolve_startup_mode(
+        os.getenv("MEDQC_STARTUP_MODE"), environment=get_settings().ENV,
+    ) == "acceptance"
     if engine is None:
+        if acceptance:
+            raise RuntimeError("Acceptance visit_index requires a PostgreSQL engine")
         return {"processed": len(rows or []), "upserted": 0, "skipped": len(rows or [])}
 
     visit_params: list[dict[str, Any]] = []
@@ -95,7 +103,10 @@ def ingest_sync_rows(
 
     try:
         with Session(engine) as session:
-            _ensure_visit_index_table(session)
+            if acceptance:
+                acceptance_startup.validate_visit_index_schema(session.connection())
+            else:
+                _ensure_visit_index_table(session)
             session.execute(
                 text(
                     """
@@ -134,6 +145,8 @@ def ingest_sync_rows(
             )
             session.commit()
     except Exception as exc:
+        if acceptance:
+            raise
         logger.warning(
             "visit_index 轻量写入失败（不阻断主同步） table=%s rows=%s scene=%s allow_frontpage_only=%s error=%s",
             table_name,
