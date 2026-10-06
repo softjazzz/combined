@@ -203,3 +203,13 @@ A2补充两个真实SQLite冷构造保护例，专用测试共13项通过：[测
 主协调另一进程用当前Python builder逐例反算：6例7事件ID及完整归一化事实与旧固定材料相同，两触发源均未超200行，五病程原始查询均未超500行，登记各唯一1条。连接目标插值风险另核：实际配置无模板，literal/parsed值精确相同，不打印或保存值；未来脚本禁用插值并拒绝未解析模板。上述依据为H16，不是独立临床答案，也不恢复旧Prompt/响应。
 
 此次补齐的是当前原始材料，raw_query_complete不能替代生产fallback、实际bundle或Stage2覆盖。scene仍空、replay_allowed=false，关联/最早坐标异议与人工预期保持。该阶段确有只读PG访问，不表述为PG访问0；32条分类、临床签认和上线批准不变。后续先核实际源投影/场景与独立标注，再按单独预算进入受控Stage2；不得直接重跑30例大包补统计。
+
+## 十四、现存缓存与限定五源候选投影
+
+在cfcfcbc8f时点，主协调只读观察六例各running/final两个候选场景，复用当前缓存读取、0916 JSON解码及年龄合并函数，装配/upsert分支强制停止。12候选均返回既有bundle-v6缓存；单只读REPEATABLE READ事务记录88条SQL（85 SELECT、2 SHOW、1 SET），无读取异常、DDL、业务写入或模型调用。主协调独立逐段反查每候选7条SELECT及三坐标参数，不以缓存可用性代替来源完整性。当前ensure_scene_bundle_tables只检查五张表存在，不执行DDL；缺表、缓存需装配和年龄异常仍必须停止，而非模拟正常返回。
+
+缓存与第十三节raw冻结是两个事务，不能宣称同一时点快照或恢复历史任务scene。随后纯离线复用当前evidence构建、来源补充、Stage2目录/事件输入/Prompt函数，未冻结的21源每候选均抛出不可用异常，不补造空表；五正式源及登记仍仅提供三坐标冻结响应，不能证明生产宽谓词的完整返回范围。原算法计算的complete和目录ready仅对这些限定输入成立，production_readiness保持空，replay_allowed=false；未传检验strict参数不影响五源目录，但不证明整体evidence等价。
+
+主协调及独立审核分别比较完整有序(source_type、document_id、clause_id、authored_at、text)：12候选均与此前归档官方投影精确相同，无新增、删除或同坐标正文/时间变化。C16/C25/C01/C04/C07/C21分别90/184/60/176/58/206分句，两个候选场景一致；Prompt字符分别41381/54511/21419/53167/20152/60490，不是Token或实测耗时。该比较不冻结最早临床位置、解除关联争议或产生新模型事实。
+
+依据：[缓存只读冻结](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-c-cache-readonly-freeze-private.json)、[主协调限定候选投影及SQL日志反查](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261005-long-root-c-current-candidate-projection-private.json)。产物均忽略且私有，不提交患者正文。Stage2不消费locatable_document_coordinates或medical_text来补齐五源覆盖；真实门控见[disease_change_stage2.py:310](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/disease_change_stage2.py:310)。生产非strict查询按院区+就诊、空结果后再放宽，现冻结未覆盖该域，见[sample_programmatic_evidence.py:731](D:/LLM/LX888/apps/medqc-web/backend/app/services/sample_programmatic_evidence.py:731)。下一步仅补该五源实际查询域的证据，不扩大规则或反复调Prompt；32条分类、临床签认和上线批准数量不变。
