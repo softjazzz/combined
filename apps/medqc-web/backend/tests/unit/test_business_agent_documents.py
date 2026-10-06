@@ -77,7 +77,7 @@ def test_document_endpoint_rechecks_saved_task_owner_and_access_before_loading(t
     monkeypatch.setattr(api.business_documents, "read_evidence_document", read)
     client = TestClient(app)
     url = f"/business/sessions/{session['session_id']}/evidence-document"
-    params = {"reference_id": "result-a", "evidence_index": 0, "source_ref": "forged"}
+    params = {"reference_id": "result-a", "evidence_index": 0, "source_ref": "forged", "institute_id": "other-hospital", "patient_id": "other-patient", "visit_id": "other-visit"}
     assert client.get(url, params=params).json()["state"] == "located"
     assert calls == [(identity, evidence)]
     assert client.get(url, params={**params, "evidence_index": 1}).status_code == 404
@@ -130,3 +130,81 @@ def test_short_ellipsis_is_not_assumed_to_be_truncation():
     evidence = {"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": "真实正文…", "excerpt_kind": "文书级依据"}
     result = locate_document(evidence, {"documents": [document(content="真实正文")]})
     assert result["state"] == "quote_not_found"
+
+
+def test_saved_excerpt_compaction_can_locate_original_indented_document():
+    # 原反例形态：保存摘录压缩了签名之前的72个空格，当前文书保留排版。
+    from app.services.luxian_0609.customer_evidence_enrichment import _excerpt
+    content = "查房记录 已阅读本次检查报告。 " + " " * 72 + "医师签名"
+    field, quote = _excerpt({"record_content": content})
+    assert field == "record_content" and quote not in content
+    result = locate_document({"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": quote}, {"documents": [document(content=content)]})
+    assert result["state"] == "located"
+    assert result["quote"] == quote and result["content"] == content
+    assert result["matched_quote"] == content
+    assert (result["start"], result["end"]) == (0, len(content))
+    assert "空白" in result["note"]
+
+
+def test_whitespace_equivalent_quote_maps_to_original_unicode_offsets():
+    content = "😀前言\n检查\t 结果\r\n未见\t异常。尾注"
+    quote = "检查 结果 未见 异常。"
+    result = locate_document({"source_ref": "src_a", "evidence_excerpt": quote}, {"documents": [document(content=content)]})
+    assert result["state"] == "located"
+    assert result["start"] == 4
+    assert result["content"][result["start"]:result["end"]] == "检查\t 结果\r\n未见\t异常。"
+    assert result["matched_quote"] == "检查\t 结果\r\n未见\t异常。"
+    assert result["quote"] == quote
+
+
+def test_exact_and_whitespace_variant_repeated_quote_are_ambiguous():
+    result = locate_document({"source_ref": "src_a", "evidence_excerpt": "原文 摘录"}, {"documents": [document(content="原文 摘录；原文\n\t摘录")]})
+    assert result["state"] == "quote_ambiguous"
+    assert "start" not in result and "end" not in result
+
+
+@pytest.mark.parametrize("content,quote", [
+    ("剂量 50 mg 已给药", "剂量 5 mg 已给药"),
+    ("AB 阴性", "A B 阴性"),
+    ("所见：阴性。诊断：待复核。", "阴性。 待复核。"),
+    ("原\u200b文摘录", "原文摘录"),
+])
+def test_non_whitespace_changes_and_disjoint_fields_never_match(content, quote):
+    result = locate_document({"source_ref": "src_a", "evidence_excerpt": quote}, {"documents": [document(content=content)]})
+    assert result["state"] == "quote_not_found"
+    assert "start" not in result and "end" not in result
+
+
+def test_missing_body_is_distinguished_without_fabricated_location():
+    result = locate_document({"source_ref": "src_a", "evidence_excerpt": "原文摘录"}, {"documents": [document(content=None)]})
+    assert result["state"] == "quote_not_found"
+    assert "未提供正文" in result["note"]
+    assert result["quote"] == "原文摘录" and not result["content"]
+    assert "start" not in result and "end" not in result
+
+
+def test_whitespace_matching_cannot_select_another_document_identity():
+    result = locate_document({"source_ref": "src_a", "source_type": "admission_record", "evidence_excerpt": "原文 摘录"}, {"documents": [document(content="当前版本已变"), document(source_ref="src_b", content="原文\n摘录")]})
+    assert result["state"] == "quote_not_found"
+    assert result["content"] == "当前版本已变"
+    assert "start" not in result and "end" not in result
+
+
+def test_whitespace_normalized_legacy_prefix_keeps_truncation_scope():
+    compact = "开头 " + "原句" * 170
+    quote = compact[:300] + "…"
+    content = compact.replace(" ", "\n\t  ")
+    result = locate_document({"source_ref": "src_a", "evidence_excerpt": quote, "excerpt_kind": "文书级依据"}, {"documents": [document(content=content)]})
+    assert result["state"] == "located" and result["match_scope"] == "excerpt_prefix"
+    assert result["quote"] == quote
+    assert result["matched_quote"] == compact[:300].replace(" ", "\n\t  ")
+    assert result["content"][result["start"]:result["end"]] == result["matched_quote"]
+    assert "省略号" in result["note"] and "空白" in result["note"]
+
+
+def test_whitespace_equivalent_literal_ellipsis_does_not_use_prefix_fallback():
+    quote = "甲" * 149 + " " + "乙" * 150 + "…"
+    content = quote.replace(" ", "\n\t ")
+    result = locate_document({"source_ref": "src_a", "evidence_excerpt": quote, "excerpt_kind": "文书级依据"}, {"documents": [document(content=content)]})
+    assert result["state"] == "located" and result["match_scope"] == "exact_excerpt"
+    assert result["quote"] == quote and result["matched_quote"] == content

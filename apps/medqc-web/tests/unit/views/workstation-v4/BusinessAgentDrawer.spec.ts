@@ -1234,6 +1234,91 @@ describe('管理助手范围选择', () => {
     expect(wrapper.get('[data-testid="business-agent-document"]').text()).toBe('😀乙原文摘录丁')
     wrapper.unmount()
   })
+  it('按后端原正文坐标高亮空白等价摘录，保留保存摘录与原排版', async () => {
+    const content = '😀前言\n检查\t 结果\r\n未见\t异常。尾注'
+    const matched = '检查\t 结果\r\n未见\t异常。'
+    const saved = '检查 结果 未见 异常。'
+    mocks.access.mockResolvedValue({ doctor_case_count: 2, manager_scopes: [] })
+    mocks.reference.mockResolvedValue({
+      id: 'result-a',
+      kind: 'saved_result',
+      evidence: [{ source_ref: 'src-a', source_type: 'admission_record', evidence_excerpt: saved }],
+    })
+    mocks.evidenceDocument.mockResolvedValue({
+      title: '入院记录',
+      state: 'located',
+      source_view: 'current',
+      content,
+      quote: saved,
+      matched_quote: matched,
+      note: '仅忽略空白与换行差异',
+      start: 4,
+      end: 4 + Array.from(matched).length,
+      offset_unit: 'unicode_code_points',
+    })
+    const wrapper = mountDrawer()
+    await wrapper.setProps({
+      userContext: { view: 'doctor', institute_id: 'H', patient_id: 'P', visit_id: 'V' },
+    })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '查看依据与详情')!
+      .trigger('click')
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '查看对应文书原文')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="business-agent-document-location"]').text()).toBe(matched)
+    expect(wrapper.get('[data-testid="business-agent-document"]').text()).toBe(content)
+    expect(wrapper.text()).toContain(saved)
+    wrapper.unmount()
+  })
+
+  it.each(['quote_not_found', 'quote_ambiguous'] as const)(
+    '位置未证实时展示来源但不伪造高亮：%s',
+    async (state) => {
+      mocks.access.mockResolvedValue({ doctor_case_count: 2, manager_scopes: [] })
+      mocks.reference.mockResolvedValue({
+        id: 'result-a',
+        kind: 'saved_result',
+        evidence: [
+          { source_ref: 'src-a', source_type: 'admission_record', evidence_excerpt: '保存原句' },
+        ],
+      })
+      mocks.evidenceDocument.mockResolvedValue({
+        title: '入院记录',
+        state,
+        source_view: 'current',
+        content: '当前原文',
+        quote: '保存原句',
+        note: '未能证明唯一位置',
+      })
+      const wrapper = mountDrawer()
+      await wrapper.setProps({
+        userContext: { view: 'doctor', institute_id: 'H', patient_id: 'P', visit_id: 'V' },
+      })
+      await flushPromises()
+      await wrapper
+        .findAll('button')
+        .find((node) => node.text() === '查看依据与详情')!
+        .trigger('click')
+      await flushPromises()
+      await wrapper
+        .findAll('button')
+        .find((node) => node.text() === '查看对应文书原文')!
+        .trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="business-agent-document"]').text()).toBe('当前原文')
+      expect(wrapper.find('[data-testid="business-agent-document-location"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('保存原句')
+      expect(wrapper.text()).toContain('未能证明唯一位置')
+      wrapper.unmount()
+    },
+  )
+
   it('切换患者后丢弃迟到的文书原文', async () => {
     mocks.access.mockResolvedValue({ doctor_case_count: 2, manager_scopes: [] })
     mocks.reference.mockResolvedValue({
