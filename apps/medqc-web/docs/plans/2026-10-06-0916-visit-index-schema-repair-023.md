@@ -140,3 +140,29 @@ root浏览器通过正常表单尝试登录，但前端[apiService.ts:57](D:/LLM
 后续先按当前场景读取合同只读核专项副本的可用内容及正常重装配会写的精确范围，再确定最小修复；不能仅把样本状态改ready、放宽所有Bundle写入或重复跑模型试错。本轮临床签认/启用/上线批准均0，023专项存在性仍未正式闭环，分类与完成数不增加。
 
 证据：[formal6硬停现场](C:/Users/Coldplay/.codex/worktrees/lx0916-independent-regression-20261004/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-formal6-reentry-private.json)、[root独立PG及纯分支重建](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-formal6-stop-root-v2-private.json)、[独立实际归档复核](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-formal6-actual-review-private.md)。患者原文/完整标识/过程脚本均仅private，不提交。93项聚焦Python回归、编码与只检查lint通过；无前端或共享契约修改，未跑全前端type-check/test:unit。
+
+## 场景与证据链只读调查结果（2026-10-07）
+
+本轮只读源码及历史归档、离线替身实验，D实际HEAD为`20b560368`；0新增PG/HTTP/模型调用、0服务启动、0数据库写入、0生产修改。复用A/B/C三树，Sol6.1 medium；当前已消耗的原任务单次重入权限没有恢复。
+
+已证实场景边界：[assembly.py:77](D:/LLM/LX888/apps/medqc-web/backend/app/services/bundles/assembly.py:77)的running优先来源不含麻醉记录，final包含。A从formal4显式创建参数还原两份最小副本，麻醉正文与已保存副本及root停机PG归档逐字相同；以冻结行替代DB读取/列反射，执行真实装配、文书assembler及factory，running均空且usable=False，final各有一份麻醉且usable=True，未变输入重复装配语义相同。root另以当前可用性函数独立核停机归档：running目录0，final目录1且均为麻醉。限定冻结副本，不能推断实时资料未变或所有刷新都无效。
+
+“ready”只是行存在：[custom_qc_sample_pool_service.py:5018](D:/LLM/LX888/apps/medqc-web/backend/app/services/custom_qc_sample_pool_service.py:5018)查询SELECT 1，不验证正文。创建使用正常两场景装配，不是麻醉丢失到错误schema的证据。本轮不把这个存在性状态改成临床证据完整性证明，也不修改共享running来源白名单。
+
+证据链存在两种不同的门槛。现有[原始读取:678](D:/LLM/LX888/apps/medqc-web/backend/app/services/sample_programmatic_evidence.py:678)能把麻醉行放入timeline；[存在性投影:353](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/input_context.py:353)可产生真实docID anchor，023只看事件及presence。另一方面，[input_context.py:58](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/input_context.py:58)把场景目录设为定位白名单，[semantic_extractor.py:515](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/semantic_extractor.py:515)过滤目录外文书。B用当前真实原始读取/投影/选择器/023规则、冻结麻醉行和两个场景包离线执行；root亲读脚本并另存独立执行结果：running麻醉原始行1、送模候选0，final候选1，两场景023纯存在性均compliant且保留原docID。其他来源模拟空，未运行模型或完整Worker，不算正式保存或024完整性验收。017–020的事件coverage函数对023/024返回空字典，不冒称它们已有覆盖门控。
+
+终末包可用不代表正式入口能直接换场景。root亲读[RunRequest:36](D:/LLM/LX888/apps/medqc-web/backend/app/routers/rule_validation.py:36)及[start_run:252](D:/LLM/LX888/apps/medqc-web/backend/app/routers/rule_validation.py:252)：当前验收请求没有scene，沿客户池running；[qc_sample_pools.py:1292](D:/LLM/LX888/apps/medqc-web/backend/app/routers/qc_sample_pools.py:1292)按池场景收集病例。[record_repository.py:368](D:/LLM/LX888/apps/medqc-web/backend/app/services/qc_workspace/record_repository.py:368)依据真实出院信息筛选scope，[batch_worker.py:729](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/batch_worker.py:729)优先record.scope。不能仅改job.scope、伪造出院时间或改变整个池来通过测试；“用现有final包直接正式验收”只是调查中的候选，已收回。
+
+刷新精确范围由root亲读并AST核字段、C独立审查确认：[assembly.py:2379](D:/LLM/LX888/apps/medqc-web/backend/app/services/bundles/assembly.py:2379)只直接执行一条独立事务upsert，三坐标冲突键、20插入字段、17非身份覆盖字段；包括medical_text、structured_context、policy_version、bundle_updated_at，空值也覆盖。现场默认policy-legacy-v1会替换创建时builder policy，但不是刷新触发原因。[ensure_scene_bundle_tables:849](D:/LLM/LX888/apps/medqc-web/backend/app/services/bundles/assembly.py:849)只查询表存在，不做DDL，也不保证后续读取只读。这个局部函数无CDM/其他Bundle直接写，不等同全Worker或服务端触发器没有间接写。
+
+另确认独立缺陷：麻醉来源读取失败、running目录为空时，现有原始读取给source_readiness=unavailable及空数组；[input_context.py:132](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/input_context.py:132)仅看数组布尔值投为anesthesia_performed=False，023返回not_applicable/trigger_event_not_present。root除复跑B实验外，另独立构造最小纯context+规则反例，要求data_quality_gap的保护断言红。它不是formal6硬停原因，没有真实发生比例证据，本轮尚未修复；不把技术失败当“无事件”。
+
+决策：不将force_refresh_if_empty改False来绕过护栏，缺失/旧版本场景在False下仍可能写入，且会改变整个0916读取合同；不扩running白名单，不自动再次派发旧任务。下一小闭环优先修023来源失败/部分覆盖的空数组门控，文件范围先限定0916事实上下文及其聚焦测试，不改Prompt、状态词表、共享装配或API；保留两份冻结存在性正例的状态/原因/anchor作为保护。具体修改方案及受控真实续验另行批准。本批没有达到该修复的验收标准，不宣称已修。
+
+若未来沿原正常running链续验，需另明确定向两份新副本各最多一次public.running_record_bundle的正常upsert及17字段变化，其他Bundle/CDM/DDL仍禁止；这只允许必要副作用，不新增可用麻醉正文、不代表质量抽取修复。是否复用旧run/job、模型预算及任务完整性验收必须重新冻结，不能沿用已消耗的单次派发权限。
+
+现有bundle_reader/input_context/surgery_consent/semantic_extractor四组172项聚焦测试通过（0.92秒），上述新来源失败保护反例仍红。测试数量不替代023真实正式结果；分类、工程完成、临床签认和上线批准均不增加。只记录结论及保留私有反例，完整前端type-check/test:unit未跑。
+
+提交前check:encoding检查四份暂存文本通过，lint只检查通过（0错误、1214警告，未自动改写前端）。暂存区两份他人文档保留原blob，本次仅两份结论文档路径限定提交；关闭本地Husky避免lint-staged改写他人文件，手动补编码/lint并在提交说明记录理由，不改CI。
+
+私有证据：[真实装配及隔离边界](C:/Users/Coldplay/.codex/worktrees/lx0916-validation-handoff/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-scene-assembly-results-private.json)、[root另存事实链执行](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-raw-evidence-path-root-private.json)、[root独立红灯反例](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-source-failure-red-root-private.py)、[精确写范围审查](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-scene-write-plan-review-private.md)。原文/标识及一次性脚本只在private，不提交。
