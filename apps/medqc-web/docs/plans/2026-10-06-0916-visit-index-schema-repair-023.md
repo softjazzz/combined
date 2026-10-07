@@ -102,3 +102,41 @@ formal4于本地2026-10-06执行，UTC2026-10-07 01:13:36正常退出0：两次�
 本批主要证据：[正常创建及认证API](C:/Users/Coldplay/.codex/worktrees/lx0916-independent-regression-20261004/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-formal4-result-private.json)、[root退出后独立PG回读](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-creation-root-readback-private.json)。新item/visit/doc坐标、原文、全过程脚本均只留private，不提交；instrumentation启用的耗时不作为生产性能收益。
 
 独立[实际产物复核](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-runner-review-formal4-actual-private.md)重算日志：12 UPDATE为样本池6、qc刷新成功4、新sample2；两sample实际绑定ID等于本次新INSERT的两ID，旧两ID不在sample DML。7项完成HTTP200（另401保护不入wrapper日志），PUT/run及模型3列表均0。原材料/旧副本before/after/exit/root四方字典相同，61源码/私有快照逐字绑定当前源。独立审查没有连接PG：新行原字典比较来自runner实际保存，root另连接的读取比较由其脚本断言及成功产物证明；不将审查的只读归档当独立第二次PG查询。
+
+## 复用新副本的正式验证方案
+
+用户在创建闭环报告后明确“继续”。本轮仅复用formal4两新副本：0创建、0DDL，两工程预期PUT、一次023正式任务、最多八次generate/SDK/provider尝试（含全部重试），018 Stage2调用禁止；不写临床签认、启用或上线批准。实际源码与formal4冻结快照仍相同，root亲读023执行器确认仅消费事件和presence，024完整性只能记录实际值，不能倒填023预期。当前待证伪假设是既有护栏在只读核对新副本后预注册其唯一身份/ID/raw，可完整保护正式任务，不需要新增通用层或生产修改。
+
+文件范围：三树仅新增私有复用runner/保护及独立反例，长期只更新本文和统一进度表。生产文件白名单为空，不向巨型文件加入职责。B最小适配原正常认证/启动/答案/run/保存链，A验证既有护栏预注册及旧ID负例，C独立审查；root亲审diff、实际模型输入和产物后执行。进入任何写入前，PG两新样本及麻醉整行必须等于formal4已保存材料，ready/synced、无旧任务、工程预期为空；原材料、formal3旧副本及源码冻结。创建入口始终禁止，GET仅限定新visit或当前run/job，不打开会自愈旧pending的全池列表。
+
+验收：64病例规则对恰好各一个合法结果或执行失败，023两例冻结核心状态/原因/事实/建议及条件证据成立；PG与认证API全部公开字段逐值一致；单独记录真实模型参数、输入、调用/Token、API耗时及任务墙钟。正常退出须在guard内join再核原材料/旧副本、新临床材料和源码。页面只沿不会读取全池的正常结果入口；不安全则明确未完成，不放宽SQL护栏。超量、来源漂移、未知写入或模型失败保存停止，不重提任务、不改预期；两例正例不声称023缺记录、独立触发或完整临床验收。
+
+## formal5停止与原任务单次重入方案
+
+formal5运行前已将实际generate上限从初稿8收紧为4（每例2），SDK/provider尝试各8含重试；没有使用初稿较宽额度。实际已保存两次development工程预期PUT并创建一次run/job；随后私有护栏以`job_update_scope`硬停，generate/SDK/provider均0，没有023结果。硬停未经过finally，不声称完成join或退出校验。root独立只读16 SELECT/2 SET确认原run仍bound、原job仍running，items/failed字段保持INSERT时NULL、两答案已保存，原材料/formal3副本及源码未变。不能把任务创建或预期保存计为规则验收通过。
+
+现场拒绝SQL未保存，正式停止根因仍待证伪。root亲读`custom_qc_workspace_service.py:108`及`batch_worker.py:185`，确认当前正常进度UPDATE使用`id=job AND status!=canceled`，原私有guard只支持单ID WHERE且错误把status绑定归入SET字段。A以冻结真实helper AST编译红→绿：原guard12/13（正常helper误拒）、新guard13/13（正常路径允许、取消/NOT/OR/额外谓词/跨schema/旧实际ID等拒绝），仅证明该工具与当前源的确定性不兼容，不倒推缺失的现场SQL。
+
+本次用户“继续”的原有正式验证范围内，root选择原任务单次Worker重入而非重提run；这是对前述“停止不重提任务”的明确受控续验补充，不启动自动恢复或无限重试。root新增只读6 SELECT/1 SET核原job/run整行仍等于停机证明、池latest_job仍为原ID、两答案未变化、`sys.llm_call_events`该root_job_id为0、原源码未变；只读事务回滚。实际存在正常retry API但它会清空summary/results/cost，本批禁止使用。
+
+实施方案与白名单：仅B树新增private重入runner，采用A新私有guard；正常acceptance启动/login后GET精确原run/job核同一用户、绑定、32规则/2坐标，再仅调用现有`submit_detached_task`一次派发`_run_sichuan_workspace_batch_job`原job。生产白名单为空，不新增公共职责、不修改巨型文件。预注册只能来自上述PG证明的唯一原run/job，禁止所有run/job INSERT、PUT/create/retry/状态手工修复。root亲读`qc_sichuan.py:1828–1864`、`detached_task_runner.py:35–53`及`mark_batch_job_running`确认正常0916 running可重入、会重置started_at和本轮局部成本，不是断点续跑；因0916无该路径领取CAS，须确认旧8003无监听、只派发一次，任何并发/漂移停止。
+
+验收沿用023存在性两例冻结合同、64交付对、PG/API逐值及安全逐例页面；本次新增提交额度0，最多4 generate（每例2）、8 SDK/8 provider HTTP含重试，formal5实际0调用不增加可用额度。模型参数沿用正式配置并逐实际请求校验，禁止018 Stage2。任何新的guard/model失败仍保存停止，不再重入第二次、不改预期。正常finally须guard内join与保护核对，另root独立PG回读。先A/C独立审查、root关键diff核验再运行；不因工具修复宣布临床通过。已停formal5归档不覆盖。
+
+## 单次重入实际停止结果
+
+独立C发现guard第一候选的共享WHERE绑定可掩盖`SET created_by`，root亲自离线复现后拒用；V2仅追加6行实际SET列白名单核验。A原反例红14/15、V2绿15/15，root重跑15/15；C另核合法status、旧actual ID及取消/cache反例。B重入草案7项最小离线探针由root独立重跑，root又要求先在run phase等待原Future完成再PG/page验收。未知不存在表INSERT在额外wrapper解析时可能缺现场上下文，但仍拒绝执行；此诊断残余记录，不扩大本批工具修复。独立审查最终源逐字相同后才运行。
+
+首次子进程预检因继承的DEEPSEEK_API_KEY与项目.env冲突退出，在app/guard/PG/HTTP/Worker之前，没有产物或外部调用；随后只在新子进程绑定项目既有.env，不改全局环境/模型配置。formal6正常acceptance启动通过、401保护及原账号login/me正常，PG/API核原run/job/用户/两引用后仅派发原job一次。冻结的0916语义客户端为qwen3.8-flash、思考开启/budget256、0/1采样；正常共享服务另初始化0.2/0.9客户端，仅供当前入口读取HTTP并发槽，不能把其初始化日志当0916实际请求。没有任何模型请求，不能称该模型已用于本批抽取。
+
+formal6实际硬停`bundle_write_scope`，这次有完整被拦SQL/context：`public.running_record_bundle`三坐标upsert目标是formal4的C03新副本，并非旧病例。日志放行504 SELECT/4 SET/2 UPDATE，两UPDATE均原job（开始/prepare进度），另一次upsert在执行前被拒；日志不是提交凭证。wrapper完成12 GET/1 authPOST，create/PUT/runPOST均0，唯一detached派发1，generate/SDK/provider均0，023结果和64交付验收均不存在。硬停没有finally/Future/executor join/退出保护记录；不拿继承的旧exit_sample冒充本次退出证明。
+
+root亲自另进程只读取证：最后两个成功探针各36 SELECT/2 SET、重复读事务回滚；原两来源及formal3副本逐值不变，两新sample仍等于formal5已保存答案行、麻醉整行不变，九张索引/Bundle全部创建时显式字段与formal4 INSERT参数一致。原run仍bound、原job仍running、results/failed仍NULL、成本0，无该root_job_id事件。首次比较忽略PG会话时区导致naive创建参数与aware timestamp误不等，root查实际timestamp with time zone及TimeZone后按会话时区解释再比较；不把此探针错误当资料改写。未手工修任务状态、回填成本或扩大PG写入。
+
+已验证阻断范围：两新运行scene为bundle-v6，但`_scene_bundle_has_usable_content`都False，ready/synced不等于当前场景可直接消费。root把当前原函数AST隔离于只读PG冻结row，逐例重建当前loader分支为load→再load→assemble→upsert（后两步仅stub，0写入）。实际Worker在[batch_worker.py:430](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/batch_worker.py:430)调用[bundle_reader.py:90](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0916/bundle_reader.py:90)，后者force_refresh=False、force_refresh_if_empty=True；[assembly.py:2579](D:/LLM/LX888/apps/medqc-web/backend/app/services/bundles/assembly.py:2579)检查schema及可用内容，不能用空scene直接返回。现场upsert及冻结输入/源码分支证明执行链需要重新装配这一范围，不声称保存了当时Python调用栈。policy-legacy-v1是被拦重装配payload值，不是已确认的policy漂移触发原因。护栏run阶段禁止Bundle写入而拒绝，没有023医学判定问题或模型失败证据。
+
+root浏览器通过正常表单尝试登录，但前端[apiService.ts:57](D:/LLM/LX888/apps/medqc-web/src/services/apiService.ts:57)15秒超时先报错，后端同次请求稍后才返回成功；没有页面结果回读证明，不为本批改超时或注入token。本次启用私有profile/SQL/快照保存，墙钟不作为生产性能数据，也未证明超时由instrumentation单独造成。8003后端已退出，3003 Vite及临时浏览器页已关闭，未触碰8001；本轮不再第二次重入，也不重新创建任务。
+
+后续先按当前场景读取合同只读核专项副本的可用内容及正常重装配会写的精确范围，再确定最小修复；不能仅把样本状态改ready、放宽所有Bundle写入或重复跑模型试错。本轮临床签认/启用/上线批准均0，023专项存在性仍未正式闭环，分类与完成数不增加。
+
+证据：[formal6硬停现场](C:/Users/Coldplay/.codex/worktrees/lx0916-independent-regression-20261004/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-formal6-reentry-private.json)、[root独立PG及纯分支重建](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-formal6-stop-root-v2-private.json)、[独立实际归档复核](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261007-023-formal6-actual-review-private.md)。患者原文/完整标识/过程脚本均仅private，不提交。93项聚焦Python回归、编码与只检查lint通过；无前端或共享契约修改，未跑全前端type-check/test:unit。
