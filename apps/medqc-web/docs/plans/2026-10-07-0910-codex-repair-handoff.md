@@ -154,3 +154,63 @@
 
 - 06-01-01、06-01-03 由 `handbook_exam_lab` 按名称建事件，不经过本次修复；是否存在同类主从身份冲突未验证。
 - C09、C10 在修复后的模型输入已变化，需新模型调用才能验证其输出；计划与预算见复验报告第 7 节。
+
+---
+
+# 第四轮交接（复验 `88aa13770`、`d081b3dca` 后，2026-10-07）
+
+复验报告：`docs/acceptance/2026-10-07-round2-d081-independent-recheck.md`；私有材料：`$P/round2-recheck-88aa/`（`$P` = `.tmp/0910-full-audit/round-20261007-private`）。探针脚本均以环境变量 `ACC_BACKEND` 指向某一工作树的 `apps/medqc-web/backend`，同一输入可在不同 SHA 对比；模型调用 0。状态：N-01 已关闭；R-03、H-02、H-04、Q-01～Q-04 不变；第 4–6 项未复验。
+
+## N-05 抗菌药取消状态吞掉明确给药（阻断，新回退）
+
+- 固定 SHA：`d081b3dca`（`88aa13770` 引入）。规则：LX0609-05-01-03、05-01-06（05 同函数）。
+- 输入（合成）：美罗培南医嘱 `order_status=已取消`；同一医嘱病程写“已予美罗培南静滴抗感染。”（03，daily）或“给予美罗培南抗感染治疗。”（06，senior）。
+- 冻结预期：明确实际给药与取消状态冲突时，不得以“从未给药”排除（修复文档自述同一合同）。
+- 实际：`not_applicable / trigger_absent_complete`；基线 `57b863d2b` 为 `non_compliant`。
+- 责任函数：`native_extended_document_execution._exclude_unperformed_antimicrobial_orders`。“已实施”只认“已给予/已使用/已启用/已输注/实际给予/实际使用”，取消状态即排除。
+- 复现：`ACC_BACKEND=C:/wd08/apps/medqc-web/backend python -X utf8 $P/round2-recheck-88aa/semantic-probe-private.py`，看 `AM3b`、`AM3c`。
+- 正常对照：已取消且“未实际给药/患者拒绝未给药”→不适用；已取消但“已使用…1剂”→仍计实际用药；已停止→仍计实际用药。
+- 证据层级：合成、正式执行器→归约；真实病例未观察（修复文档称六例真实源无取消状态）。
+- 建议最小修复边界：取消排除只在无任何肯定给药叙述时生效；肯定给药识别至少覆盖“已予/予以/给予…静滴/输注”等实际给药表述，有冲突时保留医嘱（或资料不足）；保留上述对照。取消码表仍需医院确认。
+
+## N-04 麻醉访视带前缀空标题仍计已填写（未关闭，原 D1 修复不完整）
+
+- 固定 SHA：`d081b3dca`。规则：LX0609-04-04-02。
+- 输入（合成，其余完整）：术前“既往麻醉史：”、去掉结构化签名后正文“麻醉医师签名：”、术后“术后并发症：”“术后意识：”“呼吸系统：”（各自单独替换）。
+- 冻结预期：空字段不得计为已填写，应不合规并列出对应字段。
+- 实际：均 `compliant`（基线同）。原因：`_row_has_any` 去掉 marker 后，剩余前缀（既往/麻醉/术后/系统）不在模板词表，被当成有值。
+- 复现：`ACC_BACKEND=C:/wd08/apps/medqc-web/backend python -X utf8 $P/round2-recheck-88aa/anesthesia-probe-private.py`，看 `AN5a–AN5f`（`AN5e` 为已修好的“ASA分级：”）。
+- 正常对照：AN1 完整、AN6 有效阴性、AN6b“ASA分级：Ⅱ级”合规。
+- 建议最小修复边界：判断“标签冒号后是否有值”，不枚举前缀词；保留有效阴性。真实源无麻醉访视行，未观察。
+
+## N-03 化疗核对资料不足时公开文案声称“剂量一致”（未关闭，既有）
+
+- 固定 SHA：`d081b3dca`（`57b863d2b` 已存在于医嘱缺剂量场景；缺单位进入资料不足后更易触达）。规则：LX0609-05-02-01。
+- 输入：医嘱缺单位或缺剂量，病程“使用奥沙利铂130mg 静滴”。
+- 实际：`data_gap / required_field_missing`，`field_results.dose=unknown`，但 findings 为“已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。”
+- 冻结预期：资料不足不得声称已核对一致（用户本轮明确“不能声称已核对单位”）。
+- 责任函数：`customer_renderer.py` 中 `LX0609-05-02-01 / chemotherapy_order_course_comparison` 分支，只区分 `mismatched`，忽略 `unknown`。时间未知、事件关联不唯一等资料不足终态同理（未逐一跑）。
+- 复现：`ACC_BACKEND=C:/wd08/apps/medqc-web/backend python -X utf8 $P/round2-recheck-88aa/dose-findings-private.py`。
+- 正常对照：完整医嘱合规时该文案正确。
+
+## N-02 剂量前紧邻“数字+逗号”被当千分位（未关闭，低，新回退）
+
+- 固定 SHA：`d081b3dca`。规则：LX0609-05-02-01。
+- 输入：病程“d1，130mg”“d1,130mg”“体表面积1.7，130mg”，医嘱 130mg。
+- 实际：`non_compliant`（88aa 为合规）。责任函数：`_chemotherapy_dose_matches`。全角逗号被当千分位，且 `(?<!\d,)(?<!\d，)` 拒绝紧随“数字+逗号”的剂量。
+- 复现：`ACC_BACKEND=C:/wd08/apps/medqc-web/backend python -X utf8 $P/round2-recheck-88aa/dose-supplement-private.py`，看 S11、S12、S14。
+- 正常对照：1,130mg 仍不得匹配 130mg（S10）。0910 30 例真实源未见此写法。
+- 建议边界：全角逗号不作千分位；千分位只在逗号后恰好三位且前段不是 d1 一类日程标记时成立。不能确定时宁可资料不足，不判不一致。
+
+## N-06 病理取材：单事件正常材料收紧为资料不足（未关闭 / 口径待定）
+
+- 固定 SHA：`d081b3dca`（`88aa13770` 引入）。规则：LX0609-06-02-02。
+- 输入（合成，单申请、单报告、单手术）：(a) 手术日早于病理申请日；(b) 标本为“手术标本”泛称；(c) 申请无时间；(d) 旧夹具形态去掉注入的“病理号”。
+- 实际：均 `data_gap / association_failed`；基线合规。06-02-03 同输入保持合规。
+- 判定：(a) 的“取材记录日期须不早于申请日”没有业务依据，真实源 C01 存在手术日早于申请日，列**工程收紧未关闭**；(b)(c) 单事件能否视为同次关联属**业务口径待定**；(d) 说明旧夹具注入真实数据中不存在的“病理号”（真实源 0/20），掩盖了行为变化，建议改为显式测试资料不足行为。
+- 复现：`ACC_BACKEND=C:/wd08/apps/medqc-web/backend python -X utf8 $P/round2-recheck-88aa/pathology-probe-private.py`，看 PN2、PN3、PN4、PN7。
+- 正常对照：PN1、PN1b、PN6、PN8 合规；跨事件原反例 PA1–PA6 资料不足。真实 6 例因最终诊断门控先退出，未实际触达。
+
+## 待 N-05 修复后的复验
+
+第 4–6 项和宽范围串行回归按既有冻结预期执行；随后再申请 C09/C10/C05 真实模型调用（硬上限 6 次），未授权前不执行。
