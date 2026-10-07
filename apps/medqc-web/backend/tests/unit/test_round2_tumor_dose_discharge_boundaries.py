@@ -186,3 +186,31 @@ async def test_unicode_unit_denominator_is_not_absolute_dose(observed):
     )
     assert final["status"] == "non_compliant"
     assert final["customer_display_facts"]["field_results"]["dose"] == "mismatched"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("notation", ["130mg d1", "130mg ivgtt", "130mg qd", "130 mg iv", "130mg\nqd"])
+async def test_dose_separator_preserves_following_schedule(notation):
+    final = await execute("LX0609-05-02-01", course=f"2026-04-26 使用奥沙利铂 {notation} 静滴。")
+    assert final["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_missing_order_dose_unit_is_unknown_not_mismatch():
+    final = await execute("LX0609-05-02-01", unit="", course="2026-04-26 使用奥沙利铂130mg 静滴。")
+    assert final["status"] == "data_gap"
+    assert final["customer_display_facts"]["field_results"]["dose"] == "unknown"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("notation", ["130mg /m²", "130 mg ／ m²", "1,130mg", "130mgd1"])
+async def test_dose_separator_cannot_hide_denominator_or_numeric_prefix(notation):
+    final = await execute("LX0609-05-02-01", course=f"2026-04-26 使用奥沙利铂 {notation} 静滴。")
+    assert final["status"] == "non_compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("observed,expected", [("- 130mg", "non_compliant"), ("+ 130mg", "compliant")])
+async def test_sign_separated_by_space_remains_part_of_dose(observed, expected):
+    final = await execute("LX0609-05-02-01", course=f"2026-04-26 使用奥沙利铂 {observed} 静滴。")
+    assert final["status"] == expected

@@ -1349,17 +1349,19 @@ def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
     except InvalidOperation:
         return False
     unit = parsed.group(2) or ""
-    # 单位后不能继续接字母、数字或分母；mg 不等于 mcg 或 mg/m²。
+    # 保留单位后的空白边界：mg d1/ivgtt 是剂量后的独立频次或途径。
+    # 数值内千分位必须作为整个数解析，不能从1,130中截取130。
     dose_pattern = re.compile(
-        r"(?<![\d.+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+))"
+        r"(?<![\d.+-])(?<!\d,)(?<!\d，)"
+        r"((?:[+-]\s*)?(?:\d{1,3}(?:[,，]\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+))\s*"
         + re.escape(unit)
-        + r"(?![a-z0-9/／⁄∕²³^·⋅∙])",
+        + r"(?![a-z0-9])"
+        + r"(?!\s*[/／⁄∕²³^·⋅∙])",
         re.IGNORECASE,
     )
-    compact_observed = re.sub(r"\s+", "", observed)
     return any(
-        Decimal(match.group(1)) == expected_value
-        for match in dose_pattern.finditer(compact_observed)
+        Decimal(re.sub(r"\s+", "", match.group(1)).replace(",", "").replace("，", "")) == expected_value
+        for match in dose_pattern.finditer(observed)
     )
 
 
@@ -1408,6 +1410,9 @@ def _typed_chemotherapy_comparison(
         dose_unit = _clean(row.get("single_dose_unit") or row.get("dose_unit"))
         route = _clean(row.get("drug_apply_method") or row.get("administration_route"))
         prescribed = _clean(row.get("prescribed_datetime") or row.get("order_time"))
+        # 医嘱缺单位不足以核对剂量，复用既有资料不足合同，不推定不一致。
+        if not dose_unit:
+            missing_order_fields.add("dose")
         expected_values = {
             "drug_name": drug_name,
             "dose": f"{dose_value}{dose_unit}" if dose_value else "",
