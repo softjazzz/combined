@@ -3561,10 +3561,43 @@ _RESCUE_CONTENT_FIELD_LABELS = {
 }
 
 
+_PREOP_FIELD_LABELS = {
+    "brief_condition": "简要病情", "preop_diagnosis": "术前诊断",
+    "surgical_indication": "手术指征", "planned_procedure": "拟施手术名称和方式",
+    "planned_anesthesia": "拟施麻醉方式", "precautions": "注意事项",
+    "surgeon_preop_visit": "术者术前查看患者情况",
+    "preop_preparation": "术前准备", "surgical_plan": "手术方案",
+    "risk_and_prevention": "风险及防范", "participants_with_titles": "参加人员及职称",
+    "specific_opinions": "具体讨论意见", "chair_summary": "主持人小结",
+    "discussion_date": "讨论日期", "recorder_signature": "记录者签名",
+}
+
+
 def preop_summary_customer_message(
     *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
 ) -> tuple[str, str, str] | None:
     """只解释执行器确认缺项，不从单份文书缺项重新推导同台手术结论。"""
+    if (
+        rule_id in {"LX0609-04-01-04", "LX0609-04-01-05"}
+        and status == "data_gap"
+        and isinstance(facts, Mapping)
+        and facts.get("verification_kind") == "preop_fact_extraction_invalid"
+    ):
+        document = "术前小结" if rule_id == "LX0609-04-01-04" else "术前讨论记录"
+        field_labels = _PREOP_FIELD_LABELS
+        invalid = facts.get("invalid_fields")
+        names = "、".join(
+            field_labels[field]
+            for field in (invalid if isinstance(invalid, list) else [])
+            if field in field_labels
+        )
+        scope_text = f"（{names}）" if names else ""
+        return (
+            f"{document}的自动抽取结果未通过原文核验{scope_text}，本项暂无法判定。",
+            "抽取内容与原文不一致或格式不符，已整体舍弃，未据此判定合规或不合规，"
+            "也未把不合格的引用作为证据。",
+            f"请人工核对{document}原文，或重新质控。",
+        )
     if rule_id != "LX0609-04-01-04" or status not in {"non_compliant", "data_gap"}:
         return None
     labels = {

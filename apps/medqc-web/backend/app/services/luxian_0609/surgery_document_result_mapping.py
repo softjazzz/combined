@@ -309,11 +309,39 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
             "preop_content_complete",
             "preop_content_incomplete",
             "preop_surgery_association_ambiguous",
+            "preop_fact_extraction_invalid",
         }
         or raw.get("target_document") != target
         or raw.get("checked_fields") != list(allowed)
     ):
         return None
+    if kind == "preop_fact_extraction_invalid":
+        # 抽取未通过原文校验：只交付失败范围与字段名，不含任何模型引文或文书明细。
+        invalid = raw.get("invalid_fields")
+        scope = raw.get("failure_scope")
+        if (
+            set(raw) != {
+                "verification_kind", "target_document", "checked_fields",
+                "missing_fields", "documents", "failure_scope", "invalid_fields",
+            }
+            or raw.get("missing_fields") != []
+            or raw.get("documents") != []
+            or scope not in {"field", "document"}
+            or not isinstance(invalid, list)
+            or any(item not in allowed for item in invalid)
+            or len(set(invalid)) != len(invalid)
+            or (scope == "field" and not invalid)
+        ):
+            return None
+        return {
+            "verification_kind": kind,
+            "target_document": target,
+            "checked_fields": list(allowed),
+            "missing_fields": [],
+            "documents": [],
+            "failure_scope": scope,
+            "invalid_fields": list(invalid),
+        }
     missing = raw.get("missing_fields")
     if not isinstance(missing, list):
         return None
@@ -430,5 +458,6 @@ def surgery_document_customer_fact_status_is_valid(
         "preop_content_complete": "compliant",
         "preop_content_incomplete": "non_compliant",
         "preop_surgery_association_ambiguous": "data_gap",
+        "preop_fact_extraction_invalid": "data_gap",
     }.get(str(kind))
     return expected is not None and status == expected

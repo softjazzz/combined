@@ -3087,3 +3087,16 @@ def test_exam_lab_gap_messages_distinguish_submit_only_and_time_conflict():
         rule_id="LX0609-06-01-04", reason_code="association_failed", facts={}
     )
     assert "时间冲突" not in generic[0]
+
+
+def test_preop_extraction_invalid_message_is_explicit_and_not_a_verdict():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+
+    findings, evidence, suggestion = preop_summary_customer_message(
+        rule_id="LX0609-04-01-05",
+        status="data_gap",
+        facts={"verification_kind": "preop_fact_extraction_invalid", "invalid_fields": ["preop_preparation"]},
+    )
+    assert "术前讨论记录的自动抽取结果未通过原文核验（术前准备）" in findings
+    assert "未据此判定合规或不合规" in evidence
+    assert "人工核对" in suggestion

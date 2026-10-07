@@ -189,3 +189,51 @@ def test_preop_facts_without_pending_fields_are_unchanged() -> None:
         rule_id="LX0609-04-01-04", raw=_incomplete_preop_facts()
     )
     assert safe is not None and "pending_fields" not in safe
+
+
+def _invalid_extraction_facts(**overrides):
+    facts = {
+        "verification_kind": "preop_fact_extraction_invalid",
+        "target_document": "presurg_discussion",
+        "checked_fields": [
+            "preop_preparation", "surgical_indication", "surgical_plan", "risk_and_prevention",
+            "participants_with_titles", "specific_opinions", "chair_summary", "discussion_date",
+            "recorder_signature",
+        ],
+        "missing_fields": [],
+        "documents": [],
+        "failure_scope": "field",
+        "invalid_fields": ["preop_preparation"],
+    }
+    facts.update(overrides)
+    return facts
+
+
+def test_preop_extraction_invalid_facts_are_data_gap_only_and_carry_no_quotes() -> None:
+    safe = safe_surgery_document_customer_display_facts(
+        rule_id="LX0609-04-01-05", raw=_invalid_extraction_facts()
+    )
+    assert safe == _invalid_extraction_facts()
+    assert surgery_document_customer_fact_status_is_valid(
+        rule_id="LX0609-04-01-05", status="data_gap", safe_facts=safe
+    )
+    for status in ("compliant", "non_compliant"):
+        assert not surgery_document_customer_fact_status_is_valid(
+            rule_id="LX0609-04-01-05", status=status, safe_facts=safe
+        )
+    for bad in (
+        _invalid_extraction_facts(quote="拼接引文..."),
+        _invalid_extraction_facts(invalid_fields=[]),
+        _invalid_extraction_facts(invalid_fields=["not_a_field"]),
+        _invalid_extraction_facts(missing_fields=["preop_preparation"]),
+        _invalid_extraction_facts(documents=[{"document_index": 1, "event_index": None,
+                                              "association_state": "not_required", "missing_fields": []}]),
+        _invalid_extraction_facts(failure_scope="response"),
+    ):
+        assert safe_surgery_document_customer_display_facts(
+            rule_id="LX0609-04-01-05", raw=bad
+        ) is None
+    assert safe_surgery_document_customer_display_facts(
+        rule_id="LX0609-04-01-05",
+        raw=_invalid_extraction_facts(failure_scope="document", invalid_fields=[]),
+    ) is not None

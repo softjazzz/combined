@@ -216,15 +216,57 @@ specific_opinions是参加讨论者的具体意见，chair_summary是主持人�
 {rendered}"""
 
 
-def _validated_items(
+def _field_value_valid(source: str, quote: Any, original: str) -> bool:
+    """单个字段值的形状与原文校验；不修复、不改写模型输出。"""
+
+    if source == "presurg_discussion" and isinstance(quote, Mapping):
+        if set(quote) != {"state", "quote", "reviewed_all_sections"}:
+            return False
+        state, excerpt = quote["state"], quote["quote"]
+        if state not in {"present", "missing", "unknown"} or type(quote["reviewed_all_sections"]) is not bool:
+            return False
+        if state == "present":
+            return isinstance(excerpt, str) and bool(clean_text(excerpt)) and clean_text(excerpt) in original
+        return excerpt is None and not (state == "missing" and not quote["reviewed_all_sections"])
+    if quote is None:
+        return True
+    return isinstance(quote, str) and bool(clean_text(quote)) and clean_text(quote) in original
+
+
+@dataclass(frozen=True)
+class _ValidatedResponse:
+    """共享抽取响应按规则隔离后的校验结果。
+
+    - 整体结构错误、文书身份不在本病例输入中、重复身份：整份响应拒绝（返回 None）；
+    - 某份文书的字段集合不符（文书级）或字段值/引文不合格（字段级）：只使该文书所属
+      规则失败，失败规则不得被判合规，也不把失败字段改写为 unknown；
+    - 某规则所需文书缺失（覆盖不全）：只使该规则失败。
+    本模块的抽取不含事件归属字段，事件关联由 Python 在通过校验的事实上确定。
+    """
+
+    parsed: dict[tuple[str, str], Mapping[str, Any]]
+    rule_failures: dict[str, tuple[str, tuple[str, ...]]]
+
+
+def _validate_response(
     payload: Mapping[str, Any],
     expected: Mapping[tuple[str, str], str],
     selected: Sequence[str],
-) -> dict[tuple[str, str], Mapping[str, Any]] | None:
+) -> _ValidatedResponse | None:
     raw = payload.get("documents")
-    if not isinstance(raw, list) or len(raw) != len(expected):
+    if not isinstance(raw, list):
         return None
     parsed: dict[tuple[str, str], Mapping[str, Any]] = {}
+    seen: set[tuple[str, str]] = set()
+    failures: dict[str, tuple[str, tuple[str, ...]]] = {}
+
+    def fail(rule: str, scope: str, fields: Sequence[str] = ()) -> None:
+        previous = failures.get(rule)
+        merged = tuple(dict.fromkeys((*(previous[1] if previous else ()), *fields)))
+        # 文书级失败优先于字段级（影响范围更大）。
+        failure_scope = "document" if scope == "document" or (previous and previous[0] == "document") else scope
+        failures[rule] = (failure_scope, merged)
+
     for item in raw:
         if not isinstance(item, Mapping):
             return None
@@ -234,37 +276,48 @@ def _validated_items(
         )
         key = (source, doc_id)
         original = expected.get(key)
-        facts = item.get("items")
         rule_id = next((rule for rule in selected if RULE_SOURCES[rule] == source), "")
-        if (
-            not original
-            or not rule_id
-            or key in parsed
-            or not isinstance(facts, Mapping)
-            or set(facts) != set(RULE_FIELDS[rule_id])
-        ):
+        if not original or not rule_id or key in seen:
             return None
-        for field, quote in facts.items():
-            if source == "presurg_discussion" and isinstance(quote, Mapping):
-                if set(quote) != {"state", "quote", "reviewed_all_sections"}:
-                    return None
-                state, excerpt = quote["state"], quote["quote"]
-                if state not in {"present", "missing", "unknown"} or type(quote["reviewed_all_sections"]) is not bool:
-                    return None
-                if state == "present":
-                    if not isinstance(excerpt, str) or not clean_text(excerpt) or clean_text(excerpt) not in original:
-                        return None
-                elif excerpt is not None or (state == "missing" and not quote["reviewed_all_sections"]):
-                    return None
-                continue
-            if quote is not None and (
-                not isinstance(quote, str)
-                or not clean_text(quote)
-                or clean_text(quote) not in original
-            ):
-                return None
+        seen.add(key)
+        facts = item.get("items")
+        if not isinstance(facts, Mapping) or set(facts) != set(RULE_FIELDS[rule_id]):
+            fail(rule_id, "document")
+            continue
+        invalid = [
+            field
+            for field, quote in facts.items()
+            if not _field_value_valid(source, quote, original)
+        ]
+        if invalid:
+            fail(rule_id, "field", invalid)
+            continue
         parsed[key] = facts
-    return parsed if set(parsed) == set(expected) else None
+    for rule_id in selected:
+        required = {key for key in expected if key[0] == RULE_SOURCES[rule_id]}
+        if rule_id not in failures and not required <= set(parsed):
+            fail(rule_id, "document")
+    return _ValidatedResponse(
+        parsed={
+            key: facts
+            for key, facts in parsed.items()
+            if next(rule for rule in selected if RULE_SOURCES[rule] == key[0]) not in failures
+        },
+        rule_failures=failures,
+    )
+
+
+def _validated_items(
+    payload: Mapping[str, Any],
+    expected: Mapping[tuple[str, str], str],
+    selected: Sequence[str],
+) -> dict[tuple[str, str], Mapping[str, Any]] | None:
+    """兼容入口：任一规则失败即返回 None（与旧语义一致）。"""
+
+    validated = _validate_response(payload, expected, selected)
+    if validated is None or validated.rule_failures:
+        return None
+    return validated.parsed if set(validated.parsed) == set(expected) else None
 
 
 def _document_record_time(row: Mapping[str, Any]) -> datetime | None:
@@ -569,7 +622,9 @@ async def evaluate_preop_content_rules(
         )
     prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
     payload = response_json_payload(response)
-    parsed = _validated_items(payload, expected, active) if payload else None
+    validated = _validate_response(payload, expected, active) if payload else None
+    parsed = validated.parsed if validated is not None else None
+    rule_failures = validated.rule_failures if validated is not None else {}
     if parsed is None:
         return PreopContentExecution(
             tuple(
@@ -615,6 +670,30 @@ async def evaluate_preop_content_rules(
                 }
             )
         )
+        if rule in rule_failures:
+            # 本规则所需事实未通过校验：如实返回资料不足，不改写为 unknown，
+            # 不判合规；无效引文不进入公开事实或证据（证据只引用文书本身）。
+            failure_scope, invalid_fields = rule_failures[rule]
+            decisions.append(
+                _decision(snapshot, rule, "data_gap", "required_field_missing", refs)
+            )
+            display.append(
+                (
+                    rule,
+                    {
+                        "verification_kind": "preop_fact_extraction_invalid",
+                        "target_document": RULE_SOURCES[rule],
+                        "checked_fields": list(RULE_FIELDS[rule]),
+                        "missing_fields": [],
+                        "documents": [],
+                        "failure_scope": failure_scope,
+                        "invalid_fields": [
+                            field for field in RULE_FIELDS[rule] if field in invalid_fields
+                        ],
+                    },
+                )
+            )
+            continue
         if rule == "LX0609-04-01-04" and events is None:
             decisions.append(
                 _decision(

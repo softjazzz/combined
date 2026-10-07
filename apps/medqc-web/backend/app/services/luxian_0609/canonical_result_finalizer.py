@@ -120,6 +120,16 @@ _RULE_DATA_GAP_EXPLANATIONS = {
         "missing_sources": ["需要相互核对的报告与病程"],
         "missing_fields": ["相互一致的报告时间与病程记录时间"],
     },
+    ("LX0609-04-01-04", "required_field_missing"): {
+        "reason_label": "自动抽取未通过原文核验",
+        "missing_sources": [],
+        "missing_fields": ["可与原文逐字核对的术前小结内容"],
+    },
+    ("LX0609-04-01-05", "required_field_missing"): {
+        "reason_label": "自动抽取未通过原文核验",
+        "missing_sources": [],
+        "missing_fields": ["可与原文逐字核对的术前讨论记录内容"],
+    },
     ("LX0609-02-01-05", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
         "missing_sources": [],

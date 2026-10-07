@@ -1632,3 +1632,133 @@ def test_residue_is_only_removed_when_the_source_continues_with_that_label():
     assert normalize("腹腔镜下胆囊切除术拟施", twice) == "腹腔镜下胆囊切除术拟施"
     # 非字符串（缺失）不处理。
     assert normalize(None, text) is None
+
+
+# ---- 共享抽取失败按规则隔离 ----
+
+_SPLICED = "术前准备：完成...具体讨论意见：同意手术"  # 用 ... 拼接两处不连续原文（C04 真实形态）
+
+
+def _shared_session(discussion=None):
+    name = "腹腔镜下胆囊切除术"
+    return _session(
+        summary=(
+            {"document_id": "core", "record_content": _template_core(name)},
+            {"document_id": "narrative", "record_content": _C04_NARRATIVE, "record_time": "2026-01-01 07:00:00"},
+        ),
+        discussion=(discussion or _structured_discussion(),),
+        surgery_records=(_surgery_record(document_id="s1", name=name, begin="2026-01-01 09:00:00+08:00"),),
+    )
+
+
+def _shared_payload(discussion_items, *, extra=(), drop_discussion=False, summary_items=None):
+    name = "腹腔镜下胆囊切除术"
+    documents = [
+        {"document_id": "core", "source_type": "presurg_summary",
+         "items": summary_items or _template_core_items(name)},
+        {"document_id": "narrative", "source_type": "presurg_summary", "items": _narrative_items()},
+    ]
+    if not drop_discussion:
+        documents.append({"document_id": "discussion-structured", "source_type": "presurg_discussion",
+                          "items": discussion_items})
+    return _payload(*documents, *extra)
+
+
+async def _run_shared(payload, session=None):
+    session = session or _shared_session()
+    client = _Client(payload)
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04", "LX0609-04-01-05"),
+        snapshot=session.snapshot, materials=session.materials, llm_client=client,
+    )
+    return result, client
+
+
+@pytest.mark.asyncio
+async def test_invalid_discussion_quote_does_not_void_valid_summary_facts():
+    items = _complete_discussion_items(None)
+    items["preop_preparation"] = _SPLICED
+    result, client = await _run_shared(_shared_payload(items))
+    assert len(client.prompts) == 1 and result.llm_call_count == 1
+    summary, discussion = result.decisions
+    assert (summary.qc_direction.value, summary.reason_code) == ("defect", "requirement_violated")
+    assert (discussion.evidence_state.value, discussion.reason_code) == ("data_gap", "required_field_missing")
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-04-01-04"]["missing_fields"] == ["preop_diagnosis", "surgeon_preop_visit"]
+    assert facts["LX0609-04-01-05"] == {
+        "verification_kind": "preop_fact_extraction_invalid",
+        "target_document": "presurg_discussion",
+        "checked_fields": [
+            "preop_preparation", "surgical_indication", "surgical_plan", "risk_and_prevention",
+            "participants_with_titles", "specific_opinions", "chair_summary", "discussion_date",
+            "recorder_signature",
+        ],
+        "missing_fields": [],
+        "documents": [],
+        "failure_scope": "field",
+        "invalid_fields": ["preop_preparation"],
+    }
+    # 无效引文不得出现在任何公开事实或判定里。
+    assert "..." not in repr(facts) and "同意手术" not in repr(facts["LX0609-04-01-05"])
+
+
+@pytest.mark.asyncio
+async def test_invalid_discussion_field_is_not_rewritten_as_unknown_or_judged():
+    items = _complete_discussion_items(None)
+    items["specific_opinions"] = {"state": "present", "quote": "虚构的讨论意见", "reviewed_all_sections": True}
+    result, _client = await _run_shared(_shared_payload(items))
+    discussion = result.decisions[1]
+    assert discussion.qc_direction.value not in {"satisfied", "defect"}
+    assert dict(result.customer_display_facts)["LX0609-04-01-05"]["invalid_fields"] == ["specific_opinions"]
+
+
+@pytest.mark.asyncio
+async def test_document_shape_error_fails_only_its_own_rule():
+    items = _complete_discussion_items(None)
+    items.pop("chair_summary")
+    result, _client = await _run_shared(_shared_payload(items))
+    assert result.decisions[0].reason_code == "requirement_violated"
+    facts = dict(result.customer_display_facts)["LX0609-04-01-05"]
+    assert (facts["failure_scope"], facts["invalid_fields"]) == ("document", [])
+
+
+@pytest.mark.asyncio
+async def test_missing_rule_document_fails_only_that_rule():
+    result, _client = await _run_shared(_shared_payload({}, drop_discussion=True))
+    assert result.decisions[0].reason_code == "requirement_violated"
+    assert result.decisions[1].reason_code == "required_field_missing"
+    assert dict(result.customer_display_facts)["LX0609-04-01-05"]["failure_scope"] == "document"
+
+
+@pytest.mark.asyncio
+async def test_unknown_or_duplicate_document_identity_rejects_the_whole_response():
+    valid = _complete_discussion_items(None)
+    unknown = {"document_id": "not-in-this-case", "source_type": "presurg_summary",
+               "items": _narrative_items()}
+    duplicate = {"document_id": "core", "source_type": "presurg_summary",
+                 "items": _template_core_items("腹腔镜下胆囊切除术")}
+    for extra in ((unknown,), (duplicate,)):
+        result, _client = await _run_shared(_shared_payload(valid, extra=extra))
+        assert [d.reason_code for d in result.decisions] == ["source_readiness_unproven"] * 2
+        assert result.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
+async def test_non_object_document_or_structure_rejects_the_whole_response():
+    import json
+    for payload in (json.dumps({"documents": "x"}), json.dumps({"documents": ["x"]})):
+        result, _client = await _run_shared(payload)
+        assert [d.reason_code for d in result.decisions] == ["source_readiness_unproven"] * 2
+
+
+@pytest.mark.asyncio
+async def test_invalid_summary_quote_fails_summary_rule_but_keeps_discussion():
+    name = "腹腔镜下胆囊切除术"
+    bad = _template_core_items(name)
+    bad["surgical_indication"] = "原文中不存在的手术指征"
+    result, _client = await _run_shared(
+        _shared_payload(_complete_discussion_items(None), summary_items=bad)
+    )
+    assert result.decisions[0].reason_code == "required_field_missing"
+    assert dict(result.customer_display_facts)["LX0609-04-01-04"]["invalid_fields"] == ["surgical_indication"]
+    assert result.decisions[1].qc_direction.value == "satisfied"
