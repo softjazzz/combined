@@ -985,6 +985,41 @@ def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[st
     return tuple(row for row in rows if _antimicrobial_names_in(row))
 
 
+def _has_performed_antimicrobial_administration(
+    text: str, names: Sequence[str],
+) -> bool:
+    """取消与已实施冲突时保留事件；计划、否定和历史给药不是本次实施。"""
+
+    target = "|".join(re.escape(name) for name in names)
+    action = re.compile(
+        r"已给予|已使用|已启用|已输注|实际给予|实际使用"
+        + (rf"|(?:已予以|予以|已予|给予)(?=\s*(?:{target}))" if target else "")
+    )
+    for clause in re.split(r"[，,。；;！!？?\n]", text):
+        for match in action.finditer(clause):
+            prefix = clause[:match.start()]
+            if re.search(
+                r"(?:未|未曾|未能|不|并非|否认)\s*$"
+                r"|(?:考虑|需|应|将|待)\s*$"
+                r"|拟|计划|建议|准备|尚待|等待|需待|是否|若|如果"
+                r"|既往|曾经|曾用|院外|外院|入院前|用药史",
+                prefix,
+            ):
+                continue
+            following = clause[match.end():]
+            following_names = _antimicrobial_names_in({"record_content": following})
+            if following_names:
+                nearest = min(following_names, key=following.index)
+                if nearest not in names:
+                    continue
+            else:
+                preceding_names = _antimicrobial_names_in({"record_content": prefix})
+                if preceding_names and max(preceding_names, key=prefix.rindex) not in names:
+                    continue
+            return True
+    return False
+
+
 def _exclude_unperformed_antimicrobial_orders(
     orders: Sequence[Mapping[str, Any]],
     course_rows: Sequence[Mapping[str, Any]],
@@ -1012,7 +1047,7 @@ def _exclude_unperformed_antimicrobial_orders(
         texts = tuple(_material_text(row) for row in (order, *linked_rows))
         # 明确已实施与取消信息冲突时，不把已用药事件静默删去。
         performed = any(
-            re.search(r"(?<!未)(?:已给予|已使用|已启用|已输注|实际给予|实际使用)", text)
+            _has_performed_antimicrobial_administration(text, names)
             for text in texts
         )
         unperformed_rows = tuple(

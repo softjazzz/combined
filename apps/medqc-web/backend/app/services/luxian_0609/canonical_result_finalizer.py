@@ -1079,6 +1079,7 @@ def finalize_luxian_0609_reduced_customer_result(
         precise_findings = customer_finding_from_controlled_facts(
             rule_id=rule_id,
             facts=safe_facts,
+            status=result.get("status"),
         )
         if precise_findings:
             result["findings"] = precise_findings

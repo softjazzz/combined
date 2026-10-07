@@ -1747,7 +1747,7 @@ def _format_exact_elapsed_duration(
 
 
 def customer_finding_from_controlled_facts(
-    *, rule_id: str, facts: Mapping[str, Any] | None
+    *, rule_id: str, facts: Mapping[str, Any] | None, status: str | None = None
 ) -> str:
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
@@ -2724,6 +2724,24 @@ def customer_finding_from_controlled_facts(
                 for key, value in field_results.items()
                 if key in field_labels and value == "mismatched"
             )
+            unknown = "、".join(
+                field_labels[key]
+                for key, value in field_results.items()
+                if key in field_labels and value == "unknown"
+            )
+            if unknown:
+                known_mismatch = f"{mismatched}记录不一致；" if mismatched else ""
+                return (
+                    f"已读取 {facts.get('order_count')} 条化疗医嘱及对应病程，"
+                    f"{known_mismatch}{unknown}尚无法核对，未能完成全部项目的一致性核对。"
+                )
+            if status == "data_gap":
+                # 字段初始matched不能证明事件已唯一关联；只投影既有终态。
+                known_mismatch = f"{mismatched}记录不一致；" if mismatched else ""
+                return (
+                    f"已读取 {facts.get('order_count')} 条化疗医嘱及对应病程，"
+                    f"{known_mismatch}当前资料不足，尚无法完成一致性核对。"
+                )
             if mismatched:
                 return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致。"
             return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。"

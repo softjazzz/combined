@@ -888,11 +888,24 @@ def _row_has_any(
         return False
     # 不能将一处“未完成/未告知”扩散到同一文书的所有字段；按最小分句
     # 核对每一个标记，并只拒绝该标记所在分句的明确缺失表述。
+    # 只在已知访视字段标签前切分紧连文本，不能把“清醒”等值切给下一字段。
+    # 未知标签仍由空白/标点分隔；单字段空标签校验不依赖前缀词表。
+    label = (
+        r"(?:术前|术后|既往)?(?:ASA(?:分级|评估)?|气道(?:评估)?|禁食禁饮|禁食|禁饮|"
+        r"麻醉手术史|麻醉史|麻醉风险告知|麻醉风险|风险告知|围术期风险|"
+        r"麻醉医师签名|医师签名|意识|神志|呼吸系统|呼吸|循环|并发症|恶心呕吐|咽痛|特殊情况|备注)"
+        r"\s*[:：]"
+    )
     segments = tuple(
-        segment.strip() for segment in re.split(r"[。；;，,\n]+", text) if segment.strip()
+        segment.strip()
+        for clause in re.split(r"[。；;，,\n]+", text)
+        for segment in re.split(r"\s+(?=[^\s:：]+[:：])|(?=" + label + r")", clause)
+        if segment.strip()
     )
     return any(
         marker in segment
+        # 标签前缀不是字段值；冒号后只剩空白/占位符时，不能算已填写。
+        and not re.search(re.escape(marker) + r"[^:：]*[:：][\s_—/\-（）()]*$", segment)
         # 空表单标题不能证明字段已经填写；仍保留“无并发症”等有效阴性。
         and not re.fullmatch(
             r"(?:分级|评估|情况|状态|记录|告知|签名|禁食|禁饮|[\s:：_—/\-（）()])*",

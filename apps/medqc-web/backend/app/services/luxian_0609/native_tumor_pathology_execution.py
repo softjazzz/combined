@@ -859,7 +859,9 @@ def _pathology_documentation_links(
                     continue
                 if sampling:
                     related = bool(specimen and specimen in text and unique_signature)
-                    if (request_time is None and not same_key) or (request_time is not None and record_time.date() < request_time.date()):
+                    # 取材可先于申请登记；申请日期不是手术/取材的时间下界。
+                    # 缺申请时间且无明确业务键的关联口径仍保持保守。
+                    if request_time is None and not same_key:
                         continue
                 else:
                     related = bool(diagnosis and diagnosis in text and unique_signature and (not specimen or specimen in text))
@@ -1350,10 +1352,10 @@ def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
         return False
     unit = parsed.group(2) or ""
     # 保留单位后的空白边界：mg d1/ivgtt 是剂量后的独立频次或途径。
-    # 数值内千分位必须作为整个数解析，不能从1,130中截取130。
+    # 数值内ASCII千分位作为整体；d1后的逗号及中文句读不属于剂量数字。
     dose_pattern = re.compile(
-        r"(?<![\d.+-])(?<!\d,)(?<!\d，)"
-        r"((?:[+-]\s*)?(?:\d{1,3}(?:[,，]\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+))\s*"
+        r"(?<![a-z\d.+-])"
+        r"((?:[+-]\s*)?(?:\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+))\s*"
         + re.escape(unit)
         + r"(?![a-z0-9])"
         + r"(?!\s*[/／⁄∕²³^·⋅∙])",
