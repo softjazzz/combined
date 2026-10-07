@@ -1512,3 +1512,123 @@ async def test_same_name_two_surgeries_with_unplaceable_documents_stay_data_gap(
     assert facts["missing_fields"] == []
     assert result.decisions[0].evidence_state.value == "data_gap"
     assert result.decisions[0].qc_direction.value != "satisfied"
+
+
+# ---- 术式关联：仅对比较值做受限规范化（原始引文与原文校验不变） ----
+
+def _template_core(name, anesthesia="全麻"):
+    return (
+        "手术适应症：诊断明确，有手术指征。"
+        f"拟施手术名称和方式：:{name}拟施 麻醉方式：{anesthesia}"
+        "拟诊手术日期：:2026年01月01日手术要点：:仔细操作，避免损伤。术前准备：禁食水。手术医师签名：甲"
+    )
+
+
+def _template_core_items(name, anesthesia="全麻"):
+    return {
+        "brief_condition": None,
+        "preop_diagnosis": None,
+        "surgical_indication": "手术适应症：诊断明确，有手术指征。",
+        # 真实模型取到的引文：带开头冒号与下一标签残留“拟施”。
+        "planned_procedure": f":{name}拟施 ",
+        "planned_anesthesia": anesthesia,
+        "precautions": "仔细操作，避免损伤。",
+        "surgeon_preop_visit": None,
+    }
+
+
+async def _run_template_case(core_text, core_items, surgery_names, narrative_time="2026-01-01 07:00:00"):
+    session = _session(
+        summary=(
+            {"document_id": "core", "record_content": core_text},
+            {"document_id": "narrative", "record_content": _C04_NARRATIVE, "record_time": narrative_time},
+        ),
+        surgery_records=tuple(
+            _surgery_record(document_id=f"s{index}", name=name, begin=begin)
+            for index, (name, begin) in enumerate(surgery_names, start=1)
+        ),
+    )
+    return await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "core", "source_type": "presurg_summary", "items": core_items},
+                {"document_id": "narrative", "source_type": "presurg_summary", "items": _narrative_items()},
+            )
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_label_residue_and_colon_in_quote_do_not_break_association():
+    """C02/C09/C10 形态：引文 `:术式拟施 `，原文紧接“麻醉方式”。"""
+    name = "腹腔镜下胆囊切除术"
+    result = await _run_template_case(
+        _template_core(name), _template_core_items(name), [(name, "2026-01-01 09:00:00+08:00")]
+    )
+    facts = _facts_for_summary(result)
+    assert [d["association_state"] for d in facts["documents"]] == ["matched", "matched"]
+    assert facts["missing_fields"] == ["preop_diagnosis", "surgeon_preop_visit"]
+    assert "pending_fields" not in facts
+
+
+@pytest.mark.asyncio
+async def test_side_difference_is_not_hidden_by_residue_normalization():
+    result = await _run_template_case(
+        _template_core("右侧腹股沟疝修补术"),
+        _template_core_items("右侧腹股沟疝修补术"),
+        [("左侧腹股沟疝修补术", "2026-01-01 09:00:00+08:00")],
+    )
+    assert _facts_for_summary(result)["documents"][0]["association_state"] == "ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_procedure_scope_difference_is_not_hidden_by_residue_normalization():
+    """C04 形态：计划楔形切除，实施肺叶切除，去掉标签残留后仍不同。"""
+    result = await _run_template_case(
+        _template_core(_C04_PLAN), _template_core_items(_C04_PLAN),
+        [(_C04_PERFORMED, "2026-01-01 09:00:00+08:00")],
+    )
+    assert _facts_for_summary(result)["documents"][0]["association_state"] == "ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_site_difference_is_not_hidden_by_residue_normalization():
+    result = await _run_template_case(
+        _template_core("T11椎体骨折球囊扩张成形术", "局麻"),
+        _template_core_items("T11椎体骨折球囊扩张成形术", "局麻"),
+        [("T12椎体骨折球囊扩张成形术", "2026-01-01 09:00:00+08:00")],
+    )
+    assert _facts_for_summary(result)["documents"][0]["association_state"] == "ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_same_name_two_surgeries_stay_unassociated_after_normalization():
+    name = "腹腔镜下胆囊切除术"
+    result = await _run_template_case(
+        _template_core(name), _template_core_items(name),
+        [(name, "2026-01-01 08:00:00+08:00"), (name, "2026-01-02 08:00:00+08:00")],
+        narrative_time=None,
+    )
+    facts = _facts_for_summary(result)
+    assert facts["documents"][0]["association_state"] == "ambiguous"
+    assert result.decisions[0].qc_direction.value != "satisfied"
+
+
+def test_residue_is_only_removed_when_the_source_continues_with_that_label():
+    from app.services.luxian_0609.native_preop_content_execution import (
+        _procedure_name_for_association as normalize,
+    )
+
+    text = "拟施手术名称和方式：:腹腔镜下胆囊切除术拟施 麻醉方式：全麻"
+    assert normalize(":腹腔镜下胆囊切除术拟施 ", text) == "腹腔镜下胆囊切除术"
+    # 原文接下来不是标签：不是残留，不能删字。
+    other = "拟施手术名称和方式：:腹腔镜下胆囊切除术拟施后另议"
+    assert normalize(":腹腔镜下胆囊切除术拟施", other) == "腹腔镜下胆囊切除术拟施"
+    # 引文在原文中出现不唯一：原样返回。
+    twice = text + "；腹腔镜下胆囊切除术拟施 麻醉方式：全麻"
+    assert normalize("腹腔镜下胆囊切除术拟施", twice) == "腹腔镜下胆囊切除术拟施"
+    # 非字符串（缺失）不处理。
+    assert normalize(None, text) is None

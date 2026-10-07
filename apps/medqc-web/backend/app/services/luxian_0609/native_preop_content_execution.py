@@ -310,6 +310,46 @@ def _missing_fields_for_document(
     }
 
 
+# 术前小结模板中紧随“拟施手术名称和方式”之后的固定标签。模型取术式引文时可能把
+# 下一个标签的开头字（如“拟施 麻醉方式”中的“拟施”）带进引文末尾。
+_SUMMARY_TEMPLATE_LABELS = (
+    "拟施麻醉方式",
+    "拟诊手术日期",
+    "拟施手术日期",
+    "麻醉方式",
+    "手术要点",
+    "术前准备",
+    "手术医师签名",
+)
+
+
+def _procedure_name_for_association(quote: Any, document_text: str) -> Any:
+    """仅为手术事件关联生成比较值；原始引文及其原文校验保持不变。
+
+    受限规范化只做两件事，且都必须由原文证明：
+    1. 去掉引文开头的标签分隔冒号；
+    2. 引文末尾若是下一个固定模板标签的开头部分，而原文中紧接其后的正是该标签
+       的其余部分，则去掉这段标签残留。
+    引文在原文中出现不唯一、或末尾不构成标签残留时原样返回，不做任意删字。
+    """
+
+    if not isinstance(quote, str):
+        return quote
+    cleaned = clean_text(quote)
+    text = clean_text(document_text)
+    if not cleaned or text.count(cleaned) != 1:
+        return quote
+    following = re.sub(r"\s+", "", text[text.index(cleaned) + len(cleaned):])
+    candidate = re.sub(r"^[:：\s]+", "", cleaned)
+    for label in _SUMMARY_TEMPLATE_LABELS:
+        for size in range(len(label) - 1, 0, -1):
+            residue = label[:size]
+            if candidate.endswith(residue) and (residue + following).startswith(label):
+                stripped = candidate[: -len(residue)].strip()
+                return stripped or quote
+    return candidate or quote
+
+
 def _association_state_for_rule(
     *,
     rule_id: str,
@@ -346,7 +386,9 @@ def _association_state_for_rule(
         else:
             association = associate_preop_document_to_surgery_event(
                 events=events,
-                procedure_name=values.get("planned_procedure"),
+                procedure_name=_procedure_name_for_association(
+                    values.get("planned_procedure"), _text
+                ),
                 record_time=_document_record_time(row),
                 planned_surgery_time=summary_planned_surgery_time_from_row(row),
             )
