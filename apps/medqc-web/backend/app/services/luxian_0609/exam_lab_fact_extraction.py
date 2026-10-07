@@ -16,6 +16,11 @@ from typing import Any, Callable, Mapping, Sequence
 from .evidence_material import build_material_document_refs
 from .source_evidence_reader import canonical_source_evidence
 from .imaging_report_scope import is_guidance_only_imaging_rows
+from .exam_lab_course_time import (
+    course_restates_event_result,
+    is_time_conflict_candidate,
+    limit_conflict_candidates,
+)
 
 
 SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v3"
@@ -129,6 +134,14 @@ class ExamLabTextProjection:
     course_projection_truncated: bool = False
     course_texts: Mapping[str, str] | None = None
     source_document_refs: Mapping[str, tuple[str, str]] | None = None
+    # 记录时间与提交时间分别保留，不合并成单一“病程时间”。None 表示旧式投影。
+    course_record_times: Mapping[str, datetime | None] | None = None
+    course_submit_times: Mapping[str, datetime | None] | None = None
+    # 全部病程候选正文（含被时间筛选排除者）：仅用于“未记录”结论前的完整性核对，
+    # 不进入模型上下文。值为 (正文, 记录时间, 提交时间)。
+    course_candidates: Mapping[
+        str, tuple[str, datetime | None, datetime | None]
+    ] | None = None
 
     def __repr__(self) -> str:
         return (
@@ -235,6 +248,16 @@ def _course_refs_for_rule_event(
         )
         if late_refs:
             selected_refs.add(min(late_refs, key=lambda item: item[1])[0])
+        record_times = projection.course_record_times or {}
+        submit_times = projection.course_submit_times or {}
+        conflict_candidates = [
+            (ref, submit_times[ref])
+            for ref in refs
+            if is_time_conflict_candidate(
+                record_times.get(ref), submit_times.get(ref), event.report_time
+            )
+        ]
+        selected_refs.update(limit_conflict_candidates(conflict_candidates))
     return tuple(ref for ref in refs if ref in selected_refs)
 
 
@@ -305,6 +328,18 @@ def _event_identity_mentions_course(
     return False
 
 
+def event_result_carried_by_course(event: ExamLabSingleEvent, course_text: str) -> bool:
+    """正文已确认承载本事件结果：整段逐字复述，或事件身份文本可核验的提及。
+
+    事件没有身份文本时不能用“恒真”的身份判断，只接受逐字复述。
+    """
+
+    return course_restates_event_result(event.result_texts, course_text) or (
+        bool(_clean(event.identity_text))
+        and _event_identity_mentions_course(event, course_text)
+    )
+
+
 def _is_exact_report_restatement(text: str, report_texts: Sequence[str]) -> bool:
     """整段只含报告正文和阅读前缀，才可确定没有新增分析内容。"""
     text = re.sub(r"^\s*查看[^。\n]{1,50}?报告[，,:：\s]*", "", text)
@@ -370,6 +405,20 @@ def _parse_datetime(value: Any) -> datetime | None:
     if parsed.utcoffset() != timedelta(hours=8):
         return None
     return parsed.replace(tzinfo=None)
+
+
+def _course_time_parts(
+    row: Mapping[str, Any],
+) -> tuple[datetime | None, datetime | None]:
+    """病程记录时间与提交时间，分别解析；不互相替代。"""
+
+    record = _parse_datetime(row.get("record_time")) or _parse_datetime(
+        row.get("record_datetime")
+    )
+    submit = _parse_datetime(row.get("submit_time")) or _parse_datetime(
+        row.get("submit_datetime")
+    )
+    return record, submit
 
 
 def _course_datetime(row: Mapping[str, Any]) -> datetime | None:
@@ -505,6 +554,8 @@ def build_exam_lab_text_projection(
     safe_refs: dict[str, str] = {}
     source_document_refs: dict[str, tuple[str, str]] = {}
     course_times: dict[str, datetime | None] = {}
+    course_record_times: dict[str, datetime | None] = {}
+    course_submit_times: dict[str, datetime | None] = {}
     course_texts: dict[str, str] = {}
     parts: list[str] = []
     family_rows: dict[str, list[Mapping[str, Any]]] = {"exam": [], "culture": []}
@@ -938,6 +989,19 @@ def build_exam_lab_text_projection(
                 keys.update((item[0], item[1], item[2]) for item in within_window)
                 if first_late is not None:
                     keys.add((first_late[0], first_late[1], first_late[2]))
+                # 记录时间早于报告、提交时间不早于报告的文书是时间冲突候选：不能因时间
+                # 筛选被静默排除，由执行器判为时间冲突/无法对账（数量有上限）。
+                conflict_candidates = []
+                for source_position, source_key, row_index, row, _text in course_entries:
+                    record_value, submit_value = _course_time_parts(row)
+                    if is_time_conflict_candidate(record_value, submit_value, event.report_time):
+                        conflict_candidates.append(
+                            (f"{source_position:04d}|{source_key}|{row_index:06d}", submit_value)
+                        )
+                allowed_keys = set(limit_conflict_candidates(conflict_candidates))
+                for source_position, source_key, row_index, _row, _text in course_entries:
+                    if f"{source_position:04d}|{source_key}|{row_index:06d}" in allowed_keys:
+                        keys.add((source_position, source_key, row_index))
             event_course_keys[(family, event_position)] = keys
             selected_course_entries.update(keys)
 
@@ -986,6 +1050,7 @@ def build_exam_lab_text_projection(
         if document_id:
             source_document_refs[doc_ref] = (source_key, document_id)
         course_times[doc_ref] = _course_datetime(row)
+        course_record_times[doc_ref], course_submit_times[doc_ref] = _course_time_parts(row)
         course_texts[doc_ref] = text
         parts.append(
             f"[COURSE_DOC_POSITION={course_position_by_entry[entry_key]}|"
@@ -1038,6 +1103,14 @@ def build_exam_lab_text_projection(
         course_projection_truncated=course_projection_truncated,
         course_texts=dict(course_texts),
         source_document_refs=dict(source_document_refs),
+        course_record_times=dict(course_record_times),
+        course_submit_times=dict(course_submit_times),
+        course_candidates={
+            f"D{source_position:02d}-{row_index:02d}": (
+                text, *_course_time_parts(row)
+            )
+            for source_position, _source_key, row_index, row, text in course_entries
+        },
     )
 
 

@@ -181,3 +181,28 @@ def test_unordered_input_does_not_change_primary_fact_fields() -> None:
     assert _top_level(descending) == _top_level(ascending)
     assert descending["report_time"] == "2026-04-01 12:00:00"
     assert descending["event_position"] == 1
+
+
+def test_response_time_state_is_a_controlled_enum_in_event_facts():
+    base = {
+        "failure_kind": "exam_lab_requirement_not_documented",
+        "subject": "ct_mri",
+        "requirement": "result_recording_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "applicable": True,
+        "requirement_met": False,
+        "positive_state": "not_relevant",
+        "threshold_hours": 24,
+        "response_record_count": 1,
+        "reviewed_record_scope": "首次病程记录及后续病程记录",
+        "report_time": "2025-08-13 11:01:28",
+    }
+    for state in ("submit_only", "record_time_conflict"):
+        safe = safe_exam_lab_customer_display_facts(
+            rule_id="LX0609-06-01-04", raw={**base, "response_time_state": state}
+        )
+        assert safe is not None and safe["response_time_state"] == state
+    assert safe_exam_lab_customer_display_facts(
+        rule_id="LX0609-06-01-04", raw={**base, "response_time_state": "other"}
+    ) is None

@@ -322,6 +322,18 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         kind == "preop_content_incomplete" and not safe_missing
     ):
         return None
+    pending = raw.get("pending_fields", [])
+    if not isinstance(pending, list):
+        return None
+    safe_pending = list(dict.fromkeys(item for item in pending if item in allowed))
+    if (
+        len(safe_pending) != len(pending)
+        # 待确认字段只属于术前小结，不能与确认缺项重叠，也不能出现在完整结论中。
+        or (safe_pending and rule_id != "LX0609-04-01-04")
+        or set(safe_pending) & set(safe_missing)
+        or (safe_pending and kind == "preop_content_complete")
+    ):
+        return None
     documents = raw.get("documents")
     if not isinstance(documents, list):
         return None
@@ -367,6 +379,7 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         "checked_fields": list(allowed),
         "missing_fields": safe_missing,
         "documents": safe_documents,
+        **({"pending_fields": safe_pending} if safe_pending else {}),
     }
 
 

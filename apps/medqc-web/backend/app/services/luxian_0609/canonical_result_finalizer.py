@@ -100,6 +100,26 @@ _RULE_DATA_GAP_EXPLANATIONS = {
         "missing_sources": ["会诊申请时间"],
         "missing_fields": [],
     },
+    ("LX0609-06-01-04", "document_completion_time_missing"): {
+        "reason_label": "病程记录时间缺失",
+        "missing_sources": [],
+        "missing_fields": ["报告后相关病程的记录时间（仅有提交时间）"],
+    },
+    ("LX0609-06-01-04", "association_failed"): {
+        "reason_label": "资料关联或时间冲突",
+        "missing_sources": ["需要相互核对的报告与病程"],
+        "missing_fields": ["相互一致的报告时间与病程记录时间"],
+    },
+    ("LX0609-06-01-05", "document_completion_time_missing"): {
+        "reason_label": "病程记录时间缺失",
+        "missing_sources": [],
+        "missing_fields": ["报告后相关病程的记录时间（仅有提交时间）"],
+    },
+    ("LX0609-06-01-05", "association_failed"): {
+        "reason_label": "资料关联或时间冲突",
+        "missing_sources": ["需要相互核对的报告与病程"],
+        "missing_fields": ["相互一致的报告时间与病程记录时间"],
+    },
     ("LX0609-02-01-05", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
         "missing_sources": [],
@@ -1096,6 +1116,7 @@ def finalize_luxian_0609_reduced_customer_result(
     customer_evidence = enrich_customer_evidence(
         customer_evidence,
         evidence_materials=evidence_materials,
+        strict_course_record_time=rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"},
         preferred_source_fields=(
             {"surgery_record": "surgery_name"}
             if rule_id == "LX0609-04-02-03"

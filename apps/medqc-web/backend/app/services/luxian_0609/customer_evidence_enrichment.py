@@ -430,6 +430,21 @@ def project_selected_document_evidence(
     return []
 
 
+_COURSE_SOURCE_TYPES = frozenset(
+    {"first_course_record", "daily_course_record", "senior_course_record"}
+)
+
+
+def _real_record_time(row: Mapping[str, Any]) -> str:
+    """仅返回文书自身的记录时间；提交时间不是记录时间，缺失时不填。"""
+
+    for field in ("record_time", "record_datetime"):
+        value = _text(row.get(field)).replace("T", " ", 1)
+        if value and _TIME_PATTERN.fullmatch(value):
+            return value
+    return ""
+
+
 def _record_time(row: Mapping[str, Any]) -> str:
     candidate = authoritative_document_time_value(row)
     if candidate is None:
@@ -462,8 +477,12 @@ def enrich_customer_evidence(
     *,
     evidence_materials: Any,
     preferred_source_fields: Mapping[str, str] | None = None,
+    strict_course_record_time: bool = False,
 ) -> list[dict[str, Any]]:
     """从本次执行的冻结材料中补充精确证据时间和短摘录。
+
+    ``strict_course_record_time`` 为真时，病程证据的时间只取真实记录时间，
+    不把提交时间标成记录时间（CT/MRI 报告后 24 小时类规则使用）。
 
     仅按来源和业务 ID 精确匹配；零条或多条命中均保持原引用，不猜测文书。
     """
@@ -490,7 +509,11 @@ def enrich_customer_evidence(
             enriched_rows.append(evidence)
             continue
         matched = matches[0]
-        record_time = _record_time(matched)
+        record_time = (
+            _real_record_time(matched)
+            if strict_course_record_time and source_type in _COURSE_SOURCE_TYPES
+            else _record_time(matched)
+        )
         field_path, excerpt = _excerpt(matched)
         preferred = (preferred_source_fields or {}).get(source_type)
         if preferred:

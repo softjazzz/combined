@@ -316,12 +316,19 @@ def _association_state_for_rule(
     records: Sequence[tuple[str, Mapping[str, Any], str]],
     parsed: Mapping[tuple[str, str], Mapping[str, Any]],
     events: Sequence[SurgeryEvent],
-) -> tuple[set[str], bool, list[Mapping[str, Any]]]:
-    """078按手术事件聚合；079逐份核对，返回缺项、歧义和安全展示。"""
+) -> tuple[set[str], bool, list[Mapping[str, Any]], set[str]]:
+    """078按手术事件聚合；079逐份核对，返回确认缺项、歧义、安全展示和待确认字段。
+
+    归属不明但不能排除属于本手术的文书（``ambiguous``），只能阻止错误的
+    “确认缺少”断言：字段在已匹配文书中缺失、而无法归属文书中有记录时，
+    该字段列为待确认，不计入确认缺项，也不会补齐字段或证明合规。
+    不同手术的已匹配文书互不参与。
+    """
 
     source = RULE_SOURCES[rule_id]
     grouped: dict[int, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
     ambiguous_values: list[Mapping[str, Any]] = []
+    ambiguous_documents: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     display_documents: list[Mapping[str, Any]] = []
     for document_index, (_ref, row, _text) in enumerate(records, start=1):
         values = parsed[(source, _document_id(row))]
@@ -355,6 +362,7 @@ def _association_state_for_rule(
                 grouped.setdefault(-document_index, []).append((row, values))
             else:
                 ambiguous_values.append(values)
+                ambiguous_documents.append((row, values))
         display_documents.append(
             {
                 "document_index": document_index,
@@ -369,6 +377,7 @@ def _association_state_for_rule(
         )
 
     confirmed_missing: set[str] = set()
+    pending_fields: set[str] = set()
     if rule_id == "LX0609-04-01-04":
         # 客户来源存在“核心小结 + 术者术前查看”两行同属一台手术的稳定模式；
         # 仅在已唯一关联的同一事件内部合并原子事实。
@@ -381,7 +390,17 @@ def _association_state_for_rule(
                     for row, values in documents
                 ):
                     continue
+                if any(
+                    field not in _missing_fields_for_document(
+                        rule_id=rule_id, row=row, values=values
+                    )
+                    for row, values in ambiguous_documents
+                ):
+                    # 无法归属的文书记载了该项：不能据此补齐，也不能断言缺少。
+                    pending_fields.add(field)
+                    continue
                 confirmed_missing.add(field)
+        pending_fields -= confirmed_missing
     else:
         # 讨论记录不跨文书补字段；即使同一事件也必须逐份自洽。
         for documents in grouped.values():
@@ -392,7 +411,7 @@ def _association_state_for_rule(
                     )
                 )
 
-    return confirmed_missing, bool(ambiguous_values), display_documents
+    return confirmed_missing, bool(ambiguous_values), display_documents, pending_fields
 
 
 async def evaluate_preop_content_rules(
@@ -565,7 +584,7 @@ async def evaluate_preop_content_rules(
                 )
             )
             continue
-        missing, has_ambiguous, documents = _association_state_for_rule(
+        missing, has_ambiguous, documents, pending = _association_state_for_rule(
             rule_id=rule,
             records=records[rule],
             parsed=parsed,
@@ -603,6 +622,7 @@ async def evaluate_preop_content_rules(
                     "checked_fields": list(RULE_FIELDS[rule]),
                     "missing_fields": sorted(missing),
                     "documents": documents,
+                    **({"pending_fields": sorted(pending)} if pending else {}),
                 },
             )
         )

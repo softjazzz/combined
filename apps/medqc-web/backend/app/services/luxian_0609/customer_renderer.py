@@ -644,8 +644,20 @@ _EVALUATION_WINDOW_RULE_LABELS = {
 }
 
 
+def _response_time_states(facts: Mapping[str, Any] | None) -> set[str]:
+    if not isinstance(facts, Mapping):
+        return set()
+    states = {facts.get("response_time_state")}
+    results = facts.get("event_results")
+    if isinstance(results, list):
+        states.update(
+            item.get("response_time_state") for item in results if isinstance(item, Mapping)
+        )
+    return {state for state in states if isinstance(state, str)}
+
+
 def exam_lab_data_gap_customer_message(
-    *, rule_id: str, reason_code: str
+    *, rule_id: str, reason_code: str, facts: Mapping[str, Any] | None = None
 ) -> tuple[str, str, str] | None:
     """返回检查检验事件级资料缺口文案；不读取正文，也不改变状态。"""
 
@@ -672,6 +684,20 @@ def exam_lab_data_gap_customer_message(
             f"{report_label} 报告缺少权威报告时间，暂无法核对24小时要求",
             "已读取到目标检查检验事件，但缺少可用于计算24小时窗口的权威报告时间。",
             f"请核对 {report_label} 报告时间及报告后病程记录时间，补齐后重新评估。",
+        )
+    if normalized_reason == "document_completion_time_missing":
+        return (
+            f"{report_label}报告后的相关病程没有记录时间，暂无法确认是否在24小时内记录",
+            "已读取到正文含该检查结果的病程，但文书没有记录时间，仅有提交时间；"
+            "提交时间不等同于临床记录时间，不能据此判定超过24小时，也不能判定已按时记录。",
+            "请核对该病程的实际书写时间并补齐记录时间后重新评估；不要倒签或补造时间。",
+        )
+    if normalized_reason == "association_failed" and "record_time_conflict" in _response_time_states(facts):
+        return (
+            f"{report_label}报告后的相关病程记录时间与报告时间冲突，暂无法确认记录时间",
+            "已读取到正文含该检查结果的病程，但其记录时间早于报告出具时间，提交时间不早于报告时间；"
+            "该时间冲突不能用于判定已记录或未记录。",
+            f"请核对该病程的实际书写时间与{report_label}报告时间后重新评估；不要倒签或补造时间。",
         )
     if normalized_reason == "association_failed":
         return (
@@ -2381,12 +2407,15 @@ def customer_finding_from_controlled_facts(
                 response_time = item.get("response_record_time")
                 interval = item.get("interval_hours")
                 response_count = item.get("response_record_count")
+                time_state = item.get("response_time_state")
                 if event_status == "compliant":
                     timing = (
                         f"，最早相关病程 {response_time}，间隔 {interval:g} 小时"
                         if isinstance(interval, (int, float)) and response_time
                         else ""
                     )
+                    if time_state == "submit_only":
+                        timing += "（相关病程仅有提交时间，未取得记录时间）"
                     conclusion = f"已完成{requirement_label}{timing}"
                 elif event_status == "non_compliant":
                     conclusion = (
@@ -2419,7 +2448,14 @@ def customer_finding_from_controlled_facts(
                         if analysis_rule
                         else "报告结果是否已记录"
                     )
-                    conclusion = f"资料待核实，暂无法确认{uncertain_label}"
+                    conclusion = (
+                        "病程记录时间与报告时间冲突（记录时间早于报告，提交时间不早于报告），"
+                        f"暂无法确认{uncertain_label}"
+                        if time_state == "record_time_conflict"
+                        else f"相关病程无记录时间，仅有提交时间，暂无法确认{uncertain_label}"
+                        if time_state == "submit_only"
+                        else f"资料待核实，暂无法确认{uncertain_label}"
+                    )
                 else:
                     return ""
                 details.append(f"{index}）报告时间 {report_time}：{conclusion}")
@@ -3529,7 +3565,7 @@ def preop_summary_customer_message(
     *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
 ) -> tuple[str, str, str] | None:
     """只解释执行器确认缺项，不从单份文书缺项重新推导同台手术结论。"""
-    if rule_id != "LX0609-04-01-04" or status != "non_compliant":
+    if rule_id != "LX0609-04-01-04" or status not in {"non_compliant", "data_gap"}:
         return None
     labels = {
         "brief_condition": "简要病情", "preop_diagnosis": "术前诊断",
@@ -3537,6 +3573,27 @@ def preop_summary_customer_message(
         "planned_anesthesia": "拟施麻醉方式", "precautions": "注意事项",
         "surgeon_preop_visit": "术者术前查看患者情况",
     }
+    pending = facts.get("pending_fields") if isinstance(facts, Mapping) else None
+    pending_text = (
+        "、".join(label for field, label in labels.items() if field in pending)
+        if isinstance(pending, list) and pending
+        and all(isinstance(field, str) and field in labels for field in pending)
+        else ""
+    )
+    pending_note = (
+        f"另有{pending_text}在无法确认归属的术前小结中有记录，是否属于本手术待确认，"
+        "不计入确认缺项，也不据此判定完整。"
+        if pending_text
+        else ""
+    )
+    if status == "data_gap":
+        if not pending_text or facts.get("verification_kind") != "preop_surgery_association_ambiguous":
+            return None
+        return (
+            f"术前小结与手术的对应关系无法确认，{pending_text}待确认。",
+            pending_note,
+            "请先核对术前小结与对应手术的关联，确认后再重新质控。",
+        )
     missing = facts.get("missing_fields") if isinstance(facts, Mapping) else None
     if (
         not isinstance(facts, Mapping)
@@ -3551,9 +3608,11 @@ def preop_summary_customer_message(
         )
     text = "、".join(label for field, label in labels.items() if field in missing)
     return (
-        f"术前小结内容不完整，确认缺少：{text}。",
+        f"术前小结内容不完整，确认缺少：{text}。"
+        + (f"{pending_text}待确认。" if pending_text else ""),
         "本次核查在对应术前小结及已确认同台手术的关联材料中未找到上述内容。"
-        "缺项为本次核查范围内的汇总，不表示每份相关文书均缺少全部项目。",
+        "缺项为本次核查范围内的汇总，不表示每份相关文书均缺少全部项目。"
+        + pending_note,
         f"请核对对应手术的术前小结及相关原文，依据实际情况补充：{text}。"
         "已记录的项目无需重复补写，不得补造未发生的诊疗事实。",
     )
@@ -3692,6 +3751,7 @@ def render_luxian_0609_customer_result(
         exam_lab_gap = exam_lab_data_gap_customer_message(
             rule_id=decision.rule_id,
             reason_code=decision.reason_code,
+            facts=safe_customer_display_facts,
         )
         evaluation_window_gap = _evaluation_window_gap_message(
             rule_id=decision.rule_id,
@@ -3862,6 +3922,7 @@ def render_luxian_0609_customer_result(
             or exam_lab_data_gap_customer_message(
                 rule_id=decision.rule_id,
                 reason_code=decision.reason_code,
+                facts=safe_customer_display_facts,
             )
             is not None
             or (decision.rule_id, decision.reason_code) in {

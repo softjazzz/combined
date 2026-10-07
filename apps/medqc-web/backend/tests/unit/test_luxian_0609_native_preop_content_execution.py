@@ -939,7 +939,14 @@ async def test_ambiguous_document_cannot_fill_confirmed_missing_field_across_eve
             )
         ),
     )
-    assert result.decisions[0].qc_direction.value == "defect"
+    # 归属不明的文书不能补齐字段，也不能证明合规；但它记载了该项，因此
+    # “确认缺少”无法成立：该项列为待确认，整例保持资料不足而不是合规。
+    decision = result.decisions[0]
+    assert decision.qc_direction.value != "satisfied"
+    assert decision.evidence_state.value == "data_gap"
+    facts = dict(result.customer_display_facts)["LX0609-04-01-04"]
+    assert facts["missing_fields"] == []
+    assert facts["pending_fields"] == ["planned_anesthesia"]
 
 
 @pytest.mark.asyncio
@@ -1333,3 +1340,175 @@ async def test_discussion_confirmed_defect_survives_another_unknown_field():
         "source_type": "presurg_discussion", "items": items})))
     assert result.decisions[0].qc_direction.value == "defect"
     assert dict(result.customer_display_facts)["LX0609-04-01-05"]["missing_fields"] == ["recorder_signature"]
+
+
+# ---- 归属不明文书只能阻止“确认缺少”，不能补齐或证明合规（第三轮最小修复） ----
+
+_C04_PLAN = "胸腔镜下右肺上叶结节楔形切除术"
+_C04_PERFORMED = "胸腔镜下右肺上叶切除术+纵隔淋巴结清扫术"
+_C04_CORE = (
+    "手术适应症：患者诊断右肺上叶结节明确，有手术指征。"
+    f"拟施手术名称和方式：{_C04_PLAN}拟施 麻醉方式：全麻"
+    "手术要点：尽可能彻底切除原发病灶。术前准备：常规术前宣教、备皮。手术医师签名：甲"
+)
+_C04_NARRATIVE = "患者老年女性，因腹胀腹痛入院。查体：生命体征平稳。辅助检查：心脏彩超左房增大。"
+
+
+def _core_items(text=_C04_CORE):
+    return {
+        "brief_condition": None,
+        "preop_diagnosis": None,
+        "surgical_indication": "手术适应症：患者诊断右肺上叶结节明确，有手术指征。",
+        "planned_procedure": _C04_PLAN,
+        "planned_anesthesia": "全麻",
+        "precautions": "手术要点：尽可能彻底切除原发病灶。",
+        "surgeon_preop_visit": None,
+    }
+
+
+def _narrative_items():
+    items = {field: None for field in _core_items()}
+    items["brief_condition"] = "患者老年女性，因腹胀腹痛入院。"
+    return items
+
+
+def _facts_for_summary(result):
+    return dict(result.customer_display_facts)["LX0609-04-01-04"]
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_plan_document_blocks_false_confirmed_missing_but_keeps_true_missing():
+    """C04 形态：计划术式与实施术式不一致 → 核心小结 ambiguous，叙述小结回退 matched。"""
+    session = _session(
+        summary=(
+            {"document_id": "core", "record_content": _C04_CORE},
+            {
+                "document_id": "narrative",
+                "record_content": _C04_NARRATIVE,
+                "record_time": "2026-01-01 07:50:00",
+            },
+        ),
+        surgery_records=(
+            _surgery_record(document_id="s1", name=_C04_PERFORMED, begin="2026-01-01 09:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "core", "source_type": "presurg_summary", "items": _core_items()},
+                {"document_id": "narrative", "source_type": "presurg_summary", "items": _narrative_items()},
+            )
+        ),
+    )
+    facts = _facts_for_summary(result)
+    assert [d["association_state"] for d in facts["documents"]] == ["ambiguous", "matched"]
+    # 两份文书都没有的项目仍是确认缺项，不被归属不明文书遮蔽。
+    assert facts["missing_fields"] == ["preop_diagnosis", "surgeon_preop_visit"]
+    # 仅在归属不明文书中有记录的项目：待确认，不是缺项，也没有补齐。
+    assert facts["pending_fields"] == [
+        "planned_anesthesia", "planned_procedure", "precautions", "surgical_indication",
+    ]
+    assert result.decisions[0].qc_direction.value == "defect"
+    assert facts["verification_kind"] == "preop_content_incomplete"
+
+
+@pytest.mark.asyncio
+async def test_unrelated_empty_ambiguous_document_does_not_mask_true_missing():
+    session = _session(
+        summary=(
+            {"document_id": "core", "record_content": _C04_CORE},
+            {"document_id": "narrative", "record_content": _C04_NARRATIVE, "record_time": "2026-01-01 07:50:00"},
+            {"document_id": "stray", "record_content": "患者情况稳定，拟行其他手术，详见另页记录内容。"},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="s1", name=_C04_PERFORMED, begin="2026-01-01 09:00:00+08:00"),
+        ),
+    )
+    stray_items = {field: None for field in _core_items()}
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "core", "source_type": "presurg_summary", "items": _core_items()},
+                {"document_id": "narrative", "source_type": "presurg_summary", "items": _narrative_items()},
+                {"document_id": "stray", "source_type": "presurg_summary", "items": stray_items},
+            )
+        ),
+    )
+    facts = _facts_for_summary(result)
+    assert facts["missing_fields"] == ["preop_diagnosis", "surgeon_preop_visit"]
+    assert result.decisions[0].qc_direction.value == "defect"
+
+
+@pytest.mark.asyncio
+async def test_other_event_matched_document_never_fills_this_events_missing_field():
+    first, second = "腹腔镜胆囊切除术", "腹腔镜阑尾切除术"
+    first_text = f"术前小结：拟行{first}，麻醉方式待定，其余字段完整记录。"
+    second_text = f"术前小结：拟行{second}，全麻，其余字段完整记录。"
+    session = _session(
+        summary=(
+            {"document_id": "first", "record_content": first_text},
+            {"document_id": "second", "record_content": second_text},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="s1", name=first, begin="2026-01-01 08:00:00+08:00"),
+            _surgery_record(document_id="s2", name=second, begin="2026-01-01 12:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "first", "source_type": "presurg_summary",
+                 "items": _summary_items(text=first_text, procedure=first, missing=("planned_anesthesia",))},
+                {"document_id": "second", "source_type": "presurg_summary",
+                 "items": _summary_items(text=second_text, procedure=second)},
+            )
+        ),
+    )
+    facts = _facts_for_summary(result)
+    assert [d["event_index"] for d in facts["documents"]] == [1, 2]
+    assert facts["missing_fields"] == ["planned_anesthesia"]
+    assert "pending_fields" not in facts
+    assert result.decisions[0].qc_direction.value == "defect"
+
+
+@pytest.mark.asyncio
+async def test_same_name_two_surgeries_with_unplaceable_documents_stay_data_gap():
+    """C01 形态：同名两台手术，两份小结都无法归属 → 资料不足，不跨手术合并。"""
+    name = "腹腔镜下胆囊切除术"
+    session = _session(
+        summary=(
+            {"document_id": "core", "record_content": _C04_CORE.replace(_C04_PLAN, name)},
+            {"document_id": "narrative", "record_content": _C04_NARRATIVE},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="s1", name=name, begin="2026-01-01 08:00:00+08:00"),
+            _surgery_record(document_id="s2", name=name, begin="2026-01-02 08:00:00+08:00"),
+        ),
+    )
+    core = _core_items()
+    core["planned_procedure"] = name
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "core", "source_type": "presurg_summary", "items": core},
+                {"document_id": "narrative", "source_type": "presurg_summary", "items": _narrative_items()},
+            )
+        ),
+    )
+    facts = _facts_for_summary(result)
+    assert all(d["association_state"] == "ambiguous" for d in facts["documents"])
+    assert facts["missing_fields"] == []
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].qc_direction.value != "satisfied"

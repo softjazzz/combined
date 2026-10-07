@@ -132,6 +132,25 @@ def _event_projection(
             for ref in permitted_refs
             if ref in source_document_refs
         },
+        course_record_times=(
+            None
+            if projection.course_record_times is None
+            else {
+                ref: projection.course_record_times[ref]
+                for ref in course_refs
+                if ref in projection.course_record_times
+            }
+        ),
+        course_submit_times=(
+            None
+            if projection.course_submit_times is None
+            else {
+                ref: projection.course_submit_times[ref]
+                for ref in course_refs
+                if ref in projection.course_submit_times
+            }
+        ),
+        course_candidates=projection.course_candidates,
     )
 
 

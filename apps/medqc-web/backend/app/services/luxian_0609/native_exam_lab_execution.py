@@ -17,6 +17,11 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .exam_lab_course_time import (
+    assess_fact_responses,
+    has_time_sources,
+    scan_unplaced_time_state,
+)
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
@@ -27,6 +32,7 @@ from .exam_lab_fact_extraction import (
     build_exam_lab_fact_response_format,
     build_exam_lab_text_projection,
     event_for_fact,
+    event_result_carried_by_course,
     events_for_family,
     parse_exam_lab_fact_response,
     parse_exam_lab_fact_response_isolated,
@@ -1224,6 +1230,100 @@ async def _generate_exam_lab_fact_response(
     )
 
 
+def _unplaced_record_gap_outcome(
+    *,
+    rule_id: str,
+    projection: ExamLabTextProjection,
+    event: Any,
+    refs: tuple[str, ...],
+) -> _ExamLabOutcome | None:
+    """“未记录/仅报告前病程”之前，核对被时间筛选排除的全部候选病程正文。
+
+    正文含本事件结果、但记录时间冲突或只有提交时间的文书，使“全部病程没有记录”
+    无法成立，只能返回资料不足；仍无此类文书时才允许后续判定。
+    """
+
+    if not has_time_sources(projection):
+        return None
+    state = scan_unplaced_time_state(projection=projection, event=event)
+    if state == "record_time_conflict":
+        return _ExamLabOutcome(rule_id, "data_gap", "multiple_event_or_time_conflict", refs)
+    if state == "submit_only":
+        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_unproven", refs)
+    return None
+
+
+def _post_report_response_outcome(
+    *,
+    rule_id: str,
+    fact: ExamLabEventFact,
+    projection: ExamLabTextProjection,
+    event: Any,
+    event_time: Any,
+    refs: tuple[str, ...],
+) -> _ExamLabOutcome:
+    """按记录时间/提交时间的真实含义判定报告后 24 小时窗口。
+
+    记录时间是书写时间；提交时间只能作书写时间上界，不得直接当作临床记录时间。
+    不设置任何时间容差。
+    """
+
+    responses = assess_fact_responses(
+        projection=projection,
+        event=event,
+        refs=fact.course_doc_refs,
+        carries_result=event_result_carried_by_course,
+    )
+    if any(item.kind == "in_window" for item in responses):
+        return _ExamLabOutcome(rule_id, "compliant", "exam_lab_text_fact", refs)
+    if projection.course_projection_truncated:
+        return _ExamLabOutcome(
+            rule_id, "data_gap", "course_projection_incomplete", refs
+        )
+    if any(item.kind in {"conflict", "unreconciled"} for item in responses):
+        # 记录时间早于报告、提交时间不早于报告：时间无法对账。逐字确认正文含结果的是
+        # “时间冲突”；未能逐字确认的同样不能据此认定未记录，只返回资料不足。
+        return _ExamLabOutcome(rule_id, "data_gap", "multiple_event_or_time_conflict", refs)
+    if any(item.kind == "submit_unconfirmed" for item in responses):
+        # 提交时间在 24 小时内，但正文未确认承载本事件结果：不能自动证明已及时记录。
+        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_unproven", refs)
+    late = tuple(item for item in responses if item.kind == "late")
+
+    def _mentions_event(ref: str) -> bool:
+        return event_result_carried_by_course(
+            event, (projection.course_texts or {}).get(ref, "")
+        )
+
+    if any(item.basis == "submit" and _mentions_event(item.ref) for item in late):
+        # 仅凭提交时间兜底超过 24 小时，不能证明超时，也不能证明已记录。
+        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_unproven", refs)
+    if any(item.basis == "record" for item in late):
+        return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
+    unplaced = _unplaced_record_gap_outcome(
+        rule_id=rule_id, projection=projection, event=event, refs=refs
+    )
+    if unplaced is not None:
+        return unplaced
+    # 只有报告前病程，或模型引用的提交时间文书与本事件无关：24 小时尚未届满时
+    # 不能提前报缺陷。
+    window_state = resolve_evaluation_window_state(
+        projection=projection,
+        event_time=event_time,
+    )
+    return _ExamLabOutcome(
+        rule_id,
+        "non_compliant"
+        if window_state is EvaluationWindowState.MATURE
+        else "not_applicable"
+        if window_state is EvaluationWindowState.NOT_MATURE
+        else "data_gap",
+        "exam_lab_text_fact"
+        if window_state is EvaluationWindowState.MATURE
+        else _evaluation_window_gap_reason(window_state),
+        refs,
+    )
+
+
 def _single_text_fact_outcome(
     *,
     rule_id: str,
@@ -1326,6 +1426,11 @@ def _single_text_fact_outcome(
             )
         if rule_id == "LX0609-06-01-02":
             return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
+        unplaced = _unplaced_record_gap_outcome(
+            rule_id=rule_id, projection=projection, event=event, refs=refs
+        )
+        if unplaced is not None:
+            return unplaced
         window_state = resolve_evaluation_window_state(
             projection=projection,
             event_time=event_time,
@@ -1363,6 +1468,15 @@ def _single_text_fact_outcome(
     )
     if not course_times or any(item is None for item in course_times):
         return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_missing", refs)
+    if rule_id != "LX0609-06-01-02" and has_time_sources(projection):
+        return _post_report_response_outcome(
+            rule_id=rule_id,
+            fact=fact,
+            projection=projection,
+            event=event,
+            event_time=event_time,
+            refs=refs,
+        )
     intervals = tuple(item - event_time for item in course_times if item is not None)
     if rule_id == "LX0609-06-01-02":
         compliant = any(
@@ -1545,6 +1659,7 @@ def _display_facts_for_text_outcome(
             "response_record_count",
             "response_record_time",
             "interval_hours",
+            "response_time_state",
             "applicable",
             "requirement_met",
         ):

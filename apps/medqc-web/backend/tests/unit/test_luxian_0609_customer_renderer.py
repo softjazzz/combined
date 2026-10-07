@@ -3030,3 +3030,60 @@ def test_preop_summary_without_missing_facts_does_not_invent_items():
     assert "未提供可核验的具体缺项" in message[0]
     assert "先确认" in message[2]
     assert preop_summary_customer_message(rule_id="LX0609-04-01-04", status="data_gap", facts={}) is None
+
+
+# ---- 第三轮：待确认字段与病程时间来源的客户文案 ----
+
+
+def test_preop_summary_message_lists_pending_fields_without_counting_them_missing():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+
+    facts = {
+        "verification_kind": "preop_content_incomplete",
+        "missing_fields": ["preop_diagnosis", "surgeon_preop_visit"],
+        "pending_fields": ["surgical_indication", "planned_procedure"],
+    }
+    findings, evidence, suggestion = preop_summary_customer_message(
+        rule_id="LX0609-04-01-04", status="non_compliant", facts=facts
+    )
+    assert "确认缺少：术前诊断、术者术前查看患者情况" in findings
+    assert "手术指征、拟施手术名称和方式待确认" in findings
+    assert "不计入确认缺项" in evidence
+    # 整改建议只针对确认缺项，不要求补写待确认项。
+    assert "手术指征" not in suggestion and "拟施手术名称和方式" not in suggestion
+
+
+def test_preop_summary_data_gap_message_only_for_pending_association_facts():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+
+    facts = {
+        "verification_kind": "preop_surgery_association_ambiguous",
+        "missing_fields": [],
+        "pending_fields": ["planned_anesthesia"],
+    }
+    findings, _evidence, _suggestion = preop_summary_customer_message(
+        rule_id="LX0609-04-01-04", status="data_gap", facts=facts
+    )
+    assert "拟施麻醉方式待确认" in findings
+    assert preop_summary_customer_message(
+        rule_id="LX0609-04-01-04", status="data_gap", facts={}
+    ) is None
+
+
+def test_exam_lab_gap_messages_distinguish_submit_only_and_time_conflict():
+    from app.services.luxian_0609.customer_renderer import exam_lab_data_gap_customer_message
+
+    submit_only = exam_lab_data_gap_customer_message(
+        rule_id="LX0609-06-01-04", reason_code="document_completion_time_missing"
+    )
+    assert "没有记录时间" in submit_only[0] and "提交时间不等同于临床记录时间" in submit_only[1]
+    conflict = exam_lab_data_gap_customer_message(
+        rule_id="LX0609-06-01-04",
+        reason_code="association_failed",
+        facts={"event_results": [{"response_time_state": "record_time_conflict"}]},
+    )
+    assert "时间冲突" in conflict[0]
+    generic = exam_lab_data_gap_customer_message(
+        rule_id="LX0609-06-01-04", reason_code="association_failed", facts={}
+    )
+    assert "时间冲突" not in generic[0]
