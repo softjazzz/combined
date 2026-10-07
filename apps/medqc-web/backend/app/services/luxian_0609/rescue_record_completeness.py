@@ -92,6 +92,14 @@ def _body_scope(row: Mapping[str, Any], body: str) -> str:
 
 def _python_time(body: str) -> Mapping[str, Any] | None:
     for match in _LABELED_TIME.finditer(body):
+        # 标签自身不证明本次实际发生；带计划、既往、否定或条件的局部语境
+        # 不能覆盖模型已核对全文后的 absent。不同句子的正常时间仍可补回。
+        clause_start = max(body.rfind(mark, 0, match.start()) for mark in "。；;\n") + 1
+        clause_end = _CLAUSE_END.search(body, match.end())
+        context = body[clause_start:clause_end.start() if clause_end else len(body)]
+        if (_OTHER_TIME_ROLE.search(context) or _NON_ASSERTED_ACTION.search(context)
+                or re.search(r"拟|曾经", context)):
+            continue
         year, month, day, hour, minute, second = match.groups()
         if year is not None:
             try:

@@ -771,12 +771,11 @@ def _resolve_surgery_signature_selection(
         return master_outcome, "mr_surgery", tuple(surgery_master_rows)
     if not surgery_record_rows:
         return ("data_gap", "required_field_missing", None), "", ()
-    if len(surgery_master_rows) != len(surgery_record_rows):
-        # mr_surgery 可能是按术式拆分的明细表，行数不必与手术记录一一相等。
-        # 当主表存在任何签名事实时，仍以主表为准，不能用一条手术记录覆盖
-        # 主表中的另一条未签名事件；只有主表所有签名字段都为空，才把正式
-        # 手术记录作为逐台签名事实源。这样兼容“主表按术式拆行但不落签名”
-        # 的真实数据形状，同时保留部分签名缺失的保守边界。
+    if len(surgery_master_rows) != len(surgery_record_rows) or (
+        len(surgery_master_rows) > 1 and master_outcome[0] == "data_gap"
+    ):
+        # 术式拆行可以共用同台记录，但须以受控时间证明事件覆盖。
+        # 主表已有部分签名时仍保留逐行缺口，不能被文书回退覆盖。
         master_signature_fields = (
             "main_surgery_sign",
             "surgeon_sign",
@@ -789,11 +788,12 @@ def _resolve_surgery_signature_selection(
             for field in master_signature_fields
         )
         if not master_has_signature_fact:
-            return (
-                _surgery_signature_outcome(surgery_record_rows),
-                "surgery_record",
-                tuple(surgery_record_rows),
-            )
+            record_outcome = _surgery_signature_outcome(surgery_record_rows)
+            if record_outcome[0] != "data_gap" and not _surgery_records_cover_master_rows(
+                surgery_master_rows, surgery_record_rows
+            ):
+                return ("data_gap", "association_failed", None), "", ()
+            return record_outcome, "surgery_record", tuple(surgery_record_rows)
         if master_outcome[0] in {"compliant", "non_compliant"}:
             return master_outcome, "mr_surgery", tuple(surgery_master_rows)
         return ("data_gap", "required_field_missing", None), "", ()
@@ -808,7 +808,9 @@ def _resolve_surgery_signature_selection(
     record_surgeon = re.sub(
         r"[\s,，、;；:：]+", "", _clean(surgery_record_rows[0].get("surgeon"))
     )
-    if master_surgeon and record_surgeon and master_surgeon != record_surgeon:
+    if (
+        master_surgeon and record_surgeon and master_surgeon != record_surgeon
+    ) or not _surgery_records_cover_master_rows(surgery_master_rows, surgery_record_rows):
         return ("data_gap", "association_failed", None), "", ()
     return (
         _surgery_signature_outcome(surgery_record_rows),
@@ -872,6 +874,48 @@ def _authoritative_surgery_begin_time(row: Mapping[str, Any]) -> datetime | None
         if (value := _authoritative_surgery_time(row.get(field))) is not None
     )
     return max(values) if values else None
+
+
+def _surgery_records_cover_master_rows(
+    master_rows: Sequence[Mapping[str, Any]],
+    record_rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """证明逐台覆盖；同台术式拆行可共用记录，关联不明不等于缺文书。"""
+
+    def identity(row: Mapping[str, Any]) -> tuple[datetime | None, datetime | None, str]:
+        return (
+            _authoritative_surgery_begin_time(row),
+            _authoritative_surgery_time(
+                row.get("surgery_end_datetime") or row.get("surgery_end_time")
+            ),
+            re.sub(r"[\s,，、;；:：]+", "", _clean(row.get("surgeon"))),
+        )
+
+    masters = tuple(identity(row) for row in master_rows)
+    records = tuple(identity(row) for row in record_rows)
+    for master in masters:
+        matches = []
+        for record in records:
+            shared_times = [(a, b) for a, b in zip(master[:2], record[:2]) if a and b]
+            if any(a != b for a, b in shared_times):
+                continue
+            if master[2] and record[2] and master[2] != record[2]:
+                continue
+            # 保留唯一主表/文书的既有回退；多行必须有完全相同的时间锚点。
+            if shared_times or len(masters) == len(records) == 1:
+                matches.append(record)
+        if not matches:
+            return False
+        # 一份记录只能覆盖身份相同的拆行，不能因共有结束时间串用另一台。
+        for matched in matches:
+            candidates = [
+                other for other in masters
+                if any(a and b and a == b for a, b in zip(other[:2], matched[:2]))
+                and not any(a and b and a != b for a, b in zip(other, matched))
+            ]
+            if len(candidates) > 1 and len(set(candidates)) > 1:
+                return False
+    return True
 
 
 def _labeled_anesthesia_surgery_time(
@@ -1314,6 +1358,15 @@ def _typed_003_decision(
             document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
+        qualified_mr_rows = tuple(
+            row for row in mr_rows if _qualified_traditional_surgery_present((row,))
+        )
+        if not _surgery_records_cover_master_rows(qualified_mr_rows, surgery_rows):
+            return decision("data_gap", "association_failed", {
+                "failure_kind": "surgery_timeliness_data_gap",
+                "gap_reason": "association_failed",
+                "missing_fields": ["surgery_record_association"],
+            })
         (
             interval,
             surgery_end_time,

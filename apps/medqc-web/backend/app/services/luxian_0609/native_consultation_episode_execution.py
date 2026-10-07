@@ -40,6 +40,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .extended_document.shared import _parse_datetime
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     SourceEvidenceQueryError,
@@ -1045,12 +1046,10 @@ def _parse_observed_time(value: Any) -> _ObservedTime | None:
             return _ObservedTime(datetime.strptime(normalized, fmt), False)
         except ValueError:
             continue
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
+    # 带偏移时间按既定医院时区换算，避免跨午夜证据被错误移出住院窗口。
+    parsed = _parse_datetime(normalized)
+    if parsed is None:
         return None
-    if parsed.tzinfo is not None:
-        parsed = parsed.replace(tzinfo=None)
     return _ObservedTime(parsed, "T" in normalized or " " in normalized)
 
 

@@ -32,7 +32,7 @@ class CriticalValueItem:
 
 @dataclass(frozen=True)
 class CriticalValueDisposition:
-    disposition_time: datetime
+    disposition_time: datetime | None
     event_key: str | None = None
 
 
@@ -178,6 +178,16 @@ def select_critical_value_fact_refs(
         return ()
 
     critical_refs = unique(tuple(reference for reference, _item in critical_pairs))
+    if outcome.final_state == "data_gap" and outcome.reason_code in {
+        "authoritative_time_missing", "authoritative_time_conflict",
+    } and (outcome.display_facts or {}).get("event_results"):
+        events, association_unproven = _events(tuple(item for _, item in critical_pairs))
+        if not association_unproven:
+            event_keys = {event.event_key for event in events if event.event_key is not None}
+            return unique((*critical_refs, *(reference for reference, disposition in disposition_refs
+                if disposition.event_key in event_keys
+                or (len(events) == 1 and disposition.event_key is None))))
+
     # 资料缺口、标志冲突或关联失败时，不从处置行反向猜测对应危急事件。
     if outcome.final_state not in {"compliant", "non_compliant", "not_applicable"}:
         return critical_refs
@@ -213,6 +223,7 @@ def select_critical_value_fact_refs(
             continue
         if (
             event.report_time is not None
+            and disposition.disposition_time is not None
             and disposition.disposition_time >= event.report_time
         ):
             matched_dispositions_by_event[event_indexes[id(event)]].append(
@@ -288,6 +299,7 @@ def _display_facts(
         ],
         "disposition_times": [
             value.disposition_time.isoformat(sep=" ") for value in dispositions
+            if value.disposition_time is not None
         ],
         "event_results": list(event_results),
     }
@@ -399,7 +411,7 @@ def evaluate_critical_value_rules(
                 for event in events
                 if event.event_key is not None
             }
-            dispositions_by_event: dict[str | None, list[datetime]] = {
+            dispositions_by_event: dict[str | None, list[datetime | None]] = {
                 event.event_key: [] for event in events
             }
             unmatched_dispositions = False
@@ -415,6 +427,24 @@ def evaluate_critical_value_rules(
                 else:
                     unmatched_dispositions = True
 
+            # 先确认同一事件的处置存在性，再核对时间；坏时间不能变成无记录。
+            timing_issues: dict[str | None, str] = {}
+            for event in events:
+                values = dispositions_by_event[event.event_key]
+                valid = [value for value in values if value is not None
+                         and event.report_time is not None and value >= event.report_time]
+                sufficient = bool(valid) if rule_id == "LX0609-06-04-02" else any(
+                    (value - event.report_time).total_seconds() <= 6 * 3600
+                    for value in valid
+                )
+                if sufficient:
+                    continue
+                if any(value is None for value in values):
+                    timing_issues[event.event_key] = "authoritative_time_missing"
+                elif any(value is not None and event.report_time is not None
+                         and value < event.report_time for value in values):
+                    timing_issues[event.event_key] = "authoritative_time_conflict"
+
             if unmatched_dispositions:
                 final_state, reason_code = "data_gap", "association_failed"
                 event_results = tuple(
@@ -425,6 +455,29 @@ def evaluate_critical_value_rules(
                     )
                     for event in events
                 )
+            elif timing_issues:
+                final_state, reason_code = "data_gap", next(iter(timing_issues.values()))
+                results = []
+                for event in events:
+                    valid_times = [value for value in dispositions_by_event[event.event_key]
+                                   if value is not None and event.report_time is not None
+                                   and value >= event.report_time]
+                    first = min(valid_times, default=None)
+                    interval = ((first - event.report_time).total_seconds() / 3600
+                                if first is not None and event.report_time is not None else None)
+                    issue = timing_issues.get(event.event_key)
+                    event_outcome = issue or (
+                        ("handled" if first is not None else "unhandled")
+                        if rule_id == "LX0609-06-04-02" else
+                        ("timely" if interval is not None and interval <= 6 else
+                         "overdue" if interval is not None else "unhandled")
+                    )
+                    results.append(_event_display(
+                        event=event, disposition_time=None if issue else first,
+                        interval_hours=interval if not issue and rule_id == "LX0609-06-04-01" else None,
+                        outcome=event_outcome,
+                    ))
+                event_results = tuple(results)
             elif rule_id == "LX0609-06-04-02":
                 event_results = tuple(
                     _event_display(
@@ -433,14 +486,14 @@ def evaluate_critical_value_rules(
                             (
                                 value
                                 for value in dispositions_by_event[event.event_key]
-                                if event.report_time is not None and value >= event.report_time
+                                if event.report_time is not None and value is not None and value >= event.report_time
                             ),
                             default=None,
                         ),
                         outcome=(
                             "handled"
                             if any(
-                                event.report_time is not None and value >= event.report_time
+                                event.report_time is not None and value is not None and value >= event.report_time
                                 for value in dispositions_by_event[event.event_key]
                             )
                             else "unhandled"
@@ -464,7 +517,7 @@ def evaluate_critical_value_rules(
                                 (
                                     value
                                     for value in dispositions_by_event[event.event_key]
-                                    if event.report_time is not None and value >= event.report_time
+                                    if event.report_time is not None and value is not None and value >= event.report_time
                                 ),
                                 default=None,
                             )
@@ -474,7 +527,7 @@ def evaluate_critical_value_rules(
                                 (
                                     (value - event.report_time).total_seconds() / 3600
                                     for value in dispositions_by_event[event.event_key]
-                                    if event.report_time is not None and value >= event.report_time
+                                    if event.report_time is not None and value is not None and value >= event.report_time
                                 ),
                                 default=None,
                             )
@@ -483,12 +536,13 @@ def evaluate_critical_value_rules(
                             "timely"
                             if any(
                                 event.report_time is not None
+                                and value is not None
                                 and 0 <= (value - event.report_time).total_seconds() / 3600 <= 6
                                 for value in dispositions_by_event[event.event_key]
                             )
                             else "overdue"
                             if any(
-                                event.report_time is not None and value >= event.report_time
+                                event.report_time is not None and value is not None and value >= event.report_time
                                 for value in dispositions_by_event[event.event_key]
                             )
                             else "unhandled"

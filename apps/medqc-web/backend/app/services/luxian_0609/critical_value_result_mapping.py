@@ -44,9 +44,9 @@ def _safe_events(*, value: Any, timing_rule: bool) -> list[dict[str, Any]] | Non
     if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
         return None
     allowed_outcomes = (
-        {"timely", "overdue", "unhandled", "window_not_mature", "association_failed"}
+        {"timely", "overdue", "unhandled", "window_not_mature", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
         if timing_rule
-        else {"handled", "unhandled", "association_failed"}
+        else {"handled", "unhandled", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
     )
     safe_events: list[dict[str, Any]] = []
     for item in value:
@@ -363,8 +363,8 @@ def _published_window_consistent(raw: dict[str, Any], *, date_only: bool) -> boo
 def _published_events(value: Any, *, timing_rule: bool) -> bool:
     if type(value) is not list or not 0 < len(value) <= 100:
         return False
-    outcomes = ({"timely", "overdue", "unhandled", "window_not_mature", "association_failed"}
-                if timing_rule else {"handled", "unhandled", "association_failed"})
+    outcomes = ({"timely", "overdue", "unhandled", "window_not_mature", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+                if timing_rule else {"handled", "unhandled", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"})
     base = {"critical_item_names", "critical_flags", "report_time", "outcome"}
     for event in value:
         if type(event) is not dict or not base <= set(event):
@@ -481,14 +481,16 @@ def critical_value_customer_fact_status_is_valid(
         return normalized_status == "data_gap"
     outcomes = [item.get("outcome") for item in safe_facts.get("event_results", ())]
     if str(rule_id).strip().upper() == "LX0609-06-04-02":
-        if "association_failed" in outcomes:
+        if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+               for value in outcomes):
             return normalized_status == "data_gap"
         return normalized_status == (
             "compliant"
             if outcomes and all(item == "handled" for item in outcomes)
             else "non_compliant"
         )
-    if "association_failed" in outcomes:
+    if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+               for value in outcomes):
         return normalized_status == "data_gap"
     if "window_not_mature" in outcomes:
         return (

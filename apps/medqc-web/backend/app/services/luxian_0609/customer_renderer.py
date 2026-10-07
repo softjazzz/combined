@@ -2885,6 +2885,12 @@ def customer_finding_from_controlled_facts(
             for item in event_results
         ):
             return "处置记录存在，但无法与各次危急值报告唯一对应，暂无法核对。"
+        if isinstance(event_results, list) and any(
+            isinstance(item, Mapping) and item.get("outcome") in {
+                "authoritative_time_missing", "authoritative_time_conflict",
+            } for item in event_results
+        ):
+            return "已找到与危急值报告关联的处置记录，但处置时间缺失、无法解析或早于报告时间，暂无法核对报告后处置及6小时时限。"
         items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
         reports = joined("report_times")
         dispositions = joined("disposition_times")
@@ -3084,6 +3090,8 @@ def customer_finding_from_controlled_facts(
                         f"缺少 {'、'.join(missing_dates)} 的病程记录"
                     )
                 )
+                if event.get("course_time_unresolved") is True:
+                    coverage = "存在日期缺失或不可用的病程，暂无法确认连续三日覆盖"
                 surgeon_names = event.get("surgeon_names")
                 surgeon = (
                     "、".join(surgeon_names)
@@ -3094,6 +3102,8 @@ def customer_finding_from_controlled_facts(
                     surgeon_round = "术者姓名缺失，暂无法核对术者查房记录"
                 elif event.get("surgeon_round_present") is True:
                     surgeon_round = f"已查到{surgeon}术者查房记录"
+                elif event.get("course_time_unresolved") is True:
+                    surgeon_round = f"病程日期不可用，暂无法核对{surgeon}术者查房记录"
                 else:
                     surgeon_round = f"未查到{surgeon}术者查房记录"
                 surgery_name = event.get("surgery_name")

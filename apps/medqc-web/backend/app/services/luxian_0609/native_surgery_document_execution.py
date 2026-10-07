@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -799,7 +800,38 @@ def _minute_signature_state(value: Any) -> str:
     text = _clean(value)
     if not text:
         return "missing"
-    return "present" if re.search(r"\d{1,2}:\d{2}", text) else "invalid"
+    if isinstance(value, datetime):
+        return "present"
+    # 同时验证分钟精度和日期时间有效性；保留中文日期分隔符。
+    text = re.sub(r"\s+", " ", text.replace("年", "-").replace("月", "-").replace("日", " ")).strip()
+    if not re.fullmatch(
+        r"\d{4}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}"
+        r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?",
+        text,
+    ):
+        return "invalid"
+    candidate = text.replace("/", "-").replace("Z", "+00:00")
+    try:
+        datetime.fromisoformat(candidate)
+    except ValueError:
+        # Preserve the existing single-digit month/day/hour input forms.
+        for format_ in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+            try:
+                datetime.strptime(candidate.replace("T", " "), format_)
+                return "present"
+            except ValueError:
+                continue
+        return "invalid"
+    return "present"
+
+
+def _consent_signature_value_present(value: Any) -> bool:
+    text = _clean(value).strip("。.;；")
+    return bool(text) and not (
+        _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(text)
+        or re.fullmatch(r"[-—_/\\\s]+|null|none|n/?a|\[\]|\{\}|缺失", text, re.IGNORECASE)
+        or re.match(r"^(?:未签|尚未签|未见签|拒绝签|拒签|无签)", text)
+    )
 
 
 def _anesthesia_consent_completeness(
@@ -811,9 +843,11 @@ def _anesthesia_consent_completeness(
         return "association_failed", []
     row = rows[0]
     missing: list[str] = []
-    if not _clean(row.get("patient_sign")):
+    if not _consent_signature_value_present(row.get("patient_sign")):
         missing.append("patient_signature")
-    if not _clean(row.get("physician_sign") or row.get("surgeon_sign")):
+    if not _consent_signature_value_present(
+        row.get("physician_sign") or row.get("surgeon_sign")
+    ):
         missing.append("physician_signature")
     if _minute_signature_state(row.get("patient_sign_datetime")) != "present":
         missing.append("patient_signature_time")

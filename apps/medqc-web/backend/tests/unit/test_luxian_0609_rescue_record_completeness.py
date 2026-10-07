@@ -505,3 +505,22 @@ def test_narrated_time_requires_asserted_action_in_full_parse(inline_before, bet
     assert time_state == ("present" if expected == "compliant" else "unknown")
     assert _state(result) == expected
     assert _facts(result)["failure_kind"] == ""
+
+
+@pytest.mark.parametrize("prefix", ["计划", "既往", "未发生的", "若需", "拟", "曾经"])
+def test_nonactual_labeled_time_does_not_override_correct_model_absence(prefix):
+    body = "\n".join(prefix + value if key == "rescue_time" else value for key, value in SNIPPETS.items())
+    session = _session([_row(body=body)])
+    llm = FakeLLM(_response(session, missing_by_id={"R1": ("rescue_time",)}))
+    result = _execute(session, llm)
+    assert _state(result) == "non_compliant"
+    assert _facts(result)["missing_fields"] == ["rescue_time"]
+    assert len(llm.calls) == result.llm_call_count == 1
+
+
+def test_separate_nonactual_time_does_not_hide_actual_labeled_time():
+    body = "既往抢救时间：2026-06-01 08:00。\n" + _row()["record_content"]
+    session = _session([_row(body=body)])
+    result = _execute(session, FakeLLM(_response(session, missing_by_id={"R1": ("rescue_time",)})))
+    assert _state(result) == "compliant"
+    assert "2026-07-16" in _facts(result)["rescue_content_events"][0]["field_facts"]["rescue_time"]["quote"]

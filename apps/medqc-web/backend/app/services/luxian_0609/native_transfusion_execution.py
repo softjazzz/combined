@@ -892,6 +892,36 @@ def _structured_or_labeled_value(
     )
 
 
+def _consent_signature_present(
+    row: Mapping[str, Any], *, fields: Sequence[str], labels: Sequence[str]
+) -> bool:
+    """Explicitly unsigned values and placeholders cannot prove a signature."""
+
+    def usable(value: Any) -> bool:
+        text = _clean(value).strip("。.;；")
+        return bool(text) and not re.fullmatch(
+            r"(?:[-—_/\\\s]+|无|暂无|空|空白|不详|未知|缺失|"
+            r"null|none|n/?a|\[\]|\{\}|"
+            r"待(?:填|填写|补充|完善|签名|签字)?|"
+            r"未(?:填|填写|完成|签名|签字)?|"
+            r"尚未(?:完成|签名|签字|填写)?)",
+            text,
+            re.IGNORECASE,
+        ) and not re.match(r"^(?:未签|尚未签|未见签|拒绝签|拒签|无签)", text)
+
+    structured = [row.get(field) for field in fields if _clean(row.get(field))]
+    if structured:
+        return any(usable(value) for value in structured)
+    text = _row_text(row)
+    return any(
+        usable(match.group(1))
+        for label in labels
+        for match in re.finditer(
+            rf"{re.escape(label)}\s*[：:]\s*([^。；;，,\n]+)", text
+        )
+    )
+
+
 def _has_minute_precise_signed_time(row: Mapping[str, Any]) -> bool:
     fields = (
         "sign_datetime",
@@ -1048,7 +1078,11 @@ def _programmatic_042_status(
         item
         for item, fields, labels in checks
         if not all(
-            _structured_or_labeled_value(row, fields=fields, labels=labels)
+            (
+                _consent_signature_present(row, fields=fields, labels=labels)
+                if item in {"patient_or_agent_signature", "physician_signature"}
+                else _structured_or_labeled_value(row, fields=fields, labels=labels)
+            )
             for row in consent_rows
         )
     ]
@@ -2750,6 +2784,15 @@ def _authoritative_record_time(row: Mapping[str, Any]) -> datetime | None:
     return None
 
 
+def _dedicated_record_supports_performance(content: str) -> bool:
+    # 保留专用来源门控，但明确取消/未实施不能凭正文长度证明已经输注。
+    # 此处只排除确定的非实施表述；“无输血反应”不否定输血本身。
+    if re.search(r"(?:取消|撤销)(?:本次)?输血|(?:未|没有)(?:实际)?(?:实施|进行|开始)?输血(?!前|(?:不良)?反应)|"
+                 r"输血(?:计划|申请)?(?:已)?(?:取消|撤销)", content):
+        return False
+    return len(content) >= 16
+
+
 def _performed_source_state(
     *,
     documents: Mapping[str, Any] | None,
@@ -2762,7 +2805,8 @@ def _performed_source_state(
     # 正式 bundle 已携带同次就诊专用输血记录时直接采用，避免重复查库；
     # 普通病程/手术文本中的“输血”字样不进入该分支。
     if isinstance(documents, Mapping) and any(
-        len(content) >= 16 for content in _source_rows(documents, "bloodtrans_record")
+        _dedicated_record_supports_performance(content)
+        for content in _source_rows(documents, "bloodtrans_record")
     ):
         return "present"
     if not all((institute_id, patient_id, visit_id)):
@@ -2792,7 +2836,7 @@ def _performed_source_state(
         for row in rows_by_source.get("mr_bloodtrans", ())
     )
     dedicated_record_present = any(
-        len(_clean(row.get("record_content"))) >= 16
+        _dedicated_record_supports_performance(_clean(row.get("record_content")))
         for row in rows_by_source.get("bloodtrans_record", ())
     )
     if structured_performed or dedicated_record_present:

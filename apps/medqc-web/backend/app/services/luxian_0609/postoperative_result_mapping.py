@@ -119,6 +119,10 @@ def _controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
             "covered_postop_dates": covered_dates,
             "surgeon_round_present": surgeon_round_present,
         }
+        if "course_time_unresolved" in item:
+            if type(item["course_time_unresolved"]) is not bool:
+                return None
+            safe_event["course_time_unresolved"] = item["course_time_unresolved"]
         surgery_name = item.get("surgery_name")
         if surgery_name:
             safe_surgery_name = _controlled_string(surgery_name, allow_empty=True)

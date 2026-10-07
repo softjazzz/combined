@@ -187,7 +187,11 @@ _DIAGNOSIS_CHANGE_REASON_MARKERS = (
 )
 _DIAGNOSIS_CHANGE_BASIS_MARKERS = ("诊断依据", "依据为", "依据：", "依据:")
 _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
-    r"(?:药品|药物|用药|服药|服用|口服|停药|带药)"
+    r"(?:药品|药物|用药|服药|服用|口服|停药|带药|注射|静滴|静脉滴注|"
+    r"外用|外涂|涂抹|吸入|滴眼|滴耳|滴鼻|含服|舌下|肛塞|"
+    r"(?<![a-z])(?:po|sc|ih|im|iv|ivgtt)(?![a-z])|"
+    r"\d+(?:\.\d+)?\s*(?:mg|μg|ug|ml|g|单位|片|粒|袋|支)(?![a-z]))",
+    re.IGNORECASE,
 )
 _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
     "有效", "好转", "改善", "感染控制", "疗效不佳", "效果不佳",
@@ -601,8 +605,6 @@ def _critical_value_disposition_from_row(
     row: Mapping[str, Any],
 ) -> CriticalValueDisposition | None:
     disposition_time = _row_time(row)
-    if disposition_time is None:
-        return None
     return CriticalValueDisposition(
         disposition_time=disposition_time,
         event_key=_critical_value_event_key("crisis_value_record", row),
@@ -1364,48 +1366,63 @@ def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, .
 def _structured_discharge_medications(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[Mapping[str, Any]] | None, str, tuple[int, ...]]:
-    for index, row in enumerate(rows):
-        value = row.get("discharge_medications")
-        if value is None:
-            continue
-        if isinstance(value, list) and all(isinstance(item, Mapping) for item in value):
-            return list(value), "", (index,)
-        return None, "required_field_missing", (index,)
+    labels = {
+        "药品名称": "drug_name",
+        "用药剂量": "dose",
+        "给药途径": "route",
+        "用药时间": "duration",
+    }
+    label_pattern = re.compile(r"(药品名称|用药剂量|给药途径|用药时间)\s*[:：]")
+    medications: list[Mapping[str, Any]] = []
+    selected_indexes: list[int] = []
     has_discharge_instruction = False
-    has_medication_signal = False
-    medication_signal_indexes: list[int] = []
+    has_unresolved_medications = False
     for index, row in enumerate(rows):
+        structured = row.get("discharge_medications")
+        if structured is not None:
+            selected_indexes.append(index)
+            has_discharge_instruction = True
+            if isinstance(structured, list) and all(
+                isinstance(item, Mapping) for item in structured
+            ):
+                medications.extend(structured)
+            else:
+                has_unresolved_medications = True
+            continue
         value = _clean(row.get("discharge_order"))
         if not value:
             continue
         has_discharge_instruction = True
-        row_has_medication_signal = (
-            _DISCHARGE_MEDICATION_SIGNAL_PATTERN.search(value) is not None
-        )
-        has_medication_signal = has_medication_signal or row_has_medication_signal
-        if row_has_medication_signal:
-            medication_signal_indexes.append(index)
-        labels = {
-            "drug_name": "药品名称",
-            "dose": "用药剂量",
-            "route": "给药途径",
-            "duration": "用药时间",
-        }
+        if not _DISCHARGE_MEDICATION_SIGNAL_PATTERN.search(value):
+            continue
+        selected_indexes.append(index)
+        matches = list(label_pattern.finditer(value))
+        if not matches:
+            has_unresolved_medications = True
+            continue
+        # 多药固定标签只接受以药名开头的逐药分组；前置字段归属不明时交给受控抽取。
+        multiple_names = sum(match.group(1) == "药品名称" for match in matches) > 1
+        if multiple_names and matches[0].group(1) != "药品名称":
+            has_unresolved_medications = True
+            continue
         parsed: dict[str, str] = {}
-        for key, marker in labels.items():
-            match = re.search(rf"{marker}\s*[:：]\s*([^；;]+)", value)
-            if match:
-                parsed[key] = match.group(1).strip()
-        if parsed:
-            return [parsed], "", (index,)
-    if has_discharge_instruction and not has_medication_signal:
-        return [], "", ()
-    selected_indexes = (
-        tuple(medication_signal_indexes)
-        if medication_signal_indexes
-        else tuple(range(len(rows)))
-    )
-    return None, "required_field_missing", selected_indexes
+        row_medications: list[Mapping[str, Any]] = []
+        for position, match in enumerate(matches):
+            key = labels[match.group(1)]
+            if key == "drug_name" and key in parsed:
+                row_medications.append(parsed)
+                parsed = {}
+            if key in parsed:
+                has_unresolved_medications = True
+                break
+            end = matches[position + 1].start() if position + 1 < len(matches) else len(value)
+            parsed[key] = re.split(r"[；;\n]", value[match.end():end].lstrip(), maxsplit=1)[0].strip()
+        else:
+            row_medications.append(parsed)
+            medications.extend(row_medications)
+    if has_unresolved_medications or not has_discharge_instruction:
+        return None, "required_field_missing", tuple(selected_indexes) or tuple(range(len(rows)))
+    return medications, "", tuple(selected_indexes)
 
 
 def _course_dates(
@@ -1602,15 +1619,22 @@ def _title_round_physician_tokens(
     # 不从正文、科室或查房标记后的附注反向推断术者。
     if _TITLE_ROUND_ROLE_DESCRIPTION_PATTERN.search(title_header):
         return frozenset()
-    return frozenset(
-        token
-        for token in candidate_tokens
-        if token
-        and re.search(
-            rf"{re.escape(token)}(?:副主任医师|主任医师|主治医师|住院医师|医师)",
-            title_header,
+    # 按职称分段提取完整姓名，不能用术者姓名去匹配另一姓名的后缀。
+    identities = set()
+    for match in re.finditer(
+        r"([^，,、；;：:（）()]+?)(?:副主任医师|主任医师|主治医师|住院医师|医师)",
+        title_header,
+    ):
+        identity = match.group(1).strip()
+        # 仅剥离有明确边界的联合查房/科室前缀；其余整段保留，不能猜姓名。
+        identity = re.sub(
+            r"^(?:联合)?(?:神经疾病中心|神经外科|神经内科|心胸外科|"
+            r"普通外科|普外科|骨科|眼科|耳鼻喉科|妇产科|儿科|泌尿外科)",
+            "",
+            identity,
         )
-    )
+        identities.add(_normalized_physician_token(identity))
+    return frozenset(identities.intersection(candidate_tokens))
 
 
 def _actual_surgery_end_time(
@@ -3676,6 +3700,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     unmet_events = []
                     missing_surgeon_events = []
                     empty_body_events = []
+                    unresolved_time_events = []
+                    undated_course_rows = tuple(
+                        row for row in (*daily_rows, *senior_rows)
+                        if _row_time(row) is None and _course_row_has_body(row)
+                    )
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
                         selected_postoperative_rows.append(event.row)
@@ -3769,12 +3798,18 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if unresolved_empty_body_dates:
                             empty_body_events.append(event.document_id)
                         if missing_dates or not surgeon_round:
-                            unmet_events.append({
-                                "document_id": event.document_id,
-                                "missing_postop_dates": missing_dates,
-                                "surgeon_round_present": surgeon_round,
-                            })
-                    if missing_surgeon_events or empty_body_events:
+                            if undated_course_rows:
+                                # 候选不能定日时，既不能补齐，也不能确认该手术缺项。
+                                unresolved_time_events.append(event.document_id)
+                                event_facts[-1]["course_time_unresolved"] = True
+                                selected_postoperative_rows.extend(undated_course_rows)
+                            else:
+                                unmet_events.append({
+                                    "document_id": event.document_id,
+                                    "missing_postop_dates": missing_dates,
+                                    "surgeon_round_present": surgeon_round,
+                                })
+                    if missing_surgeon_events or empty_body_events or unresolved_time_events:
                         final_state, reason_code = (
                             "data_gap",
                             "required_field_missing",
@@ -3816,6 +3851,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 "surgery_events": event_facts,
                                 "unmet_surgery_events": unmet_events,
                                 "missing_surgeon_events": missing_surgeon_events,
+                                "unresolved_course_time_events": unresolved_time_events,
                                 **legacy_summary_facts,
                             },
                         )
