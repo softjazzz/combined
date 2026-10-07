@@ -60,6 +60,7 @@ from .luxian_0609.customer_renderer import (
     customer_finding_from_controlled_facts,
 )
 from .qc_workspace.export_service import (
+    append_complete_workbook_row,
     map_item_status_label as _map_item_status_label,
     render_customer_safe_csv,
     render_customer_safe_html,
@@ -5300,7 +5301,8 @@ class CustomQCWorkspaceService:
             ]
         )
         for item in issue_items:
-            ws_items.append(
+            append_complete_workbook_row(
+                ws_items,
                 [
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
@@ -5353,7 +5355,8 @@ class CustomQCWorkspaceService:
             ]
         )
         for item in items:
-            ws_all.append(
+            append_complete_workbook_row(
+                ws_all,
                 [
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
