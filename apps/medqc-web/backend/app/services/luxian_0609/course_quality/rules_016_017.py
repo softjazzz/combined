@@ -169,6 +169,15 @@ def _normalized_for_similarity(content: str) -> str:
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", value).lower()
 
 
+def _normalized_for_exact_section_comparison(content: str) -> str:
+    """016 仅忽略空白与普通句读，保留临床日期、数值及医学符号。"""
+
+    value = re.sub(r"\s+", "", content)
+    # 逗号夹在数字之间可能是数值分隔符，不能当作普通句读删除。
+    value = re.sub(r"(?<![0-9])[,，]|[,，](?![0-9])", "", value)
+    return re.sub(r"[；;。]", "", value)
+
+
 def _rule_016_copy_coverage(documents: Mapping[str, Any]) -> float | None:
     """只比较结构化现病史与病例特点；1.0仅表示规范化后完全相同。"""
 
@@ -186,11 +195,11 @@ def _rule_016_copy_coverage(documents: Mapping[str, Any]) -> float | None:
         return None
     maximum = 0.0
     for admission_text in admission_texts:
-        normalized_admission = _normalized_for_similarity(admission_text)
+        normalized_admission = _normalized_for_exact_section_comparison(admission_text)
         if not normalized_admission:
             continue
         for first_course_text in first_course_texts:
-            normalized_first = _normalized_for_similarity(first_course_text)
+            normalized_first = _normalized_for_exact_section_comparison(first_course_text)
             if not normalized_first:
                 continue
             maximum = max(

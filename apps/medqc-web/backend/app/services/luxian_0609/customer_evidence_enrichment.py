@@ -472,7 +472,9 @@ def _excerpt(row: Mapping[str, Any], *, limit: int = 300) -> tuple[str, str]:
     return field_path, compact[:limit] + ("…" if len(compact) > limit else "")
 
 
-def _discussion_excerpt(row: Mapping[str, Any], *, limit: int = 300) -> tuple[str, str]:
+def _discussion_excerpt(
+    row: Mapping[str, Any], *, field_path: str = "", limit: int = 300
+) -> tuple[str, str]:
     """Locate existing discussion content, never a title or a claim of absence.
 
     These are the same whitelisted content fields read by the preop executor.
@@ -486,6 +488,8 @@ def _discussion_excerpt(row: Mapping[str, Any], *, limit: int = 300) -> tuple[st
         ("discuss_staff", row.get("discuss_staff")),
     )
     for path, raw in candidates:
+        if field_path and path != field_path:
+            continue
         if not isinstance(raw, str):
             continue
         compact = re.sub(r"\s+", " ", raw).strip()
@@ -536,13 +540,17 @@ def enrich_customer_evidence(
             if strict_course_record_time and source_type in _COURSE_SOURCE_TYPES
             else _record_time(matched)
         )
+        # 显式字段是来源约束；字段缺失时不得用另一字段正文填充旧坐标。
+        explicit_discussion_field = (
+            _text(evidence.get("field_path")) if source_type == "presurg_discussion" else ""
+        )
         field_path, excerpt = (
-            _discussion_excerpt(matched)
+            _discussion_excerpt(matched, field_path=explicit_discussion_field)
             if source_type == "presurg_discussion"
             else _excerpt(matched)
         )
         preferred = (preferred_source_fields or {}).get(source_type)
-        if preferred:
+        if preferred and not explicit_discussion_field:
             value = matched.get(preferred)
             path = preferred
             if preferred not in matched:

@@ -112,10 +112,10 @@ def _semantic_fallback_rows() -> dict[str, tuple[dict[str, Any], ...]]:
 
     rows = _rows()
     rows["surgery_record"] = (
-        {"document_id": "surgery-1", "record_content": "术后一般情况平稳。"},
+        {"document_id": "surgery-1", "record_content": "病理号PATH-1。术后一般情况平稳。", "record_time": "2026-09-06 11:00:00"},
     )
     rows["daily_course_record"] = (
-        {"document_id": "course-1", "record_content": "继续观察病情变化。"},
+        {"document_id": "course-1", "record_content": "病理号PATH-1。继续观察病情变化。", "record_time": "2026-09-06 11:00:00"},
     )
     return rows
 
@@ -135,11 +135,12 @@ def _semantic_response(content: str) -> dict[str, Any]:
 def _rows() -> dict[str, tuple[dict[str, Any], ...]]:
     return {
         "pathology_exam_master": (
-            {"document_id": "path-master-1", "specimen_name": "切除标本"},
+            {"document_id": "path-master-1", "pathology_exam_id": "PATH-1", "specimen_name": "切除标本"},
         ),
         "pathology_exam_report": (
             {
                 "document_id": "path-report-1",
+                "pathology_exam_id": "PATH-1",
                 "diagnosis": "结肠腺癌",
                 "report_datetime": "2026-09-06 10:00:00",
             },
@@ -147,8 +148,9 @@ def _rows() -> dict[str, tuple[dict[str, Any], ...]]:
         "surgery_record": (
             {
                 "document_id": "surgery-1",
+                "record_time": "2026-09-06 11:00:00",
                 "surgery_process": "术中切取病灶标本并送病理检查。",
-                "record_content": "病理结果为结肠腺癌。",
+                "record_content": "病理号PATH-1。病理结果为结肠腺癌。",
             },
         ),
         "daily_course_record": (
@@ -360,10 +362,10 @@ async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_technica
 
     rows = _rows()
     rows["surgery_record"] = (
-        {"document_id": "surgery-1", "record_content": "手术经过已记录。"},
+        {"document_id": "surgery-1", "record_content": "病理号PATH-1。手术经过已记录。", "record_time": "2026-09-06 11:00:00"},
     )
     rows["daily_course_record"] = (
-        {"document_id": "course-1", "record_content": "术后病程已记录。"},
+        {"document_id": "course-1", "record_content": "病理号PATH-1。术后病程已记录。", "record_time": "2026-09-06 11:00:00"},
     )
     client = _FailingRuleClient()
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(

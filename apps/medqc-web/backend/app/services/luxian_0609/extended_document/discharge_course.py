@@ -4,15 +4,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import re
 from typing import Any, Mapping, Sequence
 
 from .shared import _clean, _row_time
 
 
 def _has_course_body(row: Mapping[str, Any]) -> bool:
-    """只排除空正文与纯签名标签，不评价正文长度或临床质量。"""
-    body = "".join(_clean(row.get("record_content")).split())
-    return bool(body) and body not in {"医生签名:", "医生签名：", "医师签名:", "医师签名："}
+    """只排除空正文与纯签名行（含姓名/职称），不评价临床质量。"""
+    body = _clean(row.get("record_content"))
+    signature = re.compile(
+        r"(?:医生|医师)签名\s*[:：]\s*"
+        r"(?:[\u4e00-\u9fff·]{1,6}\s*(?:(?:副主任|主任|主治|住院)?医师)?)?"
+        r"\s*"
+    )
+    return any(
+        line.strip() and not signature.fullmatch("".join(line.split()))
+        for line in body.splitlines()
+    )
 
 
 @dataclass(frozen=True)

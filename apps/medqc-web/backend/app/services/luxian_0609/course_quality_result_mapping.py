@@ -591,6 +591,15 @@ def validate_published_course_quality_facts(
         and reason_code == "evaluation_window_not_mature"
     ):
         return True, None
+    # 016 的目标段落不可读时没有可发布的相似度；仅接受已知资料不足终态。
+    # 确定结论及非空残缺 facts 仍须通过原比较事实合同。
+    if (
+        normalized == "LX0609-12-01-01"
+        and (raw is None or raw == {})
+        and status == "data_gap"
+        and reason_code == "required_field_missing"
+    ):
+        return True, None
     if normalized == "LX0609-01-01-02" and raw is None:
         return True, None
     if (

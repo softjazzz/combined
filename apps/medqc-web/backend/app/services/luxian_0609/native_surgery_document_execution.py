@@ -893,6 +893,11 @@ def _row_has_any(
     )
     return any(
         marker in segment
+        # 空表单标题不能证明字段已经填写；仍保留“无并发症”等有效阴性。
+        and not re.fullmatch(
+            r"(?:分级|评估|情况|状态|记录|告知|签名|禁食|禁饮|[\s:：_—/\-（）()])*",
+            segment.replace(marker, "", 1),
+        )
         and not any(re.search(pattern, segment) for pattern in negative_text_patterns)
         for marker in text_markers
         for segment in segments
@@ -950,6 +955,19 @@ def _anesthesia_visit_completeness(
 
     pre = rows_by_source["preane_surveil_record"][0]
     post = rows_by_source["postane_surveil_record"][0]
+    # 文书ID在不同来源本应不同；只用同名业务键识别明确事件冲突。
+    # 保留无业务键单事件资料的既有语义，不能用A事件术前补B事件术后。
+    try:
+        anesthesia_rows = tuple(materials.rows("anesthesia_record")) if materials else ()
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return "unavailable", {}
+    for field in ("application_id", "anesthesia_id", "surgery_id"):
+        identities = {
+            value for row in (pre, post, *anesthesia_rows)
+            if (value := _clean(row.get(field)))
+        }
+        if len(identities) > 1:
+            return "association_failed", {}
     pre_checks = {
         "asa_level": _row_has_any(
             pre,
@@ -998,8 +1016,9 @@ def _anesthesia_visit_completeness(
             structured_fields=("anesthetist_sign",),
             text_markers=("医师签名",),
         ),
-        "record_time": _row_has_any(
-            pre, structured_fields=("record_time", "submit_datetime")
+        "record_time": any(
+            _minute_signature_state(pre.get(field)) == "present"
+            for field in ("record_time", "submit_datetime")
         ),
     }
     post_checks = {
@@ -1016,8 +1035,9 @@ def _anesthesia_visit_completeness(
             structured_fields=("anesthetist_sign",),
             text_markers=("医师签名",),
         ),
-        "record_time": _row_has_any(
-            post, structured_fields=("record_time", "submit_datetime")
+        "record_time": any(
+            _minute_signature_state(post.get(field)) == "present"
+            for field in ("record_time", "submit_datetime")
         ),
     }
     missing = {

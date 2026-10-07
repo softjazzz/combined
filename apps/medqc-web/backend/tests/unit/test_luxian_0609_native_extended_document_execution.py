@@ -1755,7 +1755,7 @@ async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-02 08:00:00", "author_name": "李主任"},
+                {"record_time": "2026-07-02 08:00:00", "author_name": "李主任", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
             "daily_course_record": (
                 {"record_time": "2026-07-02 09:00:00", "author_name": "王医生"},
@@ -3732,8 +3732,8 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
                 {"record_time": "2026-07-11 08:00:00", "document_title": "曾亚丽主治医师查房记录"},
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-08 20:00:00", "document_title": "上级医师查房记录"},
-                {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录"},
+                {"record_time": "2026-07-08 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
     )
@@ -3992,8 +3992,8 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-08 10:01:55"},
-                {"record_time": "2026-07-11 10:03:29"},
+                {"record_time": "2026-07-08 10:01:55", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-11 10:03:29", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
     )
@@ -4042,14 +4042,14 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-02 08:00:00"},
-                {"record_time": "2026-07-02 09:00:00"},
-                {"record_time": "2026-07-02 10:00:00"},
-                {"record_time": "2026-07-02 11:00:00"},
-                {"record_time": "2026-07-02 12:00:00"},
-                {"record_time": "2026-07-02 13:00:00"},
-                {"record_time": "2026-07-02 14:00:00"},
-                {"record_time": "2026-07-02 15:00:00"},
+                {"record_time": "2026-07-02 08:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 09:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 10:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 11:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 12:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 13:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 14:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 15:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
     )
@@ -4205,7 +4205,7 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录"},
+                {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
     )

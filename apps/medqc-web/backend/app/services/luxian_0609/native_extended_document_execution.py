@@ -31,6 +31,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .extended_document.difficult_case_trigger import has_current_uncertain_diagnosis
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
 )
@@ -42,6 +43,7 @@ from .extended_document.discharge_documentation import (
 )
 from .extended_document.discharge_course_content import evaluate_discharge_course_content
 from .extended_document.discharge_course import (
+    _has_course_body as _has_clinical_course_body,
     evaluate_predischarge_course_presence,
 )
 from .extended_document.diagnosis_change_extraction import (
@@ -983,6 +985,63 @@ def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[st
     return tuple(row for row in rows if _antimicrobial_names_in(row))
 
 
+def _exclude_unperformed_antimicrobial_orders(
+    orders: Sequence[Mapping[str, Any]],
+    course_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
+    """仅排除明确未实施事件；停用不等于从未给药，同名多医嘱不猜归属。"""
+
+    kept: list[Mapping[str, Any]] = []
+    excluded_evidence: list[Mapping[str, Any]] = []
+    for order in orders:
+        names = _antimicrobial_names_in(order)
+        order_id = _linked_order_id(order)
+        linked_rows = []
+        for row in course_rows:
+            row_id = _linked_order_id(row)
+            row_names = _antimicrobial_names_in(row)
+            if row_id:
+                matches = bool(order_id and row_id == order_id)
+            else:
+                matches = bool(
+                    len(names) == 1 and row_names == names
+                    and sum(names[0] in _antimicrobial_names_in(item) for item in orders) == 1
+                )
+            if matches:
+                linked_rows.append(row)
+        texts = tuple(_material_text(row) for row in (order, *linked_rows))
+        # 明确已实施与取消信息冲突时，不把已用药事件静默删去。
+        performed = any(
+            re.search(r"(?<!未)(?:已给予|已使用|已启用|已输注|实际给予|实际使用)", text)
+            for text in texts
+        )
+        unperformed_rows = tuple(
+            row for row in (order, *linked_rows)
+            if re.search(r"(?:未实际给药|未实际使用|从未给药|未曾给药)", _material_text(row))
+        )
+        cancelled = _clean(order.get("order_status")) in {
+            "取消", "已取消", "作废", "已作废", "撤销", "未执行",
+        }
+        if not performed and (cancelled or unperformed_rows):
+            excluded_evidence.extend((order, *unperformed_rows))
+        else:
+            kept.append(order)
+    return tuple(kept), tuple(excluded_evidence)
+
+
+def _antimicrobial_reason_clauses(row: Mapping[str, Any]) -> tuple[str, ...]:
+    """理由缺失声明不能以其中的“理由/依据”字面值充当正向事实。"""
+
+    return tuple(
+        clause for clause in re.split(r"[，,。；;\n]", _material_text(row))
+        if not re.search(
+            r"(?:理由|依据|感染证据).{0,4}(?:未记录|未说明|缺失|不详|未提供)"
+            r"|(?:无|缺少|未记录|未说明).{0,4}(?:理由|依据|感染证据)",
+            clause,
+        )
+    )
+
+
 def _055_treatment_orders(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], ...]:
@@ -1133,7 +1192,11 @@ def _054_action_events(
 
 
 def _054_reason_documented(row: Mapping[str, Any]) -> bool:
-    return any(marker in _material_text(row) for marker in _ANTIMICROBIAL_REASON_MARKERS)
+    return any(
+        marker in clause
+        for clause in _antimicrobial_reason_clauses(row)
+        for marker in _ANTIMICROBIAL_REASON_MARKERS
+    )
 
 
 def _054_event_reason_state(
@@ -1261,8 +1324,18 @@ def _empiric_reason_documented(
     order_ids = order_event.order_ids
     order_names = order_event.antimicrobials
     for row in course_rows:
-        text = _material_text(row)
-        if not any(marker in text for marker in _EMPIRIC_REASON_MARKERS):
+        clauses = _antimicrobial_reason_clauses(row)
+        if not any(
+            any(marker in clause for marker in _EMPIRIC_REASON_MARKERS)
+            # 新增同义依据只接受分句起始的明确肯定形式，不在任意前缀后
+            # 搜索“证实”。复杂修饰不由短距离否定词排除表推断为肯定。
+            or (
+                re.match(r"^\s*(?:(?:胸部)?影像)?(?:已)?(?:证实|确诊)"
+                         r"(?:为)?(?:细菌|感染)", clause)
+                and not re.search(r"尚|未|不|无|非|否|待|拟|可能|可疑|是否|排除", clause)
+            )
+            for clause in clauses
+        ):
             continue
         row_order_id = _linked_order_id(row)
         if row_order_id and order_ids:
@@ -2196,7 +2269,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             strong_uncertain_rows = tuple(
                 row
                 for row in daily_rows
-                if any(marker in _material_text(row) for marker in _UNCERTAIN_DIAGNOSIS_MARKERS)
+                if has_current_uncertain_diagnosis(_material_text(row), _UNCERTAIN_DIAGNOSIS_MARKERS)
                 and admission_time is not None
                 and (row_time := _row_time(row)) is not None
                 and row_time >= admission_time + timedelta(days=7)
@@ -2276,13 +2349,25 @@ async def execute_luxian_0609_native_extended_document_rules(
             "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01",
         }:
             antimicrobial_orders = _antimicrobial_orders(drug_order_rows)
+            excluded_antimicrobial_evidence: tuple[Mapping[str, Any], ...] = ()
+            if rule_id in {"LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06"}:
+                antimicrobial_orders, excluded_antimicrobial_evidence = (
+                    _exclude_unperformed_antimicrobial_orders(
+                        antimicrobial_orders,
+                        (*senior_rows, *consultation_rows)
+                        if rule_id == "LX0609-05-01-06"
+                        else (*daily_rows, *senior_rows, *consultation_rows),
+                    )
+                )
             rule_antimicrobial_orders = (
                 _055_treatment_orders(antimicrobial_orders)
                 if rule_id == "LX0609-05-01-03"
                 else antimicrobial_orders
             )
             course_rows = (*daily_rows, *senior_rows)
-            selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = []
+            selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = list(
+                excluded_antimicrobial_evidence
+            )
             source_error = drug_order_error or (
                 "" if rule_id == "LX0609-05-01-06" else daily_error or senior_error
             )
@@ -3608,6 +3693,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                     event_facts: list[dict[str, Any]] = []
                     unmet_events: list[dict[str, Any]] = []
                     not_mature_events: list[dict[str, Any]] = []
+                    undated_senior_rows = tuple(
+                        row for row in senior_rows
+                        if _row_time(row) is None
+                        and _has_clinical_course_body(row)
+                    )
+                    unresolved_senior_time = False
+                    unresolved_senior_body = False
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
                         selected_postoperative_rows.append(event.row)
@@ -3617,13 +3709,20 @@ async def execute_luxian_0609_native_extended_document_rules(
                             if evaluation_time is not None
                             else evaluation_date > deadline.date()
                         )
-                        matched_senior_rows = tuple(
+                        dated_senior_rows = tuple(
                             row
                             for row in senior_rows
                             if (value := _row_time(row)) is not None
                             and event.surgery_end_time <= value <= deadline
                         )
-                        selected_postoperative_rows.extend(matched_senior_rows)
+                        # 只核正文存在，不评价临床充分性；日期和纯签名不能代替查房正文。
+                        matched_senior_rows = tuple(
+                            row for row in dated_senior_rows
+                            if _has_clinical_course_body(row)
+                        )
+                        selected_postoperative_rows.extend(
+                            matched_senior_rows or dated_senior_rows
+                        )
                         senior_round_times = [
                             value.isoformat(sep=" ")
                             for row in matched_senior_rows
@@ -3645,12 +3744,22 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 "document_id": event.document_id,
                                 "deadline": deadline.isoformat(sep=" "),
                             })
+                        elif not senior_round_times and undated_senior_rows:
+                            # 已有查房但无法定位日期，不能据此宣称72小时内缺少查房。
+                            unresolved_senior_time = True
+                            selected_postoperative_rows.extend(undated_senior_rows)
+                        elif not senior_round_times and dated_senior_rows:
+                            unresolved_senior_body = True
                         elif not senior_round_times:
                             unmet_events.append({
                                 "document_id": event.document_id,
                                 "senior_round_times": [],
                             })
-                    if unmet_events:
+                    if unresolved_senior_time:
+                        final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    elif unresolved_senior_body:
+                        final_state, reason_code = "data_gap", "required_field_missing"
+                    elif unmet_events:
                         final_state, reason_code = (
                             "non_compliant",
                             "required_document_missing",
@@ -3681,20 +3790,24 @@ async def execute_luxian_0609_native_extended_document_rules(
                         ),
                         "senior_round_times": senior_round_delivery_values,
                     }
-                    display.append((rule_id, {
-                        "verification_kind": "postoperative_senior_round_check",
-                        "threshold_hours": 72,
-                        "performed_surgery_count": len(surgery_events),
-                        "surgery_events": event_facts,
-                        "unmet_surgery_events": unmet_events,
-                        "not_mature_surgery_events": not_mature_events,
-                        **(
-                            {"evaluation_time": evaluation_time.isoformat(sep=" ")}
-                            if evaluation_time is not None
-                            else {"evaluation_date": evaluation_date.isoformat()}
-                        ),
-                        **legacy_summary_facts,
-                    }))
+                    if not unresolved_senior_body or unresolved_senior_time:
+                        display.append((rule_id, {
+                            "verification_kind": "postoperative_senior_round_window_unavailable",
+                            "issue": "authoritative_time_missing",
+                        } if unresolved_senior_time else {
+                            "verification_kind": "postoperative_senior_round_check",
+                            "threshold_hours": 72,
+                            "performed_surgery_count": len(surgery_events),
+                            "surgery_events": event_facts,
+                            "unmet_surgery_events": unmet_events,
+                            "not_mature_surgery_events": not_mature_events,
+                            **(
+                                {"evaluation_time": evaluation_time.isoformat(sep=" ")}
+                                if evaluation_time is not None
+                                else {"evaluation_date": evaluation_date.isoformat()}
+                            ),
+                            **legacy_summary_facts,
+                        }))
                 else:
                     event_facts = []
                     unmet_events = []

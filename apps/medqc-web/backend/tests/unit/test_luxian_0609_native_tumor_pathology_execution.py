@@ -216,7 +216,7 @@ def _material_session(
 ):
     rows_by_source = {
         "pathology_exam_master": (
-            {"specimen_name": "手术标本", "record_content": "病理送检申请资料。"},
+            {"pathology_exam_id": "PATH-1", "specimen_name": "手术标本", "record_content": "病理送检申请资料。", "request_datetime": "2026-04-26 08:00:00"},
         ),
         "pathology_exam_report": (
             pathology_report_rows
@@ -225,6 +225,7 @@ def _material_session(
             if truncated_master
             else (
                 {
+                    "pathology_exam_id": "PATH-1",
                     "diagnosis": "病理诊断资料。",
                     "report_datetime": "2026-04-26 10:00:00",
                 },
@@ -245,6 +246,13 @@ def _material_session(
             )
         ),
     }
+    # 本组保护同次事件的执行/语义合同；缺少归属与时间另由事件关联专项覆盖。
+    for source in ("surgery_record", "daily_course_record"):
+        rows_by_source[source] = tuple({
+            **row,
+            "record_time": row.get("record_time", "2026-04-26 11:00:00"),
+            "record_content": "病理号PATH-1。" + str(row.get("record_content", "")),
+        } for row in rows_by_source[source])
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -562,6 +570,10 @@ async def test_typed_019_optional_llm_matches_raw_state_calls_tokens_and_prompt(
     process = "术中未取材，暂不送病理检查。"
     session = _material_session(surgery_process=process)
     payload = _payload(surgery_record=[{"surgery_process": process}])
+    for source in ("pathology_exam_master", "pathology_exam_report", "surgery_record", "daily_course_record"):
+        payload["programmatic_timeline"]["documents"][source] = [
+            dict(row) for _, row in session.materials.document_rows(source, snapshot=session.snapshot)
+        ]
     monkeypatch.setattr(
         tumor,
         "read_luxian_0609_native_source_rows",
@@ -604,9 +616,10 @@ async def test_typed_019_optional_llm_matches_raw_state_calls_tokens_and_prompt(
 @pytest.mark.asyncio
 async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review():
     rows_by_source = {
-        "pathology_exam_master": ({"specimen_name": "手术标本"},),
+        "pathology_exam_master": ({"pathology_exam_id": "PATH-1", "specimen_name": "手术标本"},),
         "pathology_exam_report": (
             {
+                "pathology_exam_id": "PATH-1",
                 "specimen_name": "手术标本",
                 "diagnosis": "病理诊断资料。",
                 "report_datetime": "2026-04-26 10:00:00",
@@ -614,7 +627,7 @@ async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review()
         ),
         "surgery_record": (),
         "daily_course_record": (
-            {"record_content": "病程记录未说明取材情况。SAFE_PRIVATE_TARGET"},
+            {"record_content": "病理号PATH-1。病程记录未说明取材情况。SAFE_PRIVATE_TARGET", "record_time": "2026-04-26 11:00:00"},
         ),
     }
 
@@ -684,15 +697,16 @@ async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review()
 @pytest.mark.asyncio
 async def test_typed_019_strong_surgery_sampling_overrides_complete_empty_daily():
     rows_by_source = {
-        "pathology_exam_master": ({"specimen_name": "手术标本"},),
+        "pathology_exam_master": ({"pathology_exam_id": "PATH-1", "specimen_name": "手术标本"},),
         "pathology_exam_report": (
             {
+                "pathology_exam_id": "PATH-1",
                 "specimen_name": "手术标本",
                 "diagnosis": "病理诊断资料。",
                 "report_datetime": "2026-04-26 10:00:00",
             },
         ),
-        "surgery_record": ({"surgery_process": "术中切取标本并送病理检查。"},),
+        "surgery_record": ({"surgery_process": "病理号PATH-1。术中切取标本并送病理检查。", "record_time": "2026-04-26 11:00:00"},),
         "daily_course_record": (),
     }
 
@@ -839,13 +853,14 @@ async def test_typed_019_preserves_pathology_source_four_states(
                 if mode == "empty"
                 else [
                     {
+                        "pathology_exam_id": "PATH-1",
                         "diagnosis": "病理诊断资料。",
                         "report_datetime": "2026-04-26 10:00:00",
                     }
                 ]
             )
         elif source_key == "surgery_record":
-            rows = [{"surgery_process": "术中切取标本并送病理检查。"}]
+            rows = [{"surgery_process": "病理号PATH-1。术中切取标本并送病理检查。", "record_time": "2026-04-26 11:00:00"}]
         elif source_key == "daily_course_record":
             rows = [{"record_content": "病程已记录病理送检。"}]
         else:
@@ -1196,15 +1211,16 @@ def _typed_013_027_session(
         ),
         "pathology_exam_report": (
             {
+                "pathology_exam_id": "PATH-1",
                 "diagnosis": "病理诊断资料。",
                 "report_datetime": "2026-04-26 10:00:00",
             },
         ),
         "surgery_record": (
-            {"surgery_process": "术中切取病灶标本并送病理检查。"},
+            {"surgery_process": "术中切取病灶标本并送病理检查。", "record_content": "病理号PATH-1。", "record_time": "2026-04-26 11:00:00"},
         ),
         "daily_course_record": (
-            {"record_content": "病程记录中已记录病理结果与处理计划。"},
+            {"record_content": "病理号PATH-1。病程记录中已记录病理结果与处理计划。", "record_time": "2026-04-26 11:00:00"},
         ),
         "diagnosis": ({"diagnosis_code": diagnosis_code},),
         "discharge_record": ({"treatment_course": discharge_text},),

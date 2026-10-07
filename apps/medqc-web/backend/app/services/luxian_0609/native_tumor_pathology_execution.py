@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -319,6 +320,9 @@ def _typed_decision_from_outcome(
             "target_report_missing"
             if outcome.rule_id == PATHOLOGY_REPORT_COMPLETENESS_RULE_ID
             and outcome.reason_code == "target_report_missing"
+            else "association_failed"
+            if outcome.rule_id in {"LX0609-06-02-02", "LX0609-06-02-03"}
+            and outcome.reason_code == "pathology_event_association_unresolved"
             else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
@@ -766,6 +770,129 @@ def _has_documented_pathology_result(
     ) is not None
 
 
+def _pathology_link_time(value: Any) -> datetime | None:
+    """仅解析事件/记录时间；提交时间不能补出临床记录的发生时间。"""
+    try:
+        parsed = datetime.fromisoformat(_clean(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # CDM 同时存在无时区院内时间与带时区时间，统一为院内东八区时间。
+    if parsed.tzinfo is not None:
+        from datetime import timedelta, timezone
+
+        parsed = parsed.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None)
+    return parsed
+
+
+def _pathology_documentation_links(
+    *,
+    rule_id: str,
+    master: SourceMaterial,
+    report: SourceMaterial,
+    targets: Mapping[str, SourceMaterial],
+) -> tuple[str, tuple[tuple[str, Mapping[str, Any]], ...]]:
+    """逐报告核对同次记录；只提供已证实关联，未知不变成临床缺项。
+
+    无文书业务键时，唯一标本（结果项还核对诊断）及记录时间共同提供
+    关联。重复标本/诊断无法区分事件时保留缺口，不让一份文书覆盖多次检查。
+    """
+    key_fields = ("pathology_exam_id", "pathology_id")
+    sampling = rule_id == "LX0609-06-02-02"
+    events: list[tuple[Mapping[str, Any], str, datetime | None]] = []
+    used_masters: set[int] = set()
+    for event in report.rows:
+        linked_masters = [
+            row for row in master.rows
+            if any(_clean(event.get(key)) and _clean(event.get(key)) == _clean(row.get(key)) for key in key_fields)
+        ]
+        if len(linked_masters) > 1 or any(
+            _clean(event.get(key)) and _clean(row.get(key))
+            and _clean(event.get(key)) != _clean(row.get(key))
+            for row in linked_masters for key in key_fields
+        ):
+            return "unresolved", ()
+        if not linked_masters and len(master.rows) == len(report.rows) == 1:
+            candidate = master.rows[0]
+            if not any(_clean(event.get(key)) and _clean(candidate.get(key)) for key in key_fields):
+                linked_masters = [candidate]
+        specimens = {_clean(row.get("specimen_name")) for row in (event, *linked_masters) if _clean(row.get("specimen_name"))}
+        if len(specimens) > 1:
+            return "unresolved", ()
+        specimen = next(iter(specimens), "")
+        if specimen in {"标本", "手术标本", "切除标本", "组织", "病灶标本"}:
+            specimen = ""
+        for row in linked_masters:
+            used_masters.add(id(row))
+        request_time = _pathology_link_time(linked_masters[0].get("request_datetime")) if linked_masters else None
+        events.append((event, specimen, request_time))
+    if sampling and any(id(row) not in used_masters for row in master.rows):
+        return "unresolved", ()
+    selected: list[tuple[str, Mapping[str, Any]]] = []
+    all_documented = True
+    for event, specimen, request_time in events:
+        report_time = _pathology_link_time(event.get("report_datetime") or event.get("report_time"))
+        diagnosis = _clean(event.get("diagnosis"))
+        # 无唯一标本时，只有唯一且明确的最终诊断能够关联结果记录。
+        signature = specimen if sampling else (specimen, diagnosis)
+        unique_signature = sum(
+            (other_specimen if sampling else (other_specimen, _clean(other.get("diagnosis")))) == signature
+            for other, other_specimen, _ in events
+        ) == 1
+        candidates: list[tuple[str, Mapping[str, Any]]] = []
+        documented: list[tuple[str, Mapping[str, Any]]] = []
+        for source, material in targets.items():
+            for row in material.rows:
+                text = _clean(f"{_row_text(row)} {_clean(row.get('surgery_process'))}")
+                record_time = _pathology_link_time(
+                    (row.get("surgery_begin_time") if sampling else None)
+                    or row.get("record_time") or row.get("record_datetime")
+                )
+                same_key = any(
+                    value and (
+                        value == _clean(row.get(key))
+                        or re.search(r"(?:病理号|病理编号|病理检查号)\s*[:：]?\s*" + re.escape(value) + r"(?![\w|-])", text)
+                    )
+                    for key in key_fields if (value := _clean(event.get(key)))
+                )
+                conflicting_key = any(_clean(event.get(key)) and _clean(row.get(key)) and _clean(event.get(key)) != _clean(row.get(key)) for key in key_fields)
+                if conflicting_key or record_time is None:
+                    continue
+                if sampling:
+                    related = bool(specimen and specimen in text and unique_signature)
+                    if (request_time is None and not same_key) or (request_time is not None and record_time.date() < request_time.date()):
+                        continue
+                else:
+                    related = bool(diagnosis and diagnosis in text and unique_signature and (not specimen or specimen in text))
+                    if report_time is None or record_time < report_time:
+                        continue
+                if not (same_key or related):
+                    continue
+                # 标本名和取材/结果事实必须处于同一句；整篇中的其他检查不能借用。
+                related_text = text if same_key else "。".join(
+                    clause for clause in re.split(r"[。；;！？\r\n]+", text)
+                    if (not specimen or specimen in clause)
+                    and (sampling or diagnosis.rstrip("。") in clause)
+                )
+                single = SourceMaterial("present", ({"record_content": related_text},))
+                matched = (
+                    _documented_pathology_sampling_row(single)
+                    if sampling else _documented_pathology_result_row(SourceMaterial("present", (event,)), single)
+                )
+                if matched is None and not same_key:
+                    continue
+                candidates.append((source, row))
+                if matched is not None:
+                    documented.append((source, row))
+        if not candidates:
+            return "unresolved", ()
+        if not documented:
+            all_documented = False
+        selected.extend(documented[:1] if documented else candidates)
+    if not events or (not all_documented and len(events) > 1):
+        return "unresolved", ()
+    return ("documented" if all_documented else "linked"), tuple(selected)
+
+
 def _documented_pathology_result_row(
     pathology_report: SourceMaterial,
     *target_materials: SourceMaterial,
@@ -1210,6 +1337,32 @@ def _course_event_candidates(
     return tuple(candidates)
 
 
+def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
+    """只比较完整数值和原单位，保留正负号、小数点及单位分母。"""
+
+    compact_expected = re.sub(r"\s+", "", expected).lower()
+    parsed = re.fullmatch(r"([+-]?(?:\d+(?:\.\d*)?|\.\d+))(.+)?", compact_expected)
+    if parsed is None:
+        return False
+    try:
+        expected_value = Decimal(parsed.group(1))
+    except InvalidOperation:
+        return False
+    unit = parsed.group(2) or ""
+    # 单位后不能继续接字母、数字或分母；mg 不等于 mcg 或 mg/m²。
+    dose_pattern = re.compile(
+        r"(?<![\d.+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+))"
+        + re.escape(unit)
+        + r"(?![a-z0-9/／⁄∕²³^·⋅∙])",
+        re.IGNORECASE,
+    )
+    compact_observed = re.sub(r"\s+", "", observed)
+    return any(
+        Decimal(match.group(1)) == expected_value
+        for match in dose_pattern.finditer(compact_observed)
+    )
+
+
 def _typed_chemotherapy_comparison(
     *,
     orders: SourceMaterial,
@@ -1320,10 +1473,12 @@ def _typed_chemotherapy_comparison(
                 continue
             claimed_clause_indexes.add(candidate_index)
             selected_course_rows.append(candidate)
-            comparison_text = _normalized_comparison_text(_row_text(candidate))
-            for field in ("dose", "route"):
-                if _normalized_comparison_text(event[field]) not in comparison_text:
-                    field_results[field] = "mismatched"
+            candidate_text = _row_text(candidate)
+            comparison_text = _normalized_comparison_text(candidate_text)
+            if not _chemotherapy_dose_matches(event["dose"], candidate_text):
+                field_results["dose"] = "mismatched"
+            if _normalized_comparison_text(event["route"]) not in comparison_text:
+                field_results["route"] = "mismatched"
             time_state = _chemotherapy_time_state(
                 prescribed=event["prescribed"],
                 drug_name=event["drug_name"],
@@ -1380,6 +1535,26 @@ def _typed_chemotherapy_comparison(
     )
 
 
+def _is_future_discharge_treatment_clause(clause: str) -> bool:
+    """历史语境中的继续/建议不证明未来计划，明确出院后语境可重新起算。"""
+
+    if not _DISCHARGE_PLAN_FUTURE_PATTERN.search(clause):
+        return False
+    history_pattern = re.compile(
+        r"既往|此前|曾经|曾予|曾行|入院后|住院期间|住院中|住院后|本次住院|已完成|已结束"
+    )
+    future_scope_pattern = re.compile(r"出院后|离院后|后续|下次")
+    for treatment in _DISCHARGE_PLAN_TREATMENT_PATTERN.finditer(clause):
+        prefix = clause[: treatment.start()]
+        history_positions = [item.start() for item in history_pattern.finditer(prefix)]
+        future_positions = [item.start() for item in future_scope_pattern.finditer(prefix)]
+        if not history_positions or (
+            future_positions and future_positions[-1] > history_positions[-1]
+        ):
+            return True
+    return False
+
+
 def _typed_discharge_plan_outcome(
     material: SourceMaterial,
 ) -> tuple[str, str, Mapping[str, Any]]:
@@ -1393,8 +1568,7 @@ def _typed_discharge_plan_outcome(
     treatment_plan_clauses = tuple(
         item
         for item in clauses
-        if _DISCHARGE_PLAN_FUTURE_PATTERN.search(item)
-        and _DISCHARGE_PLAN_TREATMENT_PATTERN.search(item)
+        if _is_future_discharge_treatment_clause(item)
         and not _DISCHARGE_PLAN_NEGATIVE_TREATMENT_PATTERN.search(item)
         and not _DISCHARGE_PLAN_PENDING_TREATMENT_PATTERN.search(item)
     )
@@ -2074,6 +2248,52 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 executor_type="program",
             )
             continue
+        if typed_rule and rule_id in {"LX0609-06-02-02", "LX0609-06-02-03"}:
+            target_materials = {key: materials[key] for key in required_sources}
+            linkage, linked_rows = _pathology_documentation_links(
+                rule_id=rule_id, master=master, report=report, targets=target_materials,
+            )
+            if linkage == "unresolved":
+                emit_outcome(
+                    rule_id, "data_gap", "pathology_event_association_unresolved",
+                    executor_type="program",
+                    fact_refs=typed_context_document_refs(context_sources, materials),
+                )
+                continue
+            linked_materials = {
+                source: SourceMaterial(
+                    material.state, tuple(row for key, row in linked_rows if key == source),
+                )
+                for source, material in target_materials.items()
+            }
+            if linkage == "documented":
+                display_facts = (
+                    _pathology_sampling_display_facts(
+                        pathology_master=master, pathology_report=report,
+                        surgery_record=linked_materials["surgery_record"],
+                        daily_course_record=linked_materials["daily_course_record"],
+                        senior_course_record=linked_materials["senior_course_record"],
+                    )
+                    if rule_id == "LX0609-06-02-02"
+                    else _pathology_result_display_facts(
+                        status="compliant", pathology_master=master, pathology_report=report,
+                        surgery_record=materials["surgery_record"],
+                        daily_course_record=materials["daily_course_record"],
+                    )
+                )
+                emit_outcome(
+                    rule_id, "compliant",
+                    "pathology_sampling_recorded" if rule_id == "LX0609-06-02-02" else "pathology_result_documented",
+                    executor_type="program", display_facts=display_facts,
+                    fact_refs=typed_document_refs(
+                        *(("pathology_exam_master", master.rows),) if rule_id == "LX0609-06-02-02" else (),
+                        ("pathology_exam_report", report.rows),
+                        *((source, (row,)) for source, row in linked_rows),
+                    ),
+                )
+                continue
+            # 单事件语义兜底只能看已经关联的目标文书，不能再借用其他事件的正文。
+            materials.update(linked_materials)
         if rule_id == "LX0609-08-01-04" and typed_rule:
             status, reason_code, display_facts = _typed_discharge_plan_outcome(
                 materials["discharge_record"]
