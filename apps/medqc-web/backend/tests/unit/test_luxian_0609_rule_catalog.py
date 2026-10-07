@@ -97,6 +97,7 @@ def test_luxian_0609_catalog_contains_migrated_rules_and_released_extensions():
         "LX0609-06-02-01",
         "LX0609-06-03-02",
         "LX0609-09-01-02",
+        "LX0609-08-01-05",
     }
     expected_rule_ids = migrated_rule_ids | released_extension_rule_ids
 

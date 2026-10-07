@@ -363,13 +363,6 @@ _NATIVE_SOURCE_FIELDS = {
         "report_status",
         "record_content",
     ),
-    "diagnosis": (
-        "diagnosis_code",
-        "diagnosis_name",
-        "diagnosis_type",
-        "diagnosis_source",
-        "diagnosis_datetime",
-    ),
     "inpat_drug_order": (
         "order_id",
         "drug_code",
@@ -391,17 +384,6 @@ _NATIVE_SOURCE_FIELDS = {
         "update_time",
         "order_status",
         "last_modified_datetime",
-        "record_content",
-    ),
-    "inpat_nondrug_order": (
-        "order_id",
-        "order_name",
-        "order_status",
-        "order_type",
-        "start_time",
-        "order_time",
-        "prescribed_datetime",
-        "update_time",
         "record_content",
     ),
     CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (

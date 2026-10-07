@@ -1,4 +1,4 @@
-"""出院诊疗经过：真实执行/发布/SQLite保存/三个业务入口回读。"""
+"""出院诊疗经过：真实执行/发布/SQLite保存/显式样本入口回读及正式入口拒绝。"""
 import json
 from io import BytesIO
 
@@ -19,7 +19,7 @@ _isolated_database = chain._isolated_database
     (None, None, None), ("treatment", None, None), (None, "present", None),
     (None, "missing", None), (None, "uncertain", None), ("treatment", "present", "B"),
 ])
-def test_discharge_course_three_entry_storage_and_read(monkeypatch, _isolated_database, missing, event_state, failed):
+def test_discharge_course_acceptance_only_storage_and_read(monkeypatch, _isolated_database, missing, event_state, failed):
     engine, workspace = _isolated_database
     pools = chain._install_sample_pool_sqlite(monkeypatch, engine)
     original = chain.luxian_execution.build_luxian_0609_evidence_read_session
@@ -88,7 +88,23 @@ def test_discharge_course_three_entry_storage_and_read(monkeypatch, _isolated_da
                 assert text in exported[1].text and text in workbook_text
         checked.append(job_id)
 
-    chain._entry_job_ids(app=app, workspace=workspace, pool_id=pool_id, sample_item_id=sample_id,
-                         workspace_rule_ids=[RULE_ID], on_terminal=verify)
-    assert len(checked) == 3
-    assert len(calls) == 4 * (3 if event_state and failed != "B" else 2)
+    # 实验规则只允许显式样本验证；不能为恢复三入口测试而绕过发布范围。
+    with TestClient(app) as client:
+        for records in ([chain._RECORD_A], [chain._RECORD_A, chain._RECORD_B]):
+            rejected = client.post("/api/v1/qc/sichuan/workspace/batch-jobs", json={
+                "rule_set_key": chain.LUXIAN_0609_RULE_SET_KEY, "rule_ids": [RULE_ID],
+                "scope": "final", "record_refs": records, "run_mode": "serial",
+            })
+            assert rejected.status_code == 422, rejected.text
+            assert calls == []
+        response = client.post(f"/api/v1/qc/sample-pools/{pool_id}/run", json={
+            "validation_mode": "customer", "rule_set_key": chain.LUXIAN_0609_RULE_SET_KEY,
+            "selected_rule_ids": [RULE_ID], "sample_item_ids": [sample_id],
+            "record_refs": [chain._RECORD_A], "group_by_luxian_family": False,
+        })
+        assert response.status_code == 200, response.text
+    job_id = str(response.json()["data"]["job_id"])
+    job = chain._wait_for_terminal_job(workspace, job_id)
+    verify(job_id, job, (RULE_ID,))
+    assert len(checked) == 1
+    assert len(calls) == (3 if event_state and failed != "B" else 2)
