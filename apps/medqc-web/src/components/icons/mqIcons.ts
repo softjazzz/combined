@@ -22,6 +22,26 @@ const SHIELD = 'M12 3.2 5 6v5.6c0 4.4 3 7.6 7 9.2 4-1.6 7-4.8 7-9.2V6z'
 const CIRCLE = 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17z'
 
 export const MQ_ICONS = {
+  back: [{ kind: 'stroke', d: 'M19 12H5m6-6-6 6 6 6' }],
+  search: [
+    { kind: 'body', d: 'M10.5 3.5a7 7 0 1 1 0 14 7 7 0 0 1 0-14z' },
+    { kind: 'stroke', d: 'm16 16 5 5' },
+  ],
+  copy: [
+    { kind: 'body', d: 'M8 8h12v12H8z' },
+    { kind: 'stroke', d: 'M4 16V4h12' },
+  ],
+  history: [
+    { kind: 'body', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17z' },
+    { kind: 'stroke', d: 'M12 7v5l3 2' },
+  ],
+  close: [{ kind: 'stroke', d: 'm6 6 12 12M18 6 6 18' }],
+  add: [{ kind: 'stroke', d: 'M12 5v14M5 12h14' }],
+  remove: [
+    { kind: 'body', d: 'M6 7h12l-1 13H7z' },
+    { kind: 'stroke', d: 'M4 7h16M9 7V4h6v3M10 10v7M14 10v7' },
+  ],
+
   overview: [
     { kind: 'body', d: 'M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z' },
     { kind: 'stroke', d: 'M10 20.5v-5h4v5' },
@@ -106,7 +126,10 @@ export const MQ_ICONS = {
       kind: 'body',
       d: 'M4.5 6c0-1.7 3.4-3 7.5-3s7.5 1.3 7.5 3v12c0 1.7-3.4 3-7.5 3s-7.5-1.3-7.5-3z',
     },
-    { kind: 'line', d: 'M4.5 6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3' },
+    {
+      kind: 'line',
+      d: 'M4.5 6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3',
+    },
   ],
   settings: [
     {

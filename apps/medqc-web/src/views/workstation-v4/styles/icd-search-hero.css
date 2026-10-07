@@ -1,0 +1,178 @@
+/* v7.1：页面布局保留，视觉值引用公共 Token。 */
+/* v7.1：页头不再是白色横带，眉标灰色、标题 40px */
+.icd-search-hero {
+  border-bottom: 0;
+  background: transparent;
+}
+
+.icd-hero-eyebrow {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.icd-search-hero h1 {
+  color: var(--mq-text-primary) !important;
+  font-family: var(--mq-font-family);
+  font-size: var(--mq-font-title) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.1 !important;
+}
+
+.icd-search-hero p {
+  color: var(--mq-text-secondary) !important;
+}
+
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--mq-radius-tag);
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, transparent);
+  background: color-mix(in srgb, var(--mq-brand-600) 7%, transparent);
+  padding: 7px 11px;
+  color: var(--mq-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 var(--mq-glass-bg);
+}
+
+.metric-pill strong {
+  color: var(--mq-brand-600);
+  font-weight: 700;
+}
+
+.metric-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-brand-600);
+}
+
+.metric-dot-light {
+  background: color-mix(in srgb, var(--mq-brand-600) 45%, transparent);
+}
+
+.search-shell {
+  position: relative;
+  flex: 1 1 320px;
+  min-width: 280px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  color: var(--mq-text-tertiary);
+  transform: translateY(-50%);
+}
+
+.search-input {
+  width: 100%;
+  height: 42px;
+  border-radius: var(--mq-radius-control);
+  border: 1px solid var(--mq-border-strong);
+  background: var(--mq-glass-bg-strong);
+  padding: 0 98px 0 46px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mq-text-primary);
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 var(--mq-glass-bg-strong),
+    0 1px 1px var(--mq-border);
+  transition: all 0.18s ease;
+}
+
+.search-input:focus {
+  border-color: color-mix(in srgb, var(--mq-brand-600) 42%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--mq-brand-600) 8%, transparent),
+    inset 0 1px 0 var(--mq-glass-bg-strong);
+}
+
+.search-hint {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transform: translateY(-50%);
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-hint kbd {
+  border-radius: var(--mq-radius-control);
+  border: 1px solid var(--mq-border-strong);
+  background: color-mix(in srgb, var(--mq-bg-subtle) 92%, transparent);
+  padding: 3px 7px;
+  font-family: var(--mq-font-family);
+  font-size: 11px;
+}
+
+.seg-shell {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--mq-radius-control);
+  border: 1px solid var(--mq-border);
+  background: color-mix(in srgb, var(--mq-bg-subtle) 86%, transparent);
+  box-shadow: inset 0 1px 0 var(--mq-glass-bg);
+}
+
+.seg-btn {
+  border: 0;
+  border-radius: var(--mq-radius-control);
+  padding: 8px 13px;
+  color: var(--mq-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+
+.seg-btn:hover {
+  color: var(--mq-text-primary);
+}
+
+.seg-btn-active {
+  background: var(--mq-glass-bg-strong);
+  color: var(--mq-brand-600);
+  box-shadow:
+    inset 0 1px 0 var(--mq-glass-bg-strong),
+    0 2px 7px color-mix(in srgb, var(--mq-brand-600) 8%, transparent);
+}
+
+.help-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--mq-radius-control);
+  border: 1px solid var(--mq-border);
+  background: color-mix(in srgb, var(--mq-bg-subtle) 86%, transparent);
+  padding: 8px 11px;
+  color: var(--mq-text-secondary);
+  font-size: 12px;
+  box-shadow: inset 0 1px 0 var(--mq-glass-bg);
+}
+
+.help-pill__label {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .search-shell {
+    flex-basis: 100%;
+  }
+}
+
+.icd-hero .mq-page-eyebrow {
+  color: var(--mq-text-tertiary);
+}

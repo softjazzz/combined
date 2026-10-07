@@ -11,6 +11,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
+from .admission_content_items import ITEM_LABELS, ground_items, item_instruction, item_retry_prompt
 from .surgical_document_completeness import (
     ground_document_fact,
     instruction_for,
@@ -602,7 +603,9 @@ def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) 
         "008 仅适用于儿童，检查喂养史或生长发育史；009 检查重要体征。"
         "complete/incomplete 仅表示对应内容事实完整或不完整；not_applicable 必须有明确不适用事实；否则用 unknown。"
         "严格只返回一个 JSON 对象，顶层必须且只能有 semantic_facts、event_facts、document_facts、discharge_facts 四个键。"
-        "semantic_facts：仅可含 LX0916-001 至 LX0916-009（每项必须有 state、document_id、source_type；state 为 complete/incomplete/not_applicable/unknown），"
+        "semantic_facts：入院事实仅可含 LX0916-001 至 LX0916-009；"
+        "其中001、002、003、004、007、008、009每项只能有state、document_id、source_type，三个字段均必填，不增加quote或其他字段；state为complete/incomplete/not_applicable/unknown。"
+        "005和006只返回document_id、source_type、items，逐项合同见下方，不返回state。"
         "以及 case_characteristic_present、diagnosis_basis_present、differential_diagnosis_present、treatment_plan_present（布尔值），"
         "和 case_characteristic_quality、diagnosis_basis_quality、differential_diagnosis_quality、treatment_plan_quality（值为 adequate/inadequate）。"
         "event_facts：布尔键仅可为 surgery_arranged、surgery_performed、anesthesia_arranged、anesthesia_performed、anesthesia_record_formed、emergency_surgery、unplanned_reoperation、special_treatment、critical_or_serious_condition。"
@@ -616,8 +619,11 @@ def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) 
         + instruction_for(rule_ids)
         + "每个 document_id/source_type 必须精确引用下方给出的同一份文书。若文书 truncated=true，只能确认 presence=present，不能输出 completeness。"
         "discharge_facts 仅可有 discharge_arranged、discharge_record_formed，且均为布尔值。"
-        "所有无法由给定文书确认的键必须省略。只返回 JSON，不要 Markdown 或额外字段。"
-        f"待服务规则：{json.dumps(list(rule_ids), ensure_ascii=False, separators=(',', ':'))}\n"
+        "容器内部无法由给定文书确认的事实键必须省略；四个顶层容器不得省略，没有相应事实时填{}。只返回JSON，不要Markdown或额外字段。"
+        + item_instruction(rule_ids)
+        + '输出结构固定为{"semantic_facts":{...},"event_facts":{},"document_facts":{},"discharge_facts":{}}；'
+        "这里的...用实际事实替换，后三个容器有事实则填入，否则仍保留{}。"
+        + f"待服务规则：{json.dumps(list(rule_ids), ensure_ascii=False, separators=(',', ':'))}\n"
         "待提取文书：\n"
         + json.dumps(list(documents), ensure_ascii=False, separators=(",", ":"))
     )
@@ -794,9 +800,15 @@ def _normalize_known_model_deviations(
     return normalized_events, normalized_documents, normalized_discharge
 
 
-def _validate_facts(content: str, *, rule_ids: Sequence[str]) -> dict[str, Any]:
+def _validate_facts(
+    content: str, *, rule_ids: Sequence[str], admission_only_input: bool = False,
+) -> dict[str, Any]:
     payload = json.loads(content, object_pairs_hook=_unique_object)
     required = {"semantic_facts", "event_facts", "document_facts", "discharge_facts"}
+    if admission_only_input and isinstance(payload, Mapping) and "semantic_facts" in payload and set(payload).issubset(required):
+        # 受控输入只有入院记录时，省略的辅助容器表示没有抽取事实，不表示文书不存在。
+        # 不修补已有容器的错误类型、事实内容或引用，也不容忍额外顶层字段。
+        payload = {**{key: {} for key in required - {"semantic_facts"}}, **payload}
     if not isinstance(payload, Mapping) or set(payload) != required:
         raise ValueError("invalid top-level facts")
     semantic = payload["semantic_facts"]
@@ -820,7 +832,10 @@ def _validate_facts(content: str, *, rule_ids: Sequence[str]) -> dict[str, Any]:
     if not set(semantic).issubset(allowed_semantic):
         raise ValueError("unknown semantic fact")
     for key, value in semantic.items():
-        if key in _ADMISSION_RULE_IDS:
+        if key in ITEM_LABELS:
+            # 专项畸形事实在来源校验时隔离，不能使其他规则共享抽取全部失败。
+            continue
+        elif key in _ADMISSION_RULE_IDS:
             _validate_admission_semantic_fact(value)
         elif key in _FIRST_COURSE_PRESENCE_KEYS:
             if type(value) is not bool:
@@ -948,6 +963,12 @@ def _gate_facts_to_selected_documents(
             index, source_type=source_type, document_id=document_id
         ):
             semantic.pop(rule_id, None)
+        elif rule_id in ITEM_LABELS:
+            items = ground_items(rule_id, fact, index[(source_type, document_id)])
+            if items is None:
+                semantic.pop(rule_id, None)
+            else:
+                semantic[rule_id] = {**fact, "items": items}
 
     # 首程摘要事实为标量合同，选择器对此来源最多保留一份文书；只有该文书完整
     # 且 ID 在本次输入中可验证时才继续向规则执行器暴露。
@@ -1128,8 +1149,9 @@ async def extract_luxian_0916_facts(
     llm_call_count = 1
     contract_retry_applied = False
     contract_retry_detail: str | None = None
+    admission_only_input = all(document.get("source_type") == "admission_record" for document in documents)
     try:
-        validated = _validate_facts(content, rule_ids=rule_ids)
+        validated = _validate_facts(content, rule_ids=rule_ids, admission_only_input=admission_only_input)
     except json.JSONDecodeError:
         return failed_facts(
             code="semantic_extraction_invalid",
@@ -1194,7 +1216,7 @@ async def extract_luxian_0916_facts(
                 contract_retry_detail=failure_detail,
             )
         try:
-            validated = _validate_facts(repaired_content, rule_ids=rule_ids)
+            validated = _validate_facts(repaired_content, rule_ids=rule_ids, admission_only_input=admission_only_input)
         except json.JSONDecodeError:
             return failed_facts(
                 code="semantic_extraction_invalid",
@@ -1240,6 +1262,41 @@ async def extract_luxian_0916_facts(
             failure_stage="grounding_validation",
             contract_retry_detail=contract_retry_detail,
         )
+    # 005/006的引用合同失败也使用同一个两次调用预算；只修复被拒绝的事实，
+    # 不用第二次抽取替换其他规则已通过校验的事实，也不把失败改成医生缺写。
+    rejected_item_ids = tuple(
+        rule_id for rule_id in rule_ids
+        if rule_id in ITEM_LABELS
+        and rule_id in _mapping(validated.get("semantic_facts"))
+        and rule_id not in _mapping(facts.get("semantic_facts"))
+    )
+    admission_documents = [document for document in documents
+                           if document.get("source_type") == "admission_record"
+                           and document.get("truncated") is not True]
+    grounding_retry_applied = bool(rejected_item_ids and llm_call_count == 1 and len(admission_documents) == 1)
+    if grounding_retry_applied:
+        llm_call_count = 2
+        try:
+            source_response = await generate(
+                item_retry_prompt(admission_documents[0], rejected_item_ids),
+                max_completion_tokens=_MAX_COMPLETION_TOKENS,
+                allow_length_retry=False,
+                response_format={"type": "json_object"},
+            )
+            source_choice = source_response["choices"][0]
+            if source_choice.get("finish_reason") != "length":
+                source_validated = _validate_facts(
+                    source_choice["message"]["content"], rule_ids=rejected_item_ids,
+                    admission_only_input=True,
+                )
+                # 重试不得带回其他规则；原有效事实保持逐字节不变。
+                source_semantic = _mapping(source_validated.get("semantic_facts"))
+                if set(source_semantic).issubset(rejected_item_ids):
+                    repaired = _gate_facts_to_selected_documents(source_validated, documents=admission_documents)
+                    facts["semantic_facts"].update(_mapping(repaired.get("semantic_facts")))
+        except Exception:
+            # 保留初次合法事实；失败的目标项仍为空，由执行器交付资料不足。
+            pass
     diagnostic: dict[str, Any] = {
         "code": "semantic_extraction_ready",
         "document_count": len(documents),
@@ -1248,6 +1305,9 @@ async def extract_luxian_0916_facts(
     if contract_retry_applied:
         diagnostic["contract_retry_applied"] = True
         diagnostic["contract_retry_detail"] = contract_retry_detail
+    if grounding_retry_applied:
+        diagnostic["grounding_retry_applied"] = True
+        diagnostic["grounding_retry_rule_ids"] = list(rejected_item_ids)
     return {
         **facts,
         "event_source_state_by_rule": event_source_state_by_rule,

@@ -215,7 +215,7 @@ async def test_both_rules_share_one_call_and_missing_is_per_document():
         key: next(word for word in discussion_text.split("。") if word)
         for key in incomplete_discussion
     }
-    incomplete_discussion["recorder_signature"] = None
+    incomplete_discussion["recorder_signature"] = {"state": "missing", "quote": None, "reviewed_all_sections": True}
     client = _Client(
         _payload(
             {
@@ -804,6 +804,30 @@ RULE_FIELDS_078_EXCEPT_VISIT = (
 
 
 @pytest.mark.asyncio
+async def test_unlinked_preop_documents_cannot_complete_each_other():
+    """尚无实际手术记录时，两份小结不能仅因同住院而相互补缺。"""
+    rows, documents = [], []
+    for index, (procedure, missing) in enumerate((
+        ("清创术", ("precautions",)),
+        ("植皮术", ("planned_anesthesia",)),
+    )):
+        text = f"术前小结：拟行{procedure}，已记录诊断、病情、麻醉及术者查看情况。"
+        doc_id = f"unlinked-{index}"
+        rows.append({"document_id": doc_id, "record_content": text})
+        documents.append({"document_id": doc_id, "source_type": "presurg_summary",
+                          "items": _summary_items(text=text, procedure=procedure, missing=missing)})
+    session = _session(summary=tuple(rows))
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",), snapshot=session.snapshot,
+        materials=session.materials, llm_client=_Client(_payload(*documents)),
+    )
+    assert result.decisions[0].qc_direction.value == "defect"
+    assert set(dict(result.customer_display_facts)["LX0609-04-01-04"]["missing_fields"]) == {
+        "precautions", "planned_anesthesia",
+    }
+
+
+@pytest.mark.asyncio
 async def test_document_that_names_two_surgeries_is_ambiguous():
     first_name, second_name = "腹腔镜胆囊切除术", "腹腔镜阑尾切除术"
     combined = f"{first_name}+{second_name}"
@@ -1015,7 +1039,7 @@ async def test_discussion_structured_fields_are_not_treated_as_blank_document():
         "discussion_date",
         "recorder_signature",
     )
-    items = {field: None for field in fields}
+    items = {field: {"state": "missing", "quote": None, "reviewed_all_sections": True} for field in fields}
     items.update(
         {
             "participants_with_titles": "参加讨论者：李医生 主治医师",
@@ -1187,7 +1211,7 @@ async def test_missing_submitter_and_body_signature_is_non_compliant():
             {
                 "document_id": "discussion-structured",
                 "source_type": "presurg_discussion",
-                "items": _complete_discussion_items(None),
+                "items": _complete_discussion_items({"state": "missing", "quote": None, "reviewed_all_sections": True}),
             }
         )
     )
@@ -1268,3 +1292,44 @@ async def test_json_v2_schema_still_whitelists_only_discussion_suggestion():
     )
     assert "讨论建议：术后观察。" in client.prompts[0][0]
     assert "不得进入提示词" not in client.prompts[0][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state,reviewed,direction", [
+    (None, False, "unknown"),
+    ("unknown", True, "unknown"),
+    ("missing", False, "unknown"),
+    ("missing", True, "defect"),
+])
+async def test_discussion_unextracted_is_not_confirmed_missing(state, reviewed, direction):
+    row = _structured_discussion(submitter="")
+    value = None if state is None else {"state": state, "quote": None, "reviewed_all_sections": reviewed}
+    client = _Client(_payload({"document_id": row["document_id"], "source_type": "presurg_discussion",
+                               "items": _complete_discussion_items(value)}))
+    session = _session(discussion=(row,))
+    result = await evaluate_preop_content_rules(rule_ids=("LX0609-04-01-05",),
+        snapshot=session.snapshot, materials=session.materials, llm_client=client)
+    assert result.decisions[0].qc_direction.value == direction
+    assert result.llm_call_count == 1
+
+
+def test_discussion_present_quote_must_be_in_source():
+    from app.services.luxian_0609.native_preop_content_execution import _validated_items, RULE_FIELDS
+    items = {field: {"state": "unknown", "quote": None, "reviewed_all_sections": False}
+             for field in RULE_FIELDS["LX0609-04-01-05"]}
+    items["surgical_plan"] = {"state": "present", "quote": "虚构术式", "reviewed_all_sections": True}
+    assert _validated_items({"documents": [{"document_id": "d", "source_type": "presurg_discussion", "items": items}]},
+        {("presurg_discussion", "d"): "术前准备已完善，无手术禁忌"}, ("LX0609-04-01-05",)) is None
+
+
+@pytest.mark.asyncio
+async def test_discussion_confirmed_defect_survives_another_unknown_field():
+    row = _structured_discussion(submitter="")
+    items = _complete_discussion_items({"state": "missing", "quote": None, "reviewed_all_sections": True})
+    items["surgical_plan"] = {"state": "unknown", "quote": None, "reviewed_all_sections": False}
+    session = _session(discussion=(row,))
+    result = await evaluate_preop_content_rules(rule_ids=("LX0609-04-01-05",), snapshot=session.snapshot,
+        materials=session.materials, llm_client=_Client(_payload({"document_id": row["document_id"],
+        "source_type": "presurg_discussion", "items": items})))
+    assert result.decisions[0].qc_direction.value == "defect"
+    assert dict(result.customer_display_facts)["LX0609-04-01-05"]["missing_fields"] == ["recorder_signature"]

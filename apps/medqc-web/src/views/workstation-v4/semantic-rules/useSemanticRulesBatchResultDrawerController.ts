@@ -1,5 +1,6 @@
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import type {
   QCRecordCompareIssue,
   SichuanBatchIssueItem,
@@ -75,6 +76,7 @@ export type SemanticRulesBatchResultDrawerProps = {
 export function useSemanticRulesBatchResultDrawerController(
   props: Readonly<SemanticRulesBatchResultDrawerProps>,
 ) {
+  const workstationConfirmation = useWorkstationConfirmation()
   type BatchJobExportFormat = 'xlsx' | 'csv' | 'html'
   const diagnosticPackageLoading = ref(false)
   const canLoadDebugSnapshot = computed(() => Boolean(props.fetchBatchJobDebugSnapshot))
@@ -126,7 +128,11 @@ export function useSemanticRulesBatchResultDrawerController(
   }
 
   const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
-  const LUXIAN_0609_NATIVE_RULE_IDS = new Set(['LX0609-04-01-01', 'LX0609-04-02-02', 'LX0609-04-03-01'])
+  const LUXIAN_0609_NATIVE_RULE_IDS = new Set([
+    'LX0609-04-01-01',
+    'LX0609-04-02-02',
+    'LX0609-04-03-01',
+  ])
   const LUXIAN_0609_FOCUS_STATUSES: StructuredQCStatus[] = [
     'non_compliant',
     'ai_suggested_non_compliant',
@@ -254,7 +260,7 @@ export function useSemanticRulesBatchResultDrawerController(
   function confirmCancelBatchJob() {
     const jobId = String(props.batchJobDetail?.id || '').trim()
     if (!jobId || !props.cancelBatchJob) return
-    Modal.confirm({
+    workstationConfirmation.confirm({
       title: '停止质控任务',
       content: '确定停止当前质控任务？已完成结果将保留，未完成规则不再继续执行。',
       okText: '停止任务',

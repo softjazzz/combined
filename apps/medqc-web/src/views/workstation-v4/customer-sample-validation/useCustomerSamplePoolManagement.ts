@@ -1,5 +1,6 @@
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { h, ref, type Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { ManualSamplePool, ManualSamplePoolRecord } from './types'
 import {
@@ -20,6 +21,7 @@ export interface CustomerSamplePoolManagementDependencies {
 export function useCustomerSamplePoolManagement(
   dependencies: CustomerSamplePoolManagementDependencies,
 ) {
+  const workstationConfirmation = useWorkstationConfirmation()
   const route = useRoute()
   const router = useRouter()
   const { selectedPoolId, selectedPool, records, pagination, selectedRowKeys, loadPools } =
@@ -87,7 +89,7 @@ export function useCustomerSamplePoolManagement(
 
   function confirmDeletePool(pool: ManualSamplePool) {
     if (poolDeletionDisabled(pool)) return
-    Modal.confirm({
+    workstationConfirmation.confirm({
       title: `删除样本池“${pool.name || '未命名样本池'}”？`,
       content: h('div', { class: 'space-y-2 text-[13px] leading-6 text-slate-600' }, [
         h('p', `将删除该池及其中 ${pool.total_items || 0} 份样本，并清除该池的同步任务记录。`),

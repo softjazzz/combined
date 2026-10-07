@@ -40,6 +40,7 @@ from .extended_document.consultation_timeliness import (
 from .extended_document.discharge_documentation import (
     evaluate_discharge_documentation_timeliness,
 )
+from .extended_document.discharge_course_content import evaluate_discharge_course_content
 from .extended_document.discharge_course import (
     evaluate_predischarge_course_presence,
 )
@@ -123,6 +124,7 @@ EXTENDED_DOCUMENT_RULE_IDS = (
     "LX0609-12-02-01",
     "LX0609-10-03-01",
     "LX0609-04-02-08",
+    "LX0609-08-01-05",
 )
 
 EXTENDED_DOCUMENT_SOURCE_KEYS = (
@@ -1913,6 +1915,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     llm_client: Any = None,
     **_: Any,
 ) -> NativeExtendedDocumentExecutionResult:
+    course_content_extraction = None
     medication_extraction = None
     discharge_approval_extraction = None
     diagnosis_change_extraction = None
@@ -2124,6 +2127,19 @@ async def execute_luxian_0609_native_extended_document_rules(
     } if set(selected).intersection(CRITICAL_VALUE_RULE_IDS) else {}
 
     for rule_id in selected:
+        if rule_id == "LX0609-08-01-05":
+            course_content_extraction = await evaluate_discharge_course_content(
+                snapshot=evidence_snapshot, materials=evidence_materials, llm_client=llm_client,
+            )
+            outcome = course_content_extraction
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("discharge_record",), final_state=outcome.state,
+                reason_code=outcome.reason, document_refs=outcome.refs,
+                exact_document_refs=bool(outcome.refs),
+            ))
+            display.append((rule_id, outcome.facts))
+            continue
         if rule_id == "LX0609-05-03-01":
             # 059 仍处于 pending_definition。正式编排不会派发它；若低层
             # 兼容入口收到该规则，只能报告执行合同错误，不能交付临床缺陷。
@@ -4800,6 +4816,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         llm_call_count=sum(
             item.llm_call_count
             for item in (
+                course_content_extraction,
                 antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
@@ -4810,6 +4827,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         prompt_tokens=sum(
             item.prompt_tokens
             for item in (
+                course_content_extraction,
                 antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
@@ -4820,6 +4838,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         completion_tokens=sum(
             item.completion_tokens
             for item in (
+                course_content_extraction,
                 antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
@@ -4830,6 +4849,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         total_tokens=sum(
             item.total_tokens
             for item in (
+                course_content_extraction,
                 antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
@@ -4840,6 +4860,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         api_time=sum(
             item.api_time
             for item in (
+                course_content_extraction,
                 antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,

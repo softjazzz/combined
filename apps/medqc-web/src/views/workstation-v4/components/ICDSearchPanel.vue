@@ -12,25 +12,25 @@
     />
 
     <div class="icd-workspace mx-auto flex w-full max-w-7xl flex-1 gap-5 px-6 py-5 min-h-0">
-      <div class="icd-result-shell flex flex-1 flex-col overflow-y-auto custom-scrollbar">
+      <div class="icd-result-shell mq-card flex flex-1 flex-col overflow-y-auto custom-scrollbar">
         <div class="icd-result-head sticky top-0 z-10 flex items-center justify-between px-4 py-3">
           <div class="min-w-0">
-            <div class="text-[12px] font-semibold text-slate-700">
+            <div class="text-[12px] font-semibold text-[var(--mq-text-primary)]">
               {{ searchQuery.length >= 2 ? '编码搜索结果' : '编码目录浏览' }}
             </div>
-            <div class="mt-0.5 text-[11px] text-slate-400">
+            <div class="mt-0.5 text-[11px] text-[var(--mq-text-tertiary)]">
               {{ codeType === 'icd10' ? '诊断编码' : '手术编码' }} ·
               {{ codeVersion === 'clinical' ? '临床版' : '医保版' }}
             </div>
           </div>
           <div class="flex items-center gap-2">
             <span
-              class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0a5fd6]"
+              class="rounded-full border border-[var(--mq-info-border)] bg-[var(--mq-info-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--mq-info-text)]"
             >
               {{ codeType === 'icd10' ? 'ICD-10' : 'ICD-9' }}
             </span>
             <span
-              class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500"
+              class="rounded-full border border-[var(--mq-border)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--mq-text-secondary)]"
             >
               {{ searchQuery.length >= 2 ? `${searchTotal} 条` : `${treeData.length} 章` }}
             </span>
@@ -39,12 +39,10 @@
 
         <div
           v-if="searchLoading"
-          class="flex flex-col items-center justify-center py-20 text-slate-400"
+          class="flex flex-col items-center justify-center py-20 text-[var(--mq-text-tertiary)]"
         >
           <a-spin />
-          <p class="mt-3 text-sm">
-            搜索中...
-          </p>
+          <p class="mt-3 text-sm">搜索中...</p>
         </div>
 
         <div
@@ -62,7 +60,7 @@
               @click="selectCode(item)"
             >
               <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-blue-100 bg-blue-50 text-[12px] font-semibold text-[#0a5fd6]"
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[var(--mq-info-border)] bg-[var(--mq-info-bg)] text-[12px] font-semibold text-[var(--mq-info-text)]"
               >
                 {{ item.type === 'icd10' ? '诊' : '术' }}
               </div>
@@ -71,66 +69,55 @@
                   <span
                     :class="[
                       'font-mono text-[13px] font-semibold',
-                      selectedCode?.code === item.code ? 'text-[#0a5fd6]' : 'text-slate-500',
+                      selectedCode?.code === item.code
+                        ? 'text-[var(--mq-info-text)]'
+                        : 'text-[var(--mq-text-secondary)]',
                     ]"
-                  >{{ item.code }}</span>
+                    >{{ item.code }}</span
+                  >
                   <span
-                    class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+                    class="rounded-full border border-[var(--mq-border)] bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--mq-text-secondary)]"
                   >
                     {{ item.type === 'icd10' ? 'ICD-10' : 'ICD-9' }}
                   </span>
                 </div>
                 <div
-                  class="mt-1 text-[14px] font-medium leading-6 text-slate-800"
+                  class="mt-1 text-[14px] font-medium leading-6 text-[var(--mq-text-primary)]"
                   v-html="highlightMatch(item.name, searchQuery)"
                 />
               </div>
             </div>
           </div>
-          <div
-            v-if="searchTotal > searchResults.length"
-            class="py-3 text-center"
-          >
-            <a-button
-              type="link"
-              size="small"
-              @click="loadMoreResults"
-            >
-              加载更多
-            </a-button>
+          <div v-if="searchTotal > searchResults.length" class="py-3 text-center">
+            <a-button type="link" size="small" @click="loadMoreResults"> 加载更多 </a-button>
           </div>
         </div>
 
         <div
           v-else-if="searchQuery.length >= 2 && searchResults.length === 0 && !searchLoading"
-          class="flex flex-col items-center justify-center py-20 text-slate-400"
+          class="flex flex-col items-center justify-center py-20 text-[var(--mq-text-tertiary)]"
         >
-          <SearchOutlined style="font-size: 40px; opacity: 0.3" />
-          <p class="mt-3 text-sm">
-            未找到匹配 "{{ searchQuery }}" 的编码
-          </p>
+          <MqIcon name="search" style="font-size: 40px; opacity: 0.3" />
+          <p class="mt-3 text-sm">未找到匹配 "{{ searchQuery }}" 的编码</p>
         </div>
 
-        <div
-          v-else
-          class="flex-1 p-3"
-        >
+        <div v-else class="flex-1 p-3">
           <a-spin :spinning="treeLoading">
             <div
               v-if="treeData.length > 0"
-              class="rounded-[20px] border border-slate-200/80 bg-white/94 p-3"
+              class="rounded-[20px] border border-[var(--mq-border)] bg-white/94 p-3"
             >
               <div class="mb-3 flex items-center justify-between px-1">
                 <div>
-                  <div class="text-[12px] font-semibold text-slate-500">
+                  <div class="text-[12px] font-semibold text-[var(--mq-text-secondary)]">
                     编码目录
                   </div>
-                  <div class="mt-0.5 text-[11px] text-slate-400">
+                  <div class="mt-0.5 text-[11px] text-[var(--mq-text-tertiary)]">
                     支持逐级展开定位章节、类目与叶子编码
                   </div>
                 </div>
                 <span
-                  class="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-500"
+                  class="rounded-full border border-[var(--mq-border)] bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-[var(--mq-text-secondary)]"
                 >
                   当前 {{ codeType === 'icd10' ? '诊断' : '手术' }}
                 </span>
@@ -149,7 +136,7 @@
                   <svg
                     :class="[
                       'h-4 w-4 shrink-0 transition-transform duration-200',
-                      expanded ? 'rotate-90 text-blue-500' : 'text-slate-400',
+                      expanded ? 'rotate-90 text-blue-500' : 'text-[var(--mq-text-tertiary)]',
                     ]"
                     fill="none"
                     stroke="currentColor"
@@ -173,22 +160,28 @@
                       v-if="data.code_range || data.code"
                       :class="[
                         'min-w-[70px] shrink-0 font-mono text-[13px]',
-                        data.isLeaf ? 'font-medium text-slate-500' : 'font-semibold text-slate-600',
+                        data.isLeaf
+                          ? 'font-medium text-[var(--mq-text-secondary)]'
+                          : 'font-semibold text-[var(--mq-text-secondary)]',
                       ]"
-                    >{{ data.code_range || data.code }}</span>
+                      >{{ data.code_range || data.code }}</span
+                    >
                     <span
                       :class="[
                         'truncate text-[14px]',
-                        data.isLeaf ? 'text-slate-600' : 'font-semibold text-slate-800',
+                        data.isLeaf
+                          ? 'text-[var(--mq-text-secondary)]'
+                          : 'font-semibold text-[var(--mq-text-primary)]',
                       ]"
-                    >{{ title }}</span>
+                      >{{ title }}</span
+                    >
                   </div>
                 </template>
               </a-tree>
             </div>
             <div
               v-else
-              class="flex flex-col items-center justify-center py-20 text-slate-400"
+              class="flex flex-col items-center justify-center py-20 text-[var(--mq-text-tertiary)]"
             >
               <svg
                 class="h-10 w-10 opacity-30"
@@ -203,15 +196,13 @@
                   d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                 />
               </svg>
-              <p class="mt-3 text-sm">
-                暂无编码数据
-              </p>
+              <p class="mt-3 text-sm">暂无编码数据</p>
             </div>
           </a-spin>
         </div>
       </div>
 
-      <div class="icd-detail-shell w-[420px] shrink-0 p-3">
+      <div class="icd-detail-shell mq-card w-[420px] shrink-0 p-3">
         <ICDDetailPanel
           :selected-code="selectedCode"
           :allow-apply="allowApply"
@@ -222,18 +213,15 @@
       </div>
     </div>
 
-    <ICDRecentBar
-      :recent-codes="recentCodes"
-      @select="selectCode"
-      @clear="recentCodes = []"
-    />
+    <ICDRecentBar :recent-codes="recentCodes" @select="selectCode" @clear="recentCodes = []" />
   </div>
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { ref, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { SearchOutlined } from '@ant-design/icons-vue'
+
 import type { TreeProps } from 'ant-design-vue'
 import { getAccessToken } from '@/utils/auth-token'
 
@@ -459,151 +447,4 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
-.icd-workstation {
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'SF Pro Text', 'SF Pro Display', 'San Francisco', 'PingFang SC',
-    'Microsoft YaHei UI', system-ui, sans-serif;
-  font-feature-settings:
-    'rlig' 1,
-    'calt' 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.icd-workspace {
-  background: transparent;
-}
-
-.icd-result-shell,
-.icd-detail-shell {
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 16px 36px rgba(15, 23, 42, 0.06);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.icd-result-head {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(255, 255, 255, 0.9);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.icd-workstation :deep(.text-slate-900),
-.icd-workstation :deep(.text-slate-800),
-.icd-workstation :deep(.text-slate-700) {
-  color: #1d1d1f !important;
-}
-
-.icd-workstation :deep(.text-slate-600),
-.icd-workstation :deep(.text-slate-500) {
-  color: rgba(29, 29, 31, 0.6) !important;
-}
-
-.icd-workstation :deep(.text-slate-400) {
-  color: rgba(29, 29, 31, 0.38) !important;
-}
-
-.icd-workstation :deep(.text-\[\#0a5fd6\]),
-.icd-workstation :deep(.text-blue-500) {
-  color: #0a6cff !important;
-}
-
-.icd-workstation :deep(.border-slate-200),
-.icd-workstation :deep(.border-slate-200\/80),
-.icd-workstation :deep(.border-blue-100) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.icd-workstation :deep(.bg-white),
-.icd-workstation :deep(.bg-white\/90),
-.icd-workstation :deep(.bg-white\/94) {
-  background-color: rgba(255, 255, 255, 0.82) !important;
-}
-
-.icd-workstation :deep(.bg-blue-50),
-.icd-workstation :deep(.bg-blue-50\/80) {
-  background-color: rgba(10, 108, 255, 0.08) !important;
-}
-
-.icd-workstation :deep(.font-semibold) {
-  font-weight: 650 !important;
-}
-
-.icd-result-row {
-  border: 1px solid transparent;
-  border-radius: 14px;
-  color: rgba(29, 29, 31, 0.76);
-}
-
-.icd-result-row:hover {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(245, 245, 247, 0.72);
-}
-
-.icd-result-row.is-selected {
-  border-color: rgba(10, 108, 255, 0.16);
-  background: rgba(10, 108, 255, 0.08);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 3px 10px rgba(10, 108, 255, 0.08);
-}
-
-.icd-tree-modern :deep(.ant-tree-switcher) {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 24px !important;
-}
-
-.icd-tree-modern :deep(.ant-tree-node-content-wrapper) {
-  padding: 6px 10px !important;
-  border-radius: 12px !important;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease !important;
-}
-
-.icd-tree-modern :deep(.ant-tree-node-content-wrapper:hover) {
-  background: rgba(0, 0, 0, 0.04) !important;
-}
-
-.icd-tree-modern :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper),
-.icd-tree-modern :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
-  background: rgba(10, 108, 255, 0.08) !important;
-  color: #0a6cff !important;
-}
-
-.icd-tree-modern :deep(.ant-tree-treenode) {
-  padding: 1px 0 !important;
-}
-
-.icd-tree-modern :deep(.ant-tree-indent-unit) {
-  width: 20px !important;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(29, 29, 31, 0.16);
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(29, 29, 31, 0.24);
-}
-</style>
+<style scoped src="../styles/icd-search-panel.css"></style>

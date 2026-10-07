@@ -13,12 +13,99 @@ import math
 import re
 from typing import Any
 
+from .extended_document.discharge_course_content import FIELDS, SOURCES, content_state
+from .extended_document.discharge_course_stages import valid_review
+
+
+def _safe_course_content(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """验证原样发布的原子状态和受控文本坐标，不重读材料或修补事实。"""
+    if raw.get("verification_kind") == "discharge_course_pending":
+        return dict(raw) if set(raw) == {"verification_kind", "state"} and isinstance(raw.get("state"), str) and raw.get("state") in {
+            "data_gap", "not_applicable",
+        } else None
+    expected_keys = {"verification_kind", "documents", "checks", "events"}
+    if "review" in raw:
+        expected_keys.add("review")
+    if set(raw) != expected_keys or raw.get("verification_kind") != "discharge_course_content":
+        return None
+    documents, checks, events = raw["documents"], raw["checks"], raw["events"]
+    if not all(isinstance(v, list) for v in (documents, checks, events)) or not 1 <= len(documents) <= 80 or len(events) > 1600:
+        return None
+    lookup = {}
+    for index, doc in enumerate(documents, 1):
+        expected = {"document_index", "source", "document_ref", "text_length"}
+        if isinstance(doc, dict) and doc.get("source") == "discharge_record_diagnosis":
+            expected.add("parent_document_index")
+            parent = doc.get("parent_document_index")
+            if type(parent) is not int or lookup.get(parent, {}).get("source") != "discharge_record":
+                return None
+        if (not isinstance(doc, dict) or set(doc) != expected
+                or type(doc["document_index"]) is not int or doc["document_index"] != index
+                or doc["source"] not in SOURCES or type(doc["text_length"]) is not int
+                or not 0 < doc["text_length"] <= 60000 or not isinstance(doc["document_ref"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", doc["document_ref"]) is None):
+            return None
+        lookup[index] = doc
+    discharge_ids = {i for i, d in lookup.items() if d["source"] == "discharge_record"}
+    if not discharge_ids:
+        return None
+
+    def valid_span(item: Mapping[str, Any], index: int) -> bool:
+        if not isinstance(item.get("state"), str) or item.get("state") not in {"present", "missing", "uncertain"}:
+            return False
+        start, end = item.get("start"), item.get("end")
+        return (type(start) is int and type(end) is int and 0 <= start < end <= lookup[index]["text_length"]
+                if item["state"] == "present" else start is None and end is None)
+
+    seen = set()
+    for check in checks:
+        if not isinstance(check, dict) or set(check) != {"document_index", "field", "state", "start", "end"}:
+            return None
+        index, field = check["document_index"], check["field"]
+        if (type(index) is not int or index not in discharge_ids or not isinstance(field, str)
+                or field not in FIELDS or (index, field) in seen or not valid_span(check, index)):
+            return None
+        seen.add((index, field))
+    if seen != {(i, f) for i in discharge_ids for f in FIELDS}:
+        return None
+    surgery_checked = set()
+    for event in events:
+        if not isinstance(event, dict) or set(event) != {"document_index", "kind", "start", "end", "matches"}:
+            return None
+        index = event["document_index"]
+        if (type(index) is not int or index not in lookup or index in discharge_ids
+                or lookup[index]["source"] == "discharge_record_diagnosis"
+                or not isinstance(event["kind"], str) or event["kind"] not in {"surgery", "test", "treatment", "change"}
+                or not valid_span({**event, "state": "present"}, index)
+                or not isinstance(event["matches"], list)):
+            return None
+        if event["kind"] == "surgery":
+            surgery_checked.add(index)
+        matched = set()
+        for match in event["matches"]:
+            if not isinstance(match, dict) or set(match) != {"document_index", "state", "start", "end"}:
+                return None
+            target = match["document_index"]
+            if type(target) is not int or target not in discharge_ids or target in matched or not valid_span(match, target):
+                return None
+            matched.add(target)
+        if matched != discharge_ids:
+            return None
+    review = raw.get("review")
+    if "review" in raw and not valid_review(review, lookup, checks, events):
+        return None
+    b_failed = isinstance(review, dict) and review["stages"]["B"] == "failed"
+    if not b_failed and not {i for i, d in lookup.items() if d["source"] == "surgery_record"} <= surgery_checked:
+        return None
+    return dict(raw)
+
 
 DISCHARGE_CUSTOMER_RULE_IDS = frozenset(
     {
         "LX0609-08-01-01",
         "LX0609-08-01-02",
         "LX0609-08-01-03",
+        "LX0609-08-01-05",
         "LX0609-08-02-01",
         "LX0609-08-02-02",
     }
@@ -430,6 +517,8 @@ def safe_discharge_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
+    if normalized == "LX0609-08-01-05":
+        return _safe_course_content(raw)
     if normalized == "LX0609-08-01-01":
         return _safe_061(raw)
     if normalized == "LX0609-08-01-02":
@@ -475,6 +564,8 @@ def validate_published_discharge_facts(
     if not isinstance(raw, dict) or any(type(key) is not str for key in raw):
         return None
     rid = str(rule_id or "").strip().upper()
+    if rid == "LX0609-08-01-05":
+        return _safe_course_content(raw)
     keys = set(raw)
     if rid == "LX0609-08-01-01":
         base = {"verification_kind", "discharge_time", "record_time", "threshold_hours", "actual_interval_hours"}
@@ -593,6 +684,11 @@ def discharge_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized = str(rule_id or "").strip().upper()
+    if normalized == "LX0609-08-01-05":
+        return normalized_status == (
+            safe_facts["state"] if safe_facts.get("verification_kind") == "discharge_course_pending"
+            else content_state(safe_facts)
+        )
     if normalized == "LX0609-08-01-01":
         return normalized_status == (
             "data_gap"

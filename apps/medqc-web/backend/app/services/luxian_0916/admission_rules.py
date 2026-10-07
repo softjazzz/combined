@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .contracts import Luxian0916RuleResult
+from .admission_content_items import ITEM_LABELS, ground_items
 
 
 ADMISSION_RULE_IDS = tuple(f"LX0916-{number:03d}" for number in range(1, 10))
@@ -65,7 +66,63 @@ def _evaluate_rule(
         return _evaluate_civil_capacity(admission_record, semantic_facts)
     if rule_id == "LX0916-008":
         return _evaluate_child_history(admission_record, semantic_facts)
+    if rule_id in ITEM_LABELS:
+        return _evaluate_content_items(rule_id, admission_record, semantic_facts)
     return _evaluate_semantic_content(rule_id, admission_record, semantic_facts)
+
+
+def _evaluate_content_items(
+    rule_id: str, admission_record: Mapping[str, Any], semantic_facts: Any,
+) -> Luxian0916RuleResult:
+    raw_fact = semantic_facts.get(rule_id) if isinstance(semantic_facts, Mapping) else None
+    items = ground_items(rule_id, raw_fact, admission_record)
+    facts = _admission_decision_facts(admission_record)
+    if items is None:
+        return _result(
+            rule_id, "data_quality_gap", "semantic_fact_unavailable", admission_record,
+            "未取得可定位的逐项内容事实，不能据此认定医生漏写。",
+            "请核对入院记录来源与逐项抽取依据后复核。", decision_facts=facts,
+        )
+    labels = ITEM_LABELS[rule_id]
+    missing = [labels[key] for key, item in items.items() if item["status"] == "missing"]
+    unknown = [labels[key] for key, item in items.items() if item["status"] == "unknown"]
+    documented_unknown = [labels[key] for key, item in items.items() if item["status"] == "documented_unknown"]
+    facts.update(item_states={key: item["status"] for key, item in items.items()},
+                 missing_items=missing, unknown_items=unknown)
+    if rule_id == "LX0916-005":
+        facts["documented_unknown_items"] = documented_unknown
+    if missing:
+        status, reason = "non_compliant", "requirement_violated"
+        findings = "核对入院记录后确认缺失或描述笼统：" + "、".join(missing) + "。"
+        suggestion = "请依据实际病史补充：" + "、".join(missing) + "；明确否认或不详时如实记录，不补写虚构经历。"
+    elif unknown:
+        status, reason = "data_quality_gap", "semantic_fact_unavailable"
+        explanation = "抽取未确定或信息归属、含义冲突，不等于医生漏写。" if rule_id == "LX0916-005" else "信息不详或抽取未确定，不等于医生漏写。"
+        findings = "尚无法确认：" + "、".join(unknown) + "；" + explanation
+        suggestion = "请复核相关原文及信息来源，保留明确不详的说明后再判断。"
+    elif documented_unknown:
+        status, reason = "data_quality_gap", "recorded_information_unknown"
+        findings = "原文已明确记载信息不详：" + "、".join(documented_unknown) + "；是否满足详细记录要求尚需人工复核，未认定为漏写或合规。"
+        suggestion = "请结合已记录的诊疗经过、效果及信息来源复核详细程度；无法获知的信息如实保留，不推造药名或方案。"
+    elif rule_id == "LX0916-005" and all(item["status"] in {"denied", "not_applicable"} for item in items.values()):
+        status, reason = "not_applicable", "eligibility_not_met"
+        findings, suggestion = "原文未显示需要核对的院前检查治疗行为。", ""
+    else:
+        status, reason = "compliant", "requirement_satisfied"
+        findings, suggestion = "逐项内容均有记录或明确否认，未发现确认缺项。", ""
+    if missing and unknown:
+        findings += "另有待确认项：" + "、".join(unknown) + "，未计入确认缺项。"
+    if documented_unknown and (missing or unknown):
+        findings += "另有原文已明确记载信息不详：" + "、".join(documented_unknown) + "，未计入确认缺项。"
+    base = _result(rule_id, status, reason, admission_record, findings, suggestion, facts)
+    # 原文摘录只放证据，不塞入公开的判定事实快照。
+    evidence = tuple(f"{labels[key]}：{item['quote']}" for key, item in items.items() if item["quote"])
+    return Luxian0916RuleResult(
+        rule_id=base.rule_id, status=base.status, reason_code=base.reason_code,
+        findings=base.findings, suggestion=base.suggestion,
+        evidence=evidence or base.evidence, document_anchors=base.document_anchors,
+        diagnostics=base.diagnostics, decision_facts=base.decision_facts,
+    )
 
 
 def _evaluate_repeat_admission(

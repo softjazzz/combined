@@ -1,22 +1,19 @@
 <template>
-  <div class="grouper-shell">
-    <header class="grouper-header">
-      <div class="header-main">
-        <div class="breadcrumb">
-          <Home class="inline-icon" />
-          <span>工作台</span>
-          <span>/</span>
-          <strong>分组器</strong>
-        </div>
+  <div class="grouper-shell mq-page">
+    <header class="grouper-header mq-page-head">
+      <div class="mq-page-head__copy">
+        <div class="mq-page-eyebrow">医保 · DRG/DIP</div>
+        <h1 class="mq-page-title">医保分组器</h1>
+        <p>核对病例编码，比较各分组器的入组结果。</p>
       </div>
     </header>
 
     <main class="grouper-content">
       <div class="grouper-page">
-        <section class="grouper-panel condition-panel">
+        <section class="grouper-panel mq-card condition-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><ClipboardList class="panel-icon" /></span>
+              <span class="heading-icon"><MqIcon name="doc" class="panel-icon" /></span>
               <div>
                 <h2>分组条件</h2>
                 <p>同一病案输入会同时送入 CHS-DRG 四川 2.0、CN-DRG 绩效监测、DIP 泸州版。</p>
@@ -27,7 +24,9 @@
           <div class="condition-body">
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><UserRound class="section-icon" />基本信息</span>
+                <span class="section-title-main"
+                  ><MqIcon name="pool" class="section-icon" />基本信息</span
+                >
               </div>
               <div class="field-grid">
                 <label class="field-card">
@@ -39,19 +38,11 @@
                 </label>
                 <label class="field-card">
                   <span>年龄（岁）</span>
-                  <input
-                    v-model.number="formData.age"
-                    type="number"
-                    placeholder="岁"
-                  >
+                  <input v-model.number="formData.age" type="number" placeholder="岁" />
                 </label>
                 <label class="field-card">
                   <span>住院天数（天）</span>
-                  <input
-                    v-model.number="formData.days"
-                    type="number"
-                    placeholder="天"
-                  >
+                  <input v-model.number="formData.days" type="number" placeholder="天" />
                 </label>
                 <label class="field-card">
                   <span>离院方式</span>
@@ -68,7 +59,9 @@
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><SearchCheck class="section-icon" />主诊断</span>
+                <span class="section-title-main"
+                  ><MqIcon name="search" class="section-icon" />主诊断</span
+                >
                 <span class="optional-chip">必填</span>
               </div>
               <div class="code-list">
@@ -79,7 +72,7 @@
                     type="text"
                     placeholder="输入 ICD-10 编码"
                     @keyup.enter="addDiagnosis"
-                  >
+                  />
                   <span />
                 </div>
               </div>
@@ -87,7 +80,9 @@
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><FilePlus2 class="section-icon" />其他诊断</span>
+                <span class="section-title-main"
+                  ><MqIcon name="fp_generate" class="section-icon" />其他诊断</span
+                >
                 <span class="optional-chip">选填</span>
               </div>
               <div class="code-list">
@@ -102,100 +97,76 @@
                     type="text"
                     placeholder="输入 ICD-10 编码"
                     @keyup.enter="addDiagnosis"
-                  >
+                  />
                   <button
                     type="button"
                     class="icon-button"
                     @click="formData.zdList.splice(index, 1)"
                   >
-                    <Trash2 class="button-icon" />
+                    <MqIcon name="remove" class="button-icon" />
                   </button>
                 </div>
-                <button
-                  type="button"
-                  class="add-button"
-                  @click="addDiagnosis"
-                >
-                  <Plus class="button-icon" /> 添加诊断
+                <button type="button" class="add-button" @click="addDiagnosis">
+                  <MqIcon name="add" class="button-icon" /> 添加诊断
                 </button>
               </div>
             </div>
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><BriefcaseMedical class="section-icon" />手术操作</span>
+                <span class="section-title-main"
+                  ><MqIcon name="pool" class="section-icon" />手术操作</span
+                >
                 <span class="optional-chip">选填</span>
               </div>
               <div class="code-list">
-                <div
-                  v-for="(_, index) in formData.ssList"
-                  :key="`ss-${index}`"
-                  class="code-row"
-                >
+                <div v-for="(_, index) in formData.ssList" :key="`ss-${index}`" class="code-row">
                   <span class="code-label">{{ index === 0 ? '主手术' : `其他 ${index}` }}</span>
                   <input
                     v-model="formData.ssList[index]"
                     type="text"
                     placeholder="输入手术操作编码"
                     @keyup.enter="addProcedure"
-                  >
+                  />
                   <button
                     v-if="formData.ssList.length > 1 || formData.ssList[0]"
                     type="button"
                     class="icon-button"
                     @click="formData.ssList.splice(index, 1)"
                   >
-                    <Trash2 class="button-icon" />
+                    <MqIcon name="remove" class="button-icon" />
                   </button>
                   <span v-else />
                 </div>
-                <button
-                  type="button"
-                  class="add-button"
-                  @click="addProcedure"
-                >
-                  <Plus class="button-icon" /> 添加手术
+                <button type="button" class="add-button" @click="addProcedure">
+                  <MqIcon name="add" class="button-icon" /> 添加手术
                 </button>
               </div>
             </div>
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><CircleDollarSign class="section-icon" />费用信息（元）</span>
+                <span class="section-title-main"
+                  ><MqIcon name="settlement" class="section-icon" />费用信息（元）</span
+                >
                 <span class="optional-chip">选填</span>
               </div>
               <div class="field-grid">
                 <label class="field-card">
                   <span>总费用</span>
-                  <input
-                    v-model.number="formData.totalFee"
-                    type="number"
-                    placeholder="0.00"
-                  >
+                  <input v-model.number="formData.totalFee" type="number" placeholder="0.00" />
                 </label>
                 <label class="field-card">
                   <span>药品费用</span>
-                  <input
-                    v-model.number="formData.drugFee"
-                    type="number"
-                    placeholder="0.00"
-                  >
+                  <input v-model.number="formData.drugFee" type="number" placeholder="0.00" />
                 </label>
                 <label class="field-card">
                   <span>材料费用</span>
-                  <input
-                    v-model.number="formData.materialFee"
-                    type="number"
-                    placeholder="0.00"
-                  >
+                  <input v-model.number="formData.materialFee" type="number" placeholder="0.00" />
                 </label>
                 <label class="field-card">
                   <span>其他费用</span>
-                  <input
-                    v-model.number="formData.otherFee"
-                    type="number"
-                    placeholder="0.00"
-                  >
+                  <input v-model.number="formData.otherFee" type="number" placeholder="0.00" />
                 </label>
               </div>
               <p class="field-help">
@@ -205,43 +176,20 @@
           </div>
 
           <footer class="action-bar">
-            <button
-              class="secondary-button"
-              type="button"
-              @click="fillTestCase"
-            >
-              填入样例
-            </button>
-            <button
-              class="secondary-button"
-              type="button"
-              @click="resetForm"
-            >
-              重置
-            </button>
-            <button
-              class="primary-button"
-              type="button"
-              :disabled="grouping"
-              @click="doGrouping"
-            >
-              <LoaderCircle
-                v-if="grouping"
-                class="button-icon spin-icon"
-              />
-              <Zap
-                v-else
-                class="button-icon"
-              />
+            <button class="secondary-button" type="button" @click="fillTestCase">填入样例</button>
+            <button class="secondary-button" type="button" @click="resetForm">重置</button>
+            <button class="primary-button" type="button" :disabled="grouping" @click="doGrouping">
+              <MqIcon v-if="grouping" name="sync" class="button-icon spin-icon" />
+              <MqIcon v-else name="running" class="button-icon" />
               {{ grouping ? '三分组器执行中...' : '执行分组' }}
             </button>
           </footer>
         </section>
 
-        <section class="grouper-panel result-panel">
+        <section class="grouper-panel mq-card result-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><ChartColumnBig class="panel-icon" /></span>
+              <span class="heading-icon"><MqIcon name="stats" class="panel-icon" /></span>
               <div>
                 <h2>三分组器结果</h2>
                 <p>同屏展示 CHS-DRG、CN-DRG 绩效监测、DIP 的入组结果。</p>
@@ -250,37 +198,24 @@
           </header>
 
           <div class="result-body">
-            <div
-              v-if="!hasAnyResult && !grouping"
-              class="empty-state"
-            >
-              <FileSearch class="empty-icon" />
+            <div v-if="!hasAnyResult && !grouping" class="empty-state">
+              <MqIcon name="doc" class="empty-icon" />
               <h3>等待分组</h3>
               <p>填写条件后点击执行分组，系统会一次生成 3 个分组器结果。</p>
             </div>
 
-            <div
-              v-else-if="grouping"
-              class="empty-state"
-            >
-              <LoaderCircle class="empty-icon spin-icon" />
+            <div v-else-if="grouping" class="empty-state">
+              <MqIcon name="sync" class="empty-icon spin-icon" />
               <h3>正在执行分组</h3>
               <p>系统正在并行调用 CHS-DRG、CN-DRG 绩效监测、DIP 分组器。</p>
             </div>
 
-            <div
-              v-else
-              class="result-summary"
-            >
-              <div
-                v-for="card in resultCards"
-                :key="card.key"
-                class="result-block"
-              >
+            <div v-else class="result-summary">
+              <div v-for="card in resultCards" :key="card.key" class="result-block">
                 <div class="result-block-header">
                   <span :class="['result-icon', card.success ? 'success' : 'danger']">
-                    <CircleCheck v-if="card.success" />
-                    <CircleX v-else />
+                    <MqIcon v-if="card.success" name="success" />
+                    <MqIcon v-else name="close" />
                   </span>
                   <div>
                     <h3>{{ card.title }}</h3>
@@ -314,14 +249,8 @@
                   </div>
                 </template>
 
-                <div
-                  v-else
-                  class="message-list"
-                >
-                  <p
-                    v-for="(msg, idx) in card.messages"
-                    :key="idx"
-                  >
+                <div v-else class="message-list">
+                  <p v-for="(msg, idx) in card.messages" :key="idx">
                     {{ msg }}
                   </p>
                 </div>
@@ -330,10 +259,10 @@
           </div>
         </section>
 
-        <section class="grouper-panel path-panel">
+        <section class="grouper-panel mq-card path-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><GitCompareArrows class="panel-icon" /></span>
+              <span class="heading-icon"><MqIcon name="drg" class="panel-icon" /></span>
               <div>
                 <h3>入组对比</h3>
                 <p>汇总三类分组器的编码、权重或分值、正式写入状态。</p>
@@ -353,10 +282,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="row in comparisonRows"
-                  :key="row.name"
-                >
+                <tr v-for="row in comparisonRows" :key="row.name">
                   <td>{{ row.name }}</td>
                   <td>{{ row.status }}</td>
                   <td class="mono">
@@ -370,10 +296,10 @@
           </div>
         </section>
 
-        <section class="grouper-panel mapping-panel">
+        <section class="grouper-panel mq-card mapping-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><Table2 class="panel-icon" /></span>
+              <span class="heading-icon"><MqIcon name="data" class="panel-icon" /></span>
               <div>
                 <h3>编码映射</h3>
                 <p>展示本次输入编码，三类分组器共用同一组诊断和手术输入。</p>
@@ -392,10 +318,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="row in mappingRows"
-                  :key="`${row.item}-${row.code}`"
-                >
+                <tr v-for="row in mappingRows" :key="`${row.item}-${row.code}`">
                   <td>{{ row.item }}</td>
                   <td class="mono">
                     {{ row.code }}
@@ -413,27 +336,10 @@
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import {
-  BriefcaseMedical,
-  ChartColumnBig,
-  CircleCheck,
-  CircleDollarSign,
-  CircleX,
-  ClipboardList,
-  FilePlus2,
-  FileSearch,
-  GitCompareArrows,
-  Home,
-  LoaderCircle,
-  Plus,
-  SearchCheck,
-  Table2,
-  Trash2,
-  UserRound,
-  Zap,
-} from 'lucide-vue-next'
+
 import {
   performGrouping as performDrgGrouping,
   getMdcName,

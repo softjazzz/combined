@@ -2306,6 +2306,36 @@ async def list_workspace_rule_sets(request: Request, current_user: Dict[str, Any
     )
 
 
+def _workspace_batch_list_item(job: Dict[str, Any]) -> Dict[str, Any]:
+    """历史结果损坏只隔离本行，列表不交付未经校验的医学结果。"""
+    try:
+        return _workspace_batch_response_item(job, compact=True)
+    except HTTPException as exc:
+        if exc.status_code != 409 or exc.detail != "历史质控结果交付合同不完整，无法安全展示":
+            raise
+    # 只取任务元数据；不透传嵌套结果、原始摘要或旧结果文案。
+    metadata = {
+        key: job[key]
+        for key in (
+            "id", "status", "rule_code", "rule_name", "scope", "scene",
+            "rule_set_key", "rule_set_id", "job_kind", "parent_job_id",
+            "created_at", "started_at", "completed_at", "total_records",
+            "success_count", "failed_count",
+        )
+        if key in job
+    }
+    metadata["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
+    safe = _workspace_batch_response_item(metadata, compact=True)
+    for container in (safe, safe["summary"]):
+        for key in (
+            "issue_records", "compliant_records", "uncertain_records",
+            "result_count", "display_status_counts", "history_issue_summaries",
+        ):
+            container.pop(key, None)
+    safe["error_message"] = "历史质控结果交付合同不完整，无法安全展示；请重新运行质控"
+    return safe
+
+
 @router.get("/workspace/batch-jobs")
 async def list_workspace_batch_jobs(
     request: Request,
@@ -2354,7 +2384,7 @@ async def list_workspace_batch_jobs(
             q=q,
         )
     items = [
-        _workspace_batch_response_item(item, compact=True)
+        _workspace_batch_list_item(item)
         for item in result.items
         if _is_workspace_batch_job(item)
     ]

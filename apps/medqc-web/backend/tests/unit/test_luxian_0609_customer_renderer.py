@@ -2989,3 +2989,44 @@ def test_transfer_multi_event_gap_does_not_invent_zero_count_record_evidence() -
         "已定位本次纳入核对的转科资料，当前缺口为逐次事件对应关系。"
     )
     assert "候选转出记录" not in rendered["evidence"]
+
+
+def test_preop_content_association_gap_does_not_claim_body_missing():
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id="LX0609-04-01-04", snapshot_hash=SNAPSHOT_HASH,
+        applicability=ApplicabilityState.APPLICABLE, evidence_state=EvidenceState.DATA_GAP,
+        qc_direction=QcDirection.UNKNOWN, reason_code="association_failed", fact_refs=(FACT_REF,),
+        evaluator_version="native-preop-content-v1"))
+    result = render_luxian_0609_customer_result(decision=decision)
+    assert result["status"] == "data_gap"
+    assert "已读取术前小结" in result["findings"]
+    assert "具体手术" in result["findings"]
+    assert "缺少术前小结正文" not in result["findings"]
+
+
+@pytest.mark.parametrize("missing", [["planned_anesthesia"], ["precautions", "surgeon_preop_visit"]])
+def test_preop_summary_explains_only_confirmed_missing_items(missing):
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id="LX0609-04-01-04", snapshot_hash=SNAPSHOT_HASH,
+        applicability=ApplicabilityState.APPLICABLE, evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.DEFECT, reason_code="requirement_violated",
+        fact_refs=(FACT_REF,), evaluator_version="preop-content-v1"))
+    facts = {"verification_kind": "preop_content_incomplete", "missing_fields": missing,
+             "documents": [{"missing_fields": ["brief_condition"]}]}
+    result = render_luxian_0609_customer_result(decision=decision, safe_customer_display_facts=facts)
+    assert result["status"] == "non_compliant"
+    assert "确认缺少" in result["findings"]
+    assert "简要病情" not in result["findings"]
+    assert "同一份" not in result["suggestion"]
+    if missing == ["planned_anesthesia"]:
+        assert "拟施麻醉方式" in result["findings"]
+        assert "拟施麻醉方式" in result["suggestion"]
+        assert "术者术前查看" not in result["suggestion"]
+
+
+def test_preop_summary_without_missing_facts_does_not_invent_items():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+    message = preop_summary_customer_message(rule_id="LX0609-04-01-04", status="non_compliant", facts={})
+    assert "未提供可核验的具体缺项" in message[0]
+    assert "先确认" in message[2]
+    assert preop_summary_customer_message(rule_id="LX0609-04-01-04", status="data_gap", facts={}) is None

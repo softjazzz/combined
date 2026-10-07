@@ -589,7 +589,18 @@
     "executor_type": "program_then_optional_llm",
     "rule_version": "2026-09-20",
     "prompt_version": "lx0609-078-v1",
-    "criteria": [{"criterion_id":"preop_summary_completeness","label":"术前小结内容完整","kind":"completeness","failure_reason_code":"requirement_violated","source_fact":"presurg_summary.content","operator":"complete","expected":true,"unit":"boolean"}],
+    "criteria": [
+      {
+        "criterion_id": "preop_summary_completeness",
+        "label": "术前小结内容完整",
+        "kind": "completeness",
+        "failure_reason_code": "requirement_violated",
+        "source_fact": "presurg_summary.content",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      }
+    ],
     "mapped_rule_ids": ["LX0609-04-01-04"],
     "primary_execution_rule_id": "LX0609-04-01-04",
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
@@ -604,12 +615,23 @@
     "category": "手术麻醉",
     "applicable_documents": ["presurg_discussion"],
     "applicable_document_labels": ["术前讨论记录"],
-      "data_dependencies": ["术前讨论结构字段与正文/可核验内容"],
+    "data_dependencies": ["术前讨论结构字段与正文/可核验内容"],
     "dependency_type": "受控原子事实抽取",
     "executor_type": "program_then_optional_llm",
     "rule_version": "2026-09-20",
     "prompt_version": "lx0609-079-v1",
-      "criteria": [{"criterion_id":"preop_discussion_completeness","label":"术前讨论记录内容完整","kind":"completeness","failure_reason_code":"requirement_violated","source_fact":"presurg_discussion.structured_content","operator":"complete","expected":true,"unit":"boolean"}],
+    "criteria": [
+      {
+        "criterion_id": "preop_discussion_completeness",
+        "label": "术前讨论记录内容完整",
+        "kind": "completeness",
+        "failure_reason_code": "requirement_violated",
+        "source_fact": "presurg_discussion.structured_content",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      }
+    ],
     "mapped_rule_ids": ["LX0609-04-01-05"],
     "primary_execution_rule_id": "LX0609-04-01-05",
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
@@ -631,27 +653,15 @@
       "senior_course_record",
       "rescue_record"
     ],
-    "applicable_document_labels": [
-      "CT/MRI检查记录"
-    ],
-    "data_dependencies": [
-      "CT/MRI检查记录原始材料",
-      "逐事件来源及覆盖情况"
-    ],
+    "applicable_document_labels": ["CT/MRI检查记录"],
+    "data_dependencies": ["CT/MRI检查记录原始材料", "逐事件来源及覆盖情况"],
     "dependency_type": "结构化事件关联与正文语义提取",
     "executor_type": "llm",
     "rule_version": "2026-09-23-ct-consistency-v1",
     "prompt_version": "ct-order-course-facts-v3",
-    "mapped_rule_ids": [
-      "LX0609-06-01-01"
-    ],
+    "mapped_rule_ids": ["LX0609-06-01-01"],
     "primary_execution_rule_id": "LX0609-06-01-01",
-    "allowed_result_statuses": [
-      "compliant",
-      "non_compliant",
-      "not_applicable",
-      "data_gap"
-    ]
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
     "rule_id": "LX0609-06-01-03",
@@ -661,32 +671,16 @@
     "positive_example": "同次事件的可核验材料满足本项要求。",
     "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
     "category": "CT/MRI检查记录",
-    "applicable_documents": [
-      "exam_master",
-      "exam_item_report",
-      "inpat_nondrug_order"
-    ],
-    "applicable_document_labels": [
-      "CT/MRI检查记录"
-    ],
-    "data_dependencies": [
-      "CT/MRI检查记录原始材料",
-      "逐事件来源及覆盖情况"
-    ],
+    "applicable_documents": ["exam_master", "exam_item_report", "inpat_nondrug_order"],
+    "applicable_document_labels": ["CT/MRI检查记录"],
+    "data_dependencies": ["CT/MRI检查记录原始材料", "逐事件来源及覆盖情况"],
     "dependency_type": "结构化逐事件关联",
     "executor_type": "program",
     "rule_version": "2026-09-22-handbook-v1",
     "prompt_version": "none",
-    "mapped_rule_ids": [
-      "LX0609-06-01-03"
-    ],
+    "mapped_rule_ids": ["LX0609-06-01-03"],
     "primary_execution_rule_id": "LX0609-06-01-03",
-    "allowed_result_statuses": [
-      "compliant",
-      "non_compliant",
-      "not_applicable",
-      "data_gap"
-    ]
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
     "rule_id": "LX0609-06-03-02",
@@ -696,32 +690,16 @@
     "positive_example": "同次事件的可核验材料满足本项要求。",
     "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
     "category": "微生物培养检查记录",
-    "applicable_documents": [
-      "labtest_master",
-      "labtest_item_report",
-      "inpat_nondrug_order"
-    ],
-    "applicable_document_labels": [
-      "微生物培养检查记录"
-    ],
-    "data_dependencies": [
-      "微生物培养检查记录原始材料",
-      "逐事件来源及覆盖情况"
-    ],
+    "applicable_documents": ["labtest_master", "labtest_item_report", "inpat_nondrug_order"],
+    "applicable_document_labels": ["微生物培养检查记录"],
+    "data_dependencies": ["微生物培养检查记录原始材料", "逐事件来源及覆盖情况"],
     "dependency_type": "结构化逐事件关联",
     "executor_type": "program",
     "rule_version": "2026-09-22-handbook-v1",
     "prompt_version": "none",
-    "mapped_rule_ids": [
-      "LX0609-06-03-02"
-    ],
+    "mapped_rule_ids": ["LX0609-06-03-02"],
     "primary_execution_rule_id": "LX0609-06-03-02",
-    "allowed_result_statuses": [
-      "compliant",
-      "non_compliant",
-      "not_applicable",
-      "data_gap"
-    ]
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
     "rule_id": "LX0609-06-02-01",
@@ -731,31 +709,16 @@
     "positive_example": "同次事件的可核验材料满足本项要求。",
     "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
     "category": "病理检查记录",
-    "applicable_documents": [
-      "pathology_exam_master",
-      "pathology_exam_report"
-    ],
-    "applicable_document_labels": [
-      "病理检查记录"
-    ],
-    "data_dependencies": [
-      "病理检查记录原始材料",
-      "逐事件来源及覆盖情况"
-    ],
+    "applicable_documents": ["pathology_exam_master", "pathology_exam_report"],
+    "applicable_document_labels": ["病理检查记录"],
+    "data_dependencies": ["病理检查记录原始材料", "逐事件来源及覆盖情况"],
     "dependency_type": "结构化逐事件关联",
     "executor_type": "program",
     "rule_version": "2026-09-22-handbook-v1",
     "prompt_version": "none",
-    "mapped_rule_ids": [
-      "LX0609-06-02-01"
-    ],
+    "mapped_rule_ids": ["LX0609-06-02-01"],
     "primary_execution_rule_id": "LX0609-06-02-01",
-    "allowed_result_statuses": [
-      "compliant",
-      "non_compliant",
-      "not_applicable",
-      "data_gap"
-    ]
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   },
   {
     "rule_id": "LX0609-09-01-02",
@@ -765,29 +728,34 @@
     "positive_example": "同次事件的可核验材料满足本项要求。",
     "negative_example": "已读取的同次事件资料存在明确内容矛盾或已验证正文缺项；单纯同步或关联缺口不作为不合规。",
     "category": "抢救记录",
-    "applicable_documents": [
-      "rescue_record"
-    ],
-    "applicable_document_labels": [
-      "抢救记录"
-    ],
-    "data_dependencies": [
-      "抢救记录原始材料",
-      "逐事件来源及覆盖情况"
-    ],
+    "applicable_documents": ["rescue_record"],
+    "applicable_document_labels": ["抢救记录"],
+    "data_dependencies": ["抢救记录原始材料", "逐事件来源及覆盖情况"],
     "dependency_type": "受控原子事实抽取",
     "executor_type": "program_then_optional_llm",
     "rule_version": "2026-09-22-handbook-v1",
     "prompt_version": "handbook-v1",
-    "mapped_rule_ids": [
-      "LX0609-09-01-02"
-    ],
+    "mapped_rule_ids": ["LX0609-09-01-02"],
     "primary_execution_rule_id": "LX0609-09-01-02",
-    "allowed_result_statuses": [
-      "compliant",
-      "non_compliant",
-      "not_applicable",
-      "data_gap"
-    ]
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
+  },
+  {
+    "rule_id": "LX0609-08-01-05",
+    "rule_code": "LX0609-08-01-05",
+    "name": "出院记录：诊疗经过不全面或不详细",
+    "description": "逐份核对诊疗措施、病情演变、疗效与转归，并对照同次住院病程及手术记录核对重要事件遗漏；来源缺口不判临床缺陷。",
+    "positive_example": "诊疗措施、病情演变和治疗效果具体，重要手术及病情变化均有概述。",
+    "negative_example": "仅写对症治疗好转出院，未描述具体措施；或遗漏本次实际手术。",
+    "category": "出院记录",
+    "applicable_documents": ["discharge_record"],
+    "applicable_document_labels": ["出院记录"],
+    "data_dependencies": ["出院记录诊疗经过", "本次住院病程", "实际手术记录"],
+    "dependency_type": "受控原子事实与跨文书核对",
+    "executor_type": "program_then_optional_llm",
+    "rule_version": "2026-09-28",
+    "prompt_version": "lx0609-discharge-course-v1",
+    "mapped_rule_ids": ["LX0609-08-01-05"],
+    "primary_execution_rule_id": "LX0609-08-01-05",
+    "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
   }
 ]

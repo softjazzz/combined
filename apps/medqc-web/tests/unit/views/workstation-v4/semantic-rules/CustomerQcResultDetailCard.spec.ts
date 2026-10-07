@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import CustomerQcResultDetailCard from '@/views/workstation-v4/semantic-rules/components/CustomerQcResultDetailCard.vue'
 
 describe('CustomerQcResultDetailCard', () => {
-  it('以固定层级展示结论、明细、规则要求、实际值、来源和建议', () => {
+  it('以固定层级展示结论、明细、规则要求、实际值和来源，建议交由父层统一展示', () => {
     const wrapper = mount(CustomerQcResultDetailCard, {
       props: {
         model: {
@@ -23,8 +23,8 @@ describe('CustomerQcResultDetailCard', () => {
     expect(wrapper.text()).toContain('规则要求')
     expect(wrapper.text()).toContain('实际值')
     expect(wrapper.text()).toContain('证据来源')
-    expect(wrapper.text()).toContain('处理建议')
     expect(wrapper.text()).toContain('主诉长度：21字')
+    expect(wrapper.text()).not.toContain('请补充诊断指向的症状、部位、性质及持续时间。')
   })
 
   it('不渲染空字段，避免以占位符伪造事实', () => {

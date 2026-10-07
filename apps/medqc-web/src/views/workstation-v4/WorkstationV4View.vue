@@ -333,10 +333,11 @@
 </template>
 
 <script setup lang="ts">
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiClient } from '@/services/apiService'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import {
   WarningOutlined,
   InboxOutlined,
@@ -1221,7 +1222,7 @@ const frontpageDisabledReason = computed(() =>
 )
 function handleGenerateFrontpage() {
   if (hasExistingFrontpage.value) {
-    Modal.confirm({
+    workstationConfirmation.confirm({
       title: '该患者已有病案首页数据',
       content: '重新生成将覆盖已有的首页数据，是否继续？',
       okText: '重新生成',
@@ -2045,6 +2046,8 @@ const {
 
 // ========== AI 鐢熸垚杩涘害杈呭姪 ==========
 import { MODULE_LABELS, type CompletedModule } from './composables/useFrontpageDraft'
+
+const workstationConfirmation = useWorkstationConfirmation()
 
 const ALL_MODULE_KEYS = [
   'basic_info',

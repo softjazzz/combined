@@ -94,6 +94,9 @@ def attach_luxian_0609_customer_policy(
         if master_entry is None:
             raise ValueError(f"LX0609 customer policy is missing for {rule_id or '<blank>'}")
         copied_wrapper["release_scope"] = master_entry.release_scope
+        copied_wrapper["phase_status"] = master_entry.phase_status
+        copied_wrapper["pending_reason_code"] = master_entry.pending_reason_code
+        copied_wrapper["pending_definition_note"] = master_entry.pending_definition_note
         copied_wrapper["customer_policy"] = {
             "source_document": master_entry.source_document,
             "qc_point": master_entry.qc_point,

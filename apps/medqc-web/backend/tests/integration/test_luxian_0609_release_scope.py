@@ -24,7 +24,7 @@ from app.services.sample_validation_rule_sets import (
 _isolated_database = chain._isolated_database
 
 PILOTS = {
-    "LX0609-06-01-01",
+    "LX0609-08-01-05",
     "LX0609-06-01-03",
     "LX0609-06-02-01",
     "LX0609-06-03-02",
@@ -112,6 +112,7 @@ def test_defaults_freeze_scope(monkeypatch, _isolated_database, entry):
     expected = set(get_luxian_0609_customer_delivery_rule_ids()) - PILOTS
     assert set(job["filters"]["scoped_customer_rule_ids"]) == expected
     assert not job["filters"].get("acceptance_only_rule_ids")
+    assert {"LX0609-06-01-01", "LX0609-06-01-04", "LX0609-06-01-05"} <= set(job["filters"]["rule_ids"])
     assert not set(job["filters"]["rule_ids"]) & PILOTS
     monkeypatch.setattr(
         chain.qc_sichuan,
@@ -125,11 +126,11 @@ def test_defaults_freeze_scope(monkeypatch, _isolated_database, entry):
     chain._read_canonical(app, job_id, chain._RECORD_A, expected)
 
 
-def test_acceptance_explicit_and_legacy_retry(monkeypatch, _isolated_database):
+@pytest.mark.parametrize("selected", ["LX0609-06-02-01", "LX0609-06-01-03"])
+def test_acceptance_explicit_and_legacy_retry(monkeypatch, _isolated_database, selected):
     engine, workspace, app, pool_id, item_id = setup_chain(
         monkeypatch, _isolated_database
     )
-    selected = "LX0609-06-02-01"
     with TestClient(app) as client:
         for pilot in PILOTS:
             response = client.post(
@@ -275,8 +276,8 @@ def test_grouped_default_freezes_parent_and_children(monkeypatch, _isolated_data
         executed.update(child["filters"]["rule_ids"])
         assert not set(child["filters"]["rule_ids"]) & PILOTS
     assert delivered == expected
-    assert len(delivered) == 74
-    assert len(executed) == 64
+    assert len(delivered) == 75
+    assert len(executed) == 65
 
 
 @pytest.mark.parametrize(
@@ -288,7 +289,7 @@ def test_explicit_paused_family_completes_parent(
     engine, workspace, app, pool_id, item_id = setup_chain(
         monkeypatch, _isolated_database
     )
-    selected = ["LX0609-01-01-01", "LX0609-06-01-03", "LX0609-03-01-01", *extra]
+    selected = ["LX0609-01-01-01", "LX0609-06-03-02", "LX0609-03-01-01", *extra]
     monkeypatch.setattr(
         chain.qc_sample_pools, "submit_detached_task", lambda *args, **kwargs: None
     )
@@ -330,8 +331,8 @@ def test_explicit_paused_family_completes_parent(
             "data"
         ]
     assert "filters" not in public
-    assert public["acceptance_only_rule_ids"] == ["LX0609-06-01-03"]
-    _assert_frontend_scope(public, ["LX0609-06-01-03"])
+    assert public["acceptance_only_rule_ids"] == ["LX0609-06-03-02"]
+    _assert_frontend_scope(public, ["LX0609-06-03-02"])
     for child in public.get("child_jobs", []):
         assert "filters" not in child
         _assert_frontend_scope(child, child["acceptance_only_rule_ids"])

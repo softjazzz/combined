@@ -136,6 +136,8 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
     assert all(rule.get("customer_policy") for rule in projected)
     assert "customer_policy" not in wrappers[0]
     for rule in projected:
+        assert rule["phase_status"] == master_by_id[rule["rule_id"]].phase_status
+        assert rule["release_scope"] == master_by_id[rule["rule_id"]].release_scope
         policy = rule["customer_policy"]
         assert isinstance(policy["source_document"], str) and policy["source_document"]
         assert isinstance(policy["qc_point"], str) and policy["qc_point"]

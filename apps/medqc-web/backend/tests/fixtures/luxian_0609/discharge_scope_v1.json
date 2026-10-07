@@ -1,0 +1,123 @@
+{
+  "version": "discharge-scope-v1",
+  "rule_id": "LX0609-08-01-05",
+  "expectation_origin": "规范推导的工程预期；独立于执行器和模型响应",
+  "clinical_review_status": "pending",
+  "freeze_policy": "运行前固定；修改预期必须另记理由和版本，禁止根据模型输出回填答案",
+  "cases": [
+    {
+      "id": "explicit_summary",
+      "category": "明确记录",
+      "discharge": "入院后诊断细菌性肺炎，予头孢曲松抗感染。发热逐日消退，咳嗽减轻。出院时体温正常、无气促。胸部CT示右下肺感染，支持肺炎诊断。",
+      "reference": "胸部CT示右下肺感染，结合发热咳嗽诊断肺炎，予抗感染治疗。",
+      "coverage": "complete",
+      "expected": { "own_content": "present", "important_event": true, "summary": "present" },
+      "rationale": "诊断依据、治疗措施、病情演变和疗效均有具体概述。"
+    },
+    {
+      "id": "synonymous_summary",
+      "category": "同义概述",
+      "discharge": "影像提示第三腰椎压缩性骨折，予卧床、支具保护和镇痛。腰痛逐渐减轻，出院时可在支具保护下活动。",
+      "reference": "MRI：L3椎体压缩骨折。结合压痛及影像明确本次腰痛主要病因，继续保守治疗。",
+      "coverage": "complete",
+      "expected": { "own_content": "present", "important_event": true, "summary": "present" },
+      "rationale": "L3与第三腰椎为同义表达，不要求复述MRI名称。"
+    },
+    {
+      "id": "generic_only",
+      "category": "仅笼统描述",
+      "discharge": "完善辅查，对症治疗，好转出院。",
+      "reference": "CT发现股骨颈骨折，为此次疼痛的诊断依据。",
+      "coverage": "complete",
+      "expected": { "own_content": "missing", "important_event": true, "summary": "missing" },
+      "rationale": "笼统措辞不能证明具体措施或重要检查发现已概述；完整输入无候选并非uncertain。"
+    },
+    {
+      "id": "confirmed_omission",
+      "category": "确实缺失",
+      "discharge": "予镇痛治疗，疼痛逐渐减轻，出院时可活动。",
+      "reference": "本次住院已于9月2日行胆囊切除术，术后恢复顺利。",
+      "coverage": "complete",
+      "expected": { "own_content": "present", "important_event": true, "summary": "missing" },
+      "rationale": "自身三个基础内容存在，不等于重要手术经过已记录。"
+    },
+    {
+      "id": "truncated_input",
+      "category": "材料缺失",
+      "discharge": "入院后予治疗……",
+      "reference": "本次住院行手术治疗。",
+      "coverage": "truncated",
+      "expected": {
+        "own_content": "not_evaluated",
+        "important_event": null,
+        "summary": "not_evaluated",
+        "result": "data_gap",
+        "calls": 0
+      },
+      "rationale": "输入截断须在模型前阻断，不能判医生漏写。"
+    },
+    {
+      "id": "conflicting_laterality",
+      "category": "内容冲突",
+      "discharge": "左侧股骨颈骨折，予镇痛及制动，疼痛缓解，出院时一般情况平稳。",
+      "reference": "CT示右侧股骨颈骨折，据此确立主要诊断。",
+      "coverage": "complete",
+      "expected": {
+        "own_content": "present",
+        "important_event": true,
+        "summary": "uncertain",
+        "required_conflict": "左侧与右侧"
+      },
+      "rationale": "存在具体候选但侧别冲突，须保留两端来源，不以missing替代。"
+    },
+    {
+      "id": "shared_finding_two_reports",
+      "category": "同一发现多报告",
+      "discharge": "CT提示L3压缩性骨折，予保守治疗及镇痛，腰痛减轻，出院时病情平稳。",
+      "reference": "CT提示L3压缩性骨折，为主要诊断依据。MRI复查仍示同一L3骨折，未见新发损伤，维持原治疗。",
+      "coverage": "complete",
+      "expected": {
+        "own_content": "present",
+        "important_event": true,
+        "summary": "present",
+        "forbidden_missing_reason": "没有出现MRI名称"
+      },
+      "rationale": "同一重要发现已概述；不得单独制造MRI缺项。"
+    },
+    {
+      "id": "abnormal_without_importance",
+      "category": "普通异常无重要性依据",
+      "discharge": "因踝扭伤予制动、冰敷、镇痛，肿胀逐渐消退，出院时行走改善。",
+      "reference": "血常规一项轻度偏高，医生判断无临床意义，与本次扭伤诊疗无关，不需进一步处置。",
+      "coverage": "complete",
+      "expected": {
+        "own_content": "present",
+        "important_event": false,
+        "summary": "not_evaluated"
+      },
+      "rationale": "异常本身不能作为重要性依据，无事件时不进行C匹配。"
+    },
+    {
+      "id": "important_without_treatment_change",
+      "category": "重要但不改变治疗",
+      "discharge": "CT证实L3压缩性骨折，继续卧床及镇痛，疼痛改善，出院病情平稳。",
+      "reference": "CT证实L3压缩性骨折，是本次主要疾病诊断依据，原保守方案不变。",
+      "coverage": "complete",
+      "expected": { "own_content": "present", "important_event": true, "summary": "present" },
+      "rationale": "主要诊断依据本身可重要，不以改变方案为唯一门槛。"
+    }
+  ],
+  "real_case_local_expectations": [
+    {
+      "case": "C06",
+      "whole_case_expected": null,
+      "review_status": "pending",
+      "invariants": [
+        "不能仅因未写MRI名称报缺",
+        "只有独立重要信息才构成另一个待核查事项",
+        "完整输入必须包含相关出院字段与关联诊断"
+      ],
+      "usage": "开发反例，非盲测"
+    }
+  ]
+}

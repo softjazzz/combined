@@ -1,19 +1,13 @@
 <template>
-  <main class="synthetic-case-page">
-    <header class="synthetic-case-header">
-      <div class="synthetic-case-header-copy">
-        <button
-          class="synthetic-case-back"
-          type="button"
-          @click="goBack"
-        >
-          <ArrowLeft :size="16" />
+  <main class="synthetic-case-page mq-page">
+    <header class="synthetic-case-header mq-page-head">
+      <div class="synthetic-case-header-copy mq-page-head__copy">
+        <button class="synthetic-case-back" type="button" @click="goBack">
+          <MqIcon name="back" :size="16" />
           返回样本验证
         </button>
-        <div class="synthetic-case-eyebrow">
-          客户样本验证 / 测试病历构建
-        </div>
-        <h1>创建测试病历</h1>
+        <div class="synthetic-case-eyebrow mq-page-eyebrow">客户样本验证 / 测试病历构建</div>
+        <h1 class="mq-page-title">创建测试病历</h1>
         <p>选择已配置模板的主要质控点后生成可编辑病历，用于验证规则效果。</p>
         <div class="synthetic-case-summary">
           <span>规则集：泸县0609质控点验证 v1</span>
@@ -23,13 +17,10 @@
           <span>独立样本池</span>
         </div>
       </div>
-      <div class="synthetic-case-header-actions">
-        <a-button
-          class="synthetic-case-ghost-button"
-          @click="openSyntheticCaseGuide"
-        >
+      <div class="synthetic-case-header-actions mq-page-head__actions">
+        <a-button class="synthetic-case-ghost-button" @click="openSyntheticCaseGuide">
           <template #icon>
-            <Compass :size="15" />
+            <MqIcon name="rules" :size="15" />
           </template>
           功能导览
         </a-button>
@@ -39,7 +30,7 @@
           @click="showPreview = true"
         >
           <template #icon>
-            <Eye :size="15" />
+            <MqIcon name="doc" :size="15" />
           </template>
           预览病历包
         </a-button>
@@ -111,7 +102,7 @@
       </button>
     </nav>
 
-    <section class="synthetic-case-shell">
+    <section class="synthetic-case-shell mq-card">
       <aside class="synthetic-case-sidebar">
         <div class="synthetic-case-rule-set-card">
           <span>固定规则集</span>
@@ -121,7 +112,7 @@
 
         <template v-if="wizardStep === 1">
           <div class="synthetic-case-panel-title">
-            <Layers :size="16" />
+            <MqIcon name="stack" :size="16" />
             规则族
           </div>
           <div
@@ -144,17 +135,11 @@
           </div>
         </template>
 
-        <div
-          v-if="wizardStep > 1"
-          class="synthetic-case-panel-title synthetic-case-doc-title"
-        >
-          <FileText :size="16" />
+        <div v-if="wizardStep > 1" class="synthetic-case-panel-title synthetic-case-doc-title">
+          <MqIcon name="doc" :size="16" />
           文书目录
         </div>
-        <div
-          v-if="wizardStep > 1"
-          class="synthetic-case-doc-nav"
-        >
+        <div v-if="wizardStep > 1" class="synthetic-case-doc-nav">
           <button
             v-for="(document, index) in form.documents"
             :key="document.key"
@@ -190,7 +175,7 @@
 
         <section
           v-if="wizardStep === 1"
-          class="synthetic-case-card synthetic-case-selection-card"
+          class="synthetic-case-card mq-card synthetic-case-selection-card"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -201,10 +186,7 @@
               已选 {{ selectedRuleSelection.length }} 条
             </span>
           </div>
-          <div
-            v-if="isDraftStale"
-            class="synthetic-case-warning-banner"
-          >
+          <div v-if="isDraftStale" class="synthetic-case-warning-banner">
             质控点选择已变更，当前病历草稿仍是旧范围。请重新生成病历草稿后再保存或验证。
           </div>
 
@@ -219,13 +201,12 @@
                 <div class="synthetic-case-rule-grid-head">
                   <div>
                     <strong>{{ selectedRuleFamily.name }}</strong>
-                    <small>本组 {{ selectedRuleFamily.rules.length }} 条，已选
-                      {{ selectedFamilyRuleSelectionCount }} 条</small>
+                    <small
+                      >本组 {{ selectedRuleFamily.rules.length }} 条，已选
+                      {{ selectedFamilyRuleSelectionCount }} 条</small
+                    >
                   </div>
-                  <button
-                    type="button"
-                    @click="toggleSelectedRuleFamily"
-                  >
+                  <button type="button" @click="toggleSelectedRuleFamily">
                     {{ isSelectedRuleFamilyFullySelected ? '取消本组' : '全选本组' }}
                   </button>
                 </div>
@@ -241,7 +222,7 @@
                     @change="
                       toggleRuleSelection(rule.ruleId, ($event.target as HTMLInputElement).checked)
                     "
-                  >
+                  />
                   <div>
                     <strong>{{ rule.ruleId }}</strong>
                     <span>{{ rule.name }}</span>
@@ -260,42 +241,28 @@
                 <span>本轮期望结果</span>
                 <div class="synthetic-case-fixed-status">
                   <strong>有缺陷</strong>
-                  <small>当前版本提供缺陷验证模板；无缺陷、不适用和数据不足需专用模板后开放。</small>
+                  <small
+                    >当前版本提供缺陷验证模板；无缺陷、不适用和数据不足需专用模板后开放。</small
+                  >
                 </div>
               </div>
               <div>
                 <span>关键材料</span>
-                <ul
-                  v-if="selectedRequiredMaterials.length"
-                  class="synthetic-case-material-list"
-                >
-                  <li
-                    v-for="material in selectedRequiredMaterials"
-                    :key="material"
-                  >
+                <ul v-if="selectedRequiredMaterials.length" class="synthetic-case-material-list">
+                  <li v-for="material in selectedRequiredMaterials" :key="material">
                     {{ material }}
                   </li>
                 </ul>
-                <p v-else>
-                  请选择质控点后查看需要准备的文书和结构化材料。
-                </p>
+                <p v-else>请选择质控点后查看需要准备的文书和结构化材料。</p>
               </div>
               <div>
                 <span>已选质控点</span>
-                <div
-                  v-if="selectedRules.length"
-                  class="synthetic-case-selected-rules"
-                >
-                  <em
-                    v-for="rule in selectedRules"
-                    :key="rule.ruleId"
-                  >
+                <div v-if="selectedRules.length" class="synthetic-case-selected-rules">
+                  <em v-for="rule in selectedRules" :key="rule.ruleId">
                     {{ rule.ruleId }} · {{ rule.familyName }}
                   </em>
                 </div>
-                <p v-else>
-                  尚未选择质控点。
-                </p>
+                <p v-else>尚未选择质控点。</p>
               </div>
               <a-button
                 type="primary"
@@ -313,7 +280,7 @@
 
         <section
           v-if="wizardStep === 2 && editorTab === 'overview'"
-          class="synthetic-case-card"
+          class="synthetic-case-card mq-card"
           data-synthetic-guide="basic-info"
           :class="syntheticCaseGuideTargetClass('basic-info')"
         >
@@ -335,61 +302,35 @@
           <div class="synthetic-case-form-grid">
             <label>
               <span>测试病历名称</span>
-              <a-input
-                v-model:value="form.caseTitle"
-                placeholder="例如：术后记录超时测试"
-              />
+              <a-input v-model:value="form.caseTitle" placeholder="例如：术后记录超时测试" />
             </label>
             <label>
               <span>患者姓名</span>
-              <a-input
-                v-model:value="form.patientName"
-                placeholder="脱敏姓名"
-              />
+              <a-input v-model:value="form.patientName" placeholder="脱敏姓名" />
             </label>
             <label>
               <span>性别</span>
-              <a-select
-                v-model:value="form.sex"
-                :options="sexOptions"
-              />
+              <a-select v-model:value="form.sex" :options="sexOptions" />
             </label>
             <label>
               <span>年龄</span>
-              <a-input-number
-                v-model:value="form.age"
-                class="w-full"
-                :min="0"
-                :max="120"
-              />
+              <a-input-number v-model:value="form.age" class="w-full" :min="0" :max="120" />
             </label>
             <label>
               <span>住院号</span>
-              <a-input
-                v-model:value="form.mrNo"
-                placeholder="可选，留空自动生成"
-              />
+              <a-input v-model:value="form.mrNo" placeholder="可选，留空自动生成" />
             </label>
             <label>
               <span>科室</span>
-              <a-input
-                v-model:value="form.department"
-                placeholder="例如：普通外科"
-              />
+              <a-input v-model:value="form.department" placeholder="例如：普通外科" />
             </label>
             <label>
               <span>入院时间</span>
-              <a-input
-                v-model:value="form.admissionTime"
-                type="datetime-local"
-              />
+              <a-input v-model:value="form.admissionTime" type="datetime-local" />
             </label>
             <label>
               <span>出院时间</span>
-              <a-input
-                v-model:value="form.dischargeTime"
-                type="datetime-local"
-              />
+              <a-input v-model:value="form.dischargeTime" type="datetime-local" />
             </label>
             <label>
               <span>评价时间点</span>
@@ -403,10 +344,7 @@
             </label>
             <label class="is-wide">
               <span>主要诊断</span>
-              <a-input
-                v-model:value="form.mainDiagnosis"
-                placeholder="可选，用于质控上下文"
-              />
+              <a-input v-model:value="form.mainDiagnosis" placeholder="可选，用于质控上下文" />
             </label>
             <label class="is-wide">
               <span>其他诊断</span>
@@ -421,7 +359,7 @@
 
         <section
           v-if="wizardStep === 2 && editorTab === 'documents'"
-          class="synthetic-case-card"
+          class="synthetic-case-card mq-card"
           data-synthetic-guide="documents"
           :class="syntheticCaseGuideTargetClass('documents')"
         >
@@ -436,9 +374,7 @@
                 popup-class-name="synthetic-case-doc-type-dropdown"
                 :options="testRecordDocumentTypeOptions"
               />
-              <a-button @click="addDocument">
-                添加文书
-              </a-button>
+              <a-button @click="addDocument"> 添加文书 </a-button>
             </div>
           </div>
 
@@ -461,10 +397,7 @@
                   >
                     {{ document.enabled ? '已纳入' : '已停用' }}
                   </span>
-                  <a-switch
-                    v-model:checked="document.enabled"
-                    size="small"
-                  />
+                  <a-switch v-model:checked="document.enabled" size="small" />
                   <a-button
                     size="small"
                     danger
@@ -491,24 +424,15 @@
                 </label>
                 <label>
                   <span>记录/报告时间</span>
-                  <a-input
-                    v-model:value="document.record_time"
-                    type="datetime-local"
-                  />
+                  <a-input v-model:value="document.record_time" type="datetime-local" />
                 </label>
                 <label>
                   <span>提交时间</span>
-                  <a-input
-                    v-model:value="document.submit_time"
-                    type="datetime-local"
-                  />
+                  <a-input v-model:value="document.submit_time" type="datetime-local" />
                 </label>
                 <label>
                   <span>记录医师</span>
-                  <a-input
-                    v-model:value="document.doctor_name"
-                    placeholder="可选"
-                  />
+                  <a-input v-model:value="document.doctor_name" placeholder="可选" />
                 </label>
               </div>
               <a-textarea
@@ -546,7 +470,7 @@
 
         <section
           v-if="wizardStep === 2 && editorTab === 'orders'"
-          class="synthetic-case-card"
+          class="synthetic-case-card mq-card"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -575,7 +499,7 @@
 
         <section
           v-if="wizardStep === 2 && editorTab === 'exams'"
-          class="synthetic-case-card"
+          class="synthetic-case-card mq-card"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -604,7 +528,7 @@
 
         <section
           v-if="wizardStep === 2 && editorTab === 'preview'"
-          class="synthetic-case-card"
+          class="synthetic-case-card mq-card"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -617,7 +541,7 @@
 
         <section
           v-if="wizardStep === 3"
-          class="synthetic-case-card synthetic-case-confirm-card"
+          class="synthetic-case-card mq-card synthetic-case-confirm-card"
           data-synthetic-guide="confirm"
           :class="syntheticCaseGuideTargetClass('confirm')"
         >
@@ -650,10 +574,7 @@
           </div>
 
           <div class="synthetic-case-confirm-list">
-            <div
-              v-for="rule in generatedRules"
-              :key="rule.ruleId"
-            >
+            <div v-for="rule in generatedRules" :key="rule.ruleId">
               <strong>{{ rule.ruleId }}</strong>
               <span>{{ rule.name }}</span>
               <small>{{ rule.familyName }} · {{ rule.requiredDocumentsLabel }}</small>
@@ -661,14 +582,8 @@
           </div>
 
           <div class="synthetic-case-confirm-actions">
-            <a-button @click="goWizardStep(2)">
-              返回编辑
-            </a-button>
-            <a-button
-              type="primary"
-              :loading="saving"
-              @click="handleSave(false)"
-            >
+            <a-button @click="goWizardStep(2)"> 返回编辑 </a-button>
+            <a-button type="primary" :loading="saving" @click="handleSave(false)">
               仅保存测试病历
             </a-button>
             <a-button
@@ -691,7 +606,7 @@
       width="88vw"
       title="病历包预览"
       :footer="null"
-      wrap-class-name="synthetic-case-preview-modal"
+      wrap-class-name="mq-modal synthetic-case-preview-modal"
     >
       <div class="synthetic-case-preview">
         <aside>
@@ -703,18 +618,10 @@
       </div>
     </a-modal>
 
-    <div
-      v-if="syntheticCaseGuideOpen"
-      class="synthetic-case-tour-layer"
-    >
+    <div v-if="syntheticCaseGuideOpen" class="synthetic-case-tour-layer">
       <div class="synthetic-case-tour-scrim" />
-      <div
-        class="synthetic-case-tour-card"
-        :style="syntheticCaseTourCardStyle"
-      >
-        <div class="synthetic-case-tour-kicker">
-          创建测试病历导览
-        </div>
+      <div class="synthetic-case-tour-card" :style="syntheticCaseTourCardStyle">
+        <div class="synthetic-case-tour-kicker">创建测试病历导览</div>
         <div class="synthetic-case-tour-count">
           {{ syntheticCaseGuideStepIndex + 1 }} / {{ syntheticCaseGuideSteps.length }}
         </div>
@@ -731,12 +638,7 @@
           />
         </div>
         <div class="synthetic-case-tour-actions">
-          <a-button
-            class="!rounded-lg"
-            @click="closeSyntheticCaseGuide"
-          >
-            跳过
-          </a-button>
+          <a-button class="!rounded-lg" @click="closeSyntheticCaseGuide"> 跳过 </a-button>
           <a-button
             v-if="syntheticCaseGuideStepIndex > 0"
             class="!rounded-lg"
@@ -744,11 +646,7 @@
           >
             上一步
           </a-button>
-          <a-button
-            type="primary"
-            class="!rounded-lg"
-            @click="goToNextSyntheticCaseGuideStep"
-          >
+          <a-button type="primary" class="!rounded-lg" @click="goToNextSyntheticCaseGuideStep">
             {{ isLastSyntheticCaseGuideStep ? '完成导览' : '下一步' }}
           </a-button>
         </div>
@@ -758,11 +656,12 @@
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { ArrowLeft, Compass, Eye, FileText, Layers } from 'lucide-vue-next'
+
 import {
   createManualTestMedicalRecord,
   listLuxian0609CustomerRules,
@@ -1597,1190 +1496,4 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
-.synthetic-case-page {
-  min-height: 100%;
-  padding: 20px 24px 28px;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-.synthetic-case-header,
-.synthetic-case-shell,
-.synthetic-case-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.88);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 10px 28px rgba(0, 0, 0, 0.055);
-}
-
-.synthetic-case-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  margin: 0 auto 14px;
-  max-width: 1600px;
-  border-radius: 18px;
-  padding: 16px 18px;
-}
-
-.synthetic-case-wizard {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0 auto 14px;
-  max-width: 1600px;
-}
-
-.synthetic-case-wizard button {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 64px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
-  color: rgba(29, 29, 31, 0.64);
-  cursor: pointer;
-  padding: 10px 12px;
-  text-align: left;
-  transition: 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.synthetic-case-wizard button:hover {
-  border-color: rgba(10, 108, 255, 0.22);
-  transform: translateY(-1px);
-}
-
-.synthetic-case-wizard button > span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 11px;
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.synthetic-case-wizard strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
-}
-
-.synthetic-case-wizard small {
-  display: block;
-  margin-top: 2px;
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-wizard button.is-active {
-  border-color: rgba(10, 108, 255, 0.28);
-  background: rgba(10, 108, 255, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(10, 108, 255, 0.08);
-}
-
-.synthetic-case-wizard button.is-active > span,
-.synthetic-case-wizard button.is-complete > span {
-  background: #0a6cff;
-  color: #fff;
-}
-
-.synthetic-case-header-copy {
-  min-width: 0;
-}
-
-.synthetic-case-header h1 {
-  margin: 2px 0 5px;
-  font-size: 27px;
-  font-weight: 700;
-  line-height: 31px;
-  letter-spacing: 0;
-}
-
-.synthetic-case-header p {
-  margin: 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-}
-
-.synthetic-case-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  color: #0a6cff;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 0;
-}
-
-.synthetic-case-eyebrow {
-  margin-top: 10px;
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.synthetic-case-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.synthetic-case-summary span,
-.synthetic-case-section-chip,
-.synthetic-case-doc-status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  padding: 3px 10px;
-  color: rgba(29, 29, 31, 0.64);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.synthetic-case-section-chip {
-  border-color: rgba(10, 108, 255, 0.16);
-  background: rgba(10, 108, 255, 0.07);
-  color: #0a6cff;
-}
-
-.synthetic-case-header-actions,
-.synthetic-case-inline-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.synthetic-case-header-actions {
-  flex: 0 0 auto;
-  justify-content: flex-end;
-}
-
-.synthetic-case-ghost-button,
-.synthetic-case-primary-button {
-  display: inline-flex !important;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 14px !important;
-  border-radius: 9px !important;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 34px;
-  white-space: nowrap;
-}
-
-.synthetic-case-ghost-button {
-  min-width: 112px;
-  border-color: rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.72);
-  color: rgba(29, 29, 31, 0.78);
-}
-
-.synthetic-case-primary-button {
-  min-width: 128px;
-  background: #0a6cff;
-  border-color: #0a6cff;
-  box-shadow: 0 7px 18px rgba(10, 108, 255, 0.18);
-}
-
-.synthetic-case-ghost-button :deep(.ant-btn-icon),
-.synthetic-case-primary-button :deep(.ant-btn-icon) {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  margin-inline-end: 0 !important;
-}
-
-.synthetic-case-primary-button.is-strong {
-  box-shadow: 0 9px 22px rgba(10, 108, 255, 0.24);
-}
-
-.synthetic-case-ghost-button:hover,
-.synthetic-case-primary-button:hover {
-  transform: translateY(-1px);
-}
-
-.synthetic-case-shell {
-  display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
-  gap: 14px;
-  margin: 0 auto;
-  max-width: 1600px;
-  border-radius: 20px;
-  padding: 14px;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.035),
-    0 18px 42px rgba(0, 0, 0, 0.055);
-}
-
-.synthetic-case-sidebar {
-  min-width: 0;
-}
-
-.synthetic-case-rule-set-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.76);
-  padding: 12px;
-}
-
-.synthetic-case-rule-set-card span {
-  color: rgba(29, 29, 31, 0.62);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.synthetic-case-rule-set-card strong {
-  color: #0a6cff;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 20px;
-}
-
-.synthetic-case-rule-set-card small {
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-step-card {
-  position: relative;
-  border-radius: 15px;
-  background: rgba(0, 0, 0, 0.025);
-  padding: 12px 13px 12px 42px;
-}
-
-.synthetic-case-step-card + .synthetic-case-step-card {
-  margin-top: 8px;
-}
-
-.synthetic-case-step-card span {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  background: rgba(10, 108, 255, 0.09);
-  color: #0a6cff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.synthetic-case-step-card strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.synthetic-case-step-card p {
-  margin: 3px 0 0;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 18px 0 10px;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.synthetic-case-doc-title {
-  margin-top: 18px;
-}
-
-.synthetic-case-template-list,
-.synthetic-case-doc-nav,
-.synthetic-case-doc-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.synthetic-case-template,
-.synthetic-case-doc-nav button {
-  width: 100%;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.66);
-  color: #1d1d1f;
-  cursor: pointer;
-  padding: 11px 12px;
-  text-align: left;
-  transition: 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.synthetic-case-template:hover,
-.synthetic-case-doc-nav button:hover {
-  border-color: rgba(10, 108, 255, 0.28);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.08),
-    0 6px 22px rgba(0, 0, 0, 0.055);
-  transform: translateY(-1px);
-}
-
-.synthetic-case-template.is-active {
-  border-color: rgba(10, 108, 255, 0.42);
-  background: rgba(10, 108, 255, 0.08);
-}
-
-.synthetic-case-template strong,
-.synthetic-case-doc-nav strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 19px;
-}
-
-.synthetic-case-template span,
-.synthetic-case-doc-nav span {
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.synthetic-case-template small,
-.synthetic-case-doc-nav small {
-  display: block;
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-doc-nav button {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-}
-
-.synthetic-case-rule-grid-head button {
-  height: 30px;
-  border: 1px solid rgba(10, 108, 255, 0.14);
-  border-radius: 9px;
-  background: rgba(10, 108, 255, 0.07);
-  color: #0a6cff;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 0 10px;
-  transition: 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
-  white-space: nowrap;
-}
-
-.synthetic-case-rule-grid-head button:hover {
-  border-color: rgba(10, 108, 255, 0.28);
-  background: rgba(10, 108, 255, 0.11);
-}
-
-.synthetic-case-generate-button {
-  height: 36px;
-  margin-top: 2px;
-  border-radius: 10px !important;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.synthetic-case-doc-nav button > span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 9px;
-  background: rgba(10, 108, 255, 0.08);
-}
-
-.synthetic-case-editor {
-  min-width: 0;
-}
-
-.synthetic-case-editor-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 4px;
-}
-
-.synthetic-case-editor-tabs button {
-  min-width: 82px;
-  height: 32px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: rgba(29, 29, 31, 0.6);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.synthetic-case-editor-tabs button.is-active {
-  background: rgba(10, 108, 255, 0.1);
-  color: #0a6cff;
-}
-
-.synthetic-case-card {
-  border-radius: 17px;
-  padding: 18px 18px 20px;
-  transition: 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.synthetic-case-card + .synthetic-case-card {
-  margin-top: 14px;
-}
-
-.synthetic-case-card:hover {
-  border-color: rgba(0, 0, 0, 0.12);
-}
-
-.synthetic-case-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.synthetic-case-section-head h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 22px;
-}
-
-.synthetic-case-section-head p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
-}
-
-.synthetic-case-selection-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 14px;
-}
-
-.synthetic-case-rule-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.synthetic-case-rule-grid-head {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.78);
-  padding: 10px 12px;
-}
-
-.synthetic-case-rule-grid-head strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 20px;
-}
-
-.synthetic-case-rule-grid-head small {
-  display: block;
-  margin-top: 3px;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-rule-card {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  min-height: 116px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.74);
-  cursor: pointer;
-  padding: 12px;
-  transition: 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.synthetic-case-rule-card:hover {
-  border-color: rgba(10, 108, 255, 0.22);
-  transform: translateY(-1px);
-}
-
-.synthetic-case-rule-card.is-selected {
-  border-color: rgba(10, 108, 255, 0.36);
-  background: rgba(10, 108, 255, 0.07);
-}
-
-.synthetic-case-rule-card input {
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  accent-color: #0a6cff;
-}
-
-.synthetic-case-rule-card strong {
-  display: inline-flex;
-  margin-bottom: 6px;
-  border-radius: 9px;
-  background: rgba(10, 108, 255, 0.08);
-  padding: 2px 8px;
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.synthetic-case-rule-card span {
-  display: block;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
-}
-
-.synthetic-case-rule-card small {
-  display: block;
-  margin-top: 8px;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-selection-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.74);
-  padding: 14px;
-}
-
-.synthetic-case-selection-summary > div {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.synthetic-case-selection-summary span {
-  color: rgba(29, 29, 31, 0.62);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.synthetic-case-selection-summary p {
-  margin: 0;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 12px;
-  line-height: 19px;
-}
-
-.synthetic-case-warning-banner {
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 14px;
-  background: rgba(255, 251, 235, 0.86);
-  color: #92400e;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 20px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-}
-
-.synthetic-case-fixed-status {
-  border: 1px solid rgba(10, 108, 255, 0.14);
-  border-radius: 14px;
-  background: rgba(10, 108, 255, 0.055);
-  padding: 10px 11px;
-}
-
-.synthetic-case-fixed-status strong {
-  display: block;
-  color: #0a6cff;
-  font-size: 14px;
-  font-weight: 750;
-}
-
-.synthetic-case-fixed-status small {
-  display: block;
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-material-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.synthetic-case-material-list li,
-.synthetic-case-selected-rules em {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.045);
-  color: rgba(29, 29, 31, 0.68);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 650;
-  line-height: 18px;
-  padding: 3px 9px;
-}
-
-.synthetic-case-selected-rules {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.synthetic-case-selected-rules em {
-  background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
-}
-
-.synthetic-case-form-grid,
-.synthetic-case-doc-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 13px;
-}
-
-.synthetic-case-form-grid label,
-.synthetic-case-doc-grid label {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 6px;
-  color: rgba(29, 29, 31, 0.64);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.synthetic-case-form-grid .is-wide {
-  grid-column: span 2;
-}
-
-.synthetic-case-form-grid .field-hint {
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 11px;
-  font-weight: 400;
-}
-
-.synthetic-case-doc {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 14px 14px 15px;
-  scroll-margin-top: 20px;
-}
-
-.synthetic-case-doc:hover {
-  border-color: rgba(10, 108, 255, 0.18);
-}
-
-.synthetic-case-doc-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.synthetic-case-doc-head span {
-  display: block;
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.synthetic-case-doc-head strong {
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
-}
-
-.synthetic-case-doc-grid {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  margin-bottom: 12px;
-}
-
-.synthetic-case-doc-edit-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding-top: 10px;
-}
-
-.synthetic-case-doc-edit-status {
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.synthetic-case-doc-edit-status.is-dirty {
-  color: #b45309;
-}
-
-.synthetic-case-doc-select {
-  width: 184px;
-  min-width: 184px;
-}
-
-.synthetic-case-tab-doc-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.synthetic-case-tab-doc-list button {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.74);
-  cursor: pointer;
-  padding: 12px;
-  text-align: left;
-}
-
-.synthetic-case-tab-doc-list button:hover {
-  border-color: rgba(10, 108, 255, 0.22);
-}
-
-.synthetic-case-tab-doc-list strong {
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.synthetic-case-tab-doc-list span,
-.synthetic-case-tab-doc-list p {
-  margin: 0;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 13px;
-}
-
-.synthetic-case-inline-preview {
-  max-height: 62vh;
-  overflow: auto;
-  white-space: pre-wrap;
-  border-radius: 16px;
-  background: #f8fafc;
-  color: #1d1d1f;
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.9;
-  margin: 0;
-  padding: 16px;
-}
-
-.synthetic-case-confirm-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.synthetic-case-confirm-block {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.74);
-  padding: 14px;
-}
-
-.synthetic-case-confirm-block span {
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.synthetic-case-confirm-block strong {
-  display: block;
-  margin-top: 6px;
-  color: #1d1d1f;
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.synthetic-case-confirm-block p {
-  margin: 6px 0 0;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.synthetic-case-confirm-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.synthetic-case-confirm-list div {
-  display: grid;
-  grid-template-columns: 100px minmax(0, 1fr) 220px;
-  gap: 10px;
-  align-items: center;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding-top: 8px;
-}
-
-.synthetic-case-confirm-list strong {
-  color: #0a6cff;
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.synthetic-case-confirm-list span {
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.synthetic-case-confirm-list small {
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-}
-
-.synthetic-case-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-:global(.synthetic-case-doc-type-dropdown) {
-  min-width: 184px !important;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-:global(.synthetic-case-doc-type-dropdown .ant-select-item-option-content) {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
-.synthetic-case-doc-status {
-  min-height: 24px;
-  border-color: rgba(16, 185, 129, 0.18);
-  background: rgba(16, 185, 129, 0.08);
-  color: #047857;
-}
-
-.synthetic-case-doc-status.is-disabled {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(29, 29, 31, 0.46);
-}
-
-.synthetic-case-preview {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 16px;
-}
-
-.synthetic-case-preview aside {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-radius: 16px;
-  background: #f5f5f7;
-  padding: 14px;
-}
-
-.synthetic-case-preview aside strong {
-  font-size: 16px;
-}
-
-.synthetic-case-preview aside span {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-}
-
-.synthetic-case-preview pre {
-  max-height: 68vh;
-  overflow: auto;
-  white-space: pre-wrap;
-  border-radius: 16px;
-  background: #f8fafc;
-  color: #1d1d1f;
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.9;
-  margin: 0;
-  padding: 16px;
-}
-
-.synthetic-case-page :deep(.ant-input),
-.synthetic-case-page :deep(.ant-input-number),
-.synthetic-case-page :deep(.ant-select-selector),
-.synthetic-case-page :deep(.ant-input-number-input),
-.synthetic-case-page :deep(.ant-btn),
-.synthetic-case-page :deep(.ant-select-dropdown) {
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-.synthetic-case-page :deep(.ant-input),
-.synthetic-case-page :deep(.ant-input-number),
-.synthetic-case-page :deep(.ant-select-selector) {
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  border-radius: 8px !important;
-  background: rgba(255, 255, 255, 0.78) !important;
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.synthetic-case-page :deep(.ant-input:not(textarea)),
-.synthetic-case-page :deep(.ant-input-number),
-.synthetic-case-page :deep(.ant-select-selector) {
-  min-height: 34px;
-}
-
-.synthetic-case-page :deep(.ant-input-number-input),
-.synthetic-case-page :deep(.ant-select-selection-item),
-.synthetic-case-page :deep(.ant-select-selection-placeholder) {
-  font-weight: 400;
-}
-
-.synthetic-case-page :deep(textarea.ant-input) {
-  font-weight: 400;
-  line-height: 1.85;
-}
-
-.synthetic-case-page :deep(.ant-input:focus),
-.synthetic-case-page :deep(.ant-input-focused),
-.synthetic-case-page :deep(.ant-select-focused .ant-select-selector) {
-  border-color: rgba(10, 108, 255, 0.46) !important;
-  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08) !important;
-}
-
-.synthetic-case-tour-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  pointer-events: none;
-}
-
-.synthetic-case-tour-scrim {
-  position: absolute;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.08);
-}
-
-.synthetic-case-tour-card {
-  position: absolute;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-    0 12px 36px rgba(15, 23, 42, 0.16),
-    0 2px 8px rgba(15, 23, 42, 0.08);
-  padding: 16px;
-  pointer-events: auto;
-}
-
-.synthetic-case-tour-kicker {
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.synthetic-case-tour-count {
-  display: inline-flex;
-  margin-top: 8px;
-  border-radius: 999px;
-  background: rgba(245, 158, 11, 0.12);
-  padding: 3px 9px;
-  color: #b45309;
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 18px;
-}
-
-.synthetic-case-tour-card h3 {
-  margin: 10px 0 0;
-  color: #1d1d1f;
-  font-size: 17px;
-  font-weight: 750;
-  line-height: 24px;
-}
-
-.synthetic-case-tour-card p {
-  margin: 7px 0 0;
-  color: rgba(29, 29, 31, 0.64);
-  font-size: 13px;
-  line-height: 21px;
-}
-
-.synthetic-case-tour-dots {
-  margin-top: 13px;
-  display: flex;
-  gap: 6px;
-}
-
-.synthetic-case-tour-dots button {
-  width: 24px;
-  height: 5px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.12);
-  cursor: pointer;
-}
-
-.synthetic-case-tour-dots button.is-active {
-  background: #f59e0b;
-}
-
-.synthetic-case-tour-actions {
-  margin-top: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.synthetic-case-tour-actions :deep(.ant-btn) {
-  height: 34px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.synthetic-case-tour-actions :deep(.ant-btn-primary) {
-  border-color: #0a6cff;
-  background: #0a6cff;
-}
-
-.synthetic-case-tour-target {
-  position: relative;
-}
-
-.synthetic-case-tour-target.is-current-tour-target {
-  z-index: 90;
-  border-radius: 14px;
-  outline: 3px solid #f59e0b;
-  outline-offset: 5px;
-  box-shadow:
-    0 0 0 10px rgba(245, 158, 11, 0.24),
-    0 0 0 16px rgba(255, 255, 255, 0.82),
-    0 14px 34px rgba(180, 83, 9, 0.22);
-}
-
-@media (max-width: 1280px) {
-  .synthetic-case-header {
-    position: static;
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .synthetic-case-header-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .synthetic-case-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 960px) {
-  .synthetic-case-page {
-    padding: 14px;
-  }
-
-  .synthetic-case-wizard,
-  .synthetic-case-selection-layout,
-  .synthetic-case-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .synthetic-case-rule-grid,
-  .synthetic-case-confirm-grid,
-  .synthetic-case-form-grid,
-  .synthetic-case-doc-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .synthetic-case-form-grid .is-wide {
-    grid-column: auto;
-  }
-
-  .synthetic-case-header-actions {
-    flex-wrap: wrap;
-  }
-
-  .synthetic-case-confirm-list div {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>
+<style scoped src="../styles/synthetic-case.css"></style>

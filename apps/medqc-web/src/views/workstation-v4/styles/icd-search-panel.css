@@ -1,0 +1,143 @@
+/* v7.1：页面布局保留，视觉值引用公共 Token。 */
+.icd-workstation {
+  background: var(--mq-bg-subtle);
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icd-workspace {
+  background: transparent;
+}
+
+.icd-result-shell,
+.icd-detail-shell {
+  overflow: hidden;
+}
+
+.icd-result-head {
+  border-bottom: 1px solid var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.icd-workstation :deep(.text-slate-900),
+.icd-workstation :deep(.text-slate-800),
+.icd-workstation :deep(.text-slate-700) {
+  color: var(--mq-text-primary) !important;
+}
+
+.icd-workstation :deep(.text-slate-600),
+.icd-workstation :deep(.text-slate-500) {
+  color: var(--mq-text-secondary) !important;
+}
+
+.icd-workstation :deep(.text-slate-400) {
+  color: var(--mq-text-tertiary) !important;
+}
+
+.icd-workstation :deep(.text-\[\#0a5fd6\]),
+.icd-workstation :deep(.text-blue-500) {
+  color: var(--mq-brand-600) !important;
+}
+
+.icd-workstation :deep(.border-slate-200),
+.icd-workstation :deep(.border-slate-200\/80),
+.icd-workstation :deep(.border-blue-100) {
+  border-color: var(--mq-border) !important;
+}
+
+.icd-workstation :deep(.bg-white),
+.icd-workstation :deep(.bg-white\/90),
+.icd-workstation :deep(.bg-white\/94) {
+  background-color: var(--mq-glass-bg-strong) !important;
+}
+
+.icd-workstation :deep(.bg-blue-50),
+.icd-workstation :deep(.bg-blue-50\/80) {
+  background-color: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+}
+
+.icd-workstation :deep(.font-semibold) {
+  font-weight: 650 !important;
+}
+
+.icd-result-row {
+  border: 1px solid transparent;
+  border-radius: var(--mq-radius-control);
+  color: color-mix(in srgb, var(--mq-text-primary) 76%, transparent);
+}
+
+.icd-result-row:hover {
+  border-color: var(--mq-border);
+  background: color-mix(in srgb, var(--mq-bg-subtle) 72%, transparent);
+}
+
+.icd-result-row.is-selected {
+  border-color: color-mix(in srgb, var(--mq-brand-600) 16%, transparent);
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--mq-glass-bg),
+    0 3px 10px color-mix(in srgb, var(--mq-brand-600) 8%, transparent);
+}
+
+.icd-tree-modern :deep(.ant-tree-switcher) {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 24px !important;
+}
+
+.icd-tree-modern :deep(.ant-tree-node-content-wrapper) {
+  padding: 6px 10px !important;
+  border-radius: var(--mq-radius-control) !important;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease !important;
+}
+
+.icd-tree-modern :deep(.ant-tree-node-content-wrapper:hover) {
+  background: var(--mq-border) !important;
+}
+
+.icd-tree-modern :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper),
+.icd-tree-modern :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+  color: var(--mq-brand-600) !important;
+}
+
+.icd-tree-modern :deep(.ant-tree-treenode) {
+  padding: 1px 0 !important;
+}
+
+.icd-tree-modern :deep(.ant-tree-indent-unit) {
+  width: 20px !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--mq-border-strong);
+  border-radius: var(--mq-radius-control);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--mq-text-tertiary);
+}
+
+.icd-workstation,
+.icd-detail-panel,
+.upload-workstation {
+  font-size: var(--mq-font-14);
+}

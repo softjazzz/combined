@@ -57,18 +57,6 @@ _IMAGING_UNCERTAIN_PATTERN = re.compile(
 # 原文明示且未被否定/待排的“阳性”可由 Python 快速确认；其余影像
 # 报告必须按整体异常语义由一次受控模型分类，不能靠关键词穷举病灶。
 _IMAGING_POSITIVE_PATTERN = re.compile(r"阳性")
-_IMAGING_RESULT_RESTATEMENT_PATTERN = re.compile(
-    r"(?:CT|MRI|计算机断层|磁共振|影像|报告|记录提示).{0,80}"
-    r"(?:异常|病变|结节|肿块|占位|突出|受压|梗死|出血|炎症|积液)",
-    re.IGNORECASE,
-)
-_IMAGING_CLINICAL_ANALYSIS_PATTERN = re.compile(
-    r"(?:分析|结合.{0,32}(?:考虑|判断|提示)|"
-    r"考虑.{0,40}(?:相关|诊断|原因|病因|可能|倾向)|"
-    r"与.{0,32}(?:相关|相符|一致)|临床判断|评估|处置|处理|"
-    r"调整治疗|会诊|安排.{0,24}(?:复查|随访))",
-    re.IGNORECASE,
-)
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
 _CULTURE_ORGANISM_ITEM_PATTERN = re.compile(
@@ -106,6 +94,8 @@ class ExamLabSingleEvent:
     # 用于多事件病程复用校验的最小事件身份文本（不作为对外证据）。
     identity_text: str = ""
     result_text_available: bool = False
+    # 仅用于识别整段逐字复述；不以关键词判断是否存在临床分析。
+    result_texts: tuple[str, ...] = ()
     # 仅含 CT 引导操作标签，不代表影像阴性；010仍可适用。
     guidance_only: bool = False
 
@@ -313,6 +303,18 @@ def _event_identity_mentions_course(
         if any(variant in text for variant in variants):
             return True
     return False
+
+
+def _is_exact_report_restatement(text: str, report_texts: Sequence[str]) -> bool:
+    """整段只含报告正文和阅读前缀，才可确定没有新增分析内容。"""
+    text = re.sub(r"^\s*查看[^。\n]{1,50}?报告[，,:：\s]*", "", text)
+    text = re.sub(r"^\s*记录提示[：:\s]*", "", text)
+
+    def normalize(value: str) -> str:
+        return re.sub(r"\s+", "", value).strip("。；;，,")
+
+    normalized = normalize(text)
+    return bool(normalized) and any(normalized == normalize(value) for value in report_texts)
 
 
 class ExamLabFactParseError(ValueError):
@@ -738,6 +740,8 @@ def build_exam_lab_text_projection(
             readable_text=bool(material),
             result_text_available=result_text_available,
             identity_text=identity_text,
+            result_texts=tuple(_clean(row.get(field)) for row in rows
+                               for field in result_fields if _clean(row.get(field))),
             guidance_only=(
                 family == "exam"
                 and is_guidance_only_imaging_rows(rows)
@@ -1262,24 +1266,26 @@ def build_exam_lab_fact_prompt(
     )
     guidance_instruction = (
         "目录中guidance_only=true表示原资料明确仅为CT引导操作标签，不是诊断结果。"
-        "对此事件的011/012输出not_applicable+absent、空病程引用；"
-        "011的positive_state为not_relevant，012为unknown（不是阴性）。其他事件仍按通常规则判定。\n"
+        "对此事件的LX0609-06-01-04/LX0609-06-01-05输出not_applicable+absent、空病程引用；"
+        "LX0609-06-01-04的positive_state为not_relevant，LX0609-06-01-05为unknown（不是阴性）。其他事件仍按通常规则判定。\n"
         if any(item.get("guidance_only") for items in rule_event_catalog.values() for item in items)
         else ""
     )
     return f"""{guidance_instruction}你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
 本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：{json.dumps(selected, ensure_ascii=False)}。
-010=CT/MRI检查前原因；011=CT/MRI报告后记录结果；012=检出异常病灶或异常征象的CT/MRI结果分析；014=培养报告后记录结果；015=阳性菌/药敏分析处置。
-CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性。015依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在015判定范围内。
-Python已按业务键拆分事件。逐规则事件目录={json.dumps(rule_event_catalog, ensure_ascii=False, separators=(',', ':'))}。010目录中的病程已由Python严格裁剪为对应检查前48小时；你只判断该次检查的原因或目的是否被实质记录，单纯提及检查、复述既往结果或泛泛写“完善检查”不等于写明原因。病程文书按COURSE_DOC字典序固定编号，全局位置为COURSE_DOC_POSITION={json.dumps(list(range(1, len(course_refs_in_position_order) + 1)), ensure_ascii=False)}。每条事实只能使用对应规则、对应事件course_doc_positions列出的病程；判断该规则时必须忽略目录外正文，即使它因同批其他规则而出现在材料中，也不得据此改变semantic_state或作为间接依据。
+LX0609-06-01-02=CT/MRI检查前原因；LX0609-06-01-04=CT/MRI报告后记录结果；LX0609-06-01-05=检出异常病灶或异常征象的CT/MRI结果分析；LX0609-06-03-03=培养报告后记录结果；LX0609-06-03-04=阳性菌/药敏分析处置。
+CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性。LX0609-06-03-04依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在LX0609-06-03-04判定范围内。
+Python已按业务键拆分事件。逐规则事件目录={json.dumps(rule_event_catalog, ensure_ascii=False, separators=(',', ':'))}。LX0609-06-01-02目录中的病程已由Python严格裁剪为对应检查前48小时；你只判断该次检查的原因或目的是否被实质记录，单纯提及检查、复述既往结果或泛泛写“完善检查”不等于写明原因。病程文书按COURSE_DOC字典序固定编号，全局位置为COURSE_DOC_POSITION={json.dumps(list(range(1, len(course_refs_in_position_order) + 1)), ensure_ascii=False)}。每条事实只能使用对应规则、对应事件course_doc_positions列出的病程；判断该规则时必须忽略目录外正文，即使它因同批其他规则而出现在材料中，也不得据此改变semantic_state或作为间接依据。
 模型只能输出 {"event_position 和 " if multi_event_schema else ""}course_doc_positions（均为1开始的整数位置），不能输出 EVENT_DOC/COURSE_DOC ID、course_doc_refs、evidence_refs 或任何其他引用字段。EVENT_DOC由Python按事件目录自动绑定。
 semantic_state=present时，course_doc_positions必须非空；semantic_state=absent或unknown时course_doc_positions必须为空。
-若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，010/011/014以及阳性的012/015应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
-positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012中，只要本次CT/MRI报告检出任一明确异常病灶或异常征象，即为positive；炎症、结节、退变、陈旧灶等均属于异常，不要求原文出现“阳性”，也不等同于癌症或确诊某病。仅当报告整体明确未检出异常征象时为negative；报告同时含“未见急性病变”和明确陈旧灶等异常时仍为positive；只有待排、不除外、不能除外等不确定描述且没有任何明确异常时为unknown。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
-011/014只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；012/015再独立判断阳性结果是否有分析或处置。仅复述、摘抄或写明“查看/记录”报告结论，只能证明011结果已记录，不能证明012已分析；012=present必须出现针对该异常结果的临床意义、病因判断、与症状的关系、诊疗计划、处置或会诊等实质内容。
-同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。015必须确认处置针对同一培养事件的标本/菌种/药敏或该报告，明确写的是另一种标本（如导管尖端培养）的处置不得引用；既复述阳性影像结论又给出考虑、计划或处理时，该事件的011和012都为present；既复述培养结果又据敏感性调整用药时，该事件的014和015都为present。
+若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，LX0609-06-01-02/LX0609-06-01-04/LX0609-06-03-03以及阳性的LX0609-06-01-05/LX0609-06-03-04应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
+positive_state字段固定规则：LX0609-06-01-02/LX0609-06-01-04/LX0609-06-03-03必须始终为not_relevant；只有LX0609-06-01-05/LX0609-06-03-04允许positive、negative或unknown。LX0609-06-01-05中，只要本次CT/MRI报告检出任一明确异常病灶或异常征象，即为positive；炎症、结节、退变、陈旧灶等均属于异常，不要求原文出现“阳性”，也不等同于癌症或确诊某病。仅当报告整体明确未检出异常征象时为negative；报告同时含“未见急性病变”和明确陈旧灶等异常时仍为positive；只有待排、不除外、不能除外等不确定描述且没有任何明确异常时为unknown。LX0609-06-01-05/LX0609-06-03-04事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
+必须核对病程正文中检查所属日期、部位和本次报告；病程书写时间在本次报告之后，不表示其引用的旧检查属于本次。仅引用既往或院外检查时不得用于本次结果记录或分析，若无法确定归属返回unknown。对每次检查分别找真正对应的病程。
+针对检查结果结合症状作出诊断、鉴别判断、手术建议或治疗效果解释，均可构成实质分析，不要求原文含“分析”二字；但仅列诊断或复制报告而无对应关系不算。必须检索首次病程的诊断依据和后续病程完整上下文。
+LX0609-06-01-04/LX0609-06-03-03只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；LX0609-06-01-05/LX0609-06-03-04再独立判断阳性结果是否有分析或处置。仅复述、摘抄或写明“查看/记录”报告结论，只能证明LX0609-06-01-04结果已记录，不能证明LX0609-06-01-05已分析；LX0609-06-01-05=present必须出现针对该异常结果的临床意义、病因判断、与症状的关系、诊疗计划、处置或会诊等实质内容。
+同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。LX0609-06-03-04必须确认处置针对同一培养事件的标本/菌种/药敏或该报告，明确写的是另一种标本（如导管尖端培养）的处置不得引用；既复述阳性影像结论又给出考虑、计划或处理时，该事件的LX0609-06-01-04和LX0609-06-01-05都为present；既复述培养结果又据敏感性调整用药时，该事件的LX0609-06-03-03和LX0609-06-03-04都为present。
 unknown只用于材料自身含混或互相冲突；完整投影里单纯未找到匹配病程应为absent。
-逐规则决策表（每条都必须独立作答）：010只看检查前原因；011只看报告结果是否记录；012只看阳性影像是否分析；014只看培养结果是否记录；015只看阳性菌或药敏是否被分析/处置。若同一 COURSE_DOC 同时满足多条，可为多条重复引用；不得因某一条不适用而省略其他条。
+逐规则决策表（每条都必须独立作答）：LX0609-06-01-02只看检查前原因；LX0609-06-01-04只看报告结果是否记录；LX0609-06-01-05只看阳性影像是否分析；LX0609-06-03-03只看培养结果是否记录；LX0609-06-03-04只看阳性菌或药敏是否被分析/处置。若同一 COURSE_DOC 同时满足多条，可为多条重复引用；不得因某一条不适用而省略其他条。
 当唯一目标 EVENT_DOC 和 COURSE_DOC 已明确对应上述事实时，填写 applicable+present 并引用该 COURSE_DOC 的位置；没有匹配病程且材料完整时填写 applicable+absent。unknown 不是默认答案：只在文本确实含混、冲突，或无法把文字与本次唯一事件关联时使用。
 最小有效引用示例（只示范当前目录允许的字段与位置，不代表本病例结论）：{json.dumps(example_fact, ensure_ascii=False, separators=(",", ":"))}。只能填对应事件目录给定的位置，不能改写、猜测或创造位置；目录没有可引用病程时必须使用absent或unknown并保持位置为空。
 禁止输出event_ref、检查时间、报告时间、病程时间或任何其他时间字段。
@@ -1567,20 +1573,17 @@ def parse_exam_lab_fact_response(
             rule_id == "LX0609-06-01-05"
             and semantic == "present"
             and normalized_course
+            and event is not None
             and all(
-                _IMAGING_RESULT_RESTATEMENT_PATTERN.search(
-                    (projection.course_texts or {}).get(ref, "")
-                )
-                and not _IMAGING_CLINICAL_ANALYSIS_PATTERN.search(
-                    (projection.course_texts or {}).get(ref, "")
+                _is_exact_report_restatement(
+                    (projection.course_texts or {}).get(ref, ""), event.result_texts
                 )
                 for ref in normalized_course
             )
         ):
-            # 多事件必须交给一次模型完成事件关联，但模型不能把“查看报告并
-            # 复述异常结论”升级为阳性结果分析。这里仅收口可确定的结果复述；
-            # 含临床意义、病因判断或处置等内容的灰区仍保留模型事实。
-            semantic = "absent"
+            # 仅在整段等于报告原文时拦截。含其他内容的病程由模型判断，
+            # 不再因缺少“分析/考虑”等关键词覆盖其语义事实。
+            semantic = "unknown"
             normalized_course = ()
         if (
             rule_id == "LX0609-06-03-04"

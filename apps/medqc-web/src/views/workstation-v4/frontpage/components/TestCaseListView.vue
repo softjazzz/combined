@@ -2,15 +2,10 @@
   <div class="h-full w-full flex flex-col bg-[#f5f5f7] p-6 overflow-hidden">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-6">
-      <button
-        class="text-[rgba(29,29,31,0.45)] hover:text-[#0a6cff]"
-        @click="$emit('back')"
-      >
+      <button class="text-[rgba(29,29,31,0.45)] hover:text-[#0a6cff]" @click="$emit('back')">
         <ArrowLeftOutlined class="text-lg" />
       </button>
-      <h2 class="text-[20px] font-semibold text-[#1d1d1f]">
-        测试病历列表
-      </h2>
+      <h2 class="text-[20px] font-semibold text-[#1d1d1f]">测试病历列表</h2>
       <span class="text-sm text-[rgba(29,29,31,0.45)]">{{ testCases.length }} 个测试病历</span>
     </div>
 
@@ -20,9 +15,7 @@
         class="w-80 flex-shrink-0 bg-white/90 rounded-2xl border border-black/[0.08] shadow-[0_1px_4px_rgba(0,0,0,0.045),0_2px_8px_rgba(0,0,0,0.035)] backdrop-blur-[18px] flex flex-col overflow-hidden"
       >
         <div class="px-4 py-3 border-b border-black/[0.08] flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-[#1d1d1f]">
-            病历列表
-          </h3>
+          <h3 class="text-sm font-semibold text-[#1d1d1f]">病历列表</h3>
           <button
             class="px-3 py-1.5 bg-[#0a6cff] text-white text-xs rounded-lg hover:bg-[#0a5fd6] transition-colors flex items-center gap-1.5 shadow-[0_5px_14px_rgba(10, 108, 255,0.18)]"
             @click="showCreateModal = true"
@@ -69,10 +62,7 @@
           </div>
 
           <!-- Empty state -->
-          <div
-            v-if="testCases.length === 0"
-            class="p-8 text-center text-[rgba(29,29,31,0.38)]"
-          >
+          <div v-if="testCases.length === 0" class="p-8 text-center text-[rgba(29,29,31,0.38)]">
             <FileTextOutlined class="text-4xl mb-3" />
             <p>暂无测试病历</p>
             <button
@@ -97,10 +87,7 @@
             <h3 class="text-sm font-semibold text-[#1d1d1f]">
               {{ selectedCase.title || selectedCase.name || `测试病历${selectedIndex + 1}` }}
             </h3>
-            <p
-              v-if="selectedCase?.description"
-              class="text-xs text-[rgba(29,29,31,0.56)] mt-1"
-            >
+            <p v-if="selectedCase?.description" class="text-xs text-[rgba(29,29,31,0.56)] mt-1">
               {{ selectedCase.description }}
             </p>
           </div>
@@ -138,26 +125,24 @@
           </div>
         </div>
 
-        <div
-          v-if="selectedCase"
-          class="flex-1 overflow-y-auto p-5"
-        >
+        <div v-if="selectedCase" class="flex-1 overflow-y-auto p-5">
           <div class="bg-[#f5f5f7]/75 rounded-lg p-4 border border-black/[0.08]">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-semibold text-[rgba(29,29,31,0.56)]">病历原文</span>
-              <span class="text-xs text-[rgba(29,29,31,0.38)]">{{ selectedCase?.medical_text.length }} 字符</span>
+              <span class="text-xs text-[rgba(29,29,31,0.38)]"
+                >{{ selectedCase?.medical_text.length }} 字符</span
+              >
             </div>
             <pre
               class="text-sm text-[rgba(29,29,31,0.78)] whitespace-pre-wrap font-mono leading-relaxed"
-            >{{ selectedCase?.medical_text }}</pre>
+              >{{ selectedCase?.medical_text }}</pre
+            >
           </div>
 
           <!-- Metadata -->
           <div class="mt-4 grid grid-cols-2 gap-4">
             <div class="bg-[#f5f5f7]/75 rounded-lg p-4 border border-black/[0.08]">
-              <div class="text-xs font-semibold text-[rgba(29,29,31,0.56)] mb-2">
-                创建信息
-              </div>
+              <div class="text-xs font-semibold text-[rgba(29,29,31,0.56)] mb-2">创建信息</div>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span class="text-[rgba(29,29,31,0.56)]">创建时间:</span>
@@ -169,9 +154,7 @@
             </div>
 
             <div class="bg-[#f5f5f7]/75 rounded-lg p-4 border border-black/[0.08]">
-              <div class="text-xs font-semibold text-[rgba(29,29,31,0.56)] mb-2">
-                统计信息
-              </div>
+              <div class="text-xs font-semibold text-[rgba(29,29,31,0.56)] mb-2">统计信息</div>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span class="text-[rgba(29,29,31,0.56)]">字符数:</span>
@@ -191,10 +174,7 @@
         </div>
 
         <!-- Empty state for right panel -->
-        <div
-          v-else
-          class="flex-1 flex items-center justify-center text-[rgba(29,29,31,0.38)]"
-        >
+        <div v-else class="flex-1 flex items-center justify-center text-[rgba(29,29,31,0.38)]">
           <div class="text-center">
             <FileTextOutlined class="text-5xl mb-3" />
             <p>请选择或创建一个测试病历</p>
@@ -237,9 +217,7 @@
         </div>
 
         <div class="flex justify-end gap-3 pt-2">
-          <a-button @click="showCreateModal = false">
-            取消
-          </a-button>
+          <a-button @click="showCreateModal = false"> 取消 </a-button>
           <a-button
             type="primary"
             :disabled="!newCase.title || !newCase.medical_text"
@@ -288,9 +266,7 @@
         </div>
 
         <div class="flex justify-end gap-3 pt-2">
-          <a-button @click="showEditModal = false">
-            取消
-          </a-button>
+          <a-button @click="showEditModal = false"> 取消 </a-button>
           <a-button
             type="primary"
             :disabled="!editCase.title || !editCase.medical_text"
@@ -308,8 +284,9 @@
 </template>
 
 <script setup lang="ts">
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { ref, computed, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import {
   ArrowLeftOutlined,
   FileTextOutlined,
@@ -320,6 +297,8 @@ import {
   DeleteOutlined,
   EditOutlined,
 } from '@ant-design/icons-vue'
+
+const workstationConfirmation = useWorkstationConfirmation()
 
 const props = defineProps<{
   testCases: Array<{
@@ -443,7 +422,7 @@ const confirmDelete = () => {
 
   const title =
     selectedCase.value?.title || selectedCase.value?.name || `测试病历${selectedIndex.value + 1}`
-  Modal.confirm({
+  workstationConfirmation.confirm({
     title: '删除测试病历',
     content: `确认删除“${title}”？`,
     okText: '删除',

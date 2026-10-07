@@ -1,14 +1,12 @@
 <template>
-  <main class="tender-acceptance-page">
-    <section class="acceptance-hero">
+  <main class="tender-acceptance-page mq-page">
+    <section class="acceptance-hero mq-page-head">
       <div>
-        <p class="eyebrow">
-          功能验收
-        </p>
-        <h1>投标功能验收看板</h1>
+        <p class="eyebrow mq-page-eyebrow">功能验收</p>
+        <h1 class="mq-page-title">投标功能验收看板</h1>
         <p>按条款汇总功能入口、实现状态和仍需生产联调的缺口，所有演示均为只读或草稿/模拟结果。</p>
       </div>
-      <div class="summary-card">
+      <div class="summary-card mq-card">
         <span>条款总数</span>
         <strong>{{ clauses.length }}</strong>
         <small>已实现 {{ implementedCount }} / 可演示 {{ partialCount }}</small>
@@ -16,23 +14,14 @@
     </section>
 
     <section class="clause-grid">
-      <article
-        v-for="clause in clauses"
-        :key="clause.id"
-        class="clause-card"
-      >
+      <article v-for="clause in clauses" :key="clause.id" class="clause-card mq-card">
         <div class="clause-topline">
           <span>{{ clause.id }}</span>
           <i :class="`status-${clause.status}`">{{ statusLabel[clause.status] }}</i>
         </div>
         <h2>{{ clause.title }}</h2>
         <p>{{ clause.summary }}</p>
-        <RouterLink
-          :to="clause.entry"
-          class="entry-link"
-        >
-          查看入口
-        </RouterLink>
+        <RouterLink :to="clause.entry" class="entry-link"> 查看入口 </RouterLink>
       </article>
     </section>
   </main>
@@ -142,177 +131,4 @@ const implementedCount = computed(
 const partialCount = computed(() => clauses.filter((clause) => clause.status === 'partial').length)
 </script>
 
-<style scoped>
-.tender-acceptance-page {
-  min-height: 100%;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  padding: 24px;
-}
-
-.acceptance-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    0 2px 12px rgba(0, 0, 0, 0.055);
-  padding: 28px;
-  transition:
-    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.acceptance-hero:hover,
-.clause-card:hover {
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-  transform: translateY(-2px);
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-}
-
-.acceptance-hero h1 {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 36px;
-}
-
-.acceptance-hero p {
-  margin: 10px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.summary-card {
-  min-width: 180px;
-  border: 1px solid rgba(10, 108, 255, 0.16);
-  border-radius: 14px;
-  background: rgba(10, 108, 255, 0.07);
-  padding: 18px;
-}
-
-.summary-card span,
-.summary-card small {
-  display: block;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.summary-card strong {
-  display: block;
-  color: #0a6cff;
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 42px;
-}
-
-.clause-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 18px;
-}
-
-.clause-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.84);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    0 1px 6px rgba(0, 0, 0, 0.045);
-  padding: 18px;
-  transition:
-    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.clause-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.clause-topline i {
-  border-radius: 999px;
-  font-style: normal;
-  padding: 4px 10px;
-}
-
-.status-implemented {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
-}
-
-.status-partial {
-  background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
-}
-
-.clause-card h2 {
-  margin: 14px 0 8px;
-  font-size: 18px;
-  font-weight: 650;
-}
-
-.clause-card p {
-  min-height: 48px;
-  margin: 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.entry-link {
-  display: inline-flex;
-  margin-top: 16px;
-  color: #0a6cff;
-  font-size: 13px;
-  font-weight: 650;
-  text-decoration: none;
-}
-
-@media (max-width: 1180px) {
-  .clause-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 760px) {
-  .acceptance-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .clause-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="../styles/tender-acceptance.css"></style>
