@@ -248,6 +248,7 @@ def _critical_value_018_worker_evidence() -> dict[str, Any]:
                     {
                         "test_id": "TEST-1",
                         "test_no": "REPORT-1",
+                        "document_id": "ITEM-1",
                         "item_id": "ITEM-1",
                         "item_name": "血钾",
                         "result": "6.8",
