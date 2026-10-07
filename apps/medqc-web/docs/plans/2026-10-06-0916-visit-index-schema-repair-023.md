@@ -78,3 +78,27 @@ root另开独立只读进程37 SELECT/1 SET、重复读事务回滚，核两新�
 023仍未完成正式工程验收：两次创建额度已使用；工程预期、任务及八模型额度未使用，不据此自行再执行。后续只读定位私有护栏的拦截边界，优先复用现有副本；任何新写入/重跑均需新的明确闭环。患者原文、标识及脚本全部私有保留，不提交；临床签认/启用/上线批准均未写。
 
 私有证据：[formal3停止](C:/Users/Coldplay/.codex/worktrees/lx0916-independent-regression-20261004/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-formal3-result-private.json)、[root独立停机回读](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-poststop-root-private.json)、[独立日志复核](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-runner-review-formal3-stop-private.md)。
+
+## 用户同意创建后的最小续验方案
+
+用户再次明确“同意创建”。当前两例已落库，第二例样本pending；root亲读qc_sample_pools.py:1077–1098及inspect_run_selection，正常入口仍会拦pending，不绕过就绪门禁。已向用户确认复用两例或另建两例的范围；未答前只离线准备，不恢复写入。若另建，最多再两新副本、两工程答案PUT、一次正式任务、八SDK/provider尝试（含重试）；上一批副本不更新、不删除。若复用，须先核正常定向同步的新增写范围，不能把创建许可自动扩成任意状态回填。
+
+已确认问题仅为合成Core缓存触发的私有护栏误拒；formal3真实根因仍待证伪。A独立新guard只移除ID校验对cached默认值的依赖，保留精确WHERE/表列归属/BindParameter/compiled绑定名及当前实际参数属于获准ID集合；运行state、预算等不放宽。拒绝时只保存该语句最小私有上下文。先原冻结guard红例，再同缓存绿例与旧ID、缺绑定、NOT/OR、跨schema及额外谓词拒绝对照。B新formal4草案保护旧副本及原材料，C独立证伪，root亲审关键diff和真实产物后才执行。三树既有Sol6.1 medium，0外部准备；旧formal产物不覆盖。
+
+生产文件白名单为空；代码仅各树.tmp新private guard/probe/runner，长期更新本文及统一进度。此职责是一次性护栏修复，不向巨型生产文件新增逻辑、不建新事实Owner/通用层；新增SQL诊断预计不足30行，不做结构拆分。最终仍核64计划对交付完整性、023冻结存在性核心事实及条件证据、PG/API八字段和逐例页面、实际模型参数/调用与成本。来源漂移、越界、DDL、超预算或模型失败保存停止；无临床签认、启用或上线批准。instrumentation下墙钟不能声称生产性能。
+
+本轮范围更正：root进一步查正常样本就绪入口及测试副本路由，pending不能直接复用且未找到简易状态恢复接口；初先建议复用需额外同步写入，不应默认扩大“同意创建”的授权。可选范围问题未得到回复，因此依用户明确创建请求采用最小创建闭环：仅另建两新副本并PG/API/页面存在回读。formal4中两PUT/run POST/generate/SDK/provider HTTP预算全部硬0，创建后停止，不动以前全链剩余额度；旧两副本保护不更新。此前所列一次任务/八调用只是旧剩余额度，本轮不执行。副本创建成功不算023规则验收通过。A私有缓存修复净增14行，root已独立49/49通过，C另6反例通过，均0外部；正式停止因果仍不倒推。
+
+执行前进一步纠错：root亲读list_pool_items/list_pool_records发现均调用`_heal_customer_test_bundle_statuses`（custom_qc_sample_pool_service.py:5105–5164），GET列表可自动refresh与更新pending，故此前“无简易恢复入口”不成立。该机制尚未实际用于本批旧副本，不默认扩大授权修复旧状态。本轮撤销普通样本池页面及等待窗口，避免页面全列表扫描旧pending造成写入；只按当前新visit限定GET items，已ready新行在5118直接跳过自愈，创建后独立PG/认证API逐值证明后正常退出，页面明确未复核。HTTPhelper新增items/records查询必须匹配本批新visit的门禁。根因口径更正留痕，不把GET自愈改作本轮生产修复。
+
+## 创建闭环实际结果
+
+formal4于本地2026-10-06执行，UTC2026-10-07 01:13:36正常退出0：两次正常创建POST与两次按新visit限定的认证GET均200，两新样本PG状态ready/synced，无latest_job_id、golden_answers为空，原麻醉正文保持。新索引、running/final及六领域Bundle均存在。API返回唯一新item ID、三坐标、raw_payload及ready与PG逐值一致；q本身仍为既有多字段ILIKE，不冒称数据库层三坐标精确筛选，旧写入同时由guard拒绝。
+
+护栏记录910 SELECT/9 SET/28 INSERT/12 UPDATE，0 DDL，全部新身份及指定样本池计数范围内；这是before_cursor_execute观测，不单独当提交凭证。正常finally在guard内关闭服务、join detached executor，再核原两源/旧预期及formal3两副本整行/麻醉前后、退出逐值相同；源码/.env/内存认证源及旧formal3归档未变，PG auth写0，violations为空。root随后另一进程32 SELECT/2 SET只读回滚，亲自核两新样本/麻醉整行等于保存产物、9张索引/Bundle各1行、原材料和旧两副本未变；不是只引用runner布尔值。临时8003/3003无监听，未打开普通样本池页面；页面明确未复核。
+
+本轮PUT/run POST/generate/SDK/provider HTTP全0，没有执行023临床判定、保存规则结果或签认/启用/上线。缓存双新ID护栏红→绿与49项保护、独立6项缓存反例、最后窄GET约束独立3项通过；它们只证明私有创建护栏和范围保护，不倒推formal3缺失现场的根因。两次新创建预算已使用，不继续第三例；新两副本仍来自同两份原麻醉材料，不增加独立真实病例覆盖数。下一次正式验证应使用formal4新item ID/三坐标，不要用同名旧pending副本或重新建例。
+
+本批主要证据：[正常创建及认证API](C:/Users/Coldplay/.codex/worktrees/lx0916-independent-regression-20261004/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-formal4-result-private.json)、[root退出后独立PG回读](D:/LLM/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-creation-root-readback-private.json)。新item/visit/doc坐标、原文、全过程脚本均只留private，不提交；instrumentation启用的耗时不作为生产性能收益。
+
+独立[实际产物复核](C:/Users/Coldplay/.codex/worktrees/lx0916-015016-acceptance-20261005/LX888/apps/medqc-web/.tmp/0910-full-audit/20261006-023-runner-review-formal4-actual-private.md)重算日志：12 UPDATE为样本池6、qc刷新成功4、新sample2；两sample实际绑定ID等于本次新INSERT的两ID，旧两ID不在sample DML。7项完成HTTP200（另401保护不入wrapper日志），PUT/run及模型3列表均0。原材料/旧副本before/after/exit/root四方字典相同，61源码/私有快照逐字绑定当前源。独立审查没有连接PG：新行原字典比较来自runner实际保存，root另连接的读取比较由其脚本断言及成功产物证明；不将审查的只读归档当独立第二次PG查询。

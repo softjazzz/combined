@@ -346,3 +346,11 @@ formal3两次新副本创建请求已使用，正常启动及API login/me成功�
 root独立37 SELECT/1 SET只读回读：两新身份原始材料、索引及全部Bundle均已保存；C02样本ready/synced，C03 pending/synced，无latest_job_id。两例冻结原麻醉/手术及旧raw_payload、冻结源码逐值不变，仅保护该明确集合。副本保留，不删除、补状态或重新创建；临时8003/3003和浏览器页关闭。日志放行868 SELECT/6 SET/28 INSERT/10 UPDATE、0 DDL，不等同全部提交凭证。
 
 023仍为准备/创建阶段未闭环，不增加专项通过。分类9+2+3+18、限定工程成果4、临床签认0、上线批准0保持；结构修复不能代替023验收。后续先只读定位护栏边界并复用现有副本，不自动执行剩余额度。具体停止、纠错与私有证据见[本批计划实际结果](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-06-0916-visit-index-schema-repair-023.md)。
+
+## 二十七、023两新副本创建与PG/API回读完成
+
+用户再次同意创建。私有护栏只修缓存ID误拒的合成缺陷，root独立49项保护及C缓存反例通过；WHERE、实际目标集合、来源和预算未放宽。实际formal3被拦现场缺失仍不倒推确定根因。root执行前又发现样本列表GET存在自动heal写路径，明确撤回“无简易恢复接口”的判断；普通池页面可能更新旧pending，本批不打开，仅按本批新visit限定认证API并核唯一ID/三坐标。
+
+formal4两次正常POST创建成功，两新样本ready/synced，PG与两次认证API的raw/ID/三坐标/状态一致，无预期或latest_job_id。正常退出在guard内join及退出来源检查通过；root另32 SELECT/2 SET只读连接核样本/麻醉整行、索引及全部Bundle已提交，原两真实材料/旧预期、formal3两副本逐值未变。0 DDL、PG auth写0、无越界；临时服务无监听。本轮两创建额度用完，不继续新建，后续选formal4唯一新item/visit，不复用同名旧pending。
+
+只关闭副本创建/保存链路，不算023专项验收通过。PUT/run POST/generate/SDK/provider HTTP均0、页面未复核、医学判定/规则结果/临床签认/上线批准均未执行；两新副本重复同两原材料，不增加独立真实病例覆盖。分类9+2+3+18、限定规则工程成果4、临床签认0、上线批准0保持。实际证据及纠错详见[创建闭环结果](D:/LLM/LX888/apps/medqc-web/docs/plans/2026-10-06-0916-visit-index-schema-repair-023.md)。
