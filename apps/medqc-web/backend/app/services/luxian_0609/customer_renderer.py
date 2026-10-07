@@ -3598,6 +3598,34 @@ def preop_summary_customer_message(
             "也未把不合格的引用作为证据。",
             f"请人工核对{document}原文，或重新质控。",
         )
+    if rule_id == "LX0609-04-01-05" and status == "non_compliant":
+        discussion_labels = {
+            field: _PREOP_FIELD_LABELS[field]
+            for field in (
+                "preop_preparation", "surgical_indication", "surgical_plan", "risk_and_prevention",
+                "participants_with_titles", "specific_opinions", "chair_summary",
+                "discussion_date", "recorder_signature",
+            )
+        }
+        missing = facts.get("missing_fields") if isinstance(facts, Mapping) else None
+        if (
+            not isinstance(facts, Mapping)
+            or facts.get("verification_kind") != "preop_content_incomplete"
+            or not isinstance(missing, list) or not missing
+            or any(not isinstance(field, str) or field not in discussion_labels for field in missing)
+        ):
+            return (
+                "术前讨论记录被判为内容不完整，但本次结果未提供可核验的具体缺项。",
+                "现有结果不足以说明缺少哪项内容，请核对原文或重新质控。",
+                "请先确认具体缺项，不要仅凭此概括结论补写病历。",
+            )
+        text = "、".join(label for field, label in discussion_labels.items() if field in missing)
+        return (
+            f"术前讨论记录内容不完整，确认缺少：{text}。",
+            "缺项来自执行器对术前讨论记录的核对，请结合对应原文查看。",
+            f"请核对对应术前讨论记录，依据实际情况补充：{text}。"
+            "已记录的项目无需重复补写，不得补造未发生的诊疗事实。",
+        )
     if rule_id != "LX0609-04-01-04" or status not in {"non_compliant", "data_gap"}:
         return None
     labels = {

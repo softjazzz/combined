@@ -592,7 +592,19 @@ def build_exam_lab_text_projection(
                 row,
                 text,
             )
-            is_target_candidate = bool(candidate_pattern.search(text))
+            # 检查身份存在时，只据其识别当前检查类型。报告中的复查建议或
+            # 既往 CT/MRI 比较不能把 DR/超声变成当前 CT/MRI 事件。
+            identity_text = " ".join(
+                _clean(row.get(field))
+                for field in (
+                    "exam_type", "modality", "exam_name", "item_name", "exam_item_name",
+                )
+                if _clean(row.get(field))
+            ) if family == "exam" else ""
+            if family == "exam" and not identity_text:
+                identity_text = _clean(row.get("performed_dept"))
+            candidate_text = identity_text if family == "exam" else text
+            is_target_candidate = bool(candidate_pattern.search(candidate_text))
             if is_target_candidate:
                 family_refs[family].append(doc_ref)
                 family_rows[family].append(row)

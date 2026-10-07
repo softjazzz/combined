@@ -1143,6 +1143,8 @@ def test_preop_pending_fields_survive_publish_store_and_api(
 @pytest.mark.parametrize("rule_id,missing", [
     ("LX0609-04-01-04", ["precautions"]),
     ("LX0609-04-01-05", []),
+    ("LX0609-04-01-05", ["specific_opinions"]),
+    ("LX0609-04-01-05", ["specific_opinions", "recorder_signature"]),
 ])
 def test_preop_published_documents_survive_worker_store_and_api(
     monkeypatch, _isolated_database, rule_id, missing,
@@ -1173,6 +1175,13 @@ def test_preop_published_documents_survive_worker_store_and_api(
     }
     assert safe_surgery_document_customer_display_facts(rule_id=rule_id, raw=facts) == facts
     status = "non_compliant" if missing else "compliant"
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+    message = preop_summary_customer_message(rule_id=rule_id, status=status, facts=facts)
+    if rule_id == "LX0609-04-01-05" and missing:
+        assert message is not None
+        assert "具体讨论意见" in message[0] and "具体讨论意见" in message[2]
+        assert "主持人小结" not in message[2]
+        assert ("记录者签名" in message[2]) == ("recorder_signature" in missing)
     original = luxian_execution.aggregate_luxian_0609_results
     published = {}
 
@@ -1183,7 +1192,8 @@ def test_preop_published_documents_survive_worker_store_and_api(
             status=status, result_status=status, display_status=status, is_compliant=not bool(missing),
             reason_code="requirement_violated" if missing else "requirement_satisfied",
             customer_display_facts=deepcopy(facts), evidence=[], customer_evidence=[],
-            conclusion="术前文书核对完成。", suggestion="请逐份核对术前文书。",
+            conclusion=message[0] if message else "术前文书核对完成。",
+            suggestion=message[2] if message else "请逐份核对术前文书。",
         )
         published[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
         return result
