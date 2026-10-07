@@ -260,3 +260,36 @@
 ## 口径待定（需用户决定，不交 Codex 自行判断）
 
 N-06 泛称标本 / 申请缺时间；麻醉记录时间只有日期；016 全角与半角标点差异；"并发症：/" 占位符；PA5 业务键冲突下 06-02-03 合规。
+
+---
+
+# 第六轮交接（复验 `83afaf4d3` 后，2026-10-07）
+
+复验报告：`docs/acceptance/2026-10-07-round6-83a-independent-recheck.md`。已关闭：N07、N09；N08、N10、N11 部分关闭；074 工程加固通过，真实模型未验证。探针以 `ACC_BACKEND=C:/<工作树>/apps/medqc-web/backend` 指定版本，位于 `$P/round2-recheck-88aa/`，模型调用 0。
+
+## N-12 麻醉“前缀+后缀”空标签被当作已填写（新回退，058c2d2ad 引入）
+
+- rule_id：LX0609-04-04-02。函数：`native_surgery_document_execution._row_has_any`。N08 修复去掉了通用的“marker…冒号后为空”否定，只认已知标签表里的空标签。
+- 输入（其余字段完整）：术后“术后意识状态：”“术后呼吸情况：”“术后并发症情况：”；术前“Mallampati气道分级：”。冻结预期：对应字段缺失、判不合规。实际：判合规；`1f9` 为不合规。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/anesthesia-l-private.py`（L01–L04；L05/L06 为 N08 正常对照）。
+- 正常对照：M06“神志清醒心率：”合规；AN5 系列、M01–M05、有效阴性保持。
+- 修复边界：对含 marker 的标签判断“标签自身冒号后是否为空”，前后附加词不限于已知表；不得让后续未知空标签抹掉前一字段已填的值。
+
+## N-13 医嘱缺单位/剂量时未比较字段仍报 matched（残留，基线已有）
+
+- rule_id：LX0609-05-02-01。函数：`_typed_chemotherapy_comparison`（`missing_order_fields` 非空时整体跳过比较），合同 `_safe_026` 接受。
+- 输入：医嘱缺单位（或缺剂量），病程同日同剂量。实际：资料不足，`field_results` 为 drug_name/route/time=matched、dose=unknown，并经保存。冻结预期：未比较字段不得报 matched。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/n11-chain-private.py`（K06），合同探针 `missing_order_fields_with_matched`。
+- 修复边界：跳过比较时其余字段标 unknown（或单独比较可比字段）；合同拒绝“缺医嘱字段 + matched”。保护：K01/K02b/K04/K05 六排列及正常 K07。
+
+## N-10 残留：带日期/姓名前缀的标题行仍计为正文（低，基线已有）
+
+- 输入：“2026-07-02 09:00 主任医师查房记录\n医生签名：张三”，或“张三主任医师查房记录”。实际：065、067 均判合规。复现：`template-b-private.py`（B01/B02）。0910 真实源中未见这两种首行写法。
+
+## 074 真实模型复验计划（待用户批准，未执行）
+
+- 模型/服务：alibaba DashScope `qwen3.8-flash`，thinking 开、预算 256，temperature 0.2，max_completion 2048，无长度重试、无传输重试，不写 PG（NullLLMCallEventStore）。
+- 调用：最多 2 次，C20 一次、C07 一次，失败不重试。
+- 预计 Token：输入约 1,750（C20）+ 1,430（C07）≈ 3,200；输出通常 400–700/次，上限约 2×2,304。
+- 观察点：C20 的引文是否逐字保留中文引号，依据是否为单段连续、含检查依据的片段；无效引文仍须被拒。
+- 隐私：送模内容为病程正文，不含患者姓名、住院号或病案号；含年龄、性别、病情及医师签名姓名。原文、输入、响应只存私有目录。
