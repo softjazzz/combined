@@ -11,15 +11,22 @@ from .shared import _clean, _row_time
 
 
 def _has_course_body(row: Mapping[str, Any]) -> bool:
-    """只排除空正文与纯签名行（含姓名/职称），不评价临床质量。"""
+    """只排除空正文、纯文书标题与签名行，不评价临床正文长短。"""
     body = _clean(row.get("record_content"))
     signature = re.compile(
         r"(?:医生|医师)签名\s*[:：]\s*"
         r"(?:[\u4e00-\u9fff·]{1,6}\s*(?:(?:副主任|主任|主治|住院)?医师)?)?"
         r"\s*"
     )
+    title = re.compile(
+        r"(?:(?:首次|日常|日常查房|术后首次|术后|出院前)?病程记录|"
+        r"(?:(?:上级|主治|住院|副主任|主任)(?:医师|医生)?)?查房记录)[:：]?"
+    )
+    title_and_signature = re.compile(f"(?:{title.pattern})(?:{signature.pattern})?")
     return any(
-        line.strip() and not signature.fullmatch("".join(line.split()))
+        (compact := "".join(line.split()))
+        and not signature.fullmatch(compact)
+        and not title_and_signature.fullmatch(compact)
         for line in body.splitlines()
     )
 

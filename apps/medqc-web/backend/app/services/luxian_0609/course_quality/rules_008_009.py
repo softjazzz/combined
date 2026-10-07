@@ -143,6 +143,18 @@ def _severity_active_date_intervals(
             if end_time is None or end_time < event_time:
                 return None
             events.append((end_time, 1, index, "end"))
+    # 不同医嘱行在同一权威时刻解除和重开时，无法证明先后；不能让
+    # start/end 类型排序把重开静默丢弃。复用既有时间资料不足合同。
+    # 同一 stopped 行自身的开始/结束则有明确生命周期关系，仍可配对。
+    simultaneous: dict[datetime, tuple[set[int], set[int]]] = {}
+    for event_time, _kind_order, index, event_kind in events:
+        if horizon_date is not None and event_time.date() > horizon_date:
+            continue
+        starts, ends = simultaneous.setdefault(event_time, (set(), set()))
+        (starts if event_kind == "start" else ends).add(index)
+        if starts and ends and len(starts | ends) > 1:
+            return None
+
     active_start: date | None = None
     intervals: list[tuple[date, date | None]] = []
     for event_time, _kind_order, _index, event_kind in sorted(events):

@@ -904,8 +904,11 @@ def _row_has_any(
     )
     return any(
         marker in segment
-        # 标签前缀不是字段值；冒号后只剩空白/占位符时，不能算已填写。
-        and not re.search(re.escape(marker) + r"[^:：]*[:：][\s_—/\-（）()]*$", segment)
+        # 空值只否定该标签自身；后续未知标签的冒号不能抹掉前面已填的值。
+        and not (
+            (empty_label := re.search(label + r"[\s_—/\-（）()]*$", segment))
+            and marker in empty_label.group(0)
+        )
         # 空表单标题不能证明字段已经填写；仍保留“无并发症”等有效阴性。
         and not re.fullmatch(
             r"(?:分级|评估|情况|状态|记录|告知|签名|禁食|禁饮|[\s:：_—/\-（）()])*",
