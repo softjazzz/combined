@@ -282,15 +282,37 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     fields = raw.get("field_results")
     missing = raw.get("missing_order_fields")
     allowed = {"drug_name", "dose", "route", "time"}
+    unresolved = raw.get("unresolved_event_count", 0)
+    missing_course = raw.get("missing_course_event_count", 0)
+    unknown_time = raw.get("unknown_time_event_count", 0)
     if (
         raw.get("verification_kind") != "chemotherapy_order_course_comparison"
-        or not isinstance(raw.get("order_count"), int)
+        or type(raw.get("order_count")) is not int
         or raw["order_count"] < 1
+        or type(unresolved) is not int
+        or not 0 <= unresolved <= raw["order_count"]
+        or type(missing_course) is not int
+        or type(unknown_time) is not int
+        or missing_course < 0
+        or unknown_time < 0
+        or unresolved + missing_course + unknown_time > raw["order_count"]
         or not isinstance(fields, Mapping)
         or set(fields) != allowed
         or any(value not in {"matched", "mismatched", "unknown"} for value in fields.values())
         or not isinstance(missing, list)
         or any(value not in allowed for value in missing)
+        # 受控计数区分未记录目标药和真正时间未知，不从unknown反推缺口原因。
+        or (bool(missing) and (missing_course > 0 or unknown_time > 0))
+        or (missing_course > 0 and (fields["drug_name"] != "mismatched" or "matched" in fields.values()))
+        or (missing_course > 0 and "unknown_time_event_count" not in raw)
+        or (unknown_time > 0 and fields["time"] == "matched")
+        or (missing_course == raw["order_count"] and any(fields[key] != "unknown" for key in ("dose", "route", "time")))
+        # 关联缺口不能携带matched；全未关联事件只能是unknown。
+        or (unresolved > 0 and (bool(missing) or "matched" in fields.values()))
+        or (
+            unresolved == raw["order_count"]
+            and any(value != "unknown" for value in fields.values())
+        )
     ):
         return None
     return {
@@ -298,6 +320,9 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "order_count": raw["order_count"],
         "field_results": {key: fields[key] for key in ("drug_name", "dose", "route", "time")},
         "missing_order_fields": list(dict.fromkeys(missing)),
+        **({"unresolved_event_count": unresolved} if "unresolved_event_count" in raw else {}),
+        **({"missing_course_event_count": missing_course} if "missing_course_event_count" in raw else {}),
+        **({"unknown_time_event_count": unknown_time} if "unknown_time_event_count" in raw else {}),
     }
 
 
@@ -404,6 +429,17 @@ def tumor_pathology_customer_fact_status_is_valid(
             and safe_facts.get("failure_kind") == "pathology_sampling_not_documented"
         )
     if normalized_rule_id == "LX0609-05-02-01":
+        safe_facts = _safe_026(safe_facts)
+        if safe_facts is None:
+            return False
+        # 正关联缺口已禁止matched；保留已知不一致与另一个未知事件并存的资料不足。
+        if (
+            safe_facts.get("unresolved_event_count", 0) > 0
+            or safe_facts.get("unknown_time_event_count", 0) > 0
+        ):
+            return normalized_status == "data_gap"
+        if safe_facts.get("missing_course_event_count", 0) > 0:
+            return normalized_status == "non_compliant"
         field_results = safe_facts.get("field_results")
         missing_fields = safe_facts.get("missing_order_fields")
         if not isinstance(field_results, Mapping) or not isinstance(

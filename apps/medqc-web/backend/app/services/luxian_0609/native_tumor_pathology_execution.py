@@ -1353,8 +1353,10 @@ def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
     unit = parsed.group(2) or ""
     # 保留单位后的空白边界：mg d1/ivgtt 是剂量后的独立频次或途径。
     # 数值内ASCII千分位作为整体；d1后的逗号及中文句读不属于剂量数字。
+    # d1,130mg中的日程数字不是千分位；其他字母前缀不阻断完整剂量。
+    observed = re.sub(r"(?<![a-z])d\d+\s*[,，]", "；", observed, flags=re.IGNORECASE)
     dose_pattern = re.compile(
-        r"(?<![a-z\d.+-])"
+        r"(?<![\d.+-])"
         r"((?:[+-]\s*)?(?:\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+))\s*"
         + re.escape(unit)
         + r"(?![a-z0-9])"
@@ -1437,6 +1439,8 @@ def _typed_chemotherapy_comparison(
     for field in missing_order_fields:
         field_results[field] = "unknown"
     unresolved_event_count = 0
+    missing_course_event_count = 0
+    unknown_time_event_count = 0
     selected_course_rows: list[Mapping[str, Any]] = []
     if not missing_order_fields:
         course_clauses = _course_event_candidates(
@@ -1453,6 +1457,7 @@ def _typed_chemotherapy_comparison(
                 in _normalized_comparison_text(_row_text(clause))
             )
             if not candidates:
+                missing_course_event_count += 1
                 field_results["drug_name"] = "mismatched"
                 continue
 
@@ -1491,8 +1496,20 @@ def _typed_chemotherapy_comparison(
                 drug_name=event["drug_name"],
                 course_rows=(candidate,),
             )
-            if time_state != "matched":
+            if time_state == "unknown":
+                unknown_time_event_count += 1
+            if time_state == "mismatched" or (
+                time_state == "unknown" and field_results["time"] != "mismatched"
+            ):
+                # 已确认时间不一致不被后续未知事件覆盖；未知计数仍保留资料不足。
                 field_results["time"] = time_state
+
+    if unresolved_event_count or missing_course_event_count:
+        # 汇总未能核对的事件：未知不能冒充匹配，也不能覆盖已确认的不一致。
+        field_results = {
+            key: "unknown" if value == "matched" else value
+            for key, value in field_results.items()
+        }
 
     facts = {
         "verification_kind": "chemotherapy_order_course_comparison",
@@ -1500,6 +1517,8 @@ def _typed_chemotherapy_comparison(
         "field_results": field_results,
         "missing_order_fields": sorted(missing_order_fields),
         "unresolved_event_count": unresolved_event_count,
+        "missing_course_event_count": missing_course_event_count,
+        "unknown_time_event_count": unknown_time_event_count,
     }
     if missing_order_fields:
         return (
@@ -1517,7 +1536,10 @@ def _typed_chemotherapy_comparison(
             chemotherapy_orders,
             tuple(selected_course_rows),
         )
-    if any(value == "unknown" for value in field_results.values()):
+    if unknown_time_event_count or (
+        not missing_course_event_count
+        and any(value == "unknown" for value in field_results.values())
+    ):
         return (
             "data_gap",
             "chemotherapy_time_unavailable",
