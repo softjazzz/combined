@@ -472,6 +472,28 @@ def _excerpt(row: Mapping[str, Any], *, limit: int = 300) -> tuple[str, str]:
     return field_path, compact[:limit] + ("…" if len(compact) > limit else "")
 
 
+def _discussion_excerpt(row: Mapping[str, Any], *, limit: int = 300) -> tuple[str, str]:
+    """Locate existing discussion content, never a title or a claim of absence.
+
+    These are the same whitelisted content fields read by the preop executor.
+    A document excerpt is only a navigation aid for reviewing the selected source;
+    it does not establish that another item is missing or that extraction succeeded.
+    """
+    candidates = (
+        ("record_content", row.get("record_content")),
+        ("content", row.get("content")),
+        ("host_summary", row.get("host_summary")),
+        ("discuss_staff", row.get("discuss_staff")),
+    )
+    for path, raw in candidates:
+        if not isinstance(raw, str):
+            continue
+        compact = re.sub(r"\s+", " ", raw).strip()
+        if compact:
+            return path, compact[:limit] + ("…" if len(compact) > limit else "")
+    return "", ""
+
+
 def enrich_customer_evidence(
     evidence_rows: Sequence[Mapping[str, Any]],
     *,
@@ -514,7 +536,11 @@ def enrich_customer_evidence(
             if strict_course_record_time and source_type in _COURSE_SOURCE_TYPES
             else _record_time(matched)
         )
-        field_path, excerpt = _excerpt(matched)
+        field_path, excerpt = (
+            _discussion_excerpt(matched)
+            if source_type == "presurg_discussion"
+            else _excerpt(matched)
+        )
         preferred = (preferred_source_fields or {}).get(source_type)
         if preferred:
             value = matched.get(preferred)
@@ -540,6 +566,8 @@ def enrich_customer_evidence(
             if field_path and not _text(evidence.get("field_path")):
                 evidence["field_path"] = field_path
             evidence["evidence_excerpt"] = excerpt
-            evidence["excerpt_kind"] = "文书级依据"
+            evidence["excerpt_kind"] = (
+                "字段级依据" if source_type == "presurg_discussion" else "文书级依据"
+            )
         enriched_rows.append(evidence)
     return enriched_rows
