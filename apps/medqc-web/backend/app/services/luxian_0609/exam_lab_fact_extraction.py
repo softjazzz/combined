@@ -536,6 +536,26 @@ def _event_identity(family: str, row: Mapping[str, Any], index: int) -> str:
     return f"unbound:{index}"
 
 
+def _imaging_identity_text(row: Mapping[str, Any]) -> str:
+    return " ".join(
+        _clean(row.get(field))
+        for field in ("exam_type", "modality", "exam_name", "item_name", "exam_item_name")
+        if _clean(row.get(field))
+    )
+
+
+def _explicit_guidance_report(row: Mapping[str, Any]) -> bool:
+    # 只接受某个正文/结果字段完整等于既有操作标签，不做关键词包含匹配。
+    # 其他字段可能另有诊断发现；那时仍是候选，但不能获得 guidance_only 豁免。
+    return any(
+        is_guidance_only_imaging_rows(({field: row.get(field)},))
+        for field in (
+            "record_content", "content", "description", "result", "exam_result",
+            "exam_impression", "exam_conclusion", "impression", "conclusion",
+        )
+    )
+
+
 def build_exam_lab_text_projection(
     *,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
@@ -594,17 +614,18 @@ def build_exam_lab_text_projection(
             )
             # 检查身份存在时，只据其识别当前检查类型。报告中的复查建议或
             # 既往 CT/MRI 比较不能把 DR/超声变成当前 CT/MRI 事件。
-            identity_text = " ".join(
-                _clean(row.get(field))
-                for field in (
-                    "exam_type", "modality", "exam_name", "item_name", "exam_item_name",
-                )
-                if _clean(row.get(field))
-            ) if family == "exam" else ""
-            if family == "exam" and not identity_text:
-                identity_text = _clean(row.get("performed_dept"))
-            candidate_text = identity_text if family == "exam" else text
+            identity_text = _imaging_identity_text(row) if family == "exam" else ""
+            candidate_identity = identity_text or _clean(row.get("performed_dept"))
+            candidate_text = candidate_identity if family == "exam" else text
             is_target_candidate = bool(candidate_pattern.search(candidate_text))
+            if (
+                family == "exam"
+                and source_key == "exam_item_report"
+                and not identity_text
+                and not _EXPLICIT_NON_TARGET_EXAM_PATTERN.search(candidate_identity)
+                and _explicit_guidance_report(row)
+            ):
+                is_target_candidate = True
             if is_target_candidate:
                 family_refs[family].append(doc_ref)
                 family_rows[family].append(row)
@@ -624,6 +645,17 @@ def build_exam_lab_text_projection(
         rows = [row for row, _ in pairs]
         row_refs = [ref for _, ref in pairs]
         conflicts = set(extra_conflicts)
+        identity_conflict = family == "exam" and target_confirmed and any(
+            _EXPLICIT_NON_TARGET_EXAM_PATTERN.search(
+                _imaging_identity_text(row) or _clean(row.get("performed_dept"))
+            )
+            for row in rows
+        )
+        if identity_conflict:
+            # 同一业务键的主从身份互相否定，不能把合并后的行当作确定 CT/MRI。
+            # 沿用既有事件关联冲突合同，让正式执行入口在模型调用前返回资料不足。
+            target_confirmed = False
+            conflicts.add("event_binding")
         exam_time: datetime | None = None
         if family == "exam":
             exam_time, conflict = _unique_role_time(
@@ -797,6 +829,7 @@ def build_exam_lab_text_projection(
             target_confirmed=target_confirmed,
             target_explicitly_absent=(
                 not target_confirmed
+                and not identity_conflict
                 and bool(material)
                 and bool(explicit_non_target_pattern.search(material))
             ),
@@ -807,6 +840,7 @@ def build_exam_lab_text_projection(
                                for field in result_fields if _clean(row.get(field))),
             guidance_only=(
                 family == "exam"
+                and not identity_conflict
                 and is_guidance_only_imaging_rows(rows)
                 and is_guidance_only_imaging_rows(tuple(
                     row for row, ref in pairs
