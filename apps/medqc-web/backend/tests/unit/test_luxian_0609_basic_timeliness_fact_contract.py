@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -12,7 +12,38 @@ from app.services.luxian_0609.basic_timeliness_facts import (
     extract_admission_anchor,
     extract_document_events,
     extract_rescue_events,
+    parse_authoritative_datetime,
 )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime(2026, 10, 5, 9, tzinfo=timezone(timedelta(hours=8))),
+        datetime(2026, 10, 5, 1, tzinfo=timezone.utc),
+        "2026-10-05T09:00:00+08:00",
+        "2026-10-05T01:00:00Z",
+        "2026-10-05 01:00:00+00:00",
+        "2026-10-05 09:00:00",
+    ],
+)
+def test_authoritative_time_normalizes_same_instant_to_hospital_time(value) -> None:
+    assert parse_authoritative_datetime(value) == datetime(2026, 10, 5, 9)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-10-05",
+        "完成于2026-10-05 09:00:00",
+        "2026-13-05T09:00:00+08:00",
+        "2026-10-05T09:00:00+25:00",
+    ],
+)
+def test_authoritative_time_still_rejects_invalid_or_descriptive_values(value) -> None:
+    assert parse_authoritative_datetime(value) is None
 
 
 @pytest.mark.unit
