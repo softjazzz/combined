@@ -214,3 +214,49 @@
 ## 待 N-05 修复后的复验
 
 第 4–6 项和宽范围串行回归按既有冻结预期执行；随后再申请 C09/C10/C05 真实模型调用（硬上限 6 次），未授权前不执行。
+
+---
+
+# 第五轮交接（复验 `1f9f7f703` 后，2026-10-07）
+
+复验报告：`docs/acceptance/2026-10-07-round5-1f9-independent-recheck.md`；探针均在 `$P/round2-recheck-88aa/`，以 `ACC_BACKEND=C:/<工作树>/apps/medqc-web/backend` 指定版本，模型调用 0。已关闭：N-02、N-03、N-04（原反例）、N-05、N-06 的取材早于申请子项、016、R-03、065/067 冻结项、008/009 跨时重开。仍需 Codex 修复的最小清单如下。
+
+## N-07 剂量前紧邻字母被拒（新回退，1f9 引入）
+
+- rule_id：LX0609-05-02-01。函数：`native_tumor_pathology_execution._chemotherapy_dose_matches`。新增的 `(?<![a-z\d.+-])`（IGNORECASE）拒绝任何紧跟字母的剂量数字。
+- 输入：医嘱奥沙利铂 130mg；病程 `奥沙利铂(FOLFOX) L-OHP130mg 静滴`、`奥沙利铂Oxaliplatin130mg`、`ivgtt130mg`。冻结预期：合规。实际：不合规（d081 为合规）。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/dose-letter-private.py`（X01–X03）。正常对照：X05 `L-OHP 130mg` 合规；S14 `d1,130mg` 合规。
+- 修复边界：只排除"日程标记 d/D + 数字 + 逗号"这一类前缀被并入千分位，不要一律拒绝字母后的数字；保留 N-02 全部 46 例及 X 系列。
+
+## N-08 未知空标签紧贴已填值误伤前一字段（新回退，低）
+
+- rule_id：LX0609-04-04-02。函数：`native_surgery_document_execution._row_has_any`。
+- 输入：术后"神志清醒心率：；呼吸平稳；循环稳定；无麻醉并发症。"冻结预期：合规。实际：不合规，判缺 consciousness_status（d081 为合规）。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/anesthesia-multifield-private.py`（M06）。正常对照：M06b/c/d（加空格、逗号或填值）合规；M01–M05 保持。
+- 修复边界：空标签判定只作用于该标签自身，不让紧随的未知空标签使前面已填值失效。
+
+## N-11 化疗关联不唯一变 technical_error 且无法保存（确认残留，d081 已存在）
+
+- rule_id：LX0609-05-02-01。Owner：执行器 `_typed_chemotherapy_comparison`；连带 `tumor_pathology_result_mapping._safe_026` 和 `tumor_pathology_customer_fact_status_is_valid`。
+- 输入：一条 130mg 医嘱，两份同日同剂量病程。冻结预期：交付 data_gap，不声称一致。
+- 实际：执行器 field_results 全 matched + unresolved_event_count=1，归约 data_gap；映射丢弃 unresolved_event_count；状态校验要求合规；Finalizer 输出 technical_error / model_invalid_output，findings 为空；`replace_for_job` 抛"Canonical Envelope 状态字段不一致，拒绝完成质控任务"。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/chemo-assoc-private.py`（K01；K03 为正常对照）；仓库严格 xfail：`tests/unit/test_round4_chemo_dose_and_findings.py::test_ambiguous_association_does_not_claim_initialized_fields_are_verified`。
+- 修复边界：执行器不得把未关联事件的字段报为 matched，应标为 unknown（或增加受控关联缺口事实并扩映射白名单）；不放宽"全 matched 只能合规"的校验。保护：K01 交付 data_gap 且文案不写"一致"；单病程合规；"一不一致 + 一未关联"不得变成 technical_error，也不得丢失"不一致"。
+
+## N-09 同一分钟解除与重开丢失重开区间（确认残留）
+
+- rule_id：LX0609-02-01-04/05。函数：`course_quality/rules_008_009._severity_active_date_intervals`。同一时间点开始事件排在解除之前，重开被忽略，解除又关闭了区间。
+- 输入：08:00 开、10:00 解除、10:00 重开，仅 1/1 有病程，终点 1/7。实际：合规（两种行顺序均如此）。冻结预期：不得静默丢弃重开后判合规。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/severity-probe-private.py`（RC5/RC5b）。正常对照：RC4 15:00 重开判不合规；解除后不重开判合规。
+- 修复边界：同一时刻出现解除与开始、无法证明先后时，返回资料不足或保守保留重开，不按 kind 排序擅定顺序。
+
+## N-10 模板标题当作有效病程/查房正文（确认残留，低）
+
+- rule_id：LX0609-04-05-02（065）、LX0609-08-02-01（067）。函数：`extended_document/discharge_course._has_course_body`。
+- 输入：正文"查房记录：\n医生签名：张医生"，或仅"主任医师查房记录"。实际：合规（基线同）。依据：用户要求"空白模板不能算有效病程"；该输入在冻结后补充。
+- 复现：`python -X utf8 $P/round2-recheck-88aa/rounds065-067-private.py`（RC7c/RC7d/RC9b）。正常对照：RC8/RC8b/RC10 合规。
+- 修复边界：只把"标题行 + 签名行"的纯模板排除，不评价正文长短。
+
+## 口径待定（需用户决定，不交 Codex 自行判断）
+
+N-06 泛称标本 / 申请缺时间；麻醉记录时间只有日期；016 全角与半角标点差异；"并发症：/" 占位符；PA5 业务键冲突下 06-02-03 合规。
