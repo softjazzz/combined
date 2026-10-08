@@ -89,7 +89,7 @@
     {
       "id": "PRIVACY",
       "owner": "/root/repair_privacy_closure",
-      "state": "002_004_005_integrated_003_design",
+      "state": "002_004_005_integrated_003_boundary_red_prepared_real_CLI_source_unwired",
       "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
       "branch": "codex/qc-fix-privacy-v2-20261008",
       "test_slot": null,
@@ -138,10 +138,10 @@
     {
       "id": "DD-F01",
       "owner": "/root/repair_iml02",
-      "state": "frozen_red_then_limited_repair",
+      "state": "integrated_engineering_closed",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-critical-v2-20261008",
-      "test_slot": 1,
+      "test_slot": null,
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
@@ -149,19 +149,58 @@
         "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
         "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
       ],
-      "scope_constraint": "Only063 death/discharge scope; authoritative typed mr death diagnosis is valid evidence; preserve original normal fixture; no Finalizer or074 changes"
+      "scope_constraint": "Only063 death/discharge scope; authoritative typed mr death diagnosis is valid evidence; preserve original normal fixture; no Finalizer or074 changes",
+      "commits": [
+        "58e29ffe9edc559bee552c734dc66ebed9ebf32c"
+      ],
+      "integration_commits": [
+        "b13043c3d"
+      ]
     },
     {
       "id": "RR-DEATH-DISCUSSION",
       "owner": "/root/repair_iml01",
-      "state": "RR_D02_independent19_frozen_waiting_test_slot",
+      "state": "RR_D02_integrated_RR_D01_contract_open",
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-ledger-20261008",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py",
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_death_discussion_closure.py"
       ],
-      "test_slot": null
+      "test_slot": null,
+      "commits": [
+        "3e7ee94ff607e53b7f4f54660f4a389abb3a8dbb"
+      ],
+      "integration_commits": [
+        "efb8bc62b"
+      ]
+    },
+    {
+      "id": "RR-SCOPE01",
+      "owner": "/root/repair_chemo",
+      "state": "fixed50_pass_static_independent_review_pending",
+      "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py"
+      ],
+      "scope_constraint": "Tests only; no production catalog or publishing changes; preserve migration and explicit release assertions",
+      "test_slot": null,
+      "commits": [
+        "36a3175b4c2ec2a4cc574b15405638ef44c0361a"
+      ]
+    },
+    {
+      "id": "RR-PUB01",
+      "owner": "/root/repair_iml02",
+      "state": "frozen_boundary_red_green_pending",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only precise NotImplemented identity fallback; knowninvalidfacts muststillraise; no rawpass-through",
+      "test_slot": 1
     }
   ],
   "rules": [
@@ -179,5 +218,11 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "880a433b0"
+  "integration_head": "b13043c3d",
+  "current_test_slot_owner": "/root/repair_iml02",
+  "queued_tests": [
+    "rootDD-F01integrated73",
+    "PRIV003 scopedgreen whenready",
+    "RR-SCOPE01integrated50 afterindependentreview"
+  ]
 }

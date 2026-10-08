@@ -48,3 +48,9 @@
 - root在509f4b390未过滤执行完整化疗文件时，先发现strict-markers下business_oracle未注册，0收集/1错误；owner临时runner注册了marker，未覆盖仓库标准配置。root仅在backend/pytest.ini声明该marker，不添加任何默认筛选、skip或xfail。
 - 声明后同一离线runner完整实际执行74项：68 passed / 6 failed / 1 warning，2.69秒；失败精确为三个原NC业务oracle正反序，实际data_gap，没有额外失败。不把本次称为全绿。日志chemo-run.log保留收集错误；chemo-run-markers.log及chemo-results.xml保留修复后未筛选结果。
 - RR-D02开发侧红7/23、绿39项（23新+16既有051保护）通过，固定提交与独审尚未完成；无真实模型/PG。
+
+- efb8bc62b串行集成RR-D02固定3e7：生产仅8行，开发39通过；独立23/23（21直接+2实际native/reducer/Canonical），0模型/PG。根审原缺正文反例不补造正文，RR-D01仍开放；集成后23项复跑已排队。
+- DD-F01最终73新+8原保护全绿，普通出院facts不加新字段、旧typed死亡正常fixture保持，待固定提交独审。目录测试修订仅3文件，生产目录/发布范围不动。
+
+- b13043c3d集成DD-F01固定58e29：独立39/39通过。随后在同一集成源实际复跑RR-D02全部23项，通过（1.99秒）；DD-F01自身73项集成复跑排队。正常出院旧facts逐字段兼容，死亡范围独立，不以缺death_record推翻可信MR死亡类型。
+- RR-SCOPE01固定36a3175b4原3文件红6/49→绿50，仅测试与文档，生产JSON哈希不变；待独立静态复核。RR-PUB01接管已释放的Finalizer文件，只处理未知合同sentinel，不改医学判据。

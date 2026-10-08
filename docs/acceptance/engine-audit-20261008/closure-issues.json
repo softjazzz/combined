@@ -309,7 +309,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_offline_scope_gap",
       "owner": "/root/repair_iml02",
-      "state": "frozen_red_then_limited_repair",
+      "state": "integrated_limited_engineering_closed",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -320,7 +320,9 @@
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
       ],
-      "note": "Preserve authoritative typed death diagnosis normalfixture; no death_record-only gate; root approved conflict boundaries."
+      "note": "Fixed39independentpass;owner73+old8finalpass. Preservesoldtypeddeathandnormaldischargefacts. No realPG/clinicalclaim;integrated73queued.",
+      "source_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+      "integration_commit": "b13043c3d"
     },
     {
       "id": "discharge-death:DD-F02",
@@ -483,7 +485,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
       "owner": "/root/repair_iml01",
-      "state": "independent19_frozen_waiting_serial_test_slot",
+      "state": "integrated_limited_engineering_closed",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -491,7 +493,10 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "source_commit": "3e7ee94ff607e53b7f4f54660f4a389abb3a8dbb",
+      "integration_commit": "efb8bc62b",
+      "note": "Owner39pass;independent23pass incl2native-reducer-Canonical zero-model;realPG/clinicalnotclaimed. RR-D01open."
     },
     {
       "id": "rescue-remaining:RR-M01",
@@ -710,9 +715,10 @@
       ],
       "claim": "独立native/语义复核辅助脚本绕开发送边界",
       "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
-      "state": "existing_three_entry_source_design_in_progress",
+      "state": "reject_boundary_red_prepared_real_CLI_source_unwired",
       "owner": "/root/repair_privacy_closure",
-      "depends_on": []
+      "depends_on": [],
+      "note": "No existingrealCLIcaller has same-operation rawcollector. Approvedlimitedboundaryfix andstrictfixedsynthetic028only; sourcewiring/functionality staysopen."
     },
     {
       "id": "PRIV-004",
@@ -748,11 +754,9 @@
         "0609 publication boundary"
       ],
       "claim": "未知规则回退NotImplemented被当dict调用get；非目录边界，不计新增正式规则缺陷",
-      "state": "queued_shared_module",
-      "owner": null,
-      "depends_on": [
-        "imaging-laboratory:IML-02"
-      ],
+      "state": "frozen_boundary_red_green_pending",
+      "owner": "/root/repair_iml02",
+      "depends_on": [],
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
       "reconciliation_state": "engineering_boundary_not_extra_catalog_rule"
     },
@@ -762,11 +766,12 @@
         "0609 catalog tests"
       ],
       "claim": "86/80目录与旧85/79断言漂移；先核正确集合，不能只改计数冒充业务修复",
-      "state": "queued_test_expectation_reconciliation",
-      "owner": null,
+      "state": "fixed50_pass_static_independent_review_pending",
+      "owner": "/root/repair_chemo",
       "depends_on": [],
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
-      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule"
+      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
+      "source_commit": "36a3175b4c2ec2a4cc574b15405638ef44c0361a"
     }
   ]
 }
