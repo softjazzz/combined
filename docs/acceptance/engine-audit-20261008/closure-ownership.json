@@ -398,7 +398,7 @@
       "owner": "/root/repair_iml02",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-transfusion-family-20261008",
-      "state": "frozen32_red_authorized_production_unchanged",
+      "state": "original32_red_evidence_frozen_implementation_in_progress",
       "responsibility": [
         "native_transfusion_execution.py:043-047 only",
         "new versioned performance scope extractor",
@@ -427,9 +427,9 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "f1c6ec095d61fdee9f352d0c9ae9d6386369ab6b",
-  "current_test_slot_owner": "/root/repair_iml02:32 frozen red",
+  "integration_head": "2d66663b632efa5543809109fefff48bea5e283d",
+  "current_test_slot_owner": null,
   "queued_tests": [
-    "TC01 scope contract red when ready; no concurrent tests"
+    "TC01 green when ready; sole slot requires root grant"
   ]
 }

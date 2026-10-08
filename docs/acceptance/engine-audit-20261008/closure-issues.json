@@ -29,7 +29,7 @@
       "integration_commit": "5649f6396",
       "test_adaptation_commit": "fac4ef67c",
       "latest_evidence": "docs/acceptance/engine-audit-20261008/independent-closure/n12-carrier-integration/independent-review.md",
-      "latest_result": "Sourcee5f225bd4 integratedf1c6ec095. Independent fixedblob/AST review and root375/375 strictoffline pass10.55s, source hashes unchanged. Preserves priorred6/9 and firstgreen370/5 harness failures. Same-ID sN collision and real-model semantics remain unverified; no whole-rule clinical closure."
+      "latest_result": "Sourcee5f225bd4 integratedf1c6ec095. Independent fixedblob/AST review and root375/375 strictoffline pass10.55s, source hashes unchanged. Preserves priorred6/9 and firstgreen370/5 harness failures. Same-ID sN collision and real-model semantics remain unverified; no whole-rule clinical closure. Later bounded sourcee5f supplement2synthetic cases/3documents preserves final same-ID sN marker exactbody/spans/order/length through formal wrapper; root read probe and actual report. Does not imply arbitrary marker combinations or model semantics."
     },
     {
       "id": "N10",

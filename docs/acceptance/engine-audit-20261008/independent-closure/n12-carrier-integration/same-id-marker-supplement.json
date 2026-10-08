@@ -1,0 +1,32 @@
+{
+  "source_sha": "e5f225bd40062fb124218af75171f91b2ee680cc",
+  "tree_clean": true,
+  "scope": "two synthetic final same-ID marker carrier cases, three documents; no production/test/branch modifications",
+  "cases_passed": 2,
+  "documents_compared_exact": 3,
+  "exit": 0,
+  "logical_calls_per_case": 1,
+  "delegate_calls_per_case": 1,
+  "model_http_calls": 0,
+  "pg_connections": 0,
+  "raw_body_and_each_original_span_strict_equal": true,
+  "metadata_order_and_lengths_strict_equal": true,
+  "input_marker_data_not_interpreted_as_document_delimiter": true,
+  "return_schema_parser": "ready with unknown atoms, no medical conclusion",
+  "all_hashes_before_after_identical": true,
+  "artifacts_sha256": {
+    "expectations-frozen.json": "29ff29ebd377c2b04cccf3f8eac5536000eb8e36f53c699dd82eb27483785240",
+    "capture_probe.py": "5c2e52f41d8a94c5f73ce1e40ab246028dc57a92fbde5690fb5ea939579112d5",
+    "offline_guard.py": "65ff6d33ed5927e82357922c68c87c37228526e769271ce73159511ccc1db3b6",
+    "results.json": "7d2347873272ef148be05f77bc7c11aa52936f39f38ce6125b5f959757c9c608",
+    "integrity.json": "f9f715aa43d078d34f5594e8a37b1089069150b43421b4a287164c23d4fe261b",
+    "run.log": "50ab740cb1ffd9978b37a00b4d7d1d232d486f3af63ec20d947d898eeb481bba",
+    "exit.txt": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+  },
+  "limitations": [
+    "finite two carrier cases only",
+    "does not prove real model semantic parsing or quote selection",
+    "does not prove all arbitrary marker or malformed metadata combinations",
+    "original full-ID marker tests and existing 375 remain unchanged"
+  ]
+}
