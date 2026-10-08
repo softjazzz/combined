@@ -1,10 +1,10 @@
 # 0609 closure issue queue
 
-Current production integration: `da31efd03`. Issue states are not rule acceptance counts. Frozen86-row T0 unchanged. No real-model/clinical/customer acceptance asserted.
+Production root: `da31efd03`; source-frozen repair commits awaiting independent integration are identified below. Issue closure is not full-rule/clinical acceptance. Frozen86-row T0 unchanged.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
-|N12|core_implemented_waiting_joint_offline_validation|/root/repair_iml01||
+|N12|fixed_core_independent_and_old_contract_regression_in_progress|/root/repair_iml01||
 |N10|queued_evidence_review|unassigned||
 |N13|limited_engineering_repair_integrated_business_acceptance_open|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|unassigned||
@@ -34,7 +34,7 @@ Current production integration: `da31efd03`. Issue states are not rule acceptanc
 |tumor-pathology:TP-D01|integrated_engineering_closed|/root/repair_chemo||
 |tumor-pathology:TP-D02|design_before_semantic_changes|/root/repair_chemo||
 |tumor-pathology:TP-D03|design_before_semantic_changes|/root/repair_chemo||
-|tumor-pathology:TP-D04|queued_shared_module|unassigned|imaging-laboratory:IML-02|
+|tumor-pathology:TP-D04|fixed_source_awaiting_independent_review|/root/repair_iml02|imaging-laboratory:IML-02|
 |tumor-pathology:TP-D05|queued_shared_module|unassigned|imaging-laboratory:IML-02|
 |PRIV-002|integrated_limited_source_boundary_engineering_closed|/root/repair_privacy_closure||
 |PRIV-003|limited_send_boundary_integrated_real_CLI_identity_source_open|/root/repair_privacy_closure||
@@ -43,3 +43,4 @@ Current production integration: `da31efd03`. Issue states are not rule acceptanc
 |rescue-remaining:RR-PUB01|integrated_limited_engineering_closed|/root/repair_iml02||
 |rescue-remaining:RR-SCOPE01|test_contract_drift_closed_in_fixed_catalog_scope|/root/repair_chemo||
 |course-timing:CT-04|integrated_limited_engineering_closed|/root/repair_iml02||
+|SCOPE6-01|synthetic_formal_entry_reproduction_preparation|/root/repair_privacy_closure||

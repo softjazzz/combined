@@ -1,0 +1,2559 @@
+{
+  "schema_version": "scope-six-review-v1",
+  "created_at_utc": "2026-10-08T19:34:38.299266+00:00",
+  "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+  "scope": {
+    "included_rule_ids": [
+      "LX0609-05-01-01",
+      "LX0609-05-01-04",
+      "LX0609-05-03-01",
+      "LX0609-06-03-01",
+      "LX0609-07-04-02",
+      "LX0609-08-01-05"
+    ],
+    "rule_count": 6,
+    "lx0916_included": false,
+    "no_full_86_reaudit": true
+  },
+  "method": "git show固定blob定向阅读生产范围调用链与现存测试源码；继承6行旧报告索引。无生产Python导入/执行，无pytest/探针/HTTP/模型/PG/.env/病例访问。",
+  "activity": {
+    "new_test_executions": 0,
+    "new_model_calls": 0,
+    "pg_access": 0,
+    "patient_reads": 0,
+    "production_edits": 0,
+    "matrix_or_ledger_edits": 0,
+    "commits": 0
+  },
+  "summary": {
+    "fixed_scope_read_rules": 6,
+    "registered_pending": 4,
+    "unregistered_pending": 1,
+    "acceptance_only": 1,
+    "source_read_evidence_gap_now_supplied": 6,
+    "current_runtime_acceptance_pass_count": null,
+    "medical_pass_count": "not_claimed",
+    "confirmed_new_runtime_defects": 0,
+    "unconfirmed_scope_path_gaps": 1,
+    "all_scope_execution_closed": false,
+    "note": "静态范围补证6条，不是6条工程/医学验收通过；SCOPE6-01待独立复现，其余已有测试源码也不算当前执行。"
+  },
+  "source_manifest": {
+    "master": {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+      "git_blob": "31fd1e9fe49ce4b68c58367ed25bd57e89e1bff4",
+      "sha256": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "compiler": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+      "git_blob": "1b8b969211dfd0fe2b8479599689049c62e93d04",
+      "sha256": "8d249f3912304877ee0d35b1bbe1495895dea963e85959633bdc95e2562e7d70",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "catalog": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+      "git_blob": "fdf5158a175baeef09415955ee230393b2fe7720",
+      "sha256": "175b7ab251ef98d90b51ff01f3dad1ead84d0814005607c898b1dd4d8a4de931",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "phase": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+      "git_blob": "c8d8e55ab3a41fd2e6f5557fb995826d6fe82d80",
+      "sha256": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "package": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+      "git_blob": "90b5ac3fac257865b87a770590e97d5429abf9e0",
+      "sha256": "b1709f4a107d30a714fdd7a4a78a2edc94fde27bc8868c98f23eddc6fee1b319",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "selection": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "git_blob": "afc5b8329e49c349e3939add2566f93f5d3b1293",
+      "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "ruleset": {
+      "path": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+      "git_blob": "1e799ab0edee66c05b474b6889ffbbbdb7d0ae52",
+      "sha256": "c316eb7f80233f2e2abebe2981d539d826ef2a0bf8f7b3b5d118ab0db720488e",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "sample": {
+      "path": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+      "git_blob": "25ca2834e8799d52edd8abe50480b7f5ff6d0c1f",
+      "sha256": "6259fee868660f5dd6d8c0273ca95e63092cebac4a818f942ee75a33b966d187",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "workspace_route": {
+      "path": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "git_blob": "4792c729aa5ddb94ecc8a1c1b26f6d21714b3f00",
+      "sha256": "ff05a90d693cea0122ad82bdbbcd673a168366ce4e8dae403266b33b697c2fbb",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "worker": {
+      "path": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+      "git_blob": "6dcfb579d872b134a93ca601c1d05925cdd08cc1",
+      "sha256": "c39f4ac3f2169fe787099dae2989834861f0070bc0be4095af40924efd4c1e77",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "execution": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "git_blob": "f1badd4545ee85111b906aad49ff4dc6137d9cc4",
+      "sha256": "d0bb0a8020cbf1ca19201b8ad94e85f1690d8ec101a4793cb2676fa68c3ff1d7",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "shadow": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+      "git_blob": "e69fe5ba9b024196c3450c0ac0241cff423d6fe6",
+      "sha256": "98110d373955a81a189c32d41302f1c649bb6923dd432e2404dd944337f47e4f",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "service": {
+      "path": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+      "git_blob": "28714deaffc6c3b96d7547e97311a2a3fd24e922",
+      "sha256": "455d5689323a186ed747a83ffe693c06838e0a80bf784af5e671bd0ac3bbbd8d",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "store": {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+      "git_blob": "4c217f88909954006d13f0dbaa5310f02fa623b0",
+      "sha256": "67d80d42efdd4c0010684017932d49c86856f5c2950d83af4f1eb5516b2bdf4a",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "finalizer": {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "git_blob": "1d3904a3003835d3d3d2f1a4cb35692e9bae76b2",
+      "sha256": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "targeted_source_read"
+    },
+    "phase_tests": {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+      "git_blob": "36f54a0e6b7349d834d972a778d897b884897daa",
+      "sha256": "16eb93a9504e1c0787de7e760a921443f77b2ae29b0342d64c2a5074718d44ee",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "test_source_only_not_executed"
+    },
+    "master_tests": {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+      "git_blob": "b92cea5949e0f7c0388f4b0517a8cd105eb1bd6b",
+      "sha256": "2062e3e79234501d5c7f13eaa29ad054edb560069606f40735fd947323e77884",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "test_source_only_not_executed"
+    },
+    "catalog_tests": {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_catalog.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_catalog.py",
+      "git_blob": "66e37e463915481a59a5cc5a72f8a8a290f7f233",
+      "sha256": "daedc338dee20182f610123541d9d374feb4b99d30df6b27b9d3f2b3daa0bfec",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "test_source_only_not_executed"
+    },
+    "package_tests": {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+      "git_blob": "0bdeb02570e71a224d2967d4900b5a3c74d70780",
+      "sha256": "15ef37e5eb7f90bf99fda445195190b674d42e8b9bc14b059df9dfd500794cc9",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "test_source_only_not_executed"
+    },
+    "release_tests": {
+      "path": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+      "git_blob": "a07ebadbbcacfcd2e806e582376a221289c4a77a",
+      "sha256": "2df2de43035f61afe573e2a490864b86de26dcb983fc1cc8846d38ece52a8759",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "test_source_only_not_executed"
+    },
+    "shadow_tests": {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_059_shadow_execution.py",
+      "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_059_shadow_execution.py",
+      "git_blob": "ab7875f6b9dfe32f2ed1ea6a1fbf4f131be44277",
+      "sha256": "c6f59a17d9311c3db0409ade1f36c92182128e54a819cb370ae351f88d9aebbe",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "read_kind": "test_source_only_not_executed"
+    }
+  },
+  "frozen_original_matrix_hashes": {
+    "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/catalog-coverage.json": "61075f2c9603b1fbae929a64f528746739ebcaf5cfb32717b012f23b03a0ae87",
+    "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/catalog-coverage.md": "ae02d4983c80f2b0357e8ea3a214d64936d1a050c5e4082a8bea6426042bdfe4"
+  },
+  "shared_default_and_history_contract": {
+    "registered_pending": "客户可选交付仍含，但执行选项仅phase_target，pending只交付政策暂停；workspace与sample显式仅暂停均拒绝422，混合选择保留pause交付。",
+    "unregistered_pending": "不是可选交付，不应被当已注册pause result；全master仅保留历史known identity。",
+    "acceptance_only": "phase_target能执行与入口允许范围独立；默认排除，普通workspace显式拒绝，仅customer sample显式可计划。",
+    "history": "历史身份查完整master，显示snapshot和retry范围取原保存计划；合法性/完整性门禁仍有效。",
+    "bounded_entry_definition": "本报告single/batch指正式workspace/batch-jobs的1/多record_refs；sample指customer sample-pools/run。未宣称所有诊断/debug评估API均封闭。"
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-05-01-01",
+      "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+      "source_document": "抗菌药物使用记录",
+      "master_json_pointer": "/rules/27",
+      "master_source": {
+        "file": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "line": 238,
+        "end_line": 238,
+        "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+        "note": ""
+      },
+      "current_state": {
+        "implementation_status": "active",
+        "catalog_registered": true,
+        "phase_status": "pending_definition",
+        "release_scope": "default",
+        "pending_reason_code": "antimicrobial_dictionary_missing",
+        "customer_excluded": false
+      },
+      "source_review_done": true,
+      "review_scope": "发布范围/暂停合同/选择/冻结历史身份；未审医学算法",
+      "highest_new_evidence_level": "fixed_sha_targeted_source_read",
+      "whole_rule_acceptance_complete": false,
+      "medical_pass": false,
+      "source_gate_evidence": [
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "line": 58,
+          "end_line": 107,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "active/pending与release_scope正交；acceptance_only要求active+phase_target"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "line": 23,
+          "end_line": 60,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "执行wrapper严格投影implementation_status=active"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "line": 307,
+          "end_line": 335,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "客户可选交付目录仅registered且非客户排除项；此时尚含pending及acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 168,
+          "end_line": 192,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已注册选项拆为phase_target与withheld；未注册拒绝"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 278,
+          "end_line": 327,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "inventory来自active wrappers，package选中pending但不分发医学批次"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 525,
+          "end_line": 536,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "公开包入口仅扩展可执行选项，pending不转旧执行ID"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 121,
+          "end_line": 165,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "注册pending生成not_executed/is_compliant=None/facts={}/evidence=[]及受控原因"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 384,
+          "end_line": 387,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "phase gate结果生成"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 891,
+          "end_line": 891,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "暂停结果纳入native_results"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "line": 482,
+          "end_line": 494,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "发布暂停合同允许无公开facts，不伪造事实"
+        }
+      ],
+      "historical_read_chain": [
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 146,
+          "end_line": 155,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "历史身份使用完整master，含暂停、未注册和acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "line": 117,
+          "end_line": 154,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已知身份仍需唯一身份/状态/合规语义一致，非任意旧结果通行"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 3526,
+          "end_line": 3580,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "latest-result校验Envelope及全master身份；只过滤客户明确排除集，不因当前phase/release_scope删这6条"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 203,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试从保存scoped或旧rule_ids+paused+gate恢复；缺计划拒绝并要求新建"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 4493,
+          "end_line": 4505,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试禁止超原冻结范围"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1324,
+          "end_line": 1345,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "领取任务恢复冻结范围，失败规则重试不得扩范围"
+        }
+      ],
+      "history_limits": [
+        "只证明合法已保存结果不会仅因暂停/acceptance/失去执行注册而成为未知身份；仍需合法Envelope、状态/facts/version及原冻结范围。",
+        "没有读取真实历史患者结果；该条特定历史结果跨状态存取/API独立执行未在本轮证明。",
+        "当前phase/release过滤只约束新任务；缺原保存计划不能用当前目录猜测。"
+      ],
+      "existing_test_source_evidence": [
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "line": 160,
+          "end_line": 160,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_execution_catalog_is_exactly_the_active_master_projection",
+          "covers": "注册目录必须精确等active master投影",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "本轮只读测试源码，不声明当前运行通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 162,
+          "end_line": 162,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_phase_scope_is_a_read_only_master_projection",
+          "covers": "phase/registered来自同一master，非另造列表",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 224,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_customer_delivery_excludes_registration_only_handbook_rules",
+          "covers": "默认客户交付为registered非excluded；06-03-01不可选且partition拒绝",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "不覆盖06-03-01混合sample入口创建"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 81,
+          "end_line": 81,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_defaults_freeze_scope",
+          "covers": "workspace单/批与sample默认过滤acceptance，冻结旧计划，worker/Canonical读取",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fixture为合成空材料+SQLite；源码可定位，本轮未执行，不证明医学内容/正式环境"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "line": 862,
+          "end_line": 862,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids",
+          "covers": "参数明确包含该条，公开入口暂停项不得转旧执行ID",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；无本轮执行结论"
+        }
+      ],
+      "inherited_evidence": {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+        "sha256": "cee2ab76e2b51128530cb94bec3c75ea557f03221d0bc0299ac4c84d26a834ca",
+        "reported_source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+        "row": {
+          "rule_id": "LX0609-05-01-01",
+          "name": "I/II切口预防抗菌药24/48小时",
+          "implementation_status": "active",
+          "phase_status": "pending_definition",
+          "release_scope": "paused",
+          "executor": "surgery_gate",
+          "audit_status": "已审暂停合同；未执行临床判定",
+          "source_keys": [
+            "surgery_record",
+            "mr_surgery",
+            "inpat_drug_order",
+            "daily_course_record"
+          ],
+          "finding_ids": [],
+          "pending_or_disputed": [
+            "antimicrobial_dictionary_missing"
+          ],
+          "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+        },
+        "inheritance_limit": "只继承原报告具体范围，不将组总测试数分摊给此规则；此处source_sha是旧报告基线，不冒充4e51当前运行。"
+      },
+      "before_activation_or_content_acceptance": "冻结院方抗菌药字典（名称/编码/预防与治疗用途映射）及24/48小时例外业务口径，再核实切口级别、实际给药/起止时间与事件关联；当前阶段不要求强行临床启用。",
+      "current_release_acceptance_goal": [
+        "目录保持已注册且phase=pending，不把暂停解释为医学合规或不适用。",
+        "默认/显式任务不得把该条交给正式医学执行器、亦不得转旧执行ID绕过暂停。",
+        "合法交付项保留该ID及受控pending原因；not_executed、null合规、空facts/evidence，不产生临床data_gap/non_compliant。",
+        "原任务计划与合法历史身份可恢复；重试不得用当前默认范围扩大任务。"
+      ],
+      "remaining_evidence": [
+        {
+          "gap": "05-01-01不在现有empty_evidence_contract直接参数内；no-legacy参数有该条",
+          "kind": "specific_test_case_coverage_gap",
+          "next_action": "将05-01-01加入冻结的纯phase结果合成矩阵，核验antimicrobial_dictionary_missing与全部空值；不调用医学执行器。"
+        },
+        {
+          "gap": "固定4e51下该条默认/显式（仅暂停拒绝、与active混合交付）到保存/读取/重试的独立合成消费证据尚未定位",
+          "kind": "not_run_in_this_review",
+          "next_action": "复用已有合成SQLite入口fixture补选项范围与暂停结果；历史限定结果按原SHA继承，不将源码断言算新pass。"
+        },
+        {
+          "gap": "冻结院方抗菌药字典（名称/编码/预防与治疗用途映射）及24/48小时例外业务口径，再核实切口级别、实际给药/起止时间与事件关联；当前阶段不要求强行临床启用。",
+          "kind": "activation_prerequisite_not_current_paused_release_failure",
+          "next_action": "保留暂停，启用另需用户授权/客户合同；不追要真实模型来强行关闭当前暂停范围。"
+        }
+      ],
+      "new_default_selection": {
+        "customer_delivery_selected": true,
+        "formal_medical_execution": false,
+        "delivery_expected": "not_executed / policy_definition_pending / is_compliant=null / empty facts and evidence",
+        "entry_refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1940,
+            "end_line": 1968,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1228,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      },
+      "explicit_selection": {
+        "workspace_single_batch": "仅暂停选择在partition后active rule_ids为空，2009-2010返回422；与active混合则冻结原selected、pending单列，暂停项不进入医学rule_ids。",
+        "customer_sample_only_paused": "422 所选质控点当前均暂不执行",
+        "customer_sample_mixed_with_active": "冻结原选择并记录paused，执行部分仅active；交付应同时保留暂停结果",
+        "direct_package": "选中可见但not_executed；不进入原生医学批次及legacy扩展",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1928,
+            "end_line": 1975,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1025,
+            "end_line": 1029,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1262,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "line": 310,
+            "end_line": 327,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 2009,
+            "end_line": 2010,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": "仅暂停选择拒绝，不创建任务"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-05-01-04",
+      "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
+      "source_document": "抗菌药物使用记录",
+      "master_json_pointer": "/rules/55",
+      "master_source": {
+        "file": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "line": 468,
+        "end_line": 468,
+        "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+        "note": ""
+      },
+      "current_state": {
+        "implementation_status": "active",
+        "catalog_registered": true,
+        "phase_status": "pending_definition",
+        "release_scope": "default",
+        "pending_reason_code": "key_antimicrobial_catalog_missing",
+        "customer_excluded": false
+      },
+      "source_review_done": true,
+      "review_scope": "发布范围/暂停合同/选择/冻结历史身份；未审医学算法",
+      "highest_new_evidence_level": "fixed_sha_targeted_source_read",
+      "whole_rule_acceptance_complete": false,
+      "medical_pass": false,
+      "source_gate_evidence": [
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "line": 58,
+          "end_line": 107,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "active/pending与release_scope正交；acceptance_only要求active+phase_target"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "line": 23,
+          "end_line": 60,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "执行wrapper严格投影implementation_status=active"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "line": 307,
+          "end_line": 335,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "客户可选交付目录仅registered且非客户排除项；此时尚含pending及acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 168,
+          "end_line": 192,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已注册选项拆为phase_target与withheld；未注册拒绝"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 278,
+          "end_line": 327,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "inventory来自active wrappers，package选中pending但不分发医学批次"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 525,
+          "end_line": 536,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "公开包入口仅扩展可执行选项，pending不转旧执行ID"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 121,
+          "end_line": 165,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "注册pending生成not_executed/is_compliant=None/facts={}/evidence=[]及受控原因"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 384,
+          "end_line": 387,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "phase gate结果生成"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 891,
+          "end_line": 891,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "暂停结果纳入native_results"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "line": 482,
+          "end_line": 494,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "发布暂停合同允许无公开facts，不伪造事实"
+        }
+      ],
+      "historical_read_chain": [
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 146,
+          "end_line": 155,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "历史身份使用完整master，含暂停、未注册和acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "line": 117,
+          "end_line": 154,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已知身份仍需唯一身份/状态/合规语义一致，非任意旧结果通行"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 3526,
+          "end_line": 3580,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "latest-result校验Envelope及全master身份；只过滤客户明确排除集，不因当前phase/release_scope删这6条"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 203,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试从保存scoped或旧rule_ids+paused+gate恢复；缺计划拒绝并要求新建"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 4493,
+          "end_line": 4505,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试禁止超原冻结范围"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1324,
+          "end_line": 1345,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "领取任务恢复冻结范围，失败规则重试不得扩范围"
+        }
+      ],
+      "history_limits": [
+        "只证明合法已保存结果不会仅因暂停/acceptance/失去执行注册而成为未知身份；仍需合法Envelope、状态/facts/version及原冻结范围。",
+        "没有读取真实历史患者结果；该条特定历史结果跨状态存取/API独立执行未在本轮证明。",
+        "当前phase/release过滤只约束新任务；缺原保存计划不能用当前目录猜测。"
+      ],
+      "existing_test_source_evidence": [
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "line": 160,
+          "end_line": 160,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_execution_catalog_is_exactly_the_active_master_projection",
+          "covers": "注册目录必须精确等active master投影",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "本轮只读测试源码，不声明当前运行通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 162,
+          "end_line": 162,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_phase_scope_is_a_read_only_master_projection",
+          "covers": "phase/registered来自同一master，非另造列表",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 224,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_customer_delivery_excludes_registration_only_handbook_rules",
+          "covers": "默认客户交付为registered非excluded；06-03-01不可选且partition拒绝",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "不覆盖06-03-01混合sample入口创建"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 81,
+          "end_line": 81,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_defaults_freeze_scope",
+          "covers": "workspace单/批与sample默认过滤acceptance，冻结旧计划，worker/Canonical读取",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fixture为合成空材料+SQLite；源码可定位，本轮未执行，不证明医学内容/正式环境"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "line": 862,
+          "end_line": 862,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids",
+          "covers": "参数明确包含该条，公开入口暂停项不得转旧执行ID",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；无本轮执行结论"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 143,
+          "end_line": 143,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_pending_definition_result_has_one_empty_evidence_contract",
+          "covers": "参数明确包含该条和pending_reason，空事实/证据合同",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；不证明正式三入口逐条历史读取已运行"
+        }
+      ],
+      "inherited_evidence": {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+        "sha256": "cee2ab76e2b51128530cb94bec3c75ea557f03221d0bc0299ac4c84d26a834ca",
+        "reported_source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+        "row": {
+          "rule_id": "LX0609-05-01-04",
+          "name": "两个以上重点抗菌药用前病原学",
+          "implementation_status": "active",
+          "phase_status": "pending_definition",
+          "release_scope": "paused",
+          "executor": "extended_document",
+          "audit_status": "已审暂停合同；未执行临床判定",
+          "source_keys": [
+            "inpat_drug_order",
+            "labtest_master",
+            "labtest_item_report"
+          ],
+          "finding_ids": [],
+          "pending_or_disputed": [
+            "key_antimicrobial_catalog_missing"
+          ],
+          "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+        },
+        "inheritance_limit": "只继承原报告具体范围，不将组总测试数分摊给此规则；此处source_sha是旧报告基线，不冒充4e51当前运行。"
+      },
+      "before_activation_or_content_acceptance": "冻结重点抗菌药目录与两个及以上的事件计数/使用前时间、病原学来源定义；目录或资料缺失不能生成医学不合规；之后才做用药事件金标。",
+      "current_release_acceptance_goal": [
+        "目录保持已注册且phase=pending，不把暂停解释为医学合规或不适用。",
+        "默认/显式任务不得把该条交给正式医学执行器、亦不得转旧执行ID绕过暂停。",
+        "合法交付项保留该ID及受控pending原因；not_executed、null合规、空facts/evidence，不产生临床data_gap/non_compliant。",
+        "原任务计划与合法历史身份可恢复；重试不得用当前默认范围扩大任务。"
+      ],
+      "remaining_evidence": [
+        {
+          "gap": "固定4e51下该条默认/显式（仅暂停拒绝、与active混合交付）到保存/读取/重试的独立合成消费证据尚未定位",
+          "kind": "not_run_in_this_review",
+          "next_action": "复用已有合成SQLite入口fixture补选项范围与暂停结果；历史限定结果按原SHA继承，不将源码断言算新pass。"
+        },
+        {
+          "gap": "冻结重点抗菌药目录与两个及以上的事件计数/使用前时间、病原学来源定义；目录或资料缺失不能生成医学不合规；之后才做用药事件金标。",
+          "kind": "activation_prerequisite_not_current_paused_release_failure",
+          "next_action": "保留暂停，启用另需用户授权/客户合同；不追要真实模型来强行关闭当前暂停范围。"
+        }
+      ],
+      "new_default_selection": {
+        "customer_delivery_selected": true,
+        "formal_medical_execution": false,
+        "delivery_expected": "not_executed / policy_definition_pending / is_compliant=null / empty facts and evidence",
+        "entry_refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1940,
+            "end_line": 1968,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1228,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      },
+      "explicit_selection": {
+        "workspace_single_batch": "仅暂停选择在partition后active rule_ids为空，2009-2010返回422；与active混合则冻结原selected、pending单列，暂停项不进入医学rule_ids。",
+        "customer_sample_only_paused": "422 所选质控点当前均暂不执行",
+        "customer_sample_mixed_with_active": "冻结原选择并记录paused，执行部分仅active；交付应同时保留暂停结果",
+        "direct_package": "选中可见但not_executed；不进入原生医学批次及legacy扩展",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1928,
+            "end_line": 1975,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1025,
+            "end_line": 1029,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1262,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "line": 310,
+            "end_line": 327,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 2009,
+            "end_line": 2010,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": "仅暂停选择拒绝，不创建任务"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-05-03-01",
+      "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+      "source_document": "医嘱",
+      "master_json_pointer": "/rules/58",
+      "master_source": {
+        "file": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "line": 494,
+        "end_line": 494,
+        "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+        "note": ""
+      },
+      "current_state": {
+        "implementation_status": "active",
+        "catalog_registered": true,
+        "phase_status": "pending_definition",
+        "release_scope": "default",
+        "pending_reason_code": "treatment_event_order_course_real_gold_pending",
+        "customer_excluded": false
+      },
+      "source_review_done": true,
+      "review_scope": "发布范围/暂停合同/选择/冻结历史身份；未审医学算法",
+      "highest_new_evidence_level": "fixed_sha_targeted_source_read",
+      "whole_rule_acceptance_complete": false,
+      "medical_pass": false,
+      "source_gate_evidence": [
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "line": 58,
+          "end_line": 107,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "active/pending与release_scope正交；acceptance_only要求active+phase_target"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "line": 23,
+          "end_line": 60,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "执行wrapper严格投影implementation_status=active"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "line": 307,
+          "end_line": 335,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "客户可选交付目录仅registered且非客户排除项；此时尚含pending及acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 168,
+          "end_line": 192,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已注册选项拆为phase_target与withheld；未注册拒绝"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 278,
+          "end_line": 327,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "inventory来自active wrappers，package选中pending但不分发医学批次"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 525,
+          "end_line": 536,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "公开包入口仅扩展可执行选项，pending不转旧执行ID"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 121,
+          "end_line": 165,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "注册pending生成not_executed/is_compliant=None/facts={}/evidence=[]及受控原因"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 384,
+          "end_line": 387,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "phase gate结果生成"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 891,
+          "end_line": 891,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "暂停结果纳入native_results"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "line": 482,
+          "end_line": 494,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "发布暂停合同允许无公开facts，不伪造事实"
+        }
+      ],
+      "historical_read_chain": [
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 146,
+          "end_line": 155,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "历史身份使用完整master，含暂停、未注册和acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "line": 117,
+          "end_line": 154,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已知身份仍需唯一身份/状态/合规语义一致，非任意旧结果通行"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 3526,
+          "end_line": 3580,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "latest-result校验Envelope及全master身份；只过滤客户明确排除集，不因当前phase/release_scope删这6条"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 203,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试从保存scoped或旧rule_ids+paused+gate恢复；缺计划拒绝并要求新建"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 4493,
+          "end_line": 4505,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试禁止超原冻结范围"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1324,
+          "end_line": 1345,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "领取任务恢复冻结范围，失败规则重试不得扩范围"
+        }
+      ],
+      "history_limits": [
+        "只证明合法已保存结果不会仅因暂停/acceptance/失去执行注册而成为未知身份；仍需合法Envelope、状态/facts/version及原冻结范围。",
+        "没有读取真实历史患者结果；该条特定历史结果跨状态存取/API独立执行未在本轮证明。",
+        "当前phase/release过滤只约束新任务；缺原保存计划不能用当前目录猜测。"
+      ],
+      "existing_test_source_evidence": [
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "line": 160,
+          "end_line": 160,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_execution_catalog_is_exactly_the_active_master_projection",
+          "covers": "注册目录必须精确等active master投影",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "本轮只读测试源码，不声明当前运行通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 162,
+          "end_line": 162,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_phase_scope_is_a_read_only_master_projection",
+          "covers": "phase/registered来自同一master，非另造列表",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 224,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_customer_delivery_excludes_registration_only_handbook_rules",
+          "covers": "默认客户交付为registered非excluded；06-03-01不可选且partition拒绝",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "不覆盖06-03-01混合sample入口创建"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 81,
+          "end_line": 81,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_defaults_freeze_scope",
+          "covers": "workspace单/批与sample默认过滤acceptance，冻结旧计划，worker/Canonical读取",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fixture为合成空材料+SQLite；源码可定位，本轮未执行，不证明医学内容/正式环境"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "line": 862,
+          "end_line": 862,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids",
+          "covers": "参数明确包含该条，公开入口暂停项不得转旧执行ID",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；无本轮执行结论"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 143,
+          "end_line": 143,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_pending_definition_result_has_one_empty_evidence_contract",
+          "covers": "参数明确包含该条和pending_reason，空事实/证据合同",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；不证明正式三入口逐条历史读取已运行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "line": 744,
+          "end_line": 744,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them",
+          "covers": "明确05-03-01与07-04-02在not_executed，不进入native/compatibility",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未运行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_059_shadow_execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_059_shadow_execution.py",
+          "line": 158,
+          "end_line": 158,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_059_shadow_setting_defaults_off",
+          "covers": "源码保护默认关闭",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未读取本机配置，未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_059_shadow_execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_059_shadow_execution.py",
+          "line": 200,
+          "end_line": 200,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_enabled_shadow_calls_llm_once_attaches_safe_summary_and_keeps_formal_totals",
+          "covers": "FakeLLM1次摘要shadow_only=true/release_eligible=false，正式059保持not_executed，正式tokens不混入shadow",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fake模型测试源码；无真实模型结论"
+        }
+      ],
+      "inherited_evidence": {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+        "sha256": "cee2ab76e2b51128530cb94bec3c75ea557f03221d0bc0299ac4c84d26a834ca",
+        "reported_source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+        "row": {
+          "rule_id": "LX0609-05-03-01",
+          "name": "诊疗事件/医嘱/病程一致",
+          "implementation_status": "active",
+          "phase_status": "pending_definition",
+          "release_scope": "paused",
+          "executor": "treatment_order_consistency_shadow",
+          "audit_status": "已审暂停合同及影子工程保护；缺真实金标不等于未审",
+          "source_keys": [
+            "exam_master",
+            "exam_item_report",
+            "surgery_record",
+            "inpat_drug_order",
+            "inpat_nondrug_order",
+            "daily_course_record",
+            "senior_course_record"
+          ],
+          "finding_ids": [],
+          "pending_or_disputed": [
+            "treatment_event_order_course_real_gold_pending"
+          ],
+          "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+        },
+        "inheritance_limit": "只继承原报告具体范围，不将组总测试数分摊给此规则；此处source_sha是旧报告基线，不冒充4e51当前运行。"
+      },
+      "before_activation_or_content_acceptance": "客户确认实际诊疗事件—医嘱—病程多事件/多键冲突及动作语义真实金标；先通过来源与关联合同，再考虑取消phase暂停；影子响应不得作为正式合规。",
+      "current_release_acceptance_goal": [
+        "目录保持已注册且phase=pending，不把暂停解释为医学合规或不适用。",
+        "默认/显式任务不得把该条交给正式医学执行器、亦不得转旧执行ID绕过暂停。",
+        "合法交付项保留该ID及受控pending原因；not_executed、null合规、空facts/evidence，不产生临床data_gap/non_compliant。",
+        "原任务计划与合法历史身份可恢复；重试不得用当前默认范围扩大任务。",
+        "若单独打开影子开关，摘要标shadow_only/release_eligible=false，正式状态和正式计费不受影子结果影响；本轮不打开。"
+      ],
+      "remaining_evidence": [
+        {
+          "gap": "固定4e51下该条默认/显式（仅暂停拒绝、与active混合交付）到保存/读取/重试的独立合成消费证据尚未定位",
+          "kind": "not_run_in_this_review",
+          "next_action": "复用已有合成SQLite入口fixture补选项范围与暂停结果；历史限定结果按原SHA继承，不将源码断言算新pass。"
+        },
+        {
+          "gap": "客户确认实际诊疗事件—医嘱—病程多事件/多键冲突及动作语义真实金标；先通过来源与关联合同，再考虑取消phase暂停；影子响应不得作为正式合规。",
+          "kind": "activation_prerequisite_not_current_paused_release_failure",
+          "next_action": "保留暂停，启用另需用户授权/客户合同；不追要真实模型来强行关闭当前暂停范围。"
+        }
+      ],
+      "new_default_selection": {
+        "customer_delivery_selected": true,
+        "formal_medical_execution": false,
+        "delivery_expected": "not_executed / policy_definition_pending / is_compliant=null / empty facts and evidence",
+        "entry_refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1940,
+            "end_line": 1968,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1228,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      },
+      "explicit_selection": {
+        "workspace_single_batch": "仅暂停选择在partition后active rule_ids为空，2009-2010返回422；与active混合则冻结原selected、pending单列，暂停项不进入医学rule_ids。",
+        "customer_sample_only_paused": "422 所选质控点当前均暂不执行",
+        "customer_sample_mixed_with_active": "冻结原选择并记录paused，执行部分仅active；交付应同时保留暂停结果",
+        "direct_package": "选中可见但not_executed；不进入原生医学批次及legacy扩展",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1928,
+            "end_line": 1975,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1025,
+            "end_line": 1029,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1262,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "line": 310,
+            "end_line": 327,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 2009,
+            "end_line": 2010,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": "仅暂停选择拒绝，不创建任务"
+          }
+        ]
+      },
+      "shadow_scope": {
+        "normal_gate": "正式结果保持not_executed",
+        "code_default": "execution getattr开关默认False；实际运行配置未读",
+        "explicit_enabled_exception": "独立shadow开关打开且选中该ID且受控资料可用时可调用shadow evaluator/LLM；安全摘要只附metadata、不参加正式结果和正式用量，不能泛称所有配置零模型",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+            "line": 957,
+            "end_line": 965,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+            "line": 1037,
+            "end_line": 1040,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+            "line": 299,
+            "end_line": 346,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-06-03-01",
+      "qc_point": "医嘱与病程一致性",
+      "source_document": "微生物培养检查记录",
+      "master_json_pointer": "/rules/81",
+      "master_source": {
+        "file": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "line": 686,
+        "end_line": 686,
+        "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+        "note": ""
+      },
+      "current_state": {
+        "implementation_status": "pending_definition",
+        "catalog_registered": false,
+        "phase_status": "pending_definition",
+        "release_scope": "default",
+        "pending_reason_code": "culture_order_course_linkage_unavailable",
+        "customer_excluded": false
+      },
+      "source_review_done": true,
+      "review_scope": "发布范围/暂停合同/选择/冻结历史身份；未审医学算法",
+      "highest_new_evidence_level": "fixed_sha_targeted_source_read",
+      "whole_rule_acceptance_complete": false,
+      "medical_pass": false,
+      "source_gate_evidence": [
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "line": 58,
+          "end_line": 107,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "active/pending与release_scope正交；acceptance_only要求active+phase_target"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "line": 23,
+          "end_line": 60,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "执行wrapper严格投影implementation_status=active"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "line": 307,
+          "end_line": 335,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "客户可选交付目录仅registered且非客户排除项；此时尚含pending及acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 168,
+          "end_line": 192,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已注册选项拆为phase_target与withheld；未注册拒绝"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 278,
+          "end_line": 327,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "inventory来自active wrappers，package选中pending但不分发医学批次"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 525,
+          "end_line": 536,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "公开包入口仅扩展可执行选项，pending不转旧执行ID"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 121,
+          "end_line": 165,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "注册pending生成not_executed/is_compliant=None/facts={}/evidence=[]及受控原因"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 384,
+          "end_line": 387,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "phase gate结果生成"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 891,
+          "end_line": 891,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "暂停结果纳入native_results"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "line": 482,
+          "end_line": 494,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "发布暂停合同允许无公开facts，不伪造事实"
+        }
+      ],
+      "historical_read_chain": [
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 146,
+          "end_line": 155,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "历史身份使用完整master，含暂停、未注册和acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "line": 117,
+          "end_line": 154,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已知身份仍需唯一身份/状态/合规语义一致，非任意旧结果通行"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 3526,
+          "end_line": 3580,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "latest-result校验Envelope及全master身份；只过滤客户明确排除集，不因当前phase/release_scope删这6条"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 203,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试从保存scoped或旧rule_ids+paused+gate恢复；缺计划拒绝并要求新建"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 4493,
+          "end_line": 4505,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试禁止超原冻结范围"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1324,
+          "end_line": 1345,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "领取任务恢复冻结范围，失败规则重试不得扩范围"
+        }
+      ],
+      "history_limits": [
+        "只证明合法已保存结果不会仅因暂停/acceptance/失去执行注册而成为未知身份；仍需合法Envelope、状态/facts/version及原冻结范围。",
+        "没有读取真实历史患者结果；该条特定历史结果跨状态存取/API独立执行未在本轮证明。",
+        "当前phase/release过滤只约束新任务；缺原保存计划不能用当前目录猜测。"
+      ],
+      "existing_test_source_evidence": [
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "line": 160,
+          "end_line": 160,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_execution_catalog_is_exactly_the_active_master_projection",
+          "covers": "注册目录必须精确等active master投影",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "本轮只读测试源码，不声明当前运行通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 162,
+          "end_line": 162,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_phase_scope_is_a_read_only_master_projection",
+          "covers": "phase/registered来自同一master，非另造列表",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 224,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_customer_delivery_excludes_registration_only_handbook_rules",
+          "covers": "默认客户交付为registered非excluded；06-03-01不可选且partition拒绝",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "不覆盖06-03-01混合sample入口创建"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 81,
+          "end_line": 81,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_defaults_freeze_scope",
+          "covers": "workspace单/批与sample默认过滤acceptance，冻结旧计划，worker/Canonical读取",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fixture为合成空材料+SQLite；源码可定位，本轮未执行，不证明医学内容/正式环境"
+        }
+      ],
+      "inherited_evidence": {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+        "sha256": "45b58d2ea5e089239ff63127e0ca402b8ef6b6860e7eb21c10e69fd4b105ea48",
+        "reported_source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+        "row": {
+          "rule_id": "LX0609-06-03-01",
+          "implementation_status": "pending_definition",
+          "release_scope": "default",
+          "audit_status": "未定义",
+          "executor": "none",
+          "current_logic": "培养主记录缺医嘱关联键；总表pending_definition，不应进入正式执行",
+          "finding_id": null,
+          "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+        },
+        "inheritance_limit": "只继承原报告具体范围，不将组总测试数分摊给此规则；此处source_sha是旧报告基线，不冒充4e51当前运行。"
+      },
+      "before_activation_or_content_acceptance": "培养主记录具备可信医嘱关联键及逐事件医嘱—病程关系；冻结培养边界（普通病毒检测不自动算培养）和金标后才可另行注册；本轮禁止启用。",
+      "current_release_acceptance_goal": [
+        "完整master保留未定义身份及来源缺关联键原因；active wrapper、inventory与客户默认可选目录不注册它。",
+        "所有新任务显式请求该条（单选/混合）在创建前稳定拒绝，不能将其伪装为注册暂停项；不得启用或新增执行器。",
+        "合法历史Envelope身份依完整master识别，不能因未注册被当未知；历史重试的执行拒绝与只读身份可读分别验。"
+      ],
+      "remaining_evidence": [
+        {
+          "gap": "SCOPE6-01混合sample请求创建前拒绝尚未证明；静态路径显示验证发生过晚",
+          "kind": "unconfirmed_runtime_scope_gap",
+          "next_action": "独立worker正式合成入口复现后再决定是否最小修复，不计确认运行缺陷。"
+        },
+        {
+          "gap": "仅本条合法历史Envelope的读取与对照未知ID拒绝、旧重试不新执行的合成证据未定位",
+          "kind": "specific_historical_consumption_gap",
+          "next_action": "离线合法合成Envelope/冻结任务读接口；不得读真实历史病例。"
+        },
+        {
+          "gap": "培养主记录具备可信医嘱关联键及逐事件医嘱—病程关系；冻结培养边界（普通病毒检测不自动算培养）和金标后才可另行注册；本轮禁止启用。",
+          "kind": "activation_prerequisite_not_current_scope_failure",
+          "next_action": "继续未注册；来源关联/定义成熟后另立启用验收。"
+        }
+      ],
+      "new_default_selection": {
+        "customer_delivery_selected": false,
+        "formal_medical_execution": false,
+        "delivery_expected": "不应出现在新客户交付范围；属于总表未注册身份，非4条注册暂停的正常结果项",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+            "line": 54,
+            "end_line": 60,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+            "line": 311,
+            "end_line": 321,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "line": 124,
+            "end_line": 133,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      },
+      "explicit_selection": {
+        "direct_partition_or_package": "ValueError invalid LX0609 customer rule id；build pending result因not_registered也拒绝",
+        "workspace_single_batch": "_assert inventory拒绝，路由当前转换503；明确拒绝但用户错误HTTP映射可另行一致化，不是医疗执行",
+        "customer_sample_only_this_id": "paused-only检查422",
+        "customer_sample_mixed_with_active": "静态发现入口剥离后未校验原requested，原冻结范围可能写入未注册ID；worker后来拒绝。未运行复现，列SCOPE6-01。",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "line": 124,
+            "end_line": 133,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "line": 173,
+            "end_line": 181,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1951,
+            "end_line": 1958,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1025,
+            "end_line": 1029,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1203,
+            "end_line": 1241,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+            "line": 128,
+            "end_line": 150,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+            "line": 1389,
+            "end_line": 1397,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-07-04-02",
+      "qc_point": "输血医嘱与收费不一致",
+      "source_document": "输血医嘱",
+      "master_json_pointer": "/rules/48",
+      "master_source": {
+        "file": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "line": 410,
+        "end_line": 410,
+        "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+        "note": ""
+      },
+      "current_state": {
+        "implementation_status": "active",
+        "catalog_registered": true,
+        "phase_status": "pending_definition",
+        "release_scope": "default",
+        "pending_reason_code": "charging_source_unavailable_customer_scope",
+        "customer_excluded": false
+      },
+      "source_review_done": true,
+      "review_scope": "发布范围/暂停合同/选择/冻结历史身份；未审医学算法",
+      "highest_new_evidence_level": "fixed_sha_targeted_source_read",
+      "whole_rule_acceptance_complete": false,
+      "medical_pass": false,
+      "source_gate_evidence": [
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "line": 58,
+          "end_line": 107,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "active/pending与release_scope正交；acceptance_only要求active+phase_target"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "line": 23,
+          "end_line": 60,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "执行wrapper严格投影implementation_status=active"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "line": 307,
+          "end_line": 335,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "客户可选交付目录仅registered且非客户排除项；此时尚含pending及acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 168,
+          "end_line": 192,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已注册选项拆为phase_target与withheld；未注册拒绝"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 278,
+          "end_line": 327,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "inventory来自active wrappers，package选中pending但不分发医学批次"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 525,
+          "end_line": 536,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "公开包入口仅扩展可执行选项，pending不转旧执行ID"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 121,
+          "end_line": 165,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "注册pending生成not_executed/is_compliant=None/facts={}/evidence=[]及受控原因"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 384,
+          "end_line": 387,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "phase gate结果生成"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 891,
+          "end_line": 891,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "暂停结果纳入native_results"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "line": 482,
+          "end_line": 494,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "发布暂停合同允许无公开facts，不伪造事实"
+        }
+      ],
+      "historical_read_chain": [
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 146,
+          "end_line": 155,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "历史身份使用完整master，含暂停、未注册和acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "line": 117,
+          "end_line": 154,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已知身份仍需唯一身份/状态/合规语义一致，非任意旧结果通行"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 3526,
+          "end_line": 3580,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "latest-result校验Envelope及全master身份；只过滤客户明确排除集，不因当前phase/release_scope删这6条"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 203,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试从保存scoped或旧rule_ids+paused+gate恢复；缺计划拒绝并要求新建"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 4493,
+          "end_line": 4505,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试禁止超原冻结范围"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1324,
+          "end_line": 1345,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "领取任务恢复冻结范围，失败规则重试不得扩范围"
+        }
+      ],
+      "history_limits": [
+        "只证明合法已保存结果不会仅因暂停/acceptance/失去执行注册而成为未知身份；仍需合法Envelope、状态/facts/version及原冻结范围。",
+        "没有读取真实历史患者结果；该条特定历史结果跨状态存取/API独立执行未在本轮证明。",
+        "当前phase/release过滤只约束新任务；缺原保存计划不能用当前目录猜测。"
+      ],
+      "existing_test_source_evidence": [
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "line": 160,
+          "end_line": 160,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_execution_catalog_is_exactly_the_active_master_projection",
+          "covers": "注册目录必须精确等active master投影",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "本轮只读测试源码，不声明当前运行通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 162,
+          "end_line": 162,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_phase_scope_is_a_read_only_master_projection",
+          "covers": "phase/registered来自同一master，非另造列表",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 224,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_customer_delivery_excludes_registration_only_handbook_rules",
+          "covers": "默认客户交付为registered非excluded；06-03-01不可选且partition拒绝",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "不覆盖06-03-01混合sample入口创建"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 81,
+          "end_line": 81,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_defaults_freeze_scope",
+          "covers": "workspace单/批与sample默认过滤acceptance，冻结旧计划，worker/Canonical读取",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fixture为合成空材料+SQLite；源码可定位，本轮未执行，不证明医学内容/正式环境"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+          "line": 862,
+          "end_line": 862,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids",
+          "covers": "参数明确包含该条，公开入口暂停项不得转旧执行ID",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；无本轮执行结论"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 143,
+          "end_line": 143,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_pending_definition_result_has_one_empty_evidence_contract",
+          "covers": "参数明确包含该条和pending_reason，空事实/证据合同",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "源码存在；不证明正式三入口逐条历史读取已运行"
+        }
+      ],
+      "inherited_evidence": {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+        "sha256": "e9d1bcd336437c8db748552067639631b26a064ae7fe17ac9905b1e24cece231",
+        "reported_source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+        "row": {
+          "rule_id": "LX0609-07-04-02",
+          "rule_name": "输血医嘱与收费不一致",
+          "actual_executor": "transfusion",
+          "audit_classification": "scope_pending_not_executed",
+          "confirmed_defect_ids": [],
+          "normal_controls": [],
+          "sample_coverage": "客户已确认暂不执行，不能按缺真实样本记失败。",
+          "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+          "business_dispute": "无新争议；沿用客户无收费资料暂不执行口径。",
+          "note": "当前目录phase_status=pending_definition：客户范围无可用收费数据，规则暂不执行。保留排除，不以未执行计算临床失败。"
+        },
+        "inheritance_limit": "只继承原报告具体范围，不将组总测试数分摊给此规则；此处source_sha是旧报告基线，不冒充4e51当前运行。"
+      },
+      "before_activation_or_content_acceptance": "客户提供可用收费来源及逐事件输血医嘱—收费关联/金额或条目对账口径；在现客户无收费范围内保留暂停，不能以缺收费判gap或医学缺陷。",
+      "current_release_acceptance_goal": [
+        "目录保持已注册且phase=pending，不把暂停解释为医学合规或不适用。",
+        "默认/显式任务不得把该条交给正式医学执行器、亦不得转旧执行ID绕过暂停。",
+        "合法交付项保留该ID及受控pending原因；not_executed、null合规、空facts/evidence，不产生临床data_gap/non_compliant。",
+        "原任务计划与合法历史身份可恢复；重试不得用当前默认范围扩大任务。"
+      ],
+      "remaining_evidence": [
+        {
+          "gap": "固定4e51下该条默认/显式（仅暂停拒绝、与active混合交付）到保存/读取/重试的独立合成消费证据尚未定位",
+          "kind": "not_run_in_this_review",
+          "next_action": "复用已有合成SQLite入口fixture补选项范围与暂停结果；历史限定结果按原SHA继承，不将源码断言算新pass。"
+        },
+        {
+          "gap": "客户提供可用收费来源及逐事件输血医嘱—收费关联/金额或条目对账口径；在现客户无收费范围内保留暂停，不能以缺收费判gap或医学缺陷。",
+          "kind": "activation_prerequisite_not_current_paused_release_failure",
+          "next_action": "保留暂停，启用另需用户授权/客户合同；不追要真实模型来强行关闭当前暂停范围。"
+        }
+      ],
+      "new_default_selection": {
+        "customer_delivery_selected": true,
+        "formal_medical_execution": false,
+        "delivery_expected": "not_executed / policy_definition_pending / is_compliant=null / empty facts and evidence",
+        "entry_refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1940,
+            "end_line": 1968,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1228,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      },
+      "explicit_selection": {
+        "workspace_single_batch": "仅暂停选择在partition后active rule_ids为空，2009-2010返回422；与active混合则冻结原selected、pending单列，暂停项不进入医学rule_ids。",
+        "customer_sample_only_paused": "422 所选质控点当前均暂不执行",
+        "customer_sample_mixed_with_active": "冻结原选择并记录paused，执行部分仅active；交付应同时保留暂停结果",
+        "direct_package": "选中可见但not_executed；不进入原生医学批次及legacy扩展",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1928,
+            "end_line": 1975,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1025,
+            "end_line": 1029,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1262,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "line": 310,
+            "end_line": 327,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 2009,
+            "end_line": 2010,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": "仅暂停选择拒绝，不创建任务"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-08-01-05",
+      "qc_point": "诊疗经过不全面或不详细",
+      "source_document": "出院记录",
+      "master_json_pointer": "/rules/85",
+      "master_source": {
+        "file": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "line": 725,
+        "end_line": 725,
+        "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+        "note": ""
+      },
+      "current_state": {
+        "implementation_status": "active",
+        "catalog_registered": true,
+        "phase_status": "phase_1_target",
+        "release_scope": "acceptance_only",
+        "pending_reason_code": "",
+        "customer_excluded": false
+      },
+      "source_review_done": true,
+      "review_scope": "发布范围/暂停合同/选择/冻结历史身份；未审医学算法",
+      "highest_new_evidence_level": "fixed_sha_targeted_source_read",
+      "whole_rule_acceptance_complete": false,
+      "medical_pass": false,
+      "source_gate_evidence": [
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+          "line": 58,
+          "end_line": 107,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "active/pending与release_scope正交；acceptance_only要求active+phase_target"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+          "line": 23,
+          "end_line": 60,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "执行wrapper严格投影implementation_status=active"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+          "line": 307,
+          "end_line": 335,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "客户可选交付目录仅registered且非客户排除项；此时尚含pending及acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 168,
+          "end_line": 192,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已注册选项拆为phase_target与withheld；未注册拒绝"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 278,
+          "end_line": 327,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "inventory来自active wrappers，package选中pending但不分发医学批次"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+          "line": 525,
+          "end_line": 536,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "公开包入口仅扩展可执行选项，pending不转旧执行ID"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 121,
+          "end_line": 165,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "注册pending生成not_executed/is_compliant=None/facts={}/evidence=[]及受控原因"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 384,
+          "end_line": 387,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "phase gate结果生成"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+          "line": 891,
+          "end_line": 891,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "暂停结果纳入native_results"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+          "line": 482,
+          "end_line": 494,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "发布暂停合同允许无公开facts，不伪造事实"
+        }
+      ],
+      "historical_read_chain": [
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 146,
+          "end_line": 155,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "历史身份使用完整master，含暂停、未注册和acceptance_only"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+          "line": 117,
+          "end_line": 154,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "已知身份仍需唯一身份/状态/合规语义一致，非任意旧结果通行"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 3526,
+          "end_line": 3580,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "latest-result校验Envelope及全master身份；只过滤客户明确排除集，不因当前phase/release_scope删这6条"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+          "line": 203,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试从保存scoped或旧rule_ids+paused+gate恢复；缺计划拒绝并要求新建"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+          "line": 4493,
+          "end_line": 4505,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "重试禁止超原冻结范围"
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1324,
+          "end_line": 1345,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "领取任务恢复冻结范围，失败规则重试不得扩范围"
+        }
+      ],
+      "history_limits": [
+        "只证明合法已保存结果不会仅因暂停/acceptance/失去执行注册而成为未知身份；仍需合法Envelope、状态/facts/version及原冻结范围。",
+        "没有读取真实历史患者结果；该条特定历史结果跨状态存取/API独立执行未在本轮证明。",
+        "当前phase/release过滤只约束新任务；缺原保存计划不能用当前目录猜测。"
+      ],
+      "existing_test_source_evidence": [
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+          "line": 160,
+          "end_line": 160,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_execution_catalog_is_exactly_the_active_master_projection",
+          "covers": "注册目录必须精确等active master投影",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "本轮只读测试源码，不声明当前运行通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 162,
+          "end_line": 162,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_phase_scope_is_a_read_only_master_projection",
+          "covers": "phase/registered来自同一master，非另造列表",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未执行"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 224,
+          "end_line": 224,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_customer_delivery_excludes_registration_only_handbook_rules",
+          "covers": "默认客户交付为registered非excluded；06-03-01不可选且partition拒绝",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "不覆盖06-03-01混合sample入口创建"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 81,
+          "end_line": 81,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_defaults_freeze_scope",
+          "covers": "workspace单/批与sample默认过滤acceptance，冻结旧计划，worker/Canonical读取",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "fixture为合成空材料+SQLite；源码可定位，本轮未执行，不证明医学内容/正式环境"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+          "line": 269,
+          "end_line": 269,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_acceptance_only_registration_is_separate_from_phase_and_customer_selection",
+          "covers": "acceptance仍active+target且仍可选；不等于默认执行",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "只读源码"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 130,
+          "end_line": 130,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_acceptance_explicit_and_legacy_retry",
+          "covers": "普通workspace遍历PILOTS（含08）显式422；显式sample运行/读取/重试仅参数06-02-01和06-01-03",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "08不在显式sample参数，不能借其他ID声明08链通过"
+        },
+        {
+          "file": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+          "line": 195,
+          "end_line": 195,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": "",
+          "symbol": "test_failed_retry_cannot_expand_frozen_scope",
+          "covers": "失败重试不能扩原冻结范围",
+          "evidence_level": "existing_test_source",
+          "current_execution": "not_run",
+          "limit": "未运行；不直接证明本条历史结果"
+        }
+      ],
+      "inherited_evidence": {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json",
+        "sha256": "e5801a8c8b0562a8da96b4eced5c4a853368024891589e3c74e17aab1edb3692",
+        "reported_source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+        "row": {
+          "rule_id": "LX0609-08-01-05",
+          "legacy_index": null,
+          "name": "出院诊疗经过",
+          "release_scope": "acceptance_only",
+          "offline_result": "1/1",
+          "conclusion": "仅验证当前范围开关；本轮不启用、不证明内容充分性。",
+          "legacy_index_note": "后新增规则，无旧编号；旧077对应LX0609-01-02-02。"
+        },
+        "inheritance_limit": "只继承原报告具体范围，不将组总测试数分摊给此规则；此处source_sha是旧报告基线，不冒充4e51当前运行。"
+      },
+      "before_activation_or_content_acceptance": "保留用户撤出默认范围意图；若用户日后明确要内容验收，另做逐份出院记录诊疗措施/演变/转归与重要事件遗漏金标、源gap边界及保存/API/人工复核；本轮不启用、不以范围检查证明医学充分性。",
+      "current_release_acceptance_goal": [
+        "保持active/phase_target与acceptance_only正交，不将用户撤出默认意图改成默认执行，也不删除已知身份。",
+        "workspace单/批及sample无显式选择时均排除；普通workspace显式也拒绝；仅customer sample验证显式允许。",
+        "任务保存确切scoped与acceptance_only展示快照；当前配置改变不扩大原计划或重写历史摘要。",
+        "旧合法结果可读；此阶段仅范围验收，不能算诊疗经过充分性医学通过；本轮不实际启用。"
+      ],
+      "remaining_evidence": [
+        {
+          "gap": "08-01-05显式sample任务仅创建/计划/冻结/快照/合法历史读取的专属无模型合成证据未定位；现test显式参数是另外两条acceptance规则",
+          "kind": "specific_acceptance_sample_history_gap",
+          "next_action": "合成受控保存项测试此ID的范围链，不运行医学/evaluator，不作为启用默认范围的许可。"
+        },
+        {
+          "gap": "旧组报告1/1为范围开关，未证明内容充分性",
+          "kind": "content_acceptance_deferred_by_user",
+          "next_action": "保留原范围成果；当前不继续优化/审医学内容，日后用户另行授权再补。"
+        }
+      ],
+      "new_default_selection": {
+        "customer_delivery_catalog_selectable": true,
+        "workspace_single_batch_default_selected": false,
+        "sample_default_selected": false,
+        "formal_medical_execution_by_default": false,
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+            "line": 195,
+            "end_line": 200,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1933,
+            "end_line": 1947,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1198,
+            "end_line": 1202,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      },
+      "explicit_selection": {
+        "workspace_single_batch": "422 待验收规则仅支持客户样本验证显式选择",
+        "customer_sample": "customer模式显式选中后允许形成可执行计划；保存scoped和acceptance_only快照；有无源/后续医学结果不在本轮证明",
+        "direct_package": "phase_1_target，包本身不做release_scope过滤；发布入口负责限制，不能把内部可执行计划误称默认开启",
+        "refs": [
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sichuan.py",
+            "line": 1928,
+            "end_line": 1935,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1233,
+            "end_line": 1253,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+            "line": 1460,
+            "end_line": 1468,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          },
+          {
+            "file": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+            "line": 317,
+            "end_line": 323,
+            "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+            "note": ""
+          }
+        ]
+      }
+    }
+  ],
+  "unconfirmed_gaps": [
+    {
+      "id": "SCOPE6-01",
+      "status": "unconfirmed_runtime_scope_gap",
+      "fixed_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+      "rule_id": "LX0609-06-03-01",
+      "finding": "样本入口混合显式选择先把未注册ID归paused并剥离，再仅校验剩active；可把原未注册ID存入任务冻结/paused，worker使用inventory才拒绝。",
+      "source_path_inference_only": true,
+      "confirmed_runtime_defect": false,
+      "not_medical_execution_bypass": true,
+      "refs": [
+        {
+          "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "line": 1025,
+          "end_line": 1029,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": ""
+        },
+        {
+          "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "line": 1203,
+          "end_line": 1228,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": ""
+        },
+        {
+          "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "line": 1233,
+          "end_line": 1247,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": ""
+        },
+        {
+          "file": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+          "line": 1449,
+          "end_line": 1467,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": ""
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 109,
+          "end_line": 150,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": ""
+        },
+        {
+          "file": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "absolute_path": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+          "line": 1389,
+          "end_line": 1397,
+          "source_sha": "4e51e55406fcec8b2940f2d16244ca3062db6115",
+          "note": ""
+        }
+      ],
+      "minimal_synthetic_request": {
+        "method": "POST",
+        "url": "/api/v1/qc/sample-pools/{synthetic_ready_pool_id}/run",
+        "body": {
+          "rule_set_key": "luxian_0609_qc_v1",
+          "validation_mode": "customer",
+          "selected_rule_ids": [
+            "LX0609-06-03-01",
+            "LX0609-01-01-01"
+          ],
+          "sample_item_ids": [
+            "synthetic-ready-item"
+          ],
+          "record_refs": [
+            {
+              "institute_id": "synthetic-I",
+              "patient_id": "synthetic-P",
+              "visit_id": "synthetic-V"
+            }
+          ],
+          "group_by_luxian_family": false
+        }
+      },
+      "fixture_prerequisites": [
+        "全合成ready样本/完整三坐标，授权/activation替身，submit_detached_task捕获任务不启动实际worker",
+        "复用release_scope.py setup_chain；医疗源设为空，provider断言零调用；正式复现可单独执行worker的已授权轻量槽"
+      ],
+      "expected_current_release_contract": "创建前拒绝未注册06-03-01，不落入冻结范围、不创建此无效任务；单选与混合一致。",
+      "observed_this_review": "未执行HTTP/worker；以上是固定源代码读取推断。",
+      "next_owner": "root已安排独立worker复现；只有确认后才最小修复。"
+    }
+  ],
+  "synthetic_acceptance_suggestions": [
+    {
+      "id": "S6-PENDING",
+      "rules": [
+        "LX0609-05-01-01",
+        "LX0609-05-01-04",
+        "LX0609-05-03-01",
+        "LX0609-07-04-02"
+      ],
+      "freeze_expected": "4注册pending各自稳定not_executed/null/空facts/空evidence/准确pending reason；默认和混合选择无formal native、legacy执行调用；workspace/sample仅暂停均422",
+      "small_scope": "纯phase/package函数+已有合成SQLite任务fixture，spy正式executor/provider；05-03默认shadow关闭，显式shadow只验安全统计和正式状态不变",
+      "execution": "suggestion_only_not_run"
+    },
+    {
+      "id": "S6-UNREGISTERED",
+      "rules": [
+        "LX0609-06-03-01"
+      ],
+      "freeze_expected": "master身份存在但customer/inventory无；单/混合显式创建前拒绝；合法旧合成Envelope仍known，未知ID严格拒绝；不生成本条新暂停/医学结果",
+      "small_scope": "SCOPE6-01正式sample入口最小请求；历史读取仅合成保存数据",
+      "execution": "suggestion_only_not_run"
+    },
+    {
+      "id": "S6-ACCEPTANCE",
+      "rules": [
+        "LX0609-08-01-05"
+      ],
+      "freeze_expected": "3客户入口default排除；workspace显式422；customer sample显式计划只含此ID且保存acceptance snapshot；旧计划/读取/重试不受当前default变化扩大",
+      "small_scope": "no-provider/no-medical-execution的入口创建、合成合法结果保存/读、freeze helper；禁止切换默认或运行医学内容",
+      "execution": "suggestion_only_not_run"
+    }
+  ]
+}

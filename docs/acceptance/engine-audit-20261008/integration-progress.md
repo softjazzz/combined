@@ -89,3 +89,5 @@
 - TP-D04 original other-drug support false association reproduced:18 nodes2fail16pass,0fixtureerrors. Original expectedNC and source inputs unchanged; whole058 production branch identical across preparing and current worktrees. Critical owner now receives minimal production responsibility; no new real model or patient work.
 
 - Root da31efd03 actual172/172 passed,6.54s,1 warning; CT04 35+CT03 52+CT02 56+RR-PUB29. Logs ct04-run.log/ct04-results.xml. Former root137 failure restored without changing original NA expectation.
+
+- Targeted T5 six-rule source review fixed4e51 archived, not a repeat86 audit. Four registered pending rules preserve mixed paused delivery but paused-only creation422;06-03-01 unregistered;08-01-05 defaultoff and customer-sample explicit only. No medical acceptance implied. NewSCOPE6-01 is a static creation/Worker mismatch awaiting synthetic formal-entry reproduction, not confirmed runtime defect.

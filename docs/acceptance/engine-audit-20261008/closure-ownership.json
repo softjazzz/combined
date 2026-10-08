@@ -307,6 +307,31 @@
         "da31efd03"
       ],
       "test_slot": null
+    },
+    {
+      "id": "TP-D04",
+      "owner": "/root/repair_iml02",
+      "state": "fixed_awaiting_independent",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"
+      ],
+      "scope_constraint": "Only058 known different drug support association and consistent existing facts/copy; no new drug lexicon",
+      "test_slot": null
+    },
+    {
+      "id": "SCOPE6-01",
+      "owner": "/root/repair_privacy_closure",
+      "state": "formal_entry_synthetic_reproduction_preparation",
+      "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
+      "branch": "codex/qc-fix-scope-six-20261008",
+      "baseline": "f4d32a679",
+      "write_paths": [
+        "apps/medqc-web/backend/tests/integration/test_luxian_0609_sample_scope_membership.py"
+      ],
+      "scope_constraint": "No registration/default enable; production change requires actual red proof and root narrow approval",
+      "test_slot": null
     }
   ],
   "rules": [

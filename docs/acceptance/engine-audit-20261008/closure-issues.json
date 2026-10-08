@@ -13,7 +13,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "historical_evidence",
       "owner": "/root/repair_iml01",
-      "state": "core_implemented_waiting_joint_offline_validation",
+      "state": "fixed_core_independent_and_old_contract_regression_in_progress",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -22,7 +22,10 @@
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
       ],
-      "note": "Frozen36 baseline32fail4pass. One controlled semantic call contract only037; no real calls. Public copy support owned by critical worker, integration pending."
+      "note": "Original36 red32/4 then36green; added7 grouping red5/2 thencombined43green. Old28=3pass25zero-call assertion failures; full6files277=271pass6fail, parent baseline pending. Independent43 core/wrapper checks passed before first SQLite overstrict stage-shape assertion; supplemental persistence validation pending. No real model.",
+      "commits": [
+        "08aed59db3ed9bf08316fc792a757a3ee65d992b"
+      ]
     },
     {
       "id": "N10",
@@ -664,8 +667,8 @@
       "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_open",
-      "owner": null,
-      "state": "queued_shared_module",
+      "owner": "/root/repair_iml02",
+      "state": "fixed_source_awaiting_independent_review",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -675,7 +678,12 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "commits": [
+        "f2d744f273a1b55fe3ff2bfd29a863f72292741e",
+        "0162efe65ebe2ae6105080a9eaada7b51b6aa892"
+      ],
+      "note": "Original18 red2/16; supplemental15 plus18 red15/18; developer217pass+2copyguards. Root multi-partial copy suspicion disproven by existing unmatched branch. Independent pending."
     },
     {
       "id": "tumor-pathology:TP-D05",
@@ -809,6 +817,25 @@
       ],
       "integration_commit": "da31efd03",
       "note": "Fixed515bcec independent12native/87public/CT03 28/CT02 30/SQLite3 allpass; root da31efd03 guarded172allpass6.54s,1warning,0external calls."
+    },
+    {
+      "id": "SCOPE6-01",
+      "rule_ids": [
+        "LX0609-06-03-01"
+      ],
+      "claim": "Unregistered paused rule mixed with active rule may bypass sample creation validation and fail in Worker inventory validation.",
+      "source_classification": "static_path_runtime_reproduction_pending",
+      "reconciliation_state": "open_issue",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/scope-six-review.md",
+      "state": "synthetic_formal_entry_reproduction_preparation",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": [],
+      "closure_requirements": [
+        "Frozen synthetic entry expectation",
+        "No rule registration or release scope changes",
+        "Actual entry rejects unsupported selection before task creation",
+        "Valid active and registered paused protections"
+      ]
     }
   ]
 }
