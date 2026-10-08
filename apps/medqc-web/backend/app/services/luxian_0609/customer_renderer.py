@@ -2839,14 +2839,29 @@ def customer_finding_from_controlled_facts(
             "不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。"
         )
 
+    if rule_id == "LX0609-03-02-01" and kind == "uncertain_diagnosis_course_time_gap":
+        return (
+            f"入院时间为 {facts.get('admission_time')}；"
+            f"{facts.get('candidate_course_time_gap_count')}份候选病程缺少可用的权威时间，"
+            "暂无法确认是否位于入院满7天后，当前资料不足以完成疑难病例讨论要求核对。"
+        )
+
     if rule_id == "LX0609-03-02-01" and kind == "uncertain_diagnosis_discussion_check":
         count = facts.get("discussion_count")
         trigger_times = joined("uncertain_record_times")
         if trigger_times:
-            return (
+            finding = (
                 f"入院时间为 {facts.get('admission_time')}，入院满 7 天后仍有诊断不明确记录"
                 f"（{trigger_times}）；疑难病例讨论记录 {count} 份。"
             )
+            if facts.get("candidate_course_time_gap_count"):
+                if count == 0:
+                    finding += "已确认未见疑难病例讨论记录。"
+                finding += (
+                    f"另有{facts.get('candidate_course_time_gap_count')}份候选病程时间不全，"
+                    "无法确认其七天适用条件；以上已确认结论保留。"
+                )
+            return finding
         return f"入院时间为 {facts.get('admission_time')}，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。"
 
     if rule_id == "LX0609-09-02-01":
@@ -4001,6 +4016,14 @@ def render_luxian_0609_customer_result(
             evidence = "已定位手术记录；时间缺口来自结构化时间字段核对，文书正文摘要仅用于定位。"
             suggestion = "请核对源系统中的对应时间及同步情况，确认资料完整后重新评估。"
         elif (
+            decision.rule_id == "LX0609-03-02-01"
+            and isinstance(safe_customer_display_facts, Mapping)
+            and safe_customer_display_facts.get("verification_kind") == "uncertain_diagnosis_course_time_gap"
+        ):
+            findings = customer_finding_from_controlled_facts(rule_id=decision.rule_id, facts=safe_customer_display_facts)
+            evidence = "已读取候选病程，但权威记录时间缺失或不可解析，不能据此确认入院七天适用条件。"
+            suggestion = "请核对源系统的病程权威记录时间及同步情况后重新评估；不应据此补写或倒签记录。"
+        elif (
             decision.rule_id == "LX0609-12-02-01"
             and decision.reason_code == "authoritative_time_missing"
             and isinstance(safe_customer_display_facts, Mapping)
@@ -4089,6 +4112,11 @@ def render_luxian_0609_customer_result(
         and (
             bool(pathology_report_gap)
             or consultation_time_gap is not None
+            or (
+                decision.rule_id == "LX0609-03-02-01"
+                and safe_customer_display_facts
+                and safe_customer_display_facts.get("verification_kind") == "uncertain_diagnosis_course_time_gap"
+            )
             or transfer_association_gap is not None
             or exam_lab_data_gap_customer_message(
                 rule_id=decision.rule_id,
@@ -4113,6 +4141,13 @@ def render_luxian_0609_customer_result(
         )
     ):
         suggestion = structured_suggestion
+    if (
+        decision.rule_id == "LX0609-03-02-01"
+        and decision.final_state in {CustomerFinalState.COMPLIANT, CustomerFinalState.NON_COMPLIANT}
+        and safe_customer_display_facts
+        and safe_customer_display_facts.get("candidate_course_time_gap_count")
+    ):
+        suggestion += " 对另列的候选病程时间缺口，请先核对源系统时间及同步情况；不得据此补写或倒签记录。"
     if (
         decision.rule_id in {"LX0609-06-04-01", "LX0609-06-04-02"}
         and decision.final_state is CustomerFinalState.NON_COMPLIANT

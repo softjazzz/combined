@@ -2317,24 +2317,37 @@ async def execute_luxian_0609_native_extended_document_rules(
                 ),
                 None,
             )
-            strong_uncertain_rows = tuple(
-                row
-                for row in daily_rows
+            strong_candidate_rows = tuple(
+                row for row in daily_rows
                 if has_current_uncertain_diagnosis(_material_text(row), _UNCERTAIN_DIAGNOSIS_MARKERS)
-                and admission_time is not None
+            )
+            local_candidate_rows = tuple(
+                row for row in daily_rows
+                if any(marker in _material_text(row) for marker in _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS)
+            )
+            candidate_time_gap_rows = tuple(
+                row for row in daily_rows
+                if (row in strong_candidate_rows or row in local_candidate_rows)
+                and _row_time(row) is None
+            )
+            strong_uncertain_rows = tuple(
+                row for row in strong_candidate_rows
+                if admission_time is not None
                 and (row_time := _row_time(row)) is not None
                 and row_time >= admission_time + timedelta(days=7)
             )
             local_uncertain_rows = tuple(
-                row for row in daily_rows
-                if any(marker in _material_text(row) for marker in _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS)
-                and admission_time is not None and (row_time := _row_time(row)) is not None
+                row for row in local_candidate_rows
+                if admission_time is not None and (row_time := _row_time(row)) is not None
                 and row_time >= admission_time + timedelta(days=7)
             )
             uncertain_rows = strong_uncertain_rows or local_uncertain_rows
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif admission_time is None:
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
+            elif not strong_uncertain_rows and candidate_time_gap_rows:
+                # 缺时只表示候选无法定位；不能据此确认七天触发或完整未触发。
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif not uncertain_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
@@ -2345,10 +2358,13 @@ async def execute_luxian_0609_native_extended_document_rules(
             else:
                 final_state, reason_code = "non_compliant", "required_document_missing"
             scope_uncertain = reason_code == "diagnosis_scope_uncertain"
+            time_gap_only = bool(candidate_time_gap_rows) and final_state == "data_gap"
+            selected_time_gap_refs: list[str] = []
             if admission_time is not None and not source_error:
-                display.append((rule_id, {
+                facts = {
                     "verification_kind": (
-                        "uncertain_diagnosis_scope_unverified" if scope_uncertain
+                        "uncertain_diagnosis_course_time_gap" if time_gap_only
+                        else "uncertain_diagnosis_scope_unverified" if scope_uncertain
                         else "uncertain_diagnosis_discussion_check"
                     ),
                     "admission_time": admission_time.isoformat(sep=" "),
@@ -2358,7 +2374,25 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if (value := _row_time(row)) is not None
                     ],
                     "discussion_count": len(diffcase_rows),
-                }))
+                }
+                if candidate_time_gap_rows:
+                    facts["candidate_course_time_gap_count"] = len(candidate_time_gap_rows)
+                    # 只给本次实际使用的病程和讨论附加精确文书引用。
+                    # 无ID或重复ID仍保留既有来源快照锚，不能制造定位坐标。
+                    consumed_courses = (*strong_uncertain_rows, *candidate_time_gap_rows)
+                    for source_key, consumed_rows in (
+                        ("daily_course_record", consumed_courses),
+                        ("diffcase_discussion_record", diffcase_rows),
+                    ):
+                        document_rows = evidence_materials.document_rows(source_key, snapshot=evidence_snapshot)
+                        for reference, row in document_rows:
+                            document_id = _clean(row.get("document_id") or row.get("id"))
+                            if (document_id and row in consumed_rows and sum(
+                                _clean(other.get("document_id") or other.get("id")) == document_id
+                                for _, other in document_rows
+                            ) == 1):
+                                selected_time_gap_refs.append(reference)
+                display.append((rule_id, facts))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=(
@@ -2368,6 +2402,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "diffcase_discussion_record",
                 ),
                 final_state=final_state, reason_code=reason_code,
+                document_refs=selected_time_gap_refs,
             ))
             continue
 
