@@ -1,0 +1,65 @@
+{
+  "status": "reference_index_only_not_replacement_expectations",
+  "rules": [
+    "LX0609-04-05-02",
+    "LX0609-08-02-01"
+  ],
+  "original_residuals": {
+    "reference": "apps/medqc-web/docs/acceptance/2026-10-07-round6-83a-independent-recheck.md:70",
+    "exact_public_bodies": [
+      "2026-07-02 09:00 主任医师查房记录 + 签名",
+      "张三主任医师查房记录"
+    ],
+    "historical_observed": "compliant on both rules",
+    "inherited_expected": "data_gap/required_field_missing; course body absent",
+    "full_original_row": "not in public artifact; not read privately",
+    "candidate_reconstruction": "minimal-candidates.json, 4 cases, not executed"
+  },
+  "legacy_twenty": {
+    "file": "apps/medqc-web/backend/tests/unit/test_n10_course_template_body.py",
+    "sha256": "ab0a7c10153d82e370d2b806e56c04994f050e6b9e9a51eb6ad65e4ec96bb1bb",
+    "symbols": [
+      "test_title_and_signature_only_are_not_clinical_body",
+      "test_short_clinical_body_is_not_template",
+      "_run"
+    ],
+    "rules_x_inputs": "2 x (6 empty format + 4 short normal)",
+    "normal_inputs": [
+      "病情稳定。",
+      "主任医师查房，病情稳定。\n医生签名：张医生",
+      "病程记录：患者病情稳定。",
+      "医生签名:继续观察。"
+    ],
+    "state_expectations": "empty format gap/required_field_missing, short clinical C",
+    "historical_test_result": "20 passed as recorded in old fix report; not rerun now"
+  },
+  "time_existence_and_signature": {
+    "file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_round2_document_boundaries.py",
+    "sha256": "a34fb6c910aedb66eda344cd1d99c827eb7b9e59740c10a99454498fbc4e5ff3",
+    "symbols": [
+      "test_065_undated_existing_round_is_not_missing",
+      "test_065_dated_valid_round_is_not_blocked_by_another_undated_record",
+      "test_067_signature_only_is_not_clinical_course",
+      "test_065_dated_signature_only_is_not_a_clinical_round",
+      "test_065_valid_round_is_not_blocked_by_signature_only_row"
+    ],
+    "expectations": "timely real C; undated gap/auth_time; late NC; absent/body unavailable gap/required_field_missing; one valid present not blocked"
+  },
+  "patch_report": {
+    "file": "apps/medqc-web/docs/acceptance/2026-10-07-n10-course-template-fix.md",
+    "sha256": "c050429eeea86cfa798497514fcec37bf8a6562396fad0b30d56d260b9c438a1",
+    "scope": "old pure-format helper patch; no length threshold; historic47 not current rerun"
+  },
+  "new_protections_to_freeze_before_implementation": [
+    "two original residual inputs unchanged without added metadata",
+    "headers followed actual short body remain present",
+    "legal present plus another legal unknown remains satisfied in same window",
+    "malformed model batch never trusts present",
+    "missing body does not become absent",
+    "precise72h/maturity/multi-event and discharge/death gates",
+    "full material/source bounds, all refs and cross-doc quote rejection",
+    "zero format path versus bounded semantic path",
+    "formal reason/customer suggestion no rewrite, Canonical->safe Envelope->new-store SQLite C/NC/gap"
+  ],
+  "true_semantic_evidence": "not collected; synthetic replies only establish engineering contract"
+}

@@ -410,6 +410,21 @@
         "canonical_result_finalizer.py:043-047 count and explanation only"
       ],
       "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model."
+    },
+    {
+      "id": "N10-BODY",
+      "owner": "/root/repair_iml01",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-course-body-20261008",
+      "state": "technical_direction_approved_freeze_and_original_red_preparation",
+      "responsibility": [
+        "new course_body_fact_extraction.py",
+        "native_extended_document_execution.py:065/067 only",
+        "extended_document/discharge_course.py:065/067 only",
+        "extension contracts/catalog:065/067 only",
+        "new dedicated tests/document"
+      ],
+      "note": "Reuse clean tree base0683dfb9e. Preserve old medical inputs/oracles; original missing row metadata not invented. Each rule1 bounded call; no real model/PG/env/network. TC01 owns renderer/Finalizer/rule_contracts.py: N10 must request serial support, no concurrent edits."
     }
   ],
   "rules": [

@@ -1,0 +1,203 @@
+{
+  "status": "proposed_contract_not_implemented_or_executed",
+  "root_read_sha": "2d66663b632efa5543809109fefff48bea5e283d",
+  "rules": [
+    "LX0609-04-05-02",
+    "LX0609-08-02-01"
+  ],
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py": "568032eff813c98fd678442de476f1cbf62b29b617205d732828d14890393306",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "72789f8b6953e55bdfe2e276fce052ec80428bd2ac742ffa3662b2432265e442",
+    "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+    "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py": "e7185348a8c2d6a2aa97444656552485c14a8cf8a8d5b9570491ec8d1de282c0",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a",
+    "apps/medqc-web/backend/app/services/luxian_0609/evidence_material.py": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "6364f39e5d57c102d85960ae5dc1a5fd96837e4a0123d0755d8c0bd311a0ee88",
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "13a49bfd1e48bd21e82967a5bd41e3e56180c0b4ad4b13d7fa89adcbe8e6a190",
+    "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json": "98ac689fb15048061d02509e401cb69f3ea07453773b1b0e24bbffcb64cd3303",
+    "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json": "28e08ef7b9653c9b4be114ab39e7422e497defe6c5b961ed0624c67392093545",
+    "apps/medqc-web/backend/tests/unit/test_n10_course_template_body.py": "ab0a7c10153d82e370d2b806e56c04994f050e6b9e9a51eb6ad65e4ec96bb1bb",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_round2_document_boundaries.py": "a34fb6c910aedb66eda344cd1d99c827eb7b9e59740c10a99454498fbc4e5ff3",
+    "apps/medqc-web/docs/acceptance/2026-10-07-round6-83a-independent-recheck.md": "aadacb024a35663bb4594e8b0a36039d8dae6f14d4636e03de77876d31796e55",
+    "apps/medqc-web/docs/acceptance/2026-10-07-n10-course-template-fix.md": "c050429eeea86cfa798497514fcec37bf8a6562396fad0b30d56d260b9c438a1"
+  },
+  "structural_closure": {
+    "proven": "visible public evidence cannot close original metadata alignment",
+    "not_proven": "all original source rows lack independent metadata",
+    "reader": "optional whitelist plus actual column intersection",
+    "public_legacy_fixture": "title/time present, no author; residual two inputs not in its 20 cases",
+    "do_not_fabricate": [
+      "author_name",
+      "author_title",
+      "document_title",
+      "exact original source row"
+    ]
+  },
+  "current_contract_entries": [
+    {
+      "rule_id": "LX0609-04-05-02",
+      "contract_version": "v1",
+      "family_key": "extended_document",
+      "executor_key": "extended_document",
+      "execution_mode": "native_async",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "source_contract_state": "typed_shadow_v1",
+      "golden_gate_state": "pending"
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "contract_version": "v1",
+      "family_key": "extended_document",
+      "executor_key": "extended_document",
+      "execution_mode": "native_async",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "source_contract_state": "typed_shadow_v1",
+      "golden_gate_state": "pending"
+    }
+  ],
+  "proposed_contract_delta": {
+    "only_rule_ids": [
+      "LX0609-04-05-02",
+      "LX0609-08-02-01"
+    ],
+    "contract_version": "v2",
+    "decision_authority": "program_then_optional_llm",
+    "max_llm_calls_per_rule": 1,
+    "execution_mode": "native_async",
+    "prompt_version": "new dedicated course-body facts version, root/owner to allocate",
+    "all_other_entries": "must remain byte/semantic identical after normalization"
+  },
+  "schema": {
+    "schema_version": "lx0609-course-body-facts-v1",
+    "root_keys": [
+      "schema_version",
+      "documents"
+    ],
+    "item_keys": [
+      "document_ref",
+      "clinical_body"
+    ],
+    "atom_keys": [
+      "state",
+      "span_id",
+      "start",
+      "end",
+      "quote"
+    ],
+    "states": [
+      "present",
+      "absent",
+      "unknown"
+    ],
+    "present": "same material controlled view, exact nonempty quote within same span, integer [start,end)",
+    "absent": "span_id/quote null; [0,len(full controlled row body))",
+    "unknown": "all location fields null",
+    "coverage": "every supplied alias exactly once, no extras, duplicate JSON keys rejected",
+    "scope_kind": "complete material-row view, not unverifiable complete physical document"
+  },
+  "model_inputs": [
+    "internal alias",
+    "source_type",
+    "controlled body spans and character counts"
+  ],
+  "model_must_not_decide": [
+    "rule conclusion",
+    "event or author identity",
+    "timestamp",
+    "window maturity",
+    "clinical adequacy",
+    "suggestion"
+  ],
+  "budget": {
+    "logical_calls_per_rule": 1,
+    "worst_both_rules_selected": 2,
+    "automatic_format_absent_calls": 0,
+    "proposed_max_raw_relevant_rows": 8,
+    "proposed_max_chars_per_row": 6000,
+    "proposed_max_total_chars": 12000,
+    "proposed_completion_tokens": 4096,
+    "extractor_retries": 0,
+    "allow_length_retry": false,
+    "http_attempts": "inherit controlled client policy; audit separately, no claim of single HTTP request",
+    "candidate_scope": "existing complete source before window selection, all relevant rows before automatic reduction; no arbitrary truncation"
+  },
+  "reduction": {
+    "valid_present_plus_unknown": "present satisfies same rule/window, preserve other events independently",
+    "no_present_plus_unknown": "data_gap/semantic_extraction_unresolved",
+    "all_candidate_absent": "data_gap/required_field_missing; no fabricated missing-document defect",
+    "missing_unreadable_body": "unknown, not absent; preserve single missing-body required_field_missing regression",
+    "invalid_batch": "data_gap/semantic_extraction_unresolved, reject partial model present",
+    "over_capacity": "data_gap/candidate_scope_incomplete",
+    "existing_gates": "unchanged source/death/event/time/maturity/no-candidate/late priorities",
+    "failure_customer_missing_lists": "empty for semantic failure/unknown/capacity; no demand to rewrite"
+  },
+  "consumers": [
+    {
+      "rule_id": "LX0609-04-05-02",
+      "file": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "lines": [
+        3898,
+        3920
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "file": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py",
+      "lines": [
+        98
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "file": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "lines": [
+        4197
+      ]
+    }
+  ],
+  "references": {
+    "input": "same snapshot source/occurrence material_ref with internal alias",
+    "public": "canonical to safe envelope stage; no raw IDs",
+    "existing_067_selector": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py:486",
+    "missing_duplicate_ids": "preserve no exact public projection, do not broaden to entire source"
+  },
+  "ownership": {
+    "new_proposed": [
+      "course_body_fact_extraction.py",
+      "test_n10_course_body_controlled_facts.py",
+      "N10 dedicated design/acceptance doc"
+    ],
+    "root_must_allocate": [
+      "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py",
+      "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json",
+      "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json"
+    ],
+    "TC01_exclusive_conflict": [
+      "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+      "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+    ],
+    "public_support": "TC01 owner later adds exact rule/reason tuples plus suggestion-preservation guards, no global verdict change"
+  },
+  "normal_contract_change": "nonempty short/free normal 0->1 attempt; no client now semantic gap rather than nonempty-string C; must disclose and freeze",
+  "not_verified": [
+    "runnable original complete residual fixture",
+    "fresh old protections",
+    "real semantic/model accuracy",
+    "actual finalizer new reason support",
+    "formal SQLite roundtrip after implementation"
+  ],
+  "actions_performed": {
+    "production_imports": 0,
+    "tests": 0,
+    "model": 0,
+    "pg": 0,
+    "network": 0,
+    "git_commands": 0,
+    "production_writes": 0
+  },
+  "root_ref_seen_after_read": "0683dfb9e0c407e6b9ad38a48cad2a0ec6649d32",
+  "snapshot_boundary": "static source-read SHA256 index, not immutable git-show fixed-blob acceptance; root advanced during preparation"
+}
