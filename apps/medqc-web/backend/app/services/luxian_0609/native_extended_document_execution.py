@@ -576,6 +576,19 @@ def _070_document_refs(
 
 
 def _critical_value_item_from_row(row: Mapping[str, Any]) -> CriticalValueItem:
+    # 报告字段共同证明同一时刻；记录时间不属于危急值报告的权威来源。
+    report_times = tuple(
+        _parse_datetime(row.get(key))
+        for key in ("report_time", "report_datetime")
+        if _clean(row.get(key))
+    )
+    report_time_error = (
+        "authoritative_time_missing"
+        if not report_times or any(value is None for value in report_times)
+        else "authoritative_time_conflict"
+        if len(set(report_times)) > 1
+        else None
+    )
     return CriticalValueItem(
         item_name=_clean(row.get("item_name") or row.get("item_code")),
         flag_values=tuple(
@@ -594,12 +607,9 @@ def _critical_value_item_from_row(row: Mapping[str, Any]) -> CriticalValueItem:
             or row.get("abnormal_flag")
             or row.get("abnormal_indicator")
         ),
-        report_time=_parse_datetime(
-            row.get("report_time")
-            or row.get("report_datetime")
-            or row.get("record_time")
-        ),
+        report_time=report_times[0] if report_time_error is None else None,
         event_key=_critical_value_event_key("labtest_item_report", row),
+        report_time_error=report_time_error,
     )
 
 

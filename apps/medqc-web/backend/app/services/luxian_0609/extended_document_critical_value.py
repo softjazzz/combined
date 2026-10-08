@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Mapping, Sequence
 
@@ -28,6 +28,7 @@ class CriticalValueItem:
     display_flag: str
     report_time: datetime | None
     event_key: str | None = None
+    report_time_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -353,6 +354,59 @@ def _critical_value_maturity(
     return None, "authoritative_time_missing", {}
 
 
+
+def _confirmed_independent_time_outcomes(
+    *, rule_ids: tuple[str, ...], inputs: CriticalValueInput,
+    critical_items: tuple[CriticalValueItem, ...],
+) -> dict[str, CriticalValueOutcome]:
+    """独立事件的已确认缺陷不能被另一事件的报告时间缺口覆盖。"""
+
+    if inputs.lab_item_error or inputs.crisis_error or not critical_items:
+        return {}
+    if any(item.event_key is None or _critical_display_flag(item) is None for item in critical_items):
+        return {}
+    gap_keys = {
+        item.event_key for item in critical_items
+        if item.report_time is None or item.report_time_error is not None
+    }
+    if not gap_keys:
+        return {}
+    all_keys = {item.event_key for item in critical_items}
+    # 无键或未知键的处置可能属于正常事件，不能丢弃后声称正常事件无处置。
+    if any(disposition.event_key not in all_keys for disposition in inputs.dispositions):
+        return {}
+    known_items = tuple(item for item in critical_items if item.event_key not in gap_keys)
+    if not known_items or _events(known_items)[1]:
+        return {}
+    known_keys = {item.event_key for item in known_items}
+    known_inputs = replace(
+        inputs, items=known_items,
+        dispositions=tuple(value for value in inputs.dispositions if value.event_key in known_keys),
+    )
+    known_outcomes = evaluate_critical_value_rules(rule_ids=rule_ids, inputs=known_inputs)
+    gap_groups: dict[str, list[CriticalValueItem]] = {}
+    for item in critical_items:
+        if item.event_key in gap_keys:
+            gap_groups.setdefault(item.event_key, []).append(item)
+    gaps = [
+        {
+            "critical_item_names": [item.item_name[:40] for item in group],
+            "critical_flags": [_critical_display_flag(item) for item in group],
+            "issue": (
+                "authoritative_time_conflict"
+                if any(item.report_time_error == "authoritative_time_conflict" for item in group)
+                else "authoritative_time_missing"
+            ),
+        }
+        for group in gap_groups.values()
+    ]
+    return {
+        outcome.rule_id: replace(outcome, display_facts={**outcome.display_facts, "report_time_gaps": gaps})
+        for outcome in known_outcomes
+        if outcome.final_state == "non_compliant" and outcome.display_facts is not None
+    }
+
+
 def evaluate_critical_value_rules(
     *,
     rule_ids: tuple[str, ...],
@@ -373,8 +427,14 @@ def evaluate_critical_value_rules(
     events, event_association_unproven = _events(critical_items)
     report_times = tuple(event.report_time for event in events)
     outcomes: list[CriticalValueOutcome] = []
+    confirmed_time_outcomes = _confirmed_independent_time_outcomes(
+        rule_ids=selected, inputs=inputs, critical_items=critical_items,
+    )
 
     for rule_id in selected:
+        if rule_id in confirmed_time_outcomes:
+            outcomes.append(confirmed_time_outcomes[rule_id])
+            continue
         event_results: tuple[dict[str, object], ...] = ()
         display_facts: Mapping[str, object] | None = None
         additional_display_facts: Mapping[str, object] | None = None
@@ -402,6 +462,16 @@ def evaluate_critical_value_rules(
                 "failure_kind": "critical_value_source_unavailable",
                 "missing_source": "crisis_value_record",
                 "issue": inputs.crisis_error,
+            }
+        elif any(item.report_time_error == "authoritative_time_conflict" for item in critical_items):
+            final_state, reason_code = "data_gap", "authoritative_time_conflict"
+            display_facts = {
+                "failure_kind": "critical_value_report_time_conflict",
+                "critical_item_names": [item.item_name[:40] for item in critical_items],
+                "critical_flags": [_critical_display_flag(item) for item in critical_items],
+                "conflicting_report_time_count": sum(
+                    item.report_time_error == "authoritative_time_conflict" for item in critical_items
+                ),
             }
         elif any(value is None for value in report_times):
             final_state, reason_code = "data_gap", "authoritative_time_missing"

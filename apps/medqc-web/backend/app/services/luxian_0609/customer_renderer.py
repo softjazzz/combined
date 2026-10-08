@@ -2898,6 +2898,13 @@ def customer_finding_from_controlled_facts(
                 "crisis_value_record": "危急值处置记录",
             }.get(str(facts.get("missing_source")), "核对资料")
             return f"当前{source_label}未能完整读取，暂无法核对危急值报告与对应处置记录。"
+        if kind == "critical_value_report_time_conflict":
+            items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
+            scope = "报告后处置及6小时时限" if rule_id == "LX0609-06-04-01" else "报告后处置记录"
+            return (
+                f"已读取到危急值项目：{items}；但同一报告的报告时间字段存在冲突，"
+                f"暂无法核对{scope}。"
+            )
         if kind == "critical_value_report_time_missing":
             items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
             scope = "报告后处置及6小时时限" if rule_id == "LX0609-06-04-01" else "报告后处置记录"
@@ -2925,6 +2932,25 @@ def customer_finding_from_controlled_facts(
         items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
         reports = joined("report_times")
         dispositions = joined("disposition_times")
+        gaps = facts.get("report_time_gaps")
+        if isinstance(gaps, list) and gaps:
+            events = facts.get("event_results", [])
+            failures = [
+                "、".join(item.get("critical_item_names", [])) + (
+                    "：处置已超过报告后6小时时限。" if item.get("outcome") == "overdue"
+                    else "：报告后6小时内未找到对应处置记录。" if rule_id == "LX0609-06-04-01"
+                    else "：报告后未找到对应处置记录。"
+                )
+                for item in events if item.get("outcome") in {"overdue", "unhandled"}
+            ]
+            pending = [
+                "、".join(item.get("critical_item_names", [])) + (
+                    "的报告时间字段冲突" if item.get("issue") == "authoritative_time_conflict"
+                    else "的报告时间缺失或无法解析"
+                )
+                for item in gaps
+            ]
+            return "已确认问题：" + "".join(failures) + "另有" + "；".join(pending) + "，暂无法核对这些项目的报告后处置。"
         if rule_id == "LX0609-06-04-01":
             intervals = joined("actual_interval_hours")
             if dispositions and intervals:
@@ -4077,6 +4103,13 @@ def render_luxian_0609_customer_result(
         )
     ):
         suggestion = structured_suggestion
+    if (
+        decision.rule_id in {"LX0609-06-04-01", "LX0609-06-04-02"}
+        and decision.final_state is CustomerFinalState.NON_COMPLIANT
+        and safe_customer_display_facts
+        and safe_customer_display_facts.get("report_time_gaps")
+    ):
+        suggestion = "请核对并整改上述已确认的危急值处置问题；对另列的报告时间缺口项目，先核查源系统时间及同步情况，确认后重新评估，不得据此认定处置缺失。"
     if (
         decision.rule_id == "LX0609-04-01-03"
         and decision.final_state is CustomerFinalState.NON_COMPLIANT
