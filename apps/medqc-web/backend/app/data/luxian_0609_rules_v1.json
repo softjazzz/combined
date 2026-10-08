@@ -2600,7 +2600,7 @@
     "execution_domain": "luxian_0609",
     "doc_scope": "单文书加字段完整性",
     "rule_version": "2026-06-09",
-    "prompt_version": "luxian-0609-synthetic-v1",
+    "prompt_version": "lx0609-anesthesia-visit-facts-v1",
     "mapped_rule_ids": ["LX-020", "SC-090"],
     "primary_execution_rule_id": "LX-020",
     "implementation_status": "needs_rule_implementation",

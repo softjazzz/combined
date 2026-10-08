@@ -8,6 +8,12 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .anesthesia_visit_fact_extraction import (
+    VisitDocument,
+    extract_anesthesia_visit_facts,
+    visit_document_scope_issue,
+)
+from .surgery_document_result_mapping import _VISIT_FIELDS
 from .decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -260,7 +266,10 @@ def _typed_decision_from_outcome(
     elif outcome.status == "data_gap":
         controlled_reason = (
             outcome.reason_code
-            if outcome.reason_code
+            if (outcome.rule_id == "LX0609-04-04-02" and outcome.reason_code in {
+                "semantic_extraction_unresolved", "candidate_scope_incomplete", "source_readiness_unproven",
+            })
+            or outcome.reason_code
             in {
                 "source_unavailable",
                 "source_empty",
@@ -1062,6 +1071,66 @@ def _anesthesia_visit_completeness(
     }
     missing = {source: fields for source, fields in missing.items() if fields}
     return ("incomplete" if missing else "complete"), missing
+
+
+async def _typed_037_controlled_outcome(
+    *, outcome: _SurgeryDocumentOutcome, snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore, llm_client: SurgeryDocumentLLMClient | None,
+) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
+    if outcome.reason_code not in {"anesthesia_visits_complete", "anesthesia_visit_incomplete"}:
+        return outcome, 0, 0, 0, 0, 0.0
+    documents = []
+    reliable: dict[str, dict[str, str]] = {}
+    group_keys: dict[str, tuple[str, str]] = {}
+    sources = (("preane_surveil_record", "preanesthesia_visit"), ("postane_surveil_record", "postanesthesia_visit"))
+    for source, visit in sources:
+        for ref, row in materials.document_rows(source, snapshot=snapshot):
+            states = {"record_time": "present" if any(_minute_signature_state(row.get(key)) == "present"
+                for key in ("record_time", "submit_datetime")) else "absent"}
+            for field, keys in (("asa_level", ("ASA_level", "asa_level")), ("anesthetist_signature", ("anesthetist_sign",))):
+                if field in _VISIT_FIELDS[visit] and any((value := _clean(row.get(key))) and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(value) for key in keys):
+                    states[field] = "present"
+            reliable[ref] = states
+            group_keys[ref] = (source, _clean(row.get("document_id")) or _clean(row.get("id")) or ref)
+            scope = "source_truncated" if any(row.get(key) is True for key in ("truncated", "content_truncated", "record_content_truncated")) else (
+                "source_readiness_unproven" if any(row.get(key) is False for key in ("content_complete", "record_content_complete")) else "")
+            documents.append(VisitDocument(ref, source, row.get("record_content"),
+                tuple(name for name in _VISIT_FIELDS[visit] if name not in states), scope))
+    scope_issue = visit_document_scope_issue(documents)
+    if scope_issue:
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", scope_issue, "program"), 0, 0, 0, 0, 0.0
+    # 仅明确同一实际文书的分段行可共同取证；业务事件ID不能合并正文。
+    groups: dict[tuple[str, str], list[VisitDocument]] = {}
+    for doc in documents:
+        groups.setdefault(group_keys[doc.document_ref], []).append(doc)
+    grouped = []
+    for (source, _identity), parts in groups.items():
+        ref = parts[0].document_ref
+        states = {name: ("present" if any(reliable[part.document_ref].get(name) == "present" for part in parts) else "absent")
+            for name in {name for part in parts for name in reliable[part.document_ref]}}
+        reliable[ref] = states
+        visit = next(visit for key, visit in sources if key == source)
+        grouped.append(VisitDocument(ref, source, "\n".join(dict.fromkeys(part.body for part in parts)),
+            tuple(name for name in _VISIT_FIELDS[visit] if name not in states)))
+    documents = grouped
+    extraction = await extract_anesthesia_visit_facts(documents, llm_client)
+    metrics = (extraction.llm_call_count, extraction.prompt_tokens, extraction.completion_tokens, extraction.total_tokens, extraction.api_time)
+    if extraction.state != "ready":
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", extraction.reason_code, "llm" if extraction.llm_call_count else "program"), *metrics
+    states_by_ref = {doc.document_ref: {**reliable[doc.document_ref], **extraction.fields.get(doc.document_ref, {})} for doc in documents}
+    if any("unknown" in states.values() for states in states_by_ref.values()):
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", "semantic_extraction_unresolved", "llm"), *metrics
+    missing = {}
+    for source, visit in sources:
+        rows = [states_by_ref[doc.document_ref] for doc in documents if doc.source_type == source]
+        fields = [name for name in _VISIT_FIELDS[visit] if any(row.get(name) != "present" for row in rows)]
+        if fields:
+            missing[visit] = fields
+    facts = ({"failure_kind": "anesthesia_visit_incomplete", "performed_anesthesia_confirmed": True, "missing_fields_by_visit": missing}
+        if missing else {"verification_kind": "anesthesia_visits_complete", "performed_anesthesia_confirmed": True,
+            "checked_sources": [source for source, _ in sources], "checked_fields_by_visit": {visit: list(_VISIT_FIELDS[visit]) for _, visit in sources}})
+    return _SurgeryDocumentOutcome(outcome.rule_id, "non_compliant" if missing else "compliant",
+        "anesthesia_visit_incomplete" if missing else "anesthesia_visits_complete", "llm" if extraction.llm_call_count else "program", facts), *metrics
 
 
 def _source_row_count(
@@ -2380,6 +2449,16 @@ async def execute_luxian_0609_native_surgery_document_rules(
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
                 )
+                if rule_id == "LX0609-04-04-02":
+                    assert evidence_materials is not None
+                    outcome, calls, prompt, completion, total, elapsed = await _typed_037_controlled_outcome(
+                        outcome=outcome, snapshot=evidence_snapshot, materials=evidence_materials, llm_client=llm_client,
+                    )
+                    llm_call_count += calls
+                    prompt_tokens += prompt
+                    completion_tokens += completion
+                    total_tokens += total
+                    api_time += elapsed
                 if (
                     outcome.customer_display_facts is not None
                 ):

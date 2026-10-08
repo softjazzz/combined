@@ -122,6 +122,7 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "rescue_end_time_missing",
             "document_completion_time_missing",
             "candidate_scope_incomplete",
+            "semantic_extraction_unresolved",
         }
     ),
     "evaluation_unknown": frozenset(
