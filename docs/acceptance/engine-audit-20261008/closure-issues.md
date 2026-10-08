@@ -1,14 +1,14 @@
 # 0609收尾执行队列
 
-问题级队列包含缺陷、业务争议和复验证据缺口，不等同确认缺陷数。文件锁以closure-ownership.json为准。
+问题级队列包括缺陷、争议、复验证据缺口及既有工程边界，不等同确认缺陷数，也不等同规则通过数。文件锁以closure-ownership.json为准。
 
-D01已于集成提交e256e8ea9关闭限定工程问题；不代表整条化疗规则验收通过。当前最多四路生产修复、一个重测试进程，独立复核后由主代理串行集成。
+已串行集成D01 e256e8ea9、IML02 a8ad74e69、PRIV005 1225aff95；IML01与N13独立复核发现回退，保持开放。
 
 |问题|状态|负责人|依赖|
 |---|---|---|---|
 |N12|queued_evidence_review|待分配||
 |N10|queued_evidence_review|待分配||
-|N13|repairing|/root/repair_chemo||
+|N13|independent_review_blocked_same_drug_association_followup|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|待分配||
 |SURGERY-029030|queued_evidence_review|待分配||
 |PREOP-MEDICAL|business_basis_review_no_code_decision|待分配||
@@ -23,13 +23,13 @@ D01已于集成提交e256e8ea9关闭限定工程问题；不代表整条化疗�
 |discharge-death:DD-F01|queued_shared_module|待分配|imaging-laboratory:IML-02|
 |discharge-death:DD-F02|queued_evidence_review|待分配||
 |discharge-death:DD-F05|business_basis_review_no_code_decision|待分配||
-|imaging-laboratory:IML-01|committed_independent_review|/root/repair_iml01||
-|imaging-laboratory:IML-02|committed_independent_review|/root/repair_iml02||
+|imaging-laboratory:IML-01|independent_review_blocked_followup_repair|/root/repair_iml01||
+|imaging-laboratory:IML-02|integrated_engineering_closed|/root/repair_iml02||
 |imaging-laboratory:IML-D01|business_basis_review_no_code_decision|待分配||
 |imaging-laboratory:IML-D02|business_basis_review_no_code_decision|待分配||
 |rescue-remaining:RR-D01|queued_evidence_review|待分配||
 |rescue-remaining:RR-D02|queued_evidence_review|待分配||
-|rescue-remaining:RR-M01|queued_evidence_review|待分配||
+|rescue-remaining:RR-M01|existing_model_contract_metadata_repair|/root/repair_iml02||
 |treatment-consultation:TC-01|queued_evidence_review|待分配||
 |treatment-consultation:TC-02|queued_shared_module|待分配|imaging-laboratory:IML-02|
 |treatment-consultation:TC-03|queued_evidence_review|待分配||
@@ -40,5 +40,7 @@ D01已于集成提交e256e8ea9关闭限定工程问题；不代表整条化疗�
 |tumor-pathology:TP-D05|queued_shared_module|待分配|imaging-laboratory:IML-02|
 |PRIV-002|privacy_design_required_before_real_validation|/root/repair_privacy_closure||
 |PRIV-003|privacy_design_required_before_real_validation|/root/repair_privacy_closure||
-|PRIV-004|20_offline_passed_preparing_fixed_commit|/root/repair_privacy_closure||
-|PRIV-005|committed_independent_review_pending|/root/repair_privacy_closure||
+|PRIV-004|committed_independent_review_pending|/root/repair_privacy_closure||
+|PRIV-005|integrated_engineering_closed|/root/repair_privacy_closure||
+|rescue-remaining:RR-PUB01|queued_shared_module|待分配|imaging-laboratory:IML-02|
+|rescue-remaining:RR-SCOPE01|queued_test_expectation_reconciliation|待分配||

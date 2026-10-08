@@ -54,7 +54,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "historical_evidence",
       "owner": "/root/repair_chemo",
-      "state": "repairing",
+      "state": "independent_review_blocked_same_drug_association_followup",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -62,7 +62,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "source_commit": "df3ea6837225c85de81fe5fd9929853feeadb599"
     },
     {
       "id": "TR-044-MULTI",
@@ -370,7 +371,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "确认缺陷",
       "owner": "/root/repair_iml01",
-      "state": "committed_independent_review",
+      "state": "independent_review_blocked_followup_repair",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -392,7 +393,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "确认缺陷",
       "owner": "/root/repair_iml02",
-      "state": "committed_independent_review",
+      "state": "integrated_engineering_closed",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -401,7 +402,10 @@
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
       ],
-      "source_commit": "0628782191861460bbf24edbf848eb601829876c"
+      "source_commit": "0628782191861460bbf24edbf848eb601829876c",
+      "integration_commit": "a8ad74e69",
+      "independent_review": "F:/MedQC-worktrees/review-artifacts/iml02-closure/fixed-062878219-results.json",
+      "evidence": "225 worker focused tests; 44 independent fixed-source event results + 13 public contract observations; no real model/PG/clinical claim"
     },
     {
       "id": "imaging-laboratory:IML-D01",
@@ -492,8 +496,8 @@
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_contract_execution_drift",
-      "owner": null,
-      "state": "queued_evidence_review",
+      "owner": "/root/repair_iml02",
+      "state": "existing_model_contract_metadata_repair",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -706,9 +710,10 @@
       ],
       "claim": "0609准生产旁路共用execution的prompt包装但未建立最终请求scope",
       "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
-      "state": "20_offline_passed_preparing_fixed_commit",
+      "state": "committed_independent_review_pending",
       "owner": "/root/repair_privacy_closure",
-      "depends_on": []
+      "depends_on": [],
+      "source_commit": "6b8fa3e58"
     },
     {
       "id": "PRIV-005",
@@ -717,9 +722,38 @@
       ],
       "claim": "上游错误摘要与快照异常日志存在原文传播面",
       "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
-      "state": "committed_independent_review_pending",
+      "state": "integrated_engineering_closed",
       "owner": "/root/repair_privacy_closure",
-      "depends_on": []
+      "depends_on": [],
+      "integration_commit": "1225aff95",
+      "evidence": "8 worker isolated cases; 15 independent fixed-source client/prepare observations, not full app or real provider",
+      "independent_review": "F:/MedQC-worktrees/review-artifacts/privacy005/review.md"
+    },
+    {
+      "id": "rescue-remaining:RR-PUB01",
+      "rule_ids": [
+        "0609 publication boundary"
+      ],
+      "claim": "未知规则回退NotImplemented被当dict调用get；非目录边界，不计新增正式规则缺陷",
+      "state": "queued_shared_module",
+      "owner": null,
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule"
+    },
+    {
+      "id": "rescue-remaining:RR-SCOPE01",
+      "rule_ids": [
+        "0609 catalog tests"
+      ],
+      "claim": "86/80目录与旧85/79断言漂移；先核正确集合，不能只改计数冒充业务修复",
+      "state": "queued_test_expectation_reconciliation",
+      "owner": null,
+      "depends_on": [],
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule"
     }
   ]
 }

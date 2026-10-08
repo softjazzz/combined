@@ -18,17 +18,18 @@
     {
       "id": "IML-01",
       "owner": "/root/repair_iml01",
-      "state": "committed_independent_review_in_progress",
+      "state": "independent_review_blocked_report_role_and_modality_fix",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py",
-        "apps/medqc-web/backend/tests/unit/test_luxian_0609_handbook_identity_conflict_closure.py"
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_handbook_identity_conflict_closure.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py"
       ],
       "excluded_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py"
       ],
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-ledger-20261008",
-      "test_slot": null,
+      "test_slot": 1,
       "commits": [
         "11211cc42becaa03d0f5b36056bdc3e17a31842a"
       ]
@@ -36,7 +37,7 @@
     {
       "id": "IML-02",
       "owner": "/root/repair_iml02",
-      "state": "committed_independent_review_pending",
+      "state": "integrated_engineering_verified",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_critical_time_authority_closure.py",
@@ -52,12 +53,15 @@
       "scope_constraint": "Only critical-value report-time conflict contract and copy; all unrelated renderer logic frozen; Finalizer only add critical_value_report_time_conflict to existing critical-value enum",
       "commits": [
         "0628782191861460bbf24edbf848eb601829876c"
+      ],
+      "integration_commits": [
+        "a8ad74e69"
       ]
     },
     {
       "id": "CHEMO",
       "owner": "/root/repair_chemo",
-      "state": "N13_supplementary_expectation_fix_independent_violation_priority",
+      "state": "N13_blocked_same_drug_event_association_followup",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
@@ -65,10 +69,11 @@
       ],
       "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
       "branch": "codex/qc-fix-chemo-v2-20261008",
-      "test_slot": 1,
+      "test_slot": null,
       "scope_constraint": "Only05-02-01; structuralD01/N13 first, semanticD02/D03 design reviewed before implementation",
       "commits": [
-        "d0f9c829901152a5a9fd7d97bc9916fe076b67cd"
+        "d0f9c829901152a5a9fd7d97bc9916fe076b67cd",
+        "df3ea6837225c85de81fe5fd9929853feeadb599"
       ],
       "integration_commits": [
         "e256e8ea9"
@@ -77,7 +82,7 @@
     {
       "id": "PRIVACY",
       "owner": "/root/repair_privacy_closure",
-      "state": "005_committed_review_pending_004_20_tests_passed_preparing_commit",
+      "state": "005_004_fixed_review_and_002_existing_identity_wiring",
       "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
       "branch": "codex/qc-fix-privacy-v2-20261008",
       "test_slot": null,
@@ -86,12 +91,33 @@
         "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
         "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/preproduction_runner.py",
-        "apps/medqc-web/backend/app/services/qc_llm_client.py"
+        "apps/medqc-web/backend/app/services/qc_llm_client.py",
+        "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+        "apps/medqc-web/backend/app/services/qc_workspace/record_repository.py",
+        "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py"
       ],
       "scope_constraint": "0609 privacy only; assembly/callers require explicit ownership extension; no patient/PG/model access",
       "commits": [
-        "041b3be67"
+        "041b3be67",
+        "6b8fa3e58"
+      ],
+      "integration_commits": [
+        "1225aff95"
       ]
+    },
+    {
+      "id": "RR-M01",
+      "owner": "/root/repair_iml02",
+      "state": "074_contract_metadata_repair",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json",
+        "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py"
+      ],
+      "scope_constraint": "Only074existing one-call metadata and tests; no new prompt/call/retry/release behavior",
+      "test_slot": null
     }
   ],
   "rules": [
@@ -108,5 +134,5 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "e256e8ea9"
+  "integration_head": "1225aff95"
 }
