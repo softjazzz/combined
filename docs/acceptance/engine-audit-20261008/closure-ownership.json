@@ -382,7 +382,7 @@
       "owner": "/root/repair_iml01",
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-n12-carrier-20261008",
-      "state": "fixed_e5f225bd4_writer375_pass_final_independent_review_pending",
+      "state": "integrated_f1c6ec095_independent_review_root375_pass_engineering_only",
       "responsibility": [
         "anesthesia_visit_fact_extraction.py:carrier only",
         "test_n12_anesthesia_visit_controlled_facts.py:reader only",
@@ -398,7 +398,7 @@
       "owner": "/root/repair_iml02",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-transfusion-family-20261008",
-      "state": "writer_resumed_design_constraints_preparing_red_no_production_edits",
+      "state": "frozen32_red_authorized_production_unchanged",
       "responsibility": [
         "native_transfusion_execution.py:043-047 only",
         "new versioned performance scope extractor",
@@ -427,8 +427,8 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "944650db98e45113f316d476e7dc083986640e26",
-  "current_test_slot_owner": null,
+  "integration_head": "f1c6ec095d61fdee9f352d0c9ae9d6386369ab6b",
+  "current_test_slot_owner": "/root/repair_iml02:32 frozen red",
   "queued_tests": [
     "TC01 scope contract red when ready; no concurrent tests"
   ]

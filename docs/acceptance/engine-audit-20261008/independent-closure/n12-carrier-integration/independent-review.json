@@ -1,0 +1,192 @@
+{
+  "schema_version": "n12-pv01-fix-static-review-v1",
+  "finding_id": "N12-PV01",
+  "phase": "fixed_commit_independently_reviewed",
+  "base_sha": "2f44aa44e86251acda81383e1b2bd84423008451",
+  "fixed_fix_sha": "e5f225bd40062fb124218af75171f91b2ee680cc",
+  "decision": "eligible_for_integration; N12-PV01 address/unit carrier defect closed within frozen synthetic engineering scope",
+  "reviewer_ran_tests": false,
+  "current_snapshot_hashes": {
+    "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py": "e7185348a8c2d6a2aa97444656552485c14a8cf8a8d5b9570491ec8d1de282c0",
+    "apps/medqc-web/backend/tests/unit/luxian_0609_anesthesia_test_facts.py": "afdddf504214ffdea5af996b4a28a66434a8cfe64a72f0032f40980cb4ab1e67",
+    "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_controlled_facts.py": "ae7db6cafd8c2f805b6cf87d07f051c0984218ee770a1c1af72ebe8239dea525",
+    "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_document_groups.py": "cfb522ecb8a53b6ce59b192dc0a2769cff0416634321ef407cf1d64805d94743",
+    "apps/medqc-web/backend/tests/unit/test_n12_formal_privacy_carrier.py": "eeab0d90e91ec57e59201ec47cb9d18b2f74bc744de1f99ce4e76c9bd6404844",
+    "apps/medqc-web/docs/acceptance/2026-10-08-n12-formal-privacy-carrier.md": "631467ae3d967dd71d21aabd1f0ee608e1f65059d475e26622f2645c85819510"
+  },
+  "observed_initial_layout": "revised span-oriented carrier; actual diff not independently finalized yet",
+  "production_unchanged_ast": {
+    "VisitDocument": true,
+    "VisitExtraction": true,
+    "_unique_object": true,
+    "_parsed_fields": true,
+    "visit_document_scope_issue": true,
+    "SCHEMA_VERSION": true,
+    "MAX_DOCUMENTS": true,
+    "MAX_BODY_CHARS": true,
+    "MAX_TOTAL_BODY_CHARS": true,
+    "MAX_COMPLETION_TOKENS": true,
+    "_ATOM_KEYS": true,
+    "original_scope_sanitized_inputs_prefix": true,
+    "complete_generate_parse_usage_return_suffix": true
+  },
+  "old_fake_protocol_only_ast": {
+    "apps/medqc-web/backend/tests/unit/luxian_0609_anesthesia_test_facts.py": true,
+    "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_controlled_facts.py": true,
+    "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_document_groups.py": true
+  },
+  "new_test_frozen_case_tuples_identical": true,
+  "new_test_parameter_variants": 20,
+  "new_test_parameter_groups": [
+    {
+      "function": "test_frozen_formal_delegate_preserves_same_body_spans_and_medical_quotes",
+      "parameter_variants": 10
+    },
+    {
+      "function": "test_formal_known_identity_boundary_stays_fail_closed",
+      "parameter_variants": 2
+    },
+    {
+      "function": "test_body_marker_text_does_not_change_document_or_length",
+      "parameter_variants": 3
+    },
+    {
+      "function": "test_formal_native_keeps_normal_and_original_quote_scope_contracts",
+      "parameter_variants": 5
+    }
+  ],
+  "static_safety": {
+    "JSON_body_and_quotes_removed_from_metadata": true,
+    "formal_wrapper_not_disabled": true,
+    "identity_provider_unchanged": true,
+    "native_ref_source_flow_unchanged": true,
+    "metadata_doc_ref_source_type_same_original_fields": true,
+    "original_raw_document_id_guard_assertions_retained": true,
+    "known_identity_and_provider_error_delegate_zero_tests_present": true
+  },
+  "initial_carrier_usability_gap": "Full body + counts requires model to cumulatively reconstruct the previously directly visible span-ID-to-text mapping. Fake length decoder success is not model citation equivalence.",
+  "proposed_revision_contract": "Each original span ID with unchanged text must be directly visible; preserve original order/all characters including independent newline spans, body total length, present global quote coordinates and full-body absence protocol. Consume marker-shaped data by length rather than switching document.",
+  "author_reported_runs": [
+    {
+      "scope": "initial WIP gate",
+      "actual_collected": 375,
+      "passed": 370,
+      "failed": 5,
+      "independently_rerun": false,
+      "meaning": "Five additional main-chain tests misused original _run assertion on wrapped client.calls; clinical status assertions were not reached; preserve log and do not claim those checks passed."
+    },
+    {
+      "scope": "original source formal red15",
+      "passed": 9,
+      "failed": 6,
+      "independently_rerun": false,
+      "meaning": "Author report; inherited original 10 carrier cases plus known/provider/marker controls; prior independent original 10 capture remains separate."
+    }
+  ],
+  "old_43_direct_fake_remains_valid_within_original_scope": true,
+  "does_not_establish_formal_wrapper_acceptance": true,
+  "real_model_input_ability_or_clinical_acceptance": "unverified",
+  "no_production_or_author_files_modified_by_reviewer": true,
+  "current_layout": "Every original span ID/text directly visible in ordered real-newline length block; body is original spans concatenated without added separators",
+  "author_gate_scope": {
+    "original": 354,
+    "already_integrated_tc02_permission_node": 1,
+    "new_formal_wrapper_variants": 20,
+    "actual_total": 375,
+    "global_privacy_suite_included": "not independently asserted by reviewer"
+  },
+  "revision_static_review": {
+    "all_five_author_frozen_code_hashes_match_independent_snapshot": true,
+    "original_span_id_text_directly_displayed": true,
+    "ordered_original_span_text_with_all_characters": true,
+    "span_length_not_marker_search_consumes_data": true,
+    "body_total_length_preserved_and_checked": true,
+    "old_parser_response_schema_global_coordinates_absence_unknown_unchanged": true,
+    "only_new_mainchain_harness_observes_real_delegate_calls": true,
+    "observed_client_generate_is_actual_formal_wrapper_bound_method": true,
+    "old_run_and_gold_assertions_unchanged": true,
+    "initial_span_mapping_visibility_issue_structurally_addressed": true,
+    "real_model_comprehension_or_quote_accuracy_proven": false,
+    "formal_second_redaction_idempotence_scope": "Actual author green20 includes original ten frozen same-body/span/quote checks through unchanged formal wrapper; finite fixtures only, not global redactor idempotence."
+  },
+  "initial_carrier_usability_gap_status": "Direct original span-ID/text visibility restored structurally; actual fake formal carrier same-view cases passed, but real-model usability remains unverified.",
+  "fixed_blob_bindings": [
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py",
+      "blob": "6affa2e9a84d97538c95cc7380685b6be7688a48",
+      "sha256": "e7185348a8c2d6a2aa97444656552485c14a8cf8a8d5b9570491ec8d1de282c0"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/luxian_0609_anesthesia_test_facts.py",
+      "blob": "de62a0b689e2d5f6deaecac58396705355ce3df5",
+      "sha256": "afdddf504214ffdea5af996b4a28a66434a8cfe64a72f0032f40980cb4ab1e67"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_controlled_facts.py",
+      "blob": "295438e4e3364e36546cc12c916884625cf52f18",
+      "sha256": "ae7db6cafd8c2f805b6cf87d07f051c0984218ee770a1c1af72ebe8239dea525"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_document_groups.py",
+      "blob": "fe0b8871ecb0363fc1590237614d176c53525480",
+      "sha256": "cfb522ecb8a53b6ce59b192dc0a2769cff0416634321ef407cf1d64805d94743"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_n12_formal_privacy_carrier.py",
+      "blob": "f6f37d13f0ef1bc150ba363fae7ac649d74f2a5a",
+      "sha256": "eeab0d90e91ec57e59201ec47cb9d18b2f74bc744de1f99ce4e76c9bd6404844"
+    },
+    {
+      "repo_path": "apps/medqc-web/docs/acceptance/2026-10-08-n12-formal-privacy-carrier.md",
+      "blob": "84b355a85b4fb681debad049f9b02701fe806dfc",
+      "sha256": "631467ae3d967dd71d21aabd1f0ee608e1f65059d475e26622f2645c85819510"
+    }
+  ],
+  "fixed_gate_binding": {
+    "execution_origin": "author guarded working-tree run at base HEAD; source hashes independently bound to final commit, not a claim pytest ran with final HEAD",
+    "collected": 375,
+    "passed": 375,
+    "failed": 0,
+    "warnings": 1,
+    "seconds": 15.64,
+    "exit": 0,
+    "original354": 354,
+    "already_integrated_tc02_permission_node": 1,
+    "new_formal_wrapper": 20,
+    "log_sha256": "d4713f752d0420f860e7bb5b10d12e64fa04834b1fa6e80d996af14e8b6aa4ec",
+    "integrity_pre_post_equal": true,
+    "fixed_production_and_three_existing_test_files_match_run_bytes": true,
+    "new_test_only_two_outside_string_trailing_spaces_differ": true,
+    "independently_reconstructed_tested_hash": "d8f515552ead7c7d8ecfa130ac2d9458338cf6894da2a2cadc5b8c00c4f24b27",
+    "fixed_new_test_sha256": "eeab0d90e91ec57e59201ec47cb9d18b2f74bc744de1f99ce4e76c9bd6404844",
+    "format_line_numbers": [
+      79,
+      80
+    ],
+    "entire_test_ast_including_literals_assertions_identical": true,
+    "temporary_to_final_commit_amend": "documentation only; marker coverage narrowed",
+    "no_xml_available": true,
+    "reviewer_reexecuted_tests": false,
+    "original43_direct_fake": [
+      36,
+      7
+    ],
+    "no_69_global_privacy_suite_claim": true,
+    "runtime_app_module_path_inventory": "not recorded; runner inspected sets fixed BACKEND first and explicit test selectors; do not claim module-path inventory checked"
+  },
+  "marker_coverage": {
+    "ordinary_old_full_id_marker_text": 3,
+    "final_sN_same_id_collision_tested": false,
+    "clinical_model_usability_tested": false,
+    "scope": "three cases retained, not changed for green; final doc explicitly keeps same-ID collision unverified"
+  },
+  "evidence_paths": {
+    "green375.log": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\green375.log",
+    "green375-results.json": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\green375-results.json",
+    "green375-integrity.json": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\green375-integrity.json",
+    "staged-format-ast-proof.json": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\staged-format-ast-proof.json",
+    "final-commit-manifest.json": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\final-commit-manifest.json",
+    "formal-red15.log": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\formal-red15.log",
+    "green374.log": "F:\\MedQC-worktrees\\qc-fix-ledger-20261008\\.tmp\\n12-carrier\\green374.log"
+  }
+}
