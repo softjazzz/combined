@@ -1,0 +1,103 @@
+{
+  "audit_id": "DD-F02-next-boundary-static-v1",
+  "rule_id": "LX0609-08-01-02",
+  "current_source_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+  "observed_head": "ce1d0771a1674073f3dbb4f019dfb2a4e40af1cc",
+  "head_delta_only_ledger_paths": [
+    "docs/acceptance/engine-audit-20261008/closure-issues.json",
+    "docs/acceptance/engine-audit-20261008/closure-issues.md",
+    "docs/acceptance/engine-audit-20261008/closure-ownership.json"
+  ],
+  "static_only": true,
+  "tests_or_rules_run": 0,
+  "production_modified": false,
+  "responsibility_source_blobs": {
+    "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json": {
+      "git_blob_oid": "31fd1e9fe49ce4b68c58367ed25bd57e89e1bff4",
+      "sha256": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93"
+    },
+    "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json": {
+      "git_blob_oid": "d874590fdb351a9de1ea44391f49e4d6132fa7cd",
+      "sha256": "f593e61b36b00c72b170f7280ff9875e07e105ded225c86e4d3e78e693f8a804"
+    },
+    "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json": {
+      "git_blob_oid": "a72991f1aa0a5ad5d6c8324a8614e6205472bf78",
+      "sha256": "30f2469af9e3c989f9447f05cdd18e5d9cd7878e66128791c17b916ece1af316"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": {
+      "git_blob_oid": "da8501c33e64d65d674617a170a081be1ff5a534",
+      "sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_medication_extraction.py": {
+      "git_blob_oid": "84fa1fe3cf79a3a9f1b08fcffc1ab4a6362b1d8f",
+      "sha256": "2b191f6cb529cb52e1023e5a34b9013cadcfd4bb9797c1c010897f3a4ee905ff"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py": {
+      "git_blob_oid": "10960b66c9ce76c2b14992301b852ce8b48cfdfd",
+      "sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py": {
+      "git_blob_oid": "fe4460fef00a79597f19d8bb2b3d85fe76eab1ac",
+      "sha256": "2c562562a8035b2fada29c823c0cfebaf9fd6cec74529036225008917364e01e"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py": {
+      "git_blob_oid": "f18833263508d6784ea7cde5d151e26ce0a1ab91",
+      "sha256": "0e709779ff744398ea67e2a12190d7499abdd99c474634eb44817455b47b4c91"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py": {
+      "git_blob_oid": "309338024a8351df5f47b53943429ab0255e8a82",
+      "sha256": "79d33291885b7375c0474f3cd3f3eea9efc32dfcaa884b2c6c0c5da55864923e"
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": {
+      "git_blob_oid": "ecf9f11fa19cc1702035de8e030f8a0a6b1ffa0b",
+      "sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844"
+    },
+    "apps/medqc-web/backend/app/database/models/cdm.py": {
+      "git_blob_oid": "3d673c0a39b986b1dd1dccd4de8c90dff5cfb934",
+      "sha256": "f0a5bc7e829cdb62ca288839f19bfe0cf24ec4dba70bf097555ee4ebec5d8023"
+    },
+    "apps/medqc-web/docs/0602/泸县0609质控点-业务标准基线-v1.md": {
+      "git_blob_oid": "fb8ba1b5e07331a52d8a5853f29bd8b3a68e96a9",
+      "sha256": "0d3918f693a4e06395b620f98f657a2b01246ffaa5f6e422d587b82a94417089"
+    },
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py": {
+      "git_blob_oid": "71cd01e5e02e460f9aab5c76953e56c967bb2a0f",
+      "sha256": "40d141a4bfef1d23484fe1beac81ea7a7377b863937aef6029a98e9eb44ae0fe"
+    },
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_062_document_evidence.py": {
+      "git_blob_oid": "5230a1746add7f5b6aa6e1c074009930b51ab897",
+      "sha256": "0b7bdc0be3e38bdecbbaf8ffdc83adfd40496ef754715caf18a30e334f51c2a8"
+    },
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_discharge_medication_integration.py": {
+      "git_blob_oid": "120f3394aafa267e138b409db5365984d281fe1f",
+      "sha256": "384f380659d10215cfc0790298cc7beef5e389fbe030b1437d8150e700cf4edd"
+    },
+    "apps/medqc-web/backend/tests/unit/test_discharge_medication_audit_regressions.py": {
+      "git_blob_oid": "2f58a5cc94b5749e7ae137f6901b42423320abde",
+      "sha256": "97d00d77e223f0875856aa577fb622e0847fb5ca47e97d95887743c05d898760"
+    },
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_discharge_medication_extraction.py": {
+      "git_blob_oid": "cb0f362f7876aa401ca8cf34ff937752319865a6",
+      "sha256": "dd66ce705a655603a47a70fcdba13d23a9dfcb44667a93ce4c896bd10e0e76b7"
+    }
+  },
+  "inherited_artifact_hashes": {
+    "docs/acceptance/engine-audit-20261008/discharge-death.md": "26e6dbe45928c3262f9b892317416a1703bf2f1e44a87736efceecac699de48e",
+    "docs/acceptance/engine-audit-20261008/discharge-death.json": "e5801a8c8b0562a8da96b4eced5c4a853368024891589e3c74e17aab1edb3692",
+    ".tmp/engine-audit-20261008/discharge-death/frozen-expectations.json": "8dc0233355036eea8d585d6055572971666fa6f8847bb4b80004494c92e4d289",
+    ".tmp/engine-audit-20261008/discharge-death/probe.py": "55e8caa521654b9822b4b1faeadd4333946af1d70c3281cdc2b0721aa7a8ece1",
+    ".tmp/engine-audit-20261008/discharge-death/probe-results.json": "48a25f01ff264652f23c2c8fc2ce25426100e603283d8dbf265d713c11424866"
+  },
+  "historical_execution_source_manifest_not_reconstructed": true,
+  "boundary_sha256": "12b6be19e44773ff2fb4a5ec47243baf337a26d619d6a52d06f8ff0d24ffbf4f",
+  "existing_frozen_cases": [
+    "DD-008",
+    "DD-009",
+    "DD-010",
+    "DD-011",
+    "DD-012"
+  ],
+  "new_clinical_expected_status_frozen": false,
+  "finding_open": true,
+  "preparation_diagnostic": "Initial metadata write stopped on expected HEAD check after ledger-only ce1 commit; no tests/rule calls occurred. Fixed responsibility files individually byte-verified against e5f instead; actual HEAD preserved."
+}

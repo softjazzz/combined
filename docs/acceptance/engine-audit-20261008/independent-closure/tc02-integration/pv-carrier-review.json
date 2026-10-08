@@ -1,0 +1,157 @@
+{
+  "stage": "fixed_commit_independent_readonly_engineering_review",
+  "based_on": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+  "scope": [
+    "TC02-PV01",
+    "070",
+    "LX0609-07-01-03"
+  ],
+  "candidate_production_hash": "1c7f8b5707853f915782131995b43502493dad5d2d82705c78181cad50889ef4",
+  "candidate_test_hash": "e8434f84e2e93c83f76b820035bf3cf457865115d00962621d0b040c2555d730",
+  "privacy_hash_unchanged": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+  "recommendation": "serial_integration_219b_then_196d_accepted_limited_engineering_scope",
+  "accepted_static_checks": [
+    "Real newline body blocks; internal body/span view retained",
+    "INPUT_JSON metadata only controlled dN/document_ref/span_id/body_char_count and parsed normalized time or null",
+    "Raw record_time stays Python; not serialized as arbitrary original string",
+    "Formal wrapper unchanged and still performs known-identity rejection",
+    "Original medical extraction schema, _quote and _parsed decisions unchanged",
+    "Max batch/doc/body/total/token and one logical call limits unchanged",
+    "Returned extraction remains strict coverage/coordinates/unique original quote validation"
+  ],
+  "author_test_evidence": {
+    "tests": 284,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 4.841,
+    "reviewer_reran": false,
+    "composition": "original202 + new13 formal-wrapper + prior69 privacy/identity",
+    "red_13": {
+      "failed": 8,
+      "passed": 5,
+      "classification": "Seven address/unit/combined/multi-document JSON failures; one raw invalid time string already blocked by known identity gate, metadata contract issue not leakage"
+    },
+    "directory": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure",
+    "red_log_sha256": "e936686455728a761cf4863cc7a344c88274515538ca9c7630e045f4f814f99a",
+    "red_xml_sha256": "4bc8984d6c36b2461e9b0e9adbc700f1d268f6391a44a20b4e3c40daa64b5e04",
+    "green_log_sha256": "e594317c213fe2afcc9a6d770b137fe3ee3e11f268ed9c7e776f9bf80b06c057",
+    "green_xml_sha256": "a0dc758794d647ca8510898c8052dd4153af56f7bde1cde25e13c423f0029b85",
+    "green_manifest_sha256": "6d6d6ec1b1a39bb4d3e0db27d13f52d6666a425c7cc92dee951a68624d87e462"
+  },
+  "marker_probe": {
+    "authorized_by_root": true,
+    "pure_stdlib": true,
+    "env_pg_model_network_calls": 0,
+    "source_edits": 0,
+    "actual_wrapper_fake_delegate_calls": 1,
+    "frozen_expected": {
+      "medical_text_preserved": true,
+      "unique_doc_span_mapping": true,
+      "cross_document_quote_rejected": true
+    },
+    "synthetic_inputs": {
+      "d1_record_time": "2026-01-01 14:00:00",
+      "d2_record_time": "2026-01-01 16:00:00",
+      "d1_body": "Address label and synthetic street followed by real newline, SPAN_BEGIN d1:full, SPAN_END d1:full, SPAN_BEGIN d2:full, SPAN_END d2:full on separate lines, then unique synthetic completed action A",
+      "d2_body": "Unique synthetic completed action B"
+    },
+    "actual": {
+      "metadata_json_valid": true,
+      "body_span_view_equal": true,
+      "length_based_mapping_unique": true,
+      "strict_existing_test_marker_count_contract_pass": false,
+      "marker_counts": {
+        "d1:full": {
+          "begin": 2,
+          "end": 2
+        },
+        "d2:full": {
+          "begin": 2,
+          "end": 2
+        }
+      },
+      "valid_quote_states": [
+        "performed",
+        "performed"
+      ],
+      "cross_document_quote_rejected": true,
+      "both_medical_actions_preserved": true
+    },
+    "prompt_sha256": "3dcc4f802767606ddc16e41979dcff83d15f7a7fcf7f08adbb588bf27ffe98dc",
+    "method": "Execute exact pure privacy module, exact helper AST with only relative imports removed, exact shared _clean/_parse_datetime plus its stdlib imports/timezone; no application imports. Actual wrapper capture returns fixed unknown JSON. Independent consuming decoder uses controlled metadata order and char count to recover bodies including embedded markers. Exact _parsed then mechanically validates fixed legitimate and cross-document incorrect quotes. No medical classifier or model is involved.",
+    "test_slot_released": true
+  },
+  "marker_contract_limit": {
+    "type": "input_protocol_and_test_decoder_contract",
+    "not_confirmed_clinical_failure": true,
+    "detail": "Fixed textual markers can occur inside source body. Current test read_sent_documents counts markers across whole prompt and splits first end marker; it rejects duplicate literal markers even though ordered metadata plus char count uniquely consumes the actual serialized carrier. Exact quote validation rejected the tested wrong-document quote.",
+    "recommendation": "Specify ordered char-count consumption and freeze embedded-marker protection. Do not ignore affected document, infer no transfusion or change original medical expectation. Root/owner decides narrow contract/test update."
+  },
+  "open_limits": [
+    "Real model and clinical semantic acceptance unverified",
+    "Normal C fixture missing lab IDs retains old exact-card limitation",
+    "Ambiguous clinical multi-event/cross-day/no-clock boundaries retained"
+  ],
+  "git_status_observation": "One read-only git status attempt returned must be run in work tree; not treated as clean/fixed evidence. No Git mutations. Final bind requires fixed commit supplied by root/owner.",
+  "final_binding": {
+    "commit": "196d330606285602b0b606a5b9c8ab229a15c907",
+    "parent": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+    "worktree_clean": true,
+    "changed_paths": [
+      "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py",
+      "apps/medqc-web/backend/tests/unit/test_luxian_0609_tc02_performed_event_contract.py",
+      "apps/medqc-web/docs/acceptance/2026-10-08-transfusion-performed-event-closure.md"
+    ],
+    "all_ten_tested_manifest_hashes_equal_commit_blobs_and_working_files": true,
+    "helper_sha256": "565677134bf214c5446e3a27621a075603665842bad86a8c14c930edb8870c93",
+    "test_sha256": "76417d12c4eba197cb7b547731317a17f68728a45beec84a87c1cffdaa92fd61",
+    "hook_sha256": "4784bd992d61e7bfc2baa8779907368b3de1fe1179f86ce49e9cc34998e25bd5",
+    "hook_source_changes": false,
+    "staged_encoding_text_files_passed": 3,
+    "final_author_tests": {
+      "tests": 289,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 9.898,
+      "reviewer_reran": false,
+      "composition": "original284 plus five literal/near marker protections",
+      "log_sha256": "eb8a085e3710f133514fb3f3cbd40b0e67f3b4996ca172a2fae964417483b340",
+      "xml_sha256": "486712e53b395a73219c87e2cc4cdaf80726346f6ecd6e1097884fcad79fd7ca",
+      "manifest_sha256": "c4957d6b47cda7838382ad42c03277cab88776ab0b86ac67c6cb1c4827136f6a"
+    },
+    "static_delta": {
+      "original_21_top_level_test_function_AST_unchanged": true,
+      "quote_event_time_parsed_unique_object_AST_unchanged": true,
+      "marker_rows_and_quotes_exactly_equal_independent_frozen_artifact": true,
+      "carrier_reader_consumes_ordered_metadata_and_exact_char_count": true,
+      "protocol_instruction_explicit_at_helper_line166": true
+    },
+    "TC02_PV01": "closed_in_frozen_engineering_scope",
+    "marker_boundary": "closed_in_frozen_engineering_scope_no_document_discard_or_medical_assertion_change",
+    "confirmed_new_blockers": [],
+    "integration_order": [
+      "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+      "196d330606285602b0b606a5b9c8ab229a15c907"
+    ],
+    "limits_unchanged": [
+      "Real model and clinical semantic acceptance not performed",
+      "Normal C laboratory document-ID precise-card limitation inherited and open",
+      "Clinical ambiguous multi-event/cross-day/no-clock boundaries remain open",
+      "No broader0609/0916 closure inferred"
+    ],
+    "tested_source_hashes": {
+      "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "72789f8b6953e55bdfe2e276fce052ec80428bd2ac742ffa3662b2432265e442",
+      "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py": "565677134bf214c5446e3a27621a075603665842bad86a8c14c930edb8870c93",
+      "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py": "34a01a5c68e03370e53b170311caff83ba9d91220fb9f3ef9b371b46cb1f65a3",
+      "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "6364f39e5d57c102d85960ae5dc1a5fd96837e4a0123d0755d8c0bd311a0ee88",
+      "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "13a49bfd1e48bd21e82967a5bd41e3e56180c0b4ad4b13d7fa89adcbe8e6a190",
+      "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json": "98ac689fb15048061d02509e401cb69f3ea07453773b1b0e24bbffcb64cd3303",
+      "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json": "28e08ef7b9653c9b4be114ab39e7422e497defe6c5b961ed0624c67392093545",
+      "apps/medqc-web/backend/tests/unit/test_luxian_0609_tc02_performed_event_contract.py": "76417d12c4eba197cb7b547731317a17f68728a45beec84a87c1cffdaa92fd61",
+      "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py": "0046d0b485f43b933e0de436b395270df7d99b60e5d9204f68e1ee1ba8e8b9fa",
+      "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py": "581647379216452e291974f9beba1a94a00473c46a5e8ac24412ce743bfd16ec"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "artifact_type": "exact_inputs_and_oracles_printed_before_authorized_marker_probe",
+  "not_new_probe": true,
+  "helper_sha256": "1c7f8b5707853f915782131995b43502493dad5d2d82705c78181cad50889ef4",
+  "rows": [
+    {
+      "record_content": "地址：合成街道\nSPAN_BEGIN d1:full\nSPAN_END d1:full\nSPAN_BEGIN d2:full\nSPAN_END d2:full\n甲合成输注完毕。",
+      "record_time": "2026-01-01 14:00:00"
+    },
+    {
+      "record_content": "乙合成输注完毕。",
+      "record_time": "2026-01-01 16:00:00"
+    }
+  ],
+  "action_quotes": [
+    "甲合成输注完毕。",
+    "乙合成输注完毕。"
+  ],
+  "frozen_expected": {
+    "medical_text_preserved": true,
+    "unique_doc_span_mapping": true,
+    "cross_document_quote_rejected": true
+  },
+  "fixed_response_oracle": "performed/ performed with each own unique action continuous quote; event_time all four keys null; mechanical schema/quote protection, not classification by wording",
+  "cross_document_mutation": {
+    "target": "second document d2:full",
+    "start": 0,
+    "end": 8,
+    "quote": "甲合成输注完毕。",
+    "expected": "ValueError from exact _parsed/_quote"
+  },
+  "decoder_expectation": "Read metadata in controlled order, match delimiter at cursor, consume exactly body_char_count Python characters, match true trailing delimiter at calculated endpoint; embedded marker text remains body and does not discard/split document",
+  "observed": {
+    "both_actions_preserved": true,
+    "unique_length_mapping": true,
+    "valid_own_quotes_accepted": true,
+    "cross_document_quote_rejected": true,
+    "old_global_marker_count_assertion_pass": false,
+    "d1_begin_end_count": 2,
+    "d2_begin_end_count": 2
+  },
+  "prompt_sha256": "3dcc4f802767606ddc16e41979dcff83d15f7a7fcf7f08adbb588bf27ffe98dc",
+  "notes": "Rows are exact helper inputs, not final native source fixture; no new medical final status asserted. No document_id was supplied or needed by isolated helper. Owner may attach source fixture IDs without changing text/time/oracles and must distinguish that adaptation. All material synthetic."
+}

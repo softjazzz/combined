@@ -1,6 +1,6 @@
 # 0609 closure issue queue
 
-Production integration: `e5f5696f5`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
+Production integration: `35909964a`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
@@ -19,7 +19,7 @@ Production integration: `e5f5696f5`. Issue closure is not full-rule or clinical 
 |course-timing:CT-02|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
 |course-timing:CT-03|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
 |discharge-death:DD-F01|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
-|discharge-death:DD-F02|rule_scope_and_source_contract_review|/root/audit_discharge_death||
+|discharge-death:DD-F02|authority_discharge_medication_source_and_error_scope_required|/root/audit_discharge_death||
 |discharge-death:DD-F05|business_basis_review_no_code_decision|unassigned||
 |imaging-laboratory:IML-01|integrated_confirmed_subissues_joint_ct_mri_contract_open|/root/repair_iml01||
 |imaging-laboratory:IML-02|integrated_engineering_closed|/root/repair_iml02||
@@ -29,7 +29,7 @@ Production integration: `e5f5696f5`. Issue closure is not full-rule or clinical 
 |rescue-remaining:RR-D02|integrated_limited_engineering_closed|/root/repair_iml01||
 |rescue-remaining:RR-M01|integrated_engineering_contract_closed|/root/repair_iml02||
 |treatment-consultation:TC-01|queued_evidence_review|unassigned||
-|treatment-consultation:TC-02|carrier_fix_284_synthetic_green_independent_review_pending|/root/repair_iml02|imaging-laboratory:IML-02|
+|treatment-consultation:TC-02|integrated_limited_performed_fact_and_privacy_carrier_engineering_closed_real_model_pending|/root/repair_iml02|imaging-laboratory:IML-02|
 |treatment-consultation:TC-03|queued_evidence_review|unassigned||
 |tumor-pathology:TP-D01|integrated_engineering_closed|/root/repair_chemo||
 |tumor-pathology:TP-D02|candidate_frozen_not_integrable_semantic_failures_and_legacy_regression_unverified|/root/repair_chemo||

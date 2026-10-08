@@ -151,3 +151,10 @@
 - root 在该集成 SHA 独立运行原两文件45项，45通过、1 warning、1.80秒；前后hash一致，所有已加载app模块来自当前集成树，严格guard阻止env/PG/网络/真实材料。证据存 independent-closure/culture-identity-integration/。原44/1日志保留；仅测试身份适配，不是45例临床验证。
 - TC02-PV01正式wrapper原13红为8失败/5通过：7项实际发送JSON受地址/单位脱敏破坏；1项非法raw_time原已被身份门禁拒绝，属于元数据投影契约，不代表隐私外泄。原记录保留。
 - 作者仅extractor将安全元数据与真实换行正文分离，坐标同view；不改全局privacy、不绕过wrapper。作者串行284/284通过4.84秒（原202+新13+旧privacy69），未集成，正独审。此次无真实材料、模型、PG、重启或推送。
+### TC02固定独审、串行集成与root复跑
+
+源219b13d+196d3306分别集成011d26b86、35909964a；独审固定父子关系、3路径载体补丁、10项最终源hash与作者289一致、clean，允许有限工程集成。原误判实施、公共事实计数/引用及正式隐私wrapper输入视图修复均有工程证据。真实模型语义、多时刻/多事件及正常C缺labID原定位边界仍未关闭；不扩展成043-047同族已完成。
+
+root隔离首次289为276通过13guard失败：SQLite传入bytes路径，guard用str产生b前缀，阻断全部13保存保护；没有证明产品保存失败。保留原runner/XML/manifest。仅guard改os.fsdecode与resolved绝对路径且限本次.tmp输出；第二次同289全通过5.40秒、1warning，app加载全部当前root、前后源码hash一致。证据及独审归档independent-closure/tc02-integration/。无env/PG/外网/真实模型。
+
+DD-F02规则范围复核明确原需求含药名/剂量错误，现实现只覆盖四字段完整性；住院医嘱缺权威出院标识、有效版本和唯一配对，不能擅自比较后判错。17责任文件绑定e5f，无新增临床答案；报告归档next-batch/discharge-medication/。

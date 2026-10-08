@@ -346,7 +346,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_rule_coverage_limit",
       "owner": "/root/audit_discharge_death",
-      "state": "rule_scope_and_source_contract_review",
+      "state": "authority_discharge_medication_source_and_error_scope_required",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -354,7 +354,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "latest_evidence": "docs/acceptance/engine-audit-20261008/next-batch/discharge-medication/boundary.md"
     },
     {
       "id": "discharge-death:DD-F05",
@@ -566,7 +567,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_branch_input_defect",
       "owner": "/root/repair_iml02",
-      "state": "carrier_fix_284_synthetic_green_independent_review_pending",
+      "state": "integrated_limited_performed_fact_and_privacy_carrier_engineering_closed_real_model_pending",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -577,7 +578,11 @@
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
       ],
-      "latest_result": "219b13d blocked by TC02-PV01; preserved13 red8/5; candidate carrier only changes extractor, author284/284 includes202+13+69privacy, pending independent delimiter/input-view review; not integrated or real-model accepted"
+      "latest_result": "219b+196d independently fixed reviewed; integrated011d26b86+35909964a; root289/2895.40s with source hashes unchanged and actual app paths. Original guard-only13 failures retained; no medical oracle/source correction in rerun. Clinical/model/multi-time capabilities and existing normalC missing labID exact-card remain open.",
+      "integration_commits": [
+        "011d26b86",
+        "35909964a"
+      ]
     },
     {
       "id": "treatment-consultation:TC-03",
