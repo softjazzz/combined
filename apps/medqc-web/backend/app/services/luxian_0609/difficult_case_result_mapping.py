@@ -133,7 +133,7 @@ def difficult_case_customer_fact_status_is_valid(
         discussion_count, int
     ):
         return False
-    if not records and discussion_count == 0:
+    if not records:
         return normalized_status == "not_applicable"
     if records and discussion_count == 0:
         return normalized_status == "non_compliant"
