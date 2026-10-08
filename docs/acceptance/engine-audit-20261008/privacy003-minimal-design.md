@@ -26,8 +26,8 @@
 
 | 唯一拟写文件 | 最小接缝与行为 |
 |---|---|
-| `backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py` | `_run`追加私有collector和可选内存llm_client参数；客户端创建延迟到病例来源预检成功后。现有session后至native调用/ledger构建套source scope，组合材料provider，使用 `_RecordingClient(wrapped_client,capture)`，保持既有stage capture。main没有合法来源可传，必须在现有source读与runtime客户端构造前固定安全文案、非零退出；内部已来源正常接口仍按病例运行。无参数文件/CLI原身份输入。业务规则和ledger字段不变。 |
-| `backend/scripts/review_luxian_0609_semantic20.py` | `build_semantic20_review`追加私有collector，现有llm_client/row_loader注入保留。每case source scope覆盖copy及consultation，材料provider只枚举本case已读三类缓存行的明确字段，不递归author_name/正文抓姓名；可用已有programmatic_timeline.structured_source_rows内存形状，不加入返回合同。每次生成前guard，来源失败或隐私拒发写固定 `privacy_boundary_error` 到现有_PARSE_ERROR_CODES，review_status=review_error/state=evaluation_unknown/agreement=None；不用transport_error掩盖，不记异常正文、不计completed。call_count在预检通过之后增加。main没有合法来源可传，必须在构造runtime客户端或读输入前固定失败退出；内部函数来源失败仍使用安全review_error，不把它计为completed/验收通过。 |
+| `backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py` | `_run`追加私有collector和可选内存llm_client参数；客户端创建延迟到病例来源预检成功后。现有session后至native调用/ledger构建套source scope，组合材料provider，使用 `_RecordingClient(wrapped_client,capture)`，保持既有stage capture。main/_run入口内没有合法来源可传，必须在该函数现有source读与runtime客户端构造前固定安全文案、非零退出（不覆盖顶层导入）；内部已来源正常接口仍按病例运行。无参数文件/CLI原身份输入。业务规则和ledger字段不变。 |
+| `backend/scripts/review_luxian_0609_semantic20.py` | `build_semantic20_review`追加私有collector，现有llm_client/row_loader注入保留。每case source scope覆盖copy及consultation，材料provider只枚举本case已读三类缓存行的明确字段，不递归author_name/正文抓姓名；可用已有programmatic_timeline.structured_source_rows内存形状，不加入返回合同。每次生成前guard，来源失败或隐私拒发写固定 `privacy_boundary_error` 到现有_PARSE_ERROR_CODES，review_status=review_error/state=evaluation_unknown/agreement=None；不用transport_error掩盖，不记异常正文、不计completed。call_count在预检通过之后增加。main函数内没有合法来源可传，必须在构造runtime客户端或读输入前固定失败退出（不覆盖顶层导入）；内部函数来源失败仍使用安全review_error，不把它计为completed/验收通过。 |
 | `backend/scripts/run_luxian_0609_028_synthetic_golden.py` | `_run`追加可选内存llm_client以离线运行，默认既有真实client路径只在明确运行时使用；仅接受硬编码SCENARIOS中的原对象（identity membership，不是名称或相等值），_session_for对新建/覆写Scenario固定拒绝；不增加scenario/材料/JSON/row_loader/来源flag参数或CLI输入入口。固定每scenario创建本地collector，只采固定合成姓名及SYNTHETIC-I/P/label，姓名不加入session文书或输出。套同样source scope+session材料provider+wrapper→native，finally close collector。保留原rules/reduce/expected及临床值；输出privacy_safe不能仅看repr，需与实际发送边界验证分开，不因拒发计passed。 |
 | `backend/tests/privacy_closure_20261008/test_script_boundaries.py`（新增专属） | 只执行三脚本当前AST接缝/纯privacy模块，fake selector/session/row_loader/业务结果以及实际client attempt内存transport，避免脚本import应用config/DB。不改旧共享断言。 |
 | `backend/tests/privacy_closure_20261008/offline_support.py` | 仅新增三入口AST加载支撑，不改已有002加载语义；与固定002的67项隔离。 |
@@ -74,3 +74,6 @@
 - `apps/medqc-web/backend/scripts/run_luxian_0609_028_synthetic_golden.py`：`366ca26ca472910cba3f96efe160a0e472b38d22068f3730012c728d8086f1a0`
 
 028实施还需固定私有基线tuple引用，入口核对公共SCENARIOS未被替换，并按基线原对象identity membership校验；专属红测直接替换SCENARIOS，证明不能仅校验当前全局列表中的同label对象。此处仍仅方案/红测，生产未修改。
+
+
+独审后勘误：ordinary顶层导入app.database.connection可能在main前load_dotenv；本文“配置/source前拒发”均限定隔离的main/_run函数体，不证明真实完整CLI导入零环境读取。生产增量未新增env读取不等于既有脚本从不读env。固定d2e1718bb的根受控124绿（旧67+新47+真实import unit10，dotenv替换且PG/socket/.env阻断）只证明受控测试可运行；实际CLI可信身份来源未接、功能未恢复继续开放。详见privacy003-repair.md/.json。
