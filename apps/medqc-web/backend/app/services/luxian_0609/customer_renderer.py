@@ -3045,6 +3045,8 @@ def customer_finding_from_controlled_facts(
                 "暂无法判断专家支持记录是否在用药前完成。"
             )
         if facts.get("support_before_use") is True:
+            if len(facts.get("special_antimicrobials") or ()) > 1:
+                return f"已逐项确认特殊级抗菌药物 {medicines} 各自计划启用前或同刻有可关联的专家支持记录。"
             return (
                 f"已确认特殊级抗菌药物 {medicines} 计划开始/启用时间为 "
                 f"{planned_start_time}，并在该时间前或同刻找到专家支持记录（{support_time}）。"
@@ -3057,7 +3059,7 @@ def customer_finding_from_controlled_facts(
             )
         if facts.get("expert_support_present") is True:
             return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"
-        return f"已开立特殊级抗菌药物 {medicines} 计划，未找到专家查房或会诊支持记录。"
+        return f"已开立特殊级抗菌药物 {medicines} 计划，未找到可关联到该药计划的专家查房或会诊支持记录。"
 
     if rule_id == "LX0609-04-02-06" and kind == "death_record_presence_check":
         return (

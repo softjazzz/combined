@@ -2804,22 +2804,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for row in (*consultation_rows, *senior_rows)
                     if _is_special_antimicrobial_expert_support(row)
                 )
-                timed_expert_supports = tuple(
-                    value
-                    for row in expert_support_rows
-                    if (value := _lx0609_058_row_time(row)) is not None
-                )
+                associated_expert_support_rows: list[Mapping[str, Any]] = []
                 first_order_time = min(
                     (start for _, _, start in special_events if start is not None),
                     default=None,
                 )
-                expert_support_time = min(timed_expert_supports, default=None)
                 ambiguous_support = len(special_events) > 1 and any(
                     not _linked_order_id(row)
                     and (
-                        not (mentioned := _antimicrobial_names_in(
-                            row, _SPECIAL_ANTIMICROBIALS
-                        ))
+                        not (mentioned := _antimicrobial_names_in(row))
                         or any(
                             sum(name == event_name for _, event_name, _ in special_events) > 1
                             for name in mentioned
@@ -2853,13 +2846,18 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     row, _SPECIAL_ANTIMICROBIALS
                                 )
                             )
-                            or (not _linked_order_id(row) and len(special_events) == 1)
+                            or (
+                                not _linked_order_id(row) and len(special_events) == 1
+                                and not _antimicrobial_names_in(row)
+                            )
                         )
                         matching_times = tuple(
                             value for row in matching_rows
                             if (value := _lx0609_058_row_time(row)) is not None
                         )
                         selected_antimicrobial_evidence_rows.extend(matching_rows)
+                        # 事实与精确证据共用实际关联行，不能借其他药支持时间。
+                        associated_expert_support_rows.extend(matching_rows)
                         if any(value <= start for value in matching_times):
                             continue
                         unmatched_names.append(name)
@@ -2880,11 +2878,16 @@ async def execute_luxian_0609_native_extended_document_rules(
                             if late_support
                             else "required_document_missing"
                         )
+                timed_expert_supports = tuple(
+                    value for row in associated_expert_support_rows
+                    if (value := _lx0609_058_row_time(row)) is not None
+                )
+                expert_support_time = min(timed_expert_supports, default=None)
                 if special_events:
                     display.append((rule_id, {
                         "verification_kind": "special_antimicrobial_expert_support_check",
                         "special_antimicrobials": list(special_names),
-                        "expert_support_present": bool(expert_support_rows),
+                        "expert_support_present": bool(associated_expert_support_rows),
                         "first_antimicrobial_time": (
                             first_order_time.isoformat(sep=" ")
                             if first_order_time is not None

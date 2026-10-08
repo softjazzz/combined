@@ -1,0 +1,15 @@
+# TP-D04 特殊级抗菌药物专家支持对象绑定修复
+
+基线515bcec6dc7ebcf11a8f54699aeb7b7f4dba663e。规则058/LX0609-05-01-06：目标08:00美罗培南，07:00专家会诊明确建议万古霉素，原唯一special_event无条件fallback把别药支持误绑并给C。仅删fallback仍不够：原expert_support_present/time取全部专家支持，会把别药07:00写成晚于目标08:00；必须一起收敛事实、文书证据与客户文案。
+
+本次只改native058与renderer058。匿名单事件fallback要求既有完整抗菌药名提取范围没有识别药名，保留原匿名单事件C；明确已识别别药不再作为匿名支持，多事件匿名仍association_failed/data_gap。使用现有ANTIMICROBIALS范围，不增加药名或词表；不能据此宣称任意未知药名已经识别/排除。既有order-ID和明确同药关联路径、医学时限、状态优先级不重做。多事件匿名判定同样用既有完整药名范围，已知普通别药不冒充无药名支持。
+
+现循环的实际matching_rows同时进入关联摘要列表与精确文书引用；expert_support_present/time只用该关联列表及其最早可用时间，不再采全体expert_support_rows。资料时间/归属不足的前置分支保持资料不足，不猜选支持行。事实仍原8字段严格合同，不新增字段、不改antimicrobial_result_mapping/Finalizer。单药无关联文案改为“未找到可关联到该药计划的专家查房或会诊支持记录”；多个具名事件全成功文案表示已逐项确认各药启用前/同刻支持，不用全局最早支持时间逐药推断。
+
+原创建owner已移交专属测试写权，仅复制其新文件，禁止整文件覆盖旧native。原18节点SHA256 dace2fad205b0e1e8a4122fa2b57fc756ebd4343aff62fbb071886ad77138e5e逐字保持；独立expectations.json SHA256 3be945d5414d1396f7014ced5aa5687a0fc75443247446e49f127d199f50e2aa未变。原反例NC未改；9场景正逆涵盖不同药、同药提前/同刻/晚于/缺时、单匿名、多具名逐药、只支持其一、多匿名。owner原红18为2fail/16pass，首reason失败后其他断言未到达，不能冒称后续事实/证据/文案已分别独立红。
+
+另附15节点SHA256 1a5dd75f04c3ad7bf06a892dbe1d32a7fdd4aadb9d2634fe7c7e6e349af08d46，原oracle未改：别药06:00夹入目标无支持/提前/晚于/缺时场景正逆8、多个具名成功文案正逆2、已知普通别药头孢曲松不可当匿名正逆2、3合成SQLite新实例回读。当前树正式native→Binding/Reducer→Finalizer红33为15失败/18通过（.tmp/tpd04-closure/red.log），全为目标AssertionError，无fixture/收集失败。修复后聚焦217全部通过（.tmp/tpd04-closure/green.log，4.24秒）：原18、补充15、旧native05818、旧renderer0584、抗菌mapping63、Finalizer70、RR-PUB29；旧测试/冻结预期未改，不与其他批次重复求总数。
+
+三个SQLite场景覆盖不同药NC、同药晚于NC、多个具名各自C；正式输出保存后换新Engine/新Store回读，逐字段比status/reason/facts/findings/suggestion，按原输入独立断言规范keyed_ref/source_ref集合、真实来源/时间/record_content字段和可用摘录。别药NC不保存该专家会诊引用，公开不漏raw ID；多个事件C的实际关联文书各自时间保留，文案不作全局最早时间逐药断言。模型调用/Token均0，不执行PG/env/网络/真实模型；不是临床语义签认，TP-D05与N13其他缺口未处理。
+
+源码校验 .tmp/tpd04-closure/frozen-verification.json 证明native058/renderer058以外逐字不变，mapping/Finalizer/CT04/N12支持/药名提取器/N13与目录冻结，原18及独立预期hash不变。1147前端源码/配置hash同已完成lint输入，继承本批lint证据（0错误、1214既有警告）；此前typecheck资源终止、全量前端unit未执行，不宣称通过。新测试及两生产路径执行Ruff/差分校验，提交真实Husky与编码门禁，临时日志不提交。独审尚未执行，固定提交交root独立复核。
