@@ -1,0 +1,35 @@
+{
+  "schema_version":"iml01-remaining-consumer-map-v1",
+  "fixed_sha":"1958ae3bb954af7c28d0ed4f747b09913073a205",
+  "method":"read-only specified fixed source blobs and existing synthetic oracle; no execution or new medical judgement",
+  "new_test_count":0,
+  "new_pass_count":0,
+  "source_blobs":{
+    "handbook_exam_lab.py":"eb289d39c6cab81defe0eb1393439185f5f258ce",
+    "native_exam_lab_execution.py":"f5d54399fbc603b235e609cd7932270f135fc4a7",
+    "ct_order_course_consistency.py":"7488751ca6b425ead61539b68a676c00f8305e50"
+  },
+  "source_base":"apps/medqc-web/backend/app/services/luxian_0609/",
+  "original_oracle":{
+    "path":"F:/MedQC-worktrees/review-artifacts/iml01-closure/expected.json",
+    "sha256":"dbda7a2d78a57e7114ec72879b4300c7a682ae8fa2da35335e737e2fbf2ac05c",
+    "case_id":"ct-mri-contradictory-modality",
+    "family":"exam",
+    "business_key":"exam_id:E1",
+    "orders_present":false,
+    "course_present":false,
+    "directly_executed_rule_id":"LX0609-06-01-03",
+    "frozen_expected":"data_gap",
+    "existing_actual":"compliant",
+    "closure":"pending_customer_contract",
+    "existing_result_path":"F:/MedQC-worktrees/review-artifacts/iml01-closure/fixed-8c9df71af-results.json"
+  },
+  "rules":[
+    {"rule_id":"LX0609-06-01-03","jointcase_reachable":true,"consumer":"evaluate_report_completeness","family":"exam","anchors":["handbook:25-26","handbook:283","handbook:359","handbook:404-409","native:1933-1949"],"remaining":"existing joint CT/MRI original gap vs compliant oracle remains customer joint/partition contract pending; keep expectation unchanged"},
+    {"rule_id":"LX0609-06-01-01","jointcase_reachable":true,"consumer":"build_ct_review_input -> evaluate_ct_review","family":"exam","anchors":["native:1938-1943","native:1959","native:1965","native:1996","ct:32-33","ct:93","ct:134-138","ct:374"],"original_oracle_covers_this_rule":false,"missing_required_fixture_inputs":["linked orders","course"],"remaining":"prepare independently frozen orders/course-complete input and expectation before authorized consistency revalidation; no inherited compliant claim"},
+    {"rule_id":"LX0609-06-03-02","jointcase_reachable":false,"consumer":"evaluate_report_completeness","family":"culture","source_keys":["labtest_master","labtest_item_report"],"business_key":"test_id","anchors":["handbook:25-26","handbook:283","native:1933-1949"],"remaining":"new authoritative field real-input and formal delivery-chain revalidation; not joint CT/MRI policy dispute"}
+  ],
+  "shared_ct_ledger_prior":true,
+  "shared_prior_does_not_imply_shared_final_status":true,
+  "unresolved_business_object":"whether a single exam_id CT master/MRI report has approved joint or partitioned event association contract; no medical attribution decided"
+}

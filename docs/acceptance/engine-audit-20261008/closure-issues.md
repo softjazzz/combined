@@ -1,6 +1,6 @@
 # 0609 closure issue queue
 
-Production root: `fac4ef67c`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
+Production root: `fad64946e`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
@@ -13,7 +13,7 @@ Production root: `fac4ef67c`. Issue closure is not full-rule or clinical accepta
 |CT-INPUT-CHANGE|revalidation_evidence_preparation|unassigned||
 |PATH-INPUT-CHANGE|revalidation_evidence_preparation|unassigned||
 |PROMPT-074|revalidation_evidence_preparation|unassigned||
-|SURGERY-FREEZE|revalidation_evidence_preparation|unassigned||
+|SURGERY-FREEZE|identified_fixture_and_catalog_drift_corrected_other_semantic_items_open|unassigned||
 |TR-048-REAL|revalidation_evidence_preparation|unassigned||
 |course-timing:CT-01|queued_shared_module|unassigned|imaging-laboratory:IML-02|
 |course-timing:CT-02|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
@@ -29,10 +29,10 @@ Production root: `fac4ef67c`. Issue closure is not full-rule or clinical accepta
 |rescue-remaining:RR-D02|integrated_limited_engineering_closed|/root/repair_iml01||
 |rescue-remaining:RR-M01|integrated_engineering_contract_closed|/root/repair_iml02||
 |treatment-consultation:TC-01|queued_evidence_review|unassigned||
-|treatment-consultation:TC-02|queued_shared_module|unassigned|imaging-laboratory:IML-02|
+|treatment-consultation:TC-02|offline_performed_fact_contract_implementation|unassigned|imaging-laboratory:IML-02|
 |treatment-consultation:TC-03|queued_evidence_review|unassigned||
 |tumor-pathology:TP-D01|integrated_engineering_closed|/root/repair_chemo||
-|tumor-pathology:TP-D02|design_before_semantic_changes|/root/repair_chemo||
+|tumor-pathology:TP-D02|offline_local_drug_dose_facts_implementation_other_semantics_open|/root/repair_chemo||
 |tumor-pathology:TP-D03|design_before_semantic_changes|/root/repair_chemo||
 |tumor-pathology:TP-D04|limited_engineering_repair_integrated_independently_verified|/root/repair_iml02|imaging-laboratory:IML-02|
 |tumor-pathology:TP-D05|queued_shared_module|unassigned|imaging-laboratory:IML-02|

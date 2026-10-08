@@ -22,7 +22,7 @@
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
       ],
-      "note": "Core5649f6396 plus test-only fac4ef67c independently reviewed. Root strict offline guard actual348:346pass2same-parent baseline failures (029 association and family ownership); all original03728 protections and new43 pass. Original medical inputs/oracles retained. Root383 joint also passed. Independent43 core/wrapper and SQLite3 passed with script failures disclosed. Real semantic model/full-scan accuracy not validated.",
+      "note": "Core5649f6396 plus test-only fac4ef67c independently reviewed. Root strict offline guard actual348:346pass2same-parent baseline failures (029 association and family ownership); all original03728 protections and new43 pass. Original medical inputs/oracles retained. Root383 joint also passed. Independent43 core/wrapper and SQLite3 passed with script failures disclosed. Real semantic model/full-scan accuracy not validated. Later rootfad64946e354/354 after independent test-only029 MR schema and explicit031/032 family drift correction; no production medical relaxation.",
       "commits": [
         "08aed59db3ed9bf08316fc792a757a3ee65d992b"
       ],
@@ -48,7 +48,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "note": "Targeted currenthash preparation retains title-prefix shell residual; no original metadata-row proof, no prefix/name patch approved. Semantic body facts pending serial extended-owner scope afterTC02."
     },
     {
       "id": "N13",
@@ -209,7 +210,7 @@
       "reconciliation_state": "affected_needs_revalidation",
       "source_classification": "historical_evidence",
       "owner": null,
-      "state": "revalidation_evidence_preparation",
+      "state": "identified_fixture_and_catalog_drift_corrected_other_semantic_items_open",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -217,7 +218,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "note": "Source216431018 integratedfad64946e test-only: only029 MR fixture true fields/identical absolute time; original medicalC/fullfact/ref/assertions unchanged. Other five MR inputs restored after overbroad fixture edit gave3 hash-order failures. Originalred and351/3 retained. Explicit family031/032 appended. Root354/3544.78s; multi-order029/030 semantic issues not closed."
     },
     {
       "id": "TR-048-REAL",
@@ -564,7 +566,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_branch_input_defect",
       "owner": null,
-      "state": "queued_shared_module",
+      "state": "offline_performed_fact_contract_implementation",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -630,7 +632,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_open",
       "owner": "/root/repair_chemo",
-      "state": "design_before_semantic_changes",
+      "state": "offline_local_drug_dose_facts_implementation_other_semantics_open",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
