@@ -54,6 +54,9 @@ def _parse_time(value: Any) -> datetime | None:
     normalized = re.sub(r"\s+", " ", normalized)
     if normalized.endswith(":"):
         normalized = normalized[:-1]
+    # 日期不含具体死亡时刻；显式 00:00 仍是有效午夜，不能按时间值排除。
+    if re.search(r"[ Tt]\d{1,2}:\d{1,2}", normalized) is None:
+        return None
     try:
         return datetime.fromisoformat(normalized)
     except ValueError:
