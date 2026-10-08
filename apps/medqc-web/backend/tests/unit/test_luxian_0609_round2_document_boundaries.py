@@ -4,6 +4,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
+from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
 from test_luxian_0609_native_extended_document_execution import _session as extended_session
 
 from app.services.luxian_0609.canonical_result_finalizer import (
@@ -29,7 +30,7 @@ class NoModel:
         raise AssertionError("本组规则禁止模型调用")
 
 
-async def _final(rule, rows):
+async def _final(rule, rows, *, anesthesia_facts=None):
     def reader(**kwargs):
         key = kwargs["source_key"]
         return SnapshotSourceRows.create(
@@ -47,10 +48,12 @@ async def _final(rule, rows):
         # 复用正式typed快照夹具，显式保留065评价时点，避免测试依赖运行当天。
         snapshot, materials = extended_session(rows)
         session = SimpleNamespace(snapshot=snapshot, materials=materials)
+    assert anesthesia_facts is None or rule == "LX0609-04-04-02"
+    client = NoModel() if anesthesia_facts is None else ExplicitAnesthesiaFactClient(anesthesia_facts)
     kwargs = dict(
         rule_ids=(rule,), decision_rule_ids=(rule,),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-        llm_client=NoModel(),
+        llm_client=client,
     )
     if rule == "LX0609-04-04-02":
         result = await execute_luxian_0609_native_surgery_document_rules(
@@ -58,7 +61,11 @@ async def _final(rule, rows):
         )
     else:
         result = await execute_luxian_0609_native_extended_document_rules(**kwargs)
-    assert result.llm_call_count == result.total_tokens == 0
+    if anesthesia_facts is None:
+        assert result.llm_call_count == result.total_tokens == 0
+    else:
+        assert result.llm_call_count == len(client.calls) == 1
+        assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (10, 5, 15)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=(rule,),
         snapshot=session.snapshot, evidence_materials=session.materials,
@@ -88,7 +95,7 @@ def _visits():
 
 @pytest.mark.asyncio
 async def test_037_complete_visits_and_valid_negatives_stay_compliant():
-    assert (await _final("LX0609-04-04-02", _visits()))["status"] == "compliant"
+    assert (await _final("LX0609-04-04-02", _visits(), anesthesia_facts="round2_complete"))["status"] == "compliant"
 
 
 @pytest.mark.asyncio
@@ -98,7 +105,7 @@ async def test_037_empty_template_labels_are_not_complete():
         "ASA：；气道评估：；禁食禁饮：；麻醉史：；麻醉风险告知：；"
     )
     rows["postane_surveil_record"][0]["record_content"] = "神志：；呼吸：；循环：；并发症：；"
-    final = await _final("LX0609-04-04-02", rows)
+    final = await _final("LX0609-04-04-02", rows, anesthesia_facts="round2_empty_labels")
     assert final["status"] == "non_compliant"
     assert "已核对" not in final["findings"]
 
@@ -108,7 +115,7 @@ async def test_037_invalid_record_time_is_not_complete():
     rows = _visits()
     for key in ("preane_surveil_record", "postane_surveil_record"):
         rows[key][0]["record_time"] = "2026-99-99 88:88"
-    assert (await _final("LX0609-04-04-02", rows))["status"] == "non_compliant"
+    assert (await _final("LX0609-04-04-02", rows, anesthesia_facts="round2_invalid_time"))["status"] == "non_compliant"
 
 
 @pytest.mark.asyncio
@@ -130,7 +137,7 @@ async def test_037_different_document_ids_without_event_keys_keep_single_event_c
     rows = _visits()
     for row_list in rows.values():
         row_list[0].pop("application_id")
-    assert (await _final("LX0609-04-04-02", rows))["status"] == "compliant"
+    assert (await _final("LX0609-04-04-02", rows, anesthesia_facts="round2_without_event_keys"))["status"] == "compliant"
 
 
 def _surgery():

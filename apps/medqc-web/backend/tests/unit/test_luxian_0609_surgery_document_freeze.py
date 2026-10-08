@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import pytest
+from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
 
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import (
@@ -163,13 +164,15 @@ async def _run_chain(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
     error_sources: frozenset[str] = frozenset(),
+    anesthesia_facts: str | None = None,
 ) -> tuple[Any, Any, Any, Any]:
+    assert anesthesia_facts is None or rule_id == "LX0609-04-04-02"
     session = _session(rule_id, rows_by_source, error_sources=error_sources)
     execution = await execute_luxian_0609_native_surgery_document_rules(
         rule_ids=(rule_id,),
         wrapper_rules=(_wrapper(rule_id),),
         evidence_payload=None,
-        llm_client=_NoLlmClient(),
+        llm_client=_NoLlmClient() if anesthesia_facts is None else ExplicitAnesthesiaFactClient(anesthesia_facts),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=(rule_id,),
@@ -477,7 +480,7 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     evidence: set[tuple[str, str]],
     findings: str,
 ) -> None:
-    session, execution, reduced, result = await _run_chain(rule_id, rows_by_source)
+    session, execution, reduced, result = await _run_chain(rule_id, rows_by_source, anesthesia_facts="freeze_complete" if rule_id == "LX0609-04-04-02" else None)
 
     decision = execution.decisions[0]
     assert decision.reason_code == reason_code
@@ -492,10 +495,14 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     assert _evidence_coordinates(result) == evidence
     assert _fact_ref_coordinates(session, decision.fact_refs) == fact_ref_coordinates
 
-    assert execution.llm_call_count == 0
-    assert execution.prompt_tokens == 0
-    assert execution.completion_tokens == 0
-    assert execution.total_tokens == 0
+    if rule_id == "LX0609-04-04-02":
+        assert execution.llm_call_count == 1
+        assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (10, 5, 15)
+    else:
+        assert execution.llm_call_count == 0
+        assert execution.prompt_tokens == 0
+        assert execution.completion_tokens == 0
+        assert execution.total_tokens == 0
 
 
 @pytest.mark.asyncio

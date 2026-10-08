@@ -252,7 +252,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-11-02-01",
         "LX0609-11-02-02",
         "LX0609-04-04-01",
-        "LX0609-04-04-02",
         "LX0609-04-04-03",
         "LX0609-04-01-02",
         "LX0609-11-03-01",
@@ -293,6 +292,8 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-06-03-02",
         "LX0609-06-02-01",
     }
+    visit_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-04-04-02")
+    assert (visit_contract.contract_version, visit_contract.decision_authority, visit_contract.max_llm_calls_per_rule, visit_contract.prompt_version) == ("v3", "program_then_optional_llm", 1, "lx0609-anesthesia-visit-facts-v1")
     assert typed_shadow == {
         "LX0609-06-01-01",
         "LX0609-01-01-01",

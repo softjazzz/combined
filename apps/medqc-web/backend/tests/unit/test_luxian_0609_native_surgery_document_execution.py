@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 
 import pytest
+from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
 
 from app.services.luxian_0609 import native_surgery_document_execution as surgery_doc
 from app.services.luxian_0609.decision_binding import (
@@ -1072,7 +1073,7 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
         rule_ids=("LX0609-04-04-02",),
         wrapper_rules=[],
         evidence_payload=None,
-        llm_client=_Client([]),
+        llm_client=ExplicitAnesthesiaFactClient("native_negated_assessments"),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=("LX0609-04-04-02",),
@@ -1097,7 +1098,8 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
             ]
         },
     }
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (10, 5, 15)
 
 
 @pytest.mark.asyncio
