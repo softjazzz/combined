@@ -14,6 +14,7 @@ from ..effect_priority_qc import (
     QUALITY_PROFILE_THROUGHPUT,
 )
 from ..luxian_0609 import LUXIAN_0609_RULE_SET_KEY
+from ..luxian_0609.privacy_request_scope import luxian_0609_privacy_scope
 from ..luxian_0609.rule_decision_settings import ReadOnlySettingsOverlay
 from ..luxian_0609.native_package import Luxian0609PackagePlan
 
@@ -35,6 +36,7 @@ def _resolve_facade_module(host: Any) -> Any:
     raise RuntimeError("无法定位 Running/Final Bundle 稳定门面定义模块")
 
 
+@luxian_0609_privacy_scope
 async def evaluate_running_final_bundle_input(
     host: Any,
     bundle: Dict[str, Any],

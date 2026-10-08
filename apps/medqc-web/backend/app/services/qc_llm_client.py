@@ -353,6 +353,9 @@ class SichuanQCLLMClient:
         headers: Dict[str, str],
         payload: Dict[str, Any],
     ) -> tuple[Dict[str, Any], Optional[dict[str, int]]]:
+        from .luxian_0609.privacy_request_scope import protect_current_payload
+
+        payload = protect_current_payload(payload)
         event_id, started_timestamp = await self._observability_recorder.start_attempt(
             logical_call_id=logical_call_id,
             attempt_no=attempt_no,

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -161,15 +163,262 @@ def redact_luxian_0609_patient_privacy(prompt: str) -> str:
     return redacted
 
 
+class PatientPrivacyViolation(RuntimeError):
+    """已知患者身份仍存在于待发送内容；异常不得携带原值。"""
+
+
+class PrivacyIdentityContextError(RuntimeError):
+    """无法安全取得或核查本次身份上下文，禁止继续发送。"""
+
+
+def _freeze_identity_values(values: Iterable[str]) -> tuple[str, ...]:
+    try:
+        if isinstance(values, (str, bytes)):
+            raise TypeError
+        unique = set()
+        for value in values:
+            if not isinstance(value, str):
+                raise TypeError
+            if value.strip():
+                unique.add(value.strip())
+        return tuple(sorted(unique, key=len, reverse=True))
+    except Exception:
+        raise PrivacyIdentityContextError(
+            "Patient identity context is unavailable"
+        ) from None
+
+
+_UNICODE_ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")
+_MAX_DECODE_LAYERS = 8
+_MAX_REQUEST_DEPTH = 32
+
+
+def _contains_identity(text: str, identity: str) -> bool:
+    if identity.isascii():
+        # ASCII 标识必须是完整 token，避免患者号 1/P 命中 130、1.5、Patient。
+        return (
+            re.search(
+                rf"(?<![A-Za-z0-9_.+\-]){re.escape(identity)}(?![A-Za-z0-9_.+\-])",
+                text,
+            )
+            is not None
+        )
+    return identity in text
+
+
+def _check_identity_residue(
+    value: Any, identities: tuple[str, ...], depth: int = 0
+) -> None:
+    if depth > _MAX_REQUEST_DEPTH:
+        raise PrivacyIdentityContextError("Model request cannot be checked safely")
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _check_identity_residue(key, identities, depth + 1)
+            _check_identity_residue(item, identities, depth + 1)
+        return
+    if isinstance(value, (tuple, list)):
+        for item in value:
+            _check_identity_residue(item, identities, depth + 1)
+        return
+    if value is None:
+        return
+    if isinstance(value, (bool, int, float)):
+        value = str(value)
+    if not isinstance(value, str):
+        # 不调用任意对象的 __str__/repr；不能核查的发送参数安全拒绝。
+        raise PrivacyIdentityContextError("Model request cannot be checked safely")
+    current = value
+    for _ in range(_MAX_DECODE_LAYERS + 1):
+        decoded = _UNICODE_ESCAPE.sub(
+            lambda match: chr(int(match.group(1), 16)), current
+        )
+        decoded = re.sub(
+            r"([\ud800-\udbff])([\udc00-\udfff])",
+            lambda m: chr(0x10000 + ((ord(m[1]) - 0xD800) << 10) + ord(m[2]) - 0xDC00),
+            decoded,
+        )
+        if any(
+            _contains_identity(text, identity)
+            for identity in identities
+            for text in (current, decoded)
+        ):
+            raise PatientPrivacyViolation("Patient identity remains in model request")
+        try:
+            parsed = json.loads(current)
+        except (ValueError, TypeError):
+            if decoded == current:
+                return
+            current = decoded
+            continue
+        if isinstance(parsed, str):
+            if parsed == current:
+                return
+            current = parsed
+            continue
+        if isinstance(parsed, (dict, list)):
+            _check_identity_residue(parsed, identities, depth + 1)
+        return
+    raise PrivacyIdentityContextError(
+        "Model request encoding exceeds privacy check limit"
+    )
+
+
+def assert_no_known_identity(request: object, identity_values: Iterable[str]) -> None:
+    """核查已知身份残留；只拒绝，不修改请求，也不在异常中暴露内容。"""
+    identities = _freeze_identity_values(identity_values)
+    if not identities:
+        return
+    try:
+        _check_identity_residue(request, identities)
+    except (PatientPrivacyViolation, PrivacyIdentityContextError):
+        raise
+    except Exception:
+        raise PrivacyIdentityContextError(
+            "Model request cannot be checked safely"
+        ) from None
+
+
+_MODEL_NUMERIC_PARAMETERS = frozenset(
+    {
+        "temperature",
+        "top_p",
+        "top_k",
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+        "presence_penalty",
+        "frequency_penalty",
+        "seed",
+        "n",
+        "timeout",
+        "timeout_seconds",
+    }
+)
+_SCHEMA_NUMERIC_CONSTRAINTS = frozenset(
+    {
+        "minItems",
+        "maxItems",
+        "minLength",
+        "maxLength",
+        "minProperties",
+        "maxProperties",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+    }
+)
+_SCHEMA_MAP_CHILDREN = frozenset(
+    {
+        "properties",
+        "patternProperties",
+        "$defs",
+        "definitions",
+        "dependentSchemas",
+    }
+)
+_SCHEMA_SINGLE_CHILDREN = frozenset(
+    {
+        "items",
+        "additionalProperties",
+        "contains",
+        "propertyNames",
+        "not",
+        "if",
+        "then",
+        "else",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+    }
+)
+_SCHEMA_ARRAY_CHILDREN = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
+
+
+def _schema_privacy_projection(schema: object, depth: int = 0) -> object:
+    if depth > _MAX_REQUEST_DEPTH:
+        raise PrivacyIdentityContextError("Model request cannot be checked safely")
+    if not isinstance(schema, Mapping):
+        return schema
+    projected = {}
+    for key, value in schema.items():
+        if key in _SCHEMA_NUMERIC_CONSTRAINTS and type(value) in (int, float):
+            projected[key] = None
+        elif key in _SCHEMA_MAP_CHILDREN and isinstance(value, Mapping):
+            projected[key] = {
+                name: _schema_privacy_projection(child, depth + 1)
+                for name, child in value.items()
+            }
+        elif key in _SCHEMA_SINGLE_CHILDREN:
+            projected[key] = _schema_privacy_projection(value, depth + 1)
+        elif key in _SCHEMA_ARRAY_CHILDREN and isinstance(value, (list, tuple)):
+            projected[key] = [
+                _schema_privacy_projection(child, depth + 1) for child in value
+            ]
+        else:
+            # default/const/enum/examples 和未知字段是内容，不能豁免其数值。
+            projected[key] = value
+    return projected
+
+
+def assert_no_known_identity_in_model_request(
+    request: object, identity_values: Iterable[str]
+) -> None:
+    """区分模型技术数值与病例内容，只改变检查投影，不修改实际请求。"""
+    identities = _freeze_identity_values(identity_values)
+    if not identities:
+        return
+    try:
+        projected = request
+        if isinstance(request, Mapping):
+            projected = dict(request)
+            for key in _MODEL_NUMERIC_PARAMETERS:
+                if type(projected.get(key)) in (int, float):
+                    projected[key] = None
+            response_format = request.get("response_format")
+            if (
+                isinstance(response_format, Mapping)
+                and response_format.get("type") == "json_schema"
+            ):
+                envelope = response_format.get("json_schema")
+                if isinstance(envelope, Mapping) and "schema" in envelope:
+                    projected["response_format"] = {
+                        **response_format,
+                        "json_schema": {
+                            **envelope,
+                            "schema": _schema_privacy_projection(envelope["schema"]),
+                        },
+                    }
+        assert_no_known_identity(projected, identities)
+    except (PatientPrivacyViolation, PrivacyIdentityContextError):
+        raise
+    except Exception:
+        raise PrivacyIdentityContextError(
+            "Model request cannot be checked safely"
+        ) from None
+
+
 @dataclass(frozen=True)
 class _Luxian0609PrivacyRedactingLLMClient:
-    delegate: Any
+    delegate: Any = field(repr=False)
+    identity_values: tuple[str, ...] = field(default=(), repr=False)
+    identity_providers: tuple[Callable[[], Iterable[str]], ...] = field(
+        default=(), repr=False
+    )
 
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
-        return await self.delegate.generate(
-            redact_luxian_0609_patient_privacy(prompt),
-            **kwargs,
-        )
+        identities = set(self.identity_values)
+        for provider in self.identity_providers:
+            try:
+                identities.update(_freeze_identity_values(provider()))
+            except Exception:
+                raise PrivacyIdentityContextError(
+                    "Patient identity context is unavailable"
+                ) from None
+        redacted = redact_luxian_0609_patient_privacy(prompt)
+        assert_no_known_identity(redacted, identities)
+        assert_no_known_identity_in_model_request(kwargs, identities)
+        return await self.delegate.generate(redacted, **kwargs)
 
     def supports_strict_json_schema(self) -> bool:
         capability = getattr(self.delegate, "supports_strict_json_schema", None)
@@ -178,7 +427,22 @@ class _Luxian0609PrivacyRedactingLLMClient:
         return bool(capability())
 
 
-def wrap_luxian_0609_llm_client(client: Any) -> Any:
-    if client is None or isinstance(client, _Luxian0609PrivacyRedactingLLMClient):
-        return client
-    return _Luxian0609PrivacyRedactingLLMClient(client)
+def wrap_luxian_0609_llm_client(
+    client: Any,
+    *,
+    identity_values: Iterable[str] = (),
+    identity_provider: Callable[[], Iterable[str]] | None = None,
+) -> Any:
+    if client is None:
+        return None
+    values = _freeze_identity_values(identity_values)
+    providers = (identity_provider,) if identity_provider is not None else ()
+    if isinstance(client, _Luxian0609PrivacyRedactingLLMClient):
+        if not values and not providers:
+            return client
+        return _Luxian0609PrivacyRedactingLLMClient(
+            client.delegate,
+            _freeze_identity_values((*client.identity_values, *values)),
+            (*client.identity_providers, *providers),
+        )
+    return _Luxian0609PrivacyRedactingLLMClient(client, values, providers)

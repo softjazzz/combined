@@ -263,7 +263,8 @@ def test_formal_execution_wraps_llm_client_at_single_egress_boundary(monkeypatch
     wrapped_client = object()
     seen: list[object] = []
 
-    def _wrap(client):
+    def _wrap(client, **kwargs):
+        assert callable(kwargs["identity_provider"])
         seen.append(client)
         return wrapped_client
 

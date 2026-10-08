@@ -61,6 +61,7 @@ from .effect_priority_qc import (
 from .qc_rule_sets import should_refine_rule_by_default
 from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
+from .luxian_0609.privacy_request_scope import luxian_0609_privacy_scope
 from .luxian_0609_result_schema import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_PUBLISHED_SCHEMA_VERSION,
 )
@@ -1163,6 +1164,7 @@ class SichuanQCService:
         return await self.prompt_builder.build_prompt(rules, content, document_type, prompt_mode)
 
 
+    @luxian_0609_privacy_scope
     async def _evaluate_rules_orchestrated(
         self,
         *,
