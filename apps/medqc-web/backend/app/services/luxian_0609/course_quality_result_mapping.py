@@ -599,7 +599,7 @@ def validate_published_course_quality_facts(
     # 016 的目标段落不可读时没有可发布的相似度；仅接受已知资料不足终态。
     # 确定结论及非空残缺 facts 仍须通过原比较事实合同。
     if (
-        normalized == "LX0609-12-01-01"
+        normalized in {"LX0609-12-01-01", "LX0609-12-01-02"}
         and (raw is None or raw == {})
         and status == "data_gap"
         and reason_code == "required_field_missing"
@@ -631,7 +631,16 @@ def validate_published_course_quality_facts(
     validators = {"LX0609-02-01-04": _published_008, "LX0609-02-01-05": _published_009,
                   "LX0609-12-01-01": _published_016, "LX0609-12-01-02": _published_017}
     validator = validators.get(normalized)
-    return (True, dict(raw)) if validator is not None and validator(raw) else (False, None)
+    if validator is None or not validator(raw):
+        return False, None
+    if normalized == "LX0609-12-01-02" and (
+        status not in {"compliant", "non_compliant", "data_gap", "not_applicable"}
+        or not course_quality_customer_fact_status_is_valid(
+            rule_id=normalized, status=status, raw_facts=raw, safe_facts=raw,
+        )
+    ):
+        return False, None
+    return True, dict(raw)
 
 
 def safe_course_quality_customer_display_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:
@@ -652,7 +661,7 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
     if not is_course_quality_customer_rule(rule_id):
         return True
     if str(status or "").strip().lower() == "technical_error":
-        return True
+        return rule_id != "LX0609-12-01-02" or safe_facts is None
     if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":
         return safe_facts is not None and status == "data_gap"
     if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_capacity_exceeded":

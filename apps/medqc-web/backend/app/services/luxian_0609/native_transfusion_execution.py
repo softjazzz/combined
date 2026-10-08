@@ -1418,12 +1418,18 @@ def _programmatic_044_status(
         *,
         refs: Sequence[Mapping[str, str]] = (),
     ) -> Mapping[str, Any] | None:
-        facts = _programmatic_transfusion_display_facts(
-            rule_id="LX0609-07-01-02",
-            status=status,
-            reason_code=reason_code,
-            documents=documents,
-        )
+        if status == "non_compliant" and reason_code == "pretransfusion_assessment_missing":
+            # 评估记录不存在是文书缺失，不能借过程信号生成评估字段缺项。
+            facts = _customer_display_facts_for_outcome(
+                rule_id="LX0609-07-01-02", status=status, reason_code=reason_code,
+            )
+        else:
+            facts = _programmatic_transfusion_display_facts(
+                rule_id="LX0609-07-01-02",
+                status=status,
+                reason_code=reason_code,
+                documents=documents,
+            )
         if facts is None:
             return None
         result = dict(facts)
@@ -3277,16 +3283,25 @@ async def execute_luxian_0609_native_transfusion_rules(
                 continue
             if programmatic_status is not None:
                 status, reason_code = programmatic_status[:2]
-                display_facts = (
-                    programmatic_status[2]
-                    if len(programmatic_status) == 3
-                    else _programmatic_transfusion_display_facts(
-                        rule_id=rule_id,
-                        status=status,
-                        reason_code=reason_code,
-                        documents=documents,
+                if (
+                    status == "data_gap"
+                    and reason_code == "pretransfusion_assessment_source_unavailable"
+                ):
+                    # 来源不可用属于系统资料缺口，不能生成临床不完整事实。
+                    display_facts = _customer_display_facts_for_outcome(
+                        rule_id=rule_id, status=status, reason_code=reason_code,
                     )
-                )
+                else:
+                    display_facts = (
+                        programmatic_status[2]
+                        if len(programmatic_status) == 3
+                        else _programmatic_transfusion_display_facts(
+                            rule_id=rule_id,
+                            status=status,
+                            reason_code=reason_code,
+                            documents=documents,
+                        )
+                    )
                 emit_outcome(
                     rule_id,
                     status,

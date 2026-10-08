@@ -76,11 +76,13 @@ COPY = {"copy_document_sources": ["daily_course_record", "senior_course_record"]
 def test_all_published_branches_preserve_values(rule_id, raw):
     published = safe_course_quality_customer_display_facts(rule_id=rule_id, raw=raw)
     assert published is not None
-    assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published) == published
+    # 017 的公开事实必须携带已裁决状态，形状测试使用对应合法状态。
+    status = ("non_compliant" if published.get("failure_kind") == "copy_similarity_threshold_exceeded" else "compliant") if rule_id == "LX0609-12-01-02" else ""
+    assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published, status=status) == published
     if published:
         damaged = {**published, "unexpected_field": "internal"}
         with pytest.raises(ValueError, match="解释合同不完整"):
-            validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=damaged)
+            validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=damaged, status=status)
 
 
 def test_018_absent_facts_keep_none_semantics():

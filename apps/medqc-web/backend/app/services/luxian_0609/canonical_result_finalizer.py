@@ -574,7 +574,9 @@ def validate_luxian_0609_published_customer_display_facts(
         validate_published_continuity_facts,
     )
     if is_continuity_customer_rule(normalized_rule_id):
-        valid, validated = validate_published_continuity_facts(rule_id=normalized_rule_id, raw=raw)
+        valid, validated = validate_published_continuity_facts(
+            rule_id=normalized_rule_id, raw=raw, status=status,
+        )
         if not valid:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
@@ -598,6 +600,17 @@ def validate_luxian_0609_published_customer_display_facts(
             return None
         validated = validate_published_discharge_facts(rule_id=normalized_rule_id, raw=raw)
         if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if normalized_rule_id == "LX0609-07-01-02" and raw:
+        from .transfusion_result_mapping import transfusion_customer_fact_status_is_valid
+
+        validated = validate_luxian_0609_executor_customer_display_facts(
+            rule_id=normalized_rule_id, raw=raw,
+        )
+        if validated is None or not transfusion_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+        ):
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     if raw is None or not isinstance(raw, dict):
@@ -888,6 +901,13 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_surgery_mdt_customer_rule(rule_id) and not surgery_mdt_status_valid:
+        safe_facts = None
+    from .continuity_result_mapping import continuity_customer_fact_status_is_valid
+
+    if not continuity_customer_fact_status_is_valid(
+        rule_id=rule_id, status=str(finalized.get("status") or "").strip().lower(),
+        safe_facts=safe_facts,
+    ):
         safe_facts = None
     course_quality_status_valid = (
         is_course_quality_customer_rule(rule_id)

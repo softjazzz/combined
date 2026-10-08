@@ -139,7 +139,7 @@ def safe_continuity_customer_display_facts(
 
 
 def validate_published_continuity_facts(
-    *, rule_id: str, raw: Any,
+    *, rule_id: str, raw: Any, status: str | None = None,
 ) -> tuple[bool, dict[str, Any] | None]:
     """只读校验已发布事实，不重新投影内部源字段或计算业务结果。"""
 
@@ -233,7 +233,24 @@ def validate_published_continuity_facts(
             valid = True
     except (TypeError, ValueError, OverflowError):
         return False, None
+    if valid and status is not None:
+        valid = continuity_customer_fact_status_is_valid(
+            rule_id=rule_id, status=status, safe_facts=raw,
+        )
     return (True, dict(raw)) if valid else (False, None)
+
+
+def continuity_customer_fact_status_is_valid(
+    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None,
+) -> bool:
+    """071 缺权威时间的受控事实仅能对应资料不足，不重判其他连续性事实。"""
+    if str(rule_id or "").strip().upper() != "LX0609-10-01-01":
+        return True
+    if isinstance(safe_facts, Mapping) and (
+        safe_facts.get("failure_kind") or safe_facts.get("verification_kind")
+    ) == "physician_handoff_record_time_missing":
+        return status == "data_gap"
+    return True
 
 
 def _valid_published_scalar_or_list(value: Any) -> bool:
@@ -447,7 +464,7 @@ def _valid_transfer_event_association_gap(raw: Any) -> bool:
 
 def _valid_missing_record_times(raw: Mapping[str, Any]) -> bool:
     values = tuple(raw.get(key) for key in ("change_event_count", "handoff_record_count", "missing_handoff_time_count", "handover_record_count", "missing_handover_time_count"))
-    return all(_nonnegative_int(value) for value in values) and values[0] > 1 and values[2] <= values[1] and values[4] <= values[3] and values[2] + values[4] > 0 and raw.get("handover_threshold_hours") == 24
+    return all(_nonnegative_int(value) for value in values) and values[0] > 0 and values[2] <= values[1] and values[4] <= values[3] and values[2] + values[4] > 0 and raw.get("handover_threshold_hours") == 24
 
 
 def _valid_transfer_time(value: Any, *, allow_none: bool) -> bool:

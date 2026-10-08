@@ -2209,16 +2209,12 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     )
     assert dict(result.customer_display_facts) == {
         "LX0609-07-01-02": {
-            "failure_kind": "pretransfusion_assessment_missing",
-            "performed_transfusion_confirmed": True,
-            "checked_fields": [
-                "indication",
-                "laboratory_indicator",
-                "risk_history_or_status",
-            ],
-            "missing_fields": [
-                "indication",
-                "laboratory_indicator",
+            "failure_kind": "transfusion_requirement_not_documented",
+            "requirement": "pretransfusion_assessment",
+            "checked_sources": [
+                "bloodtrans_record",
+                "blood_application",
+                "course_record",
             ],
             "source_document_refs": [
                 {

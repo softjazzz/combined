@@ -65,13 +65,17 @@ def _safe_system_gap(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
     expected_reason = _SYSTEM_GAP_REASONS.get(rule_id)
     if expected_reason is None or raw.get("failure_kind") != "system_data_contract_gap":
         return None
-    allowed_keys = {
-        "failure_kind",
-        "system_gap_reason",
-        "gap_owner",
-        "conclusion",
-        "handling_suggestion",
-    }
+    # Finalizer 已剥离文案后的公开形状仍须能通过保存/读取时的同一校验。
+    # 只接受精确字段及本规则原因；不接收任意宽松子集。
+    public_keys = {"failure_kind", "system_gap_reason", "gap_owner"}
+    if (
+        rule_id == "LX0609-07-01-02"
+        and set(raw) == public_keys
+        and raw.get("system_gap_reason") == expected_reason
+        and raw.get("gap_owner") == "system_integration"
+    ):
+        return {key: raw[key] for key in public_keys}
+    allowed_keys = public_keys | {"conclusion", "handling_suggestion"}
     conclusion = raw.get("conclusion")
     suggestion = raw.get("handling_suggestion")
     if (
@@ -665,6 +669,20 @@ def transfusion_customer_fact_status_is_valid(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id not in TRANSFUSION_CUSTOMER_RULE_IDS:
         return True
+    if normalized_rule_id == "LX0609-07-01-02":
+        if not isinstance(safe_facts, Mapping):
+            return False
+        kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
+        expected = {
+            "system_data_contract_gap": "data_gap",
+            "pretransfusion_assessment_time_unavailable": "data_gap",
+            "pretransfusion_assessment_complete": "compliant",
+            "pretransfusion_assessment_incomplete": "non_compliant",
+            "pretransfusion_assessment_missing": "non_compliant",
+            "pretransfusion_assessment_time_conflict": "non_compliant",
+            "transfusion_requirement_not_documented": "non_compliant",
+        }.get(str(kind))
+        return expected is not None and status == expected
     if normalized_rule_id == "LX0609-07-01-03":
         if status == "technical_error":
             return True
