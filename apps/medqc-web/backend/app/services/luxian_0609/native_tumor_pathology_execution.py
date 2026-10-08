@@ -1396,7 +1396,7 @@ def _typed_chemotherapy_comparison(
     if not chemotherapy_orders:
         return "data_gap", "chemotherapy_fact_unavailable", None, (), ()
     if not any(_course_record_text(row) for row in course_records.rows):
-        return "data_gap", "chemotherapy_course_record_unavailable", (), ()
+        return "data_gap", "chemotherapy_course_record_unavailable", None, (), ()
 
     field_results = {
         "drug_name": "matched",
