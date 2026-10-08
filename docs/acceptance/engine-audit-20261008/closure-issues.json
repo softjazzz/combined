@@ -264,8 +264,8 @@
       "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_defect",
-      "owner": null,
-      "state": "queued_shared_module",
+      "owner": "/root/repair_iml02",
+      "state": "owner166_green_fixed_commit_independent_review_pending",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -715,10 +715,11 @@
       ],
       "claim": "独立native/语义复核辅助脚本绕开发送边界",
       "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
-      "state": "reject_boundary_red_prepared_real_CLI_source_unwired",
+      "state": "limited_send_boundary_integrated_real_CLI_identity_source_open",
       "owner": "/root/repair_privacy_closure",
       "depends_on": [],
-      "note": "No existingrealCLIcaller has same-operation rawcollector. Approvedlimitedboundaryfix andstrictfixedsynthetic028only; sourcewiring/functionality staysopen."
+      "note": "Independent7groups pass; root124 include67prior+47ASTscript+10real-import unit cases under dotenv/PG/socket guards. Not actual CLI config/runtime restoration.",
+      "integration_commit": "d2e1718bb"
     },
     {
       "id": "PRIV-004",
@@ -760,7 +761,8 @@
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
       "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
       "integration_commit": "574e925a5",
-      "independent_result": "37/37 fixed bb3 real modules and synthetic SQLite; API/real history not executed"
+      "independent_result": "37/37 fixed bb3 real modules and synthetic SQLite; API/real history not executed",
+      "root_regression": "29 tests passed in root230 suite at575418244"
     },
     {
       "id": "rescue-remaining:RR-SCOPE01",
@@ -768,7 +770,7 @@
         "0609 catalog tests"
       ],
       "claim": "86/80目录与旧85/79断言漂移；先核正确集合，不能只改计数冒充业务修复",
-      "state": "two_test_batches_integrated_root_second_regression_pending",
+      "state": "test_contract_drift_closed_in_fixed_catalog_scope",
       "owner": "/root/repair_chemo",
       "depends_on": [],
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
@@ -779,7 +781,8 @@
       "integration_commits": [
         "0dd25d30b",
         "fc1056eb4"
-      ]
+      ],
+      "root_regression": "50 first + 201 second all passed; tests independent identity oracle, production release unchanged"
     }
   ]
 }
