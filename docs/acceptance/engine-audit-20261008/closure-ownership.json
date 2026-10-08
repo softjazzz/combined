@@ -376,6 +376,40 @@
         "tests/unit/test_surgery_029_mr_fixture_contract.py"
       ],
       "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
+    },
+    {
+      "id": "N12-PV01",
+      "owner": "/root/repair_iml01",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-n12-carrier-20261008",
+      "state": "fixed_e5f225bd4_writer375_pass_final_independent_review_pending",
+      "responsibility": [
+        "anesthesia_visit_fact_extraction.py:carrier only",
+        "test_n12_anesthesia_visit_controlled_facts.py:reader only",
+        "test_n12_anesthesia_visit_document_groups.py:reader only",
+        "luxian_0609_anesthesia_test_facts.py:reader only frozen facts unchanged",
+        "test_n12_formal_privacy_carrier.py",
+        "own acceptance document"
+      ],
+      "note": "Globalprivacy/schema/medical oracles unchanged. Reviewer audit_imaging_laboratory. No real data/network/model."
+    },
+    {
+      "id": "TC01-SCOPE",
+      "owner": "/root/repair_iml02",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-transfusion-family-20261008",
+      "state": "writer_resumed_design_constraints_preparing_red_no_production_edits",
+      "responsibility": [
+        "native_transfusion_execution.py:043-047 only",
+        "new versioned performance scope extractor",
+        "rule contracts/catalog exact043-047 entries",
+        "own new tests and document",
+        "rule_contracts.py:exact044-046 budget2 enumeration only",
+        "transfusion_result_mapping.py:043-047 unconfirmed count only",
+        "customer_renderer.py:043-047 mixed NC disclosure only",
+        "canonical_result_finalizer.py:043-047 count and explanation only"
+      ],
+      "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model."
     }
   ],
   "rules": [
@@ -393,9 +427,9 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "35909964a36289d64a381301865b0a407e97184d",
-  "current_test_slot_owner": "/root/audit_course_timing",
+  "integration_head": "944650db98e45113f316d476e7dc083986640e26",
+  "current_test_slot_owner": null,
   "queued_tests": [
-    "N12 formal-wrapper synthetic carrier probe"
+    "TC01 scope contract red when ready; no concurrent tests"
   ]
 }
