@@ -37,3 +37,25 @@ MR既有结构实施来源沿旧合同0call；专用正文使用同一执行入�
 工程限制：本轮只有人工fake的正式执行0/1计量和严格协议/状态/资料/时间/保存保护，真实外发模型0、PG0、无env与网络，不称临床/真实模型通过。真实正文实施语义、模型遗漏非支持格式时刻、跨日同钟点、无显式时刻多事件等仍须真实语义验收；当前数值多时刻schema的正常检验/实施双时刻材料只能保持gap。院端MR ETL权威性未独立验证，沿现CDM合同。前端源未改；本批既有lint证据0 errors/1214 warnings复用既定源hash，先前typecheck因资源限制终止、全量前端unit未执行，不冒称这两项通过。提交时真实hook与encoding结果另记。
 
 提交前定向Ruff覆盖五个生产Python路径和新专属测试，实际All checks passed；暂存精确11文本路径后check:encoding实际扫描11全部通过（暂存前空index输出不算这次编码验收）。前端既有源/配置hash共1147项回核完全相同，沿根批准复用lint证据；不启动全量前端门禁。真实hook提交结果以固定SHA对应commit-hook.log为准。
+
+## 固定219b的正式发送view阻断与后续窄补丁（284项回归通过，待固定独审）
+
+219b13d5881e106a4780e0d9ba1f12620d7e3900原11路径真实hook已成功，202通过；独审进一步证实TC02-PV01，因此该固定提交暂不集成。这是新正式发送view缺陷，不能凭直接native fake的202结果关闭。helper先将真实换行正文脱敏，再把body与spans嵌入JSON；execution正式入口用隐私wrapper再次脱敏整个prompt，地址/工作单位regex不识别字面转义\n，可能越过JSON边界吞掉后续临床动作。独立stdlib合成捕获确认原helper JSON有效且动作存在，delegate真实收到JSONDecodeError且动作丢失；不据此推断发生身份泄漏。独审报告位于review-artifacts/tc02-review-prep/fixed-219b-review.md/.json。
+
+在未改219b生产源时，新增13formalwrapper保护实际8失败/5通过，2.24秒，privacy-red.log/.xml原输出保留。7个地址/单位/组合/多文书病例的delegate实际JSON损坏，错误不是测试decoder编造格式；电话2、无身份标签正常2及已知正文残留failclosed1通过。另1任意raw record_time测试被既有known身份门禁拒绝，delegate0（不指称泄漏），说明元数据仍需安全投影为已解析时间或null，不能外发任意原患者字符串。
+
+根批准仅extractor/专属测试/本文补丁：元数据JSON只含临时文书ref、span_id、正文字符数，以及既有解析后标准时间或null；原rows继续用于Python权威判定。正文改为真实换行的逐文书SPAN_BEGIN/SPAN_END数据块，内部body/span与这一发送view相同；零基原子坐标从首标记后的正文字符开始，标记与外部分隔换行不计入。输出schema/状态/预算/调用次数不变，未新建框架或私有client，未unwrap、未用ensure_ascii藏字段、未改全局privacy模块。捕获fake读取delegate实际内容独立验证同view、真实原文动作quote及多文书范围。完整known身份发送门禁保持；残留身份拒绝时一次逻辑尝试、delegate外发0，不能将其称模型真实调用成功。
+
+原202全部输入与医学/公开保存断言保留。格式补丁仍须完整回归及固定源独审；真实模型语义与正常C缺labID定位旧边界不因格式重构而关闭。
+
+PV01窄补丁实际完整回归284/284通过，4.84秒：原202+新增13=215，加既有llm_prompt_privacy4与privacy_identity_gate65共69，去重284；一进程，不过滤原取消gap卡或其他失败、不相加历史轮数。正式wrapper的最终delegate正文和同一span view、可回定位的真实动作quote、地址/单位/电话脱敏、取消/正常/多文书均通过；known正文残留依旧在发送门禁拒绝，原任意time身份字符串现仅metadata null发送，Python仍据原字段判断缺可信时间，不能用它证明临床真实时刻。原202的0/1预算、混合计数/保存拒绝与三SQLite完整保护同轮通过。日志privacy-green.log/.xml和privacy-green-source-hashes.json与原privacy-red 8/5均保留，不重写先前202/83失败文件。
+
+本轮测试源hash冻结：extractor SHA256 1c7f8b5707853f915782131995b43502493dad5d2d82705c78181cad50889ef4。284仅合成工程协议/正式隐私wrapper及保存保护，不替代真实模型语义后验。219b固定提交保留，后续仅extractor/专属测试/本文3路径单独提交；globalprivacy、native070业务、mapping/renderer/Finalizer、两个目录JSON均未新增修改。
+
+正式wrapper载体的marker边界另经独审一次受控探针核准：正文含自身及另一文书相同分隔行，元数据有效、body/span同view，按metadata顺序+body_char_count可唯一还原，已有\_parse/\_quote同文书真实引文接受、错文书引文拒绝。未发现生产串源；本轮新测试reader的全串count==1限制过严，不能登记成生产串文书缺陷。没有采用条件性failclosed方案，不删除/改写标记正文、不丢文书、不降低原医疗答案。
+
+独立冻结marker-probe-frozen-input.json SHA256 1d0ee04a7ae9d977ca357aea15c6e9c1e4bfc84019cfdc1d351dd0b808b125dc的两行正文/时间/动作quote和错doc mutation原封用于helper机械保护，未给输入制造document_id，亦未从这些动作文字新推临床C。新增5个工程保护：合法同文书和原错文书引用两例，尾空格/非当前文书ID/字面转义换行近似marker三例。reader改为按受控metadata顺序、零基正文起点及字符数消费，计算尾标记端点并匹配；内部相同标记仍属于正文。生产helper只补一条长度消费协议说明，输出医学schema/state及Python判定均未改。
+
+最终原8文件完整实际289/289通过，9.90秒：原284+新增5，不筛旧失败/医疗输入、原13红8/5及284绿日志不覆盖。privacy-length-green.log/.xml和privacy-length-green-source-hashes.json在.tmp/tc02-closure。测试source/helper SHA256 565677134bf214c5446e3a27621a075603665842bad86a8c14c930edb8870c93，专属test SHA256 76417d12c4eba197cb7b547731317a17f68728a45beec84a87c1cffdaa92fd61；1c7f8b版本的284结果保留为先前实际结果，不能描述从未失败或同一固定版本跑两次全绿。真实模型仍未调用/未验，正式边界与格式工程通过不替代模型理解语义。
+
+PV01三路径固定提交前定向Ruff（extractor+专属test）实际All checks passed，暂存3文本check:encoding全部通过；独审最终WIP只读接受，并核289 XML零failure/error/skip与blob hash相同，不冒称独审重跑套件。真实hook日志privacy-commit-hook.log另存；219b旧提交保留不改写。

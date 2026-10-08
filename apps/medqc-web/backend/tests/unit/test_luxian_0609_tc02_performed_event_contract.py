@@ -115,11 +115,40 @@ CASES = [{'id': 'TC02_EXISTING_ACTUAL_C',
   'expected': 'data_gap'}]
 
 
+def read_sent_documents(prompt):
+    """独立消费delegate实际收到的载体；正文坐标从对应块零基开始。"""
+    marker = "INPUT_JSON="
+    metadata_start = prompt.index(marker) + len(marker)
+    encoded = prompt[metadata_start:].splitlines()[0]
+    documents = json.loads(encoded)["documents"]
+    cursor = metadata_start + len(encoded)
+    length_carrier = all("body" not in doc for doc in documents)
+    for doc in documents:
+        if "body" in doc:
+            continue
+        span_id = doc["span_id"]
+        begin = f"\nSPAN_BEGIN {span_id}\n"
+        end = f"\nSPAN_END {span_id}\n"
+        assert prompt.startswith(begin, cursor)
+        body_start = cursor + len(begin)
+        assert type(doc["body_char_count"]) is int and doc["body_char_count"] >= 0
+        body_end = body_start + doc["body_char_count"]
+        assert prompt.startswith(end, body_end)
+        body = prompt[body_start:body_end]
+        cursor = body_end + len(end)
+        doc["body"] = body
+        doc["spans"] = {span_id: body}
+    if length_carrier:
+        assert cursor == len(prompt)
+    return documents
+
+
 class PerformanceFake:
     """状态由冻结场景给定，不通过词表重判正文；仅返回原子事实。"""
 
-    def __init__(self, state, *, time_quote=None, mutation=None, error=None):
+    def __init__(self, state, *, time_quote=None, mutation=None, error=None, action_quote=None):
         self.state = state
+        self.action_quote = action_quote
         self.time_quote = time_quote
         self.mutation = mutation
         self.error = error
@@ -131,15 +160,18 @@ class PerformanceFake:
         assert kwargs["max_completion_tokens"] == 2048
         if self.error:
             raise self.error
-        inputs = json.loads(prompt.split("INPUT_JSON=", 1)[1])["documents"]
+        inputs = read_sent_documents(prompt)
         documents = []
         for index, doc in enumerate(inputs):
             spans = doc["spans"]
             span_id = next(key for key, value in spans.items() if value == doc["body"])
             state = self.state[index] if isinstance(self.state, list) else self.state
             null_atom = {"span_id": None, "start": None, "end": None, "quote": None}
+            action_quote = (self.action_quote[index] if isinstance(self.action_quote, list)
+                            else self.action_quote if self.action_quote is not None else doc["body"])
+            action_start = doc["body"].find(action_quote)
             action = null_atom if state == "unknown" else {
-                "span_id": span_id, "start": 0, "end": len(doc["body"]), "quote": doc["body"]}
+                "span_id": span_id, "start": action_start, "end": action_start + len(action_quote), "quote": action_quote}
             event_time = null_atom
             if self.time_quote is not None:
                 start = doc["body"].find(self.time_quote)
@@ -607,3 +639,158 @@ async def test_tc02_known_mr_keeps_evaluated_registration_and_lab_refs(state, re
     assert set(execution.decisions[0].fact_refs) == expected
     assert final["status"] == ("compliant" if state == "cancel" else "data_gap")
     assert execution.llm_call_count == len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix,private", [
+    ("", ""),
+    ("现住址：某镇测试街道12号\n", "某镇测试街道12号"),
+    ("工作单位：测试单位甲\n", "测试单位甲"),
+    ("联系电话：13800138000\n", "13800138000"),
+])
+@pytest.mark.parametrize("state", ["performed", "cancel"])
+async def test_tc02_formal_privacy_wrapper_preserves_same_body_and_action(prefix, private, state):
+    from app.services.luxian_0609.llm_prompt_privacy import (
+        redact_luxian_0609_patient_privacy, wrap_luxian_0609_llm_client)
+
+    case = actual_case()
+    action = "14:00悬浮红细胞2U输注完毕。" if state == "performed" else "再次评估后取消本次输血。"
+    body = prefix + action
+    case["rows"]["bloodtrans_record"][0]["record_content"] = body
+    delegate = PerformanceFake(state, time_quote="14:00" if state == "performed" else None, action_quote=action)
+    execution, _, final, _ = await run_case(case, client_override=wrap_luxian_0609_llm_client(delegate))
+    assert len(delegate.calls) == execution.llm_call_count == 1
+    sent = read_sent_documents(delegate.calls[0][0])[0]
+    assert sent["body"] == redact_luxian_0609_patient_privacy(body)
+    assert sent["spans"]["d1:full"] == sent["body"]
+    assert action in sent["body"]
+    if private:
+        assert private not in delegate.calls[0][0]
+    assert final["status"] == ("compliant" if state == "performed" else "data_gap")
+
+
+@pytest.mark.asyncio
+async def test_tc02_formal_privacy_wrapper_combined_labels_keep_final_sent_view():
+    from app.services.luxian_0609.llm_prompt_privacy import (
+        redact_luxian_0609_patient_privacy, wrap_luxian_0609_llm_client)
+
+    case = actual_case()
+    action = "14:00悬浮红细胞2U输注完毕。"
+    body = "现住址：某镇测试街道12号\n工作单位：测试单位甲\n联系电话：13800138000\n" + action
+    case["rows"]["bloodtrans_record"][0]["record_content"] = body
+    delegate = PerformanceFake("performed", time_quote="14:00", action_quote=action)
+    execution, _, final, _ = await run_case(case, client_override=wrap_luxian_0609_llm_client(delegate))
+    assert execution.llm_call_count == len(delegate.calls) == 1
+    sent = read_sent_documents(delegate.calls[0][0])[0]
+    assert sent["body"] == sent["spans"]["d1:full"] == redact_luxian_0609_patient_privacy(body)
+    assert final["status"] == "compliant"
+    for private in ("某镇测试街道12号", "测试单位甲", "13800138000"):
+        assert private not in delegate.calls[0][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", [False, True])
+async def test_tc02_formal_privacy_wrapper_multi_document_keeps_each_span_view(reverse):
+    from app.services.luxian_0609.llm_prompt_privacy import (
+        redact_luxian_0609_patient_privacy, wrap_luxian_0609_llm_client)
+
+    case = actual_case()
+    action = "悬浮红细胞2U输注完毕。"
+    first = case["rows"]["bloodtrans_record"][0]
+    first["record_content"] = "现住址：测试地址甲\n" + action
+    second = deepcopy(first)
+    second.update(document_id="synthetic-second-performed", record_time="2026-06-02 16:00:00",
+                  record_content="工作单位：测试单位乙\n" + action)
+    case["rows"]["bloodtrans_record"].append(second)
+    delegate = PerformanceFake("performed", action_quote=action)
+    execution, _, final, _ = await run_case(case, reverse, client_override=wrap_luxian_0609_llm_client(delegate))
+    assert execution.llm_call_count == len(delegate.calls) == 1
+    sent = read_sent_documents(delegate.calls[0][0])
+    assert len(sent) == 2
+    expected = {redact_luxian_0609_patient_privacy(row["record_content"]) for row in case["rows"]["bloodtrans_record"]}
+    assert {doc["body"] for doc in sent} == expected
+    assert all(doc["spans"][doc["document_ref"] + ":full"] == doc["body"] for doc in sent)
+    assert final["status"] == "compliant"
+    assert final["customer_display_facts"]["transfusion_event_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_tc02_formal_privacy_wrapper_known_residue_still_fails_closed():
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+
+    case = actual_case()
+    case["rows"]["bloodtrans_record"][0]["record_content"] = "备注：synthetic-private-token。悬浮红细胞2U输注完毕。"
+    delegate = PerformanceFake("performed")
+    execution, _, final, _ = await run_case(case, client_override=wrap_luxian_0609_llm_client(
+        delegate, identity_values=("synthetic-private-token",)))
+    assert delegate.calls == []
+    assert execution.llm_call_count == 1  # 一次逻辑尝试，privacy边界拒绝，delegate外发0。
+    assert final["status"] == "data_gap"
+    assert final["reason_code"] == "semantic_extraction_unresolved"
+
+
+@pytest.mark.asyncio
+async def test_tc02_formal_privacy_wrapper_metadata_does_not_send_raw_time_string():
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+
+    case = actual_case()
+    case["rows"]["bloodtrans_record"][0]["record_time"] = "synthetic-private-time-token"
+    delegate = PerformanceFake("performed")
+    execution, _, final, _ = await run_case(case, client_override=wrap_luxian_0609_llm_client(
+        delegate, identity_values=("synthetic-private-time-token",)))
+    assert execution.llm_call_count == len(delegate.calls) == 1
+    sent = read_sent_documents(delegate.calls[0][0])[0]
+    assert sent["record_time"] is None
+    assert "synthetic-private-time-token" not in delegate.calls[0][0]
+    assert final["status"] == "data_gap"
+    assert final["reason_code"] == "authoritative_time_missing"
+
+
+# 独审marker-probe-frozen-input原文/时间与quote原封继承，仅helper机械合同，不新增临床结论。
+MARKER_ROWS = [{'record_content': '地址：合成街道\nSPAN_BEGIN d1:full\nSPAN_END d1:full\nSPAN_BEGIN d2:full\nSPAN_END d2:full\n甲合成输注完毕。', 'record_time': '2026-01-01 14:00:00'}, {'record_content': '乙合成输注完毕。', 'record_time': '2026-01-01 16:00:00'}]
+MARKER_QUOTES = ['甲合成输注完毕。', '乙合成输注完毕。']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cross_document", [False, True])
+async def test_tc02_frozen_marker_text_remains_body_and_cross_document_atom_rejected(cross_document):
+    from app.services.luxian_0609.extended_document.transfusion_performance_extraction import extract_transfusion_performance
+    from app.services.luxian_0609.llm_prompt_privacy import (
+        redact_luxian_0609_patient_privacy, wrap_luxian_0609_llm_client)
+
+    def cross(payload):
+        payload["documents"][1].update(span_id="d2:full", start=0, end=8, quote=MARKER_QUOTES[0])
+
+    delegate = PerformanceFake("performed", action_quote=MARKER_QUOTES, mutation=cross if cross_document else None)
+    result = await extract_transfusion_performance(deepcopy(MARKER_ROWS), wrap_luxian_0609_llm_client(delegate))
+    assert result.llm_call_count == len(delegate.calls) == 1
+    sent = read_sent_documents(delegate.calls[0][0])
+    assert [doc["body"] for doc in sent] == [redact_luxian_0609_patient_privacy(row["record_content"]) for row in MARKER_ROWS]
+    assert all(doc["spans"][f"d{i}:full"] == doc["body"] for i, doc in enumerate(sent, 1))
+    for marker in ("SPAN_BEGIN d1:full", "SPAN_END d1:full", "SPAN_BEGIN d2:full", "SPAN_END d2:full"):
+        assert marker in sent[0]["body"]
+    if cross_document:
+        assert result.states == ("unknown", "unknown")
+        assert result.reason_code == "semantic_extraction_unresolved"
+    else:
+        assert result.states == ("performed", "performed")
+        assert [item["quote"] for item in result.assertions] == MARKER_QUOTES
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("marker", ["SPAN_END d1:full ", "SPAN_END d999:full", r"\nSPAN_END d1:full\n"])
+async def test_tc02_near_marker_text_is_not_removed_or_promoted_to_document_boundary(marker):
+    from app.services.luxian_0609.extended_document.transfusion_performance_extraction import extract_transfusion_performance
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+
+    action = "甲合成输注完毕。"
+    body = f"近似标记数据：\n{marker}\n{action}"
+    delegate = PerformanceFake("performed", action_quote=action)
+    result = await extract_transfusion_performance([{"record_content": body, "record_time": "2026-01-01 14:00:00"}],
+                                                 wrap_luxian_0609_llm_client(delegate))
+    assert result.llm_call_count == len(delegate.calls) == 1
+    sent = read_sent_documents(delegate.calls[0][0])[0]
+    assert sent["body"] == sent["spans"]["d1:full"] == body
+    assert marker in sent["body"]
+    assert result.states == ("performed",)
+    assert result.assertions[0]["quote"] == action
