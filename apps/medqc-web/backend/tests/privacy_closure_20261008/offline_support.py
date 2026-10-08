@@ -75,13 +75,28 @@ def client_with_counters(scope):
     return client, events
 
 
-def load_provider():
+def load_identity_namespace():
+    load_pure_privacy()
+    name = PACKAGE + ".case_identity"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, SERVICES / "case_identity.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
     path = SERVICES / "luxian_0609/privacy_identity_context.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     tree.body = [node for node in tree.body if not isinstance(node, ast.ImportFrom) or node.level == 0]
-    namespace = {"Luxian0609EvidenceMaterialStore": type("Materials", (), {}), "Luxian0609EvidenceSnapshot": type("Snapshot", (), {})}
+    namespace = {
+        "CaseRef": sys.modules[name].CaseRef,
+        "Luxian0609EvidenceMaterialStore": type("Materials", (), {}),
+        "Luxian0609EvidenceSnapshot": type("Snapshot", (), {}),
+    }
     exec(compile(tree, str(path), "exec"), namespace)
-    return namespace["build_luxian_0609_identity_provider"]
+    return namespace
+
+
+def load_provider():
+    return load_identity_namespace()["build_luxian_0609_identity_provider"]
 
 
 def bind_execution_source(*, scope, privacy, kwargs):
@@ -133,3 +148,64 @@ def load_runner(scope, *, prepare):
     }
     exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), function], type_ignores=[])), str(path), "exec"), namespace)
     return namespace["run_luxian_0609_preproduction"]
+
+
+def load_repository_methods():
+    from datetime import date, datetime
+    identity = load_identity_namespace()
+    case_module = sys.modules[PACKAGE + ".case_identity"]
+    path = SERVICES / "qc_workspace/record_repository.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in {
+        "_safe_text", "_as_date", "_to_iso_date", "_to_iso_datetime", "_normalize_scope", "_normalize_date_field", "_record_dates_match_range", "_capture_private_orm_identities",
+    }]
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "RecordRepository")
+    cls.body = [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in {
+        "collect_records", "_serialize_record_row", "_collect_explicit_anchor_records", "_collect_explicit_anchor_records_by_refs",
+    }]
+    class Column:
+        def __eq__(self, other):
+            return True
+        def in_(self, other):
+            return True
+    def model(name):
+        return type(name, (), {key: Column() for key in ("institute_id", "patient_id", "visit_id", "admission_datetime", "discharge_datetime")})
+    namespace = {
+        "CaseRef": identity["CaseRef"], "normalize_case_refs": case_module.normalize_case_refs,
+        "date": date, "datetime": datetime, "desc": lambda value: value,
+        "and_": lambda *values: values, "or_": lambda *values: values,
+        "MedicalRecordFrontpage": model("MedicalRecordFrontpage"), "InpatRegistration": model("InpatRegistration"),
+        "AdmissionRecord": model("AdmissionRecord"), "DischargeRecord": model("DischargeRecord"),
+    }
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), *functions, cls], type_ignores=[])), str(path), "exec"), namespace)
+    return namespace["RecordRepository"], namespace
+
+
+def load_worker_case_wrapper(*, collector, impl, source_text=None):
+    from contextlib import nullcontext
+    from datetime import datetime, timezone
+    import time
+    _, scope = load_pure_privacy()
+    path = SERVICES / "sichuan_workspace_batch_worker.py"
+    tree = ast.parse(source_text if source_text is not None else path.read_text(encoding="utf-8"))
+    function = next(node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef) and node.name == "_evaluate_single_record")
+    identity = load_identity_namespace()
+    namespace = {
+        "CaseRef": identity["CaseRef"], "nullcontext": nullcontext,
+        "datetime": datetime, "timezone": timezone, "time": time,
+        "identity_collector": collector, "luxian_0609_case_identity_scope": scope.luxian_0609_case_identity_scope,
+        "current": {}, "filters": {}, "job_id": "offline", "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "offline",
+        "llm_observation_context": lambda **kwargs: nullcontext(), "diagnostic_capture": None,
+        "is_failed_rule_retry": False, "record_timing_attempts": [], "_evaluate_single_record_impl": impl,
+    }
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), function], type_ignores=[])), str(path), "exec"), namespace)
+    return namespace["_evaluate_single_record"]
+
+
+def load_bundle_runtime(loader):
+    path = SERVICES / "qc_input_adapters/running_final_bundle_runtime.py"
+    nodes = selected_ast(path, names={"_normalize_scene", "_loads_json", "load_running_final_bundle"})
+    import json
+    namespace = {"engine": object(), "_SCENE_TABLE": {"running": "running_record_bundle", "final": "final_record_bundle"}, "load_or_assemble_scene_bundle": loader, "json": json}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), *nodes], type_ignores=[])), str(path), "exec"), namespace)
+    return namespace["load_running_final_bundle"]

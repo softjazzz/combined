@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
+from ..case_identity import CaseRef
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, build_luxian_0609_visit_ref
 from .source_manifest import QueryStatus
@@ -31,6 +32,113 @@ _IDENTITY_FIELDS = frozenset({
     "contact_name", "contact_person", "contact_person_name", "guardian_name",
     "email", "address", "home_address", "contact_address",
 })
+
+
+# 只列已合法读取的明确患者/联系人字段，不读取医生、药品、正文或任意嵌套name。
+_ORM_IDENTITY_FIELDS = frozenset({
+    "name", "mr_no", "inpat_no", "id_card_no", "insurance_no",
+    "contact_number", "contact_name", "contact_address", "contact_telephone",
+    "nativeplace", "currentaddress", "work_unit",
+})
+_ORM_PATIENT_SOURCES = frozenset({
+    "mr", "inpat_registration", "admission_record", "discharge_record",
+})
+
+
+class _CaseIdentityValues:
+    __slots__ = ("values", "has_raw_name", "invalid")
+
+    def __init__(self) -> None:
+        self.values: set[str] = set()
+        self.has_raw_name = False
+        self.invalid = False
+
+    def __repr__(self) -> str:
+        return "<LX0609 private case identity>"
+
+    def __reduce_ex__(self, protocol):
+        raise PrivacyIdentityContextUnavailable()
+
+
+class _Luxian0609IdentityCollector:
+    """仅本次worker请求内存；关闭清空，CaseRef严格隔离，不属于返回合同。"""
+    __slots__ = ("_cases", "_active", "_invalid")
+
+    def __init__(self) -> None:
+        self._cases: dict[CaseRef, _CaseIdentityValues] = {}
+        self._active = True
+        self._invalid = False
+
+    def __repr__(self) -> str:
+        return "<LX0609 private identity collector>"
+
+    def __reduce_ex__(self, protocol):
+        raise PrivacyIdentityContextUnavailable()
+
+    @staticmethod
+    def _scalar(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            raise PrivacyIdentityContextUnavailable()
+        return str(value).strip()
+
+    def _capture_values(self, row: Mapping[str, Any], *, fields: frozenset[str], name_field: str) -> None:
+        if not self._active:
+            raise PrivacyIdentityContextUnavailable()
+        holder = None
+        try:
+            ref = CaseRef(*(self._scalar(row.get(key)) for key in ("institute_id", "patient_id", "visit_id")))
+            if not all(ref):
+                raise PrivacyIdentityContextUnavailable()
+            holder = self._cases.setdefault(ref, _CaseIdentityValues())
+            values = {self._scalar(row.get(key)) for key in fields}
+            name = self._scalar(row.get(name_field))
+            holder.values.update(value for value in values if value)
+            holder.has_raw_name |= bool(name and "*" not in name and "＊" not in name)
+        except Exception:
+            # 无法归属的来源不能成为任何病例的有效身份；错误正文不保留。
+            if holder is None:
+                self._invalid = True
+            else:
+                holder.invalid = True
+
+    def capture(self, source_key: str, source: Any) -> None:
+        if source_key not in _ORM_PATIENT_SOURCES:
+            self._invalid = True
+            return
+        try:
+            # 只读已加载列的__dict__；避免getattr触发ORM lazy load/额外查询。
+            row = vars(source)
+        except Exception:
+            self._invalid = True
+            return
+        self._capture_values(row, fields=_ORM_IDENTITY_FIELDS, name_field="name")
+
+    def capture_hydrated_record(self, record: Mapping[str, Any]) -> None:
+        self._capture_values(
+            record, fields=frozenset({"patient_name", "mr_no", "inpat_no"}),
+            name_field="patient_name",
+        )
+
+    def provider_for_case(self, case_ref: CaseRef) -> Callable[[], tuple[str, ...]]:
+        if not isinstance(case_ref, CaseRef) or not all(case_ref):
+            raise PrivacyIdentityContextUnavailable()
+
+        def provide() -> tuple[str, ...]:
+            holder = self._cases.get(case_ref)
+            if not self._active or self._invalid or holder is None or holder.invalid or not holder.has_raw_name:
+                raise PrivacyIdentityContextUnavailable()
+            return tuple(sorted(holder.values))
+
+        return provide
+
+    def close(self) -> None:
+        self._active = False
+        for holder in self._cases.values():
+            holder.values.clear()
+            holder.has_raw_name = False
+        self._cases.clear()
 
 
 def build_luxian_0609_identity_provider(

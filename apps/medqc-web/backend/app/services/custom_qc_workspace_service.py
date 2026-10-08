@@ -2892,6 +2892,7 @@ class CustomQCWorkspaceService:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
+        _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         return self._record_repository().collect_records(
             scope=scope,
@@ -2904,6 +2905,7 @@ class CustomQCWorkspaceService:
             record_ids=record_ids,
             record_refs=record_refs,
             sync_scope=sync_scope,
+            **({"_private_identity_collector": _private_identity_collector} if _private_identity_collector is not None else {}),
         )
 
     def count_records(

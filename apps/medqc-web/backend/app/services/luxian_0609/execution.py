@@ -369,7 +369,9 @@ async def prepare_luxian_0609_execution(
         evidence_payload=evidence_payload, snapshot=evidence_snapshot,
         materials=evidence_materials, snapshot_build_failed=evidence_snapshot_build_failed,
     )
-    bind_luxian_0609_identity_provider(identity_provider)
+    identity_provider = bind_luxian_0609_identity_provider(
+        identity_provider, case_coordinates=(institute_id, patient_id, visit_id),
+    )
     llm_client = wrap_luxian_0609_llm_client(llm_client, identity_provider=identity_provider)
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [

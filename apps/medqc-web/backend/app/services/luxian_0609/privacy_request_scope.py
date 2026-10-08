@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
@@ -29,6 +30,8 @@ class _Scope:
     case_coordinates: tuple[str, str, str] | None = field(default=None, repr=False)
     lease: _ScopeLease = field(default_factory=_ScopeLease, repr=False, compare=False)
     preserve_existing_provider: bool = field(default=False, repr=False)
+    require_collected_identity: bool = field(default=False, repr=False)
+    identity_context_invalid: bool = field(default=False, repr=False)
 
 
 _SCOPE: ContextVar[_Scope | None] = ContextVar(
@@ -45,13 +48,8 @@ def luxian_0609_privacy_scope(function):
         arguments = sig.bind_partial(*args, **kwargs).arguments
         if str(arguments.get("rule_set_key") or "").strip() != "luxian_0609_qc_v1":
             return await function(*args, **kwargs)
-        scope = _Scope(case_coordinates=_case_coordinates(arguments))
-        token = _SCOPE.set(scope)
-        try:
+        with _case_scope(_case_coordinates(arguments)):
             return await function(*args, **kwargs)
-        finally:
-            scope.lease.active = False
-            _SCOPE.reset(token)
 
     return guarded
 
@@ -73,29 +71,53 @@ def luxian_0609_case_privacy_scope(function):
     @wraps(function)
     async def guarded(*args, **kwargs):
         arguments = sig.bind_partial(*args, **kwargs).arguments
-        coordinates = _case_coordinates(arguments)
-        current = _SCOPE.get()
-        inherits_case = (
-            current is not None and current.lease.active and coordinates is not None
-            and current.case_coordinates == coordinates
-        )
-        scope = (
-            _Scope(
-                provider=current.provider, case_coordinates=coordinates,
-                lease=current.lease, preserve_existing_provider=True,
-            )
-            if inherits_case else _Scope(case_coordinates=coordinates)
-        )
-        owns_lease = not inherits_case
-        token = _SCOPE.set(scope)
-        try:
+        with _case_scope(_case_coordinates(arguments)):
             return await function(*args, **kwargs)
-        finally:
-            if owns_lease:
-                scope.lease.active = False
-            _SCOPE.reset(token)
 
     return guarded
+
+
+@contextmanager
+def _case_scope(coordinates: tuple[str, str, str] | None, *, require_collected_identity: bool = False):
+    current = _SCOPE.get()
+    inherits_case = (
+        current is not None and current.lease.active and coordinates is not None
+        and current.case_coordinates == coordinates
+    )
+    requires_source = require_collected_identity or bool(current and current.require_collected_identity)
+    invalid_source = (
+        current.identity_context_invalid if inherits_case else
+        bool(current and current.require_collected_identity and not require_collected_identity)
+    )
+    scope = (
+        _Scope(
+            provider=current.provider, case_coordinates=coordinates,
+            lease=current.lease, preserve_existing_provider=True,
+            require_collected_identity=requires_source, identity_context_invalid=invalid_source,
+        )
+        if inherits_case else _Scope(
+            case_coordinates=coordinates, require_collected_identity=requires_source,
+            identity_context_invalid=invalid_source,
+        )
+    )
+    token = _SCOPE.set(scope)
+    try:
+        yield
+    finally:
+        if not inherits_case:
+            scope.lease.active = False
+        _SCOPE.reset(token)
+
+
+@contextmanager
+def luxian_0609_case_identity_scope(*, case_coordinates: tuple[str, str, str], identity_provider: Callable[[], Iterable[str]]):
+    """worker单病例私有作用域；完整归属贯通现有正式入口及每次attempt。"""
+    coordinates = _case_coordinates(dict(zip(("institute_id", "patient_id", "visit_id"), case_coordinates)))
+    if coordinates is None or len(case_coordinates) != 3:
+        raise PrivacyIdentityContextError("Patient identity context unavailable")
+    with _case_scope(coordinates, require_collected_identity=True):
+        bind_luxian_0609_identity_provider(identity_provider, case_coordinates=coordinates)
+        yield
 
 
 def is_luxian_0609_privacy_scope_active() -> bool:
@@ -103,11 +125,19 @@ def is_luxian_0609_privacy_scope_active() -> bool:
     return _SCOPE.get() is not None
 
 
-def bind_luxian_0609_identity_provider(provider: Callable[[], Iterable[str]]) -> None:
+def bind_luxian_0609_identity_provider(provider: Callable[[], Iterable[str]], *, case_coordinates: tuple[str, str, str] | None = None) -> Callable[[], Iterable[str]]:
     scope = _SCOPE.get()
     if scope is not None:
+        coordinates = _case_coordinates(dict(zip(("institute_id", "patient_id", "visit_id"), case_coordinates))) if case_coordinates is not None and len(case_coordinates) == 3 else None
+        invalid_context = scope.identity_context_invalid or (
+            scope.require_collected_identity and coordinates != scope.case_coordinates
+        )
+        if invalid_context:
+            def unavailable() -> tuple[str, ...]:
+                raise PrivacyIdentityContextError("Patient identity context unavailable")
+            provider = unavailable
         previous = scope.provider
-        if scope.preserve_existing_provider and previous is not None and previous is not provider:
+        if not invalid_context and scope.preserve_existing_provider and previous is not None and previous is not provider:
             incoming = provider
 
             def combined() -> tuple[str, ...]:
@@ -118,7 +148,9 @@ def bind_luxian_0609_identity_provider(provider: Callable[[], Iterable[str]]) ->
         _SCOPE.set(_Scope(
             provider=provider, case_coordinates=scope.case_coordinates,
             lease=scope.lease, preserve_existing_provider=scope.preserve_existing_provider,
+            require_collected_identity=scope.require_collected_identity, identity_context_invalid=invalid_context,
         ))
+    return provider
 
 
 def _redact_strings(value: Any) -> Any:
@@ -136,7 +168,7 @@ def protect_current_payload(payload: dict[str, Any]) -> dict[str, Any]:
     scope = _SCOPE.get()
     if scope is None:
         return payload
-    if not scope.lease.active or scope.provider is None:
+    if not scope.lease.active or scope.identity_context_invalid or scope.provider is None:
         raise PrivacyIdentityContextError("Patient identity context unavailable")
     try:
         values = tuple(scope.provider())

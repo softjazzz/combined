@@ -15,6 +15,8 @@ from fastapi import HTTPException
 
 from ..core.settings import get_settings
 from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
+from .luxian_0609.privacy_identity_context import _Luxian0609IdentityCollector
+from .luxian_0609.privacy_request_scope import luxian_0609_case_identity_scope
 from .case_identity import CaseRef, case_refs_from_records, normalize_case_refs
 from .qc_workspace.record_timing import summarize_record_timings
 from .custom_qc_workspace_service import (
@@ -1289,6 +1291,7 @@ async def run_sichuan_workspace_batch_job(
     attempt_filters_json: str | None = None
     attempt_kwargs: dict[str, str] = {}
     lease_stop: threading.Event | None = None
+    identity_collector: _Luxian0609IdentityCollector | None = None
     try:
         # HTTP 门禁之外在所有实际质控 Worker 入口统一验签，阻止旧队列或内部调用绕过授权。
         # 不存在的任务及父任务已在上方返回，不触发授权检查。
@@ -1379,6 +1382,8 @@ async def run_sichuan_workspace_batch_job(
         ):
             raise ValueError("批量任务缺少 rule_ids")
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
+        if rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+            identity_collector = _Luxian0609IdentityCollector()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
         rule_set_version = str(filters.get("rule_set_version") or "").strip()
         _assert_luxian_0609_formal_customer_rule_ids(
@@ -1510,6 +1515,7 @@ async def run_sichuan_workspace_batch_job(
             keyword=filters.get("keyword"),
             record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
             record_refs=persisted_record_refs if has_persisted_record_refs else None,
+            **({"_private_identity_collector": identity_collector.capture} if identity_collector is not None else {}),
         )
         if rule_set_key == LUXIAN_0609_RULE_SET_KEY and has_persisted_record_refs:
             accepted_refs = set(normalize_case_refs(persisted_record_refs))
@@ -1530,6 +1536,9 @@ async def run_sichuan_workspace_batch_job(
             },
         )
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
+        if identity_collector is not None:
+            for record in hydrated_records:
+                identity_collector.capture_hydrated_record(record)
         total_records = len(hydrated_records)
         if total_records == 0:
             raise ValueError("批量任务未收集到可执行病历，请确认样本病历已同步到当前病历库")
@@ -3262,31 +3271,39 @@ async def run_sichuan_workspace_batch_job(
                 or filters.get("parent_job_id")
                 or job_id
             ).strip()
-            with llm_observation_context(
-                business_scene="luxian_0609_qc",
-                root_job_id=root_job_id,
-                record_identity=(institute_id, patient_id, visit_id),
-                rule_set_key=rule_set_key,
-                rule_set_version=rule_set_version,
-                executor_key="legacy_orchestrated",
-            ):
-                with diagnostic_capture.record_scope((institute_id, patient_id, visit_id)) if diagnostic_capture else nullcontext():
-                    started_at = datetime.now(timezone.utc).isoformat()
-                    started_clock = time.perf_counter()
-                    result = None
-                    try:
-                        result = await _evaluate_single_record_impl(record)
-                        return result
-                    finally:
-                        record_timing_attempts.append({
-                            "record_key": CaseRef(institute_id, patient_id, visit_id).as_key(),
-                            "attempt_kind": "retry" if is_failed_rule_retry else "initial",
-                            "started_at": started_at,
-                            "finished_at": datetime.now(timezone.utc).isoformat(),
-                            "execution_seconds": round(max(0.0, time.perf_counter() - started_clock), 4),
-                            "completed": bool(result is not None and not result.get("failed_record")
-                                              and not any(result.get("failed_by_rule", {}).values())),
-                        })
+            identity_scope = (
+                luxian_0609_case_identity_scope(
+                    case_coordinates=(institute_id, patient_id, visit_id),
+                    identity_provider=identity_collector.provider_for_case(CaseRef(institute_id, patient_id, visit_id)),
+                )
+                if identity_collector is not None else nullcontext()
+            )
+            with identity_scope:
+                with llm_observation_context(
+                    business_scene="luxian_0609_qc",
+                    root_job_id=root_job_id,
+                    record_identity=(institute_id, patient_id, visit_id),
+                    rule_set_key=rule_set_key,
+                    rule_set_version=rule_set_version,
+                    executor_key="legacy_orchestrated",
+                ):
+                    with diagnostic_capture.record_scope((institute_id, patient_id, visit_id)) if diagnostic_capture else nullcontext():
+                        started_at = datetime.now(timezone.utc).isoformat()
+                        started_clock = time.perf_counter()
+                        result = None
+                        try:
+                            result = await _evaluate_single_record_impl(record)
+                            return result
+                        finally:
+                            record_timing_attempts.append({
+                                "record_key": CaseRef(institute_id, patient_id, visit_id).as_key(),
+                                "attempt_kind": "retry" if is_failed_rule_retry else "initial",
+                                "started_at": started_at,
+                                "finished_at": datetime.now(timezone.utc).isoformat(),
+                                "execution_seconds": round(max(0.0, time.perf_counter() - started_clock), 4),
+                                "completed": bool(result is not None and not result.get("failed_record")
+                                                  and not any(result.get("failed_by_rule", {}).values())),
+                            })
 
         def _merge_record_result(record_result: Dict[str, Any], processed_records_count: int) -> None:
             nonlocal total_tokens
@@ -3997,6 +4014,8 @@ async def run_sichuan_workspace_batch_job(
                 len(all_failed_records),
                 delay_seconds,
             )
+            if identity_collector is not None:
+                identity_collector.close()
             if delay_seconds:
                 await asyncio.sleep(delay_seconds)
             await run_sichuan_workspace_batch_job(
@@ -4019,5 +4038,7 @@ async def run_sichuan_workspace_batch_job(
             ),
         )
     finally:
+        if identity_collector is not None:
+            identity_collector.close()
         if lease_stop is not None:
             lease_stop.set()
