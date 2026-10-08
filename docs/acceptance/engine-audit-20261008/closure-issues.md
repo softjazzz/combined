@@ -1,14 +1,14 @@
 # 0609 closure issue queue
 
-Production integration: `35909964a`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
+Fixed production: `35909964a`; latest evidence after `2f44aa44e`. Limited issue evidence is not whole-rule acceptance.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
-|N12|limited_engineering_closed_real_model_validation_pending|/root/repair_iml01||
+|N12|prior_engineering_subitems_inherited_formal_carrier_regression_confirmed_repairing|/root/repair_iml01||
 |N10|queued_evidence_review|unassigned||
 |N13|limited_engineering_repair_integrated_business_acceptance_open|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|unassigned||
-|SURGERY-029030|fixed_source_remaining_counterexample_reconciliation|/root/audit_course_timing||
+|SURGERY-029030|old_normal_regressions_not_reproduced_current_two_controls_pass_negative_coverage_open|/root/audit_course_timing||
 |PREOP-MEDICAL|business_basis_review_no_code_decision|unassigned||
 |CT-INPUT-CHANGE|revalidation_evidence_preparation|unassigned||
 |PATH-INPUT-CHANGE|revalidation_evidence_preparation|unassigned||

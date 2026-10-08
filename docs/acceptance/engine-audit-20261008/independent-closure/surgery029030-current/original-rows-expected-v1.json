@@ -1,0 +1,141 @@
+{
+  "audit_id": "surgery029030-original-normal-rows-v1",
+  "cases": [
+    {
+      "case_id": "029_two_orders_two_summaries",
+      "rule_id": "LX0609-04-01-01",
+      "rows": {
+        "inpat_nondrug_order": [
+          {
+            "order_id": "A",
+            "order_type": "手术",
+            "order_status": "执行中",
+            "order_name": "胆囊切除术",
+            "start_datetime": "2026-07-01 08:00:00"
+          },
+          {
+            "order_id": "B",
+            "order_type": "手术",
+            "order_status": "执行中",
+            "order_name": "肝切除术",
+            "start_datetime": "2026-07-03 08:00:00"
+          }
+        ],
+        "presurg_summary": [
+          {
+            "document_id": "sumA",
+            "record_content": "本次7月1日胆囊切除术术前小结。",
+            "record_time": "2026-06-30 16:00:00"
+          },
+          {
+            "document_id": "sumB",
+            "record_content": "本次7月3日肝切除术术前小结。",
+            "record_time": "2026-07-02 16:00:00"
+          }
+        ]
+      },
+      "expected_statuses": [
+        "compliant"
+      ],
+      "expected_reason": null,
+      "expectation_origin": "unchanged copied original frozen_expectation; no historical reason oracle",
+      "historical_fixed": {
+        "status": "compliant",
+        "reason": "requirement_satisfied",
+        "facts": {
+          "verification_kind": "surgery_document_present",
+          "target_document": "presurg_summary",
+          "surgery_trigger_kind": "surgery_order",
+          "surgery_order_confirmed": true
+        },
+        "finding": "已发现手术医嘱，术前小结已完整记录。"
+      },
+      "historical_unintegrated_candidate": {
+        "status": "data_gap",
+        "reason": "association_failed",
+        "facts": null,
+        "finding": "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结对应哪一台手术，暂无法逐台完成核对"
+      }
+    },
+    {
+      "case_id": "030_orderB_own_record",
+      "rule_id": "LX0609-04-02-02",
+      "rows": {
+        "mr_surgery": [
+          {
+            "document_id": "M1",
+            "application_id": "A1",
+            "surgery_name": "硬脑膜外血肿清除术",
+            "surgery_code": "01.2400X013",
+            "surgeon": "甲医师",
+            "main_surgery_sign": "",
+            "surgical_level": "四级",
+            "surgery_begin_datetime": "2026-07-01 08:00:00",
+            "surgery_end_datetime": "2026-07-01 10:00:00"
+          },
+          {
+            "document_id": "M3",
+            "application_id": "A3",
+            "surgery_name": "硬脑膜外血肿清除术",
+            "surgery_code": "01.2400X013",
+            "surgeon": "甲医师",
+            "main_surgery_sign": "",
+            "surgical_level": "四级",
+            "surgery_begin_datetime": "2026-07-03 08:00:00",
+            "surgery_end_datetime": "2026-07-03 10:00:00"
+          }
+        ],
+        "surgery_record": [
+          {
+            "document_id": "S3",
+            "application_id": "A3",
+            "surgery_name": "硬脑膜外血肿清除术",
+            "surgery_code": "01.2400X013",
+            "surgeon": "甲医师",
+            "surgeon_sign": "甲医师",
+            "surgery_begin_time": "2026-07-03 08:00:00+08",
+            "surgery_end_time": "2026-07-03 10:00:00+08",
+            "record_time": "2026-07-03 12:00:00",
+            "record_content": "全麻下实施手术，清除血肿后止血，逐层关闭切口。"
+          }
+        ],
+        "inpat_nondrug_order": [
+          {
+            "order_id": "order-B",
+            "application_id": "A3",
+            "order_type": "手术",
+            "order_status": "执行中",
+            "order_name": "硬脑膜外血肿清除术",
+            "start_datetime": "2026-07-03 08:00:00",
+            "record_content": "第二次手术，2026-07-03实施硬脑膜外血肿清除术。"
+          }
+        ]
+      },
+      "expected_statuses": [
+        "compliant"
+      ],
+      "expected_reason": null,
+      "expectation_origin": "unchanged copied original frozen_expectation; no historical reason oracle",
+      "historical_fixed": {
+        "status": "compliant",
+        "reason": "requirement_satisfied",
+        "facts": {
+          "verification_kind": "surgery_document_present",
+          "target_document": "surgery_record",
+          "surgery_trigger_kind": "performed_surgery",
+          "performed_surgery_confirmed": true
+        },
+        "finding": "已确认本次手术具备手术记录。"
+      },
+      "historical_unintegrated_candidate": {
+        "status": "data_gap",
+        "reason": "association_failed",
+        "facts": null,
+        "finding": "当前缺少已实施手术与手术记录的关联信息，暂时无法完成核对"
+      }
+    }
+  ],
+  "input_conversion": "Only mr_surgery surgery_begin_datetime/surgery_end_datetime strings -> datetime.fromisoformat, as existing actuals.py. No other mutation.",
+  "test_runs": 0,
+  "scope": "two exact original normal controls; not negative coverage closure"
+}
