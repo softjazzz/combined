@@ -60,6 +60,7 @@ from .extended_document.antimicrobial_action_extraction import (
     extract_confirmed_antimicrobial_actions,
     linked_order_id as _linked_order_id,
 )
+from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
@@ -543,18 +544,26 @@ def _070_document_refs(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    consumed_bloodtrans_rows: Sequence[Mapping[str, Any]] | None = None,
+    include_pretransfusion_materials: bool = True,
 ) -> tuple[str, ...]:
     """只返回 070 判定实际消费的、同一快照验证过的逐行引用。"""
 
     try:
+        bloodtrans_record_rows = materials.document_rows(
+            "bloodtrans_record", snapshot=snapshot
+        )
+        if not include_pretransfusion_materials:
+            # 没有已确认实施事件时未核对九项，只引用实际用于抽取的专用资料。
+            return tuple(dict.fromkeys(
+                reference for reference, row in bloodtrans_record_rows
+                if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows
+            ))
         registration_rows = materials.document_rows(
             "inpat_registration", snapshot=snapshot
         )
         transfusion_rows = materials.document_rows(
             "mr_bloodtrans", snapshot=snapshot
-        )
-        bloodtrans_record_rows = materials.document_rows(
-            "bloodtrans_record", snapshot=snapshot
         )
         lab_rows = materials.document_rows("labtest_item_report", snapshot=snapshot)
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
@@ -575,7 +584,8 @@ def _070_document_refs(
     refs = (
         *registration_refs,
         *(reference for reference, _row in transfusion_rows),
-        *(reference for reference, _row in bloodtrans_record_rows),
+        *(reference for reference, row in bloodtrans_record_rows
+          if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows),
         *lab_refs,
     )
     return tuple(dict.fromkeys(refs))
@@ -2068,6 +2078,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     discharge_approval_extraction = None
     diagnosis_change_extraction = None
     antimicrobial_action_extraction = None
+    transfusion_performance_extraction = None
     selected = tuple(
         rule_id
         for rule_id in EXTENDED_DOCUMENT_RULE_IDS
@@ -3120,63 +3131,86 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-07-01-03":
             source_keys = (
-                "inpat_registration",
-                "mr_bloodtrans",
-                "bloodtrans_record",
-                "labtest_item_report",
+                "inpat_registration", "mr_bloodtrans", "bloodtrans_record", "labtest_item_report",
             )
-            transfusion_source_error = (
-                mr_bloodtrans_error or bloodtrans_record_error
-            )
-            actual_transfusion_rows = (
-                *mr_bloodtrans_rows,
-                *bloodtrans_record_rows,
-            )
+            transfusion_source_error = mr_bloodtrans_error or bloodtrans_record_error
+            actual_transfusion_rows = tuple(mr_bloodtrans_rows)
+            consumed_bloodtrans_rows: list[Mapping[str, Any]] = []
+            unconfirmed_record_count = 0
+            extraction_reason = ""
+            performed_time_missing = False
             if transfusion_source_error:
                 final_state, reason_code = "data_gap", transfusion_source_error
-            elif not actual_transfusion_rows:
+            elif not mr_bloodtrans_rows and not bloodtrans_record_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif registration_error:
-                final_state, reason_code = "data_gap", registration_error
-            elif lab_item_error:
-                final_state, reason_code = "data_gap", lab_item_error
             else:
-                final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
-                    {
-                        "inpat_registration": list(registration_rows),
-                        "mr_bloodtrans": list(actual_transfusion_rows),
-                        "labtest_item_report": list(lab_item_rows),
-                        "blood_application": [],
-                        "__logical_source_states__": {
-                            "labtest_item_report": "available" if lab_item_rows else "empty",
-                        },
-                    },
-                    require_current_stay=True,
+                transfusion_performance_extraction = await extract_transfusion_performance(
+                    bloodtrans_record_rows, llm_client,
                 )
-                reason_code = {
-                    "pretransfusion_items_complete": "requirement_satisfied",
-                    "pretransfusion_items_incomplete": "requirement_violated",
-                    "pretransfusion_tests_after_transfusion": "requirement_violated",
-                    "pretransfusion_test_time_missing": "authoritative_time_missing",
-                    "authoritative_time_missing": "authoritative_time_missing",
-                    "transfusion_time_unavailable": "authoritative_time_missing",
-                    "admission_time_unavailable": "authoritative_time_missing",
-                    "pretransfusion_item_contract_unavailable": "source_unavailable",
-                    "pretransfusion_tests_outside_current_stay": "requirement_violated",
-                    "source_query_error": "source_query_error",
-                }.get(detail_reason, "required_field_missing")
-                if facts is not None:
-                    display.append((rule_id, dict(facts)))
+                extraction_reason = transfusion_performance_extraction.reason_code
+                # 全部专用行均用于事实抽取或范围门控；否定资料不计入实施事件。
+                consumed_bloodtrans_rows = list(bloodtrans_record_rows)
+                confirmed_records = []
+                for row, state in zip(bloodtrans_record_rows, transfusion_performance_extraction.states):
+                    if state == "performed" and _parse_datetime(row.get("record_time")) is not None:
+                        confirmed_records.append(row)
+                    elif state in {"performed", "unknown"}:
+                        unconfirmed_record_count += 1
+                        performed_time_missing = performed_time_missing or state == "performed"
+                actual_transfusion_rows = (*mr_bloodtrans_rows, *confirmed_records)
+                if not actual_transfusion_rows:
+                    final_state = "data_gap"
+                    reason_code = (
+                        "authoritative_time_missing" if performed_time_missing
+                        else extraction_reason or "positive_assertion_not_explicit"
+                    )
+                elif registration_error:
+                    final_state, reason_code = "data_gap", registration_error
+                elif lab_item_error:
+                    final_state, reason_code = "data_gap", lab_item_error
+                else:
+                    final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
+                        {
+                            "inpat_registration": list(registration_rows),
+                            "mr_bloodtrans": list(actual_transfusion_rows),
+                            "labtest_item_report": list(lab_item_rows),
+                            "blood_application": [],
+                            "__logical_source_states__": {
+                                "labtest_item_report": "available" if lab_item_rows else "empty",
+                            },
+                        },
+                        require_current_stay=True,
+                    )
+                    reason_code = {
+                        "pretransfusion_items_complete": "requirement_satisfied",
+                        "pretransfusion_items_incomplete": "requirement_violated",
+                        "pretransfusion_tests_after_transfusion": "requirement_violated",
+                        "pretransfusion_test_time_missing": "authoritative_time_missing",
+                        "authoritative_time_missing": "authoritative_time_missing",
+                        "transfusion_time_unavailable": "authoritative_time_missing",
+                        "admission_time_unavailable": "authoritative_time_missing",
+                        "pretransfusion_item_contract_unavailable": "source_unavailable",
+                        "pretransfusion_tests_outside_current_stay": "requirement_violated",
+                        "source_query_error": "source_query_error",
+                    }.get(detail_reason, "required_field_missing")
+                    if final_state == "compliant" and unconfirmed_record_count:
+                        final_state = "data_gap"
+                        reason_code = "authoritative_time_missing" if performed_time_missing else extraction_reason or "positive_assertion_not_explicit"
+                        facts = None
+                    elif final_state == "non_compliant" and unconfirmed_record_count and facts is not None:
+                        facts = {**facts, "unconfirmed_record_count": unconfirmed_record_count}
+                    if facts is not None:
+                        display.append((rule_id, dict(facts)))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=source_keys,
                 final_state=final_state, reason_code=reason_code,
+                exact_document_refs=not actual_transfusion_rows and bool(consumed_bloodtrans_rows) and not transfusion_source_error,
                 document_refs=(
-                    _070_document_refs(
-                        snapshot=evidence_snapshot,
-                        materials=evidence_materials,
-                    )
-                    if actual_transfusion_rows and not transfusion_source_error
+                    _070_document_refs(snapshot=evidence_snapshot, materials=evidence_materials,
+                        consumed_bloodtrans_rows=consumed_bloodtrans_rows,
+                        include_pretransfusion_materials=bool(actual_transfusion_rows))
+                    if (actual_transfusion_rows or consumed_bloodtrans_rows) and not transfusion_source_error
                     else ()
                 ),
             ))
@@ -5135,6 +5169,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
+                transfusion_performance_extraction,
             )
             if item is not None
         ),
@@ -5146,6 +5181,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
+                transfusion_performance_extraction,
             )
             if item is not None
         ),
@@ -5157,6 +5193,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
+                transfusion_performance_extraction,
             )
             if item is not None
         ),
@@ -5168,6 +5205,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
+                transfusion_performance_extraction,
             )
             if item is not None
         ),
@@ -5179,6 +5217,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
+                transfusion_performance_extraction,
             )
             if item is not None
         ),

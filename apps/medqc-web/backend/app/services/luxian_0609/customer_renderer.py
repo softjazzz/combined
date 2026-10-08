@@ -132,6 +132,10 @@ _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
     "applicability_source_gap": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
 }
 _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
+    ("LX0609-07-01-03", "semantic_extraction_unresolved"): '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。',
+    ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
+    ("LX0609-07-01-03", "source_readiness_unproven"): '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。',
+    ("LX0609-07-01-03", "candidate_scope_incomplete"): '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。',
     ("LX0609-04-04-02", "semantic_extraction_unresolved"):
         "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
     (
@@ -559,6 +563,10 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-07-01-03", "semantic_extraction_unresolved"): ('输血实施事实暂无法确认', '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。', '请复核现有输血正文或重试质控；不要据此补写或改写记录。'),
+    ("LX0609-07-01-03", "positive_assertion_not_explicit"): ('输血实施事实暂无法确认', '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。', '请复核现有记录及实际输血事件；不要据此补写输血或检验记录。'),
+    ("LX0609-07-01-03", "source_readiness_unproven"): ('输血记录正文暂不可读取', '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。', '请核对源记录正文及同步映射后重新质控；不要据此补写或改写记录。'),
+    ("LX0609-07-01-03", "candidate_scope_incomplete"): ('输血实施资料超出本次可核范围', '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。', '请复核现有材料或联系质控系统支持；不要据此补写或改写记录。'),
     ("LX0609-04-04-02", "semantic_extraction_unresolved"): (
         "麻醉访视内容暂无法确认",
         "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
@@ -3449,14 +3457,25 @@ def customer_finding_from_controlled_facts(
             "pretransfusion_tests_after_transfusion": "late_items",
             "pretransfusion_test_time_missing": "missing_time_items",
         }.get(kind)
+        if rule_id == "LX0609-07-01-03" and kind == "pretransfusion_tests_outside_current_stay":
+            key = "outside_current_stay_items"
         if key:
             items = labels(key, _TRANSFUSION_ITEM_LABELS)
             prefix = {
                 "pretransfusion_items_incomplete": "输血前九项缺少",
                 "pretransfusion_tests_after_transfusion": "以下检验晚于输血时间",
                 "pretransfusion_test_time_missing": "以下检验缺少可核对的报告时间",
+                "pretransfusion_tests_outside_current_stay": "以下检验不属于本次住院可用的输血前九项",
             }[kind]
-            return f"{prefix}：{items}。" if items else ""
+            finding = f"{prefix}：{items}。" if items else ""
+            if rule_id == "LX0609-07-01-03" and facts.get("unconfirmed_record_count"):
+                checked_count = len(facts["event_checks"])
+                unknown_count = facts["unconfirmed_record_count"]
+                return (
+                    f"已核对可确认实施的 {checked_count} 笔输血；另 {unknown_count} 份输血记录的实施事实尚无法确认。"
+                    "以下缺陷仅针对已确认实施的事件。" + finding
+                )
+            return finding
 
     if rule_id == "LX0609-07-01-02":
         if kind == "pretransfusion_assessment_complete":
@@ -4169,6 +4188,10 @@ def render_luxian_0609_customer_result(
                 ("LX0609-09-01-01", "document_completion_time_missing"),
                 ("LX0609-03-02-01", "diagnosis_scope_uncertain"),
                 ("LX0609-04-04-02", "semantic_extraction_unresolved"),
+                ("LX0609-07-01-03", "semantic_extraction_unresolved"),
+                ("LX0609-07-01-03", "positive_assertion_not_explicit"),
+                ("LX0609-07-01-03", "source_readiness_unproven"),
+                ("LX0609-07-01-03", "candidate_scope_incomplete"),
             }
         )
     ):

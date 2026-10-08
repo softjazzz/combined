@@ -269,7 +269,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-05-01-05",
         "LX0609-05-01-06",
         "LX0609-08-01-03",
-        "LX0609-07-01-03",
         "LX0609-10-03-01",
         "LX0609-04-02-08",
         "LX0609-04-01-01",
@@ -485,3 +484,12 @@ def test_rule_criterion_contract_rejects_missing_customer_label() -> None:
             expected=8,
             unit="hour",
         )
+
+
+@pytest.mark.unit
+def test_070_controlled_performance_extraction_contract_is_optional_single_call_v2() -> None:
+    contract = next(item for item in load_luxian_0609_rule_contracts() if item.rule_id == "LX0609-07-01-03")
+    assert contract.contract_version == "v2"
+    assert contract.decision_authority == "program_then_optional_llm"
+    assert contract.max_llm_calls_per_rule == 1
+    assert contract.prompt_version == "lx0609-transfusion-performance-v1"

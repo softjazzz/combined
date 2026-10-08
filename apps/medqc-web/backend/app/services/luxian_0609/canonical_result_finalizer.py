@@ -95,6 +95,10 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-07-01-03", "semantic_extraction_unresolved"): {"reason_label": '实施事实抽取待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "positive_assertion_not_explicit"): {"reason_label": '输血实施事实待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "source_readiness_unproven"): {"reason_label": '输血正文读取待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "candidate_scope_incomplete"): {"reason_label": '实施事实核对范围不足', "missing_sources": [], "missing_fields": []},
     ("LX0609-04-04-02", "semantic_extraction_unresolved"): {
         "reason_label": "内容抽取待确认",
         "missing_sources": [],
@@ -629,6 +633,18 @@ def validate_luxian_0609_published_customer_display_facts(
         if validated is None or not transfusion_customer_fact_status_is_valid(
             rule_id=normalized_rule_id, status=status, safe_facts=validated,
         ):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if (normalized_rule_id == "LX0609-07-01-03" and isinstance(raw, Mapping)
+            and "unconfirmed_record_count" in raw):
+        from .transfusion_result_mapping import transfusion_customer_fact_status_is_valid
+
+        validated = validate_luxian_0609_executor_customer_display_facts(rule_id=normalized_rule_id, raw=raw)
+        if (validated is None or status != "non_compliant"
+                or "unconfirmed_record_count" not in validated
+                or not transfusion_customer_fact_status_is_valid(
+                    rule_id=normalized_rule_id, status=status, safe_facts=validated,
+                )):
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     if raw is None or not isinstance(raw, dict):

@@ -7421,6 +7421,8 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
 
 @pytest.mark.asyncio
 async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty() -> None:
+    from test_luxian_0609_tc02_performed_event_contract import PerformanceFake
+
     names = (
         ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
         ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
@@ -7450,6 +7452,7 @@ async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty(
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT

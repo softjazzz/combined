@@ -251,6 +251,13 @@ def _safe_070(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return safe_events
 
     def append_event_facts(result: dict[str, Any]) -> dict[str, Any] | None:
+        unknown_count = raw.get("unconfirmed_record_count")
+        if "unconfirmed_record_count" in raw:
+            if (type(unknown_count) is not int or not 1 <= unknown_count <= 100
+                    or raw.get("failure_kind") not in {"pretransfusion_items_incomplete", "pretransfusion_tests_after_transfusion", "pretransfusion_tests_outside_current_stay"}
+                    or not all(raw.get(key) is not None for key in ("transfusion_event_count", "checked_transfusion_times", "event_checks"))):
+                return None
+            result["unconfirmed_record_count"] = unknown_count
         event_count = raw.get("transfusion_event_count")
         event_times = _controlled_list(raw.get("checked_transfusion_times"))
         event_checks = controlled_event_checks(raw.get("event_checks"))
@@ -336,6 +343,7 @@ def _safe_070(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "pretransfusion_items_incomplete": "missing_items",
         "pretransfusion_tests_after_transfusion": "late_items",
         "pretransfusion_test_time_missing": "missing_time_items",
+        "pretransfusion_tests_outside_current_stay": "outside_current_stay_items",
     }.get(str(kind))
     if list_key is None:
         return None
@@ -347,7 +355,7 @@ def _safe_070(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         result["performed_transfusion_confirmed"] = True
     if isinstance(raw.get("transfusion_time"), str):
         result["transfusion_time"] = raw["transfusion_time"]
-    if kind == "pretransfusion_items_incomplete":
+    if kind in {"pretransfusion_items_incomplete", "pretransfusion_tests_outside_current_stay"}:
         required = _controlled_list(
             raw.get("required_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
         )
@@ -690,9 +698,12 @@ def transfusion_customer_fact_status_is_valid(
             # 未触发输血或资料源不可用时，执行器本来就不产生展示 facts。
             return status in {"data_gap", "not_applicable"}
         kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
+        if "unconfirmed_record_count" in safe_facts and status != "non_compliant":
+            return False
         expected_status = {
             "pretransfusion_items_complete": "compliant",
             "pretransfusion_items_incomplete": "non_compliant",
+            "pretransfusion_tests_outside_current_stay": "non_compliant",
             "pretransfusion_tests_after_transfusion": "non_compliant",
             "pretransfusion_test_time_missing": "data_gap",
         }.get(str(kind))

@@ -1,0 +1,39 @@
+# TC02 / 070 输血实施事实与九项核对修复（202项合成回归通过，待固定独审）
+
+基线fac4ef67c0f68da1625f419ea5dddb47f38aa78b，分支codex/qc-fix-transfusion-20261008，复用critical工作树。范围仅LX0609-07-01-03；TC01/TC03、共享输血时间解析函数和其他规则未修。原7423材料、正常C期望及bloodtrans_record精确native引用保持；仅新增人工fake适配070可选抽取调用合同。原独立取消反例预期不覆盖。
+
+MR既有结构实施来源沿旧合同0call；专用正文使用同一执行入口已wrap的client整批最多1逻辑调用，无本模块重试，allow_length_retry=False。070合同v1→v2、program_only/0→program_then_optional_llm/1，目录prompt_version从none改为lx0609-transfusion-performance-v1，执行器和目录范围不变。每批8文书、单6000/总12000字符、2048completion tokens；缺正文/无client/超预算0call gap，不裁前N条宣称完整。异常/无效JSON/非法原子范围1call gap，不发布实施确认事实或医生漏写缺陷。
+
+模型只抽performed/plan/cancel/unknown及同文书连续动作/实际时间原文atom，不能输出质控结论、规范时间或建议。Python校验完整覆盖、唯一ref/key、严格字段、同文书坐标、连续quote与真实原文唯一片段回定位，未知状态/跨文书/伪造quote/bool坐标拒绝。脱敏body的start/end不声明为原文offset；内部assertions不公开，客户只使用合法材料ref或来源锚。引用真实存在不等于语义正确，真实模型/临床语义仍待验。
+
+仅performed且可核record_time的专用行进入原九项Python内核；record_time不是单独实施证明。无正文实际时刻时沿7423既有文书时间合同，不宣称已证明真实输注开始时刻。实际时间atom用既有ISO解析/stdlib明确HH:MM[:SS]比较，复用医院时区规范，不设容差、不同日期不猜。明确数值时刻未解释或多时刻表示范围无法确认，不能把任意钟点当实施时间或把多钟点当多个事件；一份真实正常材料同时有检验10:00与输注14:00在当前schema仍是能力gap，单列保护，不称临床全部正常通过。相对日期/跨日同钟点/无时刻多事件或模型遗漏非支持格式时刻仍属模型语义边界，不扩动作/否定/日期词表。
+
+取消/计划/unknown单独保持gap而非全院无输血NA，不能产生九项缺陷；完整两来源空沿旧NA。取消计划不能否定MR真实实施，MR缺可信时间既有gap保留。全部确定事件C且未知资料仍存在时gap；确定事件NC与额外unknown并存保留NC与原缺陷，附唯一unconfirmed_record_count表示文书数量，N取去重event_checks数，M不能说漏验事件数。该公开计数1..100（抽取上限仍8），0不附，bool/0/负/str/101拒绝；旧无新字段事实保持兼容。Finalizer仅当原raw声明保留计数时接线既有070状态合同，非法计数不能先过滤再绕过；不重判医学状态、不扩其他规则。未知extra字段沿旧白名单过滤。已消费的取消/未知资料引用按整批选取，状态与引用集合不依赖输入顺序，未确认时刻不混入已核对事件时间。
+
+070本住院前检验公开kind小子项另有旧缺陷证据：原Python已判pretransfusion_tests_outside_current_stay/NC，公开缺该kind变technical_error。仅070 mapping补该kind→outside_current_stay_items及安全九项/原逐笔字段、状态NC、准确客户说明；043/临床核对内核不变。固定fac4原执行函数及\_safe_070 exact AST复用当前正式公共入口，同一合成输入旧/候选各一次都NC→technical_error真实红（outside-baseline-red.log/outside-candidate-red.log）；不是整个基线checkout，不冒称完整旧树端到端验收。
+
+验证记录截至WIP：
+
+- 首正式配对红18：新6失败+原07012通过。4真实状态断言（同结构取消被C正逆、原取消被NC且performed=true正逆）；2正常配对因误要求C公开证据卡KeyError，是新fixture假设错误，非产品缺陷。该正常配对仅精确native材料引用成立；九项lab无文书身份字段阻断整组精确投影，不代表所有C均应无卡。修正该fixture仅复验新6，6真实AssertionError：4状态失败和2批准新1call未接入（C/事实/引用已通过），原日志均保留。
+- 公共计数红21：4真实DID NOT RAISE（合法NC事实/count配C/gap/空/虚构status）+17通过（14非法count、合法1/9/100与extra过滤3）；证明保存入口需要窄状态接线，不能只靠Renderer安全facts收敛。
+- 首有限绿78实际13通过、65setup errors。错误全部来自新offline fixture误patch不存在get_engine，65未执行不能计产品失败/通过；改为已有socket/httpx阻断+SQLAlchemy只许SQLite的guard，未改输入/期望或生产追绿。另附5正式Store非法保存拒绝保护；后续完整范围83（新70、旧07012、合同1）实际82通过、1失败，3.57秒。
+
+日志位于工作树.tmp/tc02-closure/；设计、原配对与补充工程规格位于F:/MedQC-worktrees/review-artifacts/tc02-design/，与独立原交接hash各自保留。真实模型调用0，未读取env/PG/网络；fake的0/1计量不是模型语义验收。SQLite正常C此配对仅证明native来源实际存在；因为已核对九项lab无身份字段，旧精确投影门禁整组返回空卡，不能声称其精确卡回读通过。当前尚未固定提交/独审关闭；后续202通过记录见文末。
+83项完整首次复验唯一失败：test_tc02_synthetic_sqlite_new_instance_preserves_status_scope_and_real_source_refs[cancel_gap]。公开及新SQLite实例status/data_gap、reason、facts与文案保持正确，但精确专用文书卡缺失（StopIteration），不是SQLite丢失。green83.log SHA256 898a600d238ee69da928682f1c627f3ac68e89bc0e2a75f9395027821db68be3；green83.xml SHA256 6d6e5d5ff88a8e421d627ba8eb641d5f0e9cbdadf40c8c65b8d70965f9a31c06；源码冻结manifest green83-source-hashes.json SHA256 af11f7c4172a6a702c106dcd89efb97623092e2696dcaae58a1e13ca6fade225，均在.tmp/tc02-closure。原失败输入/精确卡期望保留，未删除、降级或xfail，不称83全绿。
+
+真实可达因果已由独审确认：070 raw facts为None时不会进入executor facts的提前返回（缺失事实强校验仅025）；随后精确projector遇选入的九项lab缺少\_IDENTITY_FIELDS整组返回[]。fac4有相同公共投影门禁，正常C同配对也受这一旧能力边界影响。但新allcancel/plan/unknown分支没有确认实施，根本没有核对九项，helper仍选入这些lab，是本次调用语境引用过宽，不能以继承门禁为由留置。未改全局projector、未补造文书ID。
+
+根批准进一步窄修：\_070_document_refs新增默认True的include_pretransfusion_materials；070仅无actual_transfusion_rows时传False，先从同快照获取实际消费bloodtrans逐行ref并立即返回，不读取或引用未核对的注册/MR/九项。有可信MR或已确认performed时沿完整旧路径。改源前独立附加6个cancel/plan/unknown正逆引用集合保护及4个可信MR混合正逆完整引用保护，spec位于review-artifacts/tc02-design/no-confirmed-consumption-spec-before-fix.json。原83所有既有测试函数AST未变，取消gap精确卡原断言继续作为产品门禁；新增10与后续回归实际执行记录如下。无已确认事件仍gap，不用排除态资料证明全院未输血。
+
+- 第一轮完整6文件实际收集202：192通过/10失败，4.51秒。原83（含取消gap精确卡3SQLite）和额外mapping10/Finalizer70/PUB29共109保护全部通过。10个新增逐行引用精确集合失败属于真实原调用合同不一致，不能称fixture错误：helper只返回消费文书，但\_decision默认又拼4类source snapshot摘要；六个无确认例期望2逐行引用、实际2+4摘要，四个可信MR例期望12逐行引用、实际12+4摘要。日志green-consumed-refs.log/.xml和源码manifest保留。未改原输入、原oracle或全局投影。
+- 第二轮同202：201通过/1失败，4.55秒。根批准070按“有actual或consumed且无输血源错误”条件启用exact_document_refs后，新增10及原取消gap精确卡都通过；唯一旧test_070_multi_transfusion_preserves_canonical_decision_facts_and_evidence明确要求fact_refs严格等于source_snapshot_refs与selected_document_refs并集，条件对已确认事件路径也清摘要破坏旧合同。旧断言保留不改。日志green-exact-refs.log/.xml和源码manifest保留。新10的可信MR精确集合期望与已有来源摘要合同有冲突，必须进一步由根裁定兼容方案后复验；当前不称202全绿。
+
+根与独审核准的最终兼容方案（同202已实际复验通过）：exact仅not actual_transfusion_rows且有consumed专用资料且无输血来源错误。无确认实施路径不追加未消费来源摘要；有MR/确认performed保持旧完整“4源摘要+逐行”约定，双来源空NA与源不可用gap保持原摘要证据和非空binding要求。新4MR保护修订为独立用原冻结材料创建snapshot，取4源observation.snapshot_ref与12逐行ref组成严格等式16，而非从执行器结果生成期待；新6无确认精确集合2保持。原freeze意图是original complete consumed sources unchanged，旧多事件合同与医学答案均未改；修订v2单独附加在consumed-ref-compatible-spec-v2-before-run.json，不覆写v1或先前失败输出。
+
+最终完整同6文件复验：202/202通过，4.48秒，未过滤83原失败，未更改原取消精确卡/旧多事件医学与证据断言。范围为新TC02 80、原070 12、070合同1、既有transfusion mapping10、canonical Finalizer70、PUB29，去重202；这些轮次不相加虚称总用例数。日志green-compatible-refs.log/.xml及green-compatible-refs-source-hashes.json在.tmp/tc02-closure。3个SQLite正常保存、新实例回读与5非法计数保存拒绝均实际执行，取消gap精确文书卡与known NC+unknown实际卡的source/time/field_path/excerpt和非空keyed_ref已独立断言，客户公开不暴露原ID/内部span。正常C同原材料缺lab文书身份字段仍沿既有整组空公共卡，不能用native真实refs冒称它精确卡已通过。
+
+最终精确开关仅无actual且consumed且无source_error；实际有MR/确认performed路径仍保留4来源快照摘要+逐行。空来源NA与源错gap沿原非空快照引用，未改变binding。先前新增4MR纯逐行等式是对既有“完整旧策略”冻结意图的过度收窄，按fac4原严格来源并集合同修订并独立附v2说明；这一修订不改变医学答案、不机械改旧夹具，也不掩盖此前新增10真实来源范围失败及201/1兼容回归失败。
+
+工程限制：本轮只有人工fake的正式执行0/1计量和严格协议/状态/资料/时间/保存保护，真实外发模型0、PG0、无env与网络，不称临床/真实模型通过。真实正文实施语义、模型遗漏非支持格式时刻、跨日同钟点、无显式时刻多事件等仍须真实语义验收；当前数值多时刻schema的正常检验/实施双时刻材料只能保持gap。院端MR ETL权威性未独立验证，沿现CDM合同。前端源未改；本批既有lint证据0 errors/1214 warnings复用既定源hash，先前typecheck因资源限制终止、全量前端unit未执行，不冒称这两项通过。提交时真实hook与encoding结果另记。
+
+提交前定向Ruff覆盖五个生产Python路径和新专属测试，实际All checks passed；暂存精确11文本路径后check:encoding实际扫描11全部通过（暂存前空index输出不算这次编码验收）。前端既有源/配置hash共1147项回核完全相同，沿根批准复用lint证据；不启动全量前端门禁。真实hook提交结果以固定SHA对应commit-hook.log为准。
