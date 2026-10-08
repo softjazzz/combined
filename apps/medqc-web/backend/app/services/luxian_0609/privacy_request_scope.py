@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
 from inspect import signature
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 from .llm_prompt_privacy import (
     PrivacyIdentityContextError,
@@ -15,9 +15,20 @@ from .llm_prompt_privacy import (
 )
 
 
+class _ScopeLease:
+    """范围退出后让继承ContextVar的延迟任务失效；不保存身份。"""
+    __slots__ = ("active",)
+
+    def __init__(self) -> None:
+        self.active = True
+
+
 @dataclass(frozen=True)
 class _Scope:
     provider: Callable[[], Iterable[str]] | None = field(default=None, repr=False)
+    case_coordinates: tuple[str, str, str] | None = field(default=None, repr=False)
+    lease: _ScopeLease = field(default_factory=_ScopeLease, repr=False, compare=False)
+    preserve_existing_provider: bool = field(default=False, repr=False)
 
 
 _SCOPE: ContextVar[_Scope | None] = ContextVar(
@@ -34,10 +45,54 @@ def luxian_0609_privacy_scope(function):
         arguments = sig.bind_partial(*args, **kwargs).arguments
         if str(arguments.get("rule_set_key") or "").strip() != "luxian_0609_qc_v1":
             return await function(*args, **kwargs)
-        token = _SCOPE.set(_Scope())
+        scope = _Scope(case_coordinates=_case_coordinates(arguments))
+        token = _SCOPE.set(scope)
         try:
             return await function(*args, **kwargs)
         finally:
+            scope.lease.active = False
+            _SCOPE.reset(token)
+
+    return guarded
+
+
+def _case_coordinates(arguments: Mapping[str, Any]) -> tuple[str, str, str] | None:
+    bundle = arguments.get("bundle")
+    source = bundle if isinstance(bundle, Mapping) else arguments
+    values = tuple(source.get(key) for key in ("institute_id", "patient_id", "visit_id"))
+    if any(isinstance(value, bool) or not isinstance(value, (str, int)) for value in values):
+        return None
+    coordinates = tuple(str(value).strip() for value in values)
+    return coordinates if all(coordinates) else None
+
+
+def luxian_0609_case_privacy_scope(function):
+    """显式0609入口；只在完整病例归属一致时继承已有 provider。"""
+    sig = signature(function)
+
+    @wraps(function)
+    async def guarded(*args, **kwargs):
+        arguments = sig.bind_partial(*args, **kwargs).arguments
+        coordinates = _case_coordinates(arguments)
+        current = _SCOPE.get()
+        inherits_case = (
+            current is not None and current.lease.active and coordinates is not None
+            and current.case_coordinates == coordinates
+        )
+        scope = (
+            _Scope(
+                provider=current.provider, case_coordinates=coordinates,
+                lease=current.lease, preserve_existing_provider=True,
+            )
+            if inherits_case else _Scope(case_coordinates=coordinates)
+        )
+        owns_lease = not inherits_case
+        token = _SCOPE.set(scope)
+        try:
+            return await function(*args, **kwargs)
+        finally:
+            if owns_lease:
+                scope.lease.active = False
             _SCOPE.reset(token)
 
     return guarded
@@ -49,8 +104,21 @@ def is_luxian_0609_privacy_scope_active() -> bool:
 
 
 def bind_luxian_0609_identity_provider(provider: Callable[[], Iterable[str]]) -> None:
-    if _SCOPE.get() is not None:
-        _SCOPE.set(_Scope(provider=provider))
+    scope = _SCOPE.get()
+    if scope is not None:
+        previous = scope.provider
+        if scope.preserve_existing_provider and previous is not None and previous is not provider:
+            incoming = provider
+
+            def combined() -> tuple[str, ...]:
+                # 不缓存身份：每次发送重读双方，任一失败仍由最终闸门固定拒发。
+                return (*previous(), *incoming())
+
+            provider = combined
+        _SCOPE.set(_Scope(
+            provider=provider, case_coordinates=scope.case_coordinates,
+            lease=scope.lease, preserve_existing_provider=scope.preserve_existing_provider,
+        ))
 
 
 def _redact_strings(value: Any) -> Any:
@@ -68,7 +136,7 @@ def protect_current_payload(payload: dict[str, Any]) -> dict[str, Any]:
     scope = _SCOPE.get()
     if scope is None:
         return payload
-    if scope.provider is None:
+    if not scope.lease.active or scope.provider is None:
         raise PrivacyIdentityContextError("Patient identity context unavailable")
     try:
         values = tuple(scope.provider())

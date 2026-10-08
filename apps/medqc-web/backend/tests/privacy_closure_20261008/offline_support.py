@@ -116,7 +116,6 @@ def load_runner(scope, *, prepare):
     from collections import Counter
     from time import perf_counter
     from typing import Mapping
-    from types import SimpleNamespace
     metrics = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     namespace = {
         "__package__": PACKAGE + ".luxian_0609", "luxian_0609_case_privacy_scope": scope.luxian_0609_case_privacy_scope,

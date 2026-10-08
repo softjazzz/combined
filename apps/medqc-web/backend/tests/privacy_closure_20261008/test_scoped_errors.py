@@ -2,7 +2,6 @@
 import ast
 import asyncio
 import logging
-from types import SimpleNamespace
 
 import pytest
 

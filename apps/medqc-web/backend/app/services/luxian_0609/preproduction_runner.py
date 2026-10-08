@@ -22,6 +22,7 @@ from .execution import (
     prepare_luxian_0609_execution,
 )
 from .execution_contract import FamilyUsageAttribution
+from .privacy_request_scope import luxian_0609_case_privacy_scope
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .rule_decision_settings import build_full_rule_decision_settings
 
@@ -630,6 +631,7 @@ def _validate_result_scope(
         raise ValueError("LX0609 preproduction result scope mismatch")
 
 
+@luxian_0609_case_privacy_scope
 async def run_luxian_0609_preproduction(
     *,
     bundle: Mapping[str, Any],
