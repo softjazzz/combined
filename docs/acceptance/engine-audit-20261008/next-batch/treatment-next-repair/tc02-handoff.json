@@ -1,0 +1,237 @@
+{
+  "fixed_sha": "aa7a98c7e43bc23439db485fa56cd90ea6da4bd1",
+  "historical_probe_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": [
+    "LX0609-07-01-03"
+  ],
+  "excluded": [
+    "0916"
+  ],
+  "mode": "read_only_static_handoff",
+  "new_tests_executed": 0,
+  "production_edits": 0,
+  "priority": "P1",
+  "blocker": "MR-only or unconditional withdrawal of record_time regresses an existing compliant dedicated-record contract. No trusted structured execution status distinguishes the fixed pair.",
+  "rules": [
+    {
+      "rule_id": "LX0609-07-01-03",
+      "finding_id": "TC02",
+      "status": "open",
+      "owner": "extended_document",
+      "original_counterexample": {
+        "id": "070_CANCELLED_RECORD_TIME",
+        "physical_sources": {
+          "inpat_registration": [
+            {
+              "admission_datetime": "2026-10-08 07:00:00"
+            }
+          ],
+          "mr_bloodtrans": [],
+          "bloodtrans_record": [
+            {
+              "document_id": "CANCEL1",
+              "record_time": "2026-10-08 08:00:00",
+              "record_content": "患者原计划输血，经再次评估后取消，本次住院未实施输血。"
+            }
+          ],
+          "labtest_item_report": []
+        },
+        "expected": "data_gap",
+        "observed_historical": {
+          "final_state": "non_compliant",
+          "detail_reason": "pretransfusion_items_incomplete",
+          "performed_transfusion_confirmed": true,
+          "checked_transfusion_times": [
+            "2026-10-08 08:00:00"
+          ]
+        },
+        "probe_limit": "070 branch input merge + pure evaluator, not full executor",
+        "frozen_path": "F:/MedQC-worktrees/qc-integration-20261008/.tmp/engine-audit-20261008/treatment-consultation/extension-frozen-expectations.json",
+        "frozen_sha256": "3077945601ca54174a167f1070bff8bc8788f1eabbdee598d29cde9bbb776303"
+      }
+    }
+  ],
+  "fixed_pair": {
+    "status": "proposed_offline_freeze_not_executed",
+    "base_sources": {
+      "inpat_registration": [
+        {
+          "admission_datetime": "2026-06-01 08:00:00"
+        }
+      ],
+      "mr_bloodtrans": [],
+      "bloodtrans_record": [
+        {
+          "document_id": "BLOOD-RECORD-1",
+          "record_time": "2026-06-02 14:00:00"
+        }
+      ],
+      "labtest_item_report": [
+        {
+          "item_code": "HBsAg",
+          "item_name": "乙肝表面抗原",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "HBsAb",
+          "item_name": "乙肝表面抗体",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "HBeAg",
+          "item_name": "乙肝e抗原",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "HBeAb",
+          "item_name": "乙肝e抗体",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "HBcAb",
+          "item_name": "乙肝核心抗体",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "HIV",
+          "item_name": "艾滋抗体",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "HCV",
+          "item_name": "丙肝抗体",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "TP",
+          "item_name": "梅毒抗体",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        },
+        {
+          "item_code": "ALT",
+          "item_name": "谷丙转氨酶",
+          "result": "阴性",
+          "report_time": "2026-06-02 10:00:00"
+        }
+      ]
+    },
+    "variations": [
+      {
+        "id": "TC02_EXISTING_ACTUAL_C",
+        "record_content": "悬浮红细胞2U输注完毕。",
+        "expected": "compliant",
+        "reason_code": "requirement_satisfied",
+        "source_test": "backend/tests/unit/test_luxian_0609_native_extended_document_execution.py:7423"
+      },
+      {
+        "id": "TC02_CANCEL_SAME_STRUCTURE",
+        "record_content": "患者原计划输血，经再次评估后取消，本次住院未实施输血。",
+        "expected": "data_gap",
+        "constraints": [
+          "No not_applicable from this text alone",
+          "No confirmed performed event from record_time alone",
+          "No nine-item deficiency on an unconfirmed event"
+        ]
+      }
+    ],
+    "only_difference": "record_content",
+    "normal_expectation_immutable": true
+  },
+  "contract_locations": [
+    {
+      "path": "backend/app/database/models/cdm.py",
+      "lines": [
+        1274,
+        1293
+      ],
+      "claim": "Existing formal CDM MrBloodtrans transfution_datetime means 输血时间; hospital ETL not independently verified"
+    },
+    {
+      "path": "backend/app/database/models/cdm.py",
+      "lines": [
+        32,
+        931
+      ],
+      "claim": "Document status has no execution-state mapping; dedicated record content is unstructured; record_time not declared implementation time"
+    },
+    {
+      "path": "backend/app/services/luxian_0609/source_evidence_reader.py",
+      "lines": [
+        137,
+        145
+      ],
+      "claim": "Projected dedicated record carries no execution state"
+    },
+    {
+      "path": "backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "lines": [
+        3131,
+        3144
+      ],
+      "claim": "Merged dedicated records become actual event rows"
+    },
+    {
+      "path": "backend/app/services/luxian_0609/native_transfusion_execution.py",
+      "lines": [
+        961
+      ],
+      "claim": "event time fallback accepts record_time"
+    },
+    {
+      "path": "backend/app/services/luxian_0609/source_registry.py",
+      "lines": [
+        515,
+        605
+      ],
+      "claim": "Actual source anchors and each-event/current-stay nine-item policy"
+    }
+  ],
+  "source_prefix": "F:/MedQC-worktrees/qc-integration-20261008/apps/medqc-web/",
+  "protected_existing_tests": {
+    "path": "backend/tests/unit/test_luxian_0609_native_extended_document_execution.py",
+    "lines": [
+      7392,
+      7423,
+      7469,
+      7517,
+      7535,
+      7577,
+      7778
+    ],
+    "executed_this_round": false
+  },
+  "next_step": "Critical owner: freeze the pair and original counterexample, reproduce offline red first. Await controlled performed/planned/cancelled/unknown evidence or trusted upstream status; no negative lexicon extension and no MR-only production patch.",
+  "proposed_exclusive_files": [
+    "backend/app/services/luxian_0609/native_extended_document_execution.py (070 branch and _070_document_refs only)",
+    "backend/tests/unit/test_luxian_0609_tc02_performed_event_contract.py (new; not created)"
+  ],
+  "shared_helper_requires_coordination": "backend/app/services/luxian_0609/native_transfusion_execution.py",
+  "remaining": [
+    {
+      "finding_id": "TC01",
+      "status": "open_semantic_event_fact_required",
+      "source": "native_transfusion_execution.py:2865"
+    },
+    {
+      "finding_id": "TC03",
+      "status": "open_intraoperative_action_association_required",
+      "source": "native_transfusion_execution.py:2388",
+      "closed_pairing_sha": "b4a98783e"
+    },
+    {
+      "finding_id": "TR044",
+      "status": "open_multi_event_association_and_business_scope",
+      "source": "pretransfusion_assessment.py:184,287",
+      "closed_gap_contract_sha": "db4bddb67"
+    }
+  ],
+  "privacy_scope_note": "Earlier overbroad docs search returned a non-target historical unsanitized sample. Search stopped; no content or identity reproduced in this handoff."
+}

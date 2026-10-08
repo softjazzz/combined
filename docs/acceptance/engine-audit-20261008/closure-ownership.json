@@ -333,6 +333,47 @@
       ],
       "scope_constraint": "No registration/default enable; production change requires actual red proof and root narrow approval",
       "test_slot": null
+    },
+    {
+      "id": "TC02",
+      "owner": "/root/repair_iml02",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "state": "approved_offline_only",
+      "responsibility": [
+        "native_extended_document_execution.py:070",
+        "extended_document/transfusion_performance_extraction.py",
+        "transfusion_result_mapping.py:070",
+        "customer_renderer.py:070",
+        "canonical_result_finalizer.py:070 explanation tuples",
+        "app/data/luxian_0609_phase1_rule_contracts_extension_v1.json:070",
+        "app/data/luxian_0609_phase1_rules_extension_v1.json:070"
+      ],
+      "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
+    },
+    {
+      "id": "TP-D02-LOCAL",
+      "owner": "/root/repair_chemo",
+      "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
+      "state": "approved_offline_only",
+      "responsibility": [
+        "native_tumor_pathology_execution.py:026",
+        "chemotherapy_local_dose_facts.py",
+        "rule_contracts.py:026 budget",
+        "app/data/luxian_0609_rule_contracts_v1.json:026",
+        "app/data/luxian_0609_rules_v1.json:026"
+      ],
+      "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
+    },
+    {
+      "id": "SURGERY-FREEZE-TEST",
+      "owner": "/root/repair_iml01",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "state": "approved_offline_only",
+      "responsibility": [
+        "tests/unit/test_luxian_0609_surgery_document_freeze.py",
+        "tests/unit/test_surgery_029_normal_event_association.py"
+      ],
+      "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
     }
   ],
   "rules": [

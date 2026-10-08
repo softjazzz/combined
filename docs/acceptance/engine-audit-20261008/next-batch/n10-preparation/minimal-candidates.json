@@ -1,0 +1,97 @@
+{
+  "frozen_stage": "static preparation, not runnable expectation replacement",
+  "cases": [
+    {
+      "rule_id": "LX0609-04-05-02",
+      "kind": "time_title",
+      "record_content": "2026-07-02 09:00 主任医师查房记录\n医生签名：张三",
+      "inherited_expected": {
+        "final_state": "data_gap",
+        "reason_code": "required_field_missing"
+      },
+      "historical_observed": "compliant",
+      "current_static_helper_path": "nonempty line unmatched by title/signature fullmatch -> body true",
+      "fixture_status": "public reconstruction, not original full frozen row",
+      "metadata_do_not_invent": [
+        "author_name",
+        "author_title",
+        "document_title"
+      ],
+      "required_before_runtime": [
+        "prove correct rule event/window reached body branch",
+        "use authoritative datetime carriers",
+        "do not satisfy assertion through unrelated early data_gap"
+      ],
+      "executed_now": false
+    },
+    {
+      "rule_id": "LX0609-04-05-02",
+      "kind": "name_title",
+      "record_content": "张三主任医师查房记录",
+      "inherited_expected": {
+        "final_state": "data_gap",
+        "reason_code": "required_field_missing"
+      },
+      "historical_observed": "compliant",
+      "current_static_helper_path": "nonempty line unmatched by title/signature fullmatch -> body true",
+      "fixture_status": "public reconstruction, not original full frozen row",
+      "metadata_do_not_invent": [
+        "author_name",
+        "author_title",
+        "document_title"
+      ],
+      "required_before_runtime": [
+        "prove correct rule event/window reached body branch",
+        "use authoritative datetime carriers",
+        "do not satisfy assertion through unrelated early data_gap"
+      ],
+      "executed_now": false
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "kind": "time_title",
+      "record_content": "2026-07-02 09:00 主任医师查房记录\n医生签名：张三",
+      "inherited_expected": {
+        "final_state": "data_gap",
+        "reason_code": "required_field_missing"
+      },
+      "historical_observed": "compliant",
+      "current_static_helper_path": "nonempty line unmatched by title/signature fullmatch -> body true",
+      "fixture_status": "public reconstruction, not original full frozen row",
+      "metadata_do_not_invent": [
+        "author_name",
+        "author_title",
+        "document_title"
+      ],
+      "required_before_runtime": [
+        "prove correct rule event/window reached body branch",
+        "use authoritative datetime carriers",
+        "do not satisfy assertion through unrelated early data_gap"
+      ],
+      "executed_now": false
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "kind": "name_title",
+      "record_content": "张三主任医师查房记录",
+      "inherited_expected": {
+        "final_state": "data_gap",
+        "reason_code": "required_field_missing"
+      },
+      "historical_observed": "compliant",
+      "current_static_helper_path": "nonempty line unmatched by title/signature fullmatch -> body true",
+      "fixture_status": "public reconstruction, not original full frozen row",
+      "metadata_do_not_invent": [
+        "author_name",
+        "author_title",
+        "document_title"
+      ],
+      "required_before_runtime": [
+        "prove correct rule event/window reached body branch",
+        "use authoritative datetime carriers",
+        "do not satisfy assertion through unrelated early data_gap"
+      ],
+      "executed_now": false
+    }
+  ]
+}
