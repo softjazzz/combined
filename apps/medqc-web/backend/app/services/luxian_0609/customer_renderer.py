@@ -3626,6 +3626,22 @@ def preop_summary_customer_message(
             "也未把不合格的引用作为证据。",
             f"请人工核对{document}原文，或重新质控。",
         )
+    if (
+        rule_id == "LX0609-04-01-05" and status == "data_gap"
+        and isinstance(facts, Mapping)
+        and facts.get("verification_kind") == "preop_discussion_content_uncertain"
+    ):
+        uncertain = facts.get("uncertain_fields")
+        if not isinstance(uncertain, list) or not uncertain or any(
+            not isinstance(field, str) or field not in _PREOP_FIELD_LABELS for field in uncertain
+        ):
+            return None
+        names = "、".join(_PREOP_FIELD_LABELS[field] for field in uncertain)
+        return (
+            f"术前讨论记录的{names}内容无法确认，本项暂无法判定。",
+            "执行器已核对术前讨论记录，以上内容仍待确认，未将待确认项目计入确认缺项。",
+            f"请人工核对术前讨论记录的{names}原文，确认后重新质控。",
+        )
     if rule_id == "LX0609-04-01-05" and status == "non_compliant":
         discussion_labels = {
             field: _PREOP_FIELD_LABELS[field]
@@ -4069,6 +4085,21 @@ def render_luxian_0609_customer_result(
         "evidence_items": [],
         "criterion_results": [],
     }
+    if (
+        decision.rule_id == "LX0609-04-01-05"
+        and decision.final_state is CustomerFinalState.DATA_GAP
+        and isinstance(safe_customer_display_facts, Mapping)
+        and safe_customer_display_facts.get("verification_kind") == "preop_discussion_content_uncertain"
+        and handbook_message is not None
+    ):
+        result.update(
+            customer_message=findings, missing_sources=[], missing_fields=[],
+            data_gap_details={
+                "reason_code": result["reason_code"],
+                "reason_label": "术前讨论记录内容待确认",
+                "customer_message": findings, "missing_sources": [], "missing_fields": [],
+            },
+        )
     if decision.criterion_results:
         contract = next(
             item

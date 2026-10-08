@@ -728,12 +728,22 @@ async def evaluate_preop_content_rules(
                 refs,
             )
         )
+        # 079的字段unknown与手术归属无关；仅公开待确认字段，不伪造关联状态。
+        uncertain_fields = sorted({
+            field
+            for _ref, row, _text in records[rule]
+            for field, value in parsed[(RULE_SOURCES[rule], _document_id(row))].items()
+            if (value is None or isinstance(value, Mapping) and value.get("state") == "unknown")
+            and not (field == "recorder_signature" and _has_structured_recorder_signature(row))
+        }) if rule == "LX0609-04-01-05" and status == "data_gap" else []
         display.append(
             (
                 rule,
                 {
                     "verification_kind": (
-                        "preop_surgery_association_ambiguous"
+                        "preop_discussion_content_uncertain"
+                        if rule == "LX0609-04-01-05" and status == "data_gap"
+                        else "preop_surgery_association_ambiguous"
                         if status == "data_gap"
                         else "preop_content_complete"
                         if not missing
@@ -743,6 +753,7 @@ async def evaluate_preop_content_rules(
                     "checked_fields": list(RULE_FIELDS[rule]),
                     "missing_fields": sorted(missing),
                     "documents": documents,
+                    **({"uncertain_fields": uncertain_fields} if uncertain_fields else {}),
                     **({"pending_fields": sorted(pending)} if pending else {}),
                 },
             )

@@ -309,6 +309,7 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
             "preop_content_complete",
             "preop_content_incomplete",
             "preop_surgery_association_ambiguous",
+            "preop_discussion_content_uncertain",
             "preop_fact_extraction_invalid",
         }
         or raw.get("target_document") != target
@@ -342,6 +343,38 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
             "failure_scope": scope,
             "invalid_fields": list(invalid),
         }
+    uncertain = raw.get("uncertain_fields", [])
+    if kind == "preop_discussion_content_uncertain":
+        # 内容unknown只属于079；不得夹带确认缺项、手术关联或未请求的事实。
+        if (
+            rule_id != "LX0609-04-01-05"
+            or set(raw) != {
+                "verification_kind", "target_document", "checked_fields",
+                "missing_fields", "documents", "uncertain_fields",
+            }
+            or raw.get("missing_fields") != []
+            or not isinstance(uncertain, list)
+            or not uncertain
+            or any(not isinstance(field, str) or field not in allowed for field in uncertain)
+            or len(uncertain) != len(set(uncertain))
+        ):
+            return None
+        documents = raw.get("documents")
+        if not isinstance(documents, list) or not documents or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"document_index", "event_index", "association_state", "missing_fields"}
+            or type(item["document_index"]) is not int
+            or item["document_index"] < 1
+            or item["association_state"] != "not_required"
+            or item["event_index"] is not None
+            or item["missing_fields"] != []
+            for item in documents
+        ):
+            return None
+        if len({item["document_index"] for item in documents}) != len(documents):
+            return None
+    elif "uncertain_fields" in raw:
+        return None
     missing = raw.get("missing_fields")
     if not isinstance(missing, list):
         return None
@@ -407,6 +440,7 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         "checked_fields": list(allowed),
         "missing_fields": safe_missing,
         "documents": safe_documents,
+        **({"uncertain_fields": list(uncertain)} if uncertain else {}),
         **({"pending_fields": safe_pending} if safe_pending else {}),
     }
 
@@ -433,6 +467,8 @@ def safe_surgery_document_customer_display_facts(
 def surgery_document_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
 ) -> bool:
+    if isinstance(safe_facts, Mapping) and safe_facts.get("verification_kind") == "preop_discussion_content_uncertain":
+        return str(rule_id or "").strip().upper() == "LX0609-04-01-05" and status == "data_gap"
     if not is_surgery_document_customer_rule(rule_id):
         return True
     if not isinstance(safe_facts, Mapping):
@@ -458,6 +494,7 @@ def surgery_document_customer_fact_status_is_valid(
         "preop_content_complete": "compliant",
         "preop_content_incomplete": "non_compliant",
         "preop_surgery_association_ambiguous": "data_gap",
+        "preop_discussion_content_uncertain": "data_gap",
         "preop_fact_extraction_invalid": "data_gap",
     }.get(str(kind))
     return expected is not None and status == expected
