@@ -1196,6 +1196,19 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_version = formal_rule_set.version
 
     if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
+        # 先校验原选择；暂停投影不能把未注册或客户排除项带入任务。
+        allowed_customer_rule_ids = {
+            str(rule_id or "").strip().upper() for rule_id in rule_ids
+        }
+        invalid_selected_rule_ids = [
+            rule_id for rule_id in requested_selected_rule_ids
+            if rule_id not in allowed_customer_rule_ids
+        ]
+        if invalid_selected_rule_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"所选质控点不属于当前规则集: {', '.join(invalid_selected_rule_ids)}",
+            )
         if not requested_selected_rule_ids:
             acceptance_only = get_luxian_0609_acceptance_only_rule_ids()
             rule_ids = [rid for rid in rule_ids if rid not in acceptance_only]
