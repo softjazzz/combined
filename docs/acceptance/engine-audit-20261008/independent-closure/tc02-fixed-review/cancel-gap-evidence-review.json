@@ -1,0 +1,286 @@
+{
+  "review_kind": "independent_read_only_cancel_gap_evidence_causality",
+  "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+  "baseline_sha": "fac4ef67c0f68da1625f419ea5dddb47f38aa78b",
+  "rule_id": "LX0609-07-01-03",
+  "reviewer_tests_executed": 0,
+  "model_calls": 0,
+  "production_edits": 0,
+  "author_run": {
+    "path": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green83.log",
+    "sha256": "898a600d238ee69da928682f1c627f3ac68e89bc0e2a75f9395027821db68be3",
+    "xml_path": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green83.xml",
+    "xml_sha256": "6d6e5d5ff88a8e421d627ba8eb641d5f0e9cbdadf40c8c65b8d70965f9a31c06",
+    "reported_and_read": "82 passed,1 failed; no reviewer rerun",
+    "failed_test": "test_tc02_synthetic_sqlite_new_instance_preserves_status_scope_and_real_source_refs[cancel_gap]",
+    "failure_line": 507,
+    "failure": "StopIteration while finding exact dedicated source_ref, public evidence=[]",
+    "prior_assertions_reached": [
+      "native exact bloodtrans reference present",
+      "status data_gap",
+      "saved status/reason/facts/findings/suggestion equality"
+    ],
+    "keep_original_failure": true,
+    "source_manifest_path": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green83-source-hashes.json",
+    "source_manifest_sha256": "af11f7c4172a6a702c106dcd89efb97623092e2696dcaae58a1e13ca6fade225"
+  },
+  "correction_of_initial_inference": "The 070 no-facts executor finalizer shortcut exists in fac4/current, but the reduced test path does not enter it: raw=None and missing-facts validation applies only to025. Earlier message treating it as reached was corrected to root/author.",
+  "actual_reachable_chain": [
+    {
+      "path": "tests/unit/test_luxian_0609_tc02_performed_event_contract.py",
+      "lines": [
+        175,
+        177,
+        468,
+        478
+      ],
+      "behavior": "cancel_gap uses fixed complete-nine-item pair and raw display facts None; native exact record reference asserted"
+    },
+    {
+      "path": "app/services/luxian_0609/canonical_result_finalizer.py",
+      "lines": [
+        794,
+        799,
+        1166,
+        1195
+      ],
+      "behavior": "070 rawNone skips executor-fact finalization and invokes selected-document projection"
+    },
+    {
+      "path": "app/services/luxian_0609/surgery_gate_result_mapping.py",
+      "lines": [
+        38,
+        40
+      ],
+      "behavior": "Missing-facts validation only025"
+    },
+    {
+      "path": "app/services/luxian_0609/native_extended_document_execution.py",
+      "lines": [
+        543,
+        584,
+        3154,
+        3175
+      ],
+      "behavior": "Allcancel branch does not run nine-item evaluator, yet prior helper still selects all nine labrefs"
+    },
+    {
+      "path": "app/services/luxian_0609/decision_binding.py",
+      "lines": [
+        267,
+        285
+      ],
+      "behavior": "Checks snapshot identity and allowed refs"
+    },
+    {
+      "path": "app/services/luxian_0609/decision_reducer.py",
+      "lines": [
+        122,
+        127
+      ],
+      "behavior": "Carries original factrefs"
+    },
+    {
+      "path": "app/services/luxian_0609/customer_evidence_enrichment.py",
+      "lines": [
+        15,
+        28,
+        274,
+        308,
+        335,
+        351
+      ],
+      "behavior": "Whole selected-ref group fails closed if any non-registration selected row lacks recognized identity. Pair's nine labs have only item_code/item_name/result/report_time, hence all selected labrows lack identity"
+    },
+    {
+      "path": "app/services/luxian_0609/canonical_result_finalizer.py",
+      "lines": [
+        1191,
+        1206,
+        1238
+      ],
+      "behavior": "Empty projection remains empty; no source-level fallback creates card"
+    },
+    {
+      "path": "app/services/qc_workspace/canonical_result_store.py",
+      "lines": [
+        405,
+        423,
+        492,
+        522,
+        643,
+        739,
+        757
+      ],
+      "behavior": "Envelope whitelist does not persist native snapshot_hash/fact_refs; existing evidence rows are HMAC projected and saved; empty input rows persist as evidence=[] and load remains envelope"
+    },
+    {
+      "path": "app/services/custom_qc_workspace_service.py",
+      "lines": [
+        362,
+        390,
+        691
+      ],
+      "behavior": "Public DTO processes only existing evidence candidates, no native-ref reconstruction"
+    }
+  ],
+  "source_hash_contract": {
+    "row_refs": "evidence_material.py:44-68 hashes canonical row material + source_key + occurrence",
+    "session_binding": "evidence_material.py:225-281 checks snapshot hash, source completeness/count and source snapshot ref; decision has snapshot_hash; projector checks matching snapshot/material",
+    "public_identity": "src_ plus 24hex is HMAC source coordinate; not raw row-content digest",
+    "limit": "Native accurate row ref does not equal a saved/public precise card"
+  },
+  "classification": {
+    "normal_actual_C": "Inherited complete-nine fixture coordinate limitation: nine test rows lack IDs; identical unchanged projector in fac4 leads empty cards. Preserve original C and do not claim precise-card readback.",
+    "new_cancel_gap": "New semantic branch reused broad 070 helper despite skipping nine-item evaluation. Inherited global projector limit is exposed by newly overbroad labref selection. Not a blanket inherited no-facts-gap contract; keep original precise-card failure open.",
+    "sqlite": "No evidence loss introduced by SQLite; source cards are already absent before envelope projection.",
+    "acceptance": "State/fact repair can only be discussed separately from evidence closure. Root has required narrow consumption-ref repair and keeping original card assertion; do not downgrade failure or call83 all green."
+  },
+  "pending_author_repair": "Final source scope and v2 expectation reconciliation read; author same202 allpassed artifacts independently read and hashes matched. No new static blocker; fixedcommit acceptance remains pending.",
+  "source_hashes": [
+    {
+      "path": "app/services/luxian_0609/native_extended_document_execution.py",
+      "sha256_before_reference_repair": "545d05fa51031b94254dbf6db87b192e32df37f8bcef591221bbbbb6241b5af1"
+    },
+    {
+      "path": "app/services/luxian_0609/canonical_result_finalizer.py",
+      "sha256": "13a49bfd1e48bd21e82967a5bd41e3e56180c0b4ad4b13d7fa89adcbe8e6a190",
+      "baseline_git_blob": "1d3904a3003835d3d3d2f1a4cb35692e9bae76b2"
+    },
+    {
+      "path": "app/services/luxian_0609/customer_evidence_enrichment.py",
+      "sha256": "d18a11c6cb22c987238b850140f0cd2f05ea73d3609e6db05f5d97e391607599",
+      "baseline_git_blob": "3970da013059795ec18457ce2ccd5ecada4f5139",
+      "unchanged_vs_baseline": true
+    },
+    {
+      "path": "app/services/luxian_0609/evidence_material.py",
+      "sha256": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec",
+      "baseline_git_blob": "1d676c1dee19e1f9d2030d26058dbc62ed477f73",
+      "unchanged_vs_baseline": true
+    },
+    {
+      "path": "app/services/qc_workspace/canonical_result_store.py",
+      "sha256": "67d80d42efdd4c0010684017932d49c86856f5c2950d83af4f1eb5516b2bdf4a",
+      "baseline_git_blob": "4c217f88909954006d13f0dbaa5310f02fa623b0",
+      "unchanged_vs_baseline": true
+    },
+    {
+      "path": "app/services/custom_qc_workspace_service.py",
+      "sha256": "455d5689323a186ed747a83ffe693c06838e0a80bf784af5e671bd0ac3bbbd8d",
+      "baseline_git_blob": "28714deaffc6c3b96d7547e97311a2a3fd24e922",
+      "unchanged_vs_baseline": true
+    }
+  ],
+  "source_prefix": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/apps/medqc-web/backend/",
+  "limits": "Static proof and read of existing synthetic log only. No fixed candidate commit/real model/clinical evidence acceptance.",
+  "narrow_repair_read": {
+    "native_sha256": "a987a4d81783505be3a64c2550c5110e2b63c3a16f161809c4bd5242cfbaec1b",
+    "helper_lines": [
+      543,
+      568
+    ],
+    "call_lines": [
+      3204,
+      3215
+    ],
+    "static_result": "False path validates same-snapshot dedicated rows then returns only consumed row refs; True retains registration/MR/labs. No global projector/save diff.",
+    "remaining": "Exact switch must apply only to no-actual-event consumed dedicated documents and no source error. Actual/MR paths retain the inherited source-snapshot summary plus selected document refs.",
+    "na_protection_source": "decision_binding.py:125-148",
+    "new_frozen_spec_path": "F:/MedQC-worktrees/review-artifacts/tc02-design/no-confirmed-consumption-spec-before-fix.json",
+    "new_frozen_spec_sha256": "fa5998dad619f340bd32d54a3104cecc6d182ffe28db85f867d1a438590b40fd",
+    "new_test_sha256": "5fc291cf9af058a8ea51053a4245ab3e164d4cf50868063b61ce16e7d622e945",
+    "new_cases": 10,
+    "executed": false,
+    "original_cancel_card_assertion_preserved_read_lines": [
+      507,
+      511
+    ]
+  },
+  "reference_contract_reconciliation": {
+    "read_native_sha256": "e1322ab79c6c1f8d22993107dc6c9b30fd888ef9baa7db351d87fb96ab5c2c28",
+    "old_contract": {
+      "baseline_test_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py",
+      "baseline_lines": [
+        7646,
+        7659
+      ],
+      "current_assertion_line": 7660,
+      "requirement": "fact_refs == source_snapshot_refs | selected_document_refs",
+      "source_keys": [
+        "inpat_registration",
+        "mr_bloodtrans",
+        "bloodtrans_record",
+        "labtest_item_report"
+      ],
+      "existing_test_unchanged": "git diff only adds fake performed client in7423; multi-event assertions unchanged"
+    },
+    "new_frozen_intent": {
+      "path": "F:/MedQC-worktrees/review-artifacts/tc02-design/no-confirmed-consumption-spec-before-fix.json",
+      "expectedNoConfirmedRefs": "exact dedicated row refs",
+      "expectedConfirmedMRRefs": "original complete consumed sources unchanged"
+    },
+    "identified_test_mismatch": "New4 confirmed-MR cases asserted only12 row refs, contradicting the frozen original-complete-sources intent and existing4 snapshot-summary contract.",
+    "authorized_expected_revision": "Keep no-confirmed6 exact dedicated refs and original cancel SQLite precise-card assertion. For confirmed-MR4 derive12 row refs plus four independent source snapshot refs from session snapshot. Do not modify old test, medical expected state, time facts or nine-item checks.",
+    "narrow_switch": "not actual_transfusion_rows and bool(consumed_bloodtrans_rows) and not transfusion_source_error",
+    "reviewer_prior_recommendation_correction": "Earlier recommendation to apply exact mode to every active actual/consumed branch was too broad for actual/MR contract and has been withdrawn for actual/MR; source summaries are not automatically unconsumed refs.",
+    "author_run_followup": {
+      "log": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green-exact-refs.log",
+      "log_sha256": "321817d7c749e204a3f7dc6e992c736b4ca27b6bcbd6cb37705d1abded2d1ee0",
+      "xml": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green-exact-refs.xml",
+      "xml_sha256": "1d990c321f26be9faa47322861a41525ec43c2efca5ffe4ce9b5552e537555c4",
+      "source_manifest": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green-exact-refs-source-hashes.json",
+      "source_manifest_sha256": "a1aaa078e737f26a3f902d5e3b47703ac68d47fe16905e48608fd314f84d73d4",
+      "result": "201 passed,1 failed; old multi-event reference contract; reviewer read existing log, no rerun"
+    },
+    "status": "Final72789f8b conditional switch and6ea5d172 revised tests statically match scope; runtime and fixed-commit acceptance pending."
+  },
+  "final_narrow_repair": {
+    "native_sha256": "72789f8b6953e55bdfe2e276fce052ec80428bd2ac742ffa3662b2432265e442",
+    "test_sha256": "6ea5d17282d7ed2eceae95fc8b15a49767b1aae1e16dd9b1546fd3ea9265e36e",
+    "switch_line": 3208,
+    "condition": "not actual_transfusion_rows and bool(consumed_bloodtrans_rows) and not transfusion_source_error",
+    "actual_and_no_source_protection": "Actual/MR branches retain default source summary + selected row refs; complete-no-source NA retains nonempty source-summary contract.",
+    "revised_test_lines": [
+      591,
+      607
+    ],
+    "independent_expectation": "Expected session separately built from frozen rows;4 source snapshots plus12 document row refs=16; never copied from executor.",
+    "v2_path": "F:/MedQC-worktrees/review-artifacts/tc02-design/consumed-ref-compatible-spec-v2-before-run.json",
+    "v2_sha256": "fdfe06cdf3870b24cc5cbfa25d631dfc0571a6c51d04543eb90ee348fc97d866",
+    "v1_sha256_unchanged": "fa5998dad619f340bd32d54a3104cecc6d182ffe28db85f867d1a438590b40fd",
+    "no_new_static_blocker": true,
+    "original_failed_card_assertion_retained": true,
+    "global_projector_store_and_public_dto_unchanged": true
+  },
+  "fixed_commit_acceptance_checklist": [
+    "Pin final commit SHA and compare withfac4; map exact TC02 source hashes to authorized202 test result manifest.",
+    "Keep original83 82/1 and subsequent202 201/1 logs plusv1/v2 freezes; identify final same202 result separately; no silent failure deletion.",
+    "Read exact-mode condition onlynoactual/consumed/nosourceerror and helperFalse same-snapshot dedicated-only refs.",
+    "Retain actual/MR source summaries+selected rows and old multi-event strict equality; no-source NA stays NA with required source proof.",
+    "Check originalcancel SQLite precise source_ref/record_time/field_path/excerpt native-to-public-to-new-session readback; native refs or nonprecise nonempty cards do not substitute.",
+    "Check original7423 C, MR-only0calls, missing timegap, canceled text not entire-stay absence, C+unknown gap, NC+unknown preserved, multi-event eachtime and mixed-order evidence.",
+    "Check raw reservedcount1..100 onlyNC complete facts; bool/string/None/0/negative/>100 or illegal status rejected before filtering/persistence.",
+    "Check070 optionalmax1 contract + privacy/strict atoms/timeconflicts/limits/usage/failure copy; no clinical-negativeword table and no raw-offset claim.",
+    "Inspect public statuses,reasons,facts,precise evidence,copy and storage invariance at fixedcommit; unchanged global projector/binding/store.",
+    "Report real-model/clinical semantic behavior as unverified; one scalarstate, cross-day sameclock and no-clock multi-events remain bounded semantic risks."
+  ],
+  "final_author_run_read": {
+    "path": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green-compatible-refs.log",
+    "sha256": "d365252477b0beec19465f8850cfd62cc56048f7bb544df074b9153d933fae78",
+    "xml_path": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green-compatible-refs.xml",
+    "xml_sha256": "7adafbcc195ab7be3db32371ad196cd692fed7faa58aaf16a8e1e7dfddac3bc1",
+    "source_manifest_path": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure/green-compatible-refs-source-hashes.json",
+    "source_manifest_sha256": "31c3c92c452deb67a44957cc4f6a85d2b993d43d714671dbf079be3e7e9d48f9",
+    "read_result": "202passed in4.48s; XML202/0failure/0error/0skip",
+    "specific_cases_present_pass": [
+      "actual_c SQLite",
+      "cancel_gap SQLite",
+      "known_nc_unknown SQLite",
+      "old070 multi-transfusion canonical facts/evidence"
+    ],
+    "source_hashes_match_statically_reviewed_native_and_test": true,
+    "reviewer_execution": false,
+    "fixed_commit_acceptance": "pending"
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "review_type": "fixed_commit_independent_readonly_engineering_review",
+  "commit": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+  "baseline": "fac4ef67c0f68da1625f419ea5dddb47f38aa78b",
+  "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+  "scope": [
+    "TC02",
+    "070",
+    "LX0609-07-01-03"
+  ],
+  "integration_recommendation": "blocked_pending_TC02_PV01",
+  "fixed_checks": {
+    "head_matches_commit": true,
+    "worktree_clean": true,
+    "changed_paths": 11,
+    "tested_source_test_json_hashes_match_commit": 10,
+    "shared_changes_rule_070_only": true,
+    "global_projector_binding_store_dto_unchanged": true
+  },
+  "author_test_evidence": {
+    "reviewer_reran_suite": false,
+    "tests": 202,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 4.48,
+    "directory": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008/.tmp/tc02-closure",
+    "log_sha256": "d365252477b0beec19465f8850cfd62cc56048f7bb544df074b9153d933fae78",
+    "xml_sha256": "7adafbcc195ab7be3db32371ad196cd692fed7faa58aaf16a8e1e7dfddac3bc1",
+    "source_manifest_sha256": "31c3c92c452deb67a44957cc4f6a85d2b993d43d714671dbf079be3e7e9d48f9",
+    "historical_failures_retained": [
+      "78 setup errors",
+      "83:82 pass/1 fail cancel_gap card",
+      "202:192 pass/10 fail refs",
+      "202:201 pass/1 fail old multi_transfusion"
+    ]
+  },
+  "accepted_engineering_subitems": [
+    "One optional bounded extraction batch for dedicated records, MR trusted path zero calls",
+    "Controlled performed/plan/cancel/unknown, no added negation vocabulary",
+    "Known NC survives unknown; C plus unknown and all-cancel give gap; no sources retains old NA",
+    "Raw reserved count validated before filtering and persistence, exact int 1..100 only for NC complete event facts",
+    "No confirmed actual and consumed dedicated records and no source error uses exact consumed dedicated row references",
+    "Actual/MR path retains independent source snapshot summaries plus consumed rows, old multi-event strict union unchanged",
+    "New four MR expectations amended through separate v2 freeze, original v1 retained; no executor-derived expectations",
+    "Original cancel_gap precise SQLite card retained and passed; normal C missing-lab-ID coordinate limitation separately retained"
+  ],
+  "blockers": [
+    {
+      "id": "TC02-PV01",
+      "priority": "P1",
+      "confirmed": true,
+      "title": "Formal privacy wrapper changes serialized extraction body/span view and invalidates JSON",
+      "locations": [
+        "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py:138",
+        "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py:153",
+        "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py:418",
+        "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py:61"
+      ],
+      "cause": "Helper redacts multiline body before json.dumps. Actual formal wrapper redacts the entire serialized prompt again. Address value excludes real newline but not JSON escaped newline, consumes clinical action and structural characters after an already-redacted address placeholder.",
+      "executability": "execution resources pass formally wrapped client to native extended-document executor; direct unwrapped fake tests omit this path",
+      "clinical_limit": "No real model tested; captured delegate input damage proven, downstream clinical accuracy or leakage not inferred.",
+      "minimal_acceptance_requirement": "One privacy-checked body/span view must be both transmitted and validated; preserve privacy checks, JSON structure, medical text and unique original quote linkage; add actual wrapper coverage before integration. Do not disable wrapper checks or rewrite medical assertions to fit damaged input."
+    }
+  ],
+  "remaining_limits": [
+    "Real-model extraction and clinical semantics unverified",
+    "Single state for ambiguous multi-event/cross-day/same-clock/no-clock material remains semantic boundary",
+    "Original normal C fixture lacks laboratory document IDs, inherited precise-card limitation not closed",
+    "CDM transfusion time contract inherited, hospital ETL independently unverified",
+    "070-only result does not close TC01, TC03, TR044 multi-event or excluded0916"
+  ],
+  "privacy_probe": {
+    "authorized_by_root": true,
+    "pure_stdlib": true,
+    "env_pg_model_network_calls": 0,
+    "production_test_file_edits": 0,
+    "direct_fake_calls": 1,
+    "actual_wrapper_fake_delegate_calls": 1,
+    "synthetic_body": "地址：合成街道\n14:00悬浮红细胞2U输注完毕。",
+    "record_time": "2026-01-01 14:00:00",
+    "frozen_expected": {
+      "already_redacted_address_keeps_following_action": true,
+      "delegate_INPUT_JSON_valid": true,
+      "delegate_body_equals_helper_view": true,
+      "delegate_span_equals_helper_view": true
+    },
+    "actual": {
+      "helper_INPUT_JSON_valid": true,
+      "initial_action_present": true,
+      "transmitted_action_present": false,
+      "delegate_INPUT_JSON_valid": false,
+      "delegate_body_equals_helper_view": false,
+      "delegate_span_equals_helper_view": false,
+      "parse_error": "JSONDecodeError",
+      "prompt_equal": false
+    },
+    "privacy_source_sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+    "helper_source_sha256": "cbc66468d12e4e47a44eec52dd27c5a29edfa7f4989f3ebeafd2740ce1607d2b",
+    "helper_prompt_sha256": "fff654ef9cfcd60d22a35e0114d11bf41ae8065fdd4fe3c91f7e2555c2f91421",
+    "delegate_prompt_sha256": "02643b3cfbe254df3ed3eb1015d9c6cd90da77093f0c439a5e73a44c40268b0a",
+    "method": "runpy executes exact pure stdlib privacy module. AST of exact helper source removes only relative import statements; original helper function and prompt construction execute unchanged with actual redaction function. Capture fake returns fixed unknown JSON, so no clinical classifier, datetime parser or model involved. Unused _parse_datetime supplied lambda; _usage supplied zero tuple. Direct helper captures initial view; second helper call uses actual wrap_luxian_0609_llm_client and captures delegate view. No approximate replacement prompt/wrapper. Expected values printed before captures. Stdout console rendered Chinese as mojibake; boolean and ASCII hashes retained, synthetic source above is explicit Unicode escapes.",
+    "test_slot_released": true
+  },
+  "source_hashes": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "72789f8b6953e55bdfe2e276fce052ec80428bd2ac742ffa3662b2432265e442",
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py": "cbc66468d12e4e47a44eec52dd27c5a29edfa7f4989f3ebeafd2740ce1607d2b",
+    "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py": "34a01a5c68e03370e53b170311caff83ba9d91220fb9f3ef9b371b46cb1f65a3",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "6364f39e5d57c102d85960ae5dc1a5fd96837e4a0123d0755d8c0bd311a0ee88",
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "13a49bfd1e48bd21e82967a5bd41e3e56180c0b4ad4b13d7fa89adcbe8e6a190",
+    "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json": "98ac689fb15048061d02509e401cb69f3ea07453773b1b0e24bbffcb64cd3303",
+    "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json": "28e08ef7b9653c9b4be114ab39e7422e497defe6c5b961ed0624c67392093545",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_tc02_performed_event_contract.py": "6ea5d17282d7ed2eceae95fc8b15a49767b1aae1e16dd9b1546fd3ea9265e36e",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py": "0046d0b485f43b933e0de436b395270df7d99b60e5d9204f68e1ee1ba8e8b9fa",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py": "581647379216452e291974f9beba1a94a00473c46a5e8ac24412ce743bfd16ec"
+  }
+}
