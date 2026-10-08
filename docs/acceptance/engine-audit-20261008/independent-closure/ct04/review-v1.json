@@ -1,0 +1,98 @@
+{
+  "audit_id": "ct04-fixed-commit-independent-finite-closure-v1",
+  "fixed_commit": "515bcec6dc7ebcf11a8f54699aeb7b7f4dba663e",
+  "baseline": "25406df7d2506f4870674ca73cddd10523bf966d",
+  "conclusion": "recommend_engineering_close_CT04_only",
+  "confirmed_blocking_defects": [],
+  "rules": [
+    {
+      "rule_id": "LX0609-03-02-01",
+      "defect_id": "CT-04",
+      "status": "finite_engineering_verified",
+      "native_cases": 12,
+      "public_combinations_and_matrices": 87,
+      "original_public_combinations": 15,
+      "CT03_preserved_cases": 28,
+      "CT02_preserved_cases": 30,
+      "synthetic_fresh_store": 3,
+      "all_checked_pass": true,
+      "evidence": [
+        "expected-v1.json",
+        "observed-v1.json",
+        "review-v1.md"
+      ]
+    }
+  ],
+  "original_CT03_business_failure_restored": {
+    "case_id": "T03_before_seven_days_plus_empty_discussion",
+    "status": "not_applicable",
+    "reason": "trigger_absent_complete",
+    "original_expected_unchanged": true,
+    "previous_25406_observation_preserved": true
+  },
+  "key_invariants": [
+    "empty_mature_records_with_nonnegative_sanitized_discussion_count_is_NA",
+    "nonempty_mature_records_fake_NA_rejected",
+    "mature_C_NC_match_actual_discussion_count",
+    "body_time_mixed_gap_only_data_gap",
+    "invalid_counts_required_fields_and_time_lists_rejected",
+    "private_extra_keys_filter_without_leak",
+    "CT02_and_CT03_freezes_preserved_and_all_replayed_pass",
+    "fresh_saved_NA_C_bodygap_results_preserved"
+  ],
+  "public_contract_layering": "safe sanitizer then explicit status validator then published helper; do not claim old published helper alone gates old statuses; new gap helper strict gate verified",
+  "old_C_NC_exact_baseline_method": "one_line_fixed_diff_static_branch_proof_and_observed_normal_rendering; no_extra_complete_baseline_dynamic_comparison",
+  "evidence_limits": [
+    "NA safe_evidence list empty while actual discussion_count retained in decision_facts",
+    "blank discussion card is source/time locator without fabricated excerpt",
+    "safe evidence format normalization not raw format loss"
+  ],
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py": "62a97d2f51b9ed79adbfab8943a86028bfddcc0b0bd417a7d319d39634abdf38",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_difficult_case_na_contract_closure.py": "206c1c39d0baf017d035d08128d9e7d6da3171e48a5946cbbc741bfe17a9e498",
+    "apps/medqc-web/docs/acceptance/2026-10-08-difficult-case-na-contract-closure.md": "55b13b3ed32c190c2d8509235c45c044c56934d3fbb1e374ca3f5503a6e301cf",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "e98f5d7524defa0502b1154d03083b9405d7f530d859d3508295bc26b3c1625a",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "c32f34cabd19aaa9e26bb519f93310ec883f52c7947a8bf8d73650293455e640",
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa"
+  },
+  "source_unchanged": true,
+  "original_expected_sha256": "818456501701e3f3088902e647bed7302d5e510ae130ac7fd668f1b10d724505",
+  "CT03_expected_sha256": "c92061e62c1d0049f4d68ea007e774cb43ef54c81672289dba78134afe29ad9e",
+  "guards": {
+    "env_reads": 0,
+    "PG": 0,
+    "real_model": 0,
+    "network": 0,
+    "violations": []
+  },
+  "production_modified": false,
+  "shared_tests_modified": false,
+  "owner_suite_run": false,
+  "still_open": [
+    "CT-01",
+    "CT-R02",
+    "clinical_signoff"
+  ],
+  "scope_excluded_by_user": [
+    "0916"
+  ],
+  "real_validation_gaps": [
+    "real_source_adapter",
+    "real_patient_or_desensitized_case_chain",
+    "browser",
+    "clinical_semantic_signoff"
+  ],
+  "artifacts": [
+    "expected-v1.json",
+    "expected-v1.md",
+    "probe-v1.py",
+    "observed-v1.json",
+    "N01_unmatured_with_valid_discussion.sqlite",
+    "N09_exact_seven_days_valid_discussion.sqlite",
+    "N12_mature_strong_blank_discussion_body_gap_preserved.sqlite",
+    "review-v1.md"
+  ],
+  "observed_sha256": "d570b2690a1c600804caa34ea48214318bdec2a520b75526eb6be704f466f742",
+  "test_slot_released": true,
+  "running_processes": 0
+}

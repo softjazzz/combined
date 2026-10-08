@@ -279,12 +279,33 @@
     {
       "id": "N12-COPY",
       "owner": "/root/repair_iml02",
-      "state": "offline77_pass_source_commit_in_progress",
+      "state": "integrated_copy_support_core_pending",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
         "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
       ],
       "scope_constraint": "Only037 semantic_extraction_unresolved message/explanation tuples and suggestion protection; no rejudging",
+      "test_slot": null,
+      "commits": [
+        "195e20cf16402052acb4aff23f76234d144296f4"
+      ],
+      "integration_commits": [
+        "4e51e5540"
+      ]
+    },
+    {
+      "id": "CT-04",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py"
+      ],
+      "commits": [
+        "515bcec6dc7ebcf11a8f54699aeb7b7f4dba663e"
+      ],
+      "integration_commits": [
+        "da31efd03"
+      ],
       "test_slot": null
     }
   ],

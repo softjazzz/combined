@@ -1,6 +1,6 @@
 # 0609 closure issue queue
 
-Latest production integration: `64e5b99c5`. This is an issue queue, not rule acceptance counts. Frozen86-row T0 matrix is unchanged. No clinical/customer/real-model pass is asserted.
+Current production integration: `da31efd03`. Issue states are not rule acceptance counts. Frozen86-row T0 unchanged. No real-model/clinical/customer acceptance asserted.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
@@ -42,4 +42,4 @@ Latest production integration: `64e5b99c5`. This is an issue queue, not rule acc
 |PRIV-005|integrated_engineering_closed|/root/repair_privacy_closure||
 |rescue-remaining:RR-PUB01|integrated_limited_engineering_closed|/root/repair_iml02||
 |rescue-remaining:RR-SCOPE01|test_contract_drift_closed_in_fixed_catalog_scope|/root/repair_chemo||
-|course-timing:CT-04|queued_minimal_mapping_fix_after_N12_copy|/root/repair_iml02||
+|course-timing:CT-04|integrated_limited_engineering_closed|/root/repair_iml02||

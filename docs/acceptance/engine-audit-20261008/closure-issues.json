@@ -799,14 +799,16 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_preexisting_defect",
       "owner": "/root/repair_iml02",
-      "state": "queued_minimal_mapping_fix_after_N12_copy",
+      "state": "integrated_limited_engineering_closed",
       "depends_on": [],
       "closure_requirements": [
         "Preserve original NA expected result",
         "Mature NC/C and data gap protections",
         "Independent fixed SHA verification",
         "Fresh SQLite persistence/readback"
-      ]
+      ],
+      "integration_commit": "da31efd03",
+      "note": "Fixed515bcec independent12native/87public/CT03 28/CT02 30/SQLite3 allpass; root da31efd03 guarded172allpass6.54s,1warning,0external calls."
     }
   ]
 }
