@@ -102,7 +102,7 @@ async def test_native_binding_aggregate_retains_published_enhanced_facts_without
 
 
 @pytest.mark.asyncio
-async def test_existing_publisher_rejects_over_threshold_by_one_second():
+async def test_existing_publisher_preserves_over_threshold_by_one_second():
     end = "2026-01-04 08:00:01"
     rows = {
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: (),
@@ -112,7 +112,9 @@ async def test_existing_publisher_rejects_over_threshold_by_one_second():
     }
     _, _, reduced, result = await _run_chain(RULE, rows)
     assert reduced.final_state.value == "non_compliant"
-    assert (result["status"], result["reason_code"]) == ("technical_error", "model_invalid_output")
+    assert (result["status"], result["reason_code"]) == ("non_compliant", "threshold_exceeded")
+    assert result["customer_display_facts"]["interval_seconds"] == 259201
+    assert result["customer_display_facts"]["overdue_seconds"] == 1
 
 
 def test_sqlite_read_returns_original_and_rejects_corrupt_facts():

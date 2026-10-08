@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 import re
 from typing import Any, Mapping
 
@@ -95,6 +96,18 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     end_time, record_time, elapsed = (
         raw.get("surgery_end_time"), raw.get("record_time"), raw.get("elapsed_hours")
     )
+    # 新事实用精确秒校验裁决；两位小时仍保留为展示值，旧事实沿用原合同。
+    precise_hours = elapsed
+    if "elapsed_seconds" in raw:
+        seconds = raw["elapsed_seconds"]
+        if type(seconds) not in {int, float}:
+            return None
+        try:
+            if not isfinite(seconds) or seconds < 0 or round(seconds / 3600, 2) != elapsed:
+                return None
+        except (OverflowError, ValueError):
+            return None
+        precise_hours = seconds / 3600
     if (
         kind not in {"surgery_record_late", "surgery_record_within_threshold"}
         or raw.get("performed_surgery_confirmed") is not True
@@ -102,11 +115,11 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or not isinstance(record_time, str)
         or not isinstance(elapsed, (int, float))
         or raw.get("threshold_hours") != 24
-        or (kind == "surgery_record_late" and elapsed <= 24)
-        or (kind == "surgery_record_within_threshold" and not 0 <= elapsed <= 24)
+        or (kind == "surgery_record_late" and precise_hours <= 24)
+        or (kind == "surgery_record_within_threshold" and not 0 <= precise_hours <= 24)
     ):
         return None
-    return {
+    facts = {
         "failure_kind": kind,
         "performed_surgery_confirmed": True,
         "surgery_end_time": end_time,
@@ -115,6 +128,9 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "threshold_hours": 24,
         "source_label": "手术记录",
     }
+    if "elapsed_seconds" in raw:
+        facts["elapsed_seconds"] = raw["elapsed_seconds"]
+    return facts
 
 
 def surgery_timeliness_gap_display(facts: Any) -> tuple[list[str], str] | None:

@@ -266,6 +266,7 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
         "performed_surgery_confirmed": True,
         "surgery_end_time": "2026-01-01 10:00:00",
         "record_time": "2026-01-01 12:00:00",
+        "elapsed_seconds": 7200.0,
         "elapsed_hours": 2.0,
         "threshold_hours": 24,
         "source_label": "手术记录",

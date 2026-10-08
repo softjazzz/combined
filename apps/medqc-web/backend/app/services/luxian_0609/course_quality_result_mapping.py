@@ -147,11 +147,16 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         facts.update({"interval_end_date": end_date, "interval_end_precision": "date"})
     else:
         interval = raw.get("interval_hours")
+        # 带秒事实以精确秒核对阈值；下方仍验证原始时间、秒与展示小时一致。
+        duration = raw.get("interval_seconds")
+        threshold = 72 * 3600
+        if type(duration) is not int:
+            duration, threshold = interval, 72
         if (raw.get("interval_end_precision") is not None or raw.get("interval_end_date") is not None
                 or not _time(raw.get("interval_end_time")) or isinstance(interval, bool)
                 or not isinstance(interval, (int, float))
-                or (kind == "course_record_interval_over_72h" and float(interval) <= 72)
-                or (kind == "course_record_interval_within_72h" and float(interval) > 72)):
+                or (kind == "course_record_interval_over_72h" and duration <= threshold)
+                or (kind == "course_record_interval_within_72h" and duration > threshold)):
             return None
         facts.update({"interval_end_time": raw["interval_end_time"], "interval_hours": round(float(interval), 2)})
     enhanced = {key: raw.get(key) for key in (
