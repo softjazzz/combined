@@ -4,6 +4,7 @@ from tests.luxian_0609_identity_test_support import published_rule_ids
 
 import importlib.util
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -380,29 +381,65 @@ def _current_rule_scope() -> tuple[tuple[str, ...], tuple[str, ...]]:
     return golden_gate.get_luxian_0609_customer_execution_scope()
 
 
-def test_v2_default_gate_requires_exact_current_customer_rule_matrix() -> None:
+def test_v2_default_gate_requires_exact_current_candidate_acceptance_matrix() -> None:
+    """Golden 校验待验候选账本，不表示 acceptance_only 已获普通复检启用。"""
+    data_path = Path(__file__).resolve().parents[2] / "app/data"
+    raw_master = json.loads((data_path / "luxian_0609_rule_master_v1.json").read_text(encoding="utf-8"))
+    raw_active = tuple(raw for raw in raw_master["rules"] if raw["implementation_status"] == "active")
+    expected_catalog = tuple(raw["rule_id"] for raw in raw_active)
+    excluded = {
+        "LX0609-11-01-01", "LX0609-11-02-01", "LX0609-11-02-02",
+        "LX0609-11-03-01", "LX0609-11-03-02",
+    }
+    expected_delivery = tuple(rule_id for rule_id in expected_catalog if rule_id not in excluded)
+    expected_executable = tuple(
+        raw["rule_id"] for raw in raw_active if raw["rule_id"] in expected_delivery
+        and raw.get("phase_status", "phase_1_target") == "phase_1_target"
+    )
+    expected_pending = tuple(
+        raw["rule_id"] for raw in raw_active if raw["rule_id"] in expected_delivery
+        and raw.get("phase_status", "phase_1_target") != "phase_1_target"
+    )
+    acceptance_only = {raw["rule_id"] for raw in raw_active if raw.get("release_scope") == "acceptance_only"}
+    assert acceptance_only == {
+        "LX0609-06-01-03", "LX0609-06-03-02", "LX0609-06-02-01",
+        "LX0609-09-01-02", "LX0609-08-01-05",
+    }
+    assert acceptance_only.issubset(expected_executable)
+    assert acceptance_only.isdisjoint(excluded)
+    assert excluded.issubset(expected_catalog)
+    assert len(set(expected_catalog)) == len(expected_catalog)
+    assert expected_catalog and expected_delivery and expected_executable and expected_pending
     executable, pending = _current_rule_scope()
-    assert len(golden_gate.get_luxian_0609_customer_delivery_rule_ids()) == 72
-    assert len(executable) == 62
-    assert len(pending) == 10
-    assert len(golden_gate.load_luxian_0609_rule_contracts()) == 77
-    assert golden_gate._validate_runtime_contract_identity(_runtime_manifest()) == executable
+    assert golden_gate.get_luxian_0609_customer_delivery_rule_ids() == expected_delivery
+    assert executable == expected_executable
+    assert pending == expected_pending
+    assert set(executable).isdisjoint(pending)
+    assert set(executable) | set(pending) == set(expected_delivery)
+    assert tuple(contract.rule_id for contract in golden_gate.load_luxian_0609_rule_contracts()) == expected_catalog
+    manifest = _runtime_manifest()
+    assert tuple(manifest["rule_set"]["rule_ids"]) == expected_catalog
+    assert tuple(item["rule_id"] for item in manifest["rules"]) == expected_catalog
+    for item, raw in zip(manifest["rules"], raw_active, strict=True):
+        assert item["phase_status"] == raw.get("phase_status", "phase_1_target")
+        assert item["definition_version"] == raw_master["definition_version"]
+    assert golden_gate._validate_runtime_contract_identity(manifest) == expected_executable
     batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=executable)
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=ledger,
         candidate=candidate,
         run_batches=[batch],
-        runtime_manifest=_runtime_manifest(),
+        runtime_manifest=manifest,
     )
 
     assert exit_code == golden_gate.EXIT_PASSED
-    assert summary["accepted_count"] == 62
+    assert summary["accepted_count"] == len(expected_executable)
     assert summary["rule_scope"] == {
-        "catalog_count": 77,
-        "customer_delivery_count": 72,
-        "executable_count": 62,
-        "withheld_count": 10,
+        "catalog_count": len(expected_catalog),
+        "customer_delivery_count": len(expected_delivery),
+        "executable_count": len(expected_executable),
+        "withheld_count": len(expected_pending),
     }
 
 

@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 import json
+from pathlib import Path
 
 import pytest
 
@@ -29,7 +30,11 @@ from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
 )
+from app.services.luxian_0609.executor_registry import (
+    resolve_legacy_executor_material_source_keys,
+)
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
+from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609.source_registry import (
     SOURCE_REGISTRY_VERSION,
     SourceAccessMode,
@@ -52,9 +57,6 @@ def test_039_accepts_explicit_emergency_life_saving_surgery_wording():
     },))
 
     assert state is True
-from app.services.luxian_0609.executor_registry import (
-    resolve_legacy_executor_material_source_keys,
-)
 
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
@@ -1688,7 +1690,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
     assert "discharge_record" not in calls
 
 
-def test_all_79_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
+def test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -1706,7 +1708,14 @@ def test_all_79_registered_rules_query_each_bounded_source_once_and_never_query_
             for source_key in entry.physical_source_keys
         }
     )
-    assert len(selected) == 79
+    raw_rules = json.loads(
+        (Path(__file__).resolve().parents[2] / "app/data/luxian_0609_rule_master_v1.json").read_text(encoding="utf-8")
+    )["rules"]
+    expected_ids = tuple(raw["rule_id"] for raw in raw_rules if raw["implementation_status"] == "active")
+    assert expected_ids
+    assert len(set(expected_ids)) == len(expected_ids)
+    assert selected == expected_ids
+    assert tuple(str(item["rule_id"]) for item in load_luxian_0609_rules()) == expected_ids
     assert calls == sorted(
         {
             *expected_bounded,
@@ -1967,10 +1976,14 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
     ]
 
 
+def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
+    # ea5ed2b047 新增手册来源时已正式从 v33 升为 v34；此处保留全局冻结门禁。
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v34"
+
+
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v33"
     assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
     assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 
