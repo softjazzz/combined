@@ -81,6 +81,11 @@ def _surgery_record(*, document_id, name, begin, end=None):
     }
 
 
+def _confirmed_missing_fact():
+    # 这些固定fixture描述确认缺项，显式声明全段核查，不能用旧null代替。
+    return {"state": "missing", "quote": None, "reviewed_all_sections": True}
+
+
 def _summary_items(*, text, procedure, missing=()):
     fields = (
         "brief_condition",
@@ -94,7 +99,7 @@ def _summary_items(*, text, procedure, missing=()):
     items = {field: text for field in fields}
     items["planned_procedure"] = procedure
     for field in missing:
-        items[field] = None
+        items[field] = _confirmed_missing_fact()
     return items
 
 
@@ -1356,18 +1361,18 @@ _C04_NARRATIVE = "患者老年女性，因腹胀腹痛入院。查体：生命�
 
 def _core_items(text=_C04_CORE):
     return {
-        "brief_condition": None,
-        "preop_diagnosis": None,
+        "brief_condition": _confirmed_missing_fact(),
+        "preop_diagnosis": _confirmed_missing_fact(),
         "surgical_indication": "手术适应症：患者诊断右肺上叶结节明确，有手术指征。",
         "planned_procedure": _C04_PLAN,
         "planned_anesthesia": "全麻",
         "precautions": "手术要点：尽可能彻底切除原发病灶。",
-        "surgeon_preop_visit": None,
+        "surgeon_preop_visit": _confirmed_missing_fact(),
     }
 
 
 def _narrative_items():
-    items = {field: None for field in _core_items()}
+    items = {field: _confirmed_missing_fact() for field in _core_items()}
     items["brief_condition"] = "患者老年女性，因腹胀腹痛入院。"
     return items
 
@@ -1427,7 +1432,7 @@ async def test_unrelated_empty_ambiguous_document_does_not_mask_true_missing():
             _surgery_record(document_id="s1", name=_C04_PERFORMED, begin="2026-01-01 09:00:00+08:00"),
         ),
     )
-    stray_items = {field: None for field in _core_items()}
+    stray_items = {field: _confirmed_missing_fact() for field in _core_items()}
     result = await evaluate_preop_content_rules(
         rule_ids=("LX0609-04-01-04",),
         snapshot=session.snapshot,
@@ -1526,14 +1531,14 @@ def _template_core(name, anesthesia="全麻"):
 
 def _template_core_items(name, anesthesia="全麻"):
     return {
-        "brief_condition": None,
-        "preop_diagnosis": None,
+        "brief_condition": _confirmed_missing_fact(),
+        "preop_diagnosis": _confirmed_missing_fact(),
         "surgical_indication": "手术适应症：诊断明确，有手术指征。",
         # 真实模型取到的引文：带开头冒号与下一标签残留“拟施”。
         "planned_procedure": f":{name}拟施 ",
         "planned_anesthesia": anesthesia,
         "precautions": "仔细操作，避免损伤。",
-        "surgeon_preop_visit": None,
+        "surgeon_preop_visit": _confirmed_missing_fact(),
     }
 
 

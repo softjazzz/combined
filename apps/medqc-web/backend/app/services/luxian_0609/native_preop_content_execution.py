@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -196,21 +196,58 @@ def _has_structured_recorder_signature(row: Mapping[str, Any]) -> bool:
     return bool(clean_text(row.get("submitter")))
 
 
+def _has_structured_discussion_date(row: Mapping[str, Any]) -> bool:
+    """同一讨论记录的 record_time 已映射为讨论日期；只证明存在，不推断时限。"""
+
+    value = row.get("record_time")
+    if isinstance(value, date):
+        return True
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    if not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?",
+        value,
+    ):
+        return False
+    try:
+        if len(value) == 10:
+            date.fromisoformat(value)
+        else:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _has_structured_field(rule_id: str, row: Mapping[str, Any], field: str) -> bool:
+    return rule_id == "LX0609-04-01-05" and (
+        field == "recorder_signature" and _has_structured_recorder_signature(row)
+        or field == "discussion_date" and _has_structured_discussion_date(row)
+    )
+
+
 def _prompt(documents: Sequence[tuple[str, str, str]], selected: Sequence[str]) -> str:
     schemas = {rule_id: list(RULE_FIELDS[rule_id]) for rule_id in selected}
     rendered = "\n\n".join(
         f"[document_id={doc_id}; source_type={source}]\n{text}"
         for doc_id, source, text in documents
     )
-    return f"""你是病历质控原子事实抽取器。只从每份给定术前文书的受控文本或结构字段投影中摘取字段值；术前小结没有明确的连续输入片段时填 null，术前讨论按下述三态合同返回。禁止总结、推断、跨文书补全，不得输出状态、建议或未请求字段。
+    response_example = json.dumps({"documents": [{
+        "document_id": "原document_id", "source_type": "presurg_summary或presurg_discussion",
+        "items": {"字段": {"state": "present|missing|unknown", "quote": "连续原文或null", "reviewed_all_sections": True}},
+    }]}, ensure_ascii=False)
+    return f"""你是病历质控原子事实抽取器。只从每份给定术前文书的受控文本或结构字段投影中摘取字段值；术前小结与术前讨论均按下述三态合同返回。禁止总结、推断、跨文书补全，不得输出状态、建议或未请求字段。
 
 按 source_type 使用字段全集：{schemas}
-术前讨论presurg_discussion的每项返回对象：{{"state":"present|missing|unknown","quote":"连续原文或null","reviewed_all_sections":true或false}}。
+两类文书的每项均返回对象：{{"state":"present|missing|unknown","quote":"连续原文或null","reviewed_all_sections":true或false}}。
 present必须有对应原文；missing仅在检查该文书全部输入（正文、主持人小结、讨论建议及结构字段）后仍无对应内容时使用，quote为null且reviewed_all_sections为true。未抽到、含义不明或无法完整核查用unknown，绝不能以未抽到代替确认缺失。一个原文片段可以支持多个不同检查项，不因位于主持人小结就只能用于chair_summary。
 九项定义：preop_preparation=已完成或拟实施的术前检查、准备及禁忌评估；surgical_indication=疾病、症状、保守治疗效果等手术理由；surgical_plan=拟行术式和方案；risk_and_prevention=可能风险及对应防范措施；participants_with_titles=参加者姓名及职称；specific_opinions=参加者具体讨论意见；chair_summary=主持人总结意见；discussion_date=讨论日期；recorder_signature=记录者签名。按内容识别，不要求固定栏目标题。
-术前小结presurg_summary仍返回连续原文或null，不使用上述对象。
-specific_opinions是参加讨论者的具体意见，chair_summary是主持人总结，两者分别抽取；仅有参加人员名单、拟行术式或主持人同意手术，不能代替具体讨论意见。“略”、空白和仅有栏目标题均填null，不算实质内容。
-只输出 JSON：{{\"documents\":[{{\"document_id\":\"原document_id\",\"source_type\":\"presurg_summary或presurg_discussion\",\"items\":{{\"字段\":\"输入中的连续片段或null\"}}}}]}}。
+术前小结七项定义：brief_condition=患者本次手术相关的简要病情；preop_diagnosis=术前诊断；surgical_indication=拟行手术的理由或指征；planned_procedure=拟施手术名称和方式；planned_anesthesia=拟施麻醉方式；precautions=拟行手术相关的注意事项或具体防范措施，可位于手术要点等段落；合适的术式常规具体措施也可支持该项，不要求患者个体独有；surgeon_preop_visit=术者术前查看患者的情况。按完整内容语义识别，不按固定栏目标题或单个注意词判存在，不能把泛称“手术要点”或空标题当内容。
+每个present仅选一个能直接支持该项的最小连续原文片段，不得拼接非连续句子、插入省略号、重排、改写或组合多个章节。片段不足以确认语义时返回unknown；只有reviewed_all_sections=true且确认该项未记载时可返回missing。语义仍由你抽取，不能用null表示确认缺项。
+讨论日期只指日期是否已记录，不判断讨论及时性；输入中的同文书“讨论日期”结构投影也必须核对，不可因正文未重复日期报missing。
+specific_opinions是参加讨论者的具体意见，chair_summary是主持人总结，两者分别抽取；仅有参加人员名单、拟行术式或主持人同意手术，不能代替具体讨论意见。“略”、空白和仅有栏目标题不算实质内容；完整核查确认无对应内容才返回missing，不能确定时返回unknown。
+只输出 JSON：{response_example}。
 
 文书：
 {rendered}"""
@@ -219,11 +256,11 @@ specific_opinions是参加讨论者的具体意见，chair_summary是主持人�
 def _field_value_valid(source: str, quote: Any, original: str) -> bool:
     """单个字段值的形状与原文校验；不修复、不改写模型输出。"""
 
-    if source == "presurg_discussion" and isinstance(quote, Mapping):
+    if isinstance(quote, Mapping):
         if set(quote) != {"state", "quote", "reviewed_all_sections"}:
             return False
         state, excerpt = quote["state"], quote["quote"]
-        if state not in {"present", "missing", "unknown"} or type(quote["reviewed_all_sections"]) is not bool:
+        if not isinstance(state, str) or state not in {"present", "missing", "unknown"} or type(quote["reviewed_all_sections"]) is not bool:
             return False
         if state == "present":
             return isinstance(excerpt, str) and bool(clean_text(excerpt)) and clean_text(excerpt) in original
@@ -345,21 +382,35 @@ def _document_record_time(row: Mapping[str, Any]) -> datetime | None:
     return parsed.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
 
 
+def _field_state(value: Any) -> str:
+    """兼容已核验的旧引文；旧null没有确认缺失声明，仅表示未确定。"""
+
+    if isinstance(value, Mapping):
+        return str(value["state"])
+    return "unknown" if value is None else "present"
+
+
+def _field_quote(value: Any) -> Any:
+    return value.get("quote") if isinstance(value, Mapping) else value
+
+
+def _field_is_present(rule_id: str, row: Mapping[str, Any], values: Mapping[str, Any], field: str) -> bool:
+    return _has_structured_field(rule_id, row, field) or _field_state(values[field]) == "present"
+
+
+def _uncertain_fields_for_document(rule_id: str, row: Mapping[str, Any], values: Mapping[str, Any]) -> set[str]:
+    return {
+        field for field in RULE_FIELDS[rule_id]
+        if not _has_structured_field(rule_id, row, field) and _field_state(values[field]) == "unknown"
+    }
+
+
 def _missing_fields_for_document(
     *, rule_id: str, row: Mapping[str, Any], values: Mapping[str, Any]
 ) -> set[str]:
     return {
-        field
-        for field in RULE_FIELDS[rule_id]
-        if not (
-            rule_id == "LX0609-04-01-05"
-            and field == "recorder_signature"
-            and _has_structured_recorder_signature(row)
-        )
-        and (
-            values.get(field) is None if rule_id == "LX0609-04-01-04"
-            else isinstance(values.get(field), Mapping) and values[field].get("state") == "missing"
-        )
+        field for field in RULE_FIELDS[rule_id]
+        if not _has_structured_field(rule_id, row, field) and _field_state(values[field]) == "missing"
     }
 
 
@@ -409,7 +460,7 @@ def _association_state_for_rule(
     records: Sequence[tuple[str, Mapping[str, Any], str]],
     parsed: Mapping[tuple[str, str], Mapping[str, Any]],
     events: Sequence[SurgeryEvent],
-) -> tuple[set[str], bool, list[Mapping[str, Any]], set[str]]:
+) -> tuple[set[str], bool, list[Mapping[str, Any]], set[str], set[str]]:
     """078按手术事件聚合；079逐份核对，返回确认缺项、歧义、安全展示和待确认字段。
 
     归属不明但不能排除属于本手术的文书（``ambiguous``），只能阻止错误的
@@ -431,7 +482,7 @@ def _association_state_for_rule(
             association_state, event_index = "not_required", None
             if any(
                 (value is None or isinstance(value, Mapping) and value.get("state") == "unknown")
-                and not (field == "recorder_signature" and _has_structured_recorder_signature(row))
+                and not _has_structured_field(rule_id, row, field)
                 for field, value in values.items()
             ):
                 ambiguous_values.append(values)
@@ -440,7 +491,7 @@ def _association_state_for_rule(
             association = associate_preop_document_to_surgery_event(
                 events=events,
                 procedure_name=_procedure_name_for_association(
-                    values.get("planned_procedure"), _text
+                    _field_quote(values.get("planned_procedure")), _text
                 ),
                 record_time=_document_record_time(row),
                 planned_surgery_time=summary_planned_surgery_time_from_row(row),
@@ -468,45 +519,43 @@ def _association_state_for_rule(
                         rule_id=rule_id, row=row, values=values
                     )
                 ),
+                **({"uncertain_fields": sorted(unknown)} if rule_id == "LX0609-04-01-04"
+                   and (unknown := _uncertain_fields_for_document(rule_id, row, values)) else {}),
             }
         )
 
     confirmed_missing: set[str] = set()
     pending_fields: set[str] = set()
+    content_uncertain: set[str] = set()
     if rule_id == "LX0609-04-01-04":
-        # 客户来源存在“核心小结 + 术者术前查看”两行同属一台手术的稳定模式；
-        # 仅在已唯一关联的同一事件内部合并原子事实。
+        # 保留原同事件合并：只有明确present可覆盖同事件的另一份文书，unknown不能补齐。
         for documents in grouped.values():
             for field in RULE_FIELDS[rule_id]:
-                if any(
-                    field not in _missing_fields_for_document(
-                        rule_id=rule_id, row=row, values=values
-                    )
-                    for row, values in documents
-                ):
+                if any(_field_is_present(rule_id, row, values, field) for row, values in documents):
                     continue
-                if any(
-                    field not in _missing_fields_for_document(
-                        rule_id=rule_id, row=row, values=values
-                    )
-                    for row, values in ambiguous_documents
-                ):
-                    # 无法归属的文书记载了该项：不能据此补齐，也不能断言缺少。
+                unknown = any(_field_state(values[field]) == "unknown" for _row, values in documents)
+                if unknown:
+                    content_uncertain.add(field)
+                if any(_field_is_present(rule_id, row, values, field) for row, values in ambiguous_documents):
                     pending_fields.add(field)
                     continue
+                if unknown or any(_field_state(values[field]) == "unknown" for _row, values in ambiguous_documents):
+                    content_uncertain.add(field)
+                    continue
                 confirmed_missing.add(field)
+        if not grouped:
+            for row, values in ambiguous_documents:
+                content_uncertain.update(_uncertain_fields_for_document(rule_id, row, values))
+        # 另一事件确认缺项仍成立；对应文书unknown已在documents保留，不被全局present删除。
         pending_fields -= confirmed_missing
+        content_uncertain -= confirmed_missing
     else:
-        # 讨论记录不跨文书补字段；即使同一事件也必须逐份自洽。
+        # 讨论记录逐份自洽，结构化日期/签名仅能覆盖同一来源行的对应字段。
         for documents in grouped.values():
             for row, values in documents:
-                confirmed_missing.update(
-                    _missing_fields_for_document(
-                        rule_id=rule_id, row=row, values=values
-                    )
-                )
+                confirmed_missing.update(_missing_fields_for_document(rule_id=rule_id, row=row, values=values))
 
-    return confirmed_missing, bool(ambiguous_values), display_documents, pending_fields
+    return confirmed_missing, bool(ambiguous_values), display_documents, pending_fields, content_uncertain
 
 
 async def evaluate_preop_content_rules(
@@ -705,15 +754,15 @@ async def evaluate_preop_content_rules(
                 )
             )
             continue
-        missing, has_ambiguous, documents, pending = _association_state_for_rule(
+        missing, has_ambiguous, documents, pending, summary_uncertain = _association_state_for_rule(
             rule_id=rule,
             records=records[rule],
             parsed=parsed,
             events=events or (),
         )
-        if has_ambiguous and not missing:
+        if (has_ambiguous or summary_uncertain) and not missing:
             status, reason = "data_gap", (
-                "source_readiness_unproven" if rule == "LX0609-04-01-05" else "association_failed"
+                "source_readiness_unproven" if rule == "LX0609-04-01-05" or summary_uncertain else "association_failed"
             )
         elif missing:
             status, reason = "non_compliant", "requirement_violated"
@@ -734,8 +783,8 @@ async def evaluate_preop_content_rules(
             for _ref, row, _text in records[rule]
             for field, value in parsed[(RULE_SOURCES[rule], _document_id(row))].items()
             if (value is None or isinstance(value, Mapping) and value.get("state") == "unknown")
-            and not (field == "recorder_signature" and _has_structured_recorder_signature(row))
-        }) if rule == "LX0609-04-01-05" and status == "data_gap" else []
+            and not _has_structured_field(rule, row, field)
+        }) if rule == "LX0609-04-01-05" and status == "data_gap" else sorted(summary_uncertain)
         display.append(
             (
                 rule,
@@ -743,6 +792,8 @@ async def evaluate_preop_content_rules(
                     "verification_kind": (
                         "preop_discussion_content_uncertain"
                         if rule == "LX0609-04-01-05" and status == "data_gap"
+                        else "preop_summary_content_uncertain"
+                        if rule == "LX0609-04-01-04" and status == "data_gap" and summary_uncertain
                         else "preop_surgery_association_ambiguous"
                         if status == "data_gap"
                         else "preop_content_complete"

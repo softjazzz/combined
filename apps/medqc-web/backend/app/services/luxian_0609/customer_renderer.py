@@ -3704,6 +3704,23 @@ def preop_summary_customer_message(
         if pending_text
         else ""
     )
+    uncertain = facts.get("uncertain_fields") if isinstance(facts, Mapping) else None
+    uncertain_text = (
+        "、".join(label for field, label in labels.items() if field in uncertain)
+        if isinstance(uncertain, list) and uncertain
+        and all(isinstance(field, str) and field in labels for field in uncertain)
+        else ""
+    )
+    uncertain_note = (
+        f"另有{uncertain_text}的内容无法确认，不计入确认缺项。" if uncertain_text else ""
+    )
+    if status == "data_gap" and isinstance(facts, Mapping) and facts.get("verification_kind") == "preop_summary_content_uncertain" and uncertain_text:
+        return (
+            f"术前小结的{uncertain_text}内容无法确认，本项暂无法判定。" + pending_note,
+            "相关内容尚无法确认，不计入确认缺项。" + pending_note,
+            f"请人工核对术前小结的{uncertain_text}原文，确认后重新质控。"
+            + ("另请核对待确认字段所在文书与本手术的关联。" if pending_text else ""),
+        )
     if status == "data_gap":
         if not pending_text or facts.get("verification_kind") != "preop_surgery_association_ambiguous":
             return None
@@ -3727,10 +3744,10 @@ def preop_summary_customer_message(
     text = "、".join(label for field, label in labels.items() if field in missing)
     return (
         f"术前小结内容不完整，确认缺少：{text}。"
-        + (f"{pending_text}待确认。" if pending_text else ""),
+        + (f"{pending_text}待确认。" if pending_text else "") + uncertain_note,
         "本次核查在对应术前小结及已确认同台手术的关联材料中未找到上述内容。"
         "缺项为本次核查范围内的汇总，不表示每份相关文书均缺少全部项目。"
-        + pending_note,
+        + pending_note + uncertain_note,
         f"请核对对应手术的术前小结及相关原文，依据实际情况补充：{text}。"
         "已记录的项目无需重复补写，不得补造未发生的诊疗事实。",
     )
@@ -4099,17 +4116,19 @@ def render_luxian_0609_customer_result(
         "criterion_results": [],
     }
     if (
-        decision.rule_id == "LX0609-04-01-05"
-        and decision.final_state is CustomerFinalState.DATA_GAP
+        decision.final_state is CustomerFinalState.DATA_GAP
         and isinstance(safe_customer_display_facts, Mapping)
-        and safe_customer_display_facts.get("verification_kind") == "preop_discussion_content_uncertain"
+        and (decision.rule_id, safe_customer_display_facts.get("verification_kind")) in {
+            ("LX0609-04-01-05", "preop_discussion_content_uncertain"),
+            ("LX0609-04-01-04", "preop_summary_content_uncertain"),
+        }
         and handbook_message is not None
     ):
         result.update(
             customer_message=findings, missing_sources=[], missing_fields=[],
             data_gap_details={
                 "reason_code": result["reason_code"],
-                "reason_label": "术前讨论记录内容待确认",
+                "reason_label": "术前讨论记录内容待确认" if decision.rule_id == "LX0609-04-01-05" else "术前小结内容待确认",
                 "customer_message": findings, "missing_sources": [], "missing_fields": [],
             },
         )

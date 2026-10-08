@@ -625,7 +625,10 @@ def validate_luxian_0609_published_customer_display_facts(
     if validated is None:
         # 非空的已发布事实未通过其规则族合同，不能在读取时静默丢成空事实。
         raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
-    if validated.get("verification_kind") == "preop_discussion_content_uncertain":
+    if validated.get("verification_kind") in {"preop_discussion_content_uncertain", "preop_summary_content_uncertain"} or (
+        normalized_rule_id == "LX0609-04-01-04" and validated.get("verification_kind") == "preop_content_incomplete"
+        and ("uncertain_fields" in validated or any("uncertain_fields" in doc for doc in validated.get("documents", [])))
+    ):
         from .surgery_document_result_mapping import surgery_document_customer_fact_status_is_valid
 
         if not surgery_document_customer_fact_status_is_valid(
