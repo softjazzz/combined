@@ -2892,6 +2892,19 @@ def customer_finding_from_controlled_facts(
             )
 
     if rule_id in {"LX0609-06-04-01", "LX0609-06-04-02"}:
+        if kind == "critical_value_source_unavailable":
+            source_label = {
+                "labtest_item_report": "检验结果明细",
+                "crisis_value_record": "危急值处置记录",
+            }.get(str(facts.get("missing_source")), "核对资料")
+            return f"当前{source_label}未能完整读取，暂无法核对危急值报告与对应处置记录。"
+        if kind == "critical_value_report_time_missing":
+            items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
+            scope = "报告后处置及6小时时限" if rule_id == "LX0609-06-04-01" else "报告后处置记录"
+            return (
+                f"已读取到危急值项目：{items}；但报告时间缺失或无法解析，"
+                f"暂无法核对{scope}。"
+            )
         if kind == "critical_value_result_detail_missing":
             return (
                 f"已读取到检验报告 {facts.get('lab_report_count')} 条，但检验结果明细未同步，"

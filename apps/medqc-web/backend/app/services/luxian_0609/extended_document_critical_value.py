@@ -380,6 +380,11 @@ def evaluate_critical_value_rules(
         additional_display_facts: Mapping[str, object] | None = None
         if inputs.lab_item_error:
             final_state, reason_code = "data_gap", inputs.lab_item_error
+            display_facts = {
+                "failure_kind": "critical_value_source_unavailable",
+                "missing_source": "labtest_item_report",
+                "issue": inputs.lab_item_error,
+            }
         elif inputs.lab_report_count and not inputs.lab_detail_count:
             final_state, reason_code = "data_gap", "required_field_missing"
             display_facts = {
@@ -393,8 +398,19 @@ def evaluate_critical_value_rules(
             final_state, reason_code = "data_gap", "required_field_missing"
         elif inputs.crisis_error:
             final_state, reason_code = "data_gap", inputs.crisis_error
+            display_facts = {
+                "failure_kind": "critical_value_source_unavailable",
+                "missing_source": "crisis_value_record",
+                "issue": inputs.crisis_error,
+            }
         elif any(value is None for value in report_times):
             final_state, reason_code = "data_gap", "authoritative_time_missing"
+            display_facts = {
+                "failure_kind": "critical_value_report_time_missing",
+                "critical_item_names": [item.item_name[:40] for item in critical_items],
+                "critical_flags": [_critical_display_flag(item) for item in critical_items],
+                "missing_report_time_count": sum(item.report_time is None for item in critical_items),
+            }
         elif event_association_unproven and inputs.dispositions:
             final_state, reason_code = "data_gap", "association_failed"
             event_results = tuple(

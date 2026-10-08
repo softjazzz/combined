@@ -562,7 +562,11 @@ def validate_luxian_0609_published_customer_display_facts(
         valid, validated = validate_published_critical_value_facts(rule_id=normalized_rule_id, raw=raw)
         if not valid or (
             validated is not None
-            and status
+            and (
+                status or validated.get("failure_kind") in {
+                    "critical_value_source_unavailable", "critical_value_report_time_missing",
+                }
+            )
             and not critical_value_customer_fact_status_is_valid(
                 rule_id=normalized_rule_id, status=status, safe_facts=validated,
             )

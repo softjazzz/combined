@@ -127,6 +127,39 @@ def _safe_result_detail_missing(raw: Mapping[str, Any]) -> dict[str, Any] | None
     return dict(raw)
 
 
+def _safe_report_time_missing(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    names = raw.get("critical_item_names")
+    flags = raw.get("critical_flags")
+    count = raw.get("missing_report_time_count")
+    if (
+        set(raw) != {"failure_kind", "critical_item_names", "critical_flags", "missing_report_time_count"}
+        or raw.get("failure_kind") != "critical_value_report_time_missing"
+        or type(names) is not list
+        or _safe_text_list(names, minimum=1, maximum=100, item_maximum=40) is None
+        or type(flags) is not list
+        or len(flags) != len(names)
+        or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in flags)
+        or type(count) is not int
+        or not 1 <= count <= len(names)
+    ):
+        return None
+    return dict(raw)
+
+
+def _safe_source_unavailable(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    # 只接受执行器已裁决的两类真实来源缺口，不豁免其它事实校验。
+    if (
+        set(raw) != {"failure_kind", "missing_source", "issue"}
+        or raw.get("failure_kind") != "critical_value_source_unavailable"
+        or type(raw.get("missing_source")) is not str
+        or raw["missing_source"] not in {"labtest_item_report", "crisis_value_record"}
+        or type(raw.get("issue")) is not str
+        or raw["issue"] not in {"source_unavailable", "source_truncated"}
+    ):
+        return None
+    return dict(raw)
+
+
 def _safe_horizon_unavailable(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if (
         set(raw) != {"verification_kind", "issue"}
@@ -140,6 +173,10 @@ def _safe_horizon_unavailable(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_052(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw)
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw)
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
         return _safe_result_detail_missing(raw)
     if raw.get("verification_kind") == "critical_value_evaluation_horizon_unavailable":
@@ -260,6 +297,10 @@ def _safe_052(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_053(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw)
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw)
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
         return _safe_result_detail_missing(raw)
     expected_keys = {
@@ -396,6 +437,10 @@ def _published_events(value: Any, *, timing_rule: bool) -> bool:
 
 
 def _published_052(raw: dict[str, Any]) -> bool:
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw) is not None
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw) is not None
     base = {"verification_kind", "critical_item_names", "critical_flags", "report_times",
             "disposition_times", "threshold_hours", "actual_interval_hours", "event_results"}
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
@@ -435,6 +480,10 @@ def _published_052(raw: dict[str, Any]) -> bool:
 
 
 def _published_053(raw: dict[str, Any]) -> bool:
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw) is not None
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw) is not None
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
         return (set(raw) == {"failure_kind", "lab_report_count", "missing_source"}
                 and type(raw["lab_report_count"]) is int and raw["lab_report_count"] > 0
@@ -469,6 +518,10 @@ def critical_value_customer_fact_status_is_valid(
     if not is_critical_value_customer_rule(rule_id):
         return True
     normalized_status = str(status or "").strip().lower()
+    if isinstance(safe_facts, Mapping) and safe_facts.get("failure_kind") in {
+        "critical_value_source_unavailable", "critical_value_report_time_missing",
+    }:
+        return normalized_status == "data_gap"
     if normalized_status == "technical_error":
         return True
     if not isinstance(safe_facts, Mapping):
@@ -476,6 +529,8 @@ def critical_value_customer_fact_status_is_valid(
     kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
     if kind in {
         "critical_value_result_detail_missing",
+        "critical_value_source_unavailable",
+        "critical_value_report_time_missing",
         "critical_value_evaluation_horizon_unavailable",
     }:
         return normalized_status == "data_gap"
