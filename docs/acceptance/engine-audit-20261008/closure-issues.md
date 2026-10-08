@@ -2,13 +2,13 @@
 
 问题级队列含缺陷、争议与验证缺口，不等同确认缺陷数或规则通过数。原86条T0分类保留历史基线，最新问题动作以本表为准。文件锁见closure-ownership.json。
 
-已集成D01、IML02、IML01确定子项、PRIV004/005、074合同元数据。集成305974e38上186项离线工程回归通过。PRIV002固定源独审49项通过，已集成26f4fe645待集成工程复跑；N13仍有6条原业务预期未达；CT/MRI联合事件合同仍开放。
+当前生产集成880a433b0。305974e38上186项聚焦回归通过；PRIV002集成后67项隐私回归通过（20项与前者重合，不叠加为独立总数）。N13有限防误判子项已集成，但6项状态预期、2项计数预期未达，整项开放。无真实模型/PG/客户验收结论。
 
 |问题|状态|负责人|依赖|
 |---|---|---|---|
 |N12|queued_evidence_review|待分配||
 |N10|queued_evidence_review|待分配||
-|N13|conservative_repair_pending_final_review_six_business_oracles_open|/root/repair_chemo||
+|N13|limited_engineering_repair_integrated_business_acceptance_open|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|待分配||
 |SURGERY-029030|queued_evidence_review|待分配||
 |PREOP-MEDICAL|business_basis_review_no_code_decision|待分配||
@@ -27,8 +27,8 @@
 |imaging-laboratory:IML-02|integrated_engineering_closed|/root/repair_iml02||
 |imaging-laboratory:IML-D01|business_basis_review_no_code_decision|待分配||
 |imaging-laboratory:IML-D02|business_basis_review_no_code_decision|待分配||
-|rescue-remaining:RR-D01|read_only_minimal_design|/root/repair_iml01||
-|rescue-remaining:RR-D02|read_only_minimal_design|/root/repair_iml01||
+|rescue-remaining:RR-D01|evaluation_horizon_material_visibility_contract_pending|/root/repair_iml01||
+|rescue-remaining:RR-D02|independent19_frozen_waiting_serial_test_slot|/root/repair_iml01||
 |rescue-remaining:RR-M01|integrated_engineering_contract_closed|/root/repair_iml02||
 |treatment-consultation:TC-01|queued_evidence_review|待分配||
 |treatment-consultation:TC-02|queued_shared_module|待分配|imaging-laboratory:IML-02|
@@ -39,7 +39,7 @@
 |tumor-pathology:TP-D04|queued_shared_module|待分配|imaging-laboratory:IML-02|
 |tumor-pathology:TP-D05|queued_shared_module|待分配|imaging-laboratory:IML-02|
 |PRIV-002|integrated_limited_source_boundary_engineering_closed|/root/repair_privacy_closure||
-|PRIV-003|privacy_design_required_before_real_validation|/root/repair_privacy_closure||
+|PRIV-003|existing_three_entry_source_design_in_progress|/root/repair_privacy_closure||
 |PRIV-004|integrated_engineering_closed|/root/repair_privacy_closure||
 |PRIV-005|integrated_engineering_closed|/root/repair_privacy_closure||
 |rescue-remaining:RR-PUB01|queued_shared_module|待分配|imaging-laboratory:IML-02|

@@ -54,7 +54,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "historical_evidence",
       "owner": "/root/repair_chemo",
-      "state": "conservative_repair_pending_final_review_six_business_oracles_open",
+      "state": "limited_engineering_repair_integrated_business_acceptance_open",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -64,7 +64,8 @@
         "No claim of real model/clinical pass from synthetic tests"
       ],
       "source_commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
-      "note": "187 engineering protections pass; all6 unchangedNC business oracles actually run and fail asdata_gap in both integratede256baseline and finalcandidate. Not accepted as wholeN13."
+      "note": "Independent47observations39match;6NCbusinessoracle fail asgap baseline/final;2DGcount0expected/1actual reflectunprovenownership, keptunmet.8falseNC fixed;20publiccontracts+14dosechecks pass. No new confirmed regression in frozen matrix;notwholeN13accepted.",
+      "integration_commit": "880a433b0"
     },
     {
       "id": "TR-044-MULTI",
@@ -461,7 +462,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
       "owner": "/root/repair_iml01",
-      "state": "read_only_minimal_design",
+      "state": "evaluation_horizon_material_visibility_contract_pending",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -469,7 +470,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "note": "Do not silently turnfrozenclinicalevaluationendpoint into sourcevisibilitycutoff; no productionchangeapproved."
     },
     {
       "id": "rescue-remaining:RR-D02",
@@ -481,7 +483,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
       "owner": "/root/repair_iml01",
-      "state": "read_only_minimal_design",
+      "state": "independent19_frozen_waiting_serial_test_slot",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -698,7 +700,7 @@
       "owner": "/root/repair_privacy_closure",
       "depends_on": [],
       "source_commit": "4232ca617",
-      "note": "49 independentboundedsource-consumption probes pass;67ownerengineeringpass. Integrated67 rerun pending. Does not close unreadidentity sources or003.",
+      "note": "49 independent bounded probes and integrated67 privacy tests pass. No real PG/job/browser; unread identity sources/PRIV003 open.",
       "integration_commit": "26f4fe645"
     },
     {

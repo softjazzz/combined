@@ -65,7 +65,7 @@
     {
       "id": "CHEMO",
       "owner": "/root/repair_chemo",
-      "state": "date_heuristic_withdrawn_pending_final_review_six_business_oracles_unmet",
+      "state": "limited_N13_integrated_eight_business_observations_open",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
@@ -82,7 +82,8 @@
         "59b3d7cbc83ee5d3de946f08409d04fc9357dc57"
       ],
       "integration_commits": [
-        "e256e8ea9"
+        "e256e8ea9",
+        "880a433b0"
       ]
     },
     {
@@ -145,17 +146,21 @@
         "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
         "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
-        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
       ],
       "scope_constraint": "Only063 death/discharge scope; authoritative typed mr death diagnosis is valid evidence; preserve original normal fixture; no Finalizer or074 changes"
     },
     {
       "id": "RR-DEATH-DISCUSSION",
       "owner": "/root/repair_iml01",
-      "state": "read_only_design_no_production_write_yet",
+      "state": "RR_D02_independent19_frozen_waiting_test_slot",
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-ledger-20261008",
-      "write_paths": [],
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_death_discussion_closure.py"
+      ],
       "test_slot": null
     }
   ],
@@ -174,5 +179,5 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "26f4fe645"
+  "integration_head": "880a433b0"
 }
