@@ -338,15 +338,16 @@
       "id": "TC02",
       "owner": "/root/repair_iml02",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
-      "state": "approved_offline_only",
+      "state": "offline_contract_validation",
       "responsibility": [
         "native_extended_document_execution.py:070",
         "extended_document/transfusion_performance_extraction.py",
         "transfusion_result_mapping.py:070",
         "customer_renderer.py:070",
-        "canonical_result_finalizer.py:070 explanation tuples",
         "app/data/luxian_0609_phase1_rule_contracts_extension_v1.json:070",
-        "app/data/luxian_0609_phase1_rules_extension_v1.json:070"
+        "app/data/luxian_0609_phase1_rules_extension_v1.json:070",
+        "tests/unit/test_luxian_0609_rule_contracts.py:070 exclusively until fixed commit",
+        "canonical_result_finalizer.py:070 explanation and raw reserved count gate"
       ],
       "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
     },
@@ -354,13 +355,14 @@
       "id": "TP-D02-LOCAL",
       "owner": "/root/repair_chemo",
       "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
-      "state": "approved_offline_only",
+      "state": "offline_semantic_and_contract_red_retained",
       "responsibility": [
         "native_tumor_pathology_execution.py:026",
         "chemotherapy_local_dose_facts.py",
         "rule_contracts.py:026 budget",
         "app/data/luxian_0609_rule_contracts_v1.json:026",
-        "app/data/luxian_0609_rules_v1.json:026"
+        "app/data/luxian_0609_rules_v1.json:026",
+        "tumor_pathology_result_mapping.py:026 local unresolved subset and status only"
       ],
       "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
     },
@@ -368,10 +370,10 @@
       "id": "SURGERY-FREEZE-TEST",
       "owner": "/root/repair_iml01",
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
-      "state": "approved_offline_only",
+      "state": "integrated_test_fixture_closed_semantic_association_still_open",
       "responsibility": [
-        "tests/unit/test_luxian_0609_surgery_document_freeze.py",
-        "tests/unit/test_surgery_029_normal_event_association.py"
+        "tests/unit/test_luxian_0609_surgery_document_freeze.py:029 fixture and family tuple",
+        "tests/unit/test_surgery_029_mr_fixture_contract.py"
       ],
       "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
     }
@@ -391,10 +393,11 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "7d36d0316",
-  "current_test_slot_owner": "/root/repair_iml02",
+  "integration_head": "56322bcffa32ac33b5069975f1dbf3af18b597ac",
+  "current_test_slot_owner": null,
   "queued_tests": [
-    "CT03 red when ready",
-    "N12 red after fixed contract"
+    "DD 11 source-bound synthetic replays pending runner review",
+    "TP-D02 narrow mapping regression pending preparation",
+    "TC02 followup pending inherited gap evidence analysis"
   ]
 }

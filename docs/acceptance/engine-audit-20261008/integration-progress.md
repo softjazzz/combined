@@ -116,3 +116,12 @@
 
 - fad64946e integrates216431018 test-only MR fixture/family drift repair after independent exactAST/fieldtime review. Owner final354/3545.31s; root strict354/3544.78s/1warning. Only029 MR source shape corrected; five other original inputs and decoded-coordinate tuple order unchanged. Earlier351/3overbroad fixture hash-order attempt and originalC red retained. This removes two identified stale tests, not medical029/030 association issues.
 - IML01 precise consumers mapped:06-01-03 original jointCT/MRI gap-vsC business contract remains pending;06-01-01 sharesledger but originalcase lacksorders/course, so cannot inheritC observation;06-03-02culture cannot consume exam-onlycase, remaining newfield real-input/delivery chain verification only. No new pass counts.
+
+### TC02 与 TP-D02 并行修复检查点（基线 56322bcff）
+
+- 两路生产改动仍在各自 F 盘工作树，尚未集成。更新文件独占表：070 保存 raw reserved count gate、026 local unresolved 子集状态合同分别由唯一 owner 负责；旧 rule_contracts 测试文件当前仅 critical 可写。
+- TC02 首轮 78 项为 13 通过、65 fixture setup 错误：错误 patch 不存在的 get_engine，不能算产品失败；原日志保留。修复隔离 fixture 后扩充正式保存负向用例，83 项为 82 通过、1 失败（作者执行，3.57 秒）。
+- 剩余 cancel_gap 用例要求公开精确证据卡，但实际公开及保存 evidence 为空；native 引用、资料不足状态、原因和文案保存回读一致。继承合同边界正在独立核对，原失败预期保留，不能宣布 83 全通过或精确定位验收通过。
+- TP-D02 仍保留否定语义、扩大 action span 借用其他药剂量的反例；仅正确 fake fact 的通过不能证明真实模型药物归属正确。新增脱敏 view 与原文坐标映射保护待有限复验。公开合同只允许 local unresolved 等于全部 unresolved、无未知时间、有独立确认事件及明确 mismatch 的窄条件；旧无字段合同不变。
+- 本检查点未调用真实模型、读取 PG 或扩大临床验收结论。
+- TP-D02 当前候选 42 项已执行：37 通过、5 失败（2.09 秒）。2 项隐私坐标保护通过；原否定预期 NC 实际资料不足、错误扩大 action span 实际合规仍各失败；3 项公共状态合同 technical_error 与真实 raw/safe facts 均已记录。仍不适合集成整套模型转换；先分清可独立提交子项及未闭语义。
