@@ -277,9 +277,12 @@ def _prompt(documents: Sequence[tuple[str, str, str]], selected: Sequence[str]) 
 
 按 source_type 使用字段全集：{schemas}
 两类文书除planned_procedure外，每项均返回对象：{{"state":"present|missing|unknown","span_id":"本doc单个片段编号或null","reviewed_all_sections":true或false}}。planned_procedure专用合同为{{"state":"present|missing|unknown","quote":"最小连续术式短引文或null","reviewed_all_sections":true或false}}，只摘录拟行手术名称及方式，不附带同句其他术式、病情或注意事项，保留原文，不得总结改写。
-present必须选本doc能直接支持该项的单个span_id，不输出quote或重写原文；missing仅在检查该文书全部输入（正文、主持人小结、讨论建议及结构字段）后仍无对应内容时使用，span_id为null且reviewed_all_sections为true（planned_procedure的quote为null）。未抽到、含义不明或无法完整核查用unknown，绝不能以未抽到代替确认缺失。一个原文片段可以支持多个不同检查项，不因位于主持人小结就只能用于chair_summary。
+present必须选本doc能直接支持该项的单个span_id，不输出quote或重写原文；missing仅在检查该文书全部输入（正文、主持人小结、讨论建议及结构字段）后仍无对应内容时使用，span_id为null且reviewed_all_sections为true（planned_procedure的quote为null）。先通读本doc全部片段并核对候选依据，再选三态：完整核查后仅未找到对应内容，应返回missing；材料不全、无法完成核查、候选含义不明或上下文冲突时才返回unknown。unknown不是“尚未搜索”的替代，missing也不能由未完成核查推得。一个原文片段可以支持多个不同检查项，不因位于主持人小结就只能用于chair_summary。
 九项定义：preop_preparation=已完成或拟实施的术前检查、准备及禁忌评估；surgical_indication=疾病、症状、保守治疗效果等手术理由；surgical_plan=拟行术式和方案；risk_and_prevention=可能风险及对应防范措施；participants_with_titles=参加者姓名及职称；specific_opinions=参加者具体讨论意见；chair_summary=主持人总结意见；discussion_date=讨论日期；recorder_signature=记录者签名。按内容识别，不要求固定栏目标题。
 术前小结七项定义：brief_condition=患者本次手术相关的简要病情；preop_diagnosis=术前诊断；surgical_indication=拟行手术的理由或指征；planned_procedure=拟施手术名称和方式；planned_anesthesia=拟施麻醉方式；precautions=拟行手术相关的注意事项或具体防范措施，可位于手术要点等段落；合适的术式常规具体措施也可支持该项，不要求患者个体独有；surgeon_preop_visit=术者术前查看患者的情况。按完整内容语义识别，不按固定栏目标题或单个注意词判存在，不能把泛称“手术要点”或空标题当内容。
+字段语义边界：surgeon_preop_visit核对术者已经查看患者的情况，必须有相应行为及患者情况的叙述依据；仅有医师签名或参加名单不能证明已经查看，拟查看、请术者查看不能证明已经查看。签名只说明署名，不推断查看行为；通读后无对应叙述按上述三态处理。
+preop_diagnosis核对医生在本次手术前对患者疾病的诊断表述，不要求专名栏目或固定措辞；其他栏目中的明确诊断，或医生结合检查明确采纳为本次术前诊断，均可作为依据。单独的影像所见、检查提示或既往诊断不能自动等同本次术前诊断；应结合完整上下文区分医生诊断与检查发现，归属确实不清时保留unknown，不强行补成诊断。
+片段编号合法只证明引用来自本doc，不证明它支持这个字段；引用须结合完整上下文核对其所支持的内容。
 每个present仅选一个能直接支持该项的最小连续片段编号；不得返回多个ID或拼接编号，其他文书的ID不能引用，不得输出自由引文。不同字段可共用同一个编号。按完整ordered spans顺序通读原文，核对上下文、否定和跨句关系，不能把片段脱离完整语境作判断；一个片段不足以确认时返回unknown且span_id=null，不能组合片段。planned_procedure仍按上述短quote例外。只有reviewed_all_sections=true且确认该项未记载时可返回missing；语义仍由你抽取，不能用null表示确认缺项。
 讨论日期只指日期是否已记录，不判断讨论及时性；输入中的同文书“讨论日期”结构投影也必须核对，不可因正文未重复日期报missing。
 specific_opinions是参加讨论者的具体意见，chair_summary是主持人总结，两者分别抽取；仅有参加人员名单、拟行术式或主持人同意手术，不能代替具体讨论意见。“略”、空白和仅有栏目标题不算实质内容；完整核查确认无对应内容才返回missing，不能确定时返回unknown。
