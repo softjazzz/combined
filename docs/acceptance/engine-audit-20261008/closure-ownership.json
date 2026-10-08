@@ -18,7 +18,7 @@
     {
       "id": "IML-01",
       "owner": "/root/repair_iml01",
-      "state": "independent_review_blocked_report_role_and_modality_fix",
+      "state": "integrated_confirmed_subissues_engineering_verified_joint_ct_mri_contract_open",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py",
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_handbook_identity_conflict_closure.py",
@@ -29,9 +29,13 @@
       ],
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-ledger-20261008",
-      "test_slot": 1,
+      "test_slot": null,
       "commits": [
-        "11211cc42becaa03d0f5b36056bdc3e17a31842a"
+        "11211cc42becaa03d0f5b36056bdc3e17a31842a",
+        "8c9df71af38c934570df6402f9251e046c489a98"
+      ],
+      "integration_commits": [
+        "ef19df8a2"
       ]
     },
     {
@@ -61,7 +65,7 @@
     {
       "id": "CHEMO",
       "owner": "/root/repair_chemo",
-      "state": "N13_blocked_same_drug_event_association_followup",
+      "state": "date_heuristic_withdrawn_pending_final_review_six_business_oracles_unmet",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
@@ -73,7 +77,9 @@
       "scope_constraint": "Only05-02-01; structuralD01/N13 first, semanticD02/D03 design reviewed before implementation",
       "commits": [
         "d0f9c829901152a5a9fd7d97bc9916fe076b67cd",
-        "df3ea6837225c85de81fe5fd9929853feeadb599"
+        "df3ea6837225c85de81fe5fd9929853feeadb599",
+        "e8f7dcb746a413d7736986535939f00d1573dad3",
+        "59b3d7cbc83ee5d3de946f08409d04fc9357dc57"
       ],
       "integration_commits": [
         "e256e8ea9"
@@ -82,7 +88,7 @@
     {
       "id": "PRIVACY",
       "owner": "/root/repair_privacy_closure",
-      "state": "005_004_fixed_review_and_002_existing_identity_wiring",
+      "state": "002_004_005_integrated_003_design",
       "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
       "branch": "codex/qc-fix-privacy-v2-20261008",
       "test_slot": null,
@@ -99,16 +105,19 @@
       "scope_constraint": "0609 privacy only; assembly/callers require explicit ownership extension; no patient/PG/model access",
       "commits": [
         "041b3be67",
-        "6b8fa3e58"
+        "6b8fa3e58",
+        "4232ca617"
       ],
       "integration_commits": [
-        "1225aff95"
+        "1225aff95",
+        "d501584dd",
+        "26f4fe645"
       ]
     },
     {
       "id": "RR-M01",
       "owner": "/root/repair_iml02",
-      "state": "074_contract_metadata_repair",
+      "state": "integrated_engineering_contract_closed_real_prompt_validation_open",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-critical-v2-20261008",
       "write_paths": [
@@ -117,6 +126,36 @@
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py"
       ],
       "scope_constraint": "Only074existing one-call metadata and tests; no new prompt/call/retry/release behavior",
+      "test_slot": null,
+      "commits": [
+        "b85b49882bcdab5703ddacf54225c671bac353da"
+      ],
+      "integration_commits": [
+        "305974e38"
+      ]
+    },
+    {
+      "id": "DD-F01",
+      "owner": "/root/repair_iml02",
+      "state": "frozen_red_then_limited_repair",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-critical-v2-20261008",
+      "test_slot": 1,
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"
+      ],
+      "scope_constraint": "Only063 death/discharge scope; authoritative typed mr death diagnosis is valid evidence; preserve original normal fixture; no Finalizer or074 changes"
+    },
+    {
+      "id": "RR-DEATH-DISCUSSION",
+      "owner": "/root/repair_iml01",
+      "state": "read_only_design_no_production_write_yet",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-ledger-20261008",
+      "write_paths": [],
       "test_slot": null
     }
   ],
@@ -125,7 +164,8 @@
     "No writes to D primary checkout",
     "No model/PG calls for offline repairs",
     "Existing reports and frozen expectations preserved",
-    "Only root integrates commits sequentially"
+    "Only root integrates commits sequentially",
+    "Git commit/Husky serialized by root; shared git stash metadata must not race"
   ],
   "preserved_worktrees": [
     {
@@ -134,5 +174,5 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "1225aff95"
+  "integration_head": "26f4fe645"
 }
