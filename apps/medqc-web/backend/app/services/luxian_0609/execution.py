@@ -359,7 +359,7 @@ async def prepare_luxian_0609_execution(
             )
         except Exception:
             # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
-            logger.exception("LX0609 evidence snapshot 构建失败")
+            logger.error("LX0609 evidence snapshot 构建失败 error_kind=snapshot_build_error")
             evidence_snapshot_build_failed = True
             evidence_snapshot = None
             evidence_materials = None

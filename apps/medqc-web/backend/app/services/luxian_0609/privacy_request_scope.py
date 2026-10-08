@@ -43,6 +43,11 @@ def luxian_0609_privacy_scope(function):
     return guarded
 
 
+def is_luxian_0609_privacy_scope_active() -> bool:
+    """只公开是否位于病例发送边界，不返回身份或 provider。"""
+    return _SCOPE.get() is not None
+
+
 def bind_luxian_0609_identity_provider(provider: Callable[[], Iterable[str]]) -> None:
     if _SCOPE.get() is not None:
         _SCOPE.set(_Scope(provider=provider))
