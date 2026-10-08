@@ -31,15 +31,17 @@ _COMMON_SURNAME = (
     r"厍聂晁勾敖融冷訾辛阚那简饶空曾毋沙乜养鞠须丰巢关蒯相查后荆红游竺"
     r"权逯盖益桓公])"
 )
+# 仅识别人口学标签及明确性别值；不把“性别相关”等医疗叙述当身份依据。
+_LABELLED_SEX = r"性别[ \t]*[:：]?[ \t]*[男女](?=[\s，,、；;。\"}]|$)"
 _PATIENT_INTRO = re.compile(
     rf"(?P<label>(?:患者|病人|患儿)\s*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    r"(?=(?:\s*[，,、]\s*(?:男|女|年龄|\d{1,3}\s*岁|因)|\s*因))"
+    rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
 )
 _DEMOGRAPHIC_NAME = re.compile(
     rf"(?P<label>(?:(?<=^)|(?<=[\n\r；;。]))[ \t]*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    r"(?=[ \t]*[，,、][ \t]*(?:男|女|\d{1,3}[ \t]*岁|年龄))",
+    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|男|女|\d{{1,3}}[ \t]*岁|年龄))",
     flags=re.MULTILINE,
 )
 _CONTACT_NAME = re.compile(
