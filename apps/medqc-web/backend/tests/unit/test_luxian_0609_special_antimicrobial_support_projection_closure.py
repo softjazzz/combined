@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from test_luxian_0609_special_antimicrobial_support_closure import CASES, RULE, _run
+from test_luxian_0609_special_antimicrobial_support_closure import CASES, _run
 
 
 @pytest.fixture(autouse=True)
@@ -148,3 +148,26 @@ async def test_synthetic_sqlite_new_instance_retains_only_target_related_support
                     assert evidence["evidence_excerpt"] == row["record_content"]
     finally:
         engine.dispose()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", [False, True])
+async def test_original_multiple_drug_half_covered_copy_never_calls_other_missing_support_late(reverse):
+    source = case("multiple_only_meropenem_supported")
+    rows = {key: tuple(reversed(value)) if reverse else tuple(value) for key, value in source["rows"].items()}
+    _, _, result = await _run(rows)
+    assert result["status"] == source["oracle"]["status"] == "non_compliant"
+    assert result["reason_code"] == source["oracle"]["reason_code"] == "required_document_missing"
+    facts = result["customer_display_facts"]
+    assert facts["expert_support_present"] is True
+    assert facts["expert_support_time"] == "2026-04-01 07:00:00"
+    assert facts["first_antimicrobial_time"] == "2026-04-01 08:00:00"
+    assert facts["support_before_use"] is False
+    assert facts["unmatched_special_antimicrobials"] == ["万古霉素"]
+    assert "其中 万古霉素 未找到可关联的计划启用前专家支持记录" in result["findings"]
+    assert "晚于该时间" not in result["findings"]
+    assert "时间前或同刻找到专家支持记录" not in result["findings"]
+    assert {e["source_document_id"] for e in result["customer_evidence"]} == {
+        "synthetic-order", "synthetic-order-V", "synthetic-note-M",
+    }
+    print(json.dumps({"case": source["id"], "reverse": reverse, "status": result["status"],
+                      "reason_code": result["reason_code"], "facts": facts, "findings": result["findings"]}, ensure_ascii=True))
