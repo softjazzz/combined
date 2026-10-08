@@ -320,7 +320,7 @@
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
       ],
-      "note": "Fixed39independentpass;owner73+old8finalpass. Preservesoldtypeddeathandnormaldischargefacts. No realPG/clinicalclaim;integrated73queued.",
+      "note": "Independent39pass;owner73+old8;integrated73pass at1deefproductionb130. Oldtypeddeath anddischargefacts preserved. NoPG/clinicalclaim.",
       "source_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
       "integration_commit": "b13043c3d"
     },
@@ -766,12 +766,14 @@
         "0609 catalog tests"
       ],
       "claim": "86/80目录与旧85/79断言漂移；先核正确集合，不能只改计数冒充业务修复",
-      "state": "fixed50_pass_static_independent_review_pending",
+      "state": "first_three_test_batch_integrated_remaining_legacy_assertions_open",
       "owner": "/root/repair_chemo",
       "depends_on": [],
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
       "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
-      "source_commit": "36a3175b4c2ec2a4cc574b15405638ef44c0361a"
+      "source_commit": "36a3175b4c2ec2a4cc574b15405638ef44c0361a",
+      "integration_commit": "0dd25d30b",
+      "note": "Staticindependentreviewaccepted productionJSONunchanged;owner50pass;integrated50pending. Nativeinventory/provider/golden candidates remain underread-onlyreconciliation."
     }
   ]
 }

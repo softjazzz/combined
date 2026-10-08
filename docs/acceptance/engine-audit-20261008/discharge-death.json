@@ -102,7 +102,20 @@
         "finding": "本次尚未形成出院记录",
         "reason_code": "trigger_absent_complete"
       },
-      "required_followup": "主协调独立复核 death-only 来源合同；若死亡诊断属于本规则范围，不能只以无出院记录判不适用。"
+      "required_followup": "主协调独立复核 death-only 来源合同；若死亡诊断属于本规则范围，不能只以无出院记录判不适用。",
+      "engineering_closure": {
+        "finding_id": "DD-F01",
+        "engineering_status": "closed_with_independent_frozen_checks",
+        "fix_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+        "independent_check_count": 39,
+        "independent_passed": 39,
+        "results_path": "F:\\MedQC-worktrees\\review-artifacts\\dd-f01-closure\\independent-fixed-58e29-results.json",
+        "results_sha256": "2ce1c41cd2ad0276ff25f66172c6b2b5dc7d99488e754276bec35beb087c65fc",
+        "frozen_sha256": "ba15b3e8b125c725a8ac8c973959ef2ad9d121a6fb36d06020c39e69177656f4",
+        "clinical_acceptance_complete": false,
+        "baseline_original_counterexample_preserved": true,
+        "test_slot_released": true
+      }
     },
     {
       "id": "DD-F02",
@@ -1533,5 +1546,20 @@
         "scope_status": "scope_excluded_by_user"
       }
     ]
-  }
+  },
+  "engineering_closures": [
+    {
+      "finding_id": "DD-F01",
+      "engineering_status": "closed_with_independent_frozen_checks",
+      "fix_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+      "independent_check_count": 39,
+      "independent_passed": 39,
+      "results_path": "F:\\MedQC-worktrees\\review-artifacts\\dd-f01-closure\\independent-fixed-58e29-results.json",
+      "results_sha256": "2ce1c41cd2ad0276ff25f66172c6b2b5dc7d99488e754276bec35beb087c65fc",
+      "frozen_sha256": "ba15b3e8b125c725a8ac8c973959ef2ad9d121a6fb36d06020c39e69177656f4",
+      "clinical_acceptance_complete": false,
+      "baseline_original_counterexample_preserved": true,
+      "test_slot_released": true
+    }
+  ]
 }

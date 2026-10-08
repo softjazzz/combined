@@ -47,3 +47,7 @@ native_extended_document_execution.py:3470-3509；executor_registry.py:226-236 �
 原始预冻结SHA256：`8dc0233355036eea8d585d6055572971666fa6f8847bb4b80004494c92e4d289`。未修改原始冻结文件；范围收缩仅影响当前报告计数。可运行探针、逐项实际结果及历史被排除项位于 `.tmp/engine-audit-20261008/discharge-death/`；JSON报告保留状态、原因、文案及公开事实。
 
 首次运行因禁止socket.connect同时拦截Windows asyncio自身socketpair而未进入用例。探针改用无I/O协程同步驱动后常规矩阵通过；原冻结预期未修改。用户范围收缩后未启动新增测试或探针。
+
+## DD-F01 固定提交独立复核更新
+
+`58e29ffe9edc559bee552c734dc66ebed9ebf32c` 独立检查39/39通过，DD-F01在原DD-S01及八项新增冻结的工程边界内关闭。原反例、初审结果与31/31+0/1计数保留为修复前证据，不与独立39项相加。普通出院facts原样、可选death/登记source缺失不拖正常分支、精确death文书与无ID MR来源锚点、公开scope gap状态拒绝均通过。独立摘要和结果位于 `F:/MedQC-worktrees/review-artifacts/dd-f01-closure/independent-fixed-58e29-review.md` / `independent-fixed-58e29-results.json`，结果SHA256 `2ce1c41cd2ad0276ff25f66172c6b2b5dc7d99488e754276bec35beb087c65fc`。真实模型、PG/.env为0；工程闭环不等于临床签认，其他覆盖及口径项仍保留。

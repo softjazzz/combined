@@ -178,7 +178,7 @@
     {
       "id": "RR-SCOPE01",
       "owner": "/root/repair_chemo",
-      "state": "fixed50_pass_static_independent_review_pending",
+      "state": "first3tests_integrated_secondbatch_readonly",
       "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
       "write_paths": [
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
@@ -218,11 +218,10 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "b13043c3d",
+  "integration_head": "0dd25d30b",
   "current_test_slot_owner": "/root/repair_iml02",
   "queued_tests": [
-    "rootDD-F01integrated73",
-    "PRIV003 scopedgreen whenready",
-    "RR-SCOPE01integrated50 afterindependentreview"
+    "rootRR-SCOPE01integrated50",
+    "PRIV003scopedgreenwhenready"
   ]
 }
