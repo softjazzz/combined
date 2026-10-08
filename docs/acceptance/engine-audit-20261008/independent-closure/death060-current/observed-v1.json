@@ -1,0 +1,254 @@
+{
+  "audit_id": "060-current-targeted-evidence-replay-v1",
+  "fixed_current_commit": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "historical_source_sha256": null,
+  "historical_gap_retained": true,
+  "source_manifest_sha256": "93a9f7c343ba068d715500f21d5deffadc1579c269dbd07c2531650e6ae57905",
+  "runner_sha256": "8f73d823de9f824e140a901b0c0c21716a8486ef94087289aa1be8eb22532fff",
+  "input_expected_sha256": "9b9ddb3fbf272948d7b0d81b6bd6fcbec4daaa6011d4f955827a5e36fc8b2cb5",
+  "sources_unchanged": true,
+  "native_records": [
+    {
+      "case_id": "060-existing-complete-discharge-NA",
+      "origin_test": "test_death_rules_treat_complete_discharge_record_as_non_death",
+      "expected_status": "not_applicable",
+      "pass": true,
+      "errors": [],
+      "native_state": "not_applicable",
+      "native_reason": "trigger_absent_complete",
+      "fact_refs": [
+        "12fdfcf5a3759a784d4207c33b593735b8b578f92dc049272d8b87e70ca07210",
+        "14affb54fd639ae2cabf47f643c63cf53da54e6d156b3a6b0b8405a2ee616036",
+        "1863b87af473b7ba198b68a651f04058053e39065929c84488653798e286aa4a"
+      ],
+      "facts": null,
+      "result": {
+        "rule_id": "LX0609-04-02-06",
+        "rule_code": "LX0609-04-02-06",
+        "rule_name": "死亡记录：死亡患者无死亡记录",
+        "qc_point_id": "LX0609-04-02-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-07-31",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "本次住院结局不是死亡",
+        "evidence": "已核对住院结局和死亡资料，未触发死亡记录要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": []
+      },
+      "llm_calls": 0,
+      "tokens": 0
+    },
+    {
+      "case_id": "060-existing-active-inpatient-NA",
+      "origin_test": "test_060_active_inpatient_with_complete_empty_death_source_is_not_applicable",
+      "expected_status": "not_applicable",
+      "pass": true,
+      "errors": [],
+      "native_state": "not_applicable",
+      "native_reason": "trigger_absent_complete",
+      "fact_refs": [
+        "12fdfcf5a3759a784d4207c33b593735b8b578f92dc049272d8b87e70ca07210",
+        "528bf50d58a0b5dc648ad1a9e04ad53c4a86b040caf3f9e5eefb5b89117adb1d",
+        "d41bdc2242cf3fed561244266faf73799e40dc8f1befd06937fd7318f7e7cb22"
+      ],
+      "facts": null,
+      "result": {
+        "rule_id": "LX0609-04-02-06",
+        "rule_code": "LX0609-04-02-06",
+        "rule_name": "死亡记录：死亡患者无死亡记录",
+        "qc_point_id": "LX0609-04-02-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-07-31",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "本次住院结局不是死亡",
+        "evidence": "已核对住院结局和死亡资料，未触发死亡记录要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": []
+      },
+      "llm_calls": 0,
+      "tokens": 0
+    },
+    {
+      "case_id": "060-existing-death-without-record-NC",
+      "origin_test": "test_060_death_patient_without_death_record_is_non_compliant",
+      "expected_status": "non_compliant",
+      "pass": true,
+      "errors": [],
+      "native_state": "non_compliant",
+      "native_reason": "required_document_missing",
+      "fact_refs": [
+        "12fdfcf5a3759a784d4207c33b593735b8b578f92dc049272d8b87e70ca07210",
+        "a2a1590d4a53b24e15fdb4ff080f633bb6587ad4f3103e8339d9979b11b339f9"
+      ],
+      "facts": {
+        "verification_kind": "death_record_presence_check",
+        "death_confirmed": true,
+        "death_time": "2026-07-01 12:00:00",
+        "death_record_count": 0
+      },
+      "result": {
+        "rule_id": "LX0609-04-02-06",
+        "rule_code": "LX0609-04-02-06",
+        "rule_name": "死亡记录：死亡患者无死亡记录",
+        "qc_point_id": "LX0609-04-02-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-07-31",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已确认患者死亡（死亡时间 2026-07-01 12:00:00），死亡记录 0 份。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：死亡记录\n需要补充：死亡时间、死亡过程、死亡原因和记录完成时间\n推荐写法：请补充并归档本次住院的死亡记录，写明死亡时间、过程和死亡原因。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "death_record_presence_check",
+          "death_confirmed": true,
+          "death_record_count": 0,
+          "death_time": "2026-07-01 12:00:00"
+        }
+      },
+      "llm_calls": 0,
+      "tokens": 0
+    },
+    {
+      "case_id": "060-existing-readable-death-record-C",
+      "origin_test": "test_death_case_skips_ordinary_discharge_rules",
+      "expected_status": "compliant",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "fact_refs": [
+        "14affb54fd639ae2cabf47f643c63cf53da54e6d156b3a6b0b8405a2ee616036",
+        "d5ade9d71e5381fee3039eb4c7323c8491de1d4234bcacc36d0363587f6b2388"
+      ],
+      "facts": {
+        "verification_kind": "death_record_presence_check",
+        "death_confirmed": true,
+        "death_time": "2026-07-15 21:22:22",
+        "death_record_count": 1
+      },
+      "result": {
+        "rule_id": "LX0609-04-02-06",
+        "rule_code": "LX0609-04-02-06",
+        "rule_name": "死亡记录：死亡患者无死亡记录",
+        "qc_point_id": "LX0609-04-02-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-07-31",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "已确认患者死亡（死亡时间 2026-07-15 21:22:22），死亡记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "death_record_presence_check",
+          "death_confirmed": true,
+          "death_record_count": 1,
+          "death_time": "2026-07-15 21:22:22"
+        }
+      },
+      "llm_calls": 0,
+      "tokens": 0
+    }
+  ],
+  "finalizer_records": [
+    {
+      "case_id": "060-existing-presence-status-conflict-rejected",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-04-02-06",
+        "status": "technical_error",
+        "reason_code": "model_invalid_output",
+        "result_status": "technical_error",
+        "is_compliant": null
+      }
+    }
+  ],
+  "published_records": [
+    {
+      "case_id": "060-existing-missing-facts-none",
+      "pass": true,
+      "errors": [],
+      "published": null
+    },
+    {
+      "case_id": "060-existing-missing-facts-empty",
+      "pass": true,
+      "errors": [],
+      "published": null
+    },
+    {
+      "case_id": "060-existing-public-count0",
+      "pass": true,
+      "errors": [],
+      "published": {
+        "verification_kind": "death_record_presence_check",
+        "death_confirmed": true,
+        "death_record_count": 0
+      }
+    },
+    {
+      "case_id": "060-existing-public-count1-time",
+      "pass": true,
+      "errors": [],
+      "published": {
+        "verification_kind": "death_record_presence_check",
+        "death_confirmed": true,
+        "death_record_count": 1,
+        "death_time": "2026-09-01 08:00:00"
+      }
+    },
+    {
+      "case_id": "060-existing-public-private-pollution",
+      "pass": true,
+      "errors": [],
+      "published": null
+    },
+    {
+      "case_id": "060-existing-public-bool-count",
+      "pass": true,
+      "errors": [],
+      "published": null
+    }
+  ],
+  "guard_attempts": {
+    "env": 0,
+    "private": 0,
+    "network": 0,
+    "database": 0,
+    "model": 0,
+    "foreign_write": 0
+  },
+  "actual_model_calls": 0,
+  "PG_calls": 0,
+  "private_material_reads": 0,
+  "historical_real_cases_replayed": 0,
+  "clinical_acceptance": false
+}

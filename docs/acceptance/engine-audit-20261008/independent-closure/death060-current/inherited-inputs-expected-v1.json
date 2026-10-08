@@ -1,0 +1,32 @@
+{
+  "audit_id":"060-current-evidence-binding-prepared-v1",
+  "rule_id":"LX0609-04-02-06","legacy_rule_id":"LX0609-060",
+  "fixed_current_commit":"21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "historical_source_sha256":null,
+  "historical_binding_gap_retained":true,
+  "stage":"prepared_not_executed",
+  "expectation_policy":"verbatim existing synthetic rows and per-rule assertions; shared multi-rule tests projected to this canonical rule only; no new clinical expectation",
+  "native_cases":[
+    {"id":"060-existing-complete-discharge-NA","origin_test":"test_death_rules_treat_complete_discharge_record_as_non_death","origin_line":496,"origin_rule_ids":["LX0609-09-02-01","LX0609-04-02-06"],"rows":{"inpat_registration":[{"discharge_datetime":"2026-07-15 16:20:31"}],"discharge_record":[{"record_time":"2026-07-15 16:10:00"}]},"expected_status":"not_applicable","expected_reason":"trigger_absent_complete","expected_llm_calls":0,"expected_tokens":0},
+    {"id":"060-existing-active-inpatient-NA","origin_test":"test_060_active_inpatient_with_complete_empty_death_source_is_not_applicable","origin_line":608,"origin_rule_ids":["LX0609-04-02-06"],"rows":{"inpat_registration":[{"admission_datetime":"2026-08-16 22:39:10","patient_status":"在院"}]},"expected_status":"not_applicable","expected_reason":"trigger_absent_complete","expected_finding":"本次住院结局不是死亡","expected_llm_calls":0,"expected_tokens":0},
+    {"id":"060-existing-death-without-record-NC","origin_test":"test_060_death_patient_without_death_record_is_non_compliant","origin_line":711,"origin_rule_ids":["LX0609-04-02-06"],"rows":{"inpat_registration":[{"patient_status":"死亡","death_datetime":"2026-07-01 12:00:00"}]},"expected_status":"non_compliant","expected_reason":"required_document_missing","expected_llm_calls":0},
+    {"id":"060-existing-readable-death-record-C","origin_test":"test_death_case_skips_ordinary_discharge_rules","origin_line":636,"origin_rule_ids":["LX0609-09-02-01","LX0609-04-02-06","LX0609-08-01-01","LX0609-08-02-02"],"rows":{"inpat_registration":[{"discharge_datetime":"2026-07-15 16:20:31"}],"death_record":[{"record_time":"2026-07-15 21:22:22","death_datetime":"2026-07-15 21:22:22"}],"death_discussion":[{"record_time":"2026-07-20 19:21:30"}]},"expected_status":"compliant","expected_reason":"requirement_satisfied","expected_llm_calls":0,"expected_tokens":0}
+  ],
+  "finalizer_case":{
+    "id":"060-existing-presence-status-conflict-rejected","origin_test":"test_060_finalizer_rejects_presence_status_conflict","origin_line":60,
+    "raw_facts":{"verification_kind":"death_record_presence_check","death_confirmed":true,"death_time":"2026-08-01 08:00:00","death_record_count":1},
+    "input_result":{"rule_id":"LX0609-04-02-06","status":"non_compliant","reason_code":"required_document_missing","findings":"不应保留"},
+    "expected_handled":true,"expected_status":"technical_error","expected_reason":"model_invalid_output","expected_findings_absent":true
+  },
+  "published_cases":[
+    {"id":"060-existing-missing-facts-none","raw":null,"expected":null,"origin_test":"test_published_death_missing_facts_stay_missing"},
+    {"id":"060-existing-missing-facts-empty","raw":{},"expected":null,"origin_test":"test_published_death_missing_facts_stay_missing"},
+    {"id":"060-existing-public-count0","raw":{"verification_kind":"death_record_presence_check","death_confirmed":true,"death_record_count":0},"expected":"same_safe_facts","origin_test":"test_published_death_forms_read_exactly"},
+    {"id":"060-existing-public-count1-time","raw":{"verification_kind":"death_record_presence_check","death_confirmed":true,"death_record_count":1,"death_time":"2026-09-01 08:00:00"},"expected":"same_safe_facts","origin_test":"test_published_death_forms_read_exactly"},
+    {"id":"060-existing-public-private-pollution","raw":{"verification_kind":"death_record_presence_check","death_confirmed":true,"death_record_count":1,"source_document_id":"SYNTHETIC"},"expected":null,"input_unchanged":true,"origin_test":"test_published_death_pollution_is_rejected"},
+    {"id":"060-existing-public-bool-count","raw":{"verification_kind":"death_record_presence_check","death_confirmed":true,"death_record_count":true},"expected":null,"input_unchanged":true,"origin_test":"test_published_death_pollution_is_rejected"}
+  ],
+  "real_material_policy":"no private historical input opened; six historical real-source examples inherited only as NA/no-death-trigger boundary; no current real death-positive claim",
+  "guard_requirements":["fixed HEAD and byte hashes before imports and after execution","case input/expectation file hashes","no .env* path read and dotenv/settings disabled","no private or 0910-full-audit path reads","no socket/network/database/model access","write only owned artifacts; no bytecode/cache","no pytest/conftest/real source acquisition"],
+  "tests_executed":0
+}

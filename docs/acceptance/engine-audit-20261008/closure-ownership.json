@@ -355,7 +355,7 @@
       "id": "TP-D02-LOCAL",
       "owner": "/root/repair_chemo",
       "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
-      "state": "offline_semantic_and_contract_red_retained",
+      "state": "candidate_frozen_not_integrable_semantic_and_legacy_regression_open",
       "responsibility": [
         "native_tumor_pathology_execution.py:026",
         "chemotherapy_local_dose_facts.py",
@@ -396,8 +396,7 @@
   "integration_head": "56322bcffa32ac33b5069975f1dbf3af18b597ac",
   "current_test_slot_owner": null,
   "queued_tests": [
-    "DD 11 source-bound synthetic replays pending runner review",
-    "TP-D02 narrow mapping regression pending preparation",
-    "TC02 followup pending inherited gap evidence analysis"
+    "TC02 fixed219b13d independent review then root integration replay202",
+    "Culture stale015 identity-only adaptation45 when ready"
   ]
 }

@@ -1,0 +1,2982 @@
+{
+  "sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "scope": [
+    "LX0609-05-01-02",
+    "LX0609-05-01-05"
+  ],
+  "legacy_ids": [
+    "054",
+    "057"
+  ],
+  "case_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    13,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21
+  ],
+  "case_count": 13,
+  "cases_sha256": "032b456895aa2eedfb54598171f8d324febe4d86380e40b5a4a2c23538ad5e5f",
+  "original_sources": [
+    {
+      "path": "F:\\MedQC-worktrees\\qc-integration-20261008\\.tmp\\engine-audit-20261008\\tumor-pathology\\antimicrobial-expectations.json",
+      "copy": "original-antimicrobial-expectations.json",
+      "sha256": "470ba4cea94b04c4eb5843b8c5415afa7e9fb5d7d37d4648ddb5d49b92b0f1b7"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\qc-integration-20261008\\.tmp\\engine-audit-20261008\\tumor-pathology\\antimicrobial-results.json",
+      "copy": "original-antimicrobial-results.json",
+      "sha256": "4d87d2e72eb3491b52a363dafdc9c96a84ed1adfe4c94da6b7ccbd2e41dd0ea7"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\qc-integration-20261008\\.tmp\\engine-audit-20261008\\tumor-pathology\\antimicrobial_probe.py",
+      "copy": "original-antimicrobial_probe.py",
+      "sha256": "5bcc4a8a6679e75baab5a8cfe62a7147c0511e6abd5a91d7d559737d3d7c6fa8"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\qc-integration-20261008\\.tmp\\engine-audit-20261008\\tumor-pathology\\probe.py",
+      "copy": "original-probe.py",
+      "sha256": "db5085e2d4c911996232a78a735fdbcac0898cdcaf940da4a9ccc29574d5bc94"
+    }
+  ],
+  "historical_report": {
+    "path": "apps/medqc-web/docs/acceptance/2026-10-07-round2-antibiotic-audit.md",
+    "sha256": "6af521c02d433bcc274717b5248f5d56f4b3a483b554ca6edaeca020d60732b6"
+  },
+  "fixed_app_tree": "250ecd857c0df046899625ad4c4b9b860de09d3e",
+  "source_files": [
+    {
+      "path": "apps/medqc-web/backend/app/LX003_OPTIMIZATION_SUMMARY.md",
+      "sha256": "b6da2000db12eb680568ecf05aa340d308da05c49df9a4a92aeacc327ced6330"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/__init__.py",
+      "sha256": "c2f72158a2983bfa777cd92ae5d87e542e29622ea62802a6757f87b853069cba"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/config.py",
+      "sha256": "d84849a59ec1c5526d279aabe4c0c867706b3fb7ec0962660cc8adeeb7778ed6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/constants/__init__.py",
+      "sha256": "2a394938ee8df6b579da2a795a67dc293320099df0a5df548c71237f423d71a7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/constants/doc_types.py",
+      "sha256": "73e0fca8f7bfe50d064897e4417f80b55ffc01babeb5755436f6a69c01bee8b9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/ERROR_HANDLING_GUIDE.md",
+      "sha256": "6fc176d9269a7635274588c2751d036817369b38bd613271c251e73af6d26ad5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/LOGGING_GUIDE.md",
+      "sha256": "596ce52a296e412313f610eeb4c8f6c63c4e2666cbf24e9597e914526cece937"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/acceptance_startup.py",
+      "sha256": "5bb4630df278172208957bbadbad46d88188626b440c68da29baaeb636ad1e6b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/access_control.py",
+      "sha256": "4d064fb77e9f55595a7db1ff12ef137702ce92feb3f8b24068fd97359e9f442d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/audit.py",
+      "sha256": "0f1cc53434562d9c1aa1028041317c939c41508776b3fd8eaf8c872d428fbeea"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/http.py",
+      "sha256": "32e1acb469de86006bcdc107b7811151ef218b67a3328f0cc83ae1a91f2694a1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/logging.py",
+      "sha256": "34a89df1f6370936b9e7a3c38bce5d0cedeb632b51fa558246704e9dd87cb6bd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/middleware_api_version.py",
+      "sha256": "2401760ff048e2b864c49d0dd865241a4b9b463f16732d74ec2b3aece92a40b1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/middleware_errors.py",
+      "sha256": "6ac770cb278a4d8139baa597459cd930f5f19e87dc666c5a3842a9292f27eec7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/otel.py",
+      "sha256": "1ad6f721c6236c89a8c298447548791a49607464083fd0f00c33fa8bbc9d82b2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/pagination.py",
+      "sha256": "d374bbc5a9b38b095acd0e28052f507f45cf99a22c350fc7e2c2c40509d3ffb3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/permissions.py",
+      "sha256": "1b6d216005a2fee8554f0599dce83d67c099e67f3815ccd4a1b485bfa49572ee"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/rate_limit.py",
+      "sha256": "83023eb6c1d0ea738a5ec32b342dadb8bb29c486ae3c338599719bd530a9d0c2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/response.py",
+      "sha256": "41478ea2d976f8db367c6a8b83b503266f219260b2b16fa249d2571fbbe09ef8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/runtime_metrics.py",
+      "sha256": "c4e7e0c2990c60e9e78eb39d385746b7db8bfc5db1e0590a98db10da4e56a0fb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/security.py",
+      "sha256": "83756d3594dba9f131acad45d1b9b2e51dbeb4f87b8e647f214d4e1299cf4fa6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/settings.py",
+      "sha256": "b37ba5fe698382e9ae3b43bfb18b349280d33aea3abc5475bc4c5d40dcba3c86"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/supabase_client.py",
+      "sha256": "67c9a4bcc7f8275dd1210d0e43c4ed3644a126c0018cf036ad20032cb51aeafa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/test_error_handling.py",
+      "sha256": "81a419d561652238986314b49fd44b92f6de1ab657dea7239a132e63184dd8a5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/core/upload_security.py",
+      "sha256": "890a88fce10ade159b725af2e49959fb1cdb914e278c1be6e55dfa9b3eba0f3f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/UPDATE_SUMMARY.md",
+      "sha256": "aa9baae1b3e4a476ef5f82433e3cdc09edeb907ae4bb47727e09d78962b08470"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/add_remaining_examples.py",
+      "sha256": "8fd7c7e2f562ace47610a5992d1d20489260454aae960ff0213757fd0c196331"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/coding_rules.json",
+      "sha256": "5db9170211ad2bf551f11d074fd9eba416ab6520fa1e1fd806be3092aa9b52f9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33.json",
+      "sha256": "29452d37e5bf08f0667afdd8cb925c676a175643480f7bb264bb17ec2d7adf08"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33.json.backup2",
+      "sha256": "19583da216583386a04f67275c3677e5b1b7a907a4998fb83a0830eb0d8b332f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33.json.backup_20251103_154259",
+      "sha256": "8f90ca34e3b6f32081f93b7c81ce5c48ed8a9b3df0e34f1fc73b471d76dc8204"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33.json.backup_before_lx006_update",
+      "sha256": "697307870e58601f8ce318b17e9d7ebe05f3d679f93c9ffe9478c050ebdc9b88"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33.json.backup_before_prompt_fix",
+      "sha256": "19583da216583386a04f67275c3677e5b1b7a907a4998fb83a0830eb0d8b332f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33.json.backup_lx017_fix_20251104",
+      "sha256": "2240964525382ed2534b948ff4a010542f27a2e56428f152d3fa6f0f40dacb19"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_33_updated.json",
+      "sha256": "e2caaf2b5585eb4a475ee6fd3094b8378abd509a41f80b5f56ec6da3585e0c4a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/custom_rules_demo.json",
+      "sha256": "a4794993dcae8683c7c737e50ebca235db49795dcad98489f3e36e827baab04c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/customer_rules_luxian_v1.json",
+      "sha256": "4a8591b8824bd53b251462ffedc612e1fb466112f7c97be3bb8804f7f2979f58"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/department_rules_oncology_icu.json",
+      "sha256": "61260037ec48301722803994de201b5f375aba92a61fac7257bac634e4919f77"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/drg_weights.json",
+      "sha256": "8819a18fea805550e8aafd1488f6d2613e0dbd888b3e9ff2c63bbff58e9b9512"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/fix_short_negatives.py",
+      "sha256": "e1cdf28f1e4c79f1ac000ce6bb36b11a662a2ac414b6d59afe8339b7ee5f11fe"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/frontpage_demo_case.json",
+      "sha256": "ba3f9abc14fdc96c278895ede8b3313ecc5f94ae61e5962d79b6ee13ba714dad"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/frontpage_settings.json",
+      "sha256": "44401d8f341a76593064e10c3908f6e627cfbfdd72e343edd3e196ccfc144eee"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_acceptance_matrix.json",
+      "sha256": "678c17ee1511e8fd87552be3032cf4111d7297b0b2b97555b266a4b9b4af7c08"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json",
+      "sha256": "30f2469af9e3c989f9447f05cdd18e5d9cd7878e66128791c17b916ece1af316"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json",
+      "sha256": "f593e61b36b00c72b170f7280ff9875e07e105ded225c86e4d3e78e693f8a804"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json",
+      "sha256": "05423d9745556b9725f0b353cb492e4d48dd10ab8cf14da78c3fa0c836ae6b90"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+      "sha256": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rules_v1.json",
+      "sha256": "2ae3ce3f839fc5abc2e413cb14e774cfe84aea53d4f502c0b784f7804b5caf83"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luzhou_dip_groups.json",
+      "sha256": "420944c5734613c2f9b92b04b40b750dec908d2018f7145dfc924230c310955e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/mongo_sync_config.json",
+      "sha256": "b50baaced57fa55f55301f3df332f55189f9b9681eeab5396e59ab826f1f5895"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/product_activation_public_key.pem",
+      "sha256": "4930b504796b9f8c257092d4c166b7f83a87e5498182ba0b88239e9949bfa81d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sc146_intrinsic_launch_tiers.json",
+      "sha256": "4bb10216525ae942f99f493df6e05b2b52d15c1b3c83179af755a7f109b27b6b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sc_rule_family_map.json",
+      "sha256": "b18b41a2dabe58cbee1835a4ebf0bad0ae006db1b3561a2e064f997f45b01d5c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sessions/0a28e752d092_1772881322.db-journal",
+      "sha256": "5b355e672e8cef4637843aed51f01a6754d42b4a11d22a7cbccf4b2eeb8248c2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sessions/4c1f25a631d2_1772881315.db-journal",
+      "sha256": "6dd9f08e171f65f6d8ab346c2c5f3b7e2a4c298690ad47e6bb0ed6ddc297ef4e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sessions/74a6ecfbc2ca_1772881319.db-journal",
+      "sha256": "68d6136173aa665da34ab0cd543ee4fc863b74a2c6dc6c4188ae349203f25c14"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sessions/8f87fd80731c_1772881320.db-journal",
+      "sha256": "fd23e9846a7a33ed0c8a43050ef97de77cded3f871e51506d5f2e4b5214e159f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sichuan_rules_146.json",
+      "sha256": "39ed49ebe384c700dbe2bf3213e6ab6ba71336fba2f88043bd38831f3c13b6bb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sichuan_rules_146.json.backup_before_lx33",
+      "sha256": "16dc57fdb44ac3fe46dfd9328f277b66a80579fff83c7303d0f61b08e331f603"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sichuan_rules_146_updated.json",
+      "sha256": "aa8b7053cb29af5ddb6b08c8d8260711cb01c490473a10ed9af30b891b8091df"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/surgery_procedure_catalog_2025.csv",
+      "sha256": "7a361ed5b4fe5c459c251457e9945d45232911a6aa23abb933758fd256849ea6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/sync_run_history.json",
+      "sha256": "384421ee5758b233929ebc242ae2e7e9e65e80e79e3834035be42f1f004526af"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/update_all_lxe.py",
+      "sha256": "cf2a1b2e3238450d3031d7428fd5d929fe73054c5b4c47a31bc7e74d66718160"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/update_lxe_42_49.py",
+      "sha256": "c72a666d46d8b35588a2f0bdcc8738caf536d2d746dff6a0e382bb34f61178fa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/update_lxe_46_49.py",
+      "sha256": "7234aefeb71c0afad992edcec5be5849b129efa9e5767aad05e41a3dd368a494"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/update_lxe_examples.py",
+      "sha256": "e84d88b85fc2bbf6afa4769bc4a7080528142da31285ae33de02b76b32f3a770"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/__init__.py",
+      "sha256": "1117429753489aa6fdf122a4dce7809f6d984d5c367e93f3a0de7946d5a2f988"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/connection.py",
+      "sha256": "b0a84f204ba13df4e469cd55df32925e5e7c5304a9c7acd7f77526cfb90563b3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/demo_db.py",
+      "sha256": "99733c2c20a1dcd7d96584363966c8ec18683807a180b9bc2f0ec03a14bab6b9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/models/__init__.py",
+      "sha256": "316198b01e3c4b4b2f10551a029a13834b5566be4417b15e331d254de94a5da6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/models/cdm.py",
+      "sha256": "f0a5bc7e829cdb62ca288839f19bfe0cf24ec4dba70bf097555ee4ebec5d8023"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/models/qc.py",
+      "sha256": "3b815e348f404f56b766299f8a5b7abf70b2ba5c8ee85889b1a32681a9a7ff84"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/models/sync.py",
+      "sha256": "b2e2aeada44826b4fb066c8a819c0eb650d9e21e12f2bebe3c5e25a5eb94ae2f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/repository.py",
+      "sha256": "f431555babe81601e760842bc1ff974a9dc9e2d85c8aa0e12f8c404d51f9edb1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/seed.py",
+      "sha256": "c7ab80e0190cd718c4dd686df9b3d379bbf7b390075936c81f4359954112cd8f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/database/sql/qc_views.sql",
+      "sha256": "b2ceadb597ff0704af2680ad12763ca1a9722f2ea5bb9265076c4dcb6b3a8235"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/main.py",
+      "sha256": "8da2c3e93acfe79f6ab4bb9d2ca92748d8fb95172925aea3dc2307b4657b97cf"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/models/demo.py",
+      "sha256": "34e3d9ea14c7656a2470042d54242ca431dfa745779fefdef8ba9ad07dae762c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/MIGRATION_GUIDE.md",
+      "sha256": "12639f1a31869e55b1250f97bf217e09e7ea5c4ff08b7cf3363dd0846b8aa348"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/P0-4_COMPLETION_REPORT.md",
+      "sha256": "a218cfea0b65d562d12c432fa9d5fb0b50f8ade3a6a382379284c5826e86537e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/P0-4_FINAL_COMPLETION_REPORT.md",
+      "sha256": "5dc8a22d05bd86cf5eda4adb90afa06817a815cd4df5dc4607dec69396691249"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/P0-4_FINAL_STATUS.md",
+      "sha256": "dd699d029e2c9dd2eb463195ee893be823dd21b1fa507ec7c904e1c8e4d56653"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/P0-4_PROGRESS.md",
+      "sha256": "edade0e2a47d5672b2ebdaf4e3539b041db0962f1cf614450d79c0a5e14d9709"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/__init__.py",
+      "sha256": "586a674e39f4a37f2b080b0f3e1efeaf334f28ee4e4f7139c2690fb6f0b3bf47"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/appeals.py",
+      "sha256": "c79d6f7e958efa8f7031e500d8ea222b60405fce24e7bfdd2a963871038011e4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/auth.py",
+      "sha256": "f4959fd6dcc1daf07e6d4cc0ab5a16b3f124ccccf9ea636483331e1082026206"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/business_agent.py",
+      "sha256": "18913e90b4e4ac67a0b5c0c298731945c08316711db2f1719d13b152c93ec6ae"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/case_front_page.py",
+      "sha256": "d718f9953bc294d4ef730be4062bee62e6179d024f888a16c600a111c2dd9e58"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/classification.py",
+      "sha256": "e9247b8fda7231008f091b4e68734d096b04024ee4b6323324f4eae469811dff"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/clinical_completeness.py",
+      "sha256": "452dbf92cb7c4ec62e76d3a4a2d7868b8fb4b3f43c165066d626cb2f4301e267"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/custom_qc.py",
+      "sha256": "a4766ee2534660eead12c257d4ca9c0337eadec0c685a6da396a1a40db32f0f6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/dashboard_api.py",
+      "sha256": "8217b75993e5d065b5cb9a8786882d8ac2a2a6a2f7cb820df09a718d2365508e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/debug.py",
+      "sha256": "446cb7407653bfea22f438e45fced92c8e6cf6a7c9289bd21d4144ec6581e9dd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/defects.py",
+      "sha256": "aebbdab8df7b0df2ac4e0403afc909c814b0e8e90a1024e53542423edaa6845d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/demo.py",
+      "sha256": "9479fb491050f6c08a0e42eb8f4dd6c07ac7afd5a77556e802ae9316e968a9d8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/demo_panel.py",
+      "sha256": "c2e1e88828dc0eb76d0f72ef1199fe4b3cf37e0f28400b000cf629f75694c263"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/department_qc_rules.py",
+      "sha256": "e135c20f6f2d54f94a5a68897226b1bad5295c92ba2ec5d48d7f587f41044eda"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/dip.py",
+      "sha256": "e7c77d1d67f046030bb24e9a6335f26d6ec19103f1e3264e55377042fcb70239"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/drg.py",
+      "sha256": "33b1b1c3c2a477d1c970a2f5b13375599adee0b83aacf0d204312159cbaaaf76"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/drg_analysis.py",
+      "sha256": "a287a38ad4aa8c4bea659317aad6eabdb56aad465d40a89b7daf8209d6a30592"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/drg_config.py",
+      "sha256": "2a6fe7dff2ab1824306620d1a6c4d44eb46e2fce23fe508ddcc707f0ff21d719"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/drg_operations.py",
+      "sha256": "c0c1300c456843a6a36368d3f231b934639ca36c35c2a3b4a4e5c03e3ea9eff3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/emr_render.py",
+      "sha256": "daa7a279a9660e735c99a682fdffe742eb4e36cc9cb713599e4f3767248e2f26"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/frontpage.py",
+      "sha256": "09c5784aaf2907fad27e87983705a39fefb0a1c238a5005febd2eded9a2bf7c4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/frontpage_settings.py",
+      "sha256": "15eb2a301070875610755cecdb63aab8abf69310046e52cdb780c188b0378ea7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/icd_search.py",
+      "sha256": "814a2970f14c0c87e00cf547df9346df6154a4cb25a6e60c8c1baf571daedfbd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/ingest.py",
+      "sha256": "b9b88cf6a5f3b1f0ee91ab92afe8c3b2be1bef3e5deeed57cc5ab5a559aa1f8a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/llm_configs.py",
+      "sha256": "c0f3c9e9191f83beea5927b981c1e29a360efed92eb119e1b99e3294607a8ced"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/llm_info.py",
+      "sha256": "b9d306324836ded9140525e0446b14d6cfe3e94517d3f982370c86bd6f921554"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/llm_observability_read.py",
+      "sha256": "075ae885337eb2430a5a0e6c57fcf457074a5636f86faa2dc87346c119dd8570"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/luxian_0609_preproduction.py",
+      "sha256": "81d755394b6c03bad32bfe4ce91ceb51f3249efe2d39fb9174cf741cd455ce89"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_documents.py",
+      "sha256": "51f0c7a4c018ac4a048115a52def2eb7d66167d47ebd7a089ae40aa7b1693fba"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records.py",
+      "sha256": "066c01181e41fd149be00b6f8841cd1d35561376a99e7a11b6882c3f1e9682a7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records_alias.py",
+      "sha256": "c7a97068a637f41ba90c431b221ca73cfdf8b90f722cf7c8af0168d40eaecccb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records_common.py",
+      "sha256": "2e074e9ff9ac61274cd5b11b01b46f466bcf36d0720ee3aff2cf83db6d42b5c5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records_detail.py",
+      "sha256": "238eb5ac42f0800b0ea6add46ce04876cc5a936202ddfef3e3710f533d50c3e6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records_export.py",
+      "sha256": "542bcdf4139afbbd12506ff78101df479ddb97cb44afd1074546ba72def2abd6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records_maintenance.py",
+      "sha256": "a90733edea4e95961cc12f3faaf1929aae87f22e2e74dc324d1b51caf3c9318d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/medical_records_query.py",
+      "sha256": "872b84fab52169d768acda82c26da43d9c55ef97feb733d3f62c4f27fc1507d9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/notifications.py",
+      "sha256": "fde4d9f7efb38b4c16012b7ee70755cb35facb01e10c504119a87898d8770621"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/payment_monitoring.py",
+      "sha256": "2b4e36db5b375428676951fd82790642cb7076ac8b4e097b29b2077fa76a3052"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/pre_grouping.py",
+      "sha256": "366e6b00b609389d4dfc262b795025c2f0b1a4cb22af212a9b532906f8fdc668"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/product_activation.py",
+      "sha256": "beba3c246ec68b298a88c30676148d14ee9838f8f9011660166158570231d2ca"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/proxy.py",
+      "sha256": "4466452e14fb9a4d336304808b2f0e43b26f9aa5fceec0c98d26b73dd705bae5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc.py",
+      "sha256": "436a96749078b21bbfdae79d5350c2d87d7a712191fe58b688d3f43abbc6481c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_agent.py",
+      "sha256": "885a5eb229e21256158208d792268d42172e32ecce18b52c350c975861fdcb7e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_diagnostics.py",
+      "sha256": "ae2a08e2434a5c48b6498455912075798dd15b09c328e968d5169f9867b6d77f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_llm_configs.py",
+      "sha256": "4cabbca11715daccd8b1003b90686341a53036c14aba997d0cde56d396076e81"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+      "sha256": "b305e4defae445ce52f4d9edb5f14cf5bb6de6013b10b564aee1cdfa70e79c96"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_settings.py",
+      "sha256": "5aba4ca31fb4bc06a580db09fdfb340332f97b78c63a7b8262127af4f2abd5e6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "sha256": "ff05a90d693cea0122ad82bdbbcd673a168366ce4e8dae403266b33b697c2fbb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/records.py",
+      "sha256": "2ba91244b009d82a663a6707438059a686ca0b826f5121c9ce070c08855af10a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/remediation.py",
+      "sha256": "0d76256c052f2cba7a11dc4e24b93e9921b660b14ff909a41fac369be0ba3034"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/reports.py",
+      "sha256": "a63c863989a71a2a8938e31e28fa1729626c0ba48cb58abc1b86f54f80518c50"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/rule_validation.py",
+      "sha256": "1a9f3ae985ca130fe011f3817599a21d25125aa43c6dc94d239db1c88e889d43"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/runtime_build.py",
+      "sha256": "c5ae39ae27862f1181f1e1bdd4df5f7d679b741b027172c88f176ef7eac79c16"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/scoring_config.py",
+      "sha256": "1b2beab40efe6742fef5d5571fdc811a1e79b9959c1a6452b799614aac71541b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/scoring_rules.py",
+      "sha256": "2a9833dbe80a71de3e825e9d9175bb8e409ec24150eafb815b1e1d4a4b62d73f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/semantic_rules.py",
+      "sha256": "36c1306e59483234bcade0bbb21f2cbf8d85db828a77b87a315023722f116c3d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/settlement.py",
+      "sha256": "3355257cb3b7c5015204cbb9c94edec7b629d3f741134072fda4b27b79e9bc2a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/smart_upload.py",
+      "sha256": "c2ed9ee8ad5caefc8c128d5bce283d209849c20a4490a576987edd7c0a769eba"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/sqlbot.py",
+      "sha256": "575fc77a6645eba8c50d56c6356602b5b25147b050e031262d20205f2d28593e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/staff_ranking.py",
+      "sha256": "4c0034f73b57a7a9be0b006dabd917a89f0b3ae91ad88cc34ad1155e77cc7f82"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/sync.py",
+      "sha256": "ff1112788835088eb1df9d1c49fe870b4a898c150b3b9945b6d02ea752f0e60f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/system.py",
+      "sha256": "79753e585dc4e48c28218dc3168237d0d5a8444b439aeb1ff63880d93479f9f0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/system_config.py",
+      "sha256": "6a67d51ceb3f0533ed83ff3bfa6c8a2d7fbf80cc657f7e31cbae2c7060b05255"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/tasks.py",
+      "sha256": "0304c1a6ca5582fd0964469a6b35d48e86c3fbb657bc69bfc78d751dc54c0469"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/tools.py",
+      "sha256": "4caab70dac76cac04e2faba0fe3bbad45c1e3a7bac94beb9d8c1020e8068a318"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/routers/workstation.py",
+      "sha256": "a6e0d51b07b7e05a9b09b4500a4501cd961e8e8b5430e20f2a8d9f6aedff8fc9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/appeals.py",
+      "sha256": "7756b4a31ee12052ca6981fb9b6509209b3b4bfb57cee08659b1fc76f052f75c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/auth.py",
+      "sha256": "c0d2751fc7dcc115948162435d68b054ee5e6670bfaa99867ff27e8500663367"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/clinical_timeline.py",
+      "sha256": "27efa1b936886afead9fede1ee25bff0f5da96bbca07d6112e8253a7f60fc12e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/defects.py",
+      "sha256": "a9d76778d38ec46f06abd36a40b9019cb270ad607da554d1eabc54b28d1f0998"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/demo.py",
+      "sha256": "3cdd0c8e8ec5915ca9240cd22ac21cf6c215783a6cd6fe0f99c453ce50309a8c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/drg_batch.py",
+      "sha256": "301b6153512746109d67e0e221e124fbc6963fe3877a376c44cd82dac3ff3ef5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/frontpage.py",
+      "sha256": "66eeaf19acfdea51f5b2dbe6f5b3d9f2f823589c828c213202704ef80eb2f08c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/frontpage_generation_contract.py",
+      "sha256": "5b9ae46b6b9acc580335d9f9c6c6d827a2d1c1a50f5271444ba2573e8e902151"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/ingest.py",
+      "sha256": "0f83191c8b9f9de525bf3706d9cadfaf4de7bf0434ef8da2ae21506fdc840012"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/qc.py",
+      "sha256": "46f62d1497988b12ab34d1825295d7142ef00d14a50d5d5497abc774565f7fef"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/qc_sichuan.py",
+      "sha256": "34172bd3fb28ea351657481207c2fb705e6f1e0183d14dd5375b9b5564a14234"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/records.py",
+      "sha256": "2bf6f4cfcbb3d92bdad9c06a8d8d2bdd5b9e094176c62add78619f3d9c6b7c86"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/remediation.py",
+      "sha256": "1814d164d3254a5e8c3fcf3bc5d42de8281822e66b1f17262fc618aa42942c58"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/schemas/tasks.py",
+      "sha256": "085b190ce4f90497b3323d828d0c56e7d01b22210492d9780c26620811cccb2b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/scripts/fix_lx003_prompt.py",
+      "sha256": "b1bbf591b67c710e4d5d055d38bd1dd65053cc5c1cf483cccf2d8c2e5650492d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/scripts/test_lx003_fix.py",
+      "sha256": "1c38423944ed184a71531c15c859957a8114b85359c9aa255f317534022f71cd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/analyzers/__init__.py",
+      "sha256": "3047d07d4cd481cc00d6fac1ac15ee00287c6cfa5c0e84d1aa0a9b8ef8eb3a28"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/analyzers/base.py",
+      "sha256": "61bedbac894232e9a0808bb285396870081ce0017710bb291987a05577eb8692"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/analyzers/department.py",
+      "sha256": "67206a50fcaf0ca027c60dd3d7e53bf8de6653d22dca4e0b6f90633c578c8091"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/analyzers/disease.py",
+      "sha256": "4ba536efdc9a3784177399d2a41289c997684fec3ec93f73d351bab062e121fb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/analyzers/financial.py",
+      "sha256": "d2a3b2a36c8ae78a3d31dc44675d6829e475d1940cfbe6f695c0938fa7bbdfa3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/async_job_store.py",
+      "sha256": "39703232979e6e25347f95ec5bcb2ae9801b8904b1c5179f8b0ec9025dd36d41"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/auth_service.py",
+      "sha256": "71e38236d9814e4321acec6a713493bcc48353cec97d5abc4b44f1aff38fc773"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/auth_store.py",
+      "sha256": "5a19a72aa4296f452c6e5e5f51bd42fbc271452fa1cb5df864111af075be7da5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/__init__.py",
+      "sha256": "deeba1f1ec227983bc5f034b2373ccfcf6c1248cc72eb8d43fb0c43b0628b76d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/assembly.py",
+      "sha256": "4a9a70ff7514f6d55353150020d62cce0bf9bf6622a436684e305e72ec59ebd5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/contracts.py",
+      "sha256": "98295cf3d1c2e6c3f9420ab415bef7c40165f2d724b96e50ac0fcd75fc24bbd8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/current_view.py",
+      "sha256": "d9dd501888c318a83318d9d36b1c87765f4c7b785cb6291b882fc3f61e0657e8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/emr_view.py",
+      "sha256": "10de73a5297dc4c1501009996d6319461c34b356426bc74e5bfbf21e0644392f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/factory.py",
+      "sha256": "cec1e63b5a59d93fd9a881780a96249199e57c8179cd245bb98c53a50b498a3e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/masking.py",
+      "sha256": "708decf42e9ca458989b2b32879c9494800413bcd289a67220e022ebc328f69c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/bundles/refresh_manager.py",
+      "sha256": "dca89e34a17252986f8e5e0b4cf6faee276dfc77d8027e62e092f8c5385043a7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/case_identity.py",
+      "sha256": "32a7c37820cf6f08e9218ee4348e40be78b6235822ed263ffad36ab3a0191181"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/case_scope_service.py",
+      "sha256": "db91cec23dd8d4206e4b5151d3319fb7ec0101cefc6c7b7e8fd57d71b7d9e346"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/case_set_sync_service.py",
+      "sha256": "f93558654707a2e89f49f57519cf41c15a5bc6582bf5c59587ff688245706fa2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/chart_service.py",
+      "sha256": "d410b2e025deaf69021e9cc551c4f0ca27b7f71b529448e146c4504647518554"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/chart_template_renderer.py",
+      "sha256": "e0ceb229526693fc6b7b94d9da9a52246fc2f3e8d30426c460846e937df65192"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/__init__.py",
+      "sha256": "970459166c237e18aed9376c635e27dd4d9edae30a8a074357ae327597748120"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/colors.py",
+      "sha256": "59793896b7968673990948fe838f324a870d21eefc3cc6f44c8494610145fba6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/department.py",
+      "sha256": "5cdcd22ad7ce5f7729f5ab9a4ccd2cd14c6049c9c6ae4525ea12edf6d3450e86"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/disease.py",
+      "sha256": "da9d84eec7f941ba43c62e1da5cd910138e606aef8acc49c120f50afc0125f38"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/financial.py",
+      "sha256": "316b2683ace642a7615b747b449e95f71b34413e812a1677365fc237a7cda527"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/monthly.py",
+      "sha256": "36959132e01c37eccee8d00d359f2cb1aecc03e823a866ec3b533020ebac2aa5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/orchestrator.py",
+      "sha256": "c708dff7a4a282d6c42596731269ed51cb65675c650d0a2d8e3d5fa040ed36ae"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/charts/table_data_injector.py",
+      "sha256": "0c639dd167e1b7d1845f6197cb0c22054067b2eecb087ffec6b2106673123e52"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/clinical_timeline_service.py",
+      "sha256": "db7cb61c9e094623e288ef60d27d2a39b97227766c9d1421e513c465148afd91"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/coding_qc_service.py",
+      "sha256": "37fd35d5833b209a202e611ef2a512cf76cd48f099e10027e4a93c5966bd6424"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/config_registry.py",
+      "sha256": "83ff039a40247efba690b454a95141a504719edf9f88d1b5dd0cb2afd91f7e5d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/copy_content_similarity.py",
+      "sha256": "84adbccedce311efdaa251f9832f701adcc446f7ac1e77e9f753fda311198cd2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/custom_qc_sample_pool_service.py",
+      "sha256": "8e5a71699ee91436095b0eaed695a9d52d7c9493e7b187806067698f33b25f55"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/custom_qc_service.py",
+      "sha256": "9b2f52af67c45dcc32a065880fbe1dd9c761f6e77f47712d12c5857ce94b8e59"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+      "sha256": "455d5689323a186ed747a83ffe693c06838e0a80bf784af5e671bd0ac3bbbd8d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/customer_rule_sets.py",
+      "sha256": "46a776175ac722988c61126cdf8f944dcffe7cbfcb3e37b551305c1656ed511f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/defect_export_service.py",
+      "sha256": "7ef3fe05b5654223e1ebcec801a20fe3fd1112f9ec70c379bb3f982e56d96a5d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/demo_case_loader.py",
+      "sha256": "ffe2fe6f6c7eee33b4806c658470cf914aeb52b3b15a02b198c111f92f0f878a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/demo_panel_service.py",
+      "sha256": "ccb79d6f1919972a9a99a9df09acd5a57dc7dd856fb385412487eb802b97ea8a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/detached_task_runner.py",
+      "sha256": "253657f98459fa20c2bbad33811dc24721cb542a6908433a13d44aa3367db7a0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/diagnosis_surgery_profiling_service.py",
+      "sha256": "c336290b6328e94021eb4a352ad0df0c87eab184976068350b474491192c11be"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/dip_grouping_service.py",
+      "sha256": "cbd6c705d0a1ad5b130bc3f51fb7be2429786eeba6d38334e0f2d7fc754ea679"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/document_assembly/__init__.py",
+      "sha256": "160c3fc5af4bc170ba8678169e7289d75adfdc898b12441b60ad4ed8d06a2f8b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/document_assembly/assembler.py",
+      "sha256": "9ac91d1c6c783526e3aae10482b3b60e25bf11d022e1c99c675452fe3957775f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/document_domain_alignment.py",
+      "sha256": "1fb72f3c43fe0d6a21f83665a3e149859652085c96bab9881134ba9a804b1c14"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/document_segmenter.py",
+      "sha256": "aa43182b2b79fdf5d18d395453429929e433e3d054653dd0c5c8b5ba7c6a38be"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg/__init__.py",
+      "sha256": "c5114e32d77c325142d26854bd4a8d1f4e15373af908672e16c734affe849372"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg/analysis_service.py",
+      "sha256": "89358f89605e46de376cae27a4ffa2cf33490a430018fb4c022219566e122adf"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg/batch_service.py",
+      "sha256": "5e3cefd52c32998a22b87ff3e3c38f22499c54f45d6a53300b3baa1b587b1935"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg/batch_task_service.py",
+      "sha256": "286794676d3ff2e27face0165d1393910f134f95e561c4d7c853eca6e05e586b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg/case_service.py",
+      "sha256": "b3a8e181204d27588015a8432f6c468726352c36c212eb7e562ad51acaae86bd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg/config_service.py",
+      "sha256": "fe37de3a372e9c52d4282f8615f18248eeb082923383fd3ec14c8ea2227f9550"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg_batch_store.py",
+      "sha256": "899c93de3eefec0fa67669bdc37838e2d2d6f404e1baf2c354271e99439782fd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg_config_store.py",
+      "sha256": "938d81859f7ea56391c834d087ff455e0b5aaad2446e7d8c2734ef7775e5374f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg_demo_store.py",
+      "sha256": "05649be3276359cfbb327e52964239ddd0ed90fccd8bb2e736b5aa2225113e9d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/drg_grouping_service.py",
+      "sha256": "246af4ca423c89ebad1fd5b4f234ce0bc64c8e8a3b34a3ef5ae39efb1a89af01"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/effect_priority_qc.py",
+      "sha256": "982670b9ae066549e144a902654b63764418adbd2eeeccba660203c57c8358f6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/enhanced_analysis.py",
+      "sha256": "6bea50f1c5b33f7c6eb24164af942c82eb836109fa3842baa101e5cf1091e489"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/etl_config.py",
+      "sha256": "fa1287c201f55a70a6ec86eac9632581c2d518756d8d3a0f2670527279e1387f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/etl_sync.py",
+      "sha256": "54322ecce9ab4f4e8e42fafe6472b1255177c10d214003fb7ce3d34f5b5dba55"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/external_coding_service.py",
+      "sha256": "49ebf8d21dfd63aaa2276a8a5ae9f0c11b4049df259fe25dda60fcc4973aef67"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/fast_screen_qc.py",
+      "sha256": "4306e5ce1e49388ea886c14869f018a18a10ad37c14ad93786e549a2bef92371"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/field_mapper.py",
+      "sha256": "b3fb4fce9cb9106413221bb2b431406b43123a1f32a72acbdcca3ef8b5ecf830"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/formal_qc_rule_criteria.py",
+      "sha256": "2d54bb13ae41e1e5d8b628c3f4722555988971604303338561f54954359ea5bf"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/formal_qc_subitem_anchors.py",
+      "sha256": "55a07f24a9fcf8ff7c67b8969e6a493b41dbcbe43d8271e3d9fddfeeb9233673"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/frontpage_export_service.py",
+      "sha256": "18a4949ec6fbe13290114f5199c2b10d91bddf845340a11a46ee43c290809240"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/frontpage_extraction_service.py",
+      "sha256": "346f53ce0eda3e8aac05d9c82cb535aec08b4a4295ab141eed8ffc7385ba6e10"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/frontpage_formal_qc.py",
+      "sha256": "926817c0af1ab94c14d491bd6621e3ebfefd01de7fceb8157e2ba7f4e915a9e9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/frontpage_report_generation_service.py",
+      "sha256": "6c1877a68a9386cbd77c24119362e7387f1e9b8018b2ac4a84dd7379001e1eb0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/frontpage_settings.py",
+      "sha256": "179b19edf6b6980380add1146a5aa2f8b237c9f0dcaddb78ef1a5fd8bea53e75"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/grouping_correction_service.py",
+      "sha256": "1051ba407fa40ccd5c3a14bc96c63636e71bc7ee83ae3e2252369282109f9cb6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/icd_code_mapper.py",
+      "sha256": "20cd4f080bc07c849d8558d4c5825aef0306b56e15231f1f5806ca369960b01e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/icd_coding_service.py",
+      "sha256": "0e7ccf9e3676d5324af4cdac4da5fee41f599711abf1111d121d9b9ab797968b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/icd_semantic_retrieval_service.py",
+      "sha256": "f9f5ccc8dd93ead1cd062627c501fc3bc68c8986aac60dc9f90eac4817defe27"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/llm_config_loader.py",
+      "sha256": "d1aaa20419242ca31773b4c72637332f269a6d9cfc0e5ce6900b32a0ee5bbbef"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/llm_document_splitter.py",
+      "sha256": "1acdb351353e7e220d0d8e91aff9d4d901edbcf6ab817f6a7719e559150782e1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/llm_execution_concurrency.py",
+      "sha256": "0a238398906aa1c8b6658ffa4a55dc985605ff8bc173d6aea9a6655b2dd31ac1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/llm_observability.py",
+      "sha256": "ff88b0ddd17b0b5f34f6cd3071903b8bedf12712659747e67c5b3e59343426f8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/llm_observability_read.py",
+      "sha256": "d3743bea7ca216ddaf2d48e6690cea61b4589b29dbbd5b0850dec364710ee7e5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/local_icd_service.py",
+      "sha256": "c92165a5565ebc5f662d7257a917319bfd601f858fc66bcbd3bff3490697bd68"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/__init__.py",
+      "sha256": "274befcae0ab066b0c19390e5ec8285b183c940bbcd19eabccc86d2c9753fbc3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py",
+      "sha256": "d3246420d34d83ca7332bb8bb8918047c7d8a6cdcfae32fdf2d355d68b7ad840"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/antimicrobial_result_mapping.py",
+      "sha256": "690b83f2b578f11dc25401d6277d0533d26abe0ead987cc13c3a2a3188b469df"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_customer_projection.py",
+      "sha256": "7bfd7c99b9d71154fb5724831527ba58eda8ebafbd243ca87a072b44de470672"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_facts.py",
+      "sha256": "3b72a97f44064d6d21c01635c2733204c0b2ca5bbe64987621b064238b7b779b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "sha256": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_020_relation_contract.py",
+      "sha256": "ea6c7c1b577270e337f32d84ecfe0df122685407fb26da931b53df3acbddb96d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_customer_projection.py",
+      "sha256": "0b1076de255db5846d16f898d3e4d9f02762c1b79425a6bdb7a7abdfd07f35b3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_decision_evidence.py",
+      "sha256": "55a58fbeff7a50608179b0d6fab91e420bbb2d29754c20ac3f1ffefe0dbe87a7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_fact_contract.py",
+      "sha256": "143f890221d4b38a63df983bbd810d1e482261554f0df7eaedcca52fde50d500"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_opinion_freeze.py",
+      "sha256": "5d8cbcccdaad0024cbd10c6028ea84f66ade8ca5a2d7c0bc4f7d8a8c12b3ca85"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/continuity_evidence_selection.py",
+      "sha256": "e6be32ff8a109e7c3d1380c796fab4fc3fde6f489100652b26f1d07777017de7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/continuity_result_mapping.py",
+      "sha256": "7e21cde62910528e97cffe833a9e5ce26217e1197e0320ebcdc39ba00b19a0ec"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/__init__.py",
+      "sha256": "a18880381e3051c2bf798bd2c45affb2f4460c7e8a7a620a543595213cb898c3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_007.py",
+      "sha256": "4fc0395fae910f334980b4edb214621c5a0f2341ac688a2586321b727d3e5b23"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_018.py",
+      "sha256": "5523ffdb69f81e460ec8fe7cb167ebabe7051a563492ad96d388e7396d836293"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_077.py",
+      "sha256": "1f849f629c9f454145dc273116c1cb00666e7da04b3b6bd0721e2186c1e5ca2e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_008_009.py",
+      "sha256": "2faa3c759e786f86409866f5938f0f543e69ab2c8ec842baf2b87d2024d0d0af"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_016_017.py",
+      "sha256": "b87472a2feb3c692ae38ad1802194988343b01422c837288cd4ed7e70cadf4db"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/shared.py",
+      "sha256": "09333473e69e59de6aacb54b2da14f07f2891311c4690a7e3b0f0654ba51bf15"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality_result_mapping.py",
+      "sha256": "9e3ba792f6eb37839e3ba73b8f5bda26cba7798b3ae4579f7e025025dafa49c5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/critical_value_result_mapping.py",
+      "sha256": "8a62a1f5194117f317cc09ebea7dfd2972dbb93758473d9d613f4cfe9cc1d3bc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/ct_order_course_consistency.py",
+      "sha256": "ac5c2d0d7f0b0593314d12d1ee5ab7c5464afa30ef0d85aa937d9388bc78f183"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_evidence_enrichment.py",
+      "sha256": "d18a11c6cb22c987238b850140f0cd2f05ea73d3609e6db05f5d97e391607599"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_remediation.py",
+      "sha256": "5ba54e2c0567b95715e49d6da2e35c810b2108527905a2a9bce16b94d0ca5bfb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+      "sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/death_document_result_mapping.py",
+      "sha256": "a5a87c9b78639029d38daea3c996eea282e495c1f4d67e46b083843d84f45df5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_binding.py",
+      "sha256": "897ec218c45e6eccea60ab92c9d3bb7c1b0ab9dbed222d5cab64dc8a70f3abcb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_model.py",
+      "sha256": "43ad743b4e4094aabbb676bd74def8c071d9ca37437d0def6b4a32003bc86fae"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_reducer.py",
+      "sha256": "84d30a75e31c6c5063e8d1181e470a40bad9fd0f02bb888d7ecf6e092feb0fd4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/deterministic_gate.py",
+      "sha256": "e28cec4ad2fe9fc0b09fc32fa31b340ade6e797eab7b72d97aed0ad68d49f4b7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
+      "sha256": "62a97d2f51b9ed79adbfab8943a86028bfddcc0b0bd417a7d319d39634abdf38"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+      "sha256": "79d33291885b7375c0474f3cd3f3eea9efc32dfcaa884b2c6c0c5da55864923e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/engine.py",
+      "sha256": "7b823d742585a5648bbe54b02ed92f2f2a6883af731147558112e6e754cfbf8d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evaluation_horizon.py",
+      "sha256": "752f42886e05becfa4f7964f10e95ecaa4a8b9af6341a235cc367f62da8a06de"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_material.py",
+      "sha256": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot.py",
+      "sha256": "a534207dafe48f4cc4a4306316515f47dd567d87576840871c5e7b8a7bc1bedd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot_provider.py",
+      "sha256": "d0bdd012b26742fd85a777ed0ea5001c89d71c64204e125b7956926a7ed9c3d9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_course_time.py",
+      "sha256": "c6aa81414713015f8af468410c0730c8b8260ef9c1b581379d86caf4fc7ac26f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_event_recovery.py",
+      "sha256": "25e526816e1504eed835378dcad13d5d0cc170122f4dbbf58960433b45cd4f31"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+      "sha256": "ac9e5dee95c00d65e87deb907ea8b922fe7392bfe263cd496f4add72c9ca97b5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_result_mapping.py",
+      "sha256": "6a2d05130c009cce9327f217b5976af6d7c5efb5af0632785a590daaf42eee7d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_window.py",
+      "sha256": "b62572ec9d04cd3d52ee7f998781abeb81299a47e7c0b3e396be0fe8c0c38a6e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_order_linkage.py",
+      "sha256": "8020255542be6db8d219de106748280373eb12adbb5adcf58b23750850d46401"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "sha256": "d0bb0a8020cbf1ca19201b8ad94e85f1690d8ec101a4793cb2676fa68c3ff1d7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution_contract.py",
+      "sha256": "566fd4552a36775be6a5a44eb0e9d80a89eb511b90f193a46eca8878d5453113"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py",
+      "sha256": "0e709779ff744398ea67e2a12190d7499abdd99c474634eb44817455b47b4c91"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/__init__.py",
+      "sha256": "909b9529f9b9f5db7ee3a0993c46cde2ef12025fdb169511b773251b00bfb6e7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/antimicrobial_action_extraction.py",
+      "sha256": "e75d4e23eb616100d45af979c2de9bf940f03374772fb12a20536772da4c9b9f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/consultation_timeliness.py",
+      "sha256": "eb29ce5554eca52bc01a71f6206e17d4ec60333a8e9c9c9c16a982accf3295c0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py",
+      "sha256": "1d18fffff8ec0802004dd668f462b9cb41e562a8460d1d6beeec663ff356ca79"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/diagnosis_change_extraction.py",
+      "sha256": "eb6f67e2fa4cc9f028a0740a1acbb16deab052ec0f822287c9b869cbd9b7e853"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/difficult_case_trigger.py",
+      "sha256": "0874fc4865386393fdd5b435e2e343a9cdd73429eeae26f5cb6af1d1f9daba62"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_approval_extraction.py",
+      "sha256": "8ac47003c3e18873e906e28e11e7db51aec7ff8aeddc30ef21da0a9e09fc455b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py",
+      "sha256": "568032eff813c98fd678442de476f1cbf62b29b617205d732828d14890393306"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_content.py",
+      "sha256": "8d88c37a9a8314a855cf0e2bdb64a363c9e1c357feb2bcd98dba598649d52290"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_stages.py",
+      "sha256": "ff3d1dfdf3ebfcc7a28190275f2d8defb3a6efff44e678dc363212818df32f29"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_documentation.py",
+      "sha256": "5f423f29b2e4ac3bca1c42388d12dc6c5593fbacd135f72ab5fc05997a56805c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_medication_extraction.py",
+      "sha256": "2b191f6cb529cb52e1023e5a34b9013cadcfd4bb9797c1c010897f3a4ee905ff"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/physician_handoff.py",
+      "sha256": "b45b6d42c656b914f04c55c638864299a12691cc3b9f08666840d1e9d8964d4b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/rule_076.py",
+      "sha256": "43a27394890f536b1261cece32c4507303c40477a50ca3a26cb9cf9f39681e37"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/shared.py",
+      "sha256": "bc46b0d7f3a1aec581dec6caaf9f7eb7f043c9158133832128062cfe769bd69b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfer_documentation.py",
+      "sha256": "77df9c66a7179d3b2c80dbc3b23059c203f61a82d8e1fec27d704fcacf8fc829"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document_critical_value.py",
+      "sha256": "957d86b873c9683c6ae3a9822d9a2c47357734a7693bc3c7d7eafac9e06a9835"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/fact_coverage.py",
+      "sha256": "225bcd062cf0df416248b7a0a7d4deaca62a3d9ea138881fd6eb2b37472f3c6b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/fact_schema.py",
+      "sha256": "bc5629f1bef3b6d5296cc7909b6a5f6540328bc68d713347d6259b5814fe3486"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py",
+      "sha256": "89ff208f6e68ce4b055d43221baa0027618e7a8c01634be80ce5f09ea6c54e96"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/imaging_report_scope.py",
+      "sha256": "33c4b37a33737d6a709977645cd9813c9eb181932178faaba4c1179958e55d95"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/impact_scope.py",
+      "sha256": "2061f71b757d1febfb8441bc69a0feba02c5f2fc0a13d8f67023d295a28c0c8e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/implant_information_shadow.py",
+      "sha256": "5b160f6b91f0130ad529c730f611b9987caa930c9b0c06a7b1125e563eab72dd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/input_builder.py",
+      "sha256": "bcb69180ae2fc57412a80771dc4b02a1a46881e1b1ff37c7ea5a8395af388c01"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/legacy_fact_adapter.py",
+      "sha256": "cc199e9a5db9bca9a56b624e9ae2c76294005c271a8b7ec67d69c6b801032a85"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+      "sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/malignancy_fact.py",
+      "sha256": "fe5aa2918d5f76660acd71102da06b9a89602c4a499c0c6728a6a91b17d0d1f9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+      "sha256": "5cc9f4fb5f1adcc603154fe6b9bedbb54d55ebca7d4c8700cc2e3b0fc4e171ec"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_episode_execution.py",
+      "sha256": "73a51b5d720e0c89cddbc7dc29b7efa451295b039099594b887b07a478519cdc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_execution.py",
+      "sha256": "7c911fcf7aa73cd3143589e0c7dce684d6adb3bc10e89b2f7f23944c323b6d2c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_course_quality_execution.py",
+      "sha256": "9e2d89255576bd00feea216ddb7e1f83875ff17d6f993ec21460c752e50a9940"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py",
+      "sha256": "a1e8dbee770fe1376d0ab71d7fd9bd7eb1a328ba6a1ba4e190979e0fa7125979"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_execution.py",
+      "sha256": "8edf38acf87fd0279000af412ae2d13de722b165cee7219c7e900888e8007e2e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_mdt_execution.py",
+      "sha256": "42cff55f0c600808fb5173dce8af55fb51f78ea87a7b2bd74b72d60276bb93f7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+      "sha256": "b1709f4a107d30a714fdd7a4a78a2edc94fde27bc8868c98f23eddc6fee1b319"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py",
+      "sha256": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
+      "sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_gate_execution.py",
+      "sha256": "f7ff9644a3c9509970efaa2dac42138a27d32ed628f04fddedbfaa488da301f6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+      "sha256": "bdc7dfd538fa8b13cfa434804835d73777d9f25cd1b08e9bdc6a02d51edaf652"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_treatment_order_consistency.py",
+      "sha256": "8b338df8c107388ed2d08f67c2e9c7b52bd61cae170270d475911e16fbe36228"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "sha256": "3e2299951c92f9835da0787f8c24fc5ef49b51a39b350429d654351411890264"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pathology_report_completeness.py",
+      "sha256": "8e8a67d6158a3821fc5890aad6387f1c0bc974e3cef576a16c57c20c3dbbdc34"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+      "sha256": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/planner.py",
+      "sha256": "3fac23dba1b0aa398f017db9b71aa75b05ce7e4dcf8025e4a78b76cb9f1bb3f0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/postoperative_result_mapping.py",
+      "sha256": "822dd16406726fc9e92f877df10b4dba92db760bc9ecf4cba689a95e5dff195a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/preproduction_bundle_reader.py",
+      "sha256": "09e09eac345d57b68b864c6ae47499be4d5dd56a0545da2a1d73c1d9e443980b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/preproduction_runner.py",
+      "sha256": "2dfa42e8bf93f4edf0e99fe2f4ad8e23f3b2f7afa423cc016a432831f7324f14"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pretransfusion_assessment.py",
+      "sha256": "b385dbe4d9ba4be1daaaaa181057be4195d0cb0d60311584a19d89e34e95e73f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py",
+      "sha256": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
+      "sha256": "ae01b8abadb2281fffa8e21c663afcd544c17c3eb86cb1f5e9a7c47f4f59a207"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/programmatic_rules.py",
+      "sha256": "082eca62c70d351d8125cef751c12aa6004e9f3130a8816c4ae94078d5446e88"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/record_result_read_model.py",
+      "sha256": "3eb18d35868e9a523414141e7380ab3abb3c60cd116ad0aa245321042f60b17d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/remediation_draft.py",
+      "sha256": "1aa4c2b20cad09bc429dd7f0bb4b5ece51b614c40c73dcc8dde9c6d69e9fa888"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rescue_record_completeness.py",
+      "sha256": "a72a1f3cb9817726408490257ec1e1379c717aad5caccf29e2678d02bfac7b7e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/result_aggregator.py",
+      "sha256": "b68c849481a8f8685948c1485294e2bc6d40d85a831cb0cd3c198a2496ab8e17"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rule_contracts.py",
+      "sha256": "b540f4d8dab09c135d31079720d771e9b92b50172f57e47586748e70e8ead297"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rule_decision_settings.py",
+      "sha256": "274cc014101c0af065113301d69efd945b6467550a006ea21e75943d1c4efef8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_assembler.py",
+      "sha256": "d65c79e1fb58359dd5b6470c4064e6942fd57cd64d0425fdf0688fb3cff3cdfc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_hook.py",
+      "sha256": "cba70ad370f7d8c6e11501da20ca9a17143ea5888529bd5e79569b2ece93c8f9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_input_provider.py",
+      "sha256": "a73508cedb5e4818cade67f7ce716cb04663a2be9fcdc699749aec7fd821591d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_audit_summary.py",
+      "sha256": "7944ddcb29be5a187bc6b32f720b7ebbd9a12e8024ea69afa64b2c488b333c79"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_execution.py",
+      "sha256": "53a9494d522d533e0c6def6440f5a0474e6086b54a5fac84a127012ebb74a675"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_fact_bundle.py",
+      "sha256": "05d82e42d34a8877fd8fbeb15d4a7048077c1c2cc3786bfb4a4f70e25bf1710d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py",
+      "sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_gap_contract.py",
+      "sha256": "b386295a317df8d9560d6d986741a8ce48954295905cc8b6684267887fa9f0e5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest.py",
+      "sha256": "98dcf8162f3b412c0d6b5ac646161c9c77c357a949433d98f5512e205339ecdb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest_builder.py",
+      "sha256": "bbcf938806bc48cd2374b2b53bacc1b72845aef619fde83d0c3dbad112899478"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+      "sha256": "2c562562a8035b2fada29c823c0cfebaf9fd6cec74529036225008917364e01e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_applicability.py",
+      "sha256": "a493ef1c9376c993c27dc1a2e1f31b5da833804b562b9156cd37f65dfd59e809"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_document_result_mapping.py",
+      "sha256": "bd3f183d426b8e15db0f7bb71aa01315c2eeb5e0af72429538917806a5913f8e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_event_association.py",
+      "sha256": "64956e8e52278bcf5e27c71e20275573af39f4a619e49a7caf5ae36dbd8c582f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_gate_result_mapping.py",
+      "sha256": "0c54f2ea434c0ec0fe5c221ff8995541ca6eb6082afdd61dd7cf7e0a605e4008"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_mdt_result_mapping.py",
+      "sha256": "0336a92f9dbe99bd3833e6d43a6b28ba36469fe2d91e402ee7175ce3ba988c38"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_presence_result_mapping.py",
+      "sha256": "d39cc5f74fdc673e8071abe5a69c437800dc96afd8e6aade2f13c8a755e0eb30"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_procedure_catalog.py",
+      "sha256": "eac2428d0436d94c34415f51ab8d8396ec5019d988498585fb2c1d2eff7b865b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_text_fact_contract.py",
+      "sha256": "85b4edad1c19f4cb6ada7d87c291dece55c00ce1f971e274ec89eeb7d41137ca"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py",
+      "sha256": "b2306a2d9ce4de035c5b1ae654d740e6faf2b01cf7e6374f4fe1e61936b246ba"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+      "sha256": "98110d373955a81a189c32d41302f1c649bb6923dd432e2404dd944337f47e4f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
+      "sha256": "1ef1640e9dc194a328df6c934b0ea519c56df65f82031ad8376cb97b9278d7f5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_evidence_formatter.py",
+      "sha256": "c225be2df25b4037f40ddd6eb44018f8e7ae669d120669b31e9851b19057f852"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_fact_extraction.py",
+      "sha256": "1d25e3315a99fd21e860a767efbc58dbf984c7b51f24097e4e23d44f122d4f77"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_legacy_result_adapter.py",
+      "sha256": "6dd5daf12f8d6946cd6bc8b8c150613ec4a1d8c1648501d6e064f709244388d6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_llm_gate.py",
+      "sha256": "2958645e84ce86fac15a70e64089d5d594007dadab8141abccdf802c2595663e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_programmatic_rules.py",
+      "sha256": "d057a29f60a6be0fb1b78a1efdc7ac71a3e74c7fb0332cbeb7ada5ddc8513f45"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_result_aggregator.py",
+      "sha256": "27ba4a80384291fa26a097efd811a491fb3b034059f72dbb2efa57f1d7c288a1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_result_export_service.py",
+      "sha256": "2b7aa5b6a09a887647eea456a96937fe15b9faa1cd86b90d9cfc1ad213e4a007"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_result_review_service.py",
+      "sha256": "0942c6b81c8c629dd433a6239c0a236f56d279e7ee7b6c48243f95cec51e0332"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_result_schema.py",
+      "sha256": "268b0d3b731d2f231c2844e03669cea8f97776c407f54e3e691bd60185be1576"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_rule_catalog.py",
+      "sha256": "175b7ab251ef98d90b51ff01f3dad1ead84d0814005607c898b1dd4d8a4de931"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+      "sha256": "8d249f3912304877ee0d35b1bbe1495895dea963e85959633bdc95e2562e7d70"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_trigger_gate.py",
+      "sha256": "4b5281f1749ca1cfc40a588845d820dd5ea7e7f8ea09a9a7e951ed6b1fe88a17"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/__init__.py",
+      "sha256": "4d03b8b271b975f2d2ed0377b01a2fc92191377919dd112d522242741a4a3bf9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/admission_content_items.py",
+      "sha256": "24e1055a8d37404116e6e75cfae535f82dd88b1e0dc78243ee4c982be253b125"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/admission_rules.py",
+      "sha256": "01b8f7f31abb6c3b95ea96c535e6fade48ed0cd3dd8c6e96332e03ff0a82aace"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/batch_worker.py",
+      "sha256": "8c13e7276a5420959d33bdfd9cc6eec040b18654c6e042b9fe09a1d22a2e0d61"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/bundle_reader.py",
+      "sha256": "c629852df9f0a1c4c20fb83cb98202c6db4b7af5597da3fb3996206b22aebefc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/contracts.py",
+      "sha256": "ef62c3345e743dc7d0c02a294c1cf3f65d242c2539eb73427b3796fb78bb6ec0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/course_event_rules.py",
+      "sha256": "c3d7741ea694f4f2e58c417fbbb0a6900c7eca8c4fa7875550fc5e16fbac1c4b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/critical_value_018.py",
+      "sha256": "f1d2c4a45a28351fefa93be9ec1b66ccd2a24978dc291d18a61880e43bf0d84e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/critical_value_018_stage2.py",
+      "sha256": "086ffe662fe3270e512d6eb3b0a89f7e719d5e7cc4d74fd544f6eb32e939c490"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/discharge_rules.py",
+      "sha256": "322d39fad82571e6b733b5c8b67d685388315a37ba08cc5a13ab0c1dd6d1d4b9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/disease_change_015016.py",
+      "sha256": "a027b63a1bc23ed45a1788a37c27dee37327744b8cdd2a7c91fae3fc004a1637"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/disease_change_stage2.py",
+      "sha256": "9a85e47699d83a5e2365ac526b825d62d5e2321dc2a816eef4e93d92427b65a8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/execution_integrity.py",
+      "sha256": "b9a06398e4398e60b968058fa79728f7052c33c6f0f2bc3781ffa125538738be"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/first_course_rules.py",
+      "sha256": "cb2feabc608811d5e0c1ad800aebbb4760bd7af41491dc2bf37dde7321269dc6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+      "sha256": "b85ba458b134d01076b53a8674d7bedc660d0273299b400d0c23a4556a0752fb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/orchestrator.py",
+      "sha256": "99bb770c7a7cbe33b9c635f930e84532c1ff6e869fda55e3395abe2dab66b0b7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/rule_catalog.py",
+      "sha256": "6d85a60af64887675721f880cf70ce11911e1e664904f400b949935ee160a24e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/semantic_extractor.py",
+      "sha256": "60ada6e10f06e55b955c1c6d63259c4799f45b3d5531c58195ef0dc60bcba319"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/surgery_consent_rules.py",
+      "sha256": "8c871790b7d74526ae73c3c8909dbd9b754df82bf6583382d9b9ef8726bc9a7c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0916/surgical_document_completeness.py",
+      "sha256": "c9a8fb1dffd537000219eca4854363c893e4810c70a760ae4c0198b115d57954"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/main_diagnosis_rules.py",
+      "sha256": "b20c1a14d6541c13ac11632988372557b153081b18f81241b4844074ce4d4d01"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/__init__.py",
+      "sha256": "42af5a154ebc9dbbfc1ae3dfa344c76c95ce30d72915cdef599aee78031a9197"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/detail_service.py",
+      "sha256": "4a0aa9a51e7508e10f73b1169b02de022b287da29b53f99ff57e49d2e8c42e27"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/errors.py",
+      "sha256": "90b81731e59e23d89a0a9c6769c5f5d5374c15679179b04593520321158cbd14"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/export_service.py",
+      "sha256": "809e7b118dabd44460740107a59c5c8cc5792be4a9a4fb6ed40a3da0b295bf33"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/frontpage_snapshot_service.py",
+      "sha256": "6232ee4f06f770dbc507dd7323c57bf5b3e162f90fef513d4d9e2483e86702a5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/hospitalization_status_service.py",
+      "sha256": "554daf22f7542ac3ff925aabb3394fd23d0ae1d853aa105b923cbfcd6b8729d3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/maintenance_service.py",
+      "sha256": "74da0ba2b15dc39e34f875e73f52fffd0b7cd71236458fa437586766b0506600"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/query_service.py",
+      "sha256": "d09908e33b04e94727a818050025986a3e2de99d77850579a406920c330eeb97"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/medical_records/shared.py",
+      "sha256": "6a7add3c01d8a25278a975be47201858d5cbd4ef2655945b8eb80714fcee5190"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/mongo_sync.py",
+      "sha256": "e067960ddb2aa20f2567c8b2900c6117d09bfa5d731ce500f6d4b95ff667d181"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/multi_file_processor.py",
+      "sha256": "eb7ca1cc8a423b153c24742f26603ca60fc3b96ee7d2459668fbc5daa4ee3e21"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/payment_monitoring_service.py",
+      "sha256": "3beffddf52fa44da47427294e4cf6ab1165887ecce73b181b82faf251157453e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/pre_grouping_diff_service.py",
+      "sha256": "2865ba7fdb58b42b57e2d084f52de6f3148d3001362a3005943f9bbb31c44942"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/pre_grouping_event_service.py",
+      "sha256": "65e3b495497d97323af1fd2376a12a9b979bb0f7662b96bbc91cf1e8adaf48c1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/product_activation.py",
+      "sha256": "550dddc21925cfd23dfcbd820021aa7254a3c3ce92af2db64838b71cbe3fab12"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/programmatic_rule_executor.py",
+      "sha256": "14539530a6e3bd79b8f97a4031bfb6c7c1ce872b678300c43717e418e23326c4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/__init__.py",
+      "sha256": "a9432f5705a767325b773ec1655a275dc52308b99a216c3e5fe3dc0b12035a77"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_access.py",
+      "sha256": "8622ec800517d480d5ea996338117a9a6c65128b6bdb18f6bef3e72577888933"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_action_flow.py",
+      "sha256": "6be3837e5bd18dceb891b6fbd451e25622a66c7d2098d11101db752aa5488c83"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_action_store.py",
+      "sha256": "75e3324d3e4b67c84854c1c13b3ca738082f028d1de922923a631b0484d90b7f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_actions.py",
+      "sha256": "8bc72d05499870fe2d023d2b57c9570f283d91c693c35c48594496e9d4152b31"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_capabilities.py",
+      "sha256": "357076959e890dd8dda0f54c60f4f2c73cffad019ffeda6d8964377f5dacfd01"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_charts.py",
+      "sha256": "d6a3b0b641e8b4f9e89f7eb278952e42899827906d2a06d41b80101187f5bde0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_documents.py",
+      "sha256": "b6245350ea0a67ea39f8b2b4210ff95591d61381136536a9e6448feeb307f35e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_drafts.py",
+      "sha256": "a99ba864571da8870a4fe66c8a7c7efde896593fbaa14a8a392bcdb3b0637073"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_feedback.py",
+      "sha256": "cd1358034706fa2dee9a8bb7d04bc5b99fd36c7408aa80835c7e5bf0d29d9686"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_followups.py",
+      "sha256": "d0a836875db4d0ded2494aee586664e70f783de0f54078c8f2abc0254517498f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_reads.py",
+      "sha256": "293797ba417475d5949bdeb26121e13fcb5f423fc3821df63a606597e78368a3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_reports.py",
+      "sha256": "ccdc86cb20d269025e4014a410896e751ff680ad2a54c500d345049a3bca2038"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_rule_validation.py",
+      "sha256": "49b498044b42074e62a3c7cdbc6b515ff97d715f82b51b75f78514305b14c6ff"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_schemas.py",
+      "sha256": "f61434d0653f17813d32baa78e120b808e4b8d4a4eb46763eb022627cbd67f7c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_source_gaps.py",
+      "sha256": "9104b2a8b8139ce630379dcc14a01ee3a5f17bfdde9fa59a258acf2326fc79a5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_store.py",
+      "sha256": "abb7ac09dd312d3050ff8cf741a066a0c340b4aeefa2861845e31389943336c4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_tools.py",
+      "sha256": "c2792136edcd5fdfc7c5549bc88f235459af659bdbaa48270a10a20ca8410da7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/business_write_switch.py",
+      "sha256": "d772327c3c68b5e62e0834dcb4f29998c7b66f06744d0ed715b98629d03b54cd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/intent_router.py",
+      "sha256": "e53b2726f3e8a9701ac96cf091df7973dd8df758f866024ad111d35f5294ff9e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/orchestrator.py",
+      "sha256": "db401380170fcbd5017eed7e90551c3afc1144cd232179b3b304b014fc88b35d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/rule_catalog.py",
+      "sha256": "ab948241fd7f5bfbbc4951a9c4798c21fb69b2f7ab67cca0c37b679009e7ed40"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/schemas.py",
+      "sha256": "2e3c4e1628d0666f548ead473ab6cc0ef2eddc18e681bf786e2e1b91373c4f0f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/session_store.py",
+      "sha256": "711428aa71f42cb71f7e8d1733679986f5e26b35c95f868e14c3360e05556df9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tool_registry.py",
+      "sha256": "b269e6be9800cef06401c75838bfca2f2a068cf63086bc586b462e9a092c61a1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/__init__.py",
+      "sha256": "566bb55efae3970c1cd2e5b80c6021f9cd090045ba86640c90587fbc72db2f28"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/_legacy.py",
+      "sha256": "57a8a23cfd528c66e4e1c07e15920e0de95ad7065c86ff8c9fa2c97fc4eac9f2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/coding_tools.py",
+      "sha256": "cbd8b22d4dc7573cb14ef22a4ad978fd8148c2d56bd4e516276ca939f4447fd1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/common.py",
+      "sha256": "d63444b7972ad3a6b7d2cde1c4fa9bd124a71c5e146a2c0412c7ef27d2497327"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/document_qc_tools.py",
+      "sha256": "839b3bdb59616f4d10e27f45b00ec0f4751b248c4f669f78bcaebd70799708b9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/grouping_tools.py",
+      "sha256": "b4bd8c7ace395f70a6e4cffd757c88364136928cc2e4cb38f2696f787d1dac57"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/record_tools.py",
+      "sha256": "24029e6c6031fd4a802dcaeb337a0f06bfdeaaac040650a25b56b70169eb75b4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_agent/tools/rule_catalog_tools.py",
+      "sha256": "827c3d7e9bf0aec207c71de603e5d6c4f47e79b4e0a93d92ef031c9febf349bd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_applicability_gates/__init__.py",
+      "sha256": "fb4b47092be162ccaeae843f5a8be36b96a7a95c6887ff57dc29d3daa5c8ed93"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_applicability_gates/models.py",
+      "sha256": "d8ae23b865f9409cf784917617b65bcdacb17ba6666c9cf55be60af96971073a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_applicability_gates/registry.py",
+      "sha256": "e9a15274a11cec2dad266cdcf958a7c1d0c77fe90076a3f4529146e646f56dc6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_applicability_gates/sc083_mdt_evidence_aggregator.py",
+      "sha256": "73b18bc534404feec7b6d1336f457a84474821d1dd1d22dea9b2e6cbc826b1ed"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_applicability_gates/sc099_pathology_specimen_gate.py",
+      "sha256": "a5adfe3787036997931aa102307a599f4a729dcaab6d9edaddb77ab0c2ed327c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_applicability_gates/sc123_discharge_medication_gate.py",
+      "sha256": "e319b4035d93cf55241108162b8ae6102738e10efc2eeaf37d8970d66f3ce3e4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_cancellation.py",
+      "sha256": "694adf305ac31ac606f2cc16283c781a9068e1b5b022c392ddbb793fba2564c0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/__init__.py",
+      "sha256": "bf3d04f2cb63148f8f1271128937b0f5707e6213510cfef8b2f9913e203af037"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/capture.py",
+      "sha256": "d77cbfa64c9551a4d351a01db00c6e9e6b7bdd82ba5f75ce4d844b1235b97e6d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/contracts.py",
+      "sha256": "42040c3e5b689e38d46069c8e63f852c9a14db078814a63347c0dff3fca65401"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/execution_inputs.py",
+      "sha256": "a9310bd318df65f94bd46a8773177279a1429a518520a37940225fa8bd685575"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/history.py",
+      "sha256": "c2e29b9ce1674ab94b3bc235dbe978508063a437076e656dec4e6e44f1309886"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/history_delivery.py",
+      "sha256": "04d8970efa12ee6e1843d36e9906f756147bd018883fddd1842cc9537a65b592"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/job_capture.py",
+      "sha256": "2a1e01a209b6a7975515887ed5cae041c42baa120b7e0488e1baa909f1fba086"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/material_redaction.py",
+      "sha256": "7548aa25767b2ce841e5cf09299a1c6b3d8d0eaa8d37a6f1a812338b43add683"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/package.py",
+      "sha256": "9596beb978a534acd80a06a319c6e9806b7df5fe90e962ea1bf0a8b3c1f0054f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/replay.py",
+      "sha256": "38e47e0ca4e2c7aa29a89dc3a4f108839a4181f40e61c79978d3c2d5e14d64c6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/runtime_build.py",
+      "sha256": "10ddd742b9f503add914d2633b039005c10c2e4701749629c47268d25b5accb0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/sanitization.py",
+      "sha256": "6e603750ecf4d956beeaef6512e81ac705c21047eaf41dfa8d262e8e94e0ea93"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/session_redaction.py",
+      "sha256": "1420fe62d33de1b95bb7f155d4d277872f15a0fc59e9f730d4180a12886e3dea"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/session_restore.py",
+      "sha256": "6e17efca66cda62eb9159122926b2cc9ffab9df7709077c53b02c29c1babac10"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/support_archive.py",
+      "sha256": "719a062ca6728bc6ec332cfe5a8ffa15be2af8da69ece86fecafb0e90fcbd0fa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/support_store.py",
+      "sha256": "495d3a31b2ec103b84e9a069d8b9262d23a78207cce10a9277087bb9a5279323"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_diagnostics/typed_values.py",
+      "sha256": "7f3e248bc85af3f6b7cf6df129f1a61a4ffb8751900af427db9e6f1d4fa7d0f5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_execution_cache.py",
+      "sha256": "2dee25b11447b9ae7d8084bec15a023f1d8671a0a153d349c6338deac4ac9db9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_input_adapters/__init__.py",
+      "sha256": "c20da77fdd09673186fce01c37ef89aec206fdd0e84ec5631be6171d10dd5a8c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_input_adapters/running_final_bundle_adapter.py",
+      "sha256": "f365e590839965628e52c1b57d6ae32be183aeb418fd4e8c64f519cc860c26db"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_input_adapters/running_final_bundle_runtime.py",
+      "sha256": "9e0981648c524066164e9607afa9cca30cc6db604ff4272a391ceb5b99b10fd4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_input_adapters/running_final_evidence_adapter.py",
+      "sha256": "eb19ee3c0e499371c242fbce9cdbeea67dcacb0ffc6f2afde8f8a6d36aa6f206"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_llm_client.py",
+      "sha256": "d2a2f1e08f0000ddb8517578f61b291bc778f5bbb9afd1617b3e58d04ad59041"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_llm_client_runtime.py",
+      "sha256": "3c24fb88fddc208170d8a5363c6a34a597d2f89f40ed21f5fd8544c19d1b919f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_persistence_service.py",
+      "sha256": "c4f6ca8a59569bd4a822319b47851ec0a1ce06f3e99802eee400128f77930800"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_prompt_builder.py",
+      "sha256": "f501bc317da55496e15031f3220ca2dbcf584a7a709cf40c3d5aaaba2c1d2d7b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_result_adjudicator.py",
+      "sha256": "66ce74e54219bafff017fb754538db168bdc5cf6b59945c210311ebb1d58da9a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_result_postprocessor.py",
+      "sha256": "9009215fefe970dc941272b2ae3e06081e4af851d60cd0203f6129348bb510b1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_rule_coverage.py",
+      "sha256": "70bb3f3dc607477e48e75e6e82b5b3f0f4888b342567801e77361fad787cb5ad"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_rule_orchestrator.py",
+      "sha256": "75c6a36f03ec07fd4cbaa816e8801226b0c6115db4603c627d618a55313bf31a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_rule_registry_service.py",
+      "sha256": "f5bc276ff9ded13f6e287f4dc49c3981dbf2f17106b8f5b7112b3320471f8663"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_rule_sets.py",
+      "sha256": "079cf208a963d84e8b86fcee57b2341d79550a7746436b6d0bf89dab8673883e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_service.py",
+      "sha256": "247632a15b45d6c694b6f066b183e3b3f9efd4d25197b6a357f7ee7d425895f7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/__init__.py",
+      "sha256": "a1b7c25d3d17b62facdc0103b1c532b6fb664047334bd5b8670b446899555958"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+      "sha256": "67d80d42efdd4c0010684017932d49c86856f5c2950d83af4f1eb5516b2bdf4a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/execution_failure.py",
+      "sha256": "c42020fcc2049cf49046d0fed3ad3c7d7ba8523f3a9b89611a2d9f52f96f6bff"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/export_service.py",
+      "sha256": "1255f0e8058ce7b3d23076fb3babc79a639c4eff0bafc0753ab40a376846a94d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/failed_rule_retry.py",
+      "sha256": "097d66248c57f28186db579907d1e1969a1c9c4732f875c090624f5ff3542687"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/partial_record_delivery.py",
+      "sha256": "97027e406a5cf0ba82956ca3578ef2ca587f7cd8853b5e1a8aeb32ec1d177705"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/record_repository.py",
+      "sha256": "c2b4089fd269ed81119713ca25c9fef831a0c5c892c59c00f2946a44c296b817"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/record_timing.py",
+      "sha256": "7c8f06a800373f007c722719618f62f6c5d1714870f43e0900c69b4238b7f58e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/qc_workspace/result_feedback_demo_store.py",
+      "sha256": "f4ffeb0e6daa3706114ceac1b2c6ec341db088c8542f9ae65320e995c158bfc0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/record_service.py",
+      "sha256": "c65af6bddce918c9be321cedbf11cdcbec5be6518a0018999c778c9ef0eff8f0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/records_ingest_service.py",
+      "sha256": "24ab813fea1cf9798e9fdbdc7a1dfe8ec9a55dbc4ef20eaaac438d149dc4d6ad"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/rule_domain_router.py",
+      "sha256": "5133580535a0543d4e557fa0be55eb8af4cbe4dd59cc22018578737c8e09a80c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/rule_router.py",
+      "sha256": "88c16ba4015262966f6b46e2c946ab857d9fcb37b989b0be8153d09197c70142"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/rule_validation.py",
+      "sha256": "e20a4315f12bae360ee9ed265cca933a1da946975448207ec69379a49919d85c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/rule_validation_comparison.py",
+      "sha256": "4d9cd6f8e7c586904c088892c98c4f480dfc604cdbfc63621086f3e0293ab69e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sample_programmatic_evidence.py",
+      "sha256": "20e7e40cc03171803a8d55468c84ca7efa92cae3c96c9d4677f3f30a3aa06622"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sample_sync_cursor_repository.py",
+      "sha256": "93d3279765ea46de25485739eb70a113bd595fc9e60b4b8c6886d26d2911579c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+      "sha256": "c316eb7f80233f2e2abebe2981d539d826ef2a0bf8f7b3b5d118ab0db720488e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sc_rule_family.py",
+      "sha256": "645d4ac6aea4ced0935c906a94d34214866b22d950cca88a23d7f3327263715a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sc_rule_family_ab.py",
+      "sha256": "507d4defb92f3c0f26415883b2884dc1a3d7d26c7d7b323c7cf2967baad308aa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sc_rule_launch_tier.py",
+      "sha256": "397fbde768f89bb33b8f218c353c5b57059fb9585bcf9612366fae4393c1c108"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/segmented_qc_pipeline.py",
+      "sha256": "6d428e951371344e6adaf68a0145a71bd1d490148808f01ba78a405a81f81166"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/settlement_assembly_service.py",
+      "sha256": "175928c64d2613ce622de0e2edb8d31f172919839fd942e9c1738ce2349600cf"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/settlement_formal_qc.py",
+      "sha256": "c9dc68d0aa3e1ea2db99a9fa26073c64530bd4ad6456d6b5a954b87d7e9ee9da"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/settlement_service.py",
+      "sha256": "c8fbac8d95bee74b54f50fcae7952553542ce96445795f90446feb5427349649"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sichuan_qc/__init__.py",
+      "sha256": "459598b45d865d02d59e92b3d7a1661aa928b676d49ac9ada7ee917b24680190"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sichuan_qc/legacy_rule_service.py",
+      "sha256": "7ff10b3dfd069b142edf79d876e1f1b269729c988d96c9f9079884745b08f86a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sichuan_qc/running_final_bundle_service.py",
+      "sha256": "a1ec5ec753ac7f2b16378d0121cabc127b12c5dc9db12ef8e21a6e4ad1941fc3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "sha256": "2772bb688a1b4ce33ef74458b03f1134daa64273fa611acfec76c958df4c2e4a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+      "sha256": "c39f4ac3f2169fe787099dae2989834861f0070bc0be4095af40924efd4c1e77"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/skills/field_mapper.yaml",
+      "sha256": "38a7d9056bcbf21bad068ad7fd30a6b534d06f9fa1a59127ab8d695f0b2a0557"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/smart_upload_async_service.py",
+      "sha256": "3691c5fe9d7f748940f00a426085c2d751164eaef314dd40fb7b97c1a775517d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sync_idempotency.py",
+      "sha256": "87261ebe01ce202e5dc5eba0cf3aebfe3e3ad847cac45f52575de3bba592e33e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sync_policy.py",
+      "sha256": "905dfe181963c7a40ff5bcd99d04e08be6b993c5f24ba174cd0e9fd42b5f5322"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sync_run_history.py",
+      "sha256": "4e0aa706e69ae8c8c0cd84b1563c86d58622a9516c7cbe85ce1ab90fd99c070b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sync_templates.py",
+      "sha256": "ad38e91a7d115a603d6428c362ada58c315cf4c4fbc6bc3f83b338629e2f5a7f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/task_sampling_service.py",
+      "sha256": "d4ced305786d48c0807b7c7d98c5b95ae3d3486a39bb31ae9c73a60b68cd9f59"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/unified_rule_engine.py",
+      "sha256": "fdaea2e34a1456595c91c0508e42cccf8cfc0f1906130a961442514c0d8f3ca7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/visit_index_service.py",
+      "sha256": "3e4f15eda685721cf455b93901bf32c7b22486a1ae0a35832e83e68fd8b2a626"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/workflow_queue_state_service.py",
+      "sha256": "b8bf850f9465066f12a88f5c7d45c0a874f89d400493eedceb51150df5a830da"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/workstation/__init__.py",
+      "sha256": "ffed04c2ab7dcf625c0a84b2bd10ac4ce32396387b69bc24d9acf329397d5a42"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/workstation/luxian_0609_result_analysis_service.py",
+      "sha256": "dda3a58a18b0b81148f045f3974e965275add03e6b2f1514dcc946d77aef3e1a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/workstation/workflow_queue_state_service.py",
+      "sha256": "c29fcc4ab5538dbe2e48d47aafcb6a0b266b796e39950014d316d4f73752a0f2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/workstation/worklist_service.py",
+      "sha256": "abb71257caab8869f3ccafd912610aeef7858698f8a0b774e41e68967361d7d6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_03738a28-be24-4c19-b46f-140c207c10fd_sequential_batch_20251116_235510.json",
+      "sha256": "292867f9a7affe8eec63a3ad6f89cd7706c048e8308c45cd32c101aa8065568e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_17682021-4601-456f-9c7f-87b9e51b77e6_sequential_batch_20251117_001350.json",
+      "sha256": "851981e03feaf9fb5b16e41a6a98f60c21781ebb32a0d26de4b1374568c96ab4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_1ac7598c-9879-4a35-a859-624d06bee915_optimized_batch_20251114_073956.json",
+      "sha256": "e4352f3dafbfb2392cc2bcbf7aeb8b4bc484bc271db4da2707b341ea2cbc60a4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_1b18b336-a124-4271-9e84-d5457d892f23_sequential_batch_20251114_073430.json",
+      "sha256": "d5cf160ba839685be3d6b4a379385057dd46231018e36bee6a60050af9b8eaf4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_21a21484-2f32-483d-8888-48c0fe844272_sequential_batch_20251117_004628.json",
+      "sha256": "c1f32b1ce49994a2e7f9b4e1e5bb8b576af4cc53ae25ee34e783214266fe922e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_2ca64685-2a82-4c64-8fe6-3cf39ce6ff32_sequential_batch_20251117_000755.json",
+      "sha256": "d03f5d99e98d31d87175c5a5266d61e8d5f5c1106274dfa991812d8a757c78e2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_34fb8956-6400-4b9f-ade6-7d39db6d399a_sequential_batch_20251114_073239.json",
+      "sha256": "4c9a25552241e05cef1a062d8caa46b12545b5853c5d30770f21375d0c2b57af"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_369da3e7-2fbb-475f-a095-1c2c6f2be56a_sequential_batch_20251114_073544.json",
+      "sha256": "aa82656bda4a0bf6404bceb56399b8d3245096ffa8c8e3da4d44784515d321e5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_3837fed2-edad-43a4-bf02-75155b4ecfde_sequential_batch_20251114_073745.json",
+      "sha256": "e62a5279f07dc18ace3878cb597925d6f50141378e0100e37ee6289015c7b461"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_524b220e-7ddc-45fa-9328-9ec74badacff_sequential_batch_20251114_073524.json",
+      "sha256": "a50359c963f3aa6e27d89dcdff1ee6af4afcf798b587c277fabbdb3c6e20d132"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_6a142ae7-42c7-45cd-aac0-0548b8b1cace_sequential_batch_20251114_073334.json",
+      "sha256": "56ca218b6c6a85d83fd050294a778adfa557750a040bac19ff90f94a3a40af3e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_6d9aa33b-141c-4832-8c2c-5f6daa8afaf3_sequential_batch_20251114_074755.json",
+      "sha256": "39986888208c36f00012fea0f83c57259b4c899f2d23fd432f06294205777e4e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_7eeef145-31fa-4e45-8669-7ce6069393bf_sequential_batch_20251116_235643.json",
+      "sha256": "5366f7a49561f49390883988f1a1778aefad61ccbbba66f1c32b210c1d6205bc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_8001bcaf-8c02-4e85-a1a1-03b7e38a9636_sequential_batch_20251117_001518.json",
+      "sha256": "7c2ea714574e33ff1a1e7a56d7291e7b957a7d7a0c2c5c2c792fd93388df01b5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_a86f064b-94af-435e-8ced-16350447c8e0_sequential_batch_20251117_000656.json",
+      "sha256": "aab49353a585e568750243dbb9eed7620a8b30f930d097ddeffcf1d6db40376d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_b7a9ff9c-19f9-4da3-9de4-611c99d7dd5b_sequential_batch_20251117_001205.json",
+      "sha256": "5be8897706d1d0bedc708cc23446f89b3e4b59e27456e8de96f7225922d485b7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_c31fb1db-99ed-4b98-a2dc-a6314d94a053_sequential_batch_20251117_014856.json",
+      "sha256": "e31ff1789fe361dfd767f296910046ccf8d05c695f877085615bb25daee2a3e6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_d3774735-3871-4597-8760-d42f6dfa85dd_sequential_batch_20251117_002115.json",
+      "sha256": "8ac214a52120b1c31b7092a435475f5760f8b37f57d9fe78e69767965acb1b37"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_d51d1347-ed47-4bc1-bd5e-9c0a9440b37c_sequential_batch_20251117_073802.json",
+      "sha256": "7ee8c28556af7999d4e3bd97a0dd0a1cd2db7b94061640379e360a41c06b9ea4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_f710204b-b47b-4630-b566-3ff012d0a30f_sequential_batch_20251117_001302.json",
+      "sha256": "97bed0ccea6c4b742c8a6373a914dd93bcbfb93556dda1722a88c773a62fabab"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/demo_qc_results/demo_fe9f2400-ba5f-4191-945e-8ec40308953d_sequential_batch_20251117_002041.json",
+      "sha256": "0cbd1c554fcd400f0746deea77afee6fa850fb84aa635fd15cf1a99d3a0ce038"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/memory.py",
+      "sha256": "4fd7f17fa3bf8a986c87070925d82ba40699886fcecde60fe5e61b4ed344d1c8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/0a1d6f84-fdb3-4a04-a3fb-9baa5ad26c95_optimized_batch_20251112_104854.json",
+      "sha256": "130453eb26ccf655abd96d0dfa8c2b2ba0e9d956f92ef721d6161336573f9dcb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/0cbfa2d3-9d97-4021-bfb3-078efdbee750_optimized_batch_20251111_084545.json",
+      "sha256": "a396288a626ce775c13cf235c876a05eae413f68db1295d2182c5ae99ed8ec28"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/0fd284ac-b23d-4b06-8fb8-529713dd721f_optimized_batch_20251111_134507.json",
+      "sha256": "fdc0fcd787d3631a0dacb35836114c335ea19bdac7729a97742144766fb98c9f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/1200b884-f456-460d-a572-bbfe9691f826_optimized_batch_20251111_114835.json",
+      "sha256": "c0d8cd776c006853a0286e081118483225ae7a73a3eceb4d31447cbf87eb53e5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/13c4efdd-6bff-4ff7-aa51-2bc906aad435_sequential_batch_20251112_232048.json",
+      "sha256": "79659f016a4b4a718aff511b01229539447f2b5399c0bf0a0f512e7551d18763"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/15325787-7c53-415f-aca4-7136d518ac4a_optimized_batch_20251112_000927.json",
+      "sha256": "f6cfd057f9fd0ccb605443b82f1537a169f2cb25155a7828b04bded99c690500"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/1685f203-b20e-40b0-9b44-ebdc99f704e7_optimized_batch_20251111_145029.json",
+      "sha256": "a10153b86267a846a0d6690f0ca524a07b2da26851181d1d9f0cdc7616b8037b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/173c5ad8-205a-48dc-a594-dc874f325d3b_optimized_batch_20251111_114812.json",
+      "sha256": "f5755b7c8f99134e2055ddeb14e8330723d3df27d8891190ce35199ddc22ff74"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/195c0371-9b37-487b-a290-957d3ac65800_optimized_batch_20251112_151627.json",
+      "sha256": "3ba5bf8dd0278b436cf293888b6dfe410799e8c2ebba285d637c7dec0c59da13"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/1ca2602c-56e6-4310-b686-19a73531a8a9_sequential_batch_20251112_232958.json",
+      "sha256": "0efd870a7b7abb42b2a0c9af851383b5dbad6cda8315caee55f42bbec8888245"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/1cf43f3a-b17c-40f1-b12f-1b0967dedd10_optimized_batch_20251114_043228.json",
+      "sha256": "50c1c148c9a32199ec414df2ded8b0c56931e142085ad142907ca6e3ffbc7879"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/1e2886a3-253f-4008-b4c7-da32548e5826_sequential_batch_20251111_121107.json",
+      "sha256": "1699b5ebd5698275429c28e44513354031ad9a01945818c3fda25552b00e1595"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/20339f9a-1706-442d-97cc-a836691193c9_optimized_batch_20251111_091202.json",
+      "sha256": "805fd8aa93696fb36c89e63ef1fac220a80de0df1f120bbc4bc1dce0452ccbf9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/2081f1b9-00ef-43d6-9f31-9d63d3f52d62_optimized_batch_20251112_013933.json",
+      "sha256": "39924bb4c841c81711931ff057691742e1c2139a165ecdac955401acb7d96318"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/219cc6e4-5dec-497a-a0c8-84fc0d989546_optimized_batch_20251111_143810.json",
+      "sha256": "adb83bbabf3f4e5f1d7300ecadb196e2369eb4f88157efe52bc85769c4d0ea2d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/231bdd1c-7f29-46ad-8372-b958d393122e_optimized_batch_20251112_030643.json",
+      "sha256": "ea9552a168a12f80c49b42796af90882fd4d385a41b5b8da825a11e548220fcd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/266e3b30-a80f-41c3-a8e1-e587ee085c95_optimized_batch_20251111_133216.json",
+      "sha256": "30ae474e42499d189f83d1acb4512acd24ecaacffd75a26559c254f01a2eecfd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/28a26c14-2e8c-4dc1-9de4-0d4aa0caa550_optimized_batch_20251112_011422.json",
+      "sha256": "4849b9f83a345cb15215ce083ab439f5017d5b04a72ba2a7a1cc59a1d4c8d0c5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/2998127a-1639-4d30-978b-bf9dec69f5dd_optimized_batch_20251112_060401.json",
+      "sha256": "7eccb3cbe87d7ed342ebf1c0a8125e2d19d4fafdde15e09b94b550cd3e13393e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/2c59b9ef-9b2f-4ef8-b671-d0840df86da8_sequential_batch_20251112_231936.json",
+      "sha256": "a79cf6a4ce5e1094dece9370922741710cbd241c3125cfffbd6172058a2b0823"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/309fb891-729e-4a41-8fd9-354fe1a4e2be_sequential_batch_20251113_090313.json",
+      "sha256": "7fb7116f04758dd0d4e2cb6dc671a090a21e4c112c5bf57b908d0e210f9da9ee"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/33df6670-9fbf-4adc-8cc8-8eb96199df48_optimized_batch_20251112_151603.json",
+      "sha256": "3dcdcfb0b77009f099e6ec70c4865f2e4848e45432a5ca1b8baa74aae68e88dd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/3422191f-627a-4f61-9917-6c636a0bdcd6_optimized_batch_20251112_105404.json",
+      "sha256": "2dd77efdd6c4bca3a4c70e37aed4f8f6d5d4a927f100d367021c7ecefc65affa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/3423ef84-1376-4f0a-9b89-dd7f1eaad1b1_optimized_batch_20251112_125929.json",
+      "sha256": "08bea259f088ad5f56203943bb7dcdae07ec97450b8296b6e5f9c50edd895b5b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/3432cb73-e65c-4e61-ace6-9559fc574562_optimized_batch_20251113_000602.json",
+      "sha256": "2b4735ba10caa39d59c16645df5a3c3b342c770d8c4276a9df9403b674f9ef1d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/345f8bc0-5f85-4385-9f88-498bb87463f0_optimized_batch_20251111_235850.json",
+      "sha256": "deab36f4301f7f1cea09e601a41e0d154335dd4663e32c9a7fe10eee90fb06f6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/36f11425-d816-4f8a-b624-dced1ac4c164_sequential_batch_20251112_060145.json",
+      "sha256": "a20bee6348414d2bae51550b59abba4cd1c22677e3dfcb95e02eba7ba106cf7a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/370bd184-75cb-4359-9e28-48819fddb669_optimized_batch_20251111_094742.json",
+      "sha256": "a0626ae49dc7dcc53d93c0b58adff710fdc0a31d9794065d560739ee4ba95b78"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/3a3b56e8-b38a-4696-9f06-ea63fabec059_optimized_batch_20251112_023644.json",
+      "sha256": "361f49abd6818c5e547ac67dbe0b79a0b8d485524811f521b7d32d78c3d795c7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/3bbcd579-563f-4565-aa83-a1897fe8a02b_sequential_batch_20251113_234848.json",
+      "sha256": "6986dc3ca637f8f5d447ded3a18b59653f8e685e7cca04fdff5e5be2be72b48d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/3e064722-fc55-4b67-89f1-5636af445b74_optimized_batch_20251111_120727.json",
+      "sha256": "c7066a1c281f76479726e1c08e1f723fd1cc6e0dbcdd132035c64e223830fbcb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/41077b4f-225f-4797-aefb-5d9e9592ddde_optimized_batch_20251112_233931.json",
+      "sha256": "348be9a99cc16fdb9d200ae6a3280e037b42ebdd110c0ea3d6ad88a56fee0f36"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/41aa90ec-746b-4602-940c-f276582bf793_sequential_batch_20251118_100204.json",
+      "sha256": "4c6040f21f80ba931a27230dbbb84628e69a63a74279cdab562df483e52b7eab"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4297c0c5-385f-40de-a030-f51ed5e74cdf_optimized_batch_20251112_010827.json",
+      "sha256": "204d8b28fcdc02f4450c70972bd0a33a6e926872f0c89a7974ee821477c02e68"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/44201b9c-6c9e-4686-93dc-036179b10907_optimized_batch_20251112_022728.json",
+      "sha256": "76f2a6d561f4734e75cd4ed8f90aa63a7d993fad62064d45f74d59dddd2b97d1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4596298c-eca7-4ca2-89ce-30ce5ae2898d_sequential_batch_20251111_012838.json",
+      "sha256": "14ac2ef474be1aec62baf8eda6300634b45636db034491d10de91f7c1dac3926"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/45eeb599-7af3-49d0-912f-f413ae62e72b_sequential_batch_20251113_001240.json",
+      "sha256": "9dd4716e0140ce6380218f39223f4eb0353906c9971503587f48bb5b0cce7444"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4798fb59-6450-4f11-94c3-848d2702cf6c_sequential_batch_20251112_151503.json",
+      "sha256": "a8b9599fc3b455616e44392b5d914827950a0d254d795ca4ff5b61be9ac73f68"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4b3fa013-1cac-413b-a50b-798f1d40c047_optimized_batch_20251111_070835.json",
+      "sha256": "2ce279195767bf215b8aa634b727f0545af6d89987ef34428809b493d856f581"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4bbadd61-0d05-4811-a3c8-299755acc996_sequential_batch_20251114_015437.json",
+      "sha256": "502cbd14d408f5d7c4a8cee5d4d734faeb76683e344602caaabea211ac4a592a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4bfffdce-ca9f-44ae-9fad-27ad1b5addd9_optimized_batch_20251112_014056.json",
+      "sha256": "ddb71bb6198735832a0b9cbd84e8b858324ed192c681bd41683b1b6d1fca2ff3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4c416350-7632-4c89-bd85-a605c5fc966a_optimized_batch_20251111_120630.json",
+      "sha256": "ab2cf280583731094fb321adaabe276eeee446dac1c4017a8125f972485d2f06"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4eb1f192-80d8-48fa-8393-0c91b788d0d9_sequential_batch_20251111_235832.json",
+      "sha256": "276d784fea42406597c94cc77b1fb72c203b1c4a9b397214cff66571f59bec57"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/4f6aa43d-a668-4bc7-8916-7f1596315450_sequential_batch_20251114_020628.json",
+      "sha256": "f2e857bb9d05f2d4295b31ae043b8388c4a21f602a4fc14d74d211428c83c266"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/52811cd0-5ac7-496b-b589-59bb3cf0396d_optimized_batch_20251112_030651.json",
+      "sha256": "68eb74fbcd99b0a6c7096b0814e570576dcebd4fa2e2f79b8f0bb307844b4486"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/5386a70c-d3a9-4c3a-ba33-85ed8680178f_optimized_batch_20251114_053350.json",
+      "sha256": "0ac603e9375c38590268e806ce1c47507527451a7d42bc8a30c3946b304579fa"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/5429972c-7698-4098-8948-630cfa69ae84_optimized_batch_20251112_105757.json",
+      "sha256": "28327413c53cb7bd739a9bba9412c3e374ccf17bb2b45ab3c25a144f9de625a3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/57c72978-223b-4e01-b6ff-180e802c1718_sequential_batch_20251112_130944.json",
+      "sha256": "1b5720fd3cd652e5a81956659f33b401cfc08c005ec6194eb2705e2326af94d0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/5a2b1859-a0a8-436b-a4a0-af30eb6db6dc_sequential_batch_20251111_235912.json",
+      "sha256": "33d52541cb4e80af0ef506c74effca6e440306c93758e99b4b3622277930bead"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/5b658b73-8a3d-484a-94b3-5a4bc3aaa88b_sequential_batch_20251114_020451.json",
+      "sha256": "c5b6c231ea1fbce777d13e70c9e5181a8f4d0f97eaba8ef21a7ba0a9992a0083"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/5f9cdcb9-1eb3-499a-b847-39cea80147d3_sequential_batch_20251114_041150.json",
+      "sha256": "aab4623b336a6ba4a603492a0ee0267f8616d0208528be420be27ba46cc93dad"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6154a09c-c692-4cfd-83a7-eb2773a9ad8b_sequential_batch_20251112_141218.json",
+      "sha256": "cd1d23ab520945b0c909053cf952c87abada62ad4c79e65998380ae01f11de66"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/61c83602-ba34-4f68-a7e3-7234dca02679_sequential_batch_20251114_020415.json",
+      "sha256": "b2a661a9bc409925af4780eecc1e2f8ddf5fc8b181879f62af28ad8106a1db5c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/631c3193-68ff-4e6a-8b74-9140b9b79234_optimized_batch_20251111_114825.json",
+      "sha256": "7e5048e23eedf4ad96a9602a8d76c0ad7498c83de5a9a083f57d518225a913e2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/64c073dc-dbab-4219-90d0-1200cbabed6d_optimized_batch_20251112_020556.json",
+      "sha256": "beaa5cb0a6ba3d25b242dee6ae91d99791511ff24ee7daf5ab68ce770083f8c4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/66b49b8c-e868-4a7b-b551-296415a4ee75_sequential_batch_20251113_002645.json",
+      "sha256": "21fc15c95db5aca0b16b421756743228e6606e723ba0915520a459caa760e60a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6780fbb4-1e53-431f-aaad-00139f701b55_optimized_batch_20251111_152527.json",
+      "sha256": "507e448ca24ec7cb66bc69e9323e97194f8d92ba791321dc18eef74665fe7a04"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/688c8d69-3d77-44a2-8238-8c81f9fb21d7_optimized_batch_20251112_014157.json",
+      "sha256": "d0ee71a16dc70b24757c51072b6039db514b1810aa227ccb6aca9c2f05c905fc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/692b46c2-428c-42c3-a9a2-a50c47719b8b_optimized_batch_20251112_105422.json",
+      "sha256": "2b434718bea9e886d836f28782563c3b01f03033d4c4340fbde6ddbd32d94d71"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6beb57f8-145a-42ee-88f8-d0c7a3234397_optimized_batch_20251111_235538.json",
+      "sha256": "71692548e8c0cda5d8d60ac08a4c9396f8b5207bddb8527b682bdeaf2aa8b906"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6cac22f6-53f4-4deb-8f5d-1ec0d2030c43_optimized_batch_20251111_133104.json",
+      "sha256": "f1066f3448eedaa91e0c7d6291c47f403c8acc46770dcfb90275047f9a5372d0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6dd06f4f-355e-40a5-9784-c691537265d0_optimized_batch_20251112_005523.json",
+      "sha256": "9a8bebbf7bd73506ffbd47c23420dca9bc0b39713777aac0c319b471f06a5878"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6de19991-4266-4aa4-8bef-ee3001fb3ddc_sequential_batch_20251113_000427.json",
+      "sha256": "16ea3e2cf31ff1130a209e7fb60ba16196b0f0e19374f067f155d978ad9baa81"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/6fd14104-4d02-4b52-bc3d-a012cf4ede90_sequential_batch_20251112_232848.json",
+      "sha256": "e9f64632409a714d2856ef9f5e8e77c71a53f49a8c9fdcdbaa0376228ecf01c6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/7157658e-761d-4548-ad03-20a9df12c93c_optimized_batch_20251112_141254.json",
+      "sha256": "372ab12ad5c075072bf1ad74653c30bad2aa372a0a59897912ffcb024df2cf15"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/7318e9fa-a2a1-417c-93e4-f7325917591f_optimized_batch_20251111_235937.json",
+      "sha256": "0aa5cfa40f3dda23c584c89788a1126f530797551cd59cd2a9b9294520bee9e3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/76013f70-a013-4495-bf65-28580ac57be5_optimized_batch_20251111_145039.json",
+      "sha256": "1e734eb6f3afba19d88fbc4c9874cb4733535ba62a7017c5c7cd445812d04be2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/768d2706-f180-436d-9270-e3fd9e8422cf_optimized_batch_20251112_233705.json",
+      "sha256": "2453596dfe7700716a58fa86d5e3302510b9d9de9546dfc569c9e992742cefb1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/76a4bb07-de51-4219-8e14-eea9c18af8ff_optimized_batch_20251112_225919.json",
+      "sha256": "733502c252cbd856e5c7c609ac60d022ab54804ae272a17d58ceaf68807c556b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/77fa248c-8139-4865-afef-be93511a738f_sequential_batch_20251115_024038.json",
+      "sha256": "eb2a013e23df99e7eb2dffc8913e819f9b81213b1fcf078cc799acb4ce5eacc5"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/784ba056-66e4-4cc5-bc39-c232c223c7d8_optimized_batch_20251113_090259.json",
+      "sha256": "3e38bfb73f5bdaab7725dac51df9946097d99d860a9c24b00187783c455b9d54"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/7892c1c7-721d-4472-b076-72632919a5b9_optimized_batch_20251112_233957.json",
+      "sha256": "fa8c973b257aa4be2c3bf86c330db1be2ee90d390618862360c59b82c8bb4e5c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/795c50e0-b3c7-4f71-9f95-adebaf03d929_optimized_batch_20251112_233528.json",
+      "sha256": "34f747aac65c33a9982e81d74b4ea2434e983daa0c46caa85e3b8f3c1f941603"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/7cff6852-b959-4c2c-8aa4-492765be8d0e_optimized_batch_20251111_012758.json",
+      "sha256": "478dfc926ceebc1def346173e975cd69d18066a881027d4fd299095f7708132c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/7dd83726-b1fa-4345-91fd-42b471b6b63d_sequential_batch_20251114_024606.json",
+      "sha256": "144fbec44da5c75e2d4ef8cb51fb03d1e67c07ca48dd4b757afbd766d24f78b7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/7eb97999-e7fe-45b3-add2-cdb3f0b769c5_optimized_batch_20251112_021244.json",
+      "sha256": "caec22612a4a9883a9d4aa4a2139b4efbbaf85dd53cee871c804f93fd53d311d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/818fe627-f5ad-4101-b06d-8a2addf10a71_sequential_batch_20251111_134659.json",
+      "sha256": "971fca89f14e9747845ef27ed898a0ca2a10f2874d5a2819d6c0a3afec3f2bc8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/81d4a41f-bd3d-457d-aea6-1c32a412312e_sequential_batch_20251111_120900.json",
+      "sha256": "b9812ce6e196d603d6ef3adf982449321bea160c0b51756e0a76178a142c8a39"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/84f5d582-25bc-44e4-b9aa-e2ce85572ee7_optimized_batch_20251111_064226.json",
+      "sha256": "7cc0112b5111acaa1a7c5c32b1146aa13b0152f2794e5890c6dac50a3326e2e1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/88ce0549-407c-4e72-a32f-40fe7f9ab09d_optimized_batch_20251111_145043.json",
+      "sha256": "24d0252a73e2debf89895d09aafb13b950b05e0d5f8789ee2d7c9997f7550c3e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/89bb0a9d-14b9-48bc-8f67-f04f89fbb9c5_sequential_batch_20251112_031203.json",
+      "sha256": "9c1af9767802af82745a78dcd97bb030a7b48afdc975b2eeef6838428bd71d01"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/8a32e28f-af3d-4ded-87b3-02bf9bda5c46_optimized_batch_20251111_152349.json",
+      "sha256": "e39b8b3fdcec87ead0499d41ca4e2901a34f15eec4a644beb232f0c97c0f65be"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/8aa8b1d9-6cd6-48d8-a965-f1169106aef8_sequential_batch_20251113_002130.json",
+      "sha256": "46487fef2dd5365c3bf699dba99895d0fb8c519830ab8f9b1a8391bb4d3ca780"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/8afd619b-b585-456e-9a09-2c3cfc9ed89a_optimized_batch_20251112_084724.json",
+      "sha256": "793dcce240bfd46c6174935e50e98cb21a56c655c01256cc02e89d28ab7de9f6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/961b19f3-412d-47da-a49f-ec6fd0224047_optimized_batch_20251111_092422.json",
+      "sha256": "20ed473a53706b03e48e43b571ad9f663f97526c038a9ecfdd7439b6db5f3bf7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/9d5ec2a7-dc69-40dc-86ac-2c1e52f9aafd_sequential_batch_20251112_031338.json",
+      "sha256": "5e8b0a8aa2e8b9184c2ca2972d509836258b068a6169b7de09cac0e26af93e08"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a0496378-b6e7-4d5d-8d54-c871ce72af94_optimized_batch_20251111_133349.json",
+      "sha256": "8dffd60a11f6cc9af4edcc5d0e7eb7a64c158597d473e3dcd929497e29bda7a0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a2bbfbe5-48de-4da8-bb47-e0cc59424775_sequential_batch_20251112_233854.json",
+      "sha256": "7fd170ec7d04cd48b47059f616ce153d1295381bd8eaf3c8d48c01990d972f53"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a5ac7981-b30a-4197-854a-345a2cd97b6c_optimized_batch_20251112_130828.json",
+      "sha256": "40f84be07c5dd0cd14546c710266632086c3cc2938e268d59f6ceab0446f0aab"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a656c1c5-ea7e-49fa-9f1d-2418ce677dc3_optimized_batch_20251112_124708.json",
+      "sha256": "12db96c2257ba3f73616f0a059813289762559348b55735f653189ef19375f9c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a8700f1b-b882-43c7-93b4-75a72e0046a1_optimized_batch_20251112_011831.json",
+      "sha256": "2684eaf71e88b02ac27144aa2216d73ad94a5e3aa78f72d8cc6c248d795a351a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a96c30cb-224c-4018-83a6-b830d0190204_optimized_batch_20251112_143100.json",
+      "sha256": "bbfa9e05b619d8cd0d0a73cf68bc875f07fbe9704dc1cd665a1f5dc243578248"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/a9c69ec9-9675-40ed-b203-5d830842a11c_sequential_batch_20251112_013953.json",
+      "sha256": "a5c8a404577f67d4debc0a3ef4d144e7da570a6678a3bacfd7a00aea2dcdd90e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/aliyun_lx030_model_report_20251113_082322.json",
+      "sha256": "4ae02c917e37aa58300bee407a57133197d30fb35ba1f6a1a2251c5195b7313f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/aliyun_lx030_model_report_20251113_083256.json",
+      "sha256": "6db6d149dc8062d1d732ee36185faef5adf031dd895cc2b6bc1a21d6767eb90a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/b1fe78fe-a3ee-4748-babc-2dc601d7b486_optimized_batch_20251112_030723.json",
+      "sha256": "cf3417705366e5abe2debf296eabc50a258948c3430740e92a1cf28564cd7ab8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/b5047f12-507f-4950-9005-a0f4b055e7e9_optimized_batch_20251112_022231.json",
+      "sha256": "f736972f919943b408b09b7f70d7de53eda398483f0b1f2392d571e3f4858a3d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/b6a04f18-a9ed-42c4-ae37-109b82162d52_optimized_batch_20251112_143117.json",
+      "sha256": "1b22b26f9bef0f0c2833cc1af7fcc0e9b9179f45fc68b68f48a84297c8e12939"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/b8125f79-5221-4c96-a247-d710a2f101b4_optimized_batch_20251114_041233.json",
+      "sha256": "335757a2ff752c387f50cb791966f0494c8a10645aa69a0ff7d1b14f23c419b7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/b93129a4-4ffa-48bf-967c-f27c30388a4c_optimized_batch_20251112_001220.json",
+      "sha256": "2d6ea9fd4a586f2c6725c0a48a9bb020d35c34ebf4e71599bb7b711face288a1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/c73e9ec9-2f9a-444e-8e98-b6cef7d24ae5_optimized_batch_20251112_010855.json",
+      "sha256": "0f53347d704ddcb9e2e96b0d5518f42e3747955cf9d010173a005cb8fb9f247b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/c79d0012-c564-4d1c-bd4c-cf5aebe1fd92_sequential_batch_20251112_132237.json",
+      "sha256": "27fc30cbd1a5c4786e6cd6eca34557186beb451fb6cf79a449a0e1227ec77dfe"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/c9cf36bd-2ec2-472f-a10a-e6731b539cff_optimized_batch_20251112_233121.json",
+      "sha256": "2bdfd48fb68255ddba3d9fb84c738ba98cfc26ecbe367795fa9b09c6fd959c7a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/ca97f91f-ced6-4ba2-879a-da31ac8b3fd2_sequential_batch_20251114_015353.json",
+      "sha256": "cd29702af2d47c362f8643d7e27b888b55a9b4c68d9d50fccb0f9fe016ab6b91"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/ce73b3db-3cef-45f1-95cb-4ef54fac16b7_sequential_batch_20251113_002103.json",
+      "sha256": "353101ff2a94f4399e2e3a11be6298c69b3c4e0bd85c25a432ecb7c22b54e10a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/d148309b-1786-4848-a661-b466ccea7257_optimized_batch_20251111_094822.json",
+      "sha256": "caf9407300d51d31e331ed8c0d57d0e8d7fd76f3b8c192dcc4b904c043f82436"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/d43e5ab0-ddb0-4c33-9687-c10d758f411e_optimized_batch_20251110_070725.json",
+      "sha256": "8b555a574a61f70f19ca6314ac8f35a061c0cc812587ae61b3c1123445796219"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/d45656ac-ba2e-44e5-8040-73419bb51a23_optimized_batch_20251111_114750.json",
+      "sha256": "a27eb51c554c79f8a00d044957d276ba662ae9f083107ed587b3cc8774ab0ffb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/d602bfef-b37b-468a-aca7-d2d3676fa47e_optimized_batch_20251111_235456.json",
+      "sha256": "56b095e33a31a0112a193e086576db06c24ddaecf2297d409d29a66d1ca8bb22"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/d71efbd0-5676-4ff9-82b2-c998f019f704_sequential_batch_20251113_090439.json",
+      "sha256": "88b42434e1ff4aaa10ed6a0aaa5ab623cd28fd30523eb830def7bb133159837b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/d9cfcc67-a2d8-452d-950e-6ffbde87e5d5_sequential_batch_20251118_112130.json",
+      "sha256": "52208fa467217087a301e3a13260d8dd3f65e35db28c653d2ded7ebf86796d50"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/daf44f72-0baa-453b-bf32-b9355bd3bd01_sequential_batch_20251112_011112.json",
+      "sha256": "c0db925407f1c7476e9bda11065ae973fa87581c357f91524b663c208aba3147"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/defbcbd9-94e9-4723-b6df-dbf0b21ea4f7_sequential_batch_20251112_233633.json",
+      "sha256": "12d04f4d67f518a83ba2402c8c328bea2b5a6a528d0362849eaa3dfae1e77e9d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e035a517-1a2c-422f-932f-7f36817e8361_sequential_batch_20251114_004159.json",
+      "sha256": "2d526076b1a1c350f78349374291323a6fea04ca9238012d8a2972264054cf73"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e07008a7-5296-4074-bc4b-d5eaebc8a7c5_sequential_batch_20251113_085820.json",
+      "sha256": "fcfe22e421748b2cc37ed63f07f04f761d4e4c3d72f5ef4266af86bf89ac07e7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e241eba5-9140-44fc-a381-60040adc1474_optimized_batch_20251112_005443.json",
+      "sha256": "e2b18d6572faafd4e1a43b578bf909cdafac9b778f0e9be2e4cf4ca3e83ac5c7"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e3d0e574-1435-4105-8133-4afcdba7e1dc_optimized_batch_20251111_065850.json",
+      "sha256": "6c8f830185b9f8c904965a8ee1c63ffeb1aafc6bec32c5cdd312cb53eefad63c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e42e2117-edf9-4812-a18b-364cf1659461_optimized_batch_20251112_232139.json",
+      "sha256": "6106754e0c5fa9bddf3b1112c7ae84cc933a012fece391bcce03219344d8b287"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e6cd1e70-88ac-4df9-a164-1326d35a6874_sequential_batch_20251110_064046.json",
+      "sha256": "22e34c48228685ca6e809043df72815bb36a151f6f4393077d7263a880e6e4c6"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/e7494684-307a-4f0c-b9ee-59aee17bdc62_optimized_batch_20251111_143845.json",
+      "sha256": "fcb0abf056f7c27e0ca4ed7fc5a8defcd8ea1501e141af91f9958e1baef34fd1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/eadc3977-e14e-4737-8b29-69878a524d9f_sequential_batch_20251114_042234.json",
+      "sha256": "6b19f04281ddd9bb9b7c8e1445e6243cb2d3987ef732fda52062af7a43fdbecc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/eae0ba6b-dfb5-440b-826f-f623a1a23dc5_optimized_batch_20251111_134444.json",
+      "sha256": "ebc7f7349da1e8be61aaed4a530fadfa0f2faf8c9394520779ae84b520541370"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/ecf421ef-8c90-48f3-b55a-6c0f4eb0e5fd_optimized_batch_20251114_042604.json",
+      "sha256": "c1ad4970609b902af0b44659962bd93dbd48d3de0de65a7b30bc2fdc08d78525"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f158d3cf-7fa9-4059-82e6-01e478d60399_sequential_batch_20251112_142617.json",
+      "sha256": "9dff05c85f7b91e26f099cd7ab32d0915d861e3d727c994adf2a78bf2454cfb9"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f3824db7-f60b-47c3-bb6d-5eb2d7a94850_optimized_batch_20251112_232019.json",
+      "sha256": "99f0e25c3d9ed7a6bc0a795340ae35994b5ff4c826b4c3d1ff0115849efd4148"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f41ab06d-0f77-4f0f-ad27-e9c08fea5756_sequential_batch_20251112_143049.json",
+      "sha256": "d36b823536d3bb0526580a8f45034f364f666843483c9c50d235d804645e9c4e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f58ec248-5f9e-4412-90c0-90d7f39834fd_optimized_batch_20251113_000143.json",
+      "sha256": "8318de7518d3f145072a48cae426113b6a7a20df2a5473e0a743094e47ed617b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f5e4ff20-b937-473a-a647-ef7b846bcdc6_optimized_batch_20251111_121226.json",
+      "sha256": "a72d24dff23e67d60c4257c328640cf6a447efd712a69cba865a48ffa67e29a1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f5f5f6d3-3db3-4a9a-9cdf-24e4ee46c759_optimized_batch_20251112_023710.json",
+      "sha256": "3521f7d4481b1d23722fc87b9b43cf627203b4952f123d0c050bc2a46a2eb4dc"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f7312955-b392-4193-9e11-5de5fdfaf6ad_optimized_batch_20251114_053516.json",
+      "sha256": "ab9b362c22ddb93b820d4d71513b8e49a159b0b751f9161e6822e0345d805637"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f85bb2cf-bc92-43eb-98a8-a66f0d8231e0_sequential_batch_20251114_053526.json",
+      "sha256": "39e276f3a1d53848b06cc7c8f61e6c46e2d28e8cb665583167a1d9467e1915f3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/f8f686f9-9e9d-49e2-b692-e87d392e698f_sequential_batch_20251114_015508.json",
+      "sha256": "be198477928ef5c09e8225d35c290b65f885c1ea2de7b16a3a9afdd23ce463eb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/fd61baa4-1fe4-4d3e-bb99-cce440dea30c_optimized_batch_20251111_133249.json",
+      "sha256": "615f6e0b973285319411cac746e11a5bbbecca75c59326d3409025ce4c21e465"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/fe17a51e-5db0-4d37-ab6d-ac41cecca752_sequential_batch_20251112_130619.json",
+      "sha256": "da1c91b9fb424f5e92d03f18dbee8c6297804fa1c3c9febb39fad1384854d84c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_013310.json",
+      "sha256": "5890191730a62371df36e7c39249a8bdb2c2cf28f6ad3d9cfaa2939dd7bf5fc1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_020403.json",
+      "sha256": "a8b5532561772a6baa780be1c2755690533e46129dde196eb669d4516fe404ba"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_053542.json",
+      "sha256": "d9832c01ec8d40631cc4069a34758770617d5bbaf0f070e235b58d587c98062e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_062855.json",
+      "sha256": "021d4d19c0b6037cdba892d936c51d7aac9bb603b65316bace4cf0f64e03f4cb"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_065425.json",
+      "sha256": "c5c3d41c87f62a6f2cbee47e658d877828a607106bd2400d9e8add9bc0cdad0a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_065626.json",
+      "sha256": "718ec690dcfdbe92788e1346f421c3d2bd30f07058277f31393d32e0a2a4c99e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251108_071016.json",
+      "sha256": "e06dc6cb79f778ed44024539523563c0b467adce563c00d61b8940fb52a63758"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251109_092614.json",
+      "sha256": "2c2e69de940124fd8b8dd5a4f73da798d7ebfc81e7393f29f420f083c3c08b0c"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251109_134828.json",
+      "sha256": "083ff46517fb44ccd4cc4e0970b7747064a7207660fce89cfe30bb095fa08d6e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251109_152644.json",
+      "sha256": "6471c59a81c675448aec1e3c1bf3dfc0a7ca149c96c996d0500053ba1ba36be8"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251109_233255.json",
+      "sha256": "df520cfb67e61279a14ed8a779e2066f32b0adc3d6f0a0466a4d4fee2cbc097a"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251110_015651.json",
+      "sha256": "fccea2aa9b8051abf853f832d150f1349de6e1311e6045ca3fd6298be0b39f40"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251110_040647.json",
+      "sha256": "c0006fb7862b787bc7ccadcff8b824154db9592137cc62f2a4062454c2f401b3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251110_043224.json",
+      "sha256": "fd2965c835b2cbc744f28821a6f37c419014d1811d1f55a42b166cd119e25e5d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/optimized_batch_20251110_052851.json",
+      "sha256": "6473110530507f2a13005cfbefbd17a75c742a85188f26caadc63dbc562ca34f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_005230.json",
+      "sha256": "2443e929aaec328875e3388fd51ea10e7ea640c6c59e6e15327b61f73f017261"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_013113.json",
+      "sha256": "4b13c45417a3cc2d1884ca8629d58226452e092731dc42b589768727d0e310d3"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_014934.json",
+      "sha256": "9bd1c806536e51db1102aa451d18566b2eac905c9c28abfea5894937b5215bf1"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_015054.json",
+      "sha256": "7057f65dc693ac872dd924f89295e183507c5bf8ee8dc1cf1ebb6219fbf48f5f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_021345.json",
+      "sha256": "ce692e4cd11e84b9d1e6d9b2de35903726b3d692e31131be8b8a231fd6fd0c9d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_053504.json",
+      "sha256": "e1d329351a6c19996a190ce57286832ce4c22701a69c3a6ea1c2fd6e5e9a948e"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_062819.json",
+      "sha256": "76b3051c94908f610463c1d7909160ff6482dd9adeb455c164b3b4fe4aa7a905"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_065421.json",
+      "sha256": "2e3f186d6fffef774f431f237c30d53d2883e724e19b6ca473303f4347274fce"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_065547.json",
+      "sha256": "3afe4885ce1bbbac2a2d131a3edbb4417cbe9c8622d82c5b9b7472c309b7f83f"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_070941.json",
+      "sha256": "5201aa2a1976a040929ebbb617550a9e9d7530ba7400b386325686bd1fa3c7e0"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251108_234838.json",
+      "sha256": "b162b5e0e65bc4f43662a1132c1b489402dbc235145cce7e4d46d3241245fa66"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251109_233517.json",
+      "sha256": "a90d6895935f9fd7497bccadb654c7555037093dfaff89b3643a6372e7d03389"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/storage/qc_results/sequential_batch_20251110_041209.json",
+      "sha256": "38050bed8917944604c1b068ac346fb5b116970fc9c5efe02b98bd454c1c37b9"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py",
+      "sha256": "40d141a4bfef1d23484fe1beac81ea7a7377b863937aef6029a98e9eb44ae0fe"
+    }
+  ],
+  "method": "existing synthetic snapshot/material helper -> whole real fixed native executor -> real binding/reducer -> real canonical Finalizer; no Worker/save/API/deployment",
+  "preparation_tests_run": 0,
+  "private_materials_opened": false,
+  "execution_status": "completed_with_retained_expected_mismatches",
+  "attempts": 2,
+  "successful_replay_attempt": 2,
+  "completed_without_exception": 13,
+  "expected_matches": 8,
+  "prior_observation_matches": 13,
+  "loaded_app_module_count": 171,
+  "loaded_real_app_source_count": 168,
+  "source_provenance_errors": [],
+  "post_execution_changed_sources": [],
+  "boundary_attempts": [],
+  "replay_sha256": "5f97067765f6b7066a54bb6d0d412f161fa1c1815a9ed2aa8e334711c5c780ee",
+  "results_sha256": "406fa9f9dd675e5faf2722c802294237256ff960be89bf813a7390f660aa0155",
+  "case_bindings_sha256": "b32616ec6614d7d6763e6bc0698cfb6a099905c7dd470aa684b65d4ec0469d08"
+}

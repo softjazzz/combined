@@ -632,7 +632,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_open",
       "owner": "/root/repair_chemo",
-      "state": "offline_local_drug_dose_facts_implementation_other_semantics_open",
+      "state": "candidate_frozen_not_integrable_semantic_failures_and_legacy_regression_unverified",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -640,7 +640,9 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "latest_evidence": "F:/MedQC-worktrees/review-artifacts/chemo-next-repair/local-dose-implementation/frozen-dependency-and-delivery.md",
+      "latest_result": "67合成用例65通过2原语义失败；3公共合同失败转绿；旧115保护未验证恢复；生产未集成，跨药及否定问题不关闭"
     },
     {
       "id": "tumor-pathology:TP-D03",
