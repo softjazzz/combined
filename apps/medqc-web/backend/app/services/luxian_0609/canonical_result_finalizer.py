@@ -95,6 +95,11 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-04-04-02", "semantic_extraction_unresolved"): {
+        "reason_label": "内容抽取待确认",
+        "missing_sources": [],
+        "missing_fields": [],
+    },
     ("LX0609-04-02-07", "source_unavailable"): {
         "reason_label": "机构数据源未接入",
         "missing_sources": ["会诊申请时间"],

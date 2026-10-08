@@ -132,6 +132,8 @@ _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
     "applicability_source_gap": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
 }
 _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
+    ("LX0609-04-04-02", "semantic_extraction_unresolved"):
+        "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
     (
         "LX0609-04-02-07",
         "source_unavailable",
@@ -557,6 +559,11 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-04-04-02", "semantic_extraction_unresolved"): (
+        "麻醉访视内容暂无法确认",
+        "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
+        "请复核现有访视正文或重试质控；不要据此补写或改写记录。",
+    ),
     ("LX0609-04-02-07", "authoritative_time_missing"): (
         "会诊资料缺少有效申请或完成时间",
         "已读取会诊资料，但缺少有效的申请或完成时间，无法核对24小时时限。",
@@ -4159,6 +4166,7 @@ def render_luxian_0609_customer_result(
                 ("LX0609-09-01-01", "rescue_end_time_missing"),
                 ("LX0609-09-01-01", "document_completion_time_missing"),
                 ("LX0609-03-02-01", "diagnosis_scope_uncertain"),
+                ("LX0609-04-04-02", "semantic_extraction_unresolved"),
             }
         )
     ):
