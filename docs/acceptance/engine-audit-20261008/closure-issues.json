@@ -566,7 +566,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_branch_input_defect",
       "owner": null,
-      "state": "offline_performed_fact_contract_implementation",
+      "state": "candidate_219b13d_engineering_green_blocked_by_confirmed_prompt_view_regression",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -576,7 +576,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "latest_result": "219b13d原202工程通过，但独立正式wrapper合成探针确认TC02-PV01：再次脱敏跨JSON转义换行吞医疗动作并破坏JSON，禁止集成；仅extractor承载格式修复中，发送身份检查保留"
     },
     {
       "id": "treatment-consultation:TC-03",

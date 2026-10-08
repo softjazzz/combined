@@ -138,3 +138,9 @@
 - 抗菌药054/057指定13合成回放绑定当前21f4：13执行完成、8符合原预期、13与历史观察一致。5差异归回原TP-L01/TP-Q03/TP-Q05/TP-Q04，Noneclient失败关闭不冒充语义误判；医院药品目录与业务口径仍未决。实际168模块及3声明package suppression、727来源hash执行前后无漂移；未读真实材料。归档 independent-closure/antibiotic-current/。
 - 出院/死亡原11例在固定56322生产源码、21f4实际HEAD完成：7纯时间函数+4真实执行/绑定/Canonical全部符合原预期；142加载/读取源绑定一致，guard全0、None模型调用0。只对customer_rule_package族定义常量使用固定blob声明初始化替身，不抽取任何生产函数；不声称完整包初始化/HTTP/保存。此前4轮guard支撑失败保留不算产品失败。归档 independent-closure/discharge-death-current/。
 - 培养原45节点44通过/1旧身份literal失败；固定四段ID迁移协议和静态全文对照确认旧015断言陈旧。授权ledger树仅修该测试literal、保留医学全文和原输入，另跑原45，不改生产或原失败记录。补证归档 independent-closure/culture-current/。
+
+### TC02 固定提交独审新增阻断
+
+候选 `219b13d5881e106a4780e0d9ba1f12620d7e3900` 11路径已提交且真实hook通过，202有限工程回归的源hash与提交一致。但独立正式privacy wrapper纯合成探针确认 **TC02-PV01**：正文按真实换行预脱敏后json.dumps，wrapper对JSON串二次脱敏，地址字段匹配跨过转义换行，原后续14:00输注动作丢失且INPUT_JSON无法解码。202直接native+fake未覆盖这一发送view。
+
+不集成该候选。授权同一owner仅修改extractor输入承载为安全元数据JSON加真实换行正文块、同view坐标验证；metadata只允许规范时间/null和临时引用，不使用转义隐藏患者值，不unwrap，不改全局privacy。补地址/单位/电话/多文书与已知身份残留failclosed，先红后绿；旧202与原语义边界保持。此为输入完整性阻断，探针0外发/PG/真实患者，不推断为已发生泄漏。
