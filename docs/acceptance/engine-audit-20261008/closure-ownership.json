@@ -89,7 +89,7 @@
     {
       "id": "PRIVACY",
       "owner": "/root/repair_privacy_closure",
-      "state": "002_004_005_integrated_003_boundary_red_prepared_real_CLI_source_unwired",
+      "state": "002_004_005_integrated_003_fixed511_independent_review_pending_real_CLI_unwired",
       "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
       "branch": "codex/qc-fix-privacy-v2-20261008",
       "test_slot": null,
@@ -101,13 +101,17 @@
         "apps/medqc-web/backend/app/services/qc_llm_client.py",
         "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
         "apps/medqc-web/backend/app/services/qc_workspace/record_repository.py",
-        "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py"
+        "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+        "apps/medqc-web/backend/scripts/review_luxian_0609_semantic20.py",
+        "apps/medqc-web/backend/scripts/run_luxian_0609_028_synthetic_golden.py",
+        "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py"
       ],
       "scope_constraint": "0609 privacy only; assembly/callers require explicit ownership extension; no patient/PG/model access",
       "commits": [
         "041b3be67",
         "6b8fa3e58",
-        "4232ca617"
+        "4232ca617",
+        "511bd12db"
       ],
       "integration_commits": [
         "1225aff95",
@@ -178,12 +182,15 @@
     {
       "id": "RR-SCOPE01",
       "owner": "/root/repair_chemo",
-      "state": "first3tests_integrated_secondbatch_readonly",
+      "state": "first_batch_integrated_root50_pass_second_batch201_plus_provider107_pass_commit_pending",
       "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
       "write_paths": [
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
-        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py"
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_evidence_snapshot_provider.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_golden_gate.py"
       ],
       "scope_constraint": "Tests only; no production catalog or publishing changes; preserve migration and explicit release assertions",
       "test_slot": null,
@@ -194,13 +201,29 @@
     {
       "id": "RR-PUB01",
       "owner": "/root/repair_iml02",
-      "state": "frozen_boundary_red_green_pending",
+      "state": "fixed_bb3_independent_probe_fixture_not_yet_executed",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
       ],
       "scope_constraint": "Only precise NotImplemented identity fallback; knowninvalidfacts muststillraise; no rawpass-through",
-      "test_slot": 1
+      "test_slot": null,
+      "commits": [
+        "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b"
+      ]
+    },
+    {
+      "id": "CT-02",
+      "owner": "/root/repair_iml02",
+      "state": "approved_narrow_implementation_red_preparation",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"
+      ],
+      "scope_constraint": "Only050 candidate authoritative-time gaps; known mature NC protected; no CT01 words/model/CT03 change; Finalizer frozen pending RR-PUB independent review",
+      "test_slot": null
     }
   ],
   "rules": [
@@ -218,10 +241,11 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "0dd25d30b",
-  "current_test_slot_owner": "/root/repair_iml02",
+  "integration_head": "9115abefb",
+  "current_test_slot_owner": null,
   "queued_tests": [
-    "rootRR-SCOPE01integrated50",
-    "PRIV003scopedgreenwhenready"
+    "RR-PUB01 independent37 after fixture ready",
+    "PRIV003 independent after frozen expectations",
+    "CT-02 red when ready"
   ]
 }
