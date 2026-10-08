@@ -279,6 +279,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "exam_master": (
+        "modality",
         "exam_id",
         "order_id",
         "exam_type",
@@ -300,6 +301,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "exam_item_report": (
+        "modality",
         "document_id",
         "exam_id",
         "description",
@@ -329,6 +331,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "labtest_item_report": (
+        "labtest_subject",
         "document_id",
         "test_id",
         "test_no",

@@ -15,6 +15,10 @@ from typing import Any, Mapping, Sequence
 from .evidence_material import EvidenceMaterialUnavailable, Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .exam_order_linkage import resolve_exam_master_order_ids
+from .exam_lab_fact_extraction import (
+    _EXPLICIT_NON_TARGET_EXAM_PATTERN,
+    _EXPLICIT_NON_TARGET_CULTURE_PATTERN,
+)
 
 
 ORDER_SOURCE = "inpat_nondrug_order.exam_lab_order"
@@ -74,7 +78,7 @@ _CURRENT_PENDING_CONTEXT = re.compile(
     r"当前|目前|现(?:仍|待|处于|在)|仍(?:然|在)?|尚(?:未|在)?|继续"
 )
 _REPORT_CLAUSE_BOUNDARY = re.compile(r"[\r\n。；;！？!?]+")
-_NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "lab_type", "test_type")
+_NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "modality", "lab_type", "test_type")
 _REPORT_FIELDS = ("exam_result", "exam_impression", "exam_conclusion", "impression", "conclusion", "description", "result", "record_content")
 _COURSE_FIELDS = ("case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan", "record_content", "content")
 
@@ -94,6 +98,53 @@ def target_name(family: str, value: str) -> bool:
 
 def _names(row: Mapping[str, Any]) -> str:
     return " ".join(dict.fromkeys(clean(row.get(field)) for field in _NAME_FIELDS if clean(row.get(field))))
+
+
+def _identity_state(family: str, value: str) -> str:
+    """复用既有目标/非目标口径，混合身份与未识别身份均不作确定推断。"""
+    pattern = _EXPLICIT_NON_TARGET_EXAM_PATTERN if family == "exam" else _EXPLICIT_NON_TARGET_CULTURE_PATTERN
+    target = target_name(family, value)
+    non_target = bool(pattern.search(value) or (family == "exam" and _SUPPLY.search(value)))
+    return "target" if target and not non_target else "non_target" if non_target and not target else "unknown"
+
+
+def _modality_identity(value: Any) -> str | None:
+    """只归一化结构化模态整值；类别和未知值不作检查模态推断。"""
+    return {"CT": "CT", "MR": "MRI", "MRI": "MRI", "US": "US", "DR": "DR"}.get(clean(value).upper())
+
+
+def _identity_conflicts(
+    family: str, rows: Sequence[tuple[str, Mapping[str, Any]]], *,
+    report_refs: frozenset[str] = frozenset(),
+) -> bool:
+    """同键目标事件出现明确反证或混合身份时，保留为关联缺口。
+
+    模态代码按结构化整值归一化，类别如“介入/其他”不否定CT/MRI。
+    培养报告的菌种鉴定/药敏明细名称不是整个检验身份，不能充当反证；
+    主项名称仍保留既有身份来源。正文不参与身份核查。
+    """
+    fields = (
+        ("modality", "exam_type", "order_name", "exam_name", "exam_item_name", "item_name")
+        if family == "exam" else
+        ("lab_type", "test_type", "order_name", "labtest_subject", "lab_item_name", "item_name")
+    )
+    for ref, row in rows:
+        row_fields = tuple(
+            field for field in fields
+            if not (family == "culture" and ref in report_refs and field in {"lab_item_name", "item_name"})
+        )
+        values = tuple((field, clean(row.get(field))) for field in row_fields if clean(row.get(field)))
+        if not values and family == "exam":
+            values = (("performed_dept", clean(row.get("performed_dept"))),)
+        for field, value in values:
+            modality = _modality_identity(value) if family == "exam" and field in {"modality", "exam_type"} else None
+            state = (
+                "target" if modality in {"CT", "MRI"} else "non_target" if modality is not None
+                else _identity_state(family, value)
+            )
+            if state == "non_target" or (state == "unknown" and target_name(family, value)):
+                return True
+    return False
 
 
 def _time(value: Any) -> bool:
@@ -262,6 +313,11 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         names = tuple(_names(row) for _, row in all_rows)
         if not any(target_name(family, name) for name in names):
             continue
+        # 业务键相同不能覆盖主记录、报告或关联医嘱的明确身份冲突。
+        # 保留全部事件引用，由共用台账消费者在语义调用前交付关联缺口。
+        unresolved = unresolved or _identity_conflicts(
+            family, all_rows, report_refs=frozenset(ref for ref, _ in report_rows),
+        )
         used_orders.update(linked_ids)
         # 一个业务键可以有多条明细和重复导入；不同检查仍由业务键分开。
         # 多个不相同的原始医嘱号不能被静默合并，显式 ^ 合并键由既有函数验证。
@@ -294,7 +350,8 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         events.append(HandbookEvent(
             family, f"order:{order_id}", _names(rows[0][1])[:200], (), rows, (),
             performed, False, excluded,
-            not order_id.startswith("missing:") and len({_names(row) for _, row in rows}) == 1,
+            not order_id.startswith("missing:") and len({_names(row) for _, row in rows}) == 1
+            and not _identity_conflicts(family, rows),
         ))
     return tuple(events)
 
