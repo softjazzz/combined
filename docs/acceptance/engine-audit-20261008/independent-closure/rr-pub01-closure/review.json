@@ -1,0 +1,18 @@
+{
+  "scope": "RR-PUB01_public_sentinel_0609",
+  "fixed_sha": "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b",
+  "baseline_sha": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+  "status": "limited_engineering_closure_pass",
+  "production_diff": {"file":"apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py","added_lines":2,"deleted_lines":0},
+  "independent_observations": {"passed":37,"failed":0,"results":"results.json","source_hashes":"source-hashes.json"},
+  "findings": [],
+  "defects": [],
+  "blockers": [],
+  "prior_harness_failures": ["harness-first-failure.txt","harness-second-failure.txt","harness-third-failure.txt","harness-fourth-failure.txt"],
+  "limits": ["actual full validator/family/Store modules with offline-only process setup; workspace table factory AST only", "synthetic SQLite historical row does not prove real history API migration", "internal decision_facts retention is separate from customer safe projection", "nonLX internal raw is outside LX-specific contract", "formal endpoint and customer deployment not executed"],
+  "owner_evidence": "30 final red with ten AttributeError and 321 focused green, not independently rerun here",
+  "postgres_connected": false,
+  "env_read": false,
+  "real_model_calls": 0,
+  "production_edited": false
+}

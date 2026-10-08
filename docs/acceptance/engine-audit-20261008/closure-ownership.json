@@ -182,7 +182,7 @@
     {
       "id": "RR-SCOPE01",
       "owner": "/root/repair_chemo",
-      "state": "first_batch_integrated_root50_pass_second_batch201_plus_provider107_pass_commit_pending",
+      "state": "both_batches_integrated_root_second_pending",
       "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
       "write_paths": [
         "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
@@ -195,13 +195,18 @@
       "scope_constraint": "Tests only; no production catalog or publishing changes; preserve migration and explicit release assertions",
       "test_slot": null,
       "commits": [
-        "36a3175b4c2ec2a4cc574b15405638ef44c0361a"
+        "36a3175b4c2ec2a4cc574b15405638ef44c0361a",
+        "a55d27612b77743442a7a7a4c37b543193d39b80"
+      ],
+      "integration_commits": [
+        "0dd25d30b",
+        "fc1056eb4"
       ]
     },
     {
       "id": "RR-PUB01",
       "owner": "/root/repair_iml02",
-      "state": "fixed_bb3_independent_probe_fixture_not_yet_executed",
+      "state": "integrated_independent37_pass",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
@@ -210,19 +215,23 @@
       "test_slot": null,
       "commits": [
         "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b"
+      ],
+      "integration_commits": [
+        "574e925a5"
       ]
     },
     {
       "id": "CT-02",
       "owner": "/root/repair_iml02",
-      "state": "approved_narrow_implementation_red_preparation",
+      "state": "baseline_red_26_failed_30_passed_minimal_implementation",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
-        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
       ],
-      "scope_constraint": "Only050 candidate authoritative-time gaps; known mature NC protected; no CT01 words/model/CT03 change; Finalizer frozen pending RR-PUB independent review",
+      "scope_constraint": "Only050 authoritative-time gaps including narrow Finalizer status consistency after RR-PUB37 independent release; no CT01 semantic words/CT03 changes",
       "test_slot": null
     }
   ],
@@ -241,11 +250,10 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "9115abefb",
-  "current_test_slot_owner": null,
+  "integration_head": "fc1056eb4",
+  "current_test_slot_owner": "/root/audit_privacy_model_paths",
   "queued_tests": [
-    "RR-PUB01 independent37 after fixture ready",
-    "PRIV003 independent after frozen expectations",
-    "CT-02 red when ready"
+    "root scope+pub230",
+    "CT02 green when ready"
   ]
 }

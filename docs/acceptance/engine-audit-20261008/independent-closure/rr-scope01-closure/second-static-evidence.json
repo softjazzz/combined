@@ -1,0 +1,90 @@
+{
+  "fixed_sha": "a55d27612b77743442a7a7a4c37b543193d39b80",
+  "parent_sha": "36a3175b4c2ec2a4cc574b15405638ef44c0361a",
+  "historical_mapping_sha": "6e796ba1dccebe47950183f50bdf9819b274884f",
+  "method": "stdlib AST literal parsing and fixed git blob raw JSON; no test or production execution",
+  "historical_mapping_entries": 84,
+  "historical_dependency_total": 125,
+  "literal_exact_historical_mapping": true,
+  "current_preserves_exact_historical_mapping": true,
+  "only_added_mapping": [
+    [
+      "LX0609-08-01-05",
+      [
+        "LX0609-08-01-05"
+      ]
+    ]
+  ],
+  "source_registry_versions": {
+    "ea5ed2b047^": "lx0609-source-registry-v33",
+    "ea5ed2b047": "lx0609-source-registry-v34",
+    "a55d27612b77743442a7a7a4c37b543193d39b80": "lx0609-source-registry-v34"
+  },
+  "function_ast_delta": {
+    "native_package": {
+      "removed": [
+        "test_dependency_inventory_covers_all_84_execution_catalog_rules_and_eight_families"
+      ],
+      "added": [
+        "_raw_master_rules",
+        "_raw_catalog_rules",
+        "_assert_full_catalog_plan_partition",
+        "test_dependency_inventory_covers_raw_active_catalog_and_preserves_frozen_dependencies"
+      ],
+      "modified": [
+        "test_dependency_inventory_exposes_current_native_and_compatibility_boundary",
+        "test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path",
+        "test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_exception"
+      ]
+    },
+    "evidence_snapshot_provider": {
+      "removed": [
+        "test_all_79_registered_rules_query_each_bounded_source_once_and_never_query_legacy"
+      ],
+      "added": [
+        "test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_query_legacy",
+        "test_source_registry_keeps_confirmed_handbook_identity_version"
+      ],
+      "modified": [
+        "test_bloodtrans_snapshot_projection_has_explicit_identity_version"
+      ]
+    },
+    "golden_gate": {
+      "removed": [
+        "test_v2_default_gate_requires_exact_current_customer_rule_matrix"
+      ],
+      "added": [
+        "test_v2_default_gate_requires_exact_current_candidate_acceptance_matrix"
+      ],
+      "modified": []
+    }
+  },
+  "production_json_blobs": {
+    "luxian_0609_rule_master_v1.json": {
+      "parent": "31fd1e9fe49ce4b68c58367ed25bd57e89e1bff4",
+      "fixed": "31fd1e9fe49ce4b68c58367ed25bd57e89e1bff4",
+      "unchanged": true
+    },
+    "luxian_0609_rules_v1.json": {
+      "parent": "cfea6bd12240de9fd20a90ce6cfc0eea73982d2f",
+      "fixed": "cfea6bd12240de9fd20a90ce6cfc0eea73982d2f",
+      "unchanged": true
+    },
+    "luxian_0609_phase1_rules_extension_v1.json": {
+      "parent": "280d7c664fb45fa09c4be4cf2aab6fa03277b392",
+      "fixed": "280d7c664fb45fa09c4be4cf2aab6fa03277b392",
+      "unchanged": true
+    },
+    "luxian_0609_rule_contracts_v1.json": {
+      "parent": "ea97ca01bdf24e28cd75ecba45280889fcd15786",
+      "fixed": "ea97ca01bdf24e28cd75ecba45280889fcd15786",
+      "unchanged": true
+    },
+    "luxian_0609_phase1_rule_contracts_extension_v1.json": {
+      "parent": "1a88ccd88e77866561c163d135ab72cb305037eb",
+      "fixed": "1a88ccd88e77866561c163d135ab72cb305037eb",
+      "unchanged": true
+    }
+  },
+  "independent_test_count": 0
+}

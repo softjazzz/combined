@@ -754,11 +754,13 @@
         "0609 publication boundary"
       ],
       "claim": "未知规则回退NotImplemented被当dict调用get；非目录边界，不计新增正式规则缺陷",
-      "state": "frozen_boundary_red_green_pending",
+      "state": "integrated_limited_engineering_closed",
       "owner": "/root/repair_iml02",
       "depends_on": [],
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
-      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule"
+      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
+      "integration_commit": "574e925a5",
+      "independent_result": "37/37 fixed bb3 real modules and synthetic SQLite; API/real history not executed"
     },
     {
       "id": "rescue-remaining:RR-SCOPE01",
@@ -766,14 +768,18 @@
         "0609 catalog tests"
       ],
       "claim": "86/80目录与旧85/79断言漂移；先核正确集合，不能只改计数冒充业务修复",
-      "state": "first_three_test_batch_integrated_remaining_legacy_assertions_open",
+      "state": "two_test_batches_integrated_root_second_regression_pending",
       "owner": "/root/repair_chemo",
       "depends_on": [],
       "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
       "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
       "source_commit": "36a3175b4c2ec2a4cc574b15405638ef44c0361a",
       "integration_commit": "0dd25d30b",
-      "note": "Staticindependentreviewaccepted productionJSONunchanged;owner50pass;integrated50pending. Nativeinventory/provider/golden candidates remain underread-onlyreconciliation."
+      "note": "Only test expectations updated from approved independent identities; production release unchanged; first root50pass, second root201 pending",
+      "integration_commits": [
+        "0dd25d30b",
+        "fc1056eb4"
+      ]
     }
   ]
 }
