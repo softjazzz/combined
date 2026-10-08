@@ -2839,6 +2839,16 @@ def customer_finding_from_controlled_facts(
             "不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。"
         )
 
+    if rule_id == "LX0609-03-02-01" and kind == "uncertain_diagnosis_discussion_body_gap":
+        finding = (
+            f"入院时间为 {facts.get('admission_time')}，入院满7天后已有诊断不明确记录"
+            f"（{joined('uncertain_record_times')}）；已读取疑难病例讨论资料{facts.get('discussion_count')}份，"
+            f"其中{facts.get('discussion_body_gap_count')}份正文缺失或不可用，资料不足，无法核对讨论内容。"
+        )
+        if facts.get("candidate_course_time_gap_count"):
+            finding += f"另有{facts.get('candidate_course_time_gap_count')}份候选病程时间不全，无法确认其七天适用条件。"
+        return finding
+
     if rule_id == "LX0609-03-02-01" and kind == "uncertain_diagnosis_course_time_gap":
         return (
             f"入院时间为 {facts.get('admission_time')}；"
@@ -4018,6 +4028,16 @@ def render_luxian_0609_customer_result(
         elif (
             decision.rule_id == "LX0609-03-02-01"
             and isinstance(safe_customer_display_facts, Mapping)
+            and safe_customer_display_facts.get("verification_kind") == "uncertain_diagnosis_discussion_body_gap"
+        ):
+            findings = customer_finding_from_controlled_facts(rule_id=decision.rule_id, facts=safe_customer_display_facts)
+            evidence = "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。"
+            suggestion = "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。"
+            if safe_customer_display_facts.get("candidate_course_time_gap_count"):
+                suggestion += "另请核对候选病程的权威记录时间及同步情况。"
+        elif (
+            decision.rule_id == "LX0609-03-02-01"
+            and isinstance(safe_customer_display_facts, Mapping)
             and safe_customer_display_facts.get("verification_kind") == "uncertain_diagnosis_course_time_gap"
         ):
             findings = customer_finding_from_controlled_facts(rule_id=decision.rule_id, facts=safe_customer_display_facts)
@@ -4115,7 +4135,9 @@ def render_luxian_0609_customer_result(
             or (
                 decision.rule_id == "LX0609-03-02-01"
                 and safe_customer_display_facts
-                and safe_customer_display_facts.get("verification_kind") == "uncertain_diagnosis_course_time_gap"
+                and safe_customer_display_facts.get("verification_kind") in {
+                    "uncertain_diagnosis_course_time_gap", "uncertain_diagnosis_discussion_body_gap",
+                }
             )
             or transfer_association_gap is not None
             or exam_lab_data_gap_customer_message(

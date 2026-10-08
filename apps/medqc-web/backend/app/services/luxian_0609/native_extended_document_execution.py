@@ -2353,17 +2353,25 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif not strong_uncertain_rows:
                 final_state, reason_code = "uncertain", "diagnosis_scope_uncertain"
+            elif diffcase_rows and not any(
+                isinstance(row.get("record_content"), str) and row["record_content"].strip()
+                for row in diffcase_rows
+            ):
+                # 已定位资料行不能代替可读取正文；不借标题或非字符串补造正文。
+                final_state, reason_code = "data_gap", "required_field_missing"
             elif diffcase_rows:
                 final_state, reason_code = "compliant", "requirement_satisfied"
             else:
                 final_state, reason_code = "non_compliant", "required_document_missing"
             scope_uncertain = reason_code == "diagnosis_scope_uncertain"
-            time_gap_only = bool(candidate_time_gap_rows) and final_state == "data_gap"
+            body_gap_only = reason_code == "required_field_missing" and final_state == "data_gap"
+            time_gap_only = bool(candidate_time_gap_rows) and reason_code == "authoritative_time_missing"
             selected_time_gap_refs: list[str] = []
             if admission_time is not None and not source_error:
                 facts = {
                     "verification_kind": (
-                        "uncertain_diagnosis_course_time_gap" if time_gap_only
+                        "uncertain_diagnosis_discussion_body_gap" if body_gap_only
+                        else "uncertain_diagnosis_course_time_gap" if time_gap_only
                         else "uncertain_diagnosis_scope_unverified" if scope_uncertain
                         else "uncertain_diagnosis_discussion_check"
                     ),
@@ -2375,8 +2383,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ],
                     "discussion_count": len(diffcase_rows),
                 }
+                if body_gap_only:
+                    facts["discussion_body_gap_count"] = len(diffcase_rows)
                 if candidate_time_gap_rows:
                     facts["candidate_course_time_gap_count"] = len(candidate_time_gap_rows)
+                if candidate_time_gap_rows or body_gap_only:
                     # 只给本次实际使用的病程和讨论附加精确文书引用。
                     # 无ID或重复ID仍保留既有来源快照锚，不能制造定位坐标。
                     consumed_courses = (*strong_uncertain_rows, *candidate_time_gap_rows)

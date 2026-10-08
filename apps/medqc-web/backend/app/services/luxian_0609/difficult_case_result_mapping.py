@@ -22,6 +22,8 @@ _DISCUSSION_KIND = "uncertain_diagnosis_discussion_check"
 _SCOPE_UNCERTAIN_KIND = "uncertain_diagnosis_scope_unverified"
 _COURSE_TIME_GAP_KIND = "uncertain_diagnosis_course_time_gap"
 _COURSE_TIME_GAP_COUNT = "candidate_course_time_gap_count"
+_DISCUSSION_BODY_GAP_KIND = "uncertain_diagnosis_discussion_body_gap"
+_DISCUSSION_BODY_GAP_COUNT = "discussion_body_gap_count"
 
 
 def is_difficult_case_customer_rule(rule_id: str) -> bool:
@@ -54,7 +56,7 @@ def safe_difficult_case_customer_display_facts(
     record_times = raw.get("uncertain_record_times")
     discussion_count = raw.get("discussion_count")
     if (
-        kind not in {_DISCUSSION_KIND, _SCOPE_UNCERTAIN_KIND, _COURSE_TIME_GAP_KIND}
+        kind not in {_DISCUSSION_KIND, _SCOPE_UNCERTAIN_KIND, _COURSE_TIME_GAP_KIND, _DISCUSSION_BODY_GAP_KIND}
         or not admission_time
         or not isinstance(record_times, (list, tuple))
         or len(record_times) > 100
@@ -74,6 +76,17 @@ def safe_difficult_case_customer_display_facts(
         return None
     if kind == _COURSE_TIME_GAP_KIND and (not has_time_gap or record_times):
         return None
+    has_body_gap = _DISCUSSION_BODY_GAP_COUNT in raw
+    body_gap_count = raw.get(_DISCUSSION_BODY_GAP_COUNT)
+    if kind == _DISCUSSION_BODY_GAP_KIND:
+        if (
+            not record_times or discussion_count <= 0 or not has_body_gap
+            or not isinstance(body_gap_count, int) or isinstance(body_gap_count, bool)
+            or body_gap_count != discussion_count
+        ):
+            return None
+    elif has_body_gap:
+        return None
     safe = {
         "verification_kind": kind,
         "admission_time": admission_time,
@@ -82,6 +95,8 @@ def safe_difficult_case_customer_display_facts(
     }
     if has_time_gap:
         safe[_COURSE_TIME_GAP_COUNT] = time_gap_count
+    if has_body_gap:
+        safe[_DISCUSSION_BODY_GAP_COUNT] = body_gap_count
     return safe
 
 
@@ -94,12 +109,13 @@ def difficult_case_customer_fact_status_is_valid(
         return True
     normalized_status = str(status or "").strip().lower()
     if isinstance(safe_facts, Mapping) and (
-        safe_facts.get("verification_kind") == _COURSE_TIME_GAP_KIND or _COURSE_TIME_GAP_COUNT in safe_facts
+        safe_facts.get("verification_kind") in {_COURSE_TIME_GAP_KIND, _DISCUSSION_BODY_GAP_KIND}
+        or _COURSE_TIME_GAP_COUNT in safe_facts or _DISCUSSION_BODY_GAP_COUNT in safe_facts
     ):
         validated = safe_difficult_case_customer_display_facts(rule_id=rule_id, raw=safe_facts)
         if validated is None:
             return False
-        if validated["verification_kind"] == _COURSE_TIME_GAP_KIND:
+        if validated["verification_kind"] in {_COURSE_TIME_GAP_KIND, _DISCUSSION_BODY_GAP_KIND}:
             return normalized_status == "data_gap"
         # 混合缺时摘要只能附在已有成熟检查的C/NC；仍按原事实匹配状态。
         if normalized_status not in {"compliant", "non_compliant"}:

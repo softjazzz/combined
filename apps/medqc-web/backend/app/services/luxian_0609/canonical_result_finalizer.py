@@ -637,8 +637,11 @@ def validate_luxian_0609_published_customer_display_facts(
         # 非空的已发布事实未通过其规则族合同，不能在读取时静默丢成空事实。
         raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
     if normalized_rule_id == "LX0609-03-02-01" and (
-        validated.get("verification_kind") == "uncertain_diagnosis_course_time_gap"
+        validated.get("verification_kind") in {
+            "uncertain_diagnosis_course_time_gap", "uncertain_diagnosis_discussion_body_gap",
+        }
         or "candidate_course_time_gap_count" in validated
+        or "discussion_body_gap_count" in validated
     ):
         from .difficult_case_result_mapping import difficult_case_customer_fact_status_is_valid
 
