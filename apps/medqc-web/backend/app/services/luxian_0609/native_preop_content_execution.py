@@ -227,24 +227,60 @@ def _has_structured_field(rule_id: str, row: Mapping[str, Any], field: str) -> b
     )
 
 
+def _document_spans(text: str, document_index: int) -> dict[str, str]:
+    """保留受控原文的每个字符；编号只在本次完整 prompt 内有效。"""
+
+    return {
+        f"d{document_index}:s{index}": match.group()
+        for index, match in enumerate(
+            re.finditer(r"[^。！？\n]+[。！？]?|[。！？]|\n", text), start=1
+        )
+    }
+
+
+def _resolve_span_fact(
+    value: Any, spans: Mapping[str, str], field: str
+) -> Any:
+    """新引用只回取同文书单片段；旧引文不修复，继续走原校验。"""
+
+    if not isinstance(value, Mapping) or "span_id" not in value:
+        return value
+    if field == "planned_procedure" or set(value) != {
+        "state", "span_id", "reviewed_all_sections"
+    }:
+        return value
+    state, span_id = value["state"], value["span_id"]
+    if state == "present":
+        if not isinstance(span_id, str) or span_id not in spans or not spans[span_id].strip():
+            return value
+        quote = spans[span_id]
+    elif state in ("missing", "unknown") and span_id is None:
+        quote = None
+    else:
+        return value
+    return {"state": state, "quote": quote, "reviewed_all_sections": value["reviewed_all_sections"]}
+
+
 def _prompt(documents: Sequence[tuple[str, str, str]], selected: Sequence[str]) -> str:
     schemas = {rule_id: list(RULE_FIELDS[rule_id]) for rule_id in selected}
-    rendered = "\n\n".join(
-        f"[document_id={doc_id}; source_type={source}]\n{text}"
-        for doc_id, source, text in documents
-    )
+    rendered = json.dumps({"documents": [
+        {"document_id": doc_id, "source_type": source,
+         "spans": [{"span_id": span_id, "text": excerpt} for span_id, excerpt in
+                   _document_spans(text, index).items()]}
+        for index, (doc_id, source, text) in enumerate(documents, start=1)
+    ]}, ensure_ascii=False)
     response_example = json.dumps({"documents": [{
         "document_id": "原document_id", "source_type": "presurg_summary或presurg_discussion",
-        "items": {"字段": {"state": "present|missing|unknown", "quote": "连续原文或null", "reviewed_all_sections": True}},
+        "items": {"字段": {"state": "present|missing|unknown", "span_id": "d1:s1或null", "reviewed_all_sections": True}},
     }]}, ensure_ascii=False)
     return f"""你是病历质控原子事实抽取器。只从每份给定术前文书的受控文本或结构字段投影中摘取字段值；术前小结与术前讨论均按下述三态合同返回。禁止总结、推断、跨文书补全，不得输出状态、建议或未请求字段。
 
 按 source_type 使用字段全集：{schemas}
-两类文书的每项均返回对象：{{"state":"present|missing|unknown","quote":"连续原文或null","reviewed_all_sections":true或false}}。
-present必须有对应原文；missing仅在检查该文书全部输入（正文、主持人小结、讨论建议及结构字段）后仍无对应内容时使用，quote为null且reviewed_all_sections为true。未抽到、含义不明或无法完整核查用unknown，绝不能以未抽到代替确认缺失。一个原文片段可以支持多个不同检查项，不因位于主持人小结就只能用于chair_summary。
+两类文书除planned_procedure外，每项均返回对象：{{"state":"present|missing|unknown","span_id":"本doc单个片段编号或null","reviewed_all_sections":true或false}}。planned_procedure专用合同为{{"state":"present|missing|unknown","quote":"最小连续术式短引文或null","reviewed_all_sections":true或false}}，只摘录拟行手术名称及方式，不附带同句其他术式、病情或注意事项，保留原文，不得总结改写。
+present必须选本doc能直接支持该项的单个span_id，不输出quote或重写原文；missing仅在检查该文书全部输入（正文、主持人小结、讨论建议及结构字段）后仍无对应内容时使用，span_id为null且reviewed_all_sections为true（planned_procedure的quote为null）。未抽到、含义不明或无法完整核查用unknown，绝不能以未抽到代替确认缺失。一个原文片段可以支持多个不同检查项，不因位于主持人小结就只能用于chair_summary。
 九项定义：preop_preparation=已完成或拟实施的术前检查、准备及禁忌评估；surgical_indication=疾病、症状、保守治疗效果等手术理由；surgical_plan=拟行术式和方案；risk_and_prevention=可能风险及对应防范措施；participants_with_titles=参加者姓名及职称；specific_opinions=参加者具体讨论意见；chair_summary=主持人总结意见；discussion_date=讨论日期；recorder_signature=记录者签名。按内容识别，不要求固定栏目标题。
 术前小结七项定义：brief_condition=患者本次手术相关的简要病情；preop_diagnosis=术前诊断；surgical_indication=拟行手术的理由或指征；planned_procedure=拟施手术名称和方式；planned_anesthesia=拟施麻醉方式；precautions=拟行手术相关的注意事项或具体防范措施，可位于手术要点等段落；合适的术式常规具体措施也可支持该项，不要求患者个体独有；surgeon_preop_visit=术者术前查看患者的情况。按完整内容语义识别，不按固定栏目标题或单个注意词判存在，不能把泛称“手术要点”或空标题当内容。
-每个present仅选一个能直接支持该项的最小连续原文片段，不得拼接非连续句子、插入省略号、重排、改写或组合多个章节。片段不足以确认语义时返回unknown；只有reviewed_all_sections=true且确认该项未记载时可返回missing。语义仍由你抽取，不能用null表示确认缺项。
+每个present仅选一个能直接支持该项的最小连续片段编号；不得返回多个ID或拼接编号，其他文书的ID不能引用，不得输出自由引文。不同字段可共用同一个编号。按完整ordered spans顺序通读原文，核对上下文、否定和跨句关系，不能把片段脱离完整语境作判断；一个片段不足以确认时返回unknown且span_id=null，不能组合片段。planned_procedure仍按上述短quote例外。只有reviewed_all_sections=true且确认该项未记载时可返回missing；语义仍由你抽取，不能用null表示确认缺项。
 讨论日期只指日期是否已记录，不判断讨论及时性；输入中的同文书“讨论日期”结构投影也必须核对，不可因正文未重复日期报missing。
 specific_opinions是参加讨论者的具体意见，chair_summary是主持人总结，两者分别抽取；仅有参加人员名单、拟行术式或主持人同意手术，不能代替具体讨论意见。“略”、空白和仅有栏目标题不算实质内容；完整核查确认无对应内容才返回missing，不能确定时返回unknown。
 只输出 JSON：{response_example}。
@@ -294,6 +330,7 @@ def _validate_response(
     if not isinstance(raw, list):
         return None
     parsed: dict[tuple[str, str], Mapping[str, Any]] = {}
+    span_catalog = {key: _document_spans(text, index) for index, (key, text) in enumerate(expected.items(), start=1)}
     seen: set[tuple[str, str]] = set()
     failures: dict[str, tuple[str, tuple[str, ...]]] = {}
 
@@ -321,6 +358,7 @@ def _validate_response(
         if not isinstance(facts, Mapping) or set(facts) != set(RULE_FIELDS[rule_id]):
             fail(rule_id, "document")
             continue
+        facts = {field: _resolve_span_fact(value, span_catalog[key], field) for field, value in facts.items()}
         invalid = [
             field
             for field, quote in facts.items()
@@ -632,6 +670,14 @@ async def evaluate_preop_content_rules(
         for _ref, row, text in records[rule]
     ]
     expected = {(source, doc_id): text for doc_id, source, text in documents}
+    if len(expected) != len(documents):
+        # 重复同源身份不能确定编号所属正文；与整体身份错误一致，拒绝本次抽取。
+        return PreopContentExecution(tuple(
+            terminal.get(rule) or _decision(
+                snapshot, rule, "data_gap", "source_readiness_unproven",
+                tuple(ref for ref, _, _ in records[rule]),
+            ) for rule in selected
+        ))
     try:
         response = await llm_client.generate(
             _prompt(documents, active),
