@@ -1,0 +1,71 @@
+{
+  "schema_version": "culture-identity-static-closure-v1",
+  "fixed_sha": "f37cc122b03071538b864da73fb7ba8a3532f16d",
+  "parent_sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "decision": "eligible_for_integration",
+  "review_type": "independent fixed-blob diff and AST only; no test execution",
+  "changed_files": [
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_culture_identified_organism.py",
+    "apps/medqc-web/docs/acceptance/2026-10-08-culture-identity-test-contract.md"
+  ],
+  "test_blob_before": "e5d7b4a82a8b74e6ec8882eaf1dc810bffaf1274",
+  "test_blob_after": "a78a89306095c4864e0b02eee7dfd42ceda942ff",
+  "doc_blob": "357d19eae319d23779c9111255c0bebcb195c429",
+  "fixed_source_blob": "c14d8be7fce2a999d662025410d60e6e9a65801a",
+  "fixed_mapping_blob": "72262fcad59f4e4c10cffd1cbd463ff250c7490c",
+  "checks": {
+    "only_two_authorized_paths": true,
+    "production_app_zero_diff": true,
+    "exact_two_identity_substitutions": true,
+    "whole_file_ast_identical_after_reversing_single_new_literal": true,
+    "historical_old_negative_literal_unchanged": true,
+    "both_complete_assertions_unchanged": true,
+    "medical_text_inputs_responses_parameters_unchanged": true,
+    "adapted_entire_paragraph_present_in_fixed_prompt_literal": true,
+    "four_part_protocol_and_prompt_unchanged": true,
+    "original_frozen_tests_untouched": true
+  },
+  "evidence": {
+    "full_paragraph_ast_sha256_before": "73de0ff546310aad5010eaf8ac70ea5602dd93313eb6171246a38bc68fe4f83f",
+    "full_paragraph_ast_sha256_after": "1c0f1bfb1b9978846ee98759f55f649967b2c8dc2ea460fc17f46c8df686b448",
+    "fixed_test_bytes_sha256": "c26462b382c400542f5119dc8140d2bd6018f2f871d767d2478a27350e46b597",
+    "fixed_doc_bytes_sha256": "d901e65f0405eaee393c62cb95e614082ab05ee992d8eaef79ce0b4016c98747"
+  },
+  "execution_attribution": {
+    "independent_original_run": "44 passed / 1 legacy identity literal failed; 2.64 s, retained",
+    "author_adapted_run": "45 passed / 1 warning; 2.92 s, reported by root/author, not rerun by this review",
+    "coverage_layers": [
+      {
+        "kind": "direct_rule_synthetic",
+        "count": 10,
+        "rule_ids": [
+          "LX0609-06-03-03",
+          "LX0609-06-03-04"
+        ]
+      },
+      {
+        "kind": "shared_seam_only",
+        "count": 33,
+        "rule_ids": []
+      },
+      {
+        "kind": "rule_fact_parser_only",
+        "count": 1,
+        "rule_ids": [
+          "LX0609-06-03-04"
+        ]
+      },
+      {
+        "kind": "full_prompt_oracle",
+        "count": 1,
+        "rule_ids": [
+          "LX0609-06-03-04"
+        ]
+      }
+    ]
+  },
+  "not_a_new_medical_acceptance": true,
+  "real_clinical_truncation_unverified": true,
+  "standards_findings": [],
+  "spec_findings": []
+}

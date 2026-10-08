@@ -144,3 +144,10 @@
 候选 `219b13d5881e106a4780e0d9ba1f12620d7e3900` 11路径已提交且真实hook通过，202有限工程回归的源hash与提交一致。但独立正式privacy wrapper纯合成探针确认 **TC02-PV01**：正文按真实换行预脱敏后json.dumps，wrapper对JSON串二次脱敏，地址字段匹配跨过转义换行，原后续14:00输注动作丢失且INPUT_JSON无法解码。202直接native+fake未覆盖这一发送view。
 
 不集成该候选。授权同一owner仅修改extractor输入承载为安全元数据JSON加真实换行正文块、同view坐标验证；metadata只允许规范时间/null和临时引用，不使用转义隐藏患者值，不unwrap，不改全局privacy。补地址/单位/电话/多文书与已知身份残留failclosed，先红后绿；旧202与原语义边界保持。此为输入完整性阻断，探针0外发/PG/真实患者，不推断为已发生泄漏。
+
+### 培养身份测试适配完成，输血发送视图修复待独审
+
+- 独审固定 f37cc122b03071538b864da73fb7ba8a3532f16d 仅两路径，完整 expected 段落仅两处身份变更；逆变换后整测试模块 AST 与父一致，医学输入、负向 literal 和全文断言不变。串行集成为 5f34698a2bc74f7bcbc5644de7a9a4a930df5ed9。
+- root 在该集成 SHA 独立运行原两文件45项，45通过、1 warning、1.80秒；前后hash一致，所有已加载app模块来自当前集成树，严格guard阻止env/PG/网络/真实材料。证据存 independent-closure/culture-identity-integration/。原44/1日志保留；仅测试身份适配，不是45例临床验证。
+- TC02-PV01正式wrapper原13红为8失败/5通过：7项实际发送JSON受地址/单位脱敏破坏；1项非法raw_time原已被身份门禁拒绝，属于元数据投影契约，不代表隐私外泄。原记录保留。
+- 作者仅extractor将安全元数据与真实换行正文分离，坐标同view；不改全局privacy、不绕过wrapper。作者串行284/284通过4.84秒（原202+新13+旧privacy69），未集成，正独审。此次无真实材料、模型、PG、重启或推送。

@@ -1,0 +1,11 @@
+# Culture identity assertion adaptation: independent closure
+
+**Eligible for integration**, fixed commit `f37cc122b03071538b864da73fb7ba8a3532f16d` (parent `21f4a93e103a34002a1f9d36f9d895f226c0122f`). Independent review is read-only fixed-blob diff and stdlib AST inspection; no tests, PG, env files, clinical input, network or model were used. Only the authorized test and author contract document changed; production app diff is empty.
+
+Standards: 0 findings. The diff introduces no standard violation or code smell; commit text is Chinese. Spec: 0 findings. The complete `new` paragraph changes only its two `015` identities to `LX0609-06-03-04`. The historical `old` negative literal, `assert old not in prompt`, and `assert new in prompt` remain intact. This keeps full paragraph matching, not keyword/regex checks.
+
+Independent AST reversal of that single literal produces the exact full original module AST. Medical text, inputs, parameters, mocked responses, other expectations and assertions are unchanged. The complete adapted paragraph occurs in the unchanged fixed production prompt AST string. The unchanged frozen identity CSV lines 49/50 binds legacy014/015 to LX0609-06-03-03/04; source lines 32, 1163-1172, 1394 and 1396 enforce/use four-part identities. Thus this adapts the identity protocol without weakening the medical oracle.
+
+Test blobs: `e5d7b4a82a8b74e6ec8882eaf1dc810bffaf1274` -> `a78a89306095c4864e0b02eee7dfd42ceda942ff`. Fact source remains `c14d8be7fce2a999d662025410d60e6e9a65801a`; identity mapping remains `72262fcad59f4e4c10cffd1cbd463ff250c7490c`. Details and hashes: [identity-adaptation-review.json](identity-adaptation-review.json).
+
+The original independent 44 passed / 1 failed run and its unchanged frozen oracles remain under this directory. Root/author reports the adapted two-file run as 45 passed, one warning, 2.92 s; this review did not rerun it. Coverage stays 10 direct native/binding/reducer synthetic checks, 33 shared projection checks, one LX0609-06-03-04 parser check and one full prompt paragraph check. It is not 45 clinical medical gold cases, does not rebind historic real/model evidence and does not establish absence of real input truncation.
