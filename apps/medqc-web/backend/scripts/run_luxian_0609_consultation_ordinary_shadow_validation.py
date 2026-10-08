@@ -28,6 +28,19 @@ from scripts.run_luxian_0609_consultation_ordinary_validation import (
 )
 
 
+from app.services.case_identity import CaseRef
+from app.services.luxian_0609.llm_prompt_privacy import (
+    PatientPrivacyViolation, PrivacyIdentityContextError, wrap_luxian_0609_llm_client,
+)
+from app.services.luxian_0609.privacy_identity_context import (
+    _Luxian0609IdentityCollector, PrivacyIdentityContextUnavailable,
+    build_luxian_0609_identity_provider,
+)
+from app.services.luxian_0609.privacy_request_scope import (
+    bind_luxian_0609_identity_provider, luxian_0609_case_identity_scope,
+)
+
+
 RULE_IDS = (
     "LX0609-03-01-01",
     "LX0609-03-01-02",
@@ -201,7 +214,34 @@ def build_safe_ledger_rows(
     return rows
 
 
-async def _run(*, snapshot_as_of: str, limit_rows: int) -> list[dict[str, Any]]:
+def _source_identity_provider(collector, coordinates):
+    # 只借用已审查collect操作内存对象；不接受字符串、字典或任意provider。
+    if not isinstance(collector, _Luxian0609IdentityCollector):
+        raise PrivacyIdentityContextUnavailable()
+    try:
+        return collector.provider_for_case(CaseRef(*coordinates))
+    except Exception:
+        raise PrivacyIdentityContextUnavailable() from None
+
+
+def _bind_script_identity(source_provider, coordinates, **material_kwargs):
+    material_provider = build_luxian_0609_identity_provider(
+        **dict(zip(("institute_id", "patient_id", "visit_id"), coordinates)),
+        **material_kwargs,
+    )
+
+    def combined():
+        # 原值只在每次调用的临时集合；不能将来源预检当作发送时校验。
+        return tuple(sorted(set(source_provider()) | set(material_provider())))
+
+    return bind_luxian_0609_identity_provider(combined, case_coordinates=coordinates)
+
+
+async def _run(*, snapshot_as_of: str, limit_rows: int, llm_client=None,
+               _private_identity_collector: _Luxian0609IdentityCollector | None = None) -> list[dict[str, Any]]:
+    # 当前CLI没有合法原身份入口，缺源时必须在任何现有读取/配置构造之前拒绝。
+    if not isinstance(_private_identity_collector, _Luxian0609IdentityCollector):
+        raise PrivacyIdentityContextUnavailable()
     source_rows = read_ordinary_consultation_source_rows(limit_rows=limit_rows)
     selected = select_ordinary_consultation_cases(
         source_rows,
@@ -209,57 +249,58 @@ async def _run(*, snapshot_as_of: str, limit_rows: int) -> list[dict[str, Any]]:
         snapshot_as_of=snapshot_as_of,
     )
     by_coordinate_hash = {_coordinate_hash(row): row for row in source_rows}
-    client = SichuanQCLLMClient()
+    client = llm_client
     ledger: list[dict[str, Any]] = []
     for case in selected["cases"]:
         source = by_coordinate_hash.get(case["coordinate_hash"])
         if source is None:
             raise ValueError("selected source missing")
-        session = build_luxian_0609_evidence_read_session(
-            selected_rule_ids=RULE_IDS,
-            institute_id=str(source["institute_id"]),
-            patient_id=str(source["patient_id"]),
-            visit_id=str(source["visit_id"]),
-            source_schema=None,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            evaluation_as_of_date=snapshot_as_of,
-        )
-        projection = episode._candidate_documents(
-            institute_id=str(source["institute_id"]),
-            patient_id=str(source["patient_id"]),
-            visit_id=str(source["visit_id"]),
-            source_schema=None,
-            evidence_materials=session.materials,
-            evidence_snapshot=session.snapshot,
-            stay_window=episode._resolve_execution_stay_window(
+        coordinates = tuple(str(source[key]) for key in ("institute_id", "patient_id", "visit_id"))
+        source_provider = _source_identity_provider(_private_identity_collector, coordinates)
+        source_provider()
+        with luxian_0609_case_identity_scope(case_coordinates=coordinates, identity_provider=source_provider):
+            session = build_luxian_0609_evidence_read_session(
+                selected_rule_ids=RULE_IDS,
+                institute_id=coordinates[0], patient_id=coordinates[1], visit_id=coordinates[2],
+                source_schema=None,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                evaluation_as_of_date=snapshot_as_of,
+            )
+            identity_provider = _bind_script_identity(
+                source_provider, coordinates, snapshot=session.snapshot, materials=session.materials,
+            )
+            identity_provider()
+            if client is None:
+                client = SichuanQCLLMClient()
+            guarded_client = wrap_luxian_0609_llm_client(client, identity_provider=identity_provider)
+            projection = episode._candidate_documents(
+                institute_id=coordinates[0], patient_id=coordinates[1], visit_id=coordinates[2],
+                source_schema=None,
                 evidence_materials=session.materials,
                 evidence_snapshot=session.snapshot,
-            ),
-        )
-        capture = _SafeStageCapture()
-        result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-            rule_ids=RULE_IDS,
-            institute_id=str(source["institute_id"]),
-            patient_id=str(source["patient_id"]),
-            visit_id=str(source["visit_id"]),
-            source_schema=None,
-            llm_client=_RecordingClient(client, capture),
-            evidence_materials=session.materials,
-            evidence_snapshot=session.snapshot,
-        )
-        ledger.extend(build_safe_ledger_rows(
-            case_label=str(case["case_label"]),
-            selector_fingerprint=str(selected["selector_fingerprint"]),
-            results=result.results,
-            capture=capture,
-            source_complete_keys=projection.source_complete_keys,
-            source_incomplete_keys=projection.source_incomplete_keys,
-            llm_call_count=result.llm_call_count,
-            prompt_tokens=result.prompt_tokens,
-            completion_tokens=result.completion_tokens,
-            total_tokens=result.total_tokens,
-            latency_seconds=result.api_time,
-        ))
+                stay_window=episode._resolve_execution_stay_window(
+                    evidence_materials=session.materials,
+                    evidence_snapshot=session.snapshot,
+                ),
+            )
+            capture = _SafeStageCapture()
+            result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+                rule_ids=RULE_IDS,
+                institute_id=coordinates[0], patient_id=coordinates[1], visit_id=coordinates[2],
+                source_schema=None,
+                llm_client=_RecordingClient(guarded_client, capture),
+                evidence_materials=session.materials,
+                evidence_snapshot=session.snapshot,
+            )
+            ledger.extend(build_safe_ledger_rows(
+                case_label=str(case["case_label"]), selector_fingerprint=str(selected["selector_fingerprint"]),
+                results=result.results, capture=capture,
+                source_complete_keys=projection.source_complete_keys,
+                source_incomplete_keys=projection.source_incomplete_keys,
+                llm_call_count=result.llm_call_count, prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens, total_tokens=result.total_tokens,
+                latency_seconds=result.api_time,
+            ))
     return ledger
 
 
@@ -268,10 +309,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--snapshot-as-of", required=True)
     parser.add_argument("--limit-rows", type=int, default=5000)
     args = parser.parse_args(argv)
-    for row in asyncio.run(_run(
-        snapshot_as_of=str(args.snapshot_as_of),
-        limit_rows=int(args.limit_rows),
-    )):
+    try:
+        rows = asyncio.run(_run(
+            snapshot_as_of=str(args.snapshot_as_of),
+            limit_rows=int(args.limit_rows),
+        ))
+    except (PrivacyIdentityContextUnavailable, PrivacyIdentityContextError, PatientPrivacyViolation):
+        print("LX0609 ordinary shadow requires trusted in-memory identity source", file=sys.stderr)
+        return 1
+    for row in rows:
         print(json.dumps(row, ensure_ascii=False, sort_keys=True))
     return 0
 

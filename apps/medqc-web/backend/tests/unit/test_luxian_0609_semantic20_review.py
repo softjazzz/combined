@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from types import SimpleNamespace
 import re
 
 import pytest
 from tests.luxian_0609_identity_test_support import published_rule_ids
+from app.services.luxian_0609.privacy_identity_context import _Luxian0609IdentityCollector
 
 from scripts.review_luxian_0609_semantic20 import (
     SemanticReviewContractError,
@@ -37,6 +38,28 @@ def _case_map() -> dict:
             for index in range(1, 21)
         ],
     }
+
+
+_IDENTITY_COLLECTORS = []
+
+
+def _identity_collector():
+    # 只属于固定合成fixture，不作为生产真实来源真实性的证据。
+    collector = _Luxian0609IdentityCollector()
+    for index, case in enumerate(_case_map()["cases"], start=1):
+        collector.capture("mr", SimpleNamespace(**{
+            key: case[key] for key in ("institute_id", "patient_id", "visit_id")
+        }, name=f"合成病例原名{index:02d}"))
+    _IDENTITY_COLLECTORS.append(collector)
+    return collector
+
+
+@pytest.fixture(autouse=True)
+def _close_private_test_identity_collectors():
+    yield
+    for collector in _IDENTITY_COLLECTORS:
+        collector.close()
+    _IDENTITY_COLLECTORS.clear()
 
 
 def _candidate() -> dict:
@@ -143,7 +166,7 @@ def _row_loader_factory(calls: list[tuple[str, str]]):
         source_key = kwargs["source_key"]
         visit_id = kwargs["visit_id"]
         calls.append((visit_id, source_key))
-        marker = "PHONE_13800138000_BEARER_SECRET"
+        marker = "PHONE_13800138000_BEARER_SECRET" + "CLINICAL_REVIEW_MATERIAL_130MG_1P5H"
         if source_key in {"daily_course_record", "senior_course_record"}:
             shared = "患者今日一般情况稳定，查体及治疗计划如下。" * 20
             suffix = "继续当前治疗。" if source_key == "daily_course_record" else "调整治疗计划。"
@@ -162,6 +185,7 @@ async def test_review_maps_exact_80_queue_and_rejects_candidate_duplicates_or_mi
         review_queue=_review_queue(),
         llm_client=_Client(),
         row_loader=_row_loader_factory(calls),
+        _private_identity_collector=_identity_collector(),
     )
     assert output["summary"]["review_count"] == 80
     assert output["summary"]["rule_counts"] == RULE_COUNTS
@@ -172,14 +196,16 @@ async def test_review_maps_exact_80_queue_and_rejects_candidate_duplicates_or_mi
         await build_semantic20_review(
             case_map=_case_map(), candidate=duplicate, review_queue=_review_queue(),
             llm_client=_Client(), row_loader=_row_loader_factory([]),
-        )
+            _private_identity_collector=_identity_collector(),
+    )
     missing = _candidate()
     missing["rows"] = missing["rows"][1:]
     with pytest.raises(SemanticReviewContractError):
         await build_semantic20_review(
             case_map=_case_map(), candidate=missing, review_queue=_review_queue(),
             llm_client=_Client(), row_loader=_row_loader_factory([]),
-        )
+            _private_identity_collector=_identity_collector(),
+    )
 
 
 @pytest.mark.asyncio
@@ -189,13 +215,16 @@ async def test_candidate_state_never_enters_prompt_and_each_case_uses_at_most_tw
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=client, row_loader=_row_loader_factory(calls),
+        _private_identity_collector=_identity_collector(),
     )
     assert len(client.prompts) <= 40
     assert all("candidate_reason_marker" not in prompt for prompt in client.prompts)
     copy_prompts = [prompt for prompt in client.prompts if "只复核LX0609-12-01-02" in prompt]
     assert len(copy_prompts) == 20
     # fake行是生产强高相似终端路径；二审仍必须拿到最佳双文书，而不是空gray_context。
-    assert all("PHONE_13800138000_BEARER_SECRET" in prompt for prompt in copy_prompts)
+    assert all("CLINICAL_REVIEW_MATERIAL_130MG_1P5H" in prompt for prompt in copy_prompts)
+    assert all("PHONE_13800138000_BEARER_SECRET" not in prompt for prompt in client.prompts)
+    assert all("13800138000" not in prompt for prompt in client.prompts)
     assert all("略高于70%" not in prompt for prompt in copy_prompts)
     consultation_prompts = [prompt for prompt in client.prompts if "逐张会诊" in prompt]
     assert consultation_prompts
@@ -221,6 +250,7 @@ async def test_medium_or_low_confidence_is_forced_to_unknown():
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=_Client(confidence="medium"), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     copy_rows = [row for row in output["rows"] if row["rule_id"] == "LX0609-12-01-02"]
     consultation_rows = [row for row in output["rows"] if row["rule_id"] != "LX0609-12-01-02"]
@@ -239,6 +269,7 @@ async def test_not_applicable_is_a_valid_high_confidence_review_state():
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=_Client(state="not_applicable"), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     assert {row["review_status"] for row in output["rows"]} == {"completed"}
     assert {row["review_state"] for row in output["rows"]} == {"not_applicable"}
@@ -263,6 +294,7 @@ async def test_one_invalid_consultation_rule_does_not_fail_three_valid_rules():
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=MixedClient(), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     assert output["summary"]["review_error_count"] == 1
     assert output["summary"]["review_error_reason_counts"] == {"parse_invalid_state": 1}
@@ -288,6 +320,7 @@ async def test_consultation_accepts_complete_json_list_inside_think_fence_and_pr
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=WrappedListClient(), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     assert output["summary"]["review_error_count"] == 0
     assert output["summary"]["completed_count"] == 80
@@ -325,7 +358,8 @@ async def test_copy_template_shell_or_dynamic_update_is_synthesized_compliant():
         output = await build_semantic20_review(
             case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
             llm_client=client, row_loader=_row_loader_factory([]),
-        )
+            _private_identity_collector=_identity_collector(),
+    )
         copy_rows = [row for row in output["rows"] if row["rule_id"] == "LX0609-12-01-02"]
         assert {row["review_state"] for row in copy_rows} == {"compliant"}
 
@@ -335,6 +369,7 @@ async def test_invalid_json_is_review_error_and_does_not_echo_raw_response():
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=_Client(invalid=True), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     encoded = json.dumps(output, ensure_ascii=False)
     assert output["summary"]["review_error_count"] == 80
@@ -351,6 +386,7 @@ async def test_transport_error_is_review_error():
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=FailedClient(), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     assert output["summary"]["review_error_count"] == 80
     assert "13800138000" not in json.dumps(output, ensure_ascii=False)
@@ -361,6 +397,7 @@ async def test_output_is_allowlisted_and_contains_no_raw_body_coordinates_or_pro
     output = await build_semantic20_review(
         case_map=_case_map(), candidate=_candidate(), review_queue=_review_queue(),
         llm_client=_Client(), row_loader=_row_loader_factory([]),
+        _private_identity_collector=_identity_collector(),
     )
     assert set(output) == {"schema_version", "review_version", "rows", "summary", "usage"}
     assert set(output["rows"][0]) == {
@@ -370,7 +407,8 @@ async def test_output_is_allowlisted_and_contains_no_raw_body_coordinates_or_pro
     }
     encoded = json.dumps(output, ensure_ascii=False)
     for forbidden in (
-        "PHONE_13800138000_BEARER_SECRET", "hospital-", "patient-", "visit-",
+        "PHONE_13800138000_BEARER_SECRET", "CLINICAL_REVIEW_MATERIAL_130MG_1P5H",
+        "hospital-", "patient-", "visit-",
         "record_content", "record_time", '"prompt":', '"raw_response":',
     ):
         assert forbidden not in encoded

@@ -1,0 +1,92 @@
+{
+  "scope": "PRIV003 known three-entry refusal-boundary subitem only",
+  "base_commit": "4232ca617",
+  "commit": null,
+  "status": "47_focused_pass_awaiting_serial_commit_and_independent_review",
+  "production_files": [
+    "run_luxian_0609_consultation_ordinary_shadow_validation.py",
+    "review_luxian_0609_semantic20.py",
+    "run_luxian_0609_028_synthetic_golden.py"
+  ],
+  "priv002_public_modules_modified": false,
+  "source_contract": {
+    "real_cli_source_connected": false,
+    "existing_production_collector_callers": 0,
+    "accepts_raw_dict_or_arbitrary_callable": false,
+    "three_ids_fallback": false,
+    "body_name_guessing": false,
+    "synthetic_label_exemption": false,
+    "fixed_golden_scene_objects_only": true,
+    "new_pg_queries": 0,
+    "new_environment_reads": 0
+  },
+  "red": {
+    "frozen_items": 8,
+    "failed": 8,
+    "seconds": 0.39,
+    "infrastructure_failures": 0,
+    "memory_attempt_counts": {
+      "ordinary_each": 1,
+      "semantic_each": 1,
+      "golden_residual": 10,
+      "forged_scenario": 0,
+      "replaced_tuple": 1
+    }
+  },
+  "green_history": [
+    {
+      "total": 46,
+      "passed": 34,
+      "failed": 12,
+      "reason": "fixture namespace and async registration plus initial retry raw-name setup"
+    },
+    {
+      "total": 46,
+      "passed": 45,
+      "failed": 1,
+      "reason": "old assertion required phone marker unchanged in prompt, explicitly revised to dual material/privacy checks with original phone fixture retained"
+    },
+    {
+      "total": 47,
+      "passed": 47,
+      "failed": 0,
+      "seconds": 2.23
+    }
+  ],
+  "semantic_original_protection": {
+    "functions": 10,
+    "method": "current-source AST functions invoked by collected wrappers, original async decorators retained with explicit pytest_asyncio registration",
+    "business_assertions_preserved": true,
+    "original_phone_fixture_retained": true,
+    "clinical_marker_added": true,
+    "prompt_phone_absence_added": true,
+    "artifact_forbidden_checks_retained_and_extended": true
+  },
+  "does_not_claim": [
+    "whole PRIV003 functional completion",
+    "real CLI functionality restored",
+    "application E2E",
+    "clinical rule acceptance",
+    "all identity completeness"
+  ],
+  "checks": {
+    "ruff": "passed_all_rules_except_explicit_E402_for_two_existing_path_bootstrap_scripts",
+    "git_diff_check": "passed_before_commit",
+    "husky": "awaiting_serial_commit_window",
+    "frontend": "not_run"
+  },
+  "safety": {
+    "real_patient_reads": 0,
+    "env_file_reads": 0,
+    "pg_calls": 0,
+    "real_model_calls": 0,
+    "network_calls": 0,
+    "serializable_raw_identity_fields_added": false
+  },
+  "open": [
+    "two real CLI legitimate source integration",
+    "unread patient_information exclusive identity",
+    "other unreviewed scripts",
+    "whole application integration and clinical rule acceptance"
+  ]
+}
