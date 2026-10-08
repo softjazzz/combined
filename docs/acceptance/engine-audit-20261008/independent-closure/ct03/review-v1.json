@@ -1,0 +1,113 @@
+{
+  "audit_id": "ct03-fixed-commit-independent-finite-review-v1",
+  "fixed_commit": "25406df7d2506f4870674ca73cddd10523bf966d",
+  "baseline": "81fe8fed3027ea7f636014fd59237819138f7f9c",
+  "conclusion": "CT03_finite_engineering_repair_verified_CT04_existing_business_failure_open",
+  "new_confirmed_CT03_blockers": [],
+  "entire_rule_closed": false,
+  "rules": [
+    {
+      "rule_id": "LX0609-03-02-01",
+      "defect_id": "CT-03",
+      "status": "finite_engineering_repair_verified",
+      "frozen_scenarios_total": 28,
+      "frozen_scenarios_pass": 27,
+      "frozen_scenarios_failure": 1,
+      "known_failure": "CT-04",
+      "old_baseline_exact": 12,
+      "CT02_protection": 30,
+      "public_contract_checks": 61,
+      "synthetic_fresh_store": 3,
+      "evidence": [
+        "expected-v1.json",
+        "observed-v1.json",
+        "review-v1.md"
+      ],
+      "scope": "missing_or_unusable_body_only_no_semantic_strength_threshold"
+    }
+  ],
+  "existing_unclosed": [
+    {
+      "defect_id": "CT-04",
+      "case_id": "T03_before_seven_days_plus_empty_discussion",
+      "expected_status": "not_applicable",
+      "expected_reason": "trigger_absent_complete",
+      "native_reduced_status": "not_applicable",
+      "native_reduced_reason": "trigger_absent_complete",
+      "published_status": "technical_error",
+      "published_reason": "model_invalid_output",
+      "also_exists_in_81fe_baseline": true,
+      "classified_as_CT03_regression": false,
+      "frozen_expected_preserved": true
+    }
+  ],
+  "verified_behaviors": [
+    "located_all_unusable_body_is_gap_not_C",
+    "nonstring_not_coerced_to_body",
+    "multiple_unusable_row_counts_preserved",
+    "title_signature_metadata_not_body_substitute",
+    "short_nonempty_and_mixed_usable_old_C_preserved",
+    "missing_ID_actual_source_anchor_readable_no_fabrication",
+    "CT02_priority_and_30_prior_scenarios_preserved",
+    "body_and_time_mixed_kind_counts_status_strict",
+    "required_fields_counts_times_and_incompatible_kinds_rejected",
+    "private_extra_fields_filtered_not_leaked",
+    "dedicated_gap_suggestion_not_overwritten",
+    "fresh_saved_results_and_mature_course_independent_evidence_preserved"
+  ],
+  "evidence_projection_limits": [
+    "blank_discussion_card_has_actual_source_time_anchor_without_fabricated_excerpt",
+    "mixed_C_retains_existing_source_anchors_and_mature_course_exact_card_not_per_discussion_exact_cards",
+    "safe_evidence_projection_shape_not_compared_with_raw_preprojection_format"
+  ],
+  "frozen_expectation_sha256": "c92061e62c1d0049f4d68ea007e774cb43ef54c81672289dba78134afe29ad9e",
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "144611674c789f518f351c9b376e784eabc11a5bdf7a7a27a6377eb4727a6cac",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "2eb71565d668704dd8833235287d2591e5e9df2b3c8f06add843246eee3b881e",
+    "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py": "bada1a2dbee38febf69f2b58ff93072d2267b6664f66708cd04820a01b7b78b0",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "e98f5d7524defa0502b1154d03083b9405d7f530d859d3508295bc26b3c1625a",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_difficult_discussion_body_gap_closure.py": "a82593c7ac28fbd40bc5b8f602d699d3035efb5de9814c896e323f7467ef97b9",
+    "apps/medqc-web/docs/acceptance/2026-10-08-difficult-discussion-body-gap-design.md": "7f79c63bfc10cb77b77f294c682f57f065e6db71d6b17fd5d498b6d8a79d9e5d"
+  },
+  "source_unchanged": true,
+  "remaining_open": [
+    "CT-04",
+    "CT-01",
+    "CT-R02",
+    "clinical_signoff"
+  ],
+  "scope_excluded_by_user": [
+    "0916"
+  ],
+  "tests_run_owner_suite": false,
+  "production_modified": false,
+  "shared_tests_modified": false,
+  "guards": {
+    "env_reads": 0,
+    "PG": 0,
+    "real_model": 0,
+    "network": 0,
+    "violations": []
+  },
+  "real_validation_gaps": [
+    "real_patient_or_desensitized_record_full_chain",
+    "real_source_adapter_and_PG",
+    "browser",
+    "clinical_semantic_signoff"
+  ],
+  "preparation_failure": "wrong utf8-sig alias before loading freeze; corrected own script only",
+  "artifacts": [
+    "expected-v1.json",
+    "expected-v1.md",
+    "probe-v1.py",
+    "scenario-observed-v1.json",
+    "observed-v1.json",
+    "B09_body_whitespace.sqlite",
+    "T04_mature_strong_and_untimed_plus_empty_discussion.sqlite",
+    "P05_mixed_empty_then_usable.sqlite",
+    "review-v1.md"
+  ],
+  "observed_sha256": "e8e8c57dd6caec1fdc02f7b52097e29e5c966cdbbbaed9c46b5183579a30a4f8",
+  "test_slot_released": true,
+  "running_processes": 0
+}

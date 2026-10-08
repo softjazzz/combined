@@ -77,3 +77,9 @@
 - 7d36d0316已集成CT02固定81fe：独立30场景、16旧行为逐值、25非法值保护和3新实例SQLite通过；根补充local+缺时疑点未证实。3个额外键必须拒绝的独审预期超出既有白名单过滤合同，原冻结保留并披露，无需改生产；证据保存为脱敏引用的合法归一未丢来源/时间/摘录。根108(56新+29PUB+23RRD02)全部通过3.82秒。CT01/03不随CT02关闭。
 - 86条既有文档证据定位附件已归档：70条源码/合同定位、10条有实质反例但源码阅读定位待补、6条仅范围/目录。这不是70通过或16未审；6条为5个pending_definition及已撤出默认的08-01-05 acceptance_only，不能伪造它们已临床验收。
 - 下一独占队列：CT03仅050已定位行但正文不可用→gap；N12仅04-04-02离线受控语义事实接入（最多1次工程权限，真实外发未授权且不执行）。两者不同核心执行器；公共renderer/Finalizer仍单属critical owner。
+
+## CT03 integration and preserved CT04 failure
+
+- Integrated25406 as64e5b99c5. Independent27/28 with only knownCT04; 12 old-value comparisons, CT02 protections30, publicguards61, freshSQLite3 passed. Rootct03-run collected137:136passed/1failed/1warning,3.66s. Failed test: test_ct04_candidate_prethreshold_existing_discussion_should_remain_not_applicable. Original NA expectation remains, actual publictechnical_error/model_invalid_output; not allgreen.
+- CT03 closes body-unavailable engineering subissue only; nonempty semantic templates/plan text and precise mixed-discussion evidence remain outside this change.
+- N12 core frozen36 baseline32failed/4passed; implementation waiting joint validation. Copy support baseline3failed/4passed then77passed under explicitly substituted reason allowlist. This does not prove the final real reason contract. No real model, PG, env or patient input accessed.

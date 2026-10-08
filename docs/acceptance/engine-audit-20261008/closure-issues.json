@@ -13,7 +13,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "historical_evidence",
       "owner": "/root/repair_iml01",
-      "state": "only04_04_02_bounded_semantic_contract_preparation",
+      "state": "core_implemented_waiting_joint_offline_validation",
       "depends_on": [],
       "closure_requirements": [
         "Fixed evidence and input expectation preserved",
@@ -21,7 +21,8 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "note": "Frozen36 baseline32fail4pass. One controlled semantic call contract only037; no real calls. Public copy support owned by critical worker, integration pending."
     },
     {
       "id": "N10",
@@ -289,7 +290,7 @@
       "reconciliation_state": "open_issue",
       "source_classification": "confirmed_defect",
       "owner": "/root/repair_iml02",
-      "state": "body_unavailable_gap_engineering_expectation_approved_red_preparation",
+      "state": "integrated_limited_engineering_closed",
       "depends_on": [
         "imaging-laboratory:IML-02"
       ],
@@ -299,7 +300,9 @@
         "No regression of named normal protection",
         "Status facts evidence copy and applicable persistence verified",
         "No claim of real model/clinical pass from synthetic tests"
-      ]
+      ],
+      "integration_commit": "64e5b99c5",
+      "note": "Fixed25406 independently27/28; only preexistingCT04 failed. CT02 protection30/publicconstraints61/SQLite3 passed. Root137=136pass+sameCT04failure; no claim of all green or semantic completeness."
     },
     {
       "id": "discharge-death:DD-F01",
@@ -785,6 +788,25 @@
         "fc1056eb4"
       ],
       "root_regression": "50 first + 201 second all passed; tests independent identity oracle, production release unchanged"
+    },
+    {
+      "id": "course-timing:CT-04",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "Prethreshold diagnosis course plus discussion row: native NA becomes public technical_error.",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/independent-closure/ct03/review-v1.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_preexisting_defect",
+      "owner": "/root/repair_iml02",
+      "state": "queued_minimal_mapping_fix_after_N12_copy",
+      "depends_on": [],
+      "closure_requirements": [
+        "Preserve original NA expected result",
+        "Mature NC/C and data gap protections",
+        "Independent fixed SHA verification",
+        "Fresh SQLite persistence/readback"
+      ]
     }
   ]
 }

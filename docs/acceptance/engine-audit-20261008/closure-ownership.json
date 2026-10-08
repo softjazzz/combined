@@ -244,7 +244,7 @@
       "id": "CT-03",
       "owner": "/root/repair_iml02",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
-      "state": "approved_body_unavailable_gap_red_preparation",
+      "state": "integrated_limited_engineering_closed",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
         "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
@@ -252,7 +252,13 @@
         "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
       ],
       "scope_constraint": "Only050 known discussion rows without usable record_content; no CT01 semantics/CT02 regression; separate commit",
-      "test_slot": 1
+      "test_slot": null,
+      "commits": [
+        "25406df7d2506f4870674ca73cddd10523bf966d"
+      ],
+      "integration_commits": [
+        "64e5b99c5"
+      ]
     },
     {
       "id": "N12",
@@ -260,12 +266,25 @@
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-anesthesia-20261008",
       "baseline": "036999e40cf88fc41261b2562aaccf414549db33",
-      "state": "bounded_semantic_contract_red_preparation_no_real_model",
+      "state": "core_implemented_waiting_joint_offline_validation",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
-        "apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json"
+        "apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json",
+        "apps/medqc-web/backend/app/data/luxian_0609_rules_v1.json",
+        "apps/medqc-web/backend/app/services/luxian_0609/decision_model.py"
       ],
-      "scope_constraint": "Only04-04-02; existingrequiredfields; explicit model1 permission version; new dedicated extractor/tests; no shared Finalizer/renderer/mapper writes yet; no externalcalls",
+      "scope_constraint": "Only037; one controlled extraction logicalcall; private wrapper and exact source boundaries; no external calls. Sharedrenderer/Finalizer owned separately. OldNoModel assertions must not redefine medical expected outcomes.",
+      "test_slot": null
+    },
+    {
+      "id": "N12-COPY",
+      "owner": "/root/repair_iml02",
+      "state": "offline77_pass_source_commit_in_progress",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only037 semantic_extraction_unresolved message/explanation tuples and suggestion protection; no rejudging",
       "test_slot": null
     }
   ],
