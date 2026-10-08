@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Any, Mapping, Sequence
 
 import pytest
@@ -79,6 +80,20 @@ def _surgery(
         "anesthesia_method": anesthesia_method,
         "surgical_level": "三级",
     }
+
+
+def _mr_surgery(surgery_id: str = "mr-surgery-1") -> Mapping[str, Any]:
+    """MR权威时间使用医院naive墙钟；保留原UTC08/09的同一绝对时刻。"""
+    row = dict(_surgery(surgery_id))
+    begin = row.pop("surgery_begin_time")
+    end = row.pop("surgery_end_time")
+    hospital_timezone = ZoneInfo("Asia/Shanghai")
+    row.update(
+        surgery_id=surgery_id,
+        surgery_begin_datetime=begin.astimezone(hospital_timezone).replace(tzinfo=None),
+        surgery_end_datetime=end.astimezone(hospital_timezone).replace(tzinfo=None),
+    )
+    return row
 
 
 def _anesthesia_record(document_id: str = "anesthesia-1") -> Mapping[str, Any]:
@@ -271,7 +286,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-01-01",
             {
                 "surgery_record": _rows(_surgery()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "mr_surgery": _rows(_mr_surgery("mr-surgery-1")),
                 "presurg_summary": _rows(
                     {
                         "document_id": "summary-1",
@@ -628,6 +643,8 @@ def test_surgery_document_family_rule_set_and_aggregator_ownership_is_zero() -> 
             "LX0609-04-04-02",
             "LX0609-04-04-03",
             "LX0609-04-01-02",
+            "LX0609-04-01-04",
+            "LX0609-04-01-05",
     )
 
     # 迁移完成后，聚合器不得再按本族规则号解释事实、状态或证据。
