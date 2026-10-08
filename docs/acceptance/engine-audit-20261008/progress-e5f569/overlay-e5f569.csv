@@ -1,0 +1,87 @@
+rule_id,name,group,primary_next_action,source_binding_package,old_fix_subitem,this_closure_production_fix_subitem,all_fix_subitem_coverage,open_issue_ids,revalidation_issue_ids,default_executes,whole_rule_complete_claimed
+LX0609-01-01-01,入院记录：入院后24小时内是否完成,admission-history,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-01-02-01,首次病程：入院后 8 小时内无首次病程记录,admission-history,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-02-01,手术记录：手术后24小时内是否完成,surgery-anesthesia,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-09-01-01,抢救记录：抢救结束后6小时内是否完成,rescue-remaining,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-02-01-01,上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。,admission-history,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-02-01-02,上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。,admission-history,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-02-01-03,查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录,admission-history,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-02-01-04,查房记录：病重（下了病重医嘱）患者2天内无查房病程记录；,admission-history,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-02-01-05,查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程,admission-history,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-06-01-02,CT/MRI 检查记录：CT/MRI检查前有无病程记录（无行CT/MRI检查原因）,imaging-laboratory,open_issue_or_business_basis,,False,False,False,imaging-laboratory:IML-D02,,True,False
+LX0609-06-01-04,CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内在病程中未记录,imaging-laboratory,affected_inputs_revalidation_open,,False,False,False,,CT-INPUT-CHANGE,True,False
+LX0609-06-01-05,CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内阳性结果未进行分析,imaging-laboratory,affected_inputs_revalidation_open,,False,False,False,,CT-INPUT-CHANGE,True,False
+LX0609-06-02-03,病理检查：病理检查结果在手术记录、病程中未记录,imaging-laboratory,affected_inputs_revalidation_open,,False,False,False,,PATH-INPUT-CHANGE,True,False
+LX0609-06-03-03,细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）,imaging-laboratory,current_synthetic_source_bound_remaining_real_layers,culture-current,False,False,False,,,True,False
+LX0609-06-03-04,细菌培养结果无分析：细菌培养结果有阳性菌，在病程记录中无分析（报告出具后24小时内）。,imaging-laboratory,current_synthetic_source_bound_remaining_real_layers,culture-current,False,False,False,,,True,False
+LX0609-12-01-01,不合理复制病历：不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同,rescue-remaining,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-12-01-02,不合理复制病历：2次以上病程记录完全相同（相似度大于70%）,rescue-remaining,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-01-01-02,主诉能导出第一诊断：主诉书写不规范（1.只写症状不写诊断，2.>20字）或不能导出第一诊断。,admission-history,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-06-02-02,病理检查：取材情况未在病程记录/手术记录中进行记录。,imaging-laboratory,affected_inputs_revalidation_open,,False,False,False,,PATH-INPUT-CHANGE,True,False
+LX0609-03-01-01,会诊记录：有会诊记录单无请会诊执行记录,course-timing,scope_registered_pending,,False,False,False,,,False,False
+LX0609-03-01-02,会诊记录：会诊申请单会诊目的不明确,course-timing,scope_registered_pending,,False,False,False,,,False,False
+LX0609-03-01-03,会诊记录：会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）,course-timing,scope_registered_pending,,False,False,False,,,False,False
+LX0609-03-01-04,会诊记录：会诊建议未落实或执行记录不具体,course-timing,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-02-03,手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-02-04,手术记录：手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息,surgery-anesthesia,scope_registered_pending,,False,False,False,,,False,False
+LX0609-05-02-01,恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致,tumor-pathology,open_issue_or_business_basis,,True,True,True,tumor-pathology:TP-D02;tumor-pathology:TP-D03;N13,,True,False
+LX0609-08-01-04,出院记录：出院记录（恶性肿瘤患者）中是否有出院后肿瘤相关治疗的出院治疗计划,discharge-death,open_issue_or_business_basis,,False,False,False,discharge-death:DD-F05,,True,False
+LX0609-05-01-01,抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物（预防使用抗生素医嘱）时间超过 24 小时，特殊情况超过48小时；,tumor-pathology,scope_registered_pending,,False,False,False,,,False,False
+LX0609-04-01-01,术前小结：无术前小结（有手术医嘱）,surgery-anesthesia,open_issue_or_business_basis,,False,False,False,SURGERY-029030,,True,False
+LX0609-04-02-02,手术记录：无手术记录（有手术医嘱）,surgery-anesthesia,open_issue_or_business_basis,,False,False,False,SURGERY-029030,SURGERY-FREEZE,True,False
+LX0609-04-02-05,手术记录：手术记录非手术者签字（质控术者及签名医生）,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-03-01,手术安全核查表：无手术安全核查表（有手术记录）,surgery-anesthesia,affected_inputs_revalidation_open,,False,False,False,,SURGERY-FREEZE,True,False
+LX0609-11-01-01,手术知情同意书：无手术知情同意书(有手术记录）,rescue-remaining,scope_customer_excluded,,False,False,False,,,False,False
+LX0609-11-02-01,麻醉知情同意书：无麻醉知情同意书（有麻醉记录）,rescue-remaining,scope_customer_excluded,,False,False,False,,,False,False
+LX0609-11-02-02,麻醉知情同意书：麻醉知情同意书填写不规范（无患者或医生签名、签名时间未精确到分钟）,rescue-remaining,scope_customer_excluded,,False,False,False,,,False,False
+LX0609-04-04-01,麻醉访视：无麻醉术前/麻醉术后访视记录（局麻除外）；,surgery-anesthesia,scope_registered_pending,,False,False,False,,,False,False
+LX0609-04-04-02,麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；,surgery-anesthesia,engineering_closed_real_semantic_pending,,False,True,True,,,True,False
+LX0609-04-04-03,麻醉记录单：无麻醉记录单（局麻除外）；,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-01-02,术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-01-03,术前多学科讨论记录：四级手术术前讨论未多学科讨论。,surgery-anesthesia,affected_inputs_revalidation_open,,False,False,False,,SURGERY-FREEZE,True,False
+LX0609-11-03-01,输血知情同意书：无输血知情同意书；,rescue-remaining,scope_customer_excluded,,False,False,False,,,False,False
+LX0609-11-03-02,输血知情同意书：输血知情同意书填写或签名不完整；,rescue-remaining,scope_customer_excluded,,False,False,False,,,False,False
+LX0609-07-01-01,输血前辅助检查：输血前常规检查不完整；,treatment-consultation,open_issue_or_business_basis,,False,False,False,treatment-consultation:TC-01,,True,False
+LX0609-07-01-02,输血前评估：无输血前评估记录或输血前评估记录不完整；,treatment-consultation,open_issue_or_business_basis,,True,False,True,TR-044-MULTI;treatment-consultation:TC-01,,True,False
+LX0609-07-02-01,输血记录：无输血病程记录；,treatment-consultation,open_issue_or_business_basis,,False,False,False,treatment-consultation:TC-01,,True,False
+LX0609-07-02-02,输血记录：输血病程记录不完整或不规范；,treatment-consultation,open_issue_or_business_basis,,False,False,False,treatment-consultation:TC-01,,True,False
+LX0609-07-03-01,输血后评价：无输血后评价,treatment-consultation,open_issue_or_business_basis,,False,False,False,treatment-consultation:TC-01,,True,False
+LX0609-07-04-01,输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容记录不一致。,treatment-consultation,open_issue_or_business_basis,,True,False,True,treatment-consultation:TC-03,TR-048-REAL,True,False
+LX0609-07-04-02,输血医嘱：输血医嘱与收费不一致。,treatment-consultation,scope_registered_pending,,False,False,False,,,False,False
+LX0609-03-02-01,疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论,course-timing,open_issue_or_business_basis,,False,True,True,course-timing:CT-01,,True,False
+LX0609-09-02-01,死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录,rescue-remaining,open_issue_or_business_basis,,False,True,True,rescue-remaining:RR-D01,,True,False
+LX0609-06-04-01,危急值记录：6小时内未书写危急值处置记录,imaging-laboratory,integrated_subissue_remaining_evidence,,True,True,True,,,True,False
+LX0609-06-04-02,危急值记录：危急值报告后无处置记录,imaging-laboratory,integrated_subissue_remaining_evidence,,True,True,True,,,True,False
+LX0609-05-01-02,抗菌药物：用药调整无充分理由,tumor-pathology,current_synthetic_source_bound_remaining_real_layers,antibiotic-current,False,False,False,,,True,False
+LX0609-05-01-03,抗菌药物：48至72小时内无效果评价,tumor-pathology,open_issue_or_business_basis,,False,False,False,tumor-pathology:TP-D05,,True,False
+LX0609-05-01-04,抗菌药物：两个以上重点抗菌药物使用前无病原学检查,tumor-pathology,scope_registered_pending,,False,False,False,,,False,False
+LX0609-05-01-05,抗菌药物：经验用药未说明理由,tumor-pathology,current_synthetic_source_bound_remaining_real_layers,antibiotic-current,False,False,False,,,True,False
+LX0609-05-01-06,抗菌药物：特殊级用药缺少专家查房或会诊,tumor-pathology,integrated_subissue_remaining_evidence,,False,True,True,,,True,False
+LX0609-05-03-01,医嘱：诊疗医嘱与病程记录不一致,tumor-pathology,scope_registered_pending,,False,False,False,,,False,False
+LX0609-04-02-06,死亡记录：死亡患者无死亡记录,surgery-anesthesia,current_synthetic_source_bound_remaining_real_layers,death060-current,False,False,False,,,True,False
+LX0609-08-01-01,出院记录：出院记录未在出院后24小时内完成,discharge-death,current_synthetic_source_bound_remaining_real_layers,discharge-death-current,False,False,False,,,True,False
+LX0609-08-01-02,出院记录：出院带药不详细,discharge-death,open_issue_or_business_basis,,False,False,False,discharge-death:DD-F02,,True,False
+LX0609-08-01-03,出院记录：出院诊断或死亡诊断错填漏填顺序错误,discharge-death,integrated_subissue_remaining_evidence,,False,True,True,,,True,False
+LX0609-04-05-01,术后连续三天查房记录：术后三天无连续病程记录或术者查房记录,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-05-02,术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录,surgery-anesthesia,open_issue_or_business_basis,,False,False,False,N10,,True,False
+LX0609-04-05-03,术后首次病程记录：无术后首次病程记录,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-08-02-01,出院前病程记录：无出院前一天或当天的病程记录,discharge-death,open_issue_or_business_basis,,False,False,False,N10,,True,False
+LX0609-08-02-02,出院前病程记录：无上级医师同意出院的意见,discharge-death,current_synthetic_source_bound_remaining_real_layers,discharge-death-current,False,False,False,,,True,False
+LX0609-04-02-07,会诊记录：会诊记录单未在会诊申请24小时内完成,surgery-anesthesia,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-07-01-03,输血前评估：未做输血前相关九项检查,treatment-consultation,open_issue_or_business_basis,,False,False,False,treatment-consultation:TC-02,,True,False
+LX0609-10-01-01,交接班记录：经治医师变更时无交接班记录或未按时完成,rescue-remaining,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-10-02-01,转科记录：转科病人24小时内未完成转入、转出记录,rescue-remaining,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-10-02-02,转科记录：有转科医嘱无转入、转出记录,rescue-remaining,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-12-02-01,病程记录：修正或补充诊断时未记录理由及诊断依据,rescue-remaining,affected_inputs_revalidation_open,,False,True,True,,PROMPT-074,True,False
+LX0609-10-03-01,有创操作记录：有创操作医嘱无有创操作记录,rescue-remaining,scope_registered_pending,,False,False,False,,,False,False
+LX0609-04-02-08,死亡记录：死亡时间缺失,surgery-anesthesia,inherited_limited_remaining_T7,,True,False,True,,,True,False
+LX0609-01-02-02,首次病程记录：鉴别诊断未与第一诊断相关联,admission-history,inherited_limited_remaining_T7,,False,False,False,,,True,False
+LX0609-04-01-04,术前小结：内容不完整,surgery-anesthesia,open_issue_or_business_basis,,True,False,True,PREOP-MEDICAL,,True,False
+LX0609-04-01-05,术前讨论记录：内容不完整,surgery-anesthesia,open_issue_or_business_basis,,True,False,True,PREOP-MEDICAL,,True,False
+LX0609-06-01-01,CT/MRI检查记录：医嘱与病程一致性,imaging-laboratory,ledger_subitem_repaired_consistency_input_and_contract_pending,,False,True,True,imaging-laboratory:IML-01,,True,False
+LX0609-06-01-03,CT/MRI检查记录：报告单完整性,imaging-laboratory,scope_acceptance_only,,False,True,True,imaging-laboratory:IML-D01;imaging-laboratory:IML-01,,False,False
+LX0609-06-03-01,微生物培养检查记录：医嘱与病程一致性,imaging-laboratory,scope_unregistered,,False,True,True,,,False,False
+LX0609-06-03-02,微生物培养检查记录：报告单完整性,imaging-laboratory,scope_acceptance_only,,False,True,True,imaging-laboratory:IML-01,,False,False
+LX0609-06-02-01,病理检查记录：报告单完整性,imaging-laboratory,scope_acceptance_only,,False,False,False,,,False,False
+LX0609-09-01-02,抢救记录：内容完整性,rescue-remaining,scope_acceptance_only,,False,False,False,,,False,False
+LX0609-08-01-05,出院记录：诊疗经过不全面或不详细,discharge-death,scope_acceptance_only,,False,False,False,,,False,False

@@ -1,0 +1,33 @@
+{
+  "status": "proposed_responsibilities_only_no_production_assignment_or_edit",
+  "root_sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+  "tc02_candidate_sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+  "owners": [
+    {
+      "role": "TC-01 implementation owner, to be assigned by root",
+      "paths": ["apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py"],
+      "scope": "043-047 performance adapter, confirmed clinical record view, consumed source references",
+      "coordination": "Shared helper also serves 041/042/048/049; avoid global behavior change. Coordinate 044 callsite with TR owner."
+    },
+    {
+      "role": "TR-044-MULTI implementation owner, to be assigned by root",
+      "paths": ["apps/medqc-web/backend/app/services/luxian_0609/pretransfusion_assessment.py"],
+      "scope": "Per-event application/reason association after original 3 failure nodes/rows/expected manifest recovered",
+      "coordination": "No old-3 replacement by new guessed cases; preserve single-event and db4bddb67 contracts."
+    },
+    {
+      "role": "TC02 extraction owner and root coordinator",
+      "paths": ["apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py"],
+      "scope": "Existing candidate remains 070-only; event schema extension requires explicit coordination/version and 070 regression",
+      "coordination": "v1 document states and single-clock equality cannot directly satisfy 043-047 normal multi-clock/event contracts."
+    },
+    {
+      "role": "Root coordinator for contract/public boundary changes only if necessary",
+      "paths": ["apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json", "apps/medqc-web/backend/app/data/luxian_0609_rules_v1.json", "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py", "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py", "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"],
+      "scope": "Explicit call budget/version and narrow validated public facts wiring; no clinical state rewrites to mask input deficits"
+    }
+  ],
+  "artifacts_owned_by_this_preparation": "F:/MedQC-worktrees/review-artifacts/transfusion-family-next",
+  "shared_source_edits": 0,
+  "new_shared_tests": 0
+}
