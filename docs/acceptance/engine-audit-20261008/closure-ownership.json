@@ -395,10 +395,10 @@
     },
     {
       "id": "TC01-SCOPE",
-      "owner": "/root/repair_iml02",
+      "owner": "/root",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-transfusion-family-20261008",
-      "state": "original32_red_evidence_frozen_implementation_in_progress",
+      "state": "root_takeover_capacity_errors_new97_green_family356_91fail_unintegrated",
       "responsibility": [
         "native_transfusion_execution.py:043-047 only",
         "new versioned performance scope extractor",
@@ -409,7 +409,7 @@
         "customer_renderer.py:043-047 mixed NC disclosure only",
         "canonical_result_finalizer.py:043-047 count and explanation only"
       ],
-      "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model."
+      "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model. Author twice terminal model capacity errors; root sole writer now. Initial65 failures retained; new97 pass incl synthetic SQLite; family356=265pass91fail pending classification. No integration."
     },
     {
       "id": "N10-BODY",
