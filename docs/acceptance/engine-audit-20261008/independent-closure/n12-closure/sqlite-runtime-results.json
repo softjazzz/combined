@@ -1,0 +1,324 @@
+{
+  "fixed_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "supplement_sha256": "c89b7aa00a00ad95255241b9af96dc6b0100e7c4307c402f21c9f74ce03989c5",
+  "states": 3,
+  "all_supplement_expectations_met": true,
+  "actual_new_reason_no_monkeypatch": true,
+  "original_43_first_attempt": "all state/call assertions completed; first SQLite phase assertion failed and preserved",
+  "real_model_calls": 0,
+  "real_http_calls": 0,
+  "postgres_access": false,
+  "dotenv_read": false,
+  "native": [
+    {
+      "id": "NORMAL",
+      "state": "compliant",
+      "reason": "requirement_satisfied",
+      "logical_attempts": 1,
+      "delegate_calls": 1,
+      "real_http_calls": 0,
+      "total_tokens": 15,
+      "canonical": {
+        "rule_id": "LX0609-04-04-02",
+        "rule_code": "LX0609-04-04-02",
+        "rule_name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+        "qc_point_id": "LX0609-04-04-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-06-09",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "anesthesia_visits_complete",
+          "performed_anesthesia_confirmed": true,
+          "checked_sources": [
+            "preane_surveil_record",
+            "postane_surveil_record"
+          ],
+          "checked_fields_by_visit": {
+            "preanesthesia_visit": [
+              "asa_level",
+              "airway_assessment",
+              "fasting_status",
+              "anesthesia_history",
+              "risk_discussion",
+              "anesthetist_signature",
+              "record_time"
+            ],
+            "postanesthesia_visit": [
+              "consciousness_status",
+              "respiratory_status",
+              "circulatory_status",
+              "complication_assessment",
+              "anesthetist_signature",
+              "record_time"
+            ]
+          }
+        },
+        "customer_evidence": [
+          {
+            "source_type": "preane_surveil_record",
+            "source_document_id": "pre-A",
+            "record_time": "2026-07-01 07:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "postane_surveil_record",
+            "source_document_id": "post-A",
+            "record_time": "2026-07-02 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "anesthesia_record",
+            "source_document_id": "ane-A",
+            "field_path": "record_content",
+            "evidence_excerpt": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs_count": 3
+    },
+    {
+      "id": "LABEL-consciousness_status",
+      "state": "non_compliant",
+      "reason": "requirement_violated",
+      "logical_attempts": 1,
+      "delegate_calls": 1,
+      "real_http_calls": 0,
+      "total_tokens": 15,
+      "canonical": {
+        "rule_id": "LX0609-04-04-02",
+        "rule_code": "LX0609-04-04-02",
+        "rule_name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+        "qc_point_id": "LX0609-04-04-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-06-09",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "麻醉术后访视缺少意识状态。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：麻醉访视记录缺项\n需要补充：结果列出的麻醉评估、患者状态、并发症和签名字段\n推荐写法：请按结果列出的缺项补全麻醉术前和术后访视记录。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "failure_kind": "anesthesia_visit_incomplete",
+          "performed_anesthesia_confirmed": true,
+          "missing_fields_by_visit": {
+            "postanesthesia_visit": [
+              "consciousness_status"
+            ]
+          }
+        },
+        "customer_evidence": [
+          {
+            "source_type": "preane_surveil_record",
+            "source_document_id": "pre-A",
+            "record_time": "2026-07-01 07:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "anesthesia_record",
+            "source_document_id": "ane-A",
+            "field_path": "record_content",
+            "evidence_excerpt": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "postane_surveil_record",
+            "source_document_id": "post-A",
+            "record_time": "2026-07-02 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "术后意识状态：；呼吸平稳；循环稳定；无麻醉并发症。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs_count": 3
+    },
+    {
+      "id": "UNKNOWN",
+      "state": "data_gap",
+      "reason": "semantic_extraction_unresolved",
+      "logical_attempts": 1,
+      "delegate_calls": 1,
+      "real_http_calls": 0,
+      "total_tokens": 15,
+      "canonical": {
+        "rule_id": "LX0609-04-04-02",
+        "rule_code": "LX0609-04-04-02",
+        "rule_name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+        "qc_point_id": "LX0609-04-04-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-06-09",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "麻醉访视内容暂无法确认",
+        "evidence": "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
+        "suggestion": "请复核现有访视正文或重试质控；不要据此补写或改写记录。",
+        "confidence": null,
+        "reason_code": "semantic_extraction_unresolved",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_evidence": [
+          {
+            "source_type": "preane_surveil_record",
+            "source_document_id": "pre-A",
+            "record_time": "2026-07-01 07:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "postane_surveil_record",
+            "source_document_id": "post-A",
+            "record_time": "2026-07-02 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "anesthesia_record",
+            "source_document_id": "ane-A",
+            "field_path": "record_content",
+            "evidence_excerpt": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [],
+        "customer_message": "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
+        "data_gap_details": {
+          "reason_code": "semantic_extraction_unresolved",
+          "reason_label": "内容抽取待确认",
+          "missing_sources": [],
+          "missing_fields": [],
+          "customer_message": "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。"
+        }
+      },
+      "fact_refs_count": 3
+    }
+  ],
+  "sqlite": {
+    "database": "F:\\MedQC-worktrees\\review-artifacts\\n12-closure\\independent-76a6bb16-82f5-436d-82d1-0d002caa2bc6.sqlite",
+    "observations": [
+      {
+        "id": "NORMAL",
+        "state": "compliant",
+        "reason": "requirement_satisfied",
+        "new_engine_and_store": true,
+        "all_frozen_fields_preserved": true,
+        "safe_evidence_checks": [
+          {
+            "source_type": "preane_surveil_record",
+            "field_path": "record_content",
+            "record_time": "2026-07-01 07:00:00",
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          },
+          {
+            "source_type": "postane_surveil_record",
+            "field_path": "record_content",
+            "record_time": "2026-07-02 08:00:00",
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          },
+          {
+            "source_type": "anesthesia_record",
+            "field_path": "record_content",
+            "record_time": null,
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          }
+        ],
+        "evidence_rows": 3
+      },
+      {
+        "id": "LABEL-consciousness_status",
+        "state": "non_compliant",
+        "reason": "requirement_violated",
+        "new_engine_and_store": true,
+        "all_frozen_fields_preserved": true,
+        "safe_evidence_checks": [
+          {
+            "source_type": "preane_surveil_record",
+            "field_path": "record_content",
+            "record_time": "2026-07-01 07:00:00",
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          },
+          {
+            "source_type": "anesthesia_record",
+            "field_path": "record_content",
+            "record_time": null,
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          },
+          {
+            "source_type": "postane_surveil_record",
+            "field_path": "record_content",
+            "record_time": "2026-07-02 08:00:00",
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          }
+        ],
+        "evidence_rows": 3
+      },
+      {
+        "id": "UNKNOWN",
+        "state": "data_gap",
+        "reason": "semantic_extraction_unresolved",
+        "new_engine_and_store": true,
+        "all_frozen_fields_preserved": true,
+        "safe_evidence_checks": [
+          {
+            "source_type": "preane_surveil_record",
+            "field_path": "record_content",
+            "record_time": "2026-07-01 07:00:00",
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          },
+          {
+            "source_type": "postane_surveil_record",
+            "field_path": "record_content",
+            "record_time": "2026-07-02 08:00:00",
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          },
+          {
+            "source_type": "anesthesia_record",
+            "field_path": "record_content",
+            "record_time": null,
+            "excerpt_matches_frozen_source": true,
+            "source_ref_safe": true
+          }
+        ],
+        "evidence_rows": 3
+      }
+    ]
+  },
+  "old25_NoModel_medical_protections": "not passed/not evaluated"
+}

@@ -1,0 +1,68 @@
+{
+  "issue": "N12",
+  "rule_id": "LX0609-04-04-02",
+  "fixed_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "parent_commit": "1b973859d1f95c099745c8af7500c3e937c05772",
+  "support_source": "195e20cf16402052acb4aff23f76234d144296f4",
+  "disposition": "accepted_limited_offline_engineering_closure_no_fixed_code_blocker",
+  "P1_multiple_complete_documents": "closed at fixed source and independently exercised; same-event multiple complete C; different-doc partial cannot OR; same-doc fragments group",
+  "independent_core_and_wrapper_assertion_cases": 43,
+  "first_probe_process_exit": 1,
+  "first_probe_seconds": 3.7851,
+  "first_probe_evidence": "all 43 case assertions completed before first SQLite comparison; no standalone 43-case JSON because write followed SQLite phase; exact frozen script/control flow and first-attempt record preserved",
+  "sqlite_followup_cases": 3,
+  "sqlite_followup_exit": 0,
+  "sqlite_followup_seconds": 3.0198,
+  "sqlite_readback": "committed disk, disposed writer, new engine/store/sessions; 3 states, 3 evidence rows each",
+  "preserved_review_harness_errors": [
+    "first phase contract error comparing raw Canonical evidence string to public Envelope list",
+    "second own script assembly SyntaxError before imports; static compile then passed"
+  ],
+  "frozen_expectations_unchanged": true,
+  "actual_reason_contract_no_monkeypatch": true,
+  "privacy_wrapper": {
+    "normal": "compliant, logical1/delegate1/realHTTP0; atomic coordinates usable",
+    "synthetic_known_identity_residual": "data_gap semantic_extraction_unresolved, logical1/delegate0/realHTTP0; no definite missing field and no rewrite suggestion"
+  },
+  "real_model_calls": 0,
+  "real_http_calls": 0,
+  "postgres_access": false,
+  "dotenv_read": false,
+  "production_modified_by_reviewer": false,
+  "test_slot": "released immediately after final process exit",
+  "old25_NoModel_medical_protection": "not passed; calls==0 assertions stop before medical assertions; not counted as baseline or independent medical protection pass",
+  "limits": [
+    "controlled Fake atomic facts do not verify real model semantic accuracy or actual fullscan",
+    "logical one-call budget does not prove HTTP transport retry count",
+    "direct native synthetic source workflow; no actual PG/provider/patient/HTTP",
+    "legacy payload medical protections and real semantic acceptance not completed",
+    "N10 remains open",
+    "no broad full-suite/publish/golden-gate acceptance claim"
+  ],
+  "evidence_files": [
+    "fixed-expectations.json",
+    "wrapper-expectations.json",
+    "fixed-static-review.json",
+    "wrapper-static-review.json",
+    "fixed_runtime_probe.py",
+    "first-attempt.json",
+    "sqlite-contract-supplement.json",
+    "supplement-syntax-failure.json",
+    "sqlite_followup_probe.py",
+    "sqlite-native-observations.json",
+    "sqlite-runtime-results.json"
+  ],
+  "sha256": {
+    "fixed-expectations.json": "c3987481a5d0d7a2285999ee77cf6f1470a2b882fc1af89d8af1414901e68ff9",
+    "wrapper-expectations.json": "1515e620e06c6f37c93e4d96b93ececf241fbea4e4553b106b053fb31b05cd7a",
+    "fixed-static-review.json": "2d2a737f25d2d4cc68da940a0745687b81eb5aa0f0716f722e83eac630eef7a6",
+    "wrapper-static-review.json": "40e3f3d0fec5ae7343cbeb1756b3ea3b3f02f6efe105ec920ab1bfe72896eb12",
+    "fixed_runtime_probe.py": "44d7c826b8bc6e24f0a53390327a8f0c03feec434ab4e53758298b6785281a99",
+    "first-attempt.json": "dff9c5c9e9051946c9a96f7cc8c67943a33e2e4746c275b07c8c5972fed7db50",
+    "sqlite-contract-supplement.json": "c89b7aa00a00ad95255241b9af96dc6b0100e7c4307c402f21c9f74ce03989c5",
+    "supplement-syntax-failure.json": "77e6567d674f90316ad53da44ee025c331469459be67128309e3006f2f7e5087",
+    "sqlite_followup_probe.py": "4468e732259b70157c21f260c7d4cfc78763af593073e0e12a2dad11380b2eda",
+    "sqlite-native-observations.json": "2dfbd2918ab4ba79db5a9cb4b310efe2da015926590169958a9ac9c759a7d4e3",
+    "sqlite-runtime-results.json": "1f7551ee4b2c33c2610c27be6c45c4e90e0dabb735c6d9ff80b1969e4873bafc"
+  }
+}

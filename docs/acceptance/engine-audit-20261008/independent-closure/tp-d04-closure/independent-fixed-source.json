@@ -1,0 +1,29 @@
+{
+  "original_worktree_test_sha256": "dace2fad205b0e1e8a4122fa2b57fc756ebd4343aff62fbb071886ad77138e5e",
+  "fixed_worktree_test_sha256": "dace2fad205b0e1e8a4122fa2b57fc756ebd4343aff62fbb071886ad77138e5e",
+  "fixed_git_blob_test_sha256": "ca9ffc5c58d148c89045c36f91a14df816da73ab16747378f187998e5744bbde",
+  "lf_normalized_equal": true,
+  "ast_equal": true,
+  "all_original_oracles_equal": true,
+  "independent_expectations_sha256": "3be945d5414d1396f7014ced5aa5687a0fc75443247446e49f127d199f50e2aa",
+  "source_hashes": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": {
+      "worktree_sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d",
+      "fixed_git_blob_sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d",
+      "lf_normalized_worktree_matches_fixed": true,
+      "production_commit_blob_equal": true
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": {
+      "worktree_sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844",
+      "fixed_git_blob_sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844",
+      "lf_normalized_worktree_matches_fixed": true,
+      "production_commit_blob_equal": true
+    },
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_special_antimicrobial_support_projection_closure.py": {
+      "worktree_sha256": "0debaf0cfed02fe1a94173ee847b9790091ad5b205b2a259637c645b22cb20a3",
+      "fixed_git_blob_sha256": "0debaf0cfed02fe1a94173ee847b9790091ad5b205b2a259637c645b22cb20a3",
+      "lf_normalized_worktree_matches_fixed": true,
+      "production_commit_blob_equal": false
+    }
+  }
+}

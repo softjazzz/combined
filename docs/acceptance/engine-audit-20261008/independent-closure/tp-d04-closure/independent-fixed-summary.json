@@ -1,0 +1,225 @@
+{
+  "fixed_head": "0162efe65ebe2ae6105080a9eaada7b51b6aa892",
+  "collected": 35,
+  "passed": 35,
+  "failed": 0,
+  "original_oracle_nodes": 18,
+  "projection_nodes": 17,
+  "sqlite_new_instance_nodes": 3,
+  "all_original_oracles_equal": true,
+  "all_models_tokens_zero": true,
+  "source_hashes_unchanged_after_run": true,
+  "raw_final_facts_equal_all35": true,
+  "different_drug_nodes": [
+    {
+      "node": "tests/unit/test_luxian_0609_special_antimicrobial_support_closure.py::test_expert_support_is_bound_to_the_correct_special_drug_through_finalizer[expert_other_drug-original]",
+      "native_reason": "required_document_missing",
+      "reduced_status": "non_compliant",
+      "final": {
+        "rule_id": "LX0609-05-01-06",
+        "rule_code": "LX0609-05-01-06",
+        "rule_name": "抗菌药物：特殊级用药缺少专家查房或会诊",
+        "qc_point_id": "LX0609-05-01-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已开立特殊级抗菌药物 美罗培南 计划，未找到可关联到该药计划的专家查房或会诊支持记录。",
+        "evidence": "已核对特殊级抗菌药物医嘱及专家查房、会诊资料。",
+        "suggestion": "修改对象：特殊级抗菌药物专家支持记录\n需要补充：专家查房或会诊意见、用药依据和后续评价\n推荐写法：请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "special_antimicrobial_expert_support_check",
+          "special_antimicrobials": [
+            "美罗培南"
+          ],
+          "expert_support_present": false,
+          "first_antimicrobial_time": "2026-04-01 08:00:00",
+          "expert_support_time": null,
+          "support_before_use": false,
+          "unmatched_special_antimicrobials": [
+            "美罗培南"
+          ],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "node": "tests/unit/test_luxian_0609_special_antimicrobial_support_closure.py::test_expert_support_is_bound_to_the_correct_special_drug_through_finalizer[expert_other_drug-reversed]",
+      "native_reason": "required_document_missing",
+      "reduced_status": "non_compliant",
+      "final": {
+        "rule_id": "LX0609-05-01-06",
+        "rule_code": "LX0609-05-01-06",
+        "rule_name": "抗菌药物：特殊级用药缺少专家查房或会诊",
+        "qc_point_id": "LX0609-05-01-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已开立特殊级抗菌药物 美罗培南 计划，未找到可关联到该药计划的专家查房或会诊支持记录。",
+        "evidence": "已核对特殊级抗菌药物医嘱及专家查房、会诊资料。",
+        "suggestion": "修改对象：特殊级抗菌药物专家支持记录\n需要补充：专家查房或会诊意见、用药依据和后续评价\n推荐写法：请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "special_antimicrobial_expert_support_check",
+          "special_antimicrobials": [
+            "美罗培南"
+          ],
+          "expert_support_present": false,
+          "first_antimicrobial_time": "2026-04-01 08:00:00",
+          "expert_support_time": null,
+          "support_before_use": false,
+          "unmatched_special_antimicrobials": [
+            "美罗培南"
+          ],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    }
+  ],
+  "multi_half_covered_nodes": [
+    {
+      "node": "tests/unit/test_luxian_0609_special_antimicrobial_support_projection_closure.py::test_original_multiple_drug_half_covered_copy_never_calls_other_missing_support_late[False]",
+      "final": {
+        "rule_id": "LX0609-05-01-06",
+        "rule_code": "LX0609-05-01-06",
+        "rule_name": "抗菌药物：特殊级用药缺少专家查房或会诊",
+        "qc_point_id": "LX0609-05-01-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已核对特殊级抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到可关联的计划启用前专家支持记录。",
+        "evidence": "已核对特殊级抗菌药物医嘱及专家查房、会诊资料。",
+        "suggestion": "修改对象：特殊级抗菌药物专家支持记录\n需要补充：专家查房或会诊意见、用药依据和后续评价\n推荐写法：请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "special_antimicrobial_expert_support_check",
+          "special_antimicrobials": [
+            "美罗培南",
+            "万古霉素"
+          ],
+          "expert_support_present": true,
+          "first_antimicrobial_time": "2026-04-01 08:00:00",
+          "expert_support_time": "2026-04-01 07:00:00",
+          "support_before_use": false,
+          "unmatched_special_antimicrobials": [
+            "万古霉素"
+          ],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "consultation_record",
+            "source_document_id": "synthetic-note-M",
+            "record_time": "2026-04-01 07:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "专家会诊，建议美罗培南抗感染。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order-V",
+            "record_time": "2026-04-01 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "node": "tests/unit/test_luxian_0609_special_antimicrobial_support_projection_closure.py::test_original_multiple_drug_half_covered_copy_never_calls_other_missing_support_late[True]",
+      "final": {
+        "rule_id": "LX0609-05-01-06",
+        "rule_code": "LX0609-05-01-06",
+        "rule_name": "抗菌药物：特殊级用药缺少专家查房或会诊",
+        "qc_point_id": "LX0609-05-01-06",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已核对特殊级抗菌药物 万古霉素、美罗培南；其中 万古霉素 未找到可关联的计划启用前专家支持记录。",
+        "evidence": "已核对特殊级抗菌药物医嘱及专家查房、会诊资料。",
+        "suggestion": "修改对象：特殊级抗菌药物专家支持记录\n需要补充：专家查房或会诊意见、用药依据和后续评价\n推荐写法：请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "special_antimicrobial_expert_support_check",
+          "special_antimicrobials": [
+            "万古霉素",
+            "美罗培南"
+          ],
+          "expert_support_present": true,
+          "first_antimicrobial_time": "2026-04-01 08:00:00",
+          "expert_support_time": "2026-04-01 07:00:00",
+          "support_before_use": false,
+          "unmatched_special_antimicrobials": [
+            "万古霉素"
+          ],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "consultation_record",
+            "source_document_id": "synthetic-note-M",
+            "record_time": "2026-04-01 07:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "专家会诊，建议美罗培南抗感染。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order-V",
+            "record_time": "2026-04-01 09:00:00"
+          }
+        ]
+      }
+    }
+  ]
+}

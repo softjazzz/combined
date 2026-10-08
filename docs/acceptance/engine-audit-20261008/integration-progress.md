@@ -91,3 +91,10 @@
 - Root da31efd03 actual172/172 passed,6.54s,1 warning; CT04 35+CT03 52+CT02 56+RR-PUB29. Logs ct04-run.log/ct04-results.xml. Former root137 failure restored without changing original NA expectation.
 
 - Targeted T5 six-rule source review fixed4e51 archived, not a repeat86 audit. Four registered pending rules preserve mixed paused delivery but paused-only creation422;06-03-01 unregistered;08-01-05 defaultoff and customer-sample explicit only. No medical acceptance implied. NewSCOPE6-01 is a static creation/Worker mismatch awaiting synthetic formal-entry reproduction, not confirmed runtime defect.
+
+## N12 and TP-D04 fixed integration
+
+- 35dd17bce/2f402affe integrate TP-D04 f2d744f/0162efe. Independent35/35 and three fresh SQLite reads pass; original18 inputs/oracles retained. Original source CRLF versus Git LF hash distinction and initial Ruff unused-import warning disclosed. Unknown drug-name recognition and TP-D05/N13 remain open.
+- 5649f6396 integrates N12 core08aed59d after independent43 core/wrapper checks plus corrected SQLite3-state persistence. Original review stage-shape assertion failure and supplemental syntax failure retained. Real semantic accuracy remains unverified. Old28 and full277 test-contract adaptation ongoing; parent277 has same two baseline failures, four target contract impacts identified.
+- Root fixed5649f6396 joined-run collected383:383passed/1warning/5.70s (CT/PUB172 + TP-D04 35 + N12 43 + mapping63 + Finalizer70). No filtering/skip/xfail. Logs and JUnit remain .tmp/closure-integration/joined-run.log and joined-results.xml; this does not include pending legacy N12 tests.
+- SCOPE6-01 formal API red6=1failed5passed proves unsupported pending+active task incorrectly persisted/dispatched; approved minimal pre-filter membership validation now under green regression. No rule enablement or medical decision change.

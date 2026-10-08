@@ -1,0 +1,468 @@
+{
+  "scope": "TP-D04 / LX0609-05-01-06 only",
+  "frozen_before_execution": true,
+  "prepared_worktree_head": "a55d27612b77743442a7a7a4c37b543193d39b80",
+  "original_expectations_path": "F:\\MedQC-worktrees\\qc-integration-20261008\\.tmp\\engine-audit-20261008\\tumor-pathology\\antimicrobial-expectations.json",
+  "original_expectations_sha256": "470ba4cea94b04c4eb5843b8c5415afa7e9fb5d7d37d4648ddb5d49b92b0f1b7",
+  "original_case": {
+    "id": "expert_other_drug",
+    "rule": "LX0609-05-01-06",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "consultation_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 07:00:00",
+          "record_content": "专家会诊，建议万古霉素抗感染。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "其他药物专家支持不能证明本药已获支持"
+  },
+  "input_orders": [
+    "original",
+    "reverse_both_sources"
+  ],
+  "cases": [
+    {
+      "id": "expert_other_drug",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-01 07:00:00",
+            "record_content": "专家会诊，建议万古霉素抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "non_compliant",
+        "reason_code": "required_document_missing",
+        "support_before_use": false,
+        "unmatched_special_antimicrobials": [
+          "美罗培南"
+        ],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order"
+        ],
+        "forbidden_findings": [
+          "晚于该时间",
+          "时间前或同刻找到专家支持记录"
+        ]
+      },
+      "rationale": "其他药物专家支持不能证明本药已获支持"
+    },
+    {
+      "id": "same_drug_before",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-01 07:00:00",
+            "record_content": "专家会诊，建议美罗培南抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "compliant",
+        "reason_code": "requirement_satisfied",
+        "support_before_use": true,
+        "unmatched_special_antimicrobials": [],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-note"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "沿用已冻结同药启用前/同刻/晚于启用/缺时间合同。"
+    },
+    {
+      "id": "same_drug_same_instant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-01 08:00:00",
+            "record_content": "专家会诊，建议美罗培南抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "compliant",
+        "reason_code": "requirement_satisfied",
+        "support_before_use": true,
+        "unmatched_special_antimicrobials": [],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-note"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "沿用已冻结同药启用前/同刻/晚于启用/缺时间合同。"
+    },
+    {
+      "id": "same_drug_late",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "record_content": "专家会诊，建议美罗培南抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "non_compliant",
+        "reason_code": "requirement_violated",
+        "support_before_use": false,
+        "unmatched_special_antimicrobials": [
+          "美罗培南"
+        ],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-note"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "沿用已冻结同药启用前/同刻/晚于启用/缺时间合同。"
+    },
+    {
+      "id": "same_drug_missing_time",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "",
+            "record_content": "专家会诊，建议美罗培南抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "data_gap",
+        "reason_code": "authoritative_time_missing",
+        "support_before_use": false,
+        "unmatched_special_antimicrobials": [
+          "美罗培南"
+        ],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-note"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "沿用已冻结同药启用前/同刻/晚于启用/缺时间合同。"
+    },
+    {
+      "id": "anonymous_single_event",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-01 07:00:00",
+            "record_content": "感染专家会诊同意特殊级抗菌药物方案。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "compliant",
+        "reason_code": "requirement_satisfied",
+        "support_before_use": true,
+        "unmatched_special_antimicrobials": [],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-note"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "现有单事件匿名支持合同保护，不另立业务政策。"
+    },
+    {
+      "id": "multiple_named_each_supported",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          },
+          {
+            "document_id": "synthetic-order-V",
+            "order_id": "synthetic-O2",
+            "generic_name": "万古霉素",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 09:00:00",
+            "prescribed_datetime": "2026-04-01 09:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note-M",
+            "record_time": "2026-04-01 07:00:00",
+            "record_content": "专家会诊，建议美罗培南抗感染。"
+          },
+          {
+            "document_id": "synthetic-note-V",
+            "record_time": "2026-04-01 08:30:00",
+            "record_content": "专家会诊，建议万古霉素抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "compliant",
+        "reason_code": "requirement_satisfied",
+        "support_before_use": true,
+        "unmatched_special_antimicrobials": [],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-order-V",
+          "synthetic-note-M",
+          "synthetic-note-V"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "两个明确不同药事件各有本药启用前支持，不相互借支持。"
+    },
+    {
+      "id": "multiple_only_meropenem_supported",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          },
+          {
+            "document_id": "synthetic-order-V",
+            "order_id": "synthetic-O2",
+            "generic_name": "万古霉素",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 09:00:00",
+            "prescribed_datetime": "2026-04-01 09:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note-M",
+            "record_time": "2026-04-01 07:00:00",
+            "record_content": "专家会诊，建议美罗培南抗感染。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "non_compliant",
+        "reason_code": "required_document_missing",
+        "support_before_use": false,
+        "unmatched_special_antimicrobials": [
+          "万古霉素"
+        ],
+        "association_ambiguous": false,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-order-V",
+          "synthetic-note-M"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "美罗培南支持不能覆盖另一万古霉素事件。"
+    },
+    {
+      "id": "anonymous_multiple_events",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          },
+          {
+            "document_id": "synthetic-order-V",
+            "order_id": "synthetic-O2",
+            "generic_name": "万古霉素",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 09:00:00",
+            "prescribed_datetime": "2026-04-01 09:00:00"
+          }
+        ],
+        "consultation_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-01 07:00:00",
+            "record_content": "感染专家会诊同意特殊级抗菌药物方案。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "oracle": {
+        "status": "data_gap",
+        "reason_code": "association_failed",
+        "support_before_use": false,
+        "unmatched_special_antimicrobials": [],
+        "association_ambiguous": true,
+        "evidence_document_ids": [
+          "synthetic-order",
+          "synthetic-order-V"
+        ],
+        "forbidden_findings": []
+      },
+      "rationale": "现有多事件匿名支持归属不明合同保护，不能猜测覆盖全部。"
+    }
+  ]
+}

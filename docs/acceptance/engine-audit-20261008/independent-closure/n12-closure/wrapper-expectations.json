@@ -1,0 +1,91 @@
+{
+  "fixed_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "executed": false,
+  "no_real_identity_context": true,
+  "cases": [
+    {
+      "id": "WRAPPER-NORMAL",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "reason": "requirement_satisfied",
+      "calls": 1,
+      "options": {
+        "wrapper": true,
+        "provider_values": [
+          "SYNTHN12IDENTITYTOKEN"
+        ],
+        "delegate_calls": 1
+      }
+    },
+    {
+      "id": "WRAPPER-BLOCKED",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。\n核验上下文：SYNTHN12IDENTITYTOKEN。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "reason": "semantic_extraction_unresolved",
+      "calls": 1,
+      "options": {
+        "wrapper": true,
+        "provider_values": [
+          "SYNTHN12IDENTITYTOKEN"
+        ],
+        "delegate_calls": 0
+      }
+    }
+  ],
+  "expected_real_http_calls": 0,
+  "coordinate_scope": "normal idempotent redaction remains usable; no offset defect assumed"
+}
