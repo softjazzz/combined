@@ -606,6 +606,14 @@ def validate_luxian_0609_published_customer_display_facts(
         validated = validate_published_discharge_facts(rule_id=normalized_rule_id, raw=raw)
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        if (normalized_rule_id == "LX0609-08-01-03"
+                and validated.get("authoritative_gap") in {"scope_conflict", "scope_unknown"}):
+            from .discharge_result_mapping import discharge_customer_fact_status_is_valid
+
+            if not discharge_customer_fact_status_is_valid(
+                rule_id=normalized_rule_id, status=status, safe_facts=validated,
+            ):
+                raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     if normalized_rule_id == "LX0609-07-01-02" and raw:
         from .transfusion_result_mapping import transfusion_customer_fact_status_is_valid

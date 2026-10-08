@@ -302,12 +302,23 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if "diagnosis_scope" in raw and (type(raw["diagnosis_scope"]) is not str or raw["diagnosis_scope"] not in {"death", "discharge"}):
+        return None
+    scope_gap_values = {"scope_conflict", "scope_unknown"}
+    if any(type(raw.get(key)) is str and raw[key] in scope_gap_values for key in ("authoritative_gap", "written_gap")):
+        if (raw.get("verification_kind") != "discharge_diagnosis_data_gap"
+                or type(raw.get("authoritative_gap")) is not str
+                or raw["authoritative_gap"] not in scope_gap_values
+                or raw.get("written_gap") is not None or "diagnosis_scope" in raw):
+            return None
     if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
         allowed = {"verification_kind", "authoritative_gap", "written_gap"}
+        if "diagnosis_scope" in raw:
+            allowed.add("diagnosis_scope")
         gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
         if (set(raw) != allowed or not any(gaps)
                 or any(value is not None and (not isinstance(value, str) or value not in {
-                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid"
+                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown"
                 }) for value in gaps)):
             return None
         return dict(raw)
@@ -319,6 +330,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "written_diagnoses",
             "diagnoses_consistent",
             "order_comparable",
+            "diagnosis_scope",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -343,6 +355,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "written_diagnoses": written,
         "diagnoses_consistent": raw["diagnoses_consistent"],
         **({"order_comparable": order_comparable} if "order_comparable" in raw else {}),
+        **({"diagnosis_scope": raw["diagnosis_scope"]} if "diagnosis_scope" in raw else {}),
     }
 
 
@@ -610,10 +623,20 @@ def validate_published_discharge_facts(
                     or any(item not in required for item in missing)):
                 return None
     elif rid == "LX0609-08-01-03":
+        if "diagnosis_scope" in raw and (type(raw["diagnosis_scope"]) is not str or raw["diagnosis_scope"] not in {"death", "discharge"}):
+            return None
+        scope_keys = {"diagnosis_scope"} if "diagnosis_scope" in raw else set()
+        scope_gap_values = {"scope_conflict", "scope_unknown"}
+        if any(type(raw.get(key)) is str and raw[key] in scope_gap_values for key in ("authoritative_gap", "written_gap")):
+            if (raw.get("verification_kind") != "discharge_diagnosis_data_gap"
+                    or type(raw.get("authoritative_gap")) is not str
+                or raw["authoritative_gap"] not in scope_gap_values
+                    or raw.get("written_gap") is not None or "diagnosis_scope" in raw):
+                return None
         if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
             gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
-            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid"}
-            if (keys != {"verification_kind", "authoritative_gap", "written_gap"}
+            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown"}
+            if (keys != {"verification_kind", "authoritative_gap", "written_gap"} | scope_keys
                     or not any(gaps)
                     or any(value is not None and (type(value) is not str or value not in allowed) for value in gaps)):
                 return None
@@ -623,7 +646,7 @@ def validate_published_discharge_facts(
             comparable = raw.get("order_comparable", True)
             consistent = raw.get("diagnoses_consistent")
             base = {"verification_kind", "authoritative_diagnoses", "written_diagnoses", "diagnoses_consistent"}
-            if (keys not in (base, base | {"order_comparable"})
+            if (keys not in (base | scope_keys, base | {"order_comparable"} | scope_keys)
                     or raw.get("verification_kind") != "discharge_diagnosis_consistency_check"
                     or authoritative is None or written is None or type(consistent) is not bool
                     or type(comparable) is not bool or consistent != (authoritative == written)
@@ -679,6 +702,11 @@ def discharge_customer_fact_status_is_valid(
     if not is_discharge_customer_rule(rule_id):
         return True
     normalized_status = str(status or "").strip().lower()
+    if (str(rule_id or "").strip().upper() == "LX0609-08-01-03"
+            and isinstance(safe_facts, Mapping)
+            and safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap"
+            and safe_facts.get("authoritative_gap") in {"scope_conflict", "scope_unknown"}):
+        return normalized_status == "data_gap"
     if normalized_status == "technical_error":
         return True
     if not isinstance(safe_facts, Mapping):

@@ -3095,10 +3095,17 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-08-01-03" and kind == "discharge_diagnosis_data_gap":
+        death_scope = facts.get("diagnosis_scope") == "death"
+        authority_label = "权威死亡诊断" if death_scope else "权威出院诊断"
+        written_label = "书写死亡诊断" if death_scope else "出院记录诊断"
         gaps = []
-        for field, label in (("authoritative_gap", "权威出院诊断"), ("written_gap", "出院记录诊断")):
+        for field, label in (("authoritative_gap", authority_label), ("written_gap", written_label)):
             gap = facts.get(field)
-            if gap == "diagnoses_missing":
+            if gap == "scope_conflict":
+                gaps.append("死亡与存活状态或终末诊断类型存在冲突")
+            elif gap == "scope_unknown":
+                gaps.append("缺少可靠的死亡或出院诊断适用范围依据")
+            elif gap == "diagnoses_missing":
                 gaps.append(f"未取得{label}")
             elif gap == "name_missing":
                 gaps.append(f"{label}存在缺少名称的记录")
@@ -3109,12 +3116,15 @@ def customer_finding_from_controlled_facts(
         return "；".join(gaps) + "，暂时无法完成诊断内容及顺序核对。"
 
     if rule_id == "LX0609-08-01-03" and kind == "discharge_diagnosis_consistency_check":
+        death_scope = facts.get("diagnosis_scope") == "death"
+        authority_label = "权威死亡诊断" if death_scope else "权威出院诊断"
+        written_label = "书写死亡诊断" if death_scope else "出院记录诊断"
         authority = joined("authoritative_diagnoses")
         written = joined("written_diagnoses")
         if facts.get("order_comparable") is False:
-            return f"权威出院诊断包含“{authority}”，出院记录诊断包含“{written}”，两者内容不一致；顺序尚无法核对，以上列示不代表诊断排列顺序。"
+            return f"{authority_label}包含“{authority}”，{written_label}包含“{written}”，两者内容不一致；顺序尚无法核对，以上列示不代表诊断排列顺序。"
         state = "一致" if facts.get("diagnoses_consistent") is True else "不一致"
-        return f"权威出院诊断为“{authority}”，出院记录诊断为“{written}”，两者顺序及内容{state}。"
+        return f"{authority_label}为“{authority}”，{written_label}为“{written}”，两者顺序及内容{state}。"
 
     if rule_id == "LX0609-04-05-01" and kind == "postoperative_three_day_coverage_check":
         surgery_events = facts.get("surgery_events")

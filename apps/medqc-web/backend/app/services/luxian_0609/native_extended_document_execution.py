@@ -373,6 +373,7 @@ def _discharge_or_death_diagnosis_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
     allow_untyped_legacy_rows: bool = False,
+    diagnosis_scope: str | None = None,
 ) -> tuple[Mapping[str, Any], ...]:
     """只保留首页/出院记录中的出院或死亡诊断。
 
@@ -381,10 +382,15 @@ def _discharge_or_death_diagnosis_rows(
     过滤，避免把入院、门诊或病理诊断混入比较。
     """
 
+    accepted_types = (
+        frozenset(("死亡诊断",)) if diagnosis_scope == "death"
+        else frozenset(("出院诊断",)) if diagnosis_scope == "discharge"
+        else _DISCHARGE_DIAGNOSIS_TYPES
+    )
     selected = tuple(
         row
         for row in rows
-        if _clean(row.get("diagnosis_type")) in _DISCHARGE_DIAGNOSIS_TYPES
+        if _clean(row.get("diagnosis_type")) in accepted_types
     )
     if selected or not allow_untyped_legacy_rows:
         return selected
@@ -2893,108 +2899,173 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-08-01-03":
-            authority_source_key = (
-                "mr_diagnosis" if mr_diagnosis_observed else "diagnosis"
+            # mr观察存在时仍是唯一权威；旧快照才兼容diagnosis，不合并两源。
+            authority_source_key = "mr_diagnosis" if mr_diagnosis_observed else "diagnosis"
+            authority_error = mr_diagnosis_error if mr_diagnosis_observed else diagnosis_error
+            raw_authority_rows = mr_diagnosis_rows if mr_diagnosis_observed else diagnosis_rows
+            authority_types = {
+                _clean(row.get("diagnosis_type")) for row in raw_authority_rows
+                if _clean(row.get("diagnosis_type")) in _DISCHARGE_DIAGNOSIS_TYPES
+            }
+            death_registration_rows = tuple(
+                row for row in registration_rows if not registration_error and (
+                    any(marker in _registration_status((row,)) for marker in _DEATH_MARKERS)
+                    or _parse_datetime(row.get("death_datetime") or row.get("death_time")) is not None
+                )
             )
-            if discharge_error:
-                final_state, reason_code = "data_gap", discharge_error
-            elif not discharge_rows:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            alive_registration_rows = tuple(
+                row for row in registration_rows if not registration_error and (
+                    _registration_status((row,)) in {"在院", "住院", "存活"}
+                    or (not any(marker in _registration_status((row,)) for marker in _DEATH_MARKERS)
+                        and any(marker in _registration_status((row,)) for marker in _ALIVE_DISCHARGE_MARKERS))
+                )
+            )
+            explicit_death = bool(death_rows or death_registration_rows)
+            # 可信mr精确死亡类型本身证明范围；记录完成时间占位不反证死亡。
+            typed_death = mr_diagnosis_observed and authority_types == {"死亡诊断"}
+            scope_conflict = bool(alive_registration_rows) and (
+                explicit_death or "死亡诊断" in authority_types
+            )
+            diagnosis_scope = None
+            consumed = []
+            scope_sources = ("inpat_registration", "death_record", authority_source_key)
+            if scope_conflict:
+                scope_gap = "scope_conflict"
+                consumed.extend(("inpat_registration", row) for row in alive_registration_rows)
+                consumed.extend((authority_source_key, row) for row in raw_authority_rows)
+            elif explicit_death or typed_death:
+                diagnosis_scope, scope_gap = "death", None
+                consumed.extend(("death_record", row) for row in death_rows)
+                consumed.extend(("inpat_registration", row) for row in death_registration_rows)
+            elif len(authority_types) > 1:
+                scope_gap = "scope_conflict"
+                consumed.extend((authority_source_key, row) for row in raw_authority_rows)
+            elif discharge_rows and not discharge_error:
+                diagnosis_scope, scope_gap = "discharge", None
+                consumed.extend(("discharge_record", row) for row in discharge_rows)
+            elif alive_registration_rows:
+                scope_gap = None
+                consumed.extend(("inpat_registration", row) for row in alive_registration_rows)
             else:
-                # 新快照明确包含 mr_diagnosis 时，它是本规则唯一的首页权威
-                # 来源；不把 diagnosis 与 mr_diagnosis 合并。没有该观察的旧
-                # 兼容快照才回退到 diagnosis，便于历史任务按原合同重放。
-                if mr_diagnosis_observed:
-                    authority_source_key = "mr_diagnosis"
-                    authority_error = mr_diagnosis_error
-                    authority_rows = (
-                        _discharge_or_death_diagnosis_rows(mr_diagnosis_rows)
-                        if not authority_error
-                        else ()
-                    )
-                else:
-                    authority_source_key = "diagnosis"
-                    authority_error = diagnosis_error
-                    authority_rows = (
-                        _discharge_or_death_diagnosis_rows(
-                            diagnosis_rows,
-                            allow_untyped_legacy_rows=True,
-                        )
-                        if not authority_error
-                        else ()
-                    )
+                scope_gap = "scope_unknown"
 
-                if authority_error:
-                    final_state, reason_code = "data_gap", authority_error
-                elif discharge_diagnosis_error:
-                    final_state, reason_code = "data_gap", discharge_diagnosis_error
+            if authority_error:
+                final_state, reason_code = "data_gap", authority_error
+            elif scope_conflict or scope_gap == "scope_conflict":
+                final_state, reason_code = "data_gap", "required_field_missing"
+                display.append((rule_id, {
+                    "verification_kind": "discharge_diagnosis_data_gap",
+                    "authoritative_gap": "scope_conflict", "written_gap": None,
+                }))
+            elif diagnosis_scope is None:
+                source_error = registration_error or death_error or discharge_error
+                if source_error:
+                    final_state, reason_code = "data_gap", source_error
+                elif scope_gap:
+                    final_state, reason_code = "data_gap", "required_field_missing"
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_diagnosis_data_gap",
+                        "authoritative_gap": scope_gap, "written_gap": None,
+                    }))
                 else:
-                    written_rows = _discharge_or_death_diagnosis_rows(
-                        discharge_diagnosis_rows,
-                        # 旧快照从未声明 mr_diagnosis，历史测试与回放中的
-                        # discharge_record_diagnosis 也可能没有 diagnosis_type；
-                        # 仅在这条兼容链允许无类型行。新快照必须按出院/死亡
-                        # 类型过滤，避免把初步诊断混入比较。
-                        allow_untyped_legacy_rows=not mr_diagnosis_observed,
-                    )
-                    authority, authority_gap = _diagnosis_sequence(authority_rows)
-                    written, written_gap = _diagnosis_sequence(written_rows)
-                    names_complete = (
-                        authority_gap not in {"diagnoses_missing", "name_missing"}
-                        and written_gap not in {"diagnoses_missing", "name_missing"}
-                    )
-                    order_gap = {"order_missing", "order_invalid"}
-                    order_comparable = authority_gap is None and written_gap is None
-                    # 名称多重集保留重复数量；顺序不可靠时不以名称排序建立临床顺序。
-                    if not names_complete:
+                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif discharge_diagnosis_error:
+                final_state, reason_code = "data_gap", discharge_diagnosis_error
+            else:
+                authority_rows = _discharge_or_death_diagnosis_rows(
+                    raw_authority_rows, diagnosis_scope=diagnosis_scope,
+                    allow_untyped_legacy_rows=not mr_diagnosis_observed and diagnosis_scope == "discharge",
+                )
+                written_rows = _discharge_or_death_diagnosis_rows(
+                    discharge_diagnosis_rows, diagnosis_scope=diagnosis_scope,
+                    allow_untyped_legacy_rows=not mr_diagnosis_observed and diagnosis_scope == "discharge",
+                )
+                consumed.extend((authority_source_key, row) for row in authority_rows)
+                consumed.extend(("discharge_record_diagnosis", row) for row in written_rows)
+                authority, authority_gap = _diagnosis_sequence(authority_rows)
+                written, written_gap = _diagnosis_sequence(written_rows)
+                names_complete = (
+                    authority_gap not in {"diagnoses_missing", "name_missing"}
+                    and written_gap not in {"diagnoses_missing", "name_missing"}
+                )
+                order_gap = {"order_missing", "order_invalid"}
+                order_comparable = authority_gap is None and written_gap is None
+                # 名称多重集保留重复数量；顺序不可靠时不以名称排序建立临床顺序。
+                if not names_complete:
+                    final_state, reason_code = "data_gap", "required_field_missing"
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_diagnosis_data_gap",
+                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
+                        "authoritative_gap": authority_gap, "written_gap": written_gap,
+                    }))
+                else:
+                    # 顺序字段缺失不妨碍识别确定的错填或漏填：先比较名称
+                    # 多重集（保留重复数量），只有内容一致时才需要可靠顺序。
+                    content_consistent = sorted(authority) == sorted(written)
+                    if not content_consistent:
+                        final_state, reason_code = "non_compliant", "requirement_violated"
+                        display.append((rule_id, {
+                            "verification_kind": "discharge_diagnosis_consistency_check",
+                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
+                            "authoritative_diagnoses": sorted(authority),
+                            "written_diagnoses": sorted(written),
+                            "diagnoses_consistent": False,
+                            "order_comparable": order_comparable,
+                        }))
+                    elif authority_gap in order_gap or written_gap in order_gap:
                         final_state, reason_code = "data_gap", "required_field_missing"
                         display.append((rule_id, {
                             "verification_kind": "discharge_diagnosis_data_gap",
-                            "authoritative_gap": authority_gap, "written_gap": written_gap,
+                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
+                            "authoritative_gap": authority_gap,
+                            "written_gap": written_gap,
                         }))
                     else:
-                        # 顺序字段缺失不妨碍识别确定的错填或漏填：先比较名称
-                        # 多重集（保留重复数量），只有内容一致时才需要可靠顺序。
-                        content_consistent = sorted(authority) == sorted(written)
-                        if not content_consistent:
-                            final_state, reason_code = "non_compliant", "requirement_violated"
-                            display.append((rule_id, {
-                                "verification_kind": "discharge_diagnosis_consistency_check",
-                                "authoritative_diagnoses": sorted(authority),
-                                "written_diagnoses": sorted(written),
-                                "diagnoses_consistent": False,
-                                "order_comparable": order_comparable,
-                            }))
-                        elif authority_gap in order_gap or written_gap in order_gap:
-                            final_state, reason_code = "data_gap", "required_field_missing"
-                            display.append((rule_id, {
-                                "verification_kind": "discharge_diagnosis_data_gap",
-                                "authoritative_gap": authority_gap,
-                                "written_gap": written_gap,
-                            }))
-                        else:
-                            complete = authority == written
-                            final_state = "compliant" if complete else "non_compliant"
-                            reason_code = (
-                                "requirement_satisfied"
-                                if complete
-                                else "requirement_violated"
-                            )
-                            display.append((rule_id, {
-                                "verification_kind": "discharge_diagnosis_consistency_check",
-                                "authoritative_diagnoses": list(authority),
-                                "written_diagnoses": list(written),
-                                "diagnoses_consistent": complete,
-                                "order_comparable": True,
-                            }))
+                        complete = authority == written
+                        final_state = "compliant" if complete else "non_compliant"
+                        reason_code = (
+                            "requirement_satisfied"
+                            if complete
+                            else "requirement_violated"
+                        )
+                        display.append((rule_id, {
+                            "verification_kind": "discharge_diagnosis_consistency_check",
+                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
+                            "authoritative_diagnoses": list(authority),
+                            "written_diagnoses": list(written),
+                            "diagnoses_consistent": complete,
+                            "order_comparable": True,
+                        }))
+
+            # 只绑定实际消费的作用域与诊断行，另一终末场景不进入事实引用。
+            document_refs = []
+            binding_failed = False
+            for source_key in dict.fromkeys(source for source, _row in consumed):
+                selected_rows = tuple(row for source, row in consumed if source == source_key)
+                try:
+                    matched_rows = tuple(
+                        (ref, row) for ref, row in evidence_materials.document_rows(source_key, snapshot=evidence_snapshot)
+                        if row in selected_rows
+                    )
+                    # 内部诊断无文书ID只保留合法来源锚点；不伪造逐行文书坐标。
+                    matched_refs = tuple(
+                        ref if _clean(row.get("document_id") or row.get("id")) or source_key == "inpat_registration"
+                        else _fact_refs(evidence_snapshot, (source_key,))[0]
+                        for ref, row in matched_rows
+                    )
+                except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+                    binding_failed = True
+                    break
+                if len(matched_refs) != len(selected_rows):
+                    binding_failed = True
+                    break
+                document_refs.extend(matched_refs)
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=(
-                    "discharge_record",
-                    authority_source_key,
-                    "discharge_record_diagnosis",
-                ),
-                final_state=final_state, reason_code=reason_code,
+                source_keys=() if consumed else (*scope_sources, "discharge_record", "discharge_record_diagnosis"),
+                document_refs=document_refs, exact_document_refs=bool(consumed),
+                final_state="technical_error" if binding_failed else final_state,
+                reason_code="snapshot_mismatch" if binding_failed else reason_code,
             ))
             continue
 

@@ -597,7 +597,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 063 比较病案首页与出院记录的出院/死亡诊断；mr_diagnosis 仅作为
     # 规则内部决策支持来源，不改变客户适用文书范围。
-    "LX0609-08-01-03": ("discharge_record", "mr_diagnosis"),
+    "LX0609-08-01-03": ("discharge_record", "mr_diagnosis", "inpat_registration", "death_record"),
     "LX0609-08-01-05": ("discharge_record", "daily_course_record", "senior_course_record", "surgery_record", "discharge_record_diagnosis"),
     "LX0609-04-05-01": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-04-05-02": ("evaluation_context.horizon", "mr_surgery"),

@@ -8121,6 +8121,8 @@ def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-08-01-03",))) == {
         "discharge_record",
         "mr_diagnosis",
+        "inpat_registration",
+        "death_record",
     }
 
 
