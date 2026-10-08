@@ -1,0 +1,332 @@
+{
+  "audit_date": "2026-10-08",
+  "commit": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": "0609 only; T0 archive of existing evidence, no new audit/test/source inspection",
+  "existing_171_tests": "not rerun; accepted as documented narrow LX0609 known-identity baseline",
+  "real_model_release_gate": "0609 identity source gap remains unclosed; archive does not authorize any real external send",
+  "findings": [
+    {
+      "id": "PRIV-002",
+      "priority": "P1",
+      "status": "known_unclosed_upstream_identity_coverage_gap",
+      "title": "0609上游原始身份已在masked投影丢失：与已完成gate分列",
+      "blocks": [
+        "0609_full_patient_identity_external_send_acceptance"
+      ],
+      "evidence": [
+        "backend/app/services/bundles/assembly.py:2348",
+        "backend/app/services/bundles/factory.py:49",
+        "backend/app/services/luxian_0609/privacy_identity_context.py:45",
+        "backend/app/services/luxian_0609/source_evidence_reader.py:70"
+      ],
+      "repro_cases": [
+        "factory_to_identity_provider_loss"
+      ],
+      "required_before_external_send": "从已合法读取的patient_profile及身份来源带入不序列化的病例内存上下文，核验归属、缺失拒发；禁止写回bundle、日志或docs。不得以只有三坐标且检测未命中认定姓名完整覆盖。"
+    },
+    {
+      "id": "PRIV-003",
+      "priority": "P1",
+      "status": "confirmed_boundary_bypass",
+      "title": "独立native/语义复核辅助脚本绕开发送边界",
+      "blocks": [
+        "patient_bearing_direct_auxiliary_model_validation"
+      ],
+      "evidence": [
+        "backend/scripts/run_luxian_0609_028_synthetic_golden.py:103",
+        "backend/scripts/run_luxian_0609_028_synthetic_golden.py:108",
+        "backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py:212",
+        "backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py:240",
+        "backend/scripts/review_luxian_0609_semantic20.py:482",
+        "backend/scripts/review_luxian_0609_semantic20.py:634"
+      ],
+      "required_before_external_send": "逐脚本核验真实输入、入口及出口；含真实病例的辅助验证必须显式身份上下文并进入每次最终payload闸门。synthetic/readonly/privacy_safe命名或输出repr检测不构成发送验收。"
+    },
+    {
+      "id": "PRIV-004",
+      "priority": "P1",
+      "status": "confirmed_partial_boundary",
+      "title": "0609准生产旁路共用execution的prompt包装但未建立最终请求scope",
+      "blocks": [
+        "patient_bearing_preproduction_model_validation"
+      ],
+      "evidence": [
+        "backend/app/services/luxian_0609/preproduction_runner.py:633",
+        "backend/app/services/luxian_0609/preproduction_runner.py:685",
+        "backend/app/services/luxian_0609/execution.py:367",
+        "backend/app/services/luxian_0609/privacy_request_scope.py:46",
+        "backend/app/routers/luxian_0609_preproduction.py:143"
+      ],
+      "required_before_external_send": "旁路入口建立与正式入口等价的病例scope与provider，补最终组包/每次HTTP attempt证据。当前prompt/kwargs包装受保护不等于已验最终payload。"
+    },
+    {
+      "id": "PRIV-005",
+      "priority": "P2",
+      "status": "confirmed_sanitization_gap_potential_propagation",
+      "title": "上游错误摘要与快照异常日志存在原文传播面",
+      "blocks": [
+        "patient_bearing_error_logging_acceptance"
+      ],
+      "evidence": [
+        "backend/app/services/qc_llm_client.py:425",
+        "backend/app/services/qc_llm_client.py:445",
+        "backend/app/services/luxian_0609/execution.py:362",
+        "backend/app/services/qc_diagnostics/capture.py:159"
+      ],
+      "repro_cases": [
+        "upstream_error_summary_echo"
+      ],
+      "required_before_external_send": "日志使用固定错误种类/安全枚举；上游message/text不得只遮API key后回传。快照logger.exception会附当前异常正文/traceback，需要审计或去原异常；诊断request/response是受限原文内存载体，不得直接导出。未证明真实患者已泄露，不能默认为无泄露。"
+    }
+  ],
+  "path_inventory": [
+    {
+      "path": "0609正式running/final与orchestrated入口",
+      "classification": "known_context_boundary_present_but_upstream_coverage_incomplete",
+      "references": [
+        "backend/app/services/sichuan_qc/running_final_bundle_service.py:39",
+        "backend/app/services/sichuan_qc_service.py:1167",
+        "backend/app/services/luxian_0609/execution.py:367",
+        "backend/app/services/qc_llm_client.py:348"
+      ]
+    },
+    {
+      "path": "0609准生产router/benchmark20",
+      "classification": "execution_prompt_wrapper_only_no_final_payload_scope",
+      "references": [
+        "backend/app/routers/luxian_0609_preproduction.py:143",
+        "backend/app/services/luxian_0609/preproduction_runner.py:685",
+        "backend/scripts/run_luxian_0609_preproduction_benchmark20.py:628"
+      ]
+    },
+    {
+      "path": "0609直接native synthetic golden与ordinary shadow",
+      "classification": "direct_client_no_scope_or_identity_wrapper",
+      "references": [
+        "backend/scripts/run_luxian_0609_028_synthetic_golden.py:103",
+        "backend/scripts/run_luxian_0609_surgery_gate_synthetic_golden.py:150",
+        "backend/scripts/run_luxian_0609_exam_lab_synthetic_golden.py:333",
+        "backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py:212"
+      ]
+    },
+    {
+      "path": "0609 semantic20二次语义复核",
+      "classification": "direct_client_no_scope_or_identity_wrapper",
+      "references": [
+        "backend/scripts/review_luxian_0609_semantic20.py:482",
+        "backend/scripts/review_luxian_0609_semantic20.py:524",
+        "backend/scripts/review_luxian_0609_semantic20.py:634"
+      ]
+    },
+    {
+      "path": "0916正式初提取/合同重试/条目来源重试",
+      "classification": "scope_excluded_by_user",
+      "references": [
+        "backend/app/services/luxian_0916/batch_worker.py:713",
+        "backend/app/services/luxian_0916/semantic_extractor.py:1107",
+        "backend/app/services/luxian_0916/semantic_extractor.py:1167",
+        "backend/app/services/luxian_0916/semantic_extractor.py:1280"
+      ]
+    },
+    {
+      "path": "0916病情变化与危急值018Stage2",
+      "classification": "scope_excluded_by_user",
+      "references": [
+        "backend/app/services/luxian_0916/batch_worker.py:475",
+        "backend/app/services/luxian_0916/batch_worker.py:501",
+        "backend/app/services/luxian_0916/disease_change_stage2.py:219",
+        "backend/app/services/luxian_0916/critical_value_018_stage2.py:208"
+      ]
+    },
+    {
+      "path": "formal双模型/deepseek连通性probe",
+      "classification": "patient_free_literal_probe_observed_only_not_engine_coverage",
+      "references": [
+        "backend/scripts/run_formal_qc_dual_model_random10_audit.py:107",
+        "backend/scripts/run_formal_qc_deepseek_v4flash_random10_ab.py:145"
+      ]
+    },
+    {
+      "path": "直接httpx/requests辅助脚本及其他引擎/智能助手",
+      "classification": "scope_excluded_by_user",
+      "references": [
+        "backend/scripts/run_aliyun_models_lx030.py:165",
+        "backend/scripts/run_formal_qc_structured_evidence_poc.py:2622",
+        "backend/app/routers/business_agent.py:75"
+      ]
+    }
+  ],
+  "offline_repro": {
+    "version": 1,
+    "method": "AST isolated current-source functions; relative imports omitted; semantic business instruction helpers empty; transport/observation/capture replaced with in-memory counters; no application startup/config import",
+    "safety": {
+      "network_calls": 0,
+      "database_calls": 0,
+      "env_files_read": 0,
+      "real_records_read": 0
+    },
+    "cases": {
+      "0916_initial_and_contract_retry_prompt": {
+        "selected_documents": 1,
+        "initial_contains_synthetic_name": true,
+        "retry_contains_synthetic_name": true,
+        "scope_status": "scope_excluded_by_user"
+      },
+      "client_without_scope_two_attempts": {
+        "transport_calls": 2,
+        "capture_contains_synthetic_name": true
+      },
+      "client_with_known_identity_two_attempts": {
+        "refused_attempts": 2,
+        "side_effect_events": 0
+      },
+      "factory_to_identity_provider_loss": {
+        "raw_name_preserved_in_bundle_identity_field": false,
+        "raw_name_in_known_values": false,
+        "known_values_count": 3,
+        "unlabelled_name_remains_after_scope_guard": true
+      },
+      "upstream_error_summary_echo": {
+        "synthetic_name_survives_summary": true
+      }
+    }
+  },
+  "safe_offline_continue": [
+    "合成资料+显式禁用网络/PG替身的执行器、合同和重试验证",
+    "纯函数prompt投影/身份残留对照",
+    "固定已知身份provider与最终payload闸门并发/隔离审查",
+    "只包含长期结论和合成计数的文档整理"
+  ],
+  "unreviewed_exports_are_safe": false,
+  "production_files_changed": false,
+  "source_sha256": {
+    "backend/app/routers/business_agent.py": "18913e90b4e4ac67a0b5c0c298731945c08316711db2f1719d13b152c93ec6ae",
+    "backend/app/routers/luxian_0609_preproduction.py": "81d755394b6c03bad32bfe4ce91ceb51f3249efe2d39fb9174cf741cd455ce89",
+    "backend/app/services/bundles/assembly.py": "4a9a70ff7514f6d55353150020d62cce0bf9bf6622a436684e305e72ec59ebd5",
+    "backend/app/services/bundles/factory.py": "cec1e63b5a59d93fd9a881780a96249199e57c8179cd245bb98c53a50b498a3e",
+    "backend/app/services/luxian_0609/execution.py": "c48555b2228c7acc2f56dc3d4e59b6bb01cbaadf61a47ab7a9eace0203ec85b9",
+    "backend/app/services/luxian_0609/preproduction_runner.py": "307207ef29dce53edc0ba61f557a519347cdb1bab57e5c47420a1b8155d90093",
+    "backend/app/services/luxian_0609/privacy_identity_context.py": "4da65853bdeceeee0b9834691821e229cff11552536a50283dc07b6188e0d03d",
+    "backend/app/services/luxian_0609/privacy_request_scope.py": "364367e526b67ab09cffd890df185d2b5710bfb4f9ed5d3ad7ea524c29607368",
+    "backend/app/services/luxian_0609/source_evidence_reader.py": "5403d747274f342f75a5561df47b9c02ea09a728eb3dad7f84535a5b2017de2d",
+    "backend/app/services/luxian_0916/batch_worker.py": "8c13e7276a5420959d33bdfd9cc6eec040b18654c6e042b9fe09a1d22a2e0d61",
+    "backend/app/services/luxian_0916/critical_value_018_stage2.py": "086ffe662fe3270e512d6eb3b0a89f7e719d5e7cc4d74fd544f6eb32e939c490",
+    "backend/app/services/luxian_0916/disease_change_stage2.py": "9a85e47699d83a5e2365ac526b825d62d5e2321dc2a816eef4e93d92427b65a8",
+    "backend/app/services/luxian_0916/semantic_extractor.py": "60ada6e10f06e55b955c1c6d63259c4799f45b3d5531c58195ef0dc60bcba319",
+    "backend/app/services/qc_diagnostics/capture.py": "d77cbfa64c9551a4d351a01db00c6e9e6b7bdd82ba5f75ce4d844b1235b97e6d",
+    "backend/app/services/qc_llm_client.py": "36af6f3325834271e1ca1b82947ec05853e4cb08f24972f8ea4130137197cd1f",
+    "backend/app/services/sichuan_qc/running_final_bundle_service.py": "a1ec5ec753ac7f2b16378d0121cabc127b12c5dc9db12ef8e21a6e4ad1941fc3",
+    "backend/app/services/sichuan_qc_service.py": "2772bb688a1b4ce33ef74458b03f1134daa64273fa611acfec76c958df4c2e4a",
+    "backend/scripts/review_luxian_0609_semantic20.py": "3f852842ee84611b20da91190052c8726ac6a112b8fe39c1e180b93072467a54",
+    "backend/scripts/run_aliyun_models_lx030.py": "9e615ac10b65b4f49a5ebc03e749c1e5ca0573b38388a56be3df883386e138b9",
+    "backend/scripts/run_formal_qc_deepseek_v4flash_random10_ab.py": "2f0d56c42173564556eccc3384f75a09cd1e232da189cf4072fd172c1f19bf51",
+    "backend/scripts/run_formal_qc_dual_model_random10_audit.py": "4db0aae9ec89230281f7b042c4c2c9dfc7e36ac1a7869d0c986d58b7f4c8dbb6",
+    "backend/scripts/run_formal_qc_structured_evidence_poc.py": "261d6f83332ec75547510d095846d07a149b51e98d3a9c6f32c4cbc2d4a5e316",
+    "backend/scripts/run_luxian_0609_028_synthetic_golden.py": "366ca26ca472910cba3f96efe160a0e472b38d22068f3730012c728d8086f1a0",
+    "backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py": "3eb50465f78dd02a973e3c6b67cd89342fad290e45af349ef6f99858fa9d92af",
+    "backend/scripts/run_luxian_0609_exam_lab_synthetic_golden.py": "5d68afa8651367ab9354b31efe8b9c81aca9aa6c2410e679fc9e9a09731e186a",
+    "backend/scripts/run_luxian_0609_preproduction_benchmark20.py": "d31b82f102216512bdd5ca26e9383ba9a7c94bc27ed262f38fa5e9fa703ab66a",
+    "backend/scripts/run_luxian_0609_surgery_gate_synthetic_golden.py": "eede8eedbe16324b02d79baa60a5d42e51a01d113ff198f713b44937cb827e76"
+  },
+  "user_scope_exclusion": "0916 scope_excluded_by_user; excluded from blockers, coverage denominators, completion rates",
+  "completed_protection": {
+    "commits": [
+      "2f7ff8091",
+      "7aa4737fe"
+    ],
+    "verification": "Existing known-identity acceptance documents 171 focused passing tests; not rerun or independently reverified in this archive turn.",
+    "status": "completed_known_identity_gate",
+    "claim": "LX0609 formal entry scope, per-case provider, prompt/kwargs wrapper, final HTTP payload check on every client attempt before observation/capture/transport, stable identity exceptions and scope restoration; guarantees only identities actually known to context.",
+    "document": "docs/acceptance/2026-10-08-known-identity-send-boundary.md",
+    "key_files": [
+      "backend/app/services/luxian_0609/privacy_request_scope.py",
+      "backend/app/services/luxian_0609/privacy_identity_context.py",
+      "backend/app/services/luxian_0609/llm_prompt_privacy.py",
+      "backend/app/services/luxian_0609/execution.py",
+      "backend/app/services/qc_llm_client.py",
+      "backend/app/services/sichuan_qc/running_final_bundle_service.py",
+      "backend/app/services/sichuan_qc_service.py"
+    ]
+  },
+  "scope_excluded_findings": [
+    {
+      "id": "PRIV-001",
+      "priority": "P1",
+      "status": "scope_excluded_by_user",
+      "title": "0916正式执行没有病例专属最终payload闸门",
+      "blocks": [],
+      "evidence": [
+        "backend/app/services/luxian_0916/batch_worker.py:120",
+        "backend/app/services/luxian_0916/batch_worker.py:425",
+        "backend/app/services/luxian_0916/batch_worker.py:713",
+        "backend/app/services/luxian_0916/semantic_extractor.py:484",
+        "backend/app/services/luxian_0916/semantic_extractor.py:576",
+        "backend/app/services/luxian_0609/privacy_request_scope.py:60"
+      ],
+      "repro_cases": [
+        "0916_initial_and_contract_retry_prompt",
+        "client_without_scope_two_attempts"
+      ],
+      "required_before_external_send": "逐病例建立内存身份provider与scope，并在每次首次/合同重试/条目重试/Stage2最终payload上拒绝残留；不能仅截短文本或依赖固定输出枚举。"
+    }
+  ],
+  "missing_real_validation_is_not_unreviewed": true,
+  "archive_turn_actions": {
+    "new_tests": 0,
+    "new_source_inspections": 0,
+    "production_writes": 0,
+    "patient_reads": 0,
+    "env_reads": 0,
+    "pg_calls": 0,
+    "external_sends": 0
+  },
+  "minimal_memory_provider_plan": {
+    "status": "proposal_only_no_production_change",
+    "constraints": [
+      "0609 only",
+      "no additional PG query",
+      "never store raw identity in serializable bundle, result, metadata, log, or docs",
+      "case/attempt/request scope with finally reset",
+      "use already legitimately read patient_profile; no recovery from masked values",
+      "cached bundle lacking upstream identity cannot claim original name coverage; block external send or use existing authorized identity context"
+    ],
+    "attachment_points": [
+      {
+        "point": "0609 caller before existing bundle acquisition/assembly",
+        "purpose": "Start a request/case context before profile is discarded; precise caller file must be selected by coordinator before authorizing a patch."
+      },
+      {
+        "point": "backend/app/services/bundles/assembly.py::_fetch_patient_profile / existing builder call around line 2348",
+        "purpose": "Feed existing in-memory patient_profile identity through a nonserialized callback/context capture; no new query and do not add identity keys to returned/persisted bundle."
+      },
+      {
+        "point": "backend/app/services/luxian_0609/privacy_identity_context.py::build_luxian_0609_identity_provider",
+        "purpose": "Combine captured case-bound upstream values with current material/coordinate checks; revalidate ownership and reject missing/unavailable upstream context."
+      },
+      {
+        "point": "backend/app/services/luxian_0609/execution.py around lines 367-373 and privacy_request_scope.py",
+        "purpose": "Consume provider explicitly within same case scope, preserve prompt wrapper and existing per-attempt final payload check; no persistence/repr of raw values."
+      }
+    ],
+    "suggested_production_write_allowlist": [
+      "backend/app/services/luxian_0609/privacy_identity_context.py",
+      "backend/app/services/luxian_0609/privacy_request_scope.py",
+      "backend/app/services/luxian_0609/execution.py",
+      "backend/app/services/bundles/assembly.py (0609 optional in-memory capture seam only)",
+      "coordinator-selected single 0609 caller that performs bundle acquisition before formal evaluate"
+    ],
+    "conditional_only": [
+      "backend/app/services/sichuan_qc/running_final_bundle_service.py or sichuan_qc_service.py if necessary to pass a private provider parameter; exact owner selected before patch"
+    ],
+    "keep_existing_verified_boundary": "qc_llm_client.py and llm_prompt_privacy.py gate need not change for upstream identity wiring; no broad client/refactor expansion",
+    "excluded_write_scope": [
+      "0916",
+      "other engines",
+      "bundle contracts/factory/persisted schema",
+      "database migrations",
+      "production configuration",
+      "business rules",
+      "shared tests outside narrowly assigned synthetic identity tests"
+    ]
+  }
+}

@@ -1,0 +1,892 @@
+{
+  "scope": "0609 only",
+  "rules": [
+    {
+      "rule_id": "LX0609-01-01-01",
+      "legacy_id": "LX0609-001",
+      "name": "入院记录：入院后24小时内是否完成",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-result-accuracy-batch1.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-01-02-01",
+      "legacy_id": "LX0609-002",
+      "name": "首次病程：入院后 8 小时内无首次病程记录",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-02-01",
+      "legacy_id": "LX0609-003",
+      "name": "手术记录：手术后24小时内是否完成",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-surgery-record-event-coverage-fix.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-09-01-01",
+      "legacy_id": "LX0609-004",
+      "name": "抢救记录：抢救结束后6小时内是否完成",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-document-quality-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-02-01-01",
+      "legacy_id": "LX0609-005",
+      "name": "上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-rounds-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-02-01-02",
+      "legacy_id": "LX0609-006",
+      "name": "上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-02-01-03",
+      "legacy_id": "LX0609-007",
+      "name": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-02-01-04",
+      "legacy_id": "LX0609-008",
+      "name": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录；",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round6-83a-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-02-01-05",
+      "legacy_id": "LX0609-009",
+      "name": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-06-01-02",
+      "legacy_id": "LX0609-010",
+      "name": "CT/MRI 检查记录：CT/MRI检查前有无病程记录（无行CT/MRI检查原因）",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-h01-h03-recheck.md",
+        "2026-10-07-0910-r01-r02-h03b-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-01-04",
+      "legacy_id": "LX0609-011",
+      "name": "CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内在病程中未记录",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-accuracy-round3-minimal-fix.md",
+        "2026-10-07-0910-accuracy-round4-real-model-and-pipeline.md",
+        "2026-10-07-0910-accuracy-round6-ct-mri-real-model.md",
+        "2026-10-07-0910-r01-r02-h03b-recheck.md",
+        "2026-10-07-0910-result-accuracy-batch1.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-01-05",
+      "legacy_id": "LX0609-012",
+      "name": "CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内阳性结果未进行分析",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-accuracy-round6-ct-mri-real-model.md",
+        "2026-10-07-0910-result-accuracy-batch1.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-02-03",
+      "legacy_id": "LX0609-013",
+      "name": "病理检查：病理检查结果在手术记录、病程中未记录",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-pathology-event-fix.md",
+        "2026-10-07-round2-pathology-micro-audit.md",
+        "2026-10-07-round5-1f9-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-03-03",
+      "legacy_id": "LX0609-014",
+      "name": "细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-pathology-micro-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-03-04",
+      "legacy_id": "LX0609-015",
+      "name": "细菌培养结果无分析：细菌培养结果有阳性菌，在病程记录中无分析（报告出具后24小时内）。",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-pathology-micro-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-12-01-01",
+      "legacy_id": "LX0609-016",
+      "name": "不合理复制病历：不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-document-quality-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-12-01-02",
+      "legacy_id": "LX0609-017",
+      "name": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-document-quality-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-01-01-02",
+      "legacy_id": "LX0609-018",
+      "name": "主诉能导出第一诊断：主诉书写不规范（1.只写症状不写诊断，2.>20字）或不能导出第一诊断。",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-document-quality-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-02-02",
+      "legacy_id": "LX0609-019",
+      "name": "病理检查：取材情况未在病程记录/手术记录中进行记录。",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-pathology-event-fix.md",
+        "2026-10-07-round2-pathology-micro-audit.md",
+        "2026-10-07-round5-1f9-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-03-01-01",
+      "legacy_id": "LX0609-020",
+      "name": "会诊记录：有会诊记录单无请会诊执行记录",
+      "report_refs": [
+        "course-timing"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-03-01-02",
+      "legacy_id": "LX0609-021",
+      "name": "会诊记录：会诊申请单会诊目的不明确",
+      "report_refs": [
+        "course-timing"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-03-01-03",
+      "legacy_id": "LX0609-022",
+      "name": "会诊记录：会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）",
+      "report_refs": [
+        "course-timing"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-03-01-04",
+      "legacy_id": "LX0609-023",
+      "name": "会诊记录：会诊建议未落实或执行记录不具体",
+      "report_refs": [
+        "course-timing"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-02-03",
+      "legacy_id": "LX0609-024",
+      "name": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-tumor-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-02-04",
+      "legacy_id": "LX0609-025",
+      "name": "手术记录：手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-05-02-01",
+      "legacy_id": "LX0609-026",
+      "name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-026-association-contract-fix.md",
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-tumor-audit.md",
+        "2026-10-07-round4-chemo-n02-n03-fix.md",
+        "2026-10-07-round5-1f9-independent-recheck.md",
+        "2026-10-07-round6-83a-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-01-04",
+      "legacy_id": "LX0609-027",
+      "name": "出院记录：出院记录（恶性肿瘤患者）中是否有出院后肿瘤相关治疗的出院治疗计划",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-tumor-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-05-01-01",
+      "legacy_id": "LX0609-028",
+      "name": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物（预防使用抗生素医嘱）时间超过 24 小时，特殊情况超过48小时；",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-01-01",
+      "legacy_id": "LX0609-029",
+      "name": "术前小结：无术前小结（有手术医嘱）",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-02-02",
+      "legacy_id": "LX0609-030",
+      "name": "手术记录：无手术记录（有手术医嘱）",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-02-05",
+      "legacy_id": "LX0609-031",
+      "name": "手术记录：手术记录非手术者签字（质控术者及签名医生）",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-surgery-record-event-coverage-fix.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-03-01",
+      "legacy_id": "LX0609-032",
+      "name": "手术安全核查表：无手术安全核查表（有手术记录）",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-surgery-documents-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-11-01-01",
+      "legacy_id": "LX0609-033",
+      "name": "手术知情同意书：无手术知情同意书(有手术记录）",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-11-02-01",
+      "legacy_id": "LX0609-034",
+      "name": "麻醉知情同意书：无麻醉知情同意书（有麻醉记录）",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-11-02-02",
+      "legacy_id": "LX0609-035",
+      "name": "麻醉知情同意书：麻醉知情同意书填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-04-01",
+      "legacy_id": "LX0609-036",
+      "name": "麻醉访视：无麻醉术前/麻醉术后访视记录（局麻除外）；",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-04-02",
+      "legacy_id": "LX0609-037",
+      "name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-n08-anesthesia-label-fix.md",
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-surgery-documents-audit.md",
+        "2026-10-07-round5-1f9-independent-recheck.md",
+        "2026-10-07-round6-83a-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-04-03",
+      "legacy_id": "LX0609-038",
+      "name": "麻醉记录单：无麻醉记录单（局麻除外）；",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-surgery-documents-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-01-02",
+      "legacy_id": "LX0609-039",
+      "name": "术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-01-03",
+      "legacy_id": "LX0609-040",
+      "name": "术前多学科讨论记录：四级手术术前讨论未多学科讨论。",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-r03-discussion-evidence-field-binding-fix.md",
+        "2026-10-07-round5-1f9-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-11-03-01",
+      "legacy_id": "LX0609-041",
+      "name": "输血知情同意书：无输血知情同意书；",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-11-03-02",
+      "legacy_id": "LX0609-042",
+      "name": "输血知情同意书：输血知情同意书填写或签名不完整；",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-07-01-01",
+      "legacy_id": "LX0609-043",
+      "name": "输血前辅助检查：输血前常规检查不完整；",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-07-01-02",
+      "legacy_id": "LX0609-044",
+      "name": "输血前评估：无输血前评估记录或输血前评估记录不完整；",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-07-02-01",
+      "legacy_id": "LX0609-045",
+      "name": "输血记录：无输血病程记录；",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-rescue-transfusion-fixes.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-07-02-02",
+      "legacy_id": "LX0609-046",
+      "name": "输血记录：输血病程记录不完整或不规范；",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-rescue-transfusion-fixes.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-07-03-01",
+      "legacy_id": "LX0609-047",
+      "name": "输血后评价：无输血后评价",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-07-04-01",
+      "legacy_id": "LX0609-048",
+      "name": "输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容记录不一致。",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-07-04-02",
+      "legacy_id": "LX0609-049",
+      "name": "输血医嘱：输血医嘱与收费不一致。",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-03-02-01",
+      "legacy_id": "LX0609-050",
+      "name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+      "report_refs": [
+        "course-timing"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-transfer-discussion-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-09-02-01",
+      "legacy_id": "LX0609-051",
+      "name": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-rounds-audit.md",
+        "2026-10-07-round2-transfer-discussion-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-04-01",
+      "legacy_id": "LX0609-052",
+      "name": "危急值记录：6小时内未书写危急值处置记录",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-06-04-02",
+      "legacy_id": "LX0609-053",
+      "name": "危急值记录：危急值报告后无处置记录",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-05-01-02",
+      "legacy_id": "LX0609-054",
+      "name": "抗菌药物：用药调整无充分理由",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-antibiotic-audit.md",
+        "2026-10-07-round2-audit-dispatch.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-05-01-03",
+      "legacy_id": "LX0609-055",
+      "name": "抗菌药物：48至72小时内无效果评价",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-n05-antimicrobial-cancel-fix.md",
+        "2026-10-07-round2-antibiotic-audit.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round5-1f9-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-05-01-04",
+      "legacy_id": "LX0609-056",
+      "name": "抗菌药物：两个以上重点抗菌药物使用前无病原学检查",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-05-01-05",
+      "legacy_id": "LX0609-057",
+      "name": "抗菌药物：经验用药未说明理由",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-antibiotic-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-05-01-06",
+      "legacy_id": "LX0609-058",
+      "name": "抗菌药物：特殊级用药缺少专家查房或会诊",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-antibiotic-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-05-03-01",
+      "legacy_id": "LX0609-059",
+      "name": "医嘱：诊疗医嘱与病程记录不一致",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-02-06",
+      "legacy_id": "LX0609-060",
+      "name": "死亡记录：死亡患者无死亡记录",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-surgery-documents-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-01-01",
+      "legacy_id": "LX0609-061",
+      "name": "出院记录：出院记录未在出院后24小时内完成",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-08-01-02",
+      "legacy_id": "LX0609-062",
+      "name": "出院记录：出院带药不详细",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-discharge-medication-audit-fixes.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-01-03",
+      "legacy_id": "LX0609-063",
+      "name": "出院记录：出院诊断或死亡诊断错填漏填顺序错误",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-discharge-postop-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-05-01",
+      "legacy_id": "LX0609-064",
+      "name": "术后连续三天查房记录：术后三天无连续病程记录或术者查房记录",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-postop-audit-fixes.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-05-02",
+      "legacy_id": "LX0609-065",
+      "name": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-discharge-postop-audit.md",
+        "2026-10-07-round6-83a-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-05-03",
+      "legacy_id": "LX0609-066",
+      "name": "术后首次病程记录：无术后首次病程记录",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-discharge-postop-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "legacy_id": "LX0609-067",
+      "name": "出院前病程记录：无出院前一天或当天的病程记录",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-discharge-postop-audit.md",
+        "2026-10-07-round6-83a-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-02-02",
+      "legacy_id": "LX0609-068",
+      "name": "出院前病程记录：无上级医师同意出院的意见",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-discharge-postop-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-02-07",
+      "legacy_id": "LX0609-069",
+      "name": "会诊记录：会诊记录单未在会诊申请24小时内完成",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-07-01-03",
+      "legacy_id": "LX0609-070",
+      "name": "输血前评估：未做输血前相关九项检查",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-10-01-01",
+      "legacy_id": "LX0609-071",
+      "name": "交接班记录：经治医师变更时无交接班记录或未按时完成",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-transfer-discussion-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-10-02-01",
+      "legacy_id": "LX0609-072",
+      "name": "转科记录：转科病人24小时内未完成转入、转出记录",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-d081-independent-recheck.md",
+        "2026-10-07-round2-transfer-discussion-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-10-02-02",
+      "legacy_id": "LX0609-073",
+      "name": "转科记录：有转科医嘱无转入、转出记录",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-transfer-discussion-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-12-02-01",
+      "legacy_id": "LX0609-074",
+      "name": "病程记录：修正或补充诊断时未记录理由及诊断依据",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-074-quote-repair.md",
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-document-quality-audit.md",
+        "2026-10-07-round6-83a-independent-recheck.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-10-03-01",
+      "legacy_id": "LX0609-075",
+      "name": "有创操作记录：有创操作医嘱无有创操作记录",
+      "report_refs": [],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-04-02-08",
+      "legacy_id": "LX0609-076",
+      "name": "死亡记录：死亡时间缺失",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-surgery-documents-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-01-02-02",
+      "legacy_id": "LX0609-077",
+      "name": "首次病程记录：鉴别诊断未与第一诊断相关联",
+      "report_refs": [
+        "admission-history"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-round2-audit-dispatch.md",
+        "2026-10-07-round2-document-quality-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-01-04",
+      "legacy_id": "LX0609-078",
+      "name": "术前小结：内容不完整",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-accuracy-round2-offline-repro.md",
+        "2026-10-07-0910-accuracy-round3-minimal-fix.md",
+        "2026-10-07-0910-accuracy-round4-real-model-and-pipeline.md",
+        "2026-10-07-0910-accuracy-round5-association-and-isolation.md",
+        "2026-10-07-0910-result-accuracy-batch1.md",
+        "2026-10-08-preop-bounded-real-validation.md",
+        "2026-10-08-preop-span-reference-validation.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-04-01-05",
+      "legacy_id": "LX0609-079",
+      "name": "术前讨论记录：内容不完整",
+      "report_refs": [
+        "surgery-anesthesia"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-accuracy-round2-offline-repro.md",
+        "2026-10-07-0910-accuracy-round3-minimal-fix.md",
+        "2026-10-07-0910-accuracy-round4-real-model-and-pipeline.md",
+        "2026-10-07-0910-accuracy-round5-association-and-isolation.md",
+        "2026-10-07-0910-h01-h03-recheck.md",
+        "2026-10-07-0910-r01-r02-h03b-recheck.md",
+        "2026-10-07-0910-result-accuracy-batch1.md",
+        "2026-10-08-preop-bounded-real-validation.md",
+        "2026-10-08-preop-span-reference-validation.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "legacy_id": "",
+      "name": "CT/MRI检查记录：医嘱与病程一致性",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-accuracy-round6-ct-mri-real-model.md",
+        "2026-10-07-0910-h01-h03-recheck.md",
+        "2026-10-07-0910-r01-r02-h03b-recheck.md",
+        "2026-10-07-0910-result-accuracy-batch1.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "legacy_id": "",
+      "name": "CT/MRI检查记录：报告单完整性",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": [
+        "2026-10-07-0910-h01-h03-recheck.md",
+        "2026-10-07-0910-r01-r02-h03b-recheck.md",
+        "2026-10-07-0910-result-accuracy-batch1.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-06-03-01",
+      "legacy_id": "",
+      "name": "微生物培养检查记录：医嘱与病程一致性",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "legacy_id": "",
+      "name": "微生物培养检查记录：报告单完整性",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "legacy_id": "",
+      "name": "病理检查记录：报告单完整性",
+      "report_refs": [
+        "imaging-laboratory"
+      ],
+      "historical_mentions_only": []
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "legacy_id": "",
+      "name": "抢救记录：内容完整性",
+      "report_refs": [],
+      "historical_mentions_only": [
+        "2026-10-07-round2-document-quality-audit.md"
+      ]
+    },
+    {
+      "rule_id": "LX0609-08-01-05",
+      "legacy_id": "",
+      "name": "出院记录：诊疗经过不全面或不详细",
+      "report_refs": [
+        "discharge-death"
+      ],
+      "historical_mentions_only": []
+    }
+  ],
+  "warning": "索引不等于验收分类；缺报告不等于未审"
+}

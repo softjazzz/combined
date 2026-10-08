@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "audit_id": "engine-audit-20261008-pipeline-release",
+  "date": "2026-10-08",
+  "owner": "audit_pipeline_release",
+  "scope": {
+    "engines": ["0609"],
+    "medical_criteria_reviewed": false,
+    "reviewed": ["create", "frozen_scope", "worker", "save", "latest", "batch_detail", "html_csv_xlsx_export", "retry_cancel", "restart", "history_compatibility", "package_release_prerequisites"],
+    "excluded": [{"engine": "0916", "status": "scope_excluded_by_user", "count_in_denominator": false, "count_as_blocker": false}]
+  },
+  "source_baseline_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "candidate_sha": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "source_identity": {
+    "commit_diff_paths": ["apps/medqc-web/docs/plans/2026-10-08-full-engine-acceptance.md"],
+    "production_commit_diff_paths": [],
+    "production_code_unchanged_between_shas": true,
+    "does_not_assert_other_worktree_changes_absent": true
+  },
+  "status": "review_completed_local_contracts_passed_final_candidate_gates_pending",
+  "completion_layers": {
+    "static_pipeline_review": "completed",
+    "existing_integration_coverage_review": "completed_inherited_evidence_not_rerun",
+    "selected_sync_contract_tests": "36_passed",
+    "selected_release_tests": "31_passed",
+    "full_three_entry_worker_api_chain": "existing_tests_reviewed_not_rerun_this_audit",
+    "cross_process_restart": "existing_tests_reviewed_not_rerun_this_audit",
+    "final_candidate_artifact": "not_built_or_installed_this_audit",
+    "customer_deployment": "not_executed"
+  },
+  "findings": [],
+  "defects": [],
+  "blockers": [],
+  "confirmed_new_0609_defect_count": 0,
+  "fix_sha": null,
+  "independent_review": {"status": "not_performed", "approved": false},
+  "executed_checks": [
+    {
+      "id": "release-local",
+      "passed": 31,
+      "failed": 0,
+      "duration_seconds": 33.39,
+      "files": ["test_customer_agent_runtime_package.py", "test_verify_release_source.py", "test_release_baseline_inventory.py", "test_customer_release_db_preflight_contract.py"],
+      "runner": "python -B -m pytest --noconftest -p no:cacheprovider -o addopts= -q <four listed files> --basetemp=.tmp/engine-audit-20261008/pipeline-release/pytest-release",
+      "log": ".tmp/engine-audit-20261008/pipeline-release/release-tests.log",
+      "evidence_scope": "existing synthetic file/PowerShell fragment/source contract tests; no real build/activation/migration/service"
+    },
+    {
+      "id": "pipeline-sync-local",
+      "passed": 36,
+      "failed": 0,
+      "deselected": 30,
+      "asynchronous_cases_excluded_before_selection": 15,
+      "warnings": 69,
+      "duration_seconds": 12.30,
+      "files": ["test_luxian_0609_task_settings_snapshot.py", "test_luxian_0609_task_runtime_identity.py", "test_luxian_0609_record_result_read_model.py", "test_luxian_0609_result_persistence_contract.py", "test_luxian_0609_attempt_boundary_audit.py"],
+      "runner": "python -B .tmp/engine-audit-20261008/pipeline-release/run_safe_existing.py",
+      "log": ".tmp/engine-audit-20261008/pipeline-release/pipeline-sync-final.log",
+      "evidence_scope": "selected existing synchronous tests only; isolated SQLite; no production startup or external database",
+      "isolation": ["shared conftest disabled", "real configuration environment removed", "real .env reads denied", "network denied", "SQLite connection module supplied", "PG initialization DDL excluded at same boundary as existing isolated fixtures"],
+      "full_pipeline_pass_claimed": false
+    }
+  ],
+  "discarded_harness_runs": [
+    {"log": ".tmp/engine-audit-20261008/pipeline-release/pipeline-tests.log", "failed": 16, "passed": 28, "classification": "harness_selection_and_default_connection_guard", "product_defect": false},
+    {"log": ".tmp/engine-audit-20261008/pipeline-release/pipeline-sync-tests.log", "failed": 8, "passed": 28, "classification": "PostgreSQL_initialization_DDL_not_supported_by_SQLite", "product_defect": false}
+  ],
+  "key_files": [
+    "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+    "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+    "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/rule_decision_settings.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/record_result_read_model.py",
+    "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+    "apps/medqc-web/backend/app/services/qc_workspace/export_service.py",
+    "apps/medqc-web/backend/app/services/luxian_0609_result_export_service.py",
+    "apps/medqc-web/backend/app/services/llm_config_loader.py",
+    "apps/medqc-web/scripts/package-customer-release.ps1",
+    "apps/medqc-web/scripts/customer-db-preflight.ps1",
+    "apps/medqc-web/backend/start_dev_backend.ps1"
+  ],
+  "existing_coverage_index": {
+    "formal_three_entry_chain": "apps/medqc-web/backend/tests/integration/test_luxian_0609_all_rules_three_entry_acceptance.py",
+    "route_flow": "apps/medqc-web/backend/tests/integration/test_qc_sichuan_workspace_batch_flow.py",
+    "freeze": ["apps/medqc-web/backend/tests/unit/test_luxian_0609_task_settings_snapshot.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_task_plan_freeze_probe.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_task_runtime_identity.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_frozen_horizon_entry.py"],
+    "save": "apps/medqc-web/backend/tests/unit/test_luxian_0609_result_persistence_contract.py",
+    "read": ["apps/medqc-web/backend/tests/unit/test_luxian_0609_record_result_read_model.py"],
+    "export": ["apps/medqc-web/backend/tests/unit/test_qc_sichuan_record_result_exports.py", "apps/medqc-web/backend/tests/unit/test_custom_qc_workspace_export_html.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_result_export_service.py"],
+    "retry_cancel_restart": ["apps/medqc-web/backend/tests/unit/test_qc_sichuan_batch_cancel.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_attempt_boundary_audit.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_task_restart_persistence.py"],
+    "history": ["apps/medqc-web/backend/tests/unit/test_qc_sichuan_saved_result_access.py", "apps/medqc-web/backend/tests/unit/test_luxian_0609_read_side_projection_boundary.py"],
+    "release": ["apps/medqc-web/backend/tests/unit/test_customer_release_db_preflight_contract.py", "apps/medqc-web/backend/tests/unit/test_customer_agent_runtime_package.py", "apps/medqc-web/backend/tests/unit/test_acceptance_startup.py", "apps/medqc-web/backend/tests/unit/test_product_activation.py", "apps/medqc-web/backend/tests/unit/test_llm_config_loader.py"]
+  },
+  "pending_final_candidate_gates": [
+    {"id": "0609-full-isolated-chain", "status": "pending", "required": "freeze final full SHA; rerun formal three-entry create/worker/save/latest/detail/HTML/CSV/XLSX contract and failure cases using reviewed isolation", "local_subset_is_sufficient": false},
+    {"id": "0609-freeze-retry-restart-history", "status": "pending", "required": "final SHA async frozen scope/time/runtime drift, cancellation/retry, cross-process recovery/lease and historical contract tests; PG locking evidence remains separate", "local_subset_is_sufficient": false},
+    {"id": "final-source-build-package-identity", "status": "pending", "required": "clean final SHA customer build; artifact manifest/hash; frontend/backend/runtime API build identity consistency"},
+    {"id": "customer-install-offline-runtime", "status": "pending_customer_environment", "required": "actual OS/architecture/runtime/offline dependencies and persistence directories; install/restart proof"},
+    {"id": "customer-pg-migration", "status": "pending_customer_authorized_execution", "required": "backup/current/heads/upgrade/structure/index permissions and read-only preflight evidence; no migration run in this audit"},
+    {"id": "customer-activation", "status": "pending_customer_environment", "required": "valid product authorization, expiry/tamper/restart behavior and safe activation-file paths"},
+    {"id": "customer-model", "status": "pending_customer_authorized_execution", "required": "actual configured provider/model transport/timeout/failure/usage evidence; this audit made zero real model calls"},
+    {"id": "frontend-role-candidate-checks", "status": "pending_other_owner", "required": "final SHA AGENTS encoding/lint/type/unit checks and target package role operation evidence"}
+  ],
+  "safety_boundary": {
+    "production_files_modified": false,
+    "shared_tests_modified": false,
+    "todo_modified": false,
+    "committed": false,
+    "service_started": false,
+    "browser_started": false,
+    "real_env_read": false,
+    "postgres_connected": false,
+    "real_model_calls": 0
+  },
+  "artifacts": {
+    "report_md": "docs/acceptance/engine-audit-20261008/pipeline-release.md",
+    "report_json": "docs/acceptance/engine-audit-20261008/pipeline-release.json",
+    "evidence_directory": ".tmp/engine-audit-20261008/pipeline-release/"
+  },
+  "acceptance_claim": "static review and inherited coverage are completed; 67 scoped checks passed; no new confirmed 0609 defect; final candidate full-chain/artifact/customer gates pending; deployment and clinical approval not claimed"
+}

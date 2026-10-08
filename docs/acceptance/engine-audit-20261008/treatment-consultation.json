@@ -1,0 +1,668 @@
+{
+  "schema": "engine-audit-report-v1",
+  "audit_date": "2026-10-08",
+  "source_commit": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": {
+    "included": "LX0609-07-*，实际8条输血相关规则",
+    "excluded": [
+      {
+        "engine": "LX0916",
+        "rule_ids": [
+          "LX0916-017",
+          "LX0916-018",
+          "LX0916-019",
+          "LX0916-020",
+          "LX0916-021",
+          "LX0916-022"
+        ],
+        "reason": "scope_excluded_by_user",
+        "prior_observations_retained_in_probe": true,
+        "counted_in_denominator": false,
+        "counted_as_blocker": false
+      }
+    ],
+    "label_warning": "任务文件名treatment-consultation为分工标签；实际07族是输血，未跨范围审会诊/治疗规则。"
+  },
+  "summary": {
+    "rules_in_scope": 8,
+    "rules_pending_not_executed": 1,
+    "confirmed_residual_findings": 3,
+    "priority_counts": {
+      "P1": 3
+    },
+    "unique_synthetic_cases": 10,
+    "matched_cases": 4,
+    "mismatched_cases": 6,
+    "not_a_clinical_accuracy_metric": true,
+    "model_calls": 0,
+    "postgres_reads": 0,
+    "postgres_writes": 0,
+    "new_production_edits": 0,
+    "new_shared_test_edits": 0,
+    "pytest_started": false
+  },
+  "findings": [
+    {
+      "id": "TC-01",
+      "priority": "P1",
+      "classification": "confirmed_function_defect",
+      "title": "专用输血正文长度把计划、拒绝、暂缓判成已实施",
+      "rule_ids": [
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01"
+      ],
+      "location": {
+        "file": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+        "line": 2865
+      },
+      "evidence_ids": [
+        "TF_PLAN",
+        "TF_REFUSED",
+        "TF_POSTPONED",
+        "TF_PLAN_COMPLETE_FIELDS"
+      ],
+      "expected": "未确认实际实施，按现有明确取消记录的保守门控为data_gap，不得进入缺陷判断",
+      "observed": "_performed_source_state=present；计划文书进入046纯函数后non_compliant/transfusion_purpose_or_indication_missing",
+      "mechanism": "排除少量取消/未输血短语后，仅len(content)>=16即确认实施；未校验拟、拒绝、暂缓动作。",
+      "validation_boundary": "未改源码AST纯函数依赖闭包重放；已核执行器门控调用位置，未执行完整0609 Typed/Finalizer/保存/API链。",
+      "normal_control": [
+        "TF_CANCELLED=data_gap",
+        "TF_ACTUAL_NO_REACTION=present"
+      ],
+      "recommendation": "先冻结实际输血/计划/拒绝/暂缓的统一事件事实门控，再对受影响规则做正式链离线复审；不得按测试句打补丁。"
+    },
+    {
+      "id": "TC-02",
+      "priority": "P1",
+      "classification": "confirmed_branch_input_defect",
+      "title": "070取消记录的完成时间被当作输血实施时间",
+      "rule_ids": [
+        "LX0609-07-01-03"
+      ],
+      "location": {
+        "file": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "line": 3001
+      },
+      "secondary_location": {
+        "file": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+        "line": 961
+      },
+      "evidence_ids": [
+        "070_CANCELLED_RECORD_TIME"
+      ],
+      "expected": "只有明确取消专用记录及record_time，未确认实施；data_gap且不可声明performed_transfusion_confirmed",
+      "observed": "non_compliant/pretransfusion_items_incomplete；performed_transfusion_confirmed=true；record_time当作checked_transfusion_times",
+      "mechanism": "070把mr_bloodtrans与bloodtrans_record的所有行直接组合为actual_transfusion_rows，再交给允许record_time回退的九项函数；没有经过普通输血家族的取消排除。",
+      "validation_boundary": "依070当前分支构造完全同构字典，重放当前九项纯函数；不是070完整执行器、公开入口或落库复现。",
+      "recommendation": "统一使用已实施事件及权威实施时间；记录完成时间不能单独成为实际输血事实。"
+    },
+    {
+      "id": "TC-03",
+      "priority": "P1",
+      "classification": "confirmed_function_defect",
+      "title": "048否定术中输血与备血量仍生成术中输血差异",
+      "rule_ids": [
+        "LX0609-07-04-01"
+      ],
+      "location": {
+        "file": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+        "line": 2388
+      },
+      "evidence_ids": [
+        "048_NEGATED_INTRAOPERATIVE"
+      ],
+      "expected": "三份文书明确术中未输血，剂量只属于术前备血，not_applicable/intraoperative_transfusion_fact_absent",
+      "observed": "non_compliant/transfusion_records_inconsistent；performed_intraoperative_transfusion_confirmed=true；三份备血量2U/4U/2U被纳入comparison_matrix",
+      "mechanism": "术中…输血与成分正向正则未排除否定/计划/备血语义；成分剂量配对正确仍不能证明动作已发生。",
+      "validation_boundary": "当前048纯函数离线重放；若实际住院其他阶段确有输血，全族已实施门控也不能替代术中事件确认。本轮未执行该整链组合。",
+      "normal_control": [
+        "048_MATCHED=compliant（2U与2单位归一）",
+        "048_TIME_CONFLICT=data_gap/association_failed"
+      ],
+      "already_closed": {
+        "commit": "b4a98783e",
+        "scope": "按事件、成分、单位及数量配对，阻断未配对剂量/不自洽明细；本轮不重开已修配对缺陷",
+        "source": "engine_coverage_registry已关闭成果索引；当前正常对照亦支持配对/冲突保护。"
+      },
+      "recommendation": "单独冻结术中实施事件，再只比较同一实际事件的成分和剂量，保留b4a98783e已关闭配对保护。"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "LX0609-07-01-01",
+      "rule_name": "输血前常规检查不完整",
+      "actual_executor": "transfusion",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-01"
+      ],
+      "normal_controls": [
+        "TF_CANCELLED",
+        "TF_ACTUAL_NO_REACTION"
+      ],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "已检查家族门控及九项确定性函数；本轮未新增九项真实样本复核。"
+    },
+    {
+      "rule_id": "LX0609-07-01-02",
+      "rule_name": "无输血前评估记录或记录不完整",
+      "actual_executor": "transfusion",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-01"
+      ],
+      "normal_controls": [
+        "TF_CANCELLED",
+        "TF_ACTUAL_NO_REACTION"
+      ],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "044既有字段/客户事实合同已关闭；本轮新门控问题与多事件/逐次申请关联未闭环分别记录，不能重开已关合同。"
+    },
+    {
+      "rule_id": "LX0609-07-02-01",
+      "rule_name": "无输血病程记录",
+      "actual_executor": "transfusion",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-01"
+      ],
+      "normal_controls": [
+        "TF_CANCELLED",
+        "TF_ACTUAL_NO_REACTION"
+      ],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "当前取消/实施无反应正常门控对照保留；计划/拒绝/暂缓误实施残留。"
+    },
+    {
+      "rule_id": "LX0609-07-02-02",
+      "rule_name": "输血病程记录不完整或不规范",
+      "actual_executor": "transfusion",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-01"
+      ],
+      "normal_controls": [
+        "TF_CANCELLED",
+        "TF_ACTUAL_NO_REACTION"
+      ],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "计划记录可进入046不合规分支；现有逐份字段合同和成分最小抽取未在本轮重测。"
+    },
+    {
+      "rule_id": "LX0609-07-03-01",
+      "rule_name": "无输血后评价",
+      "actual_executor": "transfusion",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-01"
+      ],
+      "normal_controls": [
+        "TF_CANCELLED",
+        "TF_ACTUAL_NO_REACTION"
+      ],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "实际实施前提受共同门控残留影响；24小时窗与逐次评价关联本轮仅既有源码边界，未新测。"
+    },
+    {
+      "rule_id": "LX0609-07-04-01",
+      "rule_name": "术中输血三份文书内容不一致",
+      "actual_executor": "transfusion",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-03"
+      ],
+      "normal_controls": [
+        "048_MATCHED",
+        "048_TIME_CONFLICT"
+      ],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "048 b4a98783e配对/合同已关闭；单位归一和时点冲突本轮正常对照通过，否定/备血触发单列新残留。"
+    },
+    {
+      "rule_id": "LX0609-07-04-02",
+      "rule_name": "输血医嘱与收费不一致",
+      "actual_executor": "transfusion",
+      "audit_classification": "scope_pending_not_executed",
+      "confirmed_defect_ids": [],
+      "normal_controls": [],
+      "sample_coverage": "客户已确认暂不执行，不能按缺真实样本记失败。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无新争议；沿用客户无收费资料暂不执行口径。",
+      "note": "当前目录phase_status=pending_definition：客户范围无可用收费数据，规则暂不执行。保留排除，不以未执行计算临床失败。"
+    },
+    {
+      "rule_id": "LX0609-07-01-03",
+      "rule_name": "输血前评估：未做输血前相关九项检查",
+      "actual_executor": "extended_document",
+      "audit_classification": "confirmed_residual",
+      "confirmed_defect_ids": [
+        "TC-02"
+      ],
+      "normal_controls": [],
+      "sample_coverage": "本轮仅合成离线对照；未核验此规则真实独立冻结反例输入SHA，不升级真实或临床验收。",
+      "real_model_gap": "本轮真实模型0；历史已有工程/模型成果保持原状态，缺本轮真实复验不等于未审。",
+      "business_dispute": "无本轮新医学判据争议；实际实施与计划/否定区分是确定事件事实。",
+      "note": "扩展070实际由extended_document执行，未经过普通家族取消门控；不能按编号或栏目猜执行器。"
+    }
+  ],
+  "probe_results": [
+    {
+      "id": "TF_PLAN",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_REFUSED",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_POSTPONED",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_CANCELLED",
+      "expected": "data_gap",
+      "status_match": true,
+      "anchor_match": true,
+      "output": {
+        "status": "data_gap",
+        "gate": "data_gap"
+      }
+    },
+    {
+      "id": "TF_ACTUAL_NO_REACTION",
+      "expected": "present",
+      "status_match": true,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_PLAN_COMPLETE_FIELDS",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present",
+        "programmatic_046": [
+          "non_compliant",
+          "transfusion_purpose_or_indication_missing"
+        ]
+      }
+    },
+    {
+      "id": "070_CANCELLED_RECORD_TIME",
+      "expected": "data_gap",
+      "observed": [
+        "non_compliant",
+        "pretransfusion_items_incomplete",
+        {
+          "performed_transfusion_confirmed": true,
+          "required_items": [
+            "hbsag",
+            "hbsab",
+            "hbeag",
+            "hbeab",
+            "hbcab",
+            "hcv",
+            "hiv",
+            "syphilis",
+            "alt"
+          ],
+          "transfusion_event_count": 1,
+          "checked_transfusion_times": [
+            "2026-10-08 08:00:00"
+          ],
+          "event_checks": [
+            {
+              "transfusion_time": "2026-10-08 08:00:00",
+              "missing_items": [
+                "alt",
+                "hbcab",
+                "hbeab",
+                "hbeag",
+                "hbsab",
+                "hbsag",
+                "hcv",
+                "hiv",
+                "syphilis"
+              ],
+              "missing_time_items": [],
+              "late_items": [],
+              "outside_current_stay_items": [],
+              "latest_valid_test_time": null
+            }
+          ],
+          "admission_time": "2026-10-08 07:00:00",
+          "failed_transfusion_times": [
+            "2026-10-08 08:00:00"
+          ],
+          "failure_kind": "pretransfusion_items_incomplete",
+          "missing_items": [
+            "alt",
+            "hbcab",
+            "hbeab",
+            "hbeag",
+            "hbsab",
+            "hbsag",
+            "hcv",
+            "hiv",
+            "syphilis"
+          ]
+        }
+      ],
+      "pass": false
+    },
+    {
+      "id": "048_NEGATED_INTRAOPERATIVE",
+      "expected": "not_applicable",
+      "observed": [
+        "non_compliant",
+        "transfusion_records_inconsistent",
+        {
+          "failure_kind": "transfusion_records_inconsistent",
+          "performed_intraoperative_transfusion_confirmed": true,
+          "differing_fields": [
+            "doses"
+          ],
+          "comparison_matrix": {
+            "surgery_record": {
+              "components": [
+                "红细胞"
+              ],
+              "doses": [
+                "2u"
+              ],
+              "transfusion_items": [
+                {
+                  "event_time": "",
+                  "component": "红细胞",
+                  "quantity": "2",
+                  "unit": "u",
+                  "original_dose": "2U"
+                }
+              ]
+            },
+            "anesthesia_record": {
+              "components": [
+                "红细胞"
+              ],
+              "doses": [
+                "4u"
+              ],
+              "transfusion_items": [
+                {
+                  "event_time": "",
+                  "component": "红细胞",
+                  "quantity": "4",
+                  "unit": "u",
+                  "original_dose": "4U"
+                }
+              ]
+            },
+            "postsurg_firstcourse_record": {
+              "components": [
+                "红细胞"
+              ],
+              "doses": [
+                "2u"
+              ],
+              "transfusion_items": [
+                {
+                  "event_time": "",
+                  "component": "红细胞",
+                  "quantity": "2",
+                  "unit": "u",
+                  "original_dose": "2U"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "pass": false
+    },
+    {
+      "id": "048_MATCHED",
+      "expected": "compliant",
+      "observed": [
+        "compliant",
+        "transfusion_records_consistent",
+        {
+          "verification_kind": "transfusion_records_consistent",
+          "performed_intraoperative_transfusion_confirmed": true,
+          "checked_fields": [
+            "components",
+            "doses"
+          ],
+          "comparison_matrix": {
+            "surgery_record": {
+              "components": [
+                "红细胞"
+              ],
+              "doses": [
+                "2u"
+              ],
+              "transfusion_items": [
+                {
+                  "event_time": "2026-10-08 10:00:00",
+                  "component": "红细胞",
+                  "quantity": "2",
+                  "unit": "u",
+                  "original_dose": "2U"
+                }
+              ]
+            },
+            "anesthesia_record": {
+              "components": [
+                "红细胞"
+              ],
+              "doses": [
+                "2u"
+              ],
+              "transfusion_items": [
+                {
+                  "event_time": "2026-10-08 10:00:00",
+                  "component": "红细胞",
+                  "quantity": "2",
+                  "unit": "u",
+                  "original_dose": "2单位"
+                }
+              ]
+            },
+            "postsurg_firstcourse_record": {
+              "components": [
+                "红细胞"
+              ],
+              "doses": [
+                "2u"
+              ],
+              "transfusion_items": [
+                {
+                  "event_time": "2026-10-08 10:00:00",
+                  "component": "红细胞",
+                  "quantity": "2",
+                  "unit": "u",
+                  "original_dose": "2U"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "048_TIME_CONFLICT",
+      "expected": "data_gap",
+      "observed": [
+        "data_gap",
+        "association_failed",
+        null
+      ],
+      "pass": true
+    }
+  ],
+  "evidence_sha_audit": {
+    "status": "public_document_and_synthetic_hashes_recorded_only",
+    "public_evidence_documents": [
+      "apps/medqc-web/docs/acceptance/2026-09-06-lx0609-transfusion-family-convergence.md",
+      "apps/medqc-web/docs/acceptance/2026-10-08-isolated-qc-integration.md",
+      "apps/medqc-web/docs/acceptance/2026-10-08-parallel-repair-real-validation.md"
+    ],
+    "clinical_desensitized_fixture_sha_status": "未取得范围匹配的独立脱敏输入+冻结临床预期+预期SHA的可核对manifest；公开记录仅索引private材料，不读取、不哈希患者材料。不能宣称原始脱敏验收证据SHA已核对。",
+    "source_and_public_document_hashes": [
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+        "sha256": "bdc7dfd538fa8b13cfa434804835d73777d9f25cd1b08e9bdc6a02d51edaf652",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "sha256": "bd63c9ac5927deb8130d13a480196ab514a4301ee5e1f47abd69df29a0c903d5",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py",
+        "sha256": "b2306a2d9ce4de035c5b1ae654d740e6faf2b01cf7e6374f4fe1e61936b246ba",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      },
+      {
+        "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+        "sha256": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      },
+      {
+        "path": "apps/medqc-web/docs/acceptance/2026-09-06-lx0609-transfusion-family-convergence.md",
+        "sha256": "0a3b370313002b0b7cbb021c5ee0103e904456792bbfa1cadb83eac3b4aa46cf",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      },
+      {
+        "path": "apps/medqc-web/docs/acceptance/2026-10-08-isolated-qc-integration.md",
+        "sha256": "502a7a9c27eebc3d3af683c113d03c5a06d1fc6cee81e70bcb62c67147e84e83",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      },
+      {
+        "path": "apps/medqc-web/docs/acceptance/2026-10-08-parallel-repair-real-validation.md",
+        "sha256": "713963818dfc687128514e827134d056a88e4199549c87ca64dc3e53ec4c4605",
+        "kind": "source_code_or_public_acceptance_document",
+        "matching_expected_sha_supplied": false
+      }
+    ],
+    "probe_hashes": [
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/frozen-expectations.json",
+        "sha256": "40fa02375634a4393cadccb439e79c466d114fb2ea7e8156888dcfac1d3a8371"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/extension-frozen-expectations.json",
+        "sha256": "3077945601ca54174a167f1070bff8bc8788f1eabbdee598d29cde9bbb776303"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/048-frozen-expectations.json",
+        "sha256": "8b6a3ef2d76c089b75933922e57f56a17fcf7fd0c02c5fb1fb15ab5ef3c6c69b"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/observed-results.json",
+        "sha256": "a45d582ffb72337c872811b36b0bb4ba2b3b2637a3292f0da195cbe5cb640528"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/extension-results.json",
+        "sha256": "f5eac7545b2a92ae19baeb952a8039b51738642f3a07c4bbc624a202cf67643b"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/048-results.json",
+        "sha256": "84342605c8236137d9ef1267e8657d3610b5ba53f74482e6f35dbc22d0da2cee"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/offline_probe.py",
+        "sha256": "fd0220ee5d4f8138c2765bd694573dcf58484747a95a4050a3f05fe0444686da"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/extension_probe.py",
+        "sha256": "84890ce5ba5b1ad04671e5c21582192f156571953cea120561b88620cf94e129"
+      },
+      {
+        "path": ".tmp/engine-audit-20261008/treatment-consultation/048_probe.py",
+        "sha256": "3bdfab8ea4f120f3942f5bf0a830c68aa35e51de47873bf7d6c022927056b3e2"
+      }
+    ],
+    "frozen_before_execution": true
+  },
+  "closed_work_preserved": [
+    {
+      "rule_id": "LX0609-07-04-01",
+      "commit": "b4a98783e",
+      "scope": "配对与合同已关闭；新触发残留独立列TC-03。",
+      "independent_review": "公开2026-10-08-isolated-qc-integration.md:17为b4a98783e修复索引；:22为集成482项，:24为F:/MedQC-worktrees/review-artifacts/a,b,c,d独立复核索引。组别精确产物由总索引继续绑定，本轮离线对照不替代旧复审。",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-isolated-qc-integration.md",
+      "evidence_lines": [
+        17,
+        22,
+        24
+      ]
+    },
+    {
+      "rule_id": "LX0609-07-01-02",
+      "commit": "db4bddb67",
+      "scope": "044字段/客户事实合同已关闭；多事件未关和新门控TC-01不等于合同重开。",
+      "independent_review": "2026-10-08-isolated-qc-integration.md:18明确db4bddb67合法资料缺口与矛盾拒绝修复；:24记录D独立合同182项及正式执行/SQLite/新引擎/API投影12项通过；:32明确044三项多事件基线亦失败未关闭。",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-isolated-qc-integration.md",
+      "evidence_lines": [
+        18,
+        24,
+        32
+      ]
+    }
+  ],
+  "limitations": [
+    "0609使用原源码AST纯函数依赖闭包，排除带环境/数据库副作用的导入；无完整Typed/Finalizer/保存/API/浏览器链新运行。",
+    "070是按当前分支输入构造的纯九项函数复现；未称070整链已实测。",
+    "现有两个0916测试仅复制到独占探针目录并建立入口，从未启动；最新范围排除，不纳入报告验证。",
+    "首轮探针遇到AST位置元数据与mappingproxy序列化工具错误，修正仅工具脚本；初轮结果及脚本副本保留。",
+    "019原首轮合成输入有record_present=false/complete=true，曾改为record_present=true/complete=false作更强复核；状态预期不变，此范围已排除，不计本报告。",
+    "048历史完整真实样本缺口由公开2026-10-08记录确认；未冒充当前已重新盘点全部样本。",
+    "共享进程OOM后未启动任何新pytest，恢复后只归档既有证据。"
+  ]
+}

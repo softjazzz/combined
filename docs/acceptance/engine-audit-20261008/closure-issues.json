@@ -1,0 +1,725 @@
+{
+  "baseline": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "scope": "0609 only",
+  "note": "问题级执行队列，不等同规则数；待复核与业务争议不冒认为已确认缺陷。N13两来源合并。",
+  "issues": [
+    {
+      "id": "N12",
+      "rule_ids": [
+        "LX0609-04-04-02"
+      ],
+      "claim": "麻醉空标签残留；未找到后续独立关闭",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "N10",
+      "rule_ids": [
+        "LX0609-04-05-02",
+        "LX0609-08-02-01"
+      ],
+      "claim": "正文模板壳残留；先核补丁，不重复修",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "N13",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "未比较却发布matched，旧独立复审保留",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": "/root/repair_chemo",
+      "state": "repairing",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "TR-044-MULTI",
+      "rule_ids": [
+        "LX0609-07-01-02"
+      ],
+      "claim": "三项多事件基线也失败；合同关闭不等于事实闭环",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "SURGERY-029030",
+      "rule_ids": [
+        "LX0609-04-01-01",
+        "LX0609-04-02-02"
+      ],
+      "claim": "正常材料资料不足回退反例仍待独立闭环",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PREOP-MEDICAL",
+      "rule_ids": [
+        "LX0609-04-01-04",
+        "LX0609-04-01-05"
+      ],
+      "claim": "诊断充分性及术式归属人工争议；限定工程闭环已完成",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "CT-INPUT-CHANGE",
+      "rule_ids": [
+        "LX0609-06-01-04",
+        "LX0609-06-01-05"
+      ],
+      "claim": "移除DR后送模目录变更；旧真实响应不可替代当前输入",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PATH-INPUT-CHANGE",
+      "rule_ids": [
+        "LX0609-06-02-02",
+        "LX0609-06-02-03"
+      ],
+      "claim": "跨事件同键/标本/时间门禁改变，需正常适用材料",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PROMPT-074",
+      "rule_ids": [
+        "LX0609-12-02-01"
+      ],
+      "claim": "Prompt已改，旧真实响应/合法替身不能代替当前输出",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "SURGERY-FREEZE",
+      "rule_ids": [
+        "LX0609-04-02-02",
+        "LX0609-04-03-01",
+        "LX0609-04-01-03"
+      ],
+      "claim": "7项冻结差异含新增事实/文案/坐标及技术失败，不是7医学误判",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "TR-048-REAL",
+      "rule_ids": [
+        "LX0609-07-04-01"
+      ],
+      "claim": "真实材料缺实际触发及三类完整文书；继承048配对工程证据",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "course-timing:CT-01",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "否定与未来条件中的诊断不明确误触发当前缺陷",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_defect",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "course-timing:CT-02",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "当前不明确病程缺可信时间时被静默排除并作完整未触发",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_defect",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "course-timing:CT-03",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "空白讨论行被当成书写完成并判合规；应缺陷还是数据缺口待口径",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_defect",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "discharge-death:DD-F01",
+      "rule_ids": [
+        "LX0609-08-01-03"
+      ],
+      "claim": "死亡患者未形成出院记录时，死亡诊断冲突核对被正常出院记录存在性门控跳过。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_offline_scope_gap",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "discharge-death:DD-F02",
+      "rule_ids": [
+        "LX0609-08-01-02"
+      ],
+      "claim": "带药现分支验证名称、剂量、途径、时间字段非空；没有药名/剂量错误或与医嘱一致性比较。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_rule_coverage_limit",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "discharge-death:DD-F05",
+      "rule_ids": [
+        "LX0609-08-01-04"
+      ],
+      "claim": "旧业务基线027允许肿瘤治疗或随访；当前总表质控点与确定性实现仅肿瘤治疗计划满足要求。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "documentation_policy_alignment",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "imaging-laboratory:IML-01",
+      "rule_ids": [
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-02"
+      ],
+      "claim": "按任一行目标名称确认事件，不校验同键主从身份互相否定；非目标报告也可证明目标已执行/报告齐全",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "确认缺陷",
+      "owner": "/root/repair_iml01",
+      "state": "committed_independent_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "source_commit": "11211cc42becaa03d0f5b36056bdc3e17a31842a"
+    },
+    {
+      "id": "imaging-laboratory:IML-02",
+      "rule_ids": [
+        "LX0609-06-04-01",
+        "LX0609-06-04-02"
+      ],
+      "claim": "report_time or report_datetime or record_time取首值，记录时间替代报告时间，别名冲突被静默忽略",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "确认缺陷",
+      "owner": "/root/repair_iml02",
+      "state": "committed_independent_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "source_commit": "0628782191861460bbf24edbf848eb601829876c"
+    },
+    {
+      "id": "imaging-laboratory:IML-D01",
+      "rule_ids": [
+        "LX0609-06-01-03"
+      ],
+      "claim": "主记录明确取消而同键有效正式报告仍被视为已完成；源状态是否最终或历史残留需确认，暂不计确认P1",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "争议",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "imaging-laboratory:IML-D02",
+      "rule_ids": [
+        "LX0609-06-01-02"
+      ],
+      "claim": "前48小时硬裁剪与判定，在业务基线010仅要求检查前原因；本轮未找到48小时客户确认来源。旧测试固定此行为，不据测试宣称标准已经确定。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "争议",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "rescue-remaining:RR-D01",
+      "rule_ids": [
+        "LX0609-09-02-01"
+      ],
+      "claim": "见原报告",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "rescue-remaining:RR-D02",
+      "rule_ids": [
+        "LX0609-09-02-01"
+      ],
+      "claim": "见原报告",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "rescue-remaining:RR-M01",
+      "rule_ids": [
+        "LX0609-12-02-01"
+      ],
+      "claim": "见原报告",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_contract_execution_drift",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "treatment-consultation:TC-01",
+      "rule_ids": [
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01"
+      ],
+      "claim": "专用输血正文长度把计划、拒绝、暂缓判成已实施",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_function_defect",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "treatment-consultation:TC-02",
+      "rule_ids": [
+        "LX0609-07-01-03"
+      ],
+      "claim": "070取消记录的完成时间被当作输血实施时间",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_branch_input_defect",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "treatment-consultation:TC-03",
+      "rule_ids": [
+        "LX0609-07-04-01"
+      ],
+      "claim": "048否定术中输血与备血量仍生成术中输血差异",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_function_defect",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D01",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "空化疗病程返回元组长度错误，正式执行中断",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open",
+      "owner": "/root/repair_chemo",
+      "state": "integrated_engineering_closed",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "integration_commit": "e256e8ea9",
+      "source_commit": "d0f9c829901152a5a9fd7d97bc9916fe076b67cd",
+      "evidence": "4 native/Finalizer synthetic tests by worker; independent fixed-blob AST comparison 8 observations; no real model/PG/clinical claim",
+      "independent_review": "F:/MedQC-worktrees/review-artifacts/chemo-d01/review.md"
+    },
+    {
+      "id": "tumor-pathology:TP-D02",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "单目标药整篇病程比较可借用其他药剂量，并把否定或计划给药判合规",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open",
+      "owner": "/root/repair_chemo",
+      "state": "design_before_semantic_changes",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D03",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "化疗适用事件只按药物分类筛选，无取消状态约束",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open_policy_details_pending",
+      "owner": "/root/repair_chemo",
+      "state": "design_before_semantic_changes",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D04",
+      "rule_ids": [
+        "LX0609-05-01-06"
+      ],
+      "claim": "单个特殊抗菌药事件可借用明确属于其他药的专家支持",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D05",
+      "rule_ids": [
+        "LX0609-05-01-03"
+      ],
+      "claim": "明确效果评价但不含有限结果词时被判缺评价",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open_semantic_coverage",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PRIV-002",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "0609上游原始身份已在masked投影丢失：与已完成gate分列",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "privacy_design_required_before_real_validation",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": []
+    },
+    {
+      "id": "PRIV-003",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "独立native/语义复核辅助脚本绕开发送边界",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "privacy_design_required_before_real_validation",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": []
+    },
+    {
+      "id": "PRIV-004",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "0609准生产旁路共用execution的prompt包装但未建立最终请求scope",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "20_offline_passed_preparing_fixed_commit",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": []
+    },
+    {
+      "id": "PRIV-005",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "上游错误摘要与快照异常日志存在原文传播面",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "committed_independent_review_pending",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": []
+    }
+  ]
+}

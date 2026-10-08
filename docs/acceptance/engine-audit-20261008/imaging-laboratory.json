@@ -1,0 +1,825 @@
+{
+  "audit_date": "2026-10-08",
+  "repository": "F:\\MedQC-worktrees\\qc-integration-20261008",
+  "head": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "codegraph_present": false,
+  "instructions": [
+    "AGENTS.md",
+    "apps/medqc-web/AGENTS.md"
+  ],
+  "scope": "LX0609-06-*",
+  "summary": {
+    "catalog_rules": 14,
+    "active_rules": 13,
+    "pending_definition": 1,
+    "confirmed_finding_groups": 2,
+    "confirmed_affected_rules": 5,
+    "disputes": 2,
+    "focused_tests_passed": 619,
+    "focused_test_warnings": 1,
+    "synthetic_cases": 12,
+    "synthetic_mismatches": 7,
+    "confirmed_mismatch_cases": 6,
+    "disputed_mismatch_cases": 1,
+    "real_model_calls": 0,
+    "pg_access": 0,
+    "dotenv_reads": 0
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-06-01-02",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证；口径争议",
+      "executor": "exam_lab",
+      "current_logic": "order_id→exam_id显式关联；检查时间/病程记录时间；检查前原因；模型候选仅前48小时",
+      "finding_id": "IML-D02",
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-01-04",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "按exam_id事件；报告后24小时结果记录；记录/提交时间分开；纯引导标签豁免",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-01-05",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "阳性为任一明确异常含炎症/退变/陈旧灶；24小时分析；共用01-04事实抽取",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-02-03",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证",
+      "executor": "tumor_pathology",
+      "current_logic": "最终诊断+时间门禁；病理结果与同键或唯一标本/诊断+报告后病程关联",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-03-03",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "培养/药敏事件按test_id；报告后24小时记录；完整性/时间缺口保留",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-03-04",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "可靠结构化菌名或受控语义阳性；24小时分析；药敏未出非豁免；共享抽取",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-02-02",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "待真实验证",
+      "executor": "tumor_pathology",
+      "current_logic": "最终诊断+时间门禁；按报告逐事件关联标本/业务键与取材文书；不关联则资料不足",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-04-01",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "确认缺陷；待真实验证",
+      "executor": "extended_document",
+      "current_logic": "PL/PH标记；同report_id/test_id事件与处置；报告后6小时；冻结评价终点",
+      "finding_id": "IML-02",
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-04-02",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "确认缺陷；待真实验证",
+      "executor": "extended_document",
+      "current_logic": "PL/PH标记；同事件处置存在性；不额外设置6小时；报告时间仍参与先后校验",
+      "finding_id": "IML-02",
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "implementation_status": "active",
+      "release_scope": "default",
+      "audit_status": "确认缺陷；待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "按医嘱order_id→exam_id台账；逐合并医嘱校验病程，未设置24小时；独立一次语义调用",
+      "finding_id": "IML-01",
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "audit_status": "确认缺陷；待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "按exam_id去重；正式发布+正文证明报告；缺报告保留资料不足；零模型",
+      "finding_id": "IML-01",
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-03-01",
+      "implementation_status": "pending_definition",
+      "release_scope": "default",
+      "audit_status": "未定义",
+      "executor": "none",
+      "current_logic": "培养主记录缺医嘱关联键；总表pending_definition，不应进入正式执行",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "audit_status": "确认缺陷；待真实验证",
+      "executor": "exam_lab",
+      "current_logic": "按test_id归并培养多行；正式发布+正文；零模型",
+      "finding_id": "IML-01",
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "audit_status": "待真实验证",
+      "executor": "tumor_pathology",
+      "current_logic": "同命名空间pathology_exam_id/pathology_id；申请非执行；缺报告仅资料不足；零模型",
+      "finding_id": null,
+      "real_validation": "本轮未调用真实模型/PG；旧脱敏报告仅作历史证据，当前临床及完整保存/API/浏览器链待验"
+    }
+  ],
+  "findings": [
+    {
+      "id": "IML-01",
+      "priority": "P1",
+      "classification": "确认缺陷",
+      "rules": [
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-02"
+      ],
+      "source": "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py:232",
+      "cause": "按任一行目标名称确认事件，不校验同键主从身份互相否定；非目标报告也可证明目标已执行/报告齐全",
+      "cases": [
+        "ct-master-dr-report",
+        "dr-master-ct-report",
+        "ct-master-ultrasound-dept",
+        "culture-master-routine-report"
+      ],
+      "expected": "data_gap",
+      "actual": "compliant",
+      "scope": "9例中4个确认身份冲突反例；全部报告反例已补跑原生执行，CT一致性固定响应原生执行也compliant",
+      "real_frequency": "待真实验证"
+    },
+    {
+      "id": "IML-02",
+      "priority": "P1",
+      "classification": "确认缺陷",
+      "rules": [
+        "LX0609-06-04-01",
+        "LX0609-06-04-02"
+      ],
+      "source": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py:578",
+      "cause": "report_time or report_datetime or record_time取首值，记录时间替代报告时间，别名冲突被静默忽略",
+      "cases": [
+        "critical-record-time-fallback",
+        "critical-report-alias-conflict"
+      ],
+      "expected": "data_gap",
+      "actual": "compliant；客户建议继续保持。",
+      "scope": "typed原生执行→Reducer→Aggregator/Renderer；两反例各两规则；模型0",
+      "real_frequency": "待真实验证"
+    },
+    {
+      "id": "IML-D01",
+      "classification": "争议",
+      "rules": [
+        "LX0609-06-01-03"
+      ],
+      "case": "cancelled-master-report",
+      "cause": "主记录明确取消而同键有效正式报告仍被视为已完成；源状态是否最终或历史残留需确认，暂不计确认P1"
+    },
+    {
+      "id": "IML-D02",
+      "classification": "争议",
+      "rules": [
+        "LX0609-06-01-02"
+      ],
+      "source": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py:193",
+      "cause": "前48小时硬裁剪与判定，在业务基线010仅要求检查前原因；本轮未找到48小时客户确认来源。旧测试固定此行为，不据测试宣称标准已经确定。",
+      "required": "确认有效原因记录是否应有48小时有效期；未新增模型或将争议自动判缺陷"
+    }
+  ],
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py": "a1e8dbee770fe1376d0ab71d7fd9bd7eb1a328ba6a1ba4e190979e0fa7125979",
+    "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py": "ac9e5dee95c00d65e87deb907ea8b922fe7392bfe263cd496f4add72c9ca97b5",
+    "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_course_time.py": "c6aa81414713015f8af468410c0730c8b8260ef9c1b581379d86caf4fc7ac26f",
+    "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_window.py": "b62572ec9d04cd3d52ee7f998781abeb81299a47e7c0b3e396be0fe8c0c38a6e",
+    "apps/medqc-web/backend/app/services/luxian_0609/exam_order_linkage.py": "8020255542be6db8d219de106748280373eb12adbb5adcf58b23750850d46401",
+    "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py": "c23224389a6111d4fda99d92e841a9c0e99012343c457bdb786c68ffb83a69a7",
+    "apps/medqc-web/backend/app/services/luxian_0609/ct_order_course_consistency.py": "ac5c2d0d7f0b0593314d12d1ee5ab7c5464afa30ef0d85aa937d9388bc78f183",
+    "apps/medqc-web/backend/app/services/luxian_0609/imaging_report_scope.py": "33c4b37a33737d6a709977645cd9813c9eb181932178faaba4c1179958e55d95",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py": "fb9b8c5f3c5c1573f07df53f10179d15b9ba0060772cd6fb8eccb5bbf55c1f12",
+    "apps/medqc-web/backend/app/services/luxian_0609/pathology_report_completeness.py": "8e8a67d6158a3821fc5890aad6387f1c0bc974e3cef576a16c57c20c3dbbdc34",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "bd63c9ac5927deb8130d13a480196ab514a4301ee5e1f47abd69df29a0c903d5",
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document_critical_value.py": "d6ca3cc00c88dace8c3d6ec1918ad02a60f66cee64680325e3c502f6a43201fc",
+    "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_result_mapping.py": "6a2d05130c009cce9327f217b5976af6d7c5efb5af0632785a590daaf42eee7d",
+    "apps/medqc-web/backend/app/services/luxian_0609/critical_value_result_mapping.py": "06f9a8e6d12e1392fab249383327a735649b48f4d1dfeadd9e9e62019f0b09cf",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "a0296061e86c9aecc7c9c4d77324768eeae7f3302a863f42830f88b62b33bb78"
+  },
+  "expected_sha256": [
+    "907902ea92c3c7bdc9e1724a2d322b80bec35f7d686aaa70a3af5768a5bc10c3",
+    "4540b293986702c6501cb929dc11ce052863157259fd8d6748d388860a22ff8a"
+  ],
+  "synthetic_results": [
+    {
+      "id": "ct-master-dr-report",
+      "rules": [
+        "LX0609-06-01-03",
+        "LX0609-06-01-01"
+      ],
+      "expected": "data_gap",
+      "basis": "同一exam_id主记录CT与报告DR身份冲突，不能确认CT报告或医嘱一致性",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": false,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "ct_mri",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "exam_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "胸部CT"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0,
+      "native": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        },
+        {
+          "rule_id": "LX0609-06-01-01",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "fixed_client_calls": 1
+    },
+    {
+      "id": "dr-master-ct-report",
+      "rules": [
+        "LX0609-06-01-03"
+      ],
+      "expected": "data_gap",
+      "basis": "同一业务键身份冲突不能择一认定已完成CT",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": false,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "ct_mri",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "exam_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "胸部CT"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "ct-master-ultrasound-dept",
+      "rules": [
+        "LX0609-06-01-03"
+      ],
+      "expected": "data_gap",
+      "basis": "报告无身份字段但执行科室明确超声，与CT主记录冲突",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": false,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "ct_mri",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "exam_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "胸部CT"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "cancelled-master-report",
+      "rules": [
+        "LX0609-06-01-03"
+      ],
+      "expected": "data_gap",
+      "basis": "明确取消和已正式报告的执行事实矛盾需核查",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": false,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "ct_mri",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "exam_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "胸部CT"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "pending-report-with-time",
+      "rules": [
+        "LX0609-06-01-03"
+      ],
+      "expected": "data_gap",
+      "basis": "时间戳不能覆盖当前待审核状态",
+      "actual": "data_gap",
+      "reason_code": "target_report_missing",
+      "passed": true,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "ct_mri",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "exam_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "data_gap",
+            "issue_kind": "report_content_unavailable",
+            "event_name": "胸部CT"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "data_gap",
+          "reason": "target_report_missing"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "normal-ct-report",
+      "rules": [
+        "LX0609-06-01-03"
+      ],
+      "expected": "compliant",
+      "basis": "同一exam_id正常已发布CT报告且有正文",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": true,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "ct_mri",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "exam_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "胸部CT"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-01-03",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "culture-master-routine-report",
+      "rules": [
+        "LX0609-06-03-02"
+      ],
+      "expected": "data_gap",
+      "basis": "血培养主记录与同键血常规报告身份不一致不能证明培养报告完整",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": false,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "microbiology_culture",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "labtest_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "血培养"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-03-02",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "culture-pending-report",
+      "rules": [
+        "LX0609-06-03-02"
+      ],
+      "expected": "data_gap",
+      "basis": "培养中待审核不是正式报告",
+      "actual": "data_gap",
+      "reason_code": "target_report_missing",
+      "passed": true,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "microbiology_culture",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "labtest_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "data_gap",
+            "issue_kind": "report_content_unavailable",
+            "event_name": "血培养"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-03-02",
+          "state": "data_gap",
+          "reason": "target_report_missing"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "normal-culture-report",
+      "rules": [
+        "LX0609-06-03-02"
+      ],
+      "expected": "compliant",
+      "basis": "按test_id唯一关联有效正式培养报告",
+      "actual": "compliant",
+      "reason_code": "requirement_satisfied",
+      "passed": true,
+      "findings": {
+        "verification_kind": "handbook_exam_lab_review",
+        "subject": "microbiology_culture",
+        "requirement": "report_completeness",
+        "checked_sources": [
+          "exam_lab_order",
+          "labtest_master",
+          "exam_lab_report"
+        ],
+        "event_count": 1,
+        "event_results": [
+          {
+            "event_position": 1,
+            "event_status": "compliant",
+            "issue_kind": "report_present",
+            "event_name": "血培养"
+          }
+        ],
+        "review_scope_complete": true
+      },
+      "native_report": [
+        {
+          "rule_id": "LX0609-06-03-02",
+          "state": "compliant",
+          "reason": "requirement_satisfied"
+        }
+      ],
+      "native_report_model_calls": 0
+    },
+    {
+      "id": "critical-record-time-fallback",
+      "expected": "data_gap",
+      "actual": [
+        {
+          "rule_id": "LX0609-06-04-01",
+          "status": "compliant",
+          "reason": "requirement_within_threshold",
+          "conclusion": null,
+          "suggestion": "继续保持。"
+        },
+        {
+          "rule_id": "LX0609-06-04-02",
+          "status": "compliant",
+          "reason": "requirement_satisfied",
+          "conclusion": null,
+          "suggestion": "继续保持。"
+        }
+      ],
+      "model_calls": 0
+    },
+    {
+      "id": "critical-report-alias-conflict",
+      "expected": "data_gap",
+      "actual": [
+        {
+          "rule_id": "LX0609-06-04-01",
+          "status": "compliant",
+          "reason": "requirement_within_threshold",
+          "conclusion": null,
+          "suggestion": "继续保持。"
+        },
+        {
+          "rule_id": "LX0609-06-04-02",
+          "status": "compliant",
+          "reason": "requirement_satisfied",
+          "conclusion": null,
+          "suggestion": "继续保持。"
+        }
+      ],
+      "model_calls": 0
+    },
+    {
+      "id": "critical-normal-report",
+      "expected": "compliant",
+      "actual": [
+        {
+          "rule_id": "LX0609-06-04-01",
+          "status": "compliant",
+          "reason": "requirement_within_threshold",
+          "conclusion": null,
+          "suggestion": "继续保持。"
+        },
+        {
+          "rule_id": "LX0609-06-04-02",
+          "status": "compliant",
+          "reason": "requirement_satisfied",
+          "conclusion": null,
+          "suggestion": "继续保持。"
+        }
+      ],
+      "model_calls": 0
+    }
+  ],
+  "test_command": "python .tmp/engine-audit-20261008/imaging-laboratory/run_tests.py（16组；--confcutdir=tests/unit；dotenv替换并审计钩子拒绝.env/网络；禁用缓存；不改测试断言）",
+  "historical_evidence_effect": [
+    {
+      "report": "apps/medqc-web/docs/acceptance/2026-10-07-0910-accuracy-round6-ct-mri-real-model.md",
+      "baseline": "1e9af161f5d25c0a0a36513e83a9574c902afa8e",
+      "source_change": "当前exam_lab_fact_extraction.py相比该基线47新增/1删除；候选身份优先、纯引导恢复、同键身份冲突保护",
+      "effect": "C09/C10移除DR后输入变化，旧模型响应不能作为当前验证；C12/C04仅有已记录的逐字输入不变离线回放，不能称新模型稳定通过；不覆盖01-01/03"
+    },
+    {
+      "report": "apps/medqc-web/docs/acceptance/2026-10-07-0910-r01-r02-h03b-recheck.md",
+      "effect": "明确01-01/03未验证；本轮填补合成反例并确认IML-01，原30例投影记录不能证明手册台账正确"
+    },
+    {
+      "report": "apps/medqc-web/docs/acceptance/2026-09-12-culture015-identified-organism.md",
+      "effect": "旧4份模型回答/150项冻结回放是当时菌名修复证据，不能作为当前03-02报告身份或全族泛化验收"
+    },
+    {
+      "report": "apps/medqc-web/docs/acceptance/2026-09-13-r04-019-pathology-report-gap.md",
+      "effect": "旧30例仅报告最终诊断空/不适用覆盖；完整报告事件关联与取材+结果双条件仍待真实验证"
+    },
+    {
+      "report": "apps/medqc-web/docs/acceptance/2026-09-24-critical-value-published-boundary.md",
+      "effect": "发布/读取固定合成合同验证不能覆盖报告时间替代与冲突；本轮IML-02表明合法公开合同仍可交付错误时间事实"
+    }
+  ],
+  "limits": [
+    "未访问患者原文/原始病例/私有真实产物",
+    "未访问PG/.env或真实模型，固定响应只作工程反例",
+    "未运行完整任务保存、API或浏览器；客户结论建议仅危急值两反例走装配链",
+    "未改生产、共享测试、TODO，未提交",
+    "规则缺少当前正例/反例/多事件真实覆盖均列待真实验证，619单测不是全引擎验收通过"
+  ],
+  "t1_repair_handoff": {
+    "mode": "只整理既有证据，未重跑审查、pytest、模型或PG",
+    "shared_production_files": [],
+    "IML-01": {
+      "production_owner": [
+        "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py"
+      ],
+      "entry_read_only": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/ct_order_course_consistency.py"
+      ],
+      "inheritable_tests": [
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_handbook_exam_lab.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_ct_order_course_consistency.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_imaging_identity_boundary.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_exam_lab_execution.py"
+      ],
+      "frozen_expected": ".tmp/engine-audit-20261008/imaging-laboratory/expected.json",
+      "probe": ".tmp/engine-audit-20261008/imaging-laboratory/probe.py",
+      "actual": ".tmp/engine-audit-20261008/imaging-laboratory/results.json",
+      "confirmed_cases": [
+        "ct-master-dr-report",
+        "dr-master-ct-report",
+        "ct-master-ultrasound-dept",
+        "culture-master-routine-report"
+      ],
+      "normal_controls": [
+        "normal-ct-report",
+        "normal-culture-report",
+        "pending-report-with-time",
+        "culture-pending-report"
+      ],
+      "additional_protection_in_existing_tests": [
+        "多行/重复业务键同一事件",
+        "显式合并医嘱逐项覆盖",
+        "正式报告证明新开医嘱已执行",
+        "同名重复检查日期及动作归属",
+        "明确非目标事件不升级为目标",
+        "未命名明细合法并入目标主记录",
+        "待审核/初步正文不升级正式报告"
+      ],
+      "close_criteria": [
+        "4个确认冲突反例均data_gap且保留可核查文书引用",
+        "01-01身份冲突在语义调用前停止，固定客户端0调用",
+        "01-03及03-02保持0调用，正式执行与单独台账同结果",
+        "冻结正常/待审核对照状态原因事实证据不回退",
+        "不把冲突当确定不适用，不扩大已确认的CT引导豁免",
+        "报告当前修复SHA及独立复审索引；真实发生频率/完整API保存浏览器仍另验"
+      ],
+      "not_closed_by_old_fix": "64dd69e9a旧R-02只覆盖exam_lab_fact_extraction影像投影，未覆盖handbook台账"
+    },
+    "IML-02": {
+      "production_owner": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py"
+      ],
+      "conditional_contract_files": [
+        "apps/medqc-web/backend/app/services/luxian_0609/extended_document_critical_value.py（仅当既有输入合同不能表达报告时间冲突时评估）"
+      ],
+      "inheritable_tests": [
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_critical_value_source_gaps.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_critical_value_disposition_time.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_critical_value_public_boundary.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_critical_value_result_mapping.py"
+      ],
+      "frozen_expected": ".tmp/engine-audit-20261008/imaging-laboratory/expected-extra.json",
+      "probe": ".tmp/engine-audit-20261008/imaging-laboratory/probe-extra.py",
+      "actual": ".tmp/engine-audit-20261008/imaging-laboratory/results-extra.json",
+      "confirmed_cases": [
+        "critical-record-time-fallback",
+        "critical-report-alias-conflict"
+      ],
+      "normal_controls": [
+        "critical-normal-report"
+      ],
+      "additional_protection_in_existing_tests": [
+        "PL/PH触发及标记冲突",
+        "多事件业务键唯一关联",
+        "同事件已有处置坏时间不变成缺记录",
+        "052未成熟/成熟及精确或日期型终点",
+        "053存在性不额外附加6小时",
+        "及时和超时处置边界",
+        "公开发布事实原值读回及损坏拒绝"
+      ],
+      "close_criteria": [
+        "缺报告时间即使record_time存在两规则仍data_gap/authoritative_time_missing",
+        "两个有效报告别名不等价两规则data_gap/authoritative_time_conflict，不任取首值",
+        "正常报告与同键1h处置仍合规；等价跨时区报告别名不误作冲突",
+        "typed原生→Reducer→Aggregator/Renderer保持缺口及对应建议，不再继续保持",
+        "反例/正例0模型，真实来源频率及完整保存/API/browser另验",
+        "既有危急值处置时间与公开事实合同修复不回退，当前修复SHA与独立复审单列"
+      ],
+      "not_closed_by_old_fix": "4d5322c4a既有危急值合同已关闭项与本轮报告时间输入IML-02分列，不以旧合同通过替代本缺陷关闭"
+    },
+    "old_real_evidence": {
+      "input_changed_requires_new_validation": [
+        "06-01-04/05 C09",
+        "06-01-04/05 C10"
+      ],
+      "unchanged_input_historical_replay_only": [
+        "06-01-04/05 C12",
+        "06-01-04/05 C04"
+      ],
+      "excluded_from_round6": [
+        "06-01-01",
+        "06-01-03"
+      ],
+      "classification": "011/012及019/013已有审查与历史验收；当前来源/输入改变属于复验，不标从未审"
+    }
+  }
+}

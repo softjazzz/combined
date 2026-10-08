@@ -1,0 +1,497 @@
+{
+  "schema_version": "medqc-engine-audit-tumor-pathology-v1",
+  "audit_date": "2026-10-08",
+  "repository": "F:\\MedQC-worktrees\\qc-integration-20261008",
+  "scope": "LX0609-05-* only; 0916 excluded by user; 06/08共享依赖不计本组分母",
+  "snapshot_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "document_head": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "production_diff_from_snapshot_empty": true,
+  "codegraph_present": false,
+  "summary": {
+    "catalog_rules": 8,
+    "formal_rules": 5,
+    "pending_definition_rules": 3,
+    "reviewed_rules": 8,
+    "real_validated_rules": 0,
+    "confirmed_new_finding_groups": 5,
+    "inherited_open_finding_groups": 1,
+    "current_regression_tests": 444,
+    "current_regression_failures": 0,
+    "current_regression_errors": 0,
+    "deselected_out_of_scope_tests": 6,
+    "independent_synthetic_cases": 53,
+    "matched_predeclared_statuses": 31,
+    "unmatched_predeclared_statuses": 22,
+    "real_model_calls": 0,
+    "pg_access": 0,
+    "dotenv_reads": 0
+  },
+  "method": {
+    "predeclared_expectations": [
+      ".tmp/engine-audit-20261008/tumor-pathology/expectations.json",
+      ".tmp/engine-audit-20261008/tumor-pathology/antimicrobial-expectations.json",
+      ".tmp/engine-audit-20261008/tumor-pathology/regression-expectations.json"
+    ],
+    "execution_level": "合成SnapshotSourceRows/受控材料→当前正式原生执行器→binding/reducer→canonical finalizer；当前回归中另有隔离SQLite与合法模型替身",
+    "safety": "DB connection模块为惰性拒绝stub；最终回归projection settings为合成固定stub；审计hook拒绝.env读取与网络，Windows asyncio loopback self-pipe为唯一运行时例外。没有生产改动、提交或服务启动。",
+    "test_setup_note": "最初444例有1例因projection未配置JWT失败；改用固定合成settings后444全部通过，不算规则缺陷。此前导入stub/Windows编码修正只涉及本组探针；不作为生产缺陷。",
+    "pending_expectation_note": "暂停记录中的expected=pending_definition是阶段标签；正式展示status为not_executed，符合既有暂停合同，不将标签差异计为缺陷。",
+    "limitations": "未新建第二輪探针/测试，未做真实链；53例的22处预期差异包括模型缺席/口径争议，不等于22个确定缺陷。"
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-05-01-01",
+      "name": "I/II切口预防抗菌药24/48小时",
+      "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "release_scope": "paused",
+      "executor": "surgery_gate",
+      "audit_status": "已审暂停合同；未执行临床判定",
+      "source_keys": [
+        "surgery_record",
+        "mr_surgery",
+        "inpat_drug_order",
+        "daily_course_record"
+      ],
+      "finding_ids": [],
+      "pending_or_disputed": [
+        "antimicrobial_dictionary_missing"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-01-02",
+      "name": "使用/停用/更换/联合等理由",
+      "implementation_status": "active",
+      "phase_status": "phase_1_target",
+      "release_scope": "formal",
+      "executor": "extended_document",
+      "audit_status": "已审；合成正常/缺理由对照有效，目录与真实语义待验",
+      "source_keys": [
+        "inpat_drug_order",
+        "daily_course_record",
+        "senior_course_record",
+        "consultation_record",
+        "labtest_master",
+        "labtest_item_report"
+      ],
+      "finding_ids": [],
+      "pending_or_disputed": [
+        "药品目录遗漏与语义模型能力"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-01-03",
+      "name": "48–72小时效果评价",
+      "implementation_status": "active",
+      "phase_status": "phase_1_target",
+      "release_scope": "formal",
+      "executor": "extended_document",
+      "audit_status": "已审；存在明确评价漏识别",
+      "source_keys": [
+        "inpat_drug_order",
+        "daily_course_record",
+        "senior_course_record",
+        "evaluation_context.horizon"
+      ],
+      "finding_ids": [
+        "TP-D05"
+      ],
+      "pending_or_disputed": [
+        "评价语义覆盖"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-01-04",
+      "name": "两个以上重点抗菌药用前病原学",
+      "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "release_scope": "paused",
+      "executor": "extended_document",
+      "audit_status": "已审暂停合同；未执行临床判定",
+      "source_keys": [
+        "inpat_drug_order",
+        "labtest_master",
+        "labtest_item_report"
+      ],
+      "finding_ids": [],
+      "pending_or_disputed": [
+        "key_antimicrobial_catalog_missing"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-01-05",
+      "name": "经验用药理由/无样可采原因",
+      "implementation_status": "active",
+      "phase_status": "phase_1_target",
+      "release_scope": "formal",
+      "executor": "extended_document",
+      "audit_status": "已审；正常与否定理由对照有效，来源/词汇争议待裁定",
+      "source_keys": [
+        "inpat_drug_order",
+        "daily_course_record",
+        "senior_course_record",
+        "consultation_record"
+      ],
+      "finding_ids": [],
+      "pending_or_disputed": [
+        "会诊来源范围、无痰标本原因口径"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-01-06",
+      "name": "特殊级抗菌药专家支持",
+      "implementation_status": "active",
+      "phase_status": "phase_1_target",
+      "release_scope": "formal",
+      "executor": "extended_document",
+      "audit_status": "已审；跨药专家支持假合规",
+      "source_keys": [
+        "inpat_drug_order",
+        "senior_course_record",
+        "consultation_record"
+      ],
+      "finding_ids": [
+        "TP-D04"
+      ],
+      "pending_or_disputed": [
+        "医院特殊级目录与专家授权"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-02-01",
+      "name": "化疗药名/剂量/方法/时间与医嘱",
+      "implementation_status": "active",
+      "phase_status": "phase_1_target",
+      "release_scope": "formal",
+      "executor": "tumor_pathology",
+      "audit_status": "已审；有正常对照和确定缺陷；真实链未验",
+      "source_keys": [
+        "admission_record_diagnosis",
+        "diagnosis",
+        "discharge_record_diagnosis",
+        "pathology_exam_report",
+        "inpat_registration.discharge_horizon",
+        "discharge_record",
+        "inpat_drug_order",
+        "daily_course_record"
+      ],
+      "finding_ids": [
+        "TP-D01",
+        "TP-D02",
+        "TP-D03",
+        "N13"
+      ],
+      "pending_or_disputed": [
+        "单位同义/换算、提交时间及用药时间精度"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    },
+    {
+      "rule_id": "LX0609-05-03-01",
+      "name": "诊疗事件/医嘱/病程一致",
+      "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "release_scope": "paused",
+      "executor": "treatment_order_consistency_shadow",
+      "audit_status": "已审暂停合同及影子工程保护；缺真实金标不等于未审",
+      "source_keys": [
+        "exam_master",
+        "exam_item_report",
+        "surgery_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "daily_course_record",
+        "senior_course_record"
+      ],
+      "finding_ids": [],
+      "pending_or_disputed": [
+        "treatment_event_order_course_real_gold_pending"
+      ],
+      "real_validation": "本轮未执行真实模型、PG、运行中服务、正式API/浏览器及客户链；合成/SQLite工程证据不代表临床部署验收。"
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "TP-D01",
+      "priority": "P1",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "status": "confirmed_open",
+      "title": "空化疗病程返回元组长度错误，正式执行中断",
+      "source_file": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "line": 1399,
+      "caller_line": 2010,
+      "cases": [
+        "empty_course_row",
+        "no_course_rows"
+      ],
+      "expected": "data_gap受控结果",
+      "observed": "ValueError: not enough values to unpack (expected 5, got 4)",
+      "normal_control": "dose_130mg → compliant",
+      "ownership_suggestion": [
+        "native_tumor_pathology_execution.py（仅化疗比较分支）"
+      ],
+      "repair_validation": "空源与空正文均须受控结果；保留已有正常dose与缺单位对照。"
+    },
+    {
+      "finding_id": "TP-D02",
+      "priority": "P1",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "status": "confirmed_open",
+      "title": "单目标药整篇病程比较可借用其他药剂量，并把否定或计划给药判合规",
+      "source_file": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "line": 1298,
+      "related_lines": [
+        1342,
+        1490
+      ],
+      "cases": [
+        "foreign_drug_dose",
+        "negated_course",
+        "planned_course",
+        "conflicting_dose_in_one_record"
+      ],
+      "expected": "他药剂量不可证明本药一致；否定或计划不能证明已实施；冲突未决不应全部matched",
+      "observed": "全部compliant；四字段matched；findings声称全部一致；suggestion继续保持",
+      "minimal_synthetic_counterexample": {
+        "order": "奥沙利铂130mg，静滴，2026-04-26",
+        "course": "2026-04-26 使用奥沙利铂120mg 静滴。另予昂丹司琼130mg 静滴。"
+      },
+      "normal_control": "2026-04-26 使用奥沙利铂130mg 静滴。→ compliant",
+      "ownership_suggestion": [
+        "native_tumor_pathology_execution.py（_course_event_candidates/_typed_chemotherapy_comparison）"
+      ],
+      "repair_validation": "必须保留跨相邻句的正常单药记录、合法前缀和数值单位保护；不要重开已关闭N01/N07。"
+    },
+    {
+      "finding_id": "TP-D03",
+      "priority": "P2",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "status": "confirmed_open_policy_details_pending",
+      "title": "化疗适用事件只按药物分类筛选，无取消状态约束",
+      "source_file": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "line": 632,
+      "cases": [
+        "order_取消",
+        "order_撤销",
+        "order_作废",
+        "order_拟执行"
+      ],
+      "expected": "明确取消且未给药不应交付已实施一致；拟执行的终态需客户确认",
+      "observed": "四例compliant；负向病程亦被当作一致事实",
+      "normal_control": "执行状态+肯定给药记录 → compliant",
+      "ownership_suggestion": [
+        "native_tumor_pathology_execution.py（化疗医嘱事件筛选）"
+      ],
+      "policy_gap": "医院取消/撤销/作废/停用码表待确认；已取消与明确实际给药冲突须保留实施证据，不能简单删事件。"
+    },
+    {
+      "finding_id": "TP-D04",
+      "priority": "P1",
+      "rule_ids": [
+        "LX0609-05-01-06"
+      ],
+      "status": "confirmed_open",
+      "title": "单个特殊抗菌药事件可借用明确属于其他药的专家支持",
+      "source_file": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "line": 2794,
+      "cases": [
+        "expert_other_drug"
+      ],
+      "expected": "万古霉素的命名专家支持不能证明美罗培南支持；至少拒绝compliant",
+      "observed": "compliant；客户findings称已找到美罗培南启用前专家支持，suggestion继续保持",
+      "minimal_synthetic_counterexample": {
+        "order": "美罗培南，已执行，2026-04-01 08:00:00",
+        "consultation": "专家会诊，建议万古霉素抗感染。",
+        "consultation_time": "2026-04-01 07:00:00"
+      },
+      "normal_control": "同药专家会诊在启用前或同刻 → compliant；晚于启用 → non_compliant",
+      "ownership_suggestion": [
+        "native_extended_document_execution.py（仅05-01-06 matching_rows分支）"
+      ],
+      "repair_validation": "单事件泛称支持与明确其他药支持区分；保留多事件歧义、同刻和时区回归。"
+    },
+    {
+      "finding_id": "TP-D05",
+      "priority": "P2",
+      "rule_ids": [
+        "LX0609-05-01-03"
+      ],
+      "status": "confirmed_open_semantic_coverage",
+      "title": "明确效果评价但不含有限结果词时被判缺评价",
+      "source_file": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "line": 198,
+      "related_lines": [
+        1137
+      ],
+      "cases": [
+        "effect_hour_48",
+        "effect_hour_60",
+        "effect_hour_72"
+      ],
+      "expected": "美罗培南抗感染治疗效果评价：体温下降。在48/60/72小时应算已评价",
+      "observed": "三例non_compliant；窗口外47/73小时正常为non_compliant",
+      "normal_control": "当前回归中“抗感染治疗有效，体温下降”等在48/72小时合规",
+      "ownership_suggestion": [
+        "native_extended_document_execution.py（_is_antimicrobial_effect_evaluation）"
+      ],
+      "policy_gap": "应核查评价语义而非将任意检验趋势认作已评价；本反例含明确效果评价标题和药名。"
+    },
+    {
+      "finding_id": "N13",
+      "priority": "P2",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "status": "inherited_open_confirmed_current_fact",
+      "title": "医嘱缺单位/剂量导致比较整体跳过，其余未比较字段仍matched",
+      "source_file": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "cases": [
+        "missing_order_unit"
+      ],
+      "expected": "未实际比较的药名/途径/时间不能发布matched",
+      "observed": "data_gap且dose=unknown，其余字段仍matched；findings已正确说明资料不足",
+      "historical_source": "apps/medqc-web/docs/acceptance/2026-10-07-round6-83a-independent-recheck.md",
+      "normal_control": "完整医嘱全部实际核对 → 四字段matched；缺单位终态data_gap、建议同步核查，避免直接要求医生补写",
+      "ownership_suggestion": [
+        "native_tumor_pathology_execution.py（缺字段比较初始化）",
+        "tumor_pathology_result_mapping.py（未比较事实合同，按需）"
+      ],
+      "distinction": "继承N11部分关闭后的旧残留，非新回退；本轮已存在结果验证缺单位事实，未新增缺剂量独立探针。"
+    }
+  ],
+  "prior_closures": [
+    {
+      "issue_id": "N01",
+      "status": "closed_inherited_and_current_protection_passed",
+      "repair_sha": "d081b3dca424f1612ef9dab993fbcec61c527662",
+      "source": "apps/medqc-web/docs/acceptance/2026-10-07-n01-dose-separator-fix.md",
+      "independent_recheck": "apps/medqc-web/docs/acceptance/2026-10-07-round2-d081-independent-recheck.md",
+      "current_evidence": "dose_130mg d1合规；1,130mg、单位分母不合规；当前round2相关回归通过；不再认领旧分隔符问题。"
+    },
+    {
+      "issue_id": "N07",
+      "status": "closed_inherited_and_current_protection_passed",
+      "repair_sha": "83afaf4d359600444fafbae4e31cb8b9a7769ef7",
+      "source": "apps/medqc-web/docs/acceptance/2026-10-07-round6-83a-independent-recheck.md",
+      "current_evidence": "L-OHP130mg独立正常对照合规；round4 L-OHP/Oxaliplatin/ivgtt回归通过；旧d1-3变体仅继承旧独立复验，不声称本轮新增覆盖。"
+    },
+    {
+      "issue_id": "N11",
+      "status": "partially_closed_inherited_current_contract_regressions_passed",
+      "repair_sha": "83afaf4d359600444fafbae4e31cb8b9a7769ef7",
+      "source": "apps/medqc-web/docs/acceptance/2026-10-07-round6-83a-independent-recheck.md",
+      "current_evidence": "关联歧义、缺目标药、已知不一致+未知事件、非法计数及SQLite合同当前回归通过；未消除N13。"
+    },
+    {
+      "issue_id": "N13",
+      "status": "open_inherited_current_missing_unit_fact_confirmed",
+      "repair_sha": null,
+      "source": "apps/medqc-web/docs/acceptance/2026-10-07-round6-83a-independent-recheck.md",
+      "current_evidence": "missing_order_unit资料不足但其余matched；缺剂量边界继承历史，未新增探针。"
+    }
+  ],
+  "disputes_and_limits": [
+    {
+      "id": "TP-Q01",
+      "rules": [
+        "LX0609-05-02-01"
+      ],
+      "cases": [
+        "dose_130毫克",
+        "dose_0.13g"
+      ],
+      "observed": "non_compliant",
+      "classification": "既有原单位严格比较限制，不计新回退；事先保守预期data_gap未满足",
+      "decision_needed": "客户冻结单位同义和转换规则后再决定错误不合规或可接受严格一致。"
+    },
+    {
+      "id": "TP-Q02",
+      "rules": [
+        "LX0609-05-02-01"
+      ],
+      "cases": [
+        "relative_date_submit_only"
+      ],
+      "observed": "compliant",
+      "classification": "提交时点替代今日临床日期的精度/来源政策风险",
+      "decision_needed": "确认record_time缺失时是否允许submit_datetime，以及按日期还是精确给药时间比较。"
+    },
+    {
+      "id": "TP-Q03",
+      "rules": [
+        "LX0609-05-01-02"
+      ],
+      "cases": [
+        "reason_unknown_antibiotic"
+      ],
+      "observed": "not_applicable",
+      "classification": "硬编码药名目录范围风险；无院方完整药品字典不声称漏药范围已完成",
+      "decision_needed": "客户提供药物分类目录和代码映射；未知类输入不可静默当完整阴性。"
+    },
+    {
+      "id": "TP-Q04",
+      "rules": [
+        "LX0609-05-01-05"
+      ],
+      "cases": [
+        "empiric_source_consultation_record"
+      ],
+      "observed": "not_applicable；相同daily_course正文non_compliant",
+      "classification": "既有test_luxian_0609_057_source_boundary.py明确冻结现状，非新回退",
+      "decision_needed": "确认会诊执行/请会诊正文是否能作为本次经验用药触发或仅作为内部资料。"
+    },
+    {
+      "id": "TP-Q05",
+      "rules": [
+        "LX0609-05-01-05"
+      ],
+      "cases": [
+        "empiric_美罗培南经验性抗感染治疗，无痰标本可采。"
+      ],
+      "observed": "non_compliant",
+      "classification": "无样可采原因语义和有限词汇覆盖待裁定",
+      "decision_needed": "是否把无痰标本可采当作充分原因，或仍需解释无痰/不能留取的具体原因。"
+    },
+    {
+      "id": "TP-L01",
+      "rules": [
+        "LX0609-05-01-02"
+      ],
+      "cases": [
+        "reason_拟使用美罗培南，后续评估。",
+        "reason_今日未使用美罗培南。"
+      ],
+      "observed": "technical_error/model_transport_error",
+      "classification": "未提供模型替身导致受控语义候选未决，不能误记为模型语义错误或缺临床内容",
+      "decision_needed": "本轮只验证失败关闭；真实语义或合法替身判定需另行授权执行。"
+    }
+  ],
+  "artifacts": {
+    "chemo_results": ".tmp/engine-audit-20261008/tumor-pathology/results.json",
+    "antimicrobial_results": ".tmp/engine-audit-20261008/tumor-pathology/antimicrobial-results.json",
+    "current_regression_junit": ".tmp/engine-audit-20261008/tumor-pathology/current-regressions.xml",
+    "current_regression_exit": ".tmp/engine-audit-20261008/tumor-pathology/regression-exit.json"
+  },
+  "handoff_file_ownership": {
+    "chemo": [
+      "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py：仅化疗事件/剂量比较及缺字段分支，禁止碰06/08共享行为；如跨函数确需改动请与所属审计协调",
+      "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py：仅05-02-01未比较事实合同（按需）"
+    ],
+    "antimicrobial": [
+      "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py：仅05-01-03效果识别和05-01-06支持绑定；同文件其他族为他人范围"
+    ],
+    "tests": "修复者在独立树自行添加合成反例并复验；本组现有预期/结果不得覆盖。"
+  }
+}
