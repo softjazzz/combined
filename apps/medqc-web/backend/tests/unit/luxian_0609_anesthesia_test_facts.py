@@ -61,6 +61,33 @@ N04_ADJACENT_CASES = {
 N04_FILLED_CASES = {"": "n04_filled_no_separator", " ": "n04_filled_space_separator"}
 
 
+def read_sent_anesthesia_documents(prompt):
+    """只按受控元数据/字符数读实际发送正文；旧JSON用于固定原版红对照。"""
+    tail = prompt.split("\nINPUT_JSON=", 1)[1]
+    encoded = tail.split("\n", 1)[0]
+    documents = json.loads(encoded)["documents"]
+    if all("body" in doc for doc in documents):
+        return documents
+    cursor = len(encoded)
+    for doc in documents:
+        spans = {}
+        for span_id, count in doc["span_char_counts"].items():
+            begin = f"\nSPAN_BEGIN {span_id}\n"
+            end = f"\nSPAN_END {span_id}\n"
+            assert tail.startswith(begin, cursor)
+            start = cursor + len(begin)
+            assert type(count) is int and count >= 0
+            stop = start + count
+            assert tail.startswith(end, stop)
+            spans[span_id] = tail[start:stop]
+            cursor = stop + len(end)
+        body = "".join(spans.values())
+        assert type(doc["body_char_count"]) is int and doc["body_char_count"] == len(body)
+        doc["body"], doc["spans"] = body, spans
+    assert cursor == len(tail)
+    return documents
+
+
 class ExplicitAnesthesiaFactClient:
     def __init__(self, case):
         self.facts = CASE_FACTS[case]
@@ -71,7 +98,7 @@ class ExplicitAnesthesiaFactClient:
         assert len(self.calls) == 1
         assert kwargs["allow_length_retry"] is False
         assert 0 < kwargs["max_completion_tokens"] <= 4096
-        documents = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["documents"]
+        documents = read_sent_anesthesia_documents(prompt)
         assert len(documents) == 2
         assert {doc["source_type"] for doc in documents} == {PRE_SOURCE, POST_SOURCE}
         items = []

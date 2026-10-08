@@ -2,6 +2,7 @@
 import json
 
 import pytest
+from luxian_0609_anesthesia_test_facts import read_sent_anesthesia_documents
 
 from test_n12_anesthesia_visit_controlled_facts import GOLD_QUOTES, _run, _visits
 
@@ -15,7 +16,7 @@ class FrozenPerDocumentFactClient:
 
     async def generate(self, prompt, **kwargs):
         self.calls.append((prompt, kwargs))
-        documents = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["documents"]
+        documents = read_sent_anesthesia_documents(prompt)
         items = []
         for index, doc in enumerate(documents):
             fields = {}
@@ -93,7 +94,7 @@ class FrozenWholeDocumentFactClient:
 
     async def generate(self, prompt, **kwargs):
         self.calls.append((prompt, kwargs))
-        documents = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["documents"]
+        documents = read_sent_anesthesia_documents(prompt)
         items = []
         for doc in documents:
             fields = {}
@@ -123,7 +124,7 @@ async def test_same_actual_document_parts_preserve_complete_content_and_trusted_
     final, execution = await _run(rows, client)
     assert final["status"] == "compliant"
     assert execution.llm_call_count == len(client.calls) == 1
-    sent = json.loads(client.calls[0][0].split("\nINPUT_JSON=", 1)[1])["documents"]
+    sent = read_sent_anesthesia_documents(client.calls[0][0])
     assert len(sent) == 2
     assert all(raw_id not in client.calls[0][0] for raw_id in ("pre-A", "post-A"))
     from app.services.luxian_0609.evidence_material import build_material_document_refs

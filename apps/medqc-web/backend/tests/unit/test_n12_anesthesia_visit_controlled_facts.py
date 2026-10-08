@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from luxian_0609_anesthesia_test_facts import read_sent_anesthesia_documents
 
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
@@ -32,7 +33,7 @@ class FrozenFactClient:
         self.calls.append((prompt, kwargs))
         if self.mode == "transport":
             raise RuntimeError("synthetic transport failure")
-        documents = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["documents"]
+        documents = read_sent_anesthesia_documents(prompt)
         items = []
         for doc in documents:
             fields = {}
