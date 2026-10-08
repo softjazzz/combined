@@ -2384,10 +2384,20 @@ def _programmatic_048_status(
     intraoperative_transfusion_is_credible = any(
         _SURGERY_TRANSFUSION_PATTERN.search(text)
         and _TRANSFUSION_COMPONENT_PATTERN.search(text)
-        and _TRANSFUSION_DOSE_PATTERN.search(text)
         for text in (*surgery_texts, *anesthesia_texts)
     )
     if not intraoperative_transfusion_is_credible:
+        has_source_states = isinstance(documents.get("__logical_source_states__"), Mapping)
+        if has_source_states and any(_logical_source_state(documents, source) == "error"
+                                    for source in ("surgery_record", "anesthesia_record")):
+            return "technical_error", "source_query_error", None
+        uncertain_sources = [source for source in ("surgery_record", "anesthesia_record")
+                             if has_source_states and _logical_source_state(documents, source) in {"unavailable", "missing"}]
+        if uncertain_sources:
+            return (
+                "data_gap", "transfusion_comparison_fields_unavailable",
+                {"failure_kind": "transfusion_comparison_material_missing", "missing_sources": uncertain_sources},
+            )
         return (
             "not_applicable",
             "intraoperative_transfusion_fact_absent",
@@ -2420,39 +2430,84 @@ def _programmatic_048_status(
             },
         )
 
-    def normalized_values(row: Mapping[str, Any]) -> dict[str, list[str]]:
-        text = _clean(
-            " ".join(
-                _clean(row.get(key))
-                for key in (
-                    "surgery_process",
-                    "anesthesia_process",
-                    "content",
-                    "record_content",
-                    "assembled_text",
-                )
-                if _clean(row.get(key))
-            )
-        )
-        components = sorted(set(_TRANSFUSION_COMPONENT_PATTERN.findall(text)))
-        doses = sorted(
-            {
-                re.sub(r"\s+", "", value).lower()
-                for value in _TRANSFUSION_DOSE_PATTERN.findall(text)
-            }
-        )
-        return {"components": components, "doses": doses}
+    def normalized_values(row: Mapping[str, Any]) -> tuple[dict[str, Any], bool]:
+        from decimal import Decimal
 
-    matrix = {
-        source: normalized_values(rows[0]) for source, rows in rows_by_source.items()
-    }
+        # 每条成分只消费紧邻自己的剂量；绝不将独立排序的两列重新配对。
+        text = _clean(row.get("surgery_process") or row.get("anesthesia_process") or _row_text(row))
+        components = tuple(_TRANSFUSION_COMPONENT_PATTERN.finditer(text))
+        dose = re.compile(
+            r"\s*(?:[:：]|共|约|计|为|输注量|量|输入|输注)*\s*"
+            r"(?P<quantity>\d+(?:\.\d+)?)\s*"
+            r"(?P<unit>U|单位|m[lL]|毫升|袋|(?:个)?治疗量)", re.IGNORECASE,
+        )
+        units = {"u": "u", "单位": "u", "ml": "ml", "毫升": "ml",
+                 "袋": "袋", "治疗量": "治疗量", "个治疗量": "治疗量"}
+        items: list[dict[str, str]] = []
+        bound_dose_spans: set[tuple[int, int]] = set()
+        times = [match for pattern in (_ISO_DATETIME_PATTERN, _CN_DATETIME_PATTERN)
+                 for match in pattern.finditer(text)]
+        for index, component in enumerate(components):
+            boundary = components[index + 1].start() if index + 1 < len(components) else len(text)
+            match = dose.match(text, component.end(), boundary)
+            if match is None:
+                continue
+            # 只保留正文中本条输注之前的既有时间锚点，文书完成时间不是事件时间。
+            anchor = max((candidate for candidate in times
+                          if candidate.end() <= component.start()
+                          and component.start() - candidate.end() <= 96
+                          and _TRANSFUSION_CONTEXT_PATTERN.search(text[candidate.end():component.start()])
+                          and re.search(r"[。；;\n]|(?<!\d)\.(?!\d)", text[candidate.end():component.start()]) is None),
+                         key=lambda candidate: candidate.end(), default=None)
+            event_time = _datetime_from_match(anchor) if anchor is not None else None
+            bound_dose_spans.add((match.start("quantity"), match.end()))
+            items.append({
+                "event_time": event_time.isoformat(sep=" ") if event_time is not None else "",
+                "component": component.group(),
+                "quantity": format(Decimal(match.group("quantity")).normalize(), "f"),
+                "unit": units[match.group("unit").lower()],
+                "original_dose": text[match.start("quantity"):match.end()],
+            })
+        # 对已有输血对象/动作直接引出的数值单位 token 核对覆盖，其他用药对象不当血量。
+        contexts = tuple(_TRANSFUSION_CONTEXT_PATTERN.finditer(text))
+        sentence_boundary = re.compile(r"[。！？；;\n]|(?<!\d)\.(?!\d)")
+        dose_connectors = re.compile(
+            r"[\s,，、:：]*(?:(?:共|约|计|为|输注量|量|给予|输注)[\s,，、:：]*)*"
+        )
+        has_unpaired_dose = False
+        for token in _TRANSFUSION_DOSE_PATTERN.finditer(text):
+            if (token.start(), token.end()) in bound_dose_spans:
+                continue
+            clause_start = max((boundary.end() for boundary in
+                                sentence_boundary.finditer(text, 0, token.start())), default=0)
+            anchor = max((candidate for candidate in (*components, *contexts)
+                          if clause_start <= candidate.start() and candidate.end() <= token.start()),
+                         key=lambda candidate: candidate.end(), default=None)
+            if anchor is None:
+                continue
+            prefix = _TRANSFUSION_DOSE_PATTERN.sub("", text[anchor.end():token.start()])
+            if dose_connectors.fullmatch(prefix) is not None:
+                has_unpaired_dose = True
+                break
+        return {
+            "components": sorted({item["component"] for item in items}),
+            "doses": sorted({item["quantity"] + item["unit"] for item in items}),
+            # 保留原顺序及重复项供客户核对，不按集合丢失同成分多条。
+            "transfusion_items": items,
+        }, bool(items) and len(items) == len(components) and not has_unpaired_dose
+
+    parsed = {source: normalized_values(rows[0]) for source, rows in rows_by_source.items()}
+    matrix = {source: fields for source, (fields, _) in parsed.items()}
     missing_fields = {
-        source: sorted(field for field, values in fields.items() if not values)
+        source: sorted(field for field in ("components", "doses") if not fields[field])
         for source, fields in matrix.items()
     }
     missing_fields = {
         source: fields for source, fields in missing_fields.items() if fields
     }
+    for source, (_, complete) in parsed.items():
+        if not complete:
+            missing_fields[source] = sorted(set(missing_fields.get(source, [])) | {"doses"})
     if missing_fields:
         return (
             "data_gap",
@@ -2462,11 +2517,28 @@ def _programmatic_048_status(
                 "missing_fields_by_source": missing_fields,
             },
         )
-    differing_fields = sorted(
-        field
-        for field in ("components", "doses")
-        if len({tuple(values[field]) for values in matrix.values()}) > 1
-    )
+    event_times = [{item["event_time"] for item in fields["transfusion_items"]}
+                   for fields in matrix.values()]
+    if any(times != event_times[0] for times in event_times[1:]) or any(
+        "" in times and len(times) > 1 for times in event_times
+    ):
+        # 事件身份不齐或冲突时，不把别次输注的成分/剂量借来补成一致。
+        return "data_gap", "association_failed", None
+
+    def grouped_quantities(fields: Mapping[str, Any]) -> tuple[tuple[str, str, str, str], ...]:
+        from decimal import Decimal
+
+        totals: dict[tuple[str, str, str], Decimal] = {}
+        for item in fields["transfusion_items"]:
+            key = (item["event_time"], item["component"], item["unit"])
+            totals[key] = totals.get(key, Decimal(0)) + Decimal(item["quantity"])
+        return tuple(sorted((*key, format(value.normalize(), "f")) for key, value in totals.items()))
+
+    differing_fields: list[str] = []
+    if len({tuple(fields["components"]) for fields in matrix.values()}) > 1:
+        differing_fields.append("components")
+    if len({grouped_quantities(fields) for fields in matrix.values()}) > 1:
+        differing_fields.append("doses")
     if differing_fields:
         return (
             "non_compliant",

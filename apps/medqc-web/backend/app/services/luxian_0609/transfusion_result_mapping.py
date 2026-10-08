@@ -539,7 +539,7 @@ def _safe_048(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     matrix = raw.get("comparison_matrix")
     if not isinstance(matrix, Mapping):
         return None
-    safe_matrix: dict[str, dict[str, list[str]]] = {}
+    safe_matrix: dict[str, dict[str, Any]] = {}
     for source in ("surgery_record", "anesthesia_record", "postsurg_firstcourse_record"):
         fields = matrix.get(source)
         if not isinstance(fields, Mapping):
@@ -549,6 +549,53 @@ def _safe_048(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         if components is None or doses is None:
             return None
         safe_matrix[source] = {"components": components, "doses": doses}
+        raw_items = fields.get("transfusion_items")
+        if raw_items is not None:
+            import re
+            from decimal import Decimal
+
+            if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 128:
+                return None
+            safe_items: list[dict[str, str]] = []
+            for item in raw_items:
+                if (
+                    not isinstance(item, Mapping)
+                    or not isinstance(item.get("component"), str)
+                    or item.get("component") not in {"红细胞", "血浆", "血小板", "冷沉淀", "全血", "白蛋白", "粒细胞"}
+                    or not isinstance(item.get("quantity"), str)
+                    or re.fullmatch(r"\d+(?:\.\d+)?", item["quantity"]) is None
+                    or not isinstance(item.get("unit"), str)
+                    or item.get("unit") not in {"u", "ml", "袋", "治疗量"}
+                    or not isinstance(item.get("original_dose"), str)
+                    or re.fullmatch(r"\d+(?:\.\d+)?\s*(?:U|单位|m[lL]|毫升|袋|(?:个)?治疗量)",
+                                    item["original_dose"], re.IGNORECASE) is None
+                ):
+                    return None
+                # 新增配对明细只校验同一剂量内部自洽，历史 matrix 不重新判业务状态。
+                dose_match = re.fullmatch(
+                    r"(?P<quantity>\d+(?:\.\d+)?)\s*(?P<unit>U|单位|m[lL]|毫升|袋|(?:个)?治疗量)",
+                    item["original_dose"], re.IGNORECASE,
+                )
+                unit_aliases = {"u": "u", "单位": "u", "ml": "ml", "毫升": "ml",
+                                "袋": "袋", "治疗量": "治疗量", "个治疗量": "治疗量"}
+                if (
+                    dose_match is None
+                    or Decimal(item["quantity"]) != Decimal(dose_match.group("quantity"))
+                    or item["unit"] != unit_aliases[dose_match.group("unit").lower()]
+                ):
+                    return None
+                safe_item = {key: item[key] for key in ("component", "quantity", "unit", "original_dose")}
+                event_time = item.get("event_time", "")
+                if not isinstance(event_time, str):
+                    return None
+                if event_time:
+                    try:
+                        datetime.fromisoformat(event_time)
+                    except ValueError:
+                        return None
+                safe_item["event_time"] = event_time
+                safe_items.append(safe_item)
+            safe_matrix[source]["transfusion_items"] = safe_items
     field_key = "checked_fields" if kind == "transfusion_records_consistent" else "differing_fields"
     values = _controlled_list(raw.get(field_key), allowed={"components", "doses"})
     if values is None:
