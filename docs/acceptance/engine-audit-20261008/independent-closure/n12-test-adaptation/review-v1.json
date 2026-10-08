@@ -1,0 +1,116 @@
+{
+  "audit_id": "n12-test-adaptation-static-independent-v1",
+  "fixed_commit": "62cbbc240e6a072795220ef3cd91dd49b230eb19",
+  "parent_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "tree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+  "scope": "test_contract_adaptation_only_not_core_production_rereview",
+  "conclusion": "accept_fixed_test_only_adaptation",
+  "confirmed_blockers": [],
+  "rules": [
+    {
+      "rule_id": "LX0609-04-04-02",
+      "legacy_id": "037",
+      "group": "N12",
+      "status": "test_contract_adaptation_accepted_statically",
+      "production_semantics_reaudited": false,
+      "real_model_semantics_accepted": false,
+      "evidence": [
+        "review-v1.md",
+        "fixed_commit_diff",
+        "helper_manual_case_table"
+      ]
+    }
+  ],
+  "changed_paths": [
+    "apps/medqc-web/backend/tests/unit/luxian_0609_anesthesia_test_facts.py",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_surgery_document_execution.py",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_round2_document_boundaries.py",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_freeze.py",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_precise_fact_refs.py",
+    "apps/medqc-web/backend/tests/unit/test_n04_n06_anesthesia_pathology_boundaries.py",
+    "apps/medqc-web/backend/tests/unit/test_n08_anesthesia_label_ownership.py",
+    "apps/medqc-web/docs/acceptance/2026-10-08-n12-test-contract-adaptation.md"
+  ],
+  "path_sha256": {
+    "apps/medqc-web/backend/tests/unit/luxian_0609_anesthesia_test_facts.py": "2bd1b9f55d60f2e04e91d00ec68d656cf1bdfbf8f8d97be33efce6a7a8fefd3b",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_surgery_document_execution.py": "4ee05f424eaa8c60672bf3610ef0f53e3ab0f5a2d07cd37be6ad72a9f0f5cb48",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_round2_document_boundaries.py": "a34fb6c910aedb66eda344cd1d99c827eb7b9e59740c10a99454498fbc4e5ff3",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py": "bd77f274217f2ff92153f612d61afc43b987854390e9fb7bd30fa9b6fd32a8fb",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_freeze.py": "ec3531c09732d0bc021b6acc9b757fff680271865379e23ccfa81e6753d7fc00",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_precise_fact_refs.py": "08f272380311df2785163ffa75e2fa58132184be962a4b514f423d70bd74b1ab",
+    "apps/medqc-web/backend/tests/unit/test_n04_n06_anesthesia_pathology_boundaries.py": "8170e3347a77cc25fc058b1d3043396e557fac03854cb63b7741d38b13311e36",
+    "apps/medqc-web/backend/tests/unit/test_n08_anesthesia_label_ownership.py": "c2b1c25826fe22fda182de3e8a87cccd6a4649367f1b4dbecfe3a55422cdc22b",
+    "apps/medqc-web/docs/acceptance/2026-10-08-n12-test-contract-adaptation.md": "702541a0cfa14f65f14dc39f8f43cbae5b0476f0ccf4592bcf0bfb1c8b953620"
+  },
+  "production_app_diff_paths": [],
+  "production_unchanged": true,
+  "working_tree_clean": true,
+  "axes": {
+    "Standards": {
+      "confirmed_violations": 0,
+      "blocking_smells": 0,
+      "old_test_files": 7,
+      "medical_inputs_and_assertions_preserved": true
+    },
+    "Spec": {
+      "confirmed_defects": 0,
+      "static_test_functions_compared": 119,
+      "parametrize_preserved": true,
+      "status_reason_missing_refs_and_negative_assertions_preserved": true,
+      "helper_stdlib_only": true,
+      "helper_manual_case_facts": true,
+      "keyword_answers": false,
+      "answers_from_production_output": false
+    }
+  },
+  "helper": {
+    "path": "apps/medqc-web/backend/tests/unit/luxian_0609_anesthesia_test_facts.py",
+    "git_blob": "cea2124efda5ec3a3d6f855534581b1e45e182aa",
+    "frozen_boundary_cases": 25,
+    "formal_chain_fixtures": 3,
+    "generate_role": "locate manually frozen fact fragments and coordinates only",
+    "does_not_return_qc_status": true,
+    "max_calls": 1,
+    "length_retry": false
+  },
+  "prior_failure_interpretation": {
+    "old_25_failures": "stopped_at_zero_call_assert_before_Binding_Finalizer_and_medical_assertions",
+    "old_red_is_medical_pass": false,
+    "new_assertions_statically_reachable": true,
+    "new_assertions_dynamically_verified_by_this_review": false
+  },
+  "external_run_claims_not_independent": {
+    "source": "root_and_owner_report",
+    "complete348": "346_pass_2_parent_version_fail",
+    "core43": "reported_green_not_reaudited",
+    "old28": "reported_green_not_reaudited",
+    "complete277": "275_pass_2_baseline_fail",
+    "root_strict_guard_rerun": "separate_coordination"
+  },
+  "forbidden_actions_performed": {
+    "test_execution": false,
+    "owner_audit_script_execution": false,
+    "owner_preservation_as_independent_evidence": false,
+    "production_change": false,
+    "test_change": false,
+    "root_file_change": false,
+    "env_access": false,
+    "PG_access": false,
+    "model_access": false,
+    "network_access": false
+  },
+  "remaining_validation_gaps": [
+    "this_review_no_dynamic_tests",
+    "real_model_semantic_validation_not_closed"
+  ],
+  "review_skill": "code-review",
+  "skill_axes": "independent_readonly_subreviews_standards_and_spec",
+  "scope_restricted_by_root": true,
+  "re_review_triggers": [
+    "helper_generates_answers_from_keywords_or_production_output",
+    "case_or_negative_assertion_removed",
+    "medical_expected_status_reason_missing_refs_changed",
+    "production_scope_added"
+  ]
+}

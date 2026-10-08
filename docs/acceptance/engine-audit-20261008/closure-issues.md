@@ -1,10 +1,10 @@
 # 0609 closure issue queue
 
-Production root: `5649f6396`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
+Production root: `fac4ef67c`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
-|N12|core_integrated_independent_engineering_verified_legacy_contract_tests_pending|/root/repair_iml01||
+|N12|limited_engineering_closed_real_model_validation_pending|/root/repair_iml01||
 |N10|queued_evidence_review|unassigned||
 |N13|limited_engineering_repair_integrated_business_acceptance_open|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|unassigned||
@@ -43,4 +43,4 @@ Production root: `5649f6396`. Issue closure is not full-rule or clinical accepta
 |rescue-remaining:RR-PUB01|integrated_limited_engineering_closed|/root/repair_iml02||
 |rescue-remaining:RR-SCOPE01|test_contract_drift_closed_in_fixed_catalog_scope|/root/repair_chemo||
 |course-timing:CT-04|integrated_limited_engineering_closed|/root/repair_iml02||
-|SCOPE6-01|formal_api_reproduced_minimal_fix_under_test|/root/repair_privacy_closure||
+|SCOPE6-01|integrated_formal_entry_engineering_closed|/root/repair_privacy_closure||

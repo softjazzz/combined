@@ -266,7 +266,7 @@
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-anesthesia-20261008",
       "baseline": "036999e40cf88fc41261b2562aaccf414549db33",
-      "state": "core_implemented_waiting_joint_offline_validation",
+      "state": "limited_engineering_closed_real_model_pending",
       "write_paths": [
         "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
         "apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json",
@@ -323,7 +323,7 @@
     {
       "id": "SCOPE6-01",
       "owner": "/root/repair_privacy_closure",
-      "state": "confirmed_formal_api_fix_validation",
+      "state": "integrated_formal_entry_engineering_closed",
       "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
       "branch": "codex/qc-fix-scope-six-20261008",
       "baseline": "f4d32a679",

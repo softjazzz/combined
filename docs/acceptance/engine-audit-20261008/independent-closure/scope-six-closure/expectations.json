@@ -1,0 +1,93 @@
+{
+  "sha": "b5d0991a22c79aea3821a7819042a66a974c033f",
+  "scope": "0609 only",
+  "review_method": "static fixed-commit review; no independent runtime execution",
+  "freeze_timing": "Before any independent execution; owner tests/results were already known. Not a blind pre-owner freeze.",
+  "contracts": [
+    {
+      "id": "S6-01",
+      "input": [
+        "LX0609-06-03-01",
+        "LX0609-01-01-01"
+      ],
+      "expected": {
+        "http": 422,
+        "new_jobs": 0,
+        "dispatches": 0
+      },
+      "reason": "paused projection cannot admit an unregistered original selection"
+    },
+    {
+      "id": "S6-02",
+      "input": [
+        "LX0609-03-01-01",
+        "LX0609-01-01-01"
+      ],
+      "expected": {
+        "http": 200,
+        "new_jobs": 1,
+        "dispatches": 1,
+        "execution": [
+          "LX0609-01-01-01"
+        ],
+        "paused": [
+          "LX0609-03-01-01"
+        ],
+        "scoped": [
+          "LX0609-01-01-01",
+          "LX0609-03-01-01"
+        ]
+      },
+      "reason": "registered paused identity remains in customer delivery without running it"
+    },
+    {
+      "id": "S6-03",
+      "input": [
+        "LX0609-03-01-01"
+      ],
+      "expected": {
+        "http": 422,
+        "new_jobs": 0,
+        "dispatches": 0
+      },
+      "reason": "existing paused-only rejection preserved"
+    },
+    {
+      "id": "S6-04",
+      "input": "selected field omitted",
+      "expected": "resolved customer delivery minus the fixed five acceptance-only IDs; paused subset is retained in scoped, excluded from execution",
+      "reason": "default freeze preserved"
+    },
+    {
+      "id": "S6-05",
+      "input": "customer-excluded ID plus LX0609-01-01-01",
+      "expected": {
+        "http": 422,
+        "new_jobs": 0,
+        "dispatches": 0
+      },
+      "reason": "whole master is not an entry allowlist"
+    },
+    {
+      "id": "S6-06",
+      "input": [
+        "LX0609-99-99-99",
+        "LX0609-01-01-01"
+      ],
+      "expected": {
+        "http": 422,
+        "new_jobs": 0,
+        "dispatches": 0
+      },
+      "reason": "unknown IDs rejected before persistence/dispatch"
+    }
+  ],
+  "exclusions": [
+    "0916",
+    "medical criteria",
+    "complete Worker endpoint",
+    "real authentication/activation/model configuration",
+    "PG migration",
+    "deployment acceptance"
+  ]
+}
