@@ -338,7 +338,7 @@
       "id": "TC02",
       "owner": "/root/repair_iml02",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
-      "state": "offline_contract_validation",
+      "state": "carrier_fix_284_green_independent_review_pending",
       "responsibility": [
         "native_extended_document_execution.py:070",
         "extended_document/transfusion_performance_extraction.py",
@@ -393,10 +393,10 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "56322bcffa32ac33b5069975f1dbf3af18b597ac",
+  "integration_head": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
   "current_test_slot_owner": null,
   "queued_tests": [
-    "TC02 fixed219b13d independent review then root integration replay202",
-    "Culture stale015 identity-only adaptation45 when ready"
+    "TC02 carrier length-consumption protection; fixed candidate independent review/root integration replay",
+    "SURGERY-029030 exact original two-case current-source reconciliation"
   ]
 }

@@ -1,6 +1,6 @@
 # 0609 closure issue queue
 
-Production root: `fad64946e`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
+Production integration: `e5f5696f5`. Issue closure is not full-rule or clinical acceptance. Frozen86-row T0 unchanged.
 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
@@ -8,7 +8,7 @@ Production root: `fad64946e`. Issue closure is not full-rule or clinical accepta
 |N10|queued_evidence_review|unassigned||
 |N13|limited_engineering_repair_integrated_business_acceptance_open|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|unassigned||
-|SURGERY-029030|queued_evidence_review|unassigned||
+|SURGERY-029030|fixed_source_remaining_counterexample_reconciliation|/root/audit_course_timing||
 |PREOP-MEDICAL|business_basis_review_no_code_decision|unassigned||
 |CT-INPUT-CHANGE|revalidation_evidence_preparation|unassigned||
 |PATH-INPUT-CHANGE|revalidation_evidence_preparation|unassigned||
@@ -19,7 +19,7 @@ Production root: `fad64946e`. Issue closure is not full-rule or clinical accepta
 |course-timing:CT-02|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
 |course-timing:CT-03|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
 |discharge-death:DD-F01|integrated_limited_engineering_closed|/root/repair_iml02|imaging-laboratory:IML-02|
-|discharge-death:DD-F02|queued_evidence_review|unassigned||
+|discharge-death:DD-F02|rule_scope_and_source_contract_review|/root/audit_discharge_death||
 |discharge-death:DD-F05|business_basis_review_no_code_decision|unassigned||
 |imaging-laboratory:IML-01|integrated_confirmed_subissues_joint_ct_mri_contract_open|/root/repair_iml01||
 |imaging-laboratory:IML-02|integrated_engineering_closed|/root/repair_iml02||
@@ -29,10 +29,10 @@ Production root: `fad64946e`. Issue closure is not full-rule or clinical accepta
 |rescue-remaining:RR-D02|integrated_limited_engineering_closed|/root/repair_iml01||
 |rescue-remaining:RR-M01|integrated_engineering_contract_closed|/root/repair_iml02||
 |treatment-consultation:TC-01|queued_evidence_review|unassigned||
-|treatment-consultation:TC-02|offline_performed_fact_contract_implementation|unassigned|imaging-laboratory:IML-02|
+|treatment-consultation:TC-02|carrier_fix_284_synthetic_green_independent_review_pending|/root/repair_iml02|imaging-laboratory:IML-02|
 |treatment-consultation:TC-03|queued_evidence_review|unassigned||
 |tumor-pathology:TP-D01|integrated_engineering_closed|/root/repair_chemo||
-|tumor-pathology:TP-D02|offline_local_drug_dose_facts_implementation_other_semantics_open|/root/repair_chemo||
+|tumor-pathology:TP-D02|candidate_frozen_not_integrable_semantic_failures_and_legacy_regression_unverified|/root/repair_chemo||
 |tumor-pathology:TP-D03|design_before_semantic_changes|/root/repair_chemo||
 |tumor-pathology:TP-D04|limited_engineering_repair_integrated_independently_verified|/root/repair_iml02|imaging-laboratory:IML-02|
 |tumor-pathology:TP-D05|queued_shared_module|unassigned|imaging-laboratory:IML-02|
