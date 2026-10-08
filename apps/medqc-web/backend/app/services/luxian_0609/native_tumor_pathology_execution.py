@@ -1369,6 +1369,31 @@ def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
     )
 
 
+def _chemotherapy_candidate_has_independent_owner(
+    *,
+    candidate: Mapping[str, Any],
+    selected_event: Mapping[str, str],
+    all_events: Sequence[Mapping[str, str]],
+) -> bool:
+    """检查所有医嘱的可能归属；待核剂量/途径不用于反向证明事件身份。"""
+
+    text = _normalized_comparison_text(_row_text(candidate))
+    selected_name = _normalized_comparison_text(selected_event["drug_name"])
+    for competing_event in all_events:
+        # 仅跳过本请求内同一事件描述对象，不把文书ID或医嘱ID虚构为跨表关联键。
+        if competing_event is selected_event:
+            continue
+        competing_name = _normalized_comparison_text(competing_event["drug_name"])
+        if competing_name and competing_name != selected_name:
+            if competing_name not in text:
+                continue
+            # 同一片段还提及另一目标药，日期不能补足药物与剂量的局部归属。
+            return False
+        # 正文日期尚未绑定该次给药，不以任意日期排除同药或缺药名的竞争事件。
+        return False
+    return True
+
+
 def _typed_chemotherapy_comparison(
     *,
     orders: SourceMaterial,
@@ -1405,18 +1430,24 @@ def _typed_chemotherapy_comparison(
         "time": "matched",
     }
     missing_order_fields: set[str] = set()
+    missing_order_event_count = 0
+    target_drug_names: list[str] = []
+    all_events: list[dict[str, str]] = []
     expected_events: list[dict[str, str]] = []
     for row in chemotherapy_orders:
+        event_missing_fields: set[str] = set()
         drug_name = _clean(
             row.get("generic_name") or row.get("drug_name") or row.get("brand_name")
         )
+        if drug_name:
+            target_drug_names.append(drug_name)
         dose_value = _clean(row.get("single_dose") or row.get("dose"))
         dose_unit = _clean(row.get("single_dose_unit") or row.get("dose_unit"))
         route = _clean(row.get("drug_apply_method") or row.get("administration_route"))
         prescribed = _clean(row.get("prescribed_datetime") or row.get("order_time"))
         # 医嘱缺单位不足以核对剂量，复用既有资料不足合同，不推定不一致。
         if not dose_unit:
-            missing_order_fields.add("dose")
+            event_missing_fields.add("dose")
         expected_values = {
             "drug_name": drug_name,
             "dose": f"{dose_value}{dose_unit}" if dose_value else "",
@@ -1424,28 +1455,30 @@ def _typed_chemotherapy_comparison(
         }
         for field, expected in expected_values.items():
             if not _normalized_comparison_text(expected):
-                missing_order_fields.add(field)
+                event_missing_fields.add(field)
         if not _date_value(prescribed):
-            missing_order_fields.add("time")
-        expected_events.append(
-            {
-                "drug_name": drug_name,
-                "dose": expected_values["dose"],
-                "route": route,
-                "prescribed": prescribed,
-            }
-        )
+            event_missing_fields.add("time")
+        event = {
+            "drug_name": drug_name,
+            "dose": expected_values["dose"],
+            "route": route,
+            "prescribed": prescribed,
+        }
+        all_events.append(event)
+        if event_missing_fields:
+            missing_order_fields.update(event_missing_fields)
+            missing_order_event_count += 1
+            continue
+        expected_events.append(event)
 
-    for field in missing_order_fields:
-        field_results[field] = "unknown"
     unresolved_event_count = 0
     missing_course_event_count = 0
     unknown_time_event_count = 0
     selected_course_rows: list[Mapping[str, Any]] = []
-    if not missing_order_fields:
+    if expected_events:
         course_clauses = _course_event_candidates(
             course_records.rows,
-            target_drug_names=tuple(event["drug_name"] for event in expected_events),
+            target_drug_names=tuple(target_drug_names),
         )
         claimed_clause_indexes: set[int] = set()
         for event in expected_events:
@@ -1479,6 +1512,12 @@ def _typed_chemotherapy_comparison(
             else:
                 candidate_index, candidate = candidates[0]
 
+            # 缺字段与已确认缺陷并存时，只有可独立归属的完整事件才能确认不一致。
+            if missing_order_event_count and not _chemotherapy_candidate_has_independent_owner(
+                candidate=candidate, selected_event=event, all_events=all_events,
+            ):
+                unresolved_event_count += 1
+                continue
             # 一个片段不能同时证明两个独立化疗事件；无法唯一关联时拒绝猜测。
             if candidate_index in claimed_clause_indexes:
                 unresolved_event_count += 1
@@ -1504,7 +1543,7 @@ def _typed_chemotherapy_comparison(
                 # 已确认时间不一致不被后续未知事件覆盖；未知计数仍保留资料不足。
                 field_results["time"] = time_state
 
-    if unresolved_event_count or missing_course_event_count:
+    if missing_order_event_count or unresolved_event_count or missing_course_event_count:
         # 汇总未能核对的事件：未知不能冒充匹配，也不能覆盖已确认的不一致。
         field_results = {
             key: "unknown" if value == "matched" else value
@@ -1516,14 +1555,17 @@ def _typed_chemotherapy_comparison(
         "order_count": len(chemotherapy_orders),
         "field_results": field_results,
         "missing_order_fields": sorted(missing_order_fields),
+        "missing_order_event_count": missing_order_event_count,
         "unresolved_event_count": unresolved_event_count,
         "missing_course_event_count": missing_course_event_count,
         "unknown_time_event_count": unknown_time_event_count,
     }
     if missing_order_fields:
+        # 完整独立事件已确认的不一致不能被另一事件的字段缺口掩盖。
+        independent_mismatch = "mismatched" in field_results.values()
         return (
-            "data_gap",
-            "chemotherapy_order_fields_missing",
+            "non_compliant" if independent_mismatch else "data_gap",
+            "chemotherapy_record_mismatch" if independent_mismatch else "chemotherapy_order_fields_missing",
             facts,
             chemotherapy_orders,
             tuple(selected_course_rows),
