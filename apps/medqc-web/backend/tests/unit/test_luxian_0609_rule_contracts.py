@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from itertools import combinations
 from pathlib import Path
 
 import pytest
@@ -33,13 +34,37 @@ _CONTRACT_PATH = (
 def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 84
-    assert tuple(contract.rule_id for contract in contracts) == tuple(
-        str(item["rule_id"]) for item in load_luxian_0609_rules()
+    raw_master = json.loads(
+        (Path(__file__).resolve().parents[2] / "app/data/luxian_0609_rule_master_v1.json").read_text(encoding="utf-8")
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 74
-    assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
-    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 10
+    raw_active = tuple(raw for raw in raw_master["rules"] if raw["implementation_status"] == "active")
+    expected_ids = tuple(raw["rule_id"] for raw in raw_active)
+    assert expected_ids
+    assert len(set(expected_ids)) == len(expected_ids)
+    assert tuple(contract.rule_id for contract in contracts) == expected_ids
+    assert tuple(str(item["rule_id"]) for item in load_luxian_0609_rules()) == expected_ids
+    for contract, raw in zip(contracts, raw_active, strict=True):
+        assert (
+            contract.phase_status,
+            contract.active_criteria,
+            contract.pending_criteria,
+            contract.pending_reason_code,
+            contract.definition_version,
+        ) == (
+            raw.get("phase_status", "phase_1_target"),
+            tuple(raw.get("active_criteria", ())),
+            tuple(raw.get("pending_criteria", ())),
+            raw.get("pending_reason_code", ""),
+            raw_master["definition_version"],
+        ), contract.rule_id
+    phase_sets = []
+    for status in ("phase_1_target", "phase_1_partial", "pending_definition"):
+        expected = tuple(raw["rule_id"] for raw in raw_active if raw.get("phase_status", "phase_1_target") == status)
+        actual = tuple(contract.rule_id for contract in contracts if contract.phase_status == status)
+        assert actual == expected
+        phase_sets.append(set(actual))
+    assert all(left.isdisjoint(right) for left, right in combinations(phase_sets, 2))
+    assert set().union(*phase_sets) == set(expected_ids)
     assert {"LX0609-06-03-01"}.isdisjoint(
         contract.rule_id for contract in contracts
     )
@@ -350,6 +375,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-06-03-02",
         "LX0609-06-02-01",
         "LX0609-09-01-02",
+        "LX0609-08-01-05",
     }
     assert typed_malignancy == {"LX0609-04-02-03", "LX0609-05-02-01", "LX0609-08-01-04"}
     assert all(contract.golden_gate_state == "pending" for contract in contracts)

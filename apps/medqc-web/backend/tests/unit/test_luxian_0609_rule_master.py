@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -19,11 +20,31 @@ from app.services.luxian_0609_rule_master import (
 )
 
 
+_RAW_MASTER_PATH = Path(__file__).resolve().parents[2] / "app/data/luxian_0609_rule_master_v1.json"
+_APPROVED_EXTENSION_IDS = (
+    "LX0609-06-01-01",
+    "LX0609-06-01-03",
+    "LX0609-06-03-01",
+    "LX0609-06-03-02",
+    "LX0609-06-02-01",
+    "LX0609-09-01-02",
+    "LX0609-08-01-05",
+)
+
+
+def _raw_master():
+    return json.loads(_RAW_MASTER_PATH.read_text(encoding="utf-8"))
+
+
 def _frozen_rule_ids() -> tuple[str, ...]:
     """迁移清单仅由测试读取，生产目录不依赖旧编号。"""
     mapping_path = Path(__file__).resolve().parents[3] / "docs/plans/lx0609-four-part-rule-code-mapping-v1.csv"
     with mapping_path.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
+    assert rows
+    assert all(row["mapping_status"] == "frozen_identity_migration" for row in rows)
+    assert len({row["legacy_rule_id"] for row in rows}) == len(rows)
+    assert len({row["rule_id"] for row in rows}) == len(rows)
     return tuple(row["rule_id"] for row in sorted(rows, key=lambda row: row["legacy_rule_id"]))
 
 
@@ -109,27 +130,30 @@ def test_rule_master_rejects_duplicate_malformed_or_empty_scope(
 
 
 @pytest.mark.unit
-def test_rule_master_keeps_79_migrated_rules_and_six_handbook_registrations():
+def test_rule_master_preserves_frozen_migration_and_approved_extensions():
+    payload = _raw_master()
+    raw_rules = payload["rules"]
+    raw_ids = tuple(raw["rule_id"] for raw in raw_rules)
+    migrated_ids = _frozen_rule_ids()
+    migrated_set = set(migrated_ids)
     entries = load_luxian_0609_rule_master()
+    actual_ids = tuple(entry.rule_id for entry in entries)
 
-    assert tuple(entry.rule_id for entry in entries[:79]) == _frozen_rule_ids()
-    assert tuple(entry.rule_id for entry in entries[79:]) == (
-        "LX0609-06-01-01",
-        "LX0609-06-01-03",
-        "LX0609-06-03-01",
-        "LX0609-06-03-02",
-        "LX0609-06-02-01",
-        "LX0609-09-01-02",
-    )
-    assert len({entry.rule_id for entry in entries}) == 85
+    assert actual_ids == raw_ids
+    assert len(set(raw_ids)) == len(raw_ids)
+    assert tuple(rule_id for rule_id in raw_ids if rule_id in migrated_set) == migrated_ids
+    assert tuple(rule_id for rule_id in actual_ids if rule_id in migrated_set) == migrated_ids
+    assert tuple(rule_id for rule_id in raw_ids if rule_id not in migrated_set) == _APPROVED_EXTENSION_IDS
+    assert migrated_set.isdisjoint(_APPROVED_EXTENSION_IDS)
+    assert set(raw_ids) == migrated_set | set(_APPROVED_EXTENSION_IDS)
+    statuses = Counter(raw["implementation_status"] for raw in raw_rules)
+    assert set(statuses).issubset({"active", "contract_ready", "pending_definition"})
     assert get_luxian_0609_rule_master_summary() == {
-        "total": 85,
-        "active": 84,
-        "contract_ready": 0,
-        "pending_definition": 1,
+        "total": len(raw_rules),
+        **{status: statuses[status] for status in ("active", "contract_ready", "pending_definition")},
     }
-    assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-09-22-identity-v1"
-    assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-09-22-identity-v1"
+    assert LUXIAN_0609_RULE_MASTER_VERSION == payload["master_version"] == "2026-09-22-identity-v1"
+    assert LUXIAN_0609_RULE_DEFINITION_VERSION == payload["definition_version"] == "lx0609-defined-scope-2026-09-22-identity-v1"
 
 
 @pytest.mark.unit
@@ -180,9 +204,10 @@ def test_pending_rules_keep_customer_definition_gaps_visible():
 def test_rule_master_requires_complete_customer_policy_metadata_for_all_rules():
     entries = load_luxian_0609_rule_master()
 
-    assert len(entries) == 85
+    assert tuple(entry.rule_id for entry in entries) == tuple(raw["rule_id"] for raw in _raw_master()["rules"])
+    migrated_ids = set(_frozen_rule_ids())
     assert all(entry.policy_sources for entry in entries)
-    assert all("customer_confirmed" in entry.policy_sources for entry in entries[:79])
+    assert all("customer_confirmed" in entry.policy_sources for entry in entries if entry.rule_id in migrated_ids)
     assert all(entry.policy_summary for entry in entries)
 
 
