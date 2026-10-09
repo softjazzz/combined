@@ -178,6 +178,8 @@ _PATHOLOGY_SAMPLING_MISSING_PATTERN = re.compile(
     r"(?:未记录.{0,12}(?:病理)?(?:取材|送检)|(?:病理)?(?:取材|送检).{0,12}未记录)"
 )
 _CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"(?:化疗|抗肿瘤)")
+_CHEMO_ORDER_VOID_STATUSES = frozenset({"取消", "撤销", "作废"})
+_CHEMO_ORDER_PENDING_STATUSES = frozenset({"拟执行"})
 _CHEMOTHERAPY_RELATIVE_DATE_PATTERN = re.compile(r"(?:今日|当日)")
 _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN = re.compile(
     r"(?P<year>\d{4})[-年/](?P<month>\d{1,2})[-月/](?P<day>\d{1,2})日?"
@@ -1232,7 +1234,8 @@ def _date_value(value: Any) -> date | None:
 
 
 def _course_record_date(row: Mapping[str, Any]) -> date | None:
-    for key in ("record_time", "record_datetime", "submit_time", "submit_datetime"):
+    # “今日/当日”只能绑定临床记录时间；文书提交时间不代表用药发生日期。
+    for key in ("record_time", "record_datetime"):
         if value := _date_value(row.get(key)):
             return value
     return None
@@ -1370,6 +1373,30 @@ def _course_event_candidates(
     return tuple(candidates)
 
 
+_CHEMO_MASS_UNIT_FACTORS = {
+    "mg": Decimal(1), "毫克": Decimal(1), "g": Decimal(1000), "克": Decimal(1000),
+    "μg": Decimal("0.001"), "ug": Decimal("0.001"), "mcg": Decimal("0.001"), "微克": Decimal("0.001"),
+}
+
+
+def _chemotherapy_dose_unit_unconfirmed(expected: str, observed: str) -> bool:
+    """病程写的是同一质量的另一单位写法（毫克、g 等）：换算口径待确认，不能判不一致。"""
+
+    parsed = re.fullmatch(r"([+-]?(?:\d+(?:\.\d*)?|\.\d+))(.+)?", re.sub(r"\s+", "", expected).lower())
+    if parsed is None or (parsed.group(2) or "") not in _CHEMO_MASS_UNIT_FACTORS:
+        return False
+    expected_mass = Decimal(parsed.group(1)) * _CHEMO_MASS_UNIT_FACTORS[parsed.group(2)]
+    units = "|".join(sorted((re.escape(unit) for unit in _CHEMO_MASS_UNIT_FACTORS), key=len, reverse=True))
+    for match in re.finditer(
+        r"(?<![\d.+-])(\d+(?:\.\d*)?|\.\d+)\s*(" + units + r")(?![a-z0-9])(?!\s*[/／⁄∕²³^·⋅∙])",
+        observed, re.IGNORECASE,
+    ):
+        unit = match.group(2).lower()
+        if unit != parsed.group(2) and Decimal(match.group(1)) * _CHEMO_MASS_UNIT_FACTORS[unit] == expected_mass:
+            return True
+    return False
+
+
 def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
     """只比较完整数值和原单位，保留正负号、小数点及单位分母。"""
 
@@ -1451,6 +1478,17 @@ def _typed_chemotherapy_comparison(
     )
     if not chemotherapy_orders:
         return "data_gap", "chemotherapy_fact_unavailable", None, (), ()
+    # 冻结口径（院方状态码表待提供）：取消/撤销/作废医嘱不证明用药，排除后无有效
+    # 化疗医嘱即不适用；拟执行医嘱尚未证明实施，资料不足。未列出的状态沿用原行为。
+    statuses = [_clean(row.get("order_status")) for row in chemotherapy_orders]
+    chemotherapy_orders = tuple(
+        row for row, status in zip(chemotherapy_orders, statuses)
+        if status not in _CHEMO_ORDER_VOID_STATUSES
+    )
+    if not chemotherapy_orders:
+        return "not_applicable", "chemotherapy_orders_cancelled", None, (), ()
+    if any(_clean(row.get("order_status")) in _CHEMO_ORDER_PENDING_STATUSES for row in chemotherapy_orders):
+        return "data_gap", "chemotherapy_order_not_executed", None, chemotherapy_orders, ()
     if not any(_course_record_text(row) for row in course_records.rows):
         return "data_gap", "chemotherapy_course_record_unavailable", None, (), ()
 
@@ -1558,7 +1596,10 @@ def _typed_chemotherapy_comparison(
             candidate_text = _row_text(candidate)
             comparison_text = _normalized_comparison_text(candidate_text)
             if not _chemotherapy_dose_matches(event["dose"], candidate_text):
-                field_results["dose"] = "mismatched"
+                field_results["dose"] = (
+                    "unknown" if _chemotherapy_dose_unit_unconfirmed(event["dose"], candidate_text)
+                    and field_results["dose"] != "mismatched" else "mismatched"
+                )
             if _normalized_comparison_text(event["route"]) not in comparison_text:
                 field_results["route"] = "mismatched"
             time_state = _chemotherapy_time_state(
@@ -1605,6 +1646,14 @@ def _typed_chemotherapy_comparison(
         return (
             "data_gap",
             "chemotherapy_event_association_ambiguous",
+            facts,
+            chemotherapy_orders,
+            tuple(selected_course_rows),
+        )
+    if field_results["dose"] == "unknown" and "mismatched" not in field_results.values():
+        return (
+            "data_gap",
+            "chemotherapy_dose_unit_unconfirmed",
             facts,
             chemotherapy_orders,
             tuple(selected_course_rows),
