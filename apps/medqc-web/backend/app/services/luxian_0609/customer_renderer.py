@@ -917,8 +917,8 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "请核对实际输血情况并统一修正文书记录。",
     ),
     "LX0609-03-02-01": (
-        "入院 7 天后诊断仍不明确，未见疑难病例讨论记录",
-        "已核对第 7 日病程和疑难病例讨论资料，当前诊断仍不明确且未检出讨论记录。",
+        "入院满 7 天后诊断或治疗方案尚未明确，未见疑难病例讨论记录",
+        "已核对入院满 7 天后的病程和疑难病例讨论资料，诊断或治疗方案尚未明确且未检出讨论记录。",
         "请组织疑难病例讨论并记录诊断分析和后续诊疗计划。",
     ),
     "LX0609-06-04-01": (
@@ -1264,7 +1264,7 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "无需按本质控点处理。",
     ),
     ("LX0609-03-02-01", "trigger_absent_complete"): (
-        "入院满7天后未发现诊断仍不明确的记录",
+        "入院满7天后未发现诊断或治疗方案尚未明确的记录",
         "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
         "无需按本质控点处理。",
     ),
@@ -2870,6 +2870,17 @@ def customer_finding_from_controlled_facts(
         if state == "completed":
             return f"已确认实施四级手术 {procedure}（等级来源：{source}），已完成术前多学科讨论。"
 
+    if rule_id == "LX0609-03-02-01":
+        resolution = facts.get("diagnosis_scope_resolution")
+        if resolution == "unknown":
+            return "诊断或治疗方案的当前明确性、极性或范围尚无法可靠确认，暂不能判断疑难病例讨论要求是否触发。"
+        if resolution == "capacity_exceeded":
+            return "完整病程材料超出本次诊断状态抽取预算，尚未完成疑难病例讨论适用性核对。"
+        if resolution == "unavailable":
+            return "病程正文缺失或不可读，暂不能核对诊断或治疗方案的当前状态。"
+        if resolution == "invalid":
+            return "诊断状态抽取未取得有效响应，暂不能完成核对。"
+
     if rule_id == "LX0609-03-02-01" and kind == "uncertain_diagnosis_scope_unverified":
         trigger_times = joined("uncertain_record_times")
         return (
@@ -2880,7 +2891,7 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-03-02-01" and kind == "uncertain_diagnosis_discussion_body_gap":
         finding = (
-            f"入院时间为 {facts.get('admission_time')}，入院满7天后已有诊断不明确记录"
+            f"入院时间为 {facts.get('admission_time')}，入院满7天后已有诊断或治疗方案尚未明确的记录"
             f"（{joined('uncertain_record_times')}）；已读取疑难病例讨论资料{facts.get('discussion_count')}份，"
             f"其中{facts.get('discussion_body_gap_count')}份正文缺失或不可用，资料不足，无法核对讨论内容。"
         )
@@ -2900,7 +2911,7 @@ def customer_finding_from_controlled_facts(
         trigger_times = joined("uncertain_record_times")
         if trigger_times:
             finding = (
-                f"入院时间为 {facts.get('admission_time')}，入院满 7 天后仍有诊断不明确记录"
+                f"入院时间为 {facts.get('admission_time')}，入院满 7 天后仍有诊断或治疗方案尚未明确的记录"
                 f"（{trigger_times}）；疑难病例讨论记录 {count} 份。"
             )
             if facts.get("candidate_course_time_gap_count"):
@@ -2911,7 +2922,7 @@ def customer_finding_from_controlled_facts(
                     "无法确认其七天适用条件；以上已确认结论保留。"
                 )
             return finding
-        return f"入院时间为 {facts.get('admission_time')}，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。"
+        return f"入院时间为 {facts.get('admission_time')}，未发现入院满 7 天后诊断或治疗方案尚未明确的触发记录，本质控点不适用。"
 
     if rule_id == "LX0609-09-02-01":
         if kind == "death_discussion_timeliness_check":

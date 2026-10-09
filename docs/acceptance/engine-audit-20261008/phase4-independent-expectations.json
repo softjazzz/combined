@@ -1,0 +1,1443 @@
+{
+  "schema_version": "phase4-independent-expectations-v1",
+  "scope": [
+    "050",
+    "048"
+  ],
+  "created_date": "2026-10-09",
+  "evidence_level": "独立合成工程oracle；不是真实模型、临床金标或正式全链验收",
+  "sources": [
+    {
+      "path": "docs/acceptance/engine-audit-20261008/phase3-050055-expectations.json",
+      "sha256": "57eda4ddc21ac31d1679f431ae6e65d95201c5d8ec5030dc86a52eb73e42484e"
+    },
+    {
+      "path": ".tmp/engine-audit-20261008/treatment-consultation/048-frozen-expectations.json",
+      "sha256": "8b6a3ef2d76c089b75933922e57f56a17fcf7fd0c02c5fb1fb15ab5ef3c6c69b"
+    },
+    {
+      "path": "docs/acceptance/engine-audit-20261008/phase2-transfusion-reproduction.md",
+      "sha256": "196a606051a260c11f24fa17a0f2556e1d71b35f5b90dbb5f49f5d1ed406d827"
+    },
+    {
+      "path": "docs/acceptance/engine-audit-20261008/phase2-independent-expectations.md",
+      "sha256": "2692212d534bb4644f5aeaba19c75016525222926aa41681c5384cd216c2b24c"
+    },
+    {
+      "path": "docs/acceptance/engine-audit-20261008/treatment-consultation.md",
+      "sha256": "610c0d0c2bca26afe42e4115adbd2bdc771e4bfcd807f68b5220dffa46520f01"
+    }
+  ],
+  "050_cases_unchanged": [
+    {
+      "id": "050_positive",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "non_compliant",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "目前诊断仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_no_marker",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "not_applicable",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "目前诊断已明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_negated_marker",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "not_applicable",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "目前不存在诊断不明确的问题。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_planned_marker",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "not_applicable",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "如后续诊断不明确，拟进行疑难讨论。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_negation_reordered",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_negation_reordered",
+            "record_content": "诊断不明确的问题，目前并不存在。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "诊断不明确",
+            "state": "absent",
+            "time_scope": "current",
+            "polarity": "negated"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "否定作用于当前诊断不明确问题，语序变化不改变不存在。"
+    },
+    {
+      "id": "050_future_condition_reordered",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_future_condition_reordered",
+            "record_content": "拟在后续诊断仍不明确时开展疑难病例讨论。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "诊断不明确",
+            "state": "unresolved",
+            "time_scope": "future_conditional",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "计划讨论条件不是当前问题事实。"
+    },
+    {
+      "id": "050_historical_resolved",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_historical_resolved",
+            "record_content": "入院时发热病因诊断不明确；目前已明确为肺炎，发热病因问题已解决。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "historical",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "发热病因",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "同一问题历史未明确且当前明确解决，不能作为当前触发。"
+    },
+    {
+      "id": "050_historical_persisting",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_historical_persisting",
+            "record_content": "入院时发热病因诊断不明确；目前该发热病因仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "historical",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "历史问题明确延续至当前。"
+    },
+    {
+      "id": "050_multi_problem_one_unresolved",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_multi_problem_one_unresolved",
+            "record_content": "肺炎诊断已明确；贫血病因目前仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "贫血病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "问题各自归属，另一诊断明确不能抵消当前贫血病因未明。"
+    },
+    {
+      "id": "050_multi_problem_historical_other",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_multi_problem_historical_other",
+            "record_content": "入院时贫血病因诊断不明确，现已明确为缺铁性贫血；目前胸腔积液病因仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "贫血病因",
+            "state": "unresolved",
+            "time_scope": "historical",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "贫血病因",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "胸腔积液病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "历史问题解决不抵消另一当前问题。"
+    },
+    {
+      "id": "050_multi_problem_all_resolved",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_multi_problem_all_resolved",
+            "record_content": "肺炎诊断已明确；贫血病因也已明确，目前无诊断不明确问题。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "贫血病因",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "诊断不明确",
+            "state": "absent",
+            "time_scope": "current",
+            "polarity": "negated"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "完整明确的当前无未明问题保护。"
+    },
+    {
+      "id": "050_double_negation",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_double_negation",
+            "record_content": "不能说发热病因不存在诊断不明确的问题；目前发热病因仍待明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "双重否定及明确仍待明确不能被单一否定词抹掉。"
+    },
+    {
+      "id": "050_plan_difficult_current",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_plan_difficult_current",
+            "record_content": "目前肺炎诊断明确，但该患者诊疗方案难以确定。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "诊疗方案",
+            "state": "undetermined",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "050批准标准含诊疗方案难以确定，不能只识别诊断未明。"
+    },
+    {
+      "id": "050_ambiguous_problem_owner",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_ambiguous_problem_owner",
+            "record_content": "肺炎与胸腔积液曾均待明确。目前其中一项已明确，另一项尚未明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎或胸腔积液",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "至少一项当前未明明确，但不可猜测是哪一项。",
+      "notes": {
+        "problem_identity": "association_ambiguous",
+        "must_not_assign_resolved_state_to_both": true
+      }
+    }
+  ],
+  "048_original_cases_unchanged": [
+    {
+      "id": "048_NEGATED_INTRAOPERATIVE",
+      "expected": "not_applicable",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SUR1",
+            "content": "术中未输血，红细胞2U为术前备血，术中无实际输注。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "ANE1",
+            "content": "术中未输血，红细胞4U为术前备血，术中无实际输注。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "POST1",
+            "content": "术中未输血，红细胞2U为术前备血，术中无实际输注。"
+          }
+        ]
+      }
+    },
+    {
+      "id": "048_MATCHED",
+      "expected": "compliant",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SUR1",
+            "content": "2026-10-08 10:00术中输注红细胞2U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "ANE1",
+            "content": "2026-10-08 10:00术中输注红细胞2单位。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "POST1",
+            "content": "2026-10-08 10:00术中输注红细胞2U。"
+          }
+        ]
+      }
+    },
+    {
+      "id": "048_TIME_CONFLICT",
+      "expected": "data_gap",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SUR1",
+            "content": "2026-10-08 10:00术中输注红细胞2U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "ANE1",
+            "content": "2026-10-08 11:00术中输注红细胞2U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "POST1",
+            "content": "2026-10-08 10:00术中输注红细胞2U。"
+          }
+        ]
+      }
+    }
+  ],
+  "048_synthetic_cases": [
+    {
+      "id": "048_actual_three_documents",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_actual_three_documents-0",
+            "content": "2026-10-08 10:00本次阑尾切除术术中已输注红细胞2U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_actual_three_documents-1",
+            "content": "2026-10-08 10:00本次阑尾切除术术中已输注红细胞2U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_actual_three_documents-2",
+            "content": "2026-10-08 10:00本次阑尾切除术术中已输注红细胞2U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": true,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "2026-10-08 10:00本次阑尾切除术术中已输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "2026-10-08 10:00本次阑尾切除术术中已输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "2026-10-08 10:00本次阑尾切除术术中已输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": true,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "compliant",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "三文书明确同一手术时点已实际输注且成分量一致，保护正常触发。"
+    },
+    {
+      "id": "048_planned_only",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_planned_only-0",
+            "content": "本次手术拟于术中输注红细胞2U，尚未实施。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_planned_only-1",
+            "content": "拟术中输注红细胞4U，当前仅备血。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_planned_only-2",
+            "content": "本次手术未实际输注，原计划术中红细胞2U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": false,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "本次手术拟于术中输注红细胞2U，尚未实施。",
+            "action": "planned",
+            "time_scope": "future_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "拟术中输注红细胞4U，当前仅备血。",
+            "action": "planned",
+            "time_scope": "future_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "本次手术未实际输注，原计划术中红细胞2U。",
+            "action": "planned",
+            "time_scope": "future_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "not_applicable",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "三份完整材料仅计划/未实施，计划量不参加比较。"
+    },
+    {
+      "id": "048_cancelled_only",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_cancelled_only-0",
+            "content": "术中红细胞2U输注计划已取消，未输注。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_cancelled_only-1",
+            "content": "红细胞4U仅为备血，术中输注已取消。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_cancelled_only-2",
+            "content": "本次术中输血取消，未实际输注红细胞2U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": false,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "术中红细胞2U输注计划已取消，未输注。",
+            "action": "cancelled",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "红细胞4U仅为备血，术中输注已取消。",
+            "action": "cancelled",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "本次术中输血取消，未实际输注红细胞2U。",
+            "action": "cancelled",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "not_applicable",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "取消不等于实施，备血差异不能产出输血不一致。"
+    },
+    {
+      "id": "048_preoperative_only",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_preoperative_only-0",
+            "content": "术前病房已输注红细胞2U，本次术中未输血。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_preoperative_only-1",
+            "content": "术前病房已输注红细胞2U，本次术中未输血。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_preoperative_only-2",
+            "content": "术前病房已输注红细胞2U，本次术中未输血。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": false,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "术前病房已输注红细胞2U，本次术中未输血。",
+            "action": "actual_other_stage",
+            "time_scope": "preoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "术前病房已输注红细胞2U，本次术中未输血。",
+            "action": "actual_other_stage",
+            "time_scope": "preoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "术前病房已输注红细胞2U，本次术中未输血。",
+            "action": "actual_other_stage",
+            "time_scope": "preoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "not_applicable",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "术前实际输血不证明术中输血。"
+    },
+    {
+      "id": "048_postoperative_only",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_postoperative_only-0",
+            "content": "本次术中未输血，术后病房已输注红细胞2U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_postoperative_only-1",
+            "content": "本次术中未输血，术后病房已输注红细胞2U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_postoperative_only-2",
+            "content": "本次术中未输血，术后病房已输注红细胞2U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": false,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "本次术中未输血，术后病房已输注红细胞2U。",
+            "action": "actual_other_stage",
+            "time_scope": "postoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "本次术中未输血，术后病房已输注红细胞2U。",
+            "action": "actual_other_stage",
+            "time_scope": "postoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "本次术中未输血，术后病房已输注红细胞2U。",
+            "action": "actual_other_stage",
+            "time_scope": "postoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "not_applicable",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "术后实际输血不能充当术中事件。"
+    },
+    {
+      "id": "048_other_hospital_stage_mr",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_other_hospital_stage_mr-0",
+            "content": "本次术中未输血，红细胞2U仅备血。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_other_hospital_stage_mr-1",
+            "content": "本次术中未输血，红细胞4U仅备血。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_other_hospital_stage_mr-2",
+            "content": "本次术中未输血，红细胞2U仅备血。"
+          }
+        ],
+        "mr_bloodtrans": [
+          {
+            "document_id": "SYN-WARD",
+            "transfusion_start_datetime": "2026-10-07 15:00:00",
+            "record_content": "术前一天病房已输注红细胞2U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": false,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "本次术中未输血，红细胞2U仅备血。",
+            "action": "negated",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "本次术中未输血，红细胞4U仅备血。",
+            "action": "negated",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "本次术中未输血，红细胞2U仅备血。",
+            "action": "negated",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "not_applicable",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "另外住院病房可靠输血事件不能覆盖三文书术中否定。"
+    },
+    {
+      "id": "048_cancelled_plan_then_actual",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_cancelled_plan_then_actual-0",
+            "content": "术中原红细胞4U计划取消，2026-10-08 10:00实际输注红细胞2U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_cancelled_plan_then_actual-1",
+            "content": "术中原红细胞4U计划取消，2026-10-08 10:00实际输注红细胞2U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_cancelled_plan_then_actual-2",
+            "content": "术中原红细胞4U计划取消，2026-10-08 10:00实际输注红细胞2U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": true,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "术中原红细胞4U计划取消，2026-10-08 10:00实际输注红细胞2U。",
+            "action": "actual_after_cancelled_plan",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "术中原红细胞4U计划取消，2026-10-08 10:00实际输注红细胞2U。",
+            "action": "actual_after_cancelled_plan",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "术中原红细胞4U计划取消，2026-10-08 10:00实际输注红细胞2U。",
+            "action": "actual_after_cancelled_plan",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": true,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "compliant",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "取消原计划与实际给药并存，不能以取消抹掉后续真实术中事件，比较仅实际2U。"
+    },
+    {
+      "id": "048_actual_plus_prepared_difference",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_actual_plus_prepared_difference-0",
+            "content": "2026-10-08 10:00术中已输注红细胞2U，另备血红细胞4U未输注。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_actual_plus_prepared_difference-1",
+            "content": "2026-10-08 10:00术中实际输注红细胞2单位，术前备血6U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_actual_plus_prepared_difference-2",
+            "content": "2026-10-08 10:00术中实际输注红细胞2U，原备血8U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": true,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "2026-10-08 10:00术中已输注红细胞2U，另备血红细胞4U未输注。",
+            "action": "actual_plus_untransfused_preparation",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "2026-10-08 10:00术中实际输注红细胞2单位，术前备血6U。",
+            "action": "actual_plus_untransfused_preparation",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "2026-10-08 10:00术中实际输注红细胞2U，原备血8U。",
+            "action": "actual_plus_untransfused_preparation",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": true,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "compliant",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "同一实际量一致，三份备血量不同不影响实际2U比较。"
+    },
+    {
+      "id": "048_actual_same_operation_dose_mismatch",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_actual_same_operation_dose_mismatch-0",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_actual_same_operation_dose_mismatch-1",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞4U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_actual_same_operation_dose_mismatch-2",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": true,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞4U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "same_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": true,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "non_compliant",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "对应同一手术实际事件，实际剂量不一致的正常缺陷保护。"
+    },
+    {
+      "id": "048_different_operations_same_clock",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_different_operations_same_clock-0",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_different_operations_same_clock-1",
+            "content": "2026-10-08 10:00手术SYN-OP-B术中实际输注红细胞4U。",
+            "surgery_id": "SYN-OP-B"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_different_operations_same_clock-2",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": true,
+        "association": "different_operations",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "target_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-B术中实际输注红细胞4U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "other_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "target_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "data_gap",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "时钟相同仍是不同手术，不能跨手术拼接不一致；继承关联失败保护。"
+    },
+    {
+      "id": "048_historical_other_operation",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_historical_other_operation-0",
+            "content": "既往手术SYN-OLD术中输注红细胞2U；本次手术SYN-CURRENT术中未输血。",
+            "surgery_id": "SYN-CURRENT"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_historical_other_operation-1",
+            "content": "既往手术SYN-OLD术中输注红细胞2U；本次手术SYN-CURRENT术中未输血。",
+            "surgery_id": "SYN-CURRENT"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_historical_other_operation-2",
+            "content": "既往手术SYN-OLD术中输注红细胞2U；本次手术SYN-CURRENT术中未输血。",
+            "surgery_id": "SYN-CURRENT"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": false,
+        "association": "same_operation",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "既往手术SYN-OLD术中输注红细胞2U；本次手术SYN-CURRENT术中未输血。",
+            "action": "historical_actual_current_negated",
+            "time_scope": "historical_other_operation",
+            "operation_owner": "other_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "既往手术SYN-OLD术中输注红细胞2U；本次手术SYN-CURRENT术中未输血。",
+            "action": "historical_actual_current_negated",
+            "time_scope": "historical_other_operation",
+            "operation_owner": "other_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "既往手术SYN-OLD术中输注红细胞2U；本次手术SYN-CURRENT术中未输血。",
+            "action": "historical_actual_current_negated",
+            "time_scope": "historical_other_operation",
+            "operation_owner": "other_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "not_applicable",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "既往另一手术已输血不证明本次手术术中实施。"
+    },
+    {
+      "id": "048_current_actual_vs_historical_other",
+      "rule": "LX0609-07-04-01",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-048_current_actual_vs_historical_other-0",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-048_current_actual_vs_historical_other-1",
+            "content": "既往2026-10-01 10:00手术SYN-OP-OLD术中输注红细胞4U。",
+            "surgery_id": "SYN-OP-OLD"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-048_current_actual_vs_historical_other-2",
+            "content": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "surgery_id": "SYN-OP-A"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "performed_intraoperative_transfusion_confirmed": true,
+        "association": "different_operations",
+        "scope": "本次对应手术术中；住院其它阶段、备血、计划不能替代",
+        "body_labels": [
+          {
+            "source": "surgery_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "target_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          },
+          {
+            "source": "anesthesia_record",
+            "quote": "既往2026-10-01 10:00手术SYN-OP-OLD术中输注红细胞4U。",
+            "action": "historical_actual",
+            "time_scope": "historical_other_operation",
+            "operation_owner": "other_operation",
+            "current_target_operation_intraoperative_transfusion": false
+          },
+          {
+            "source": "postsurg_firstcourse_record",
+            "quote": "2026-10-08 10:00手术SYN-OP-A术中实际输注红细胞2U。",
+            "action": "actual",
+            "time_scope": "current_intraoperative",
+            "operation_owner": "target_operation",
+            "current_target_operation_intraoperative_transfusion": true
+          }
+        ]
+      },
+      "comparison_expectation": {
+        "enter_component_dose_comparison": false,
+        "only_actual_same_operation_quantities": true
+      },
+      "final_rule_expectation": {
+        "status": "data_gap",
+        "basis": "继承批准048实际术中事件/同事件三文书完整一致合同；null为当前语义/关联尚不足，非DG默认值"
+      },
+      "rationale": "两份当前事件不能借历史他手术麻醉记录凑三文书完整比较。"
+    }
+  ],
+  "separation_contract": {
+    "050": "14项原样复制，原4 expected与新增10 semantic/program/final status=null的分离均不重写；unknown和不存在不同，待root状态合同。",
+    "048": "术中实施/同手术归属的语义事实与成分剂量比较及最终状态分开；不能只用全住院实施gate或模型自报ID证明术中事件。",
+    "source_assumption": "合成列出三类正文均完整可读、不截断；真实来源不足/协议非法不能当未实施。",
+    "citation_limit": "原文引用存在不证明语义或同手术关联正确；body_labels仅定位输入全文，不替代独立动作/归属标签。",
+    "failure_limit": "同根因最多3轮失败，schema、owner或阶段变化均不清零。"
+  },
+  "048_round_account": {
+    "root_cause": "TC03术中否定/备血误认实施",
+    "confirmed_baseline_observations": 2,
+    "confirmed_failed_production_repair_rounds": null,
+    "reached_three_failed_production_rounds": null,
+    "basis": "原审计与phase2均基线观察，无TC03失败试修manifest；043–047三次正式支撑失败不含048，b4成分/单位配对已闭且不同根因。不能从无证据声称0或重置。",
+    "required_follow_up": "root对原会话/源码manifest逐笔承接；若累计已3轮立即停止本根因试修，不继续重测试。"
+  }
+}

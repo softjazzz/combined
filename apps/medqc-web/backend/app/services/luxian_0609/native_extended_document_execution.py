@@ -31,7 +31,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
-from .extended_document.difficult_case_trigger import has_current_uncertain_diagnosis
+from .extended_document.diagnosis_scope_extraction import extract_diagnosis_scope
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
 )
@@ -2088,6 +2088,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     diagnosis_change_extraction = None
     antimicrobial_action_extraction = None
     antimicrobial_effect_extraction = None
+    diagnosis_scope_extraction = None
     transfusion_performance_extraction = None
     selected = tuple(
         rule_id
@@ -2338,14 +2339,54 @@ async def execute_luxian_0609_native_extended_document_rules(
                 ),
                 None,
             )
-            strong_candidate_rows = tuple(
-                row for row in daily_rows
-                if has_current_uncertain_diagnosis(_material_text(row), _UNCERTAIN_DIAGNOSIS_MARKERS)
-            )
-            local_candidate_rows = tuple(
-                row for row in daily_rows
-                if any(marker in _material_text(row) for marker in _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS)
-            )
+            strong_candidates = []
+            local_candidates = []
+            unknown_candidates = []
+            scope_resolution = "ready"
+            extraction_error = None
+            if not source_error and admission_time is not None:
+                # 权威时间已排除的早期病程不进入语义调用；缺时保留，不能静默排除。
+                scope_rows = tuple(row for row in daily_rows if _row_time(row) is None
+                                   or _row_time(row) >= admission_time + timedelta(days=7))
+                diagnosis_scope_extraction = await extract_diagnosis_scope(
+                    scope_rows, llm_client, max_prompt_bytes=65536, max_completion_tokens=16384,
+                )
+                if diagnosis_scope_extraction.state != "ready":
+                    extraction_error = (diagnosis_scope_extraction.state, diagnosis_scope_extraction.reason_code)
+                    scope_resolution = (
+                        "capacity_exceeded" if diagnosis_scope_extraction.reason_code == "candidate_scope_incomplete"
+                        else "unavailable" if diagnosis_scope_extraction.state == "data_gap" else "invalid"
+                    )
+                else:
+                    for document in diagnosis_scope_extraction.documents:
+                        row = scope_rows[document.row_index]
+                        if document.coverage == "unknown":
+                            unknown_candidates.append(row)
+                        for assertion in document.assertions:
+                            if assertion.temporal_scope in {"historical", "future_conditional"}:
+                                continue
+                            if "unknown" in (assertion.polarity, assertion.temporal_scope,
+                                             assertion.diagnosis_state, assertion.scope):
+                                unknown_candidates.append(row)
+                                continue
+                            # 否定“明确”与肯定“未明确”均表示当前未解决；未知不能当成不存在。
+                            is_unresolved = (
+                                assertion.polarity == "affirmed"
+                                and assertion.diagnosis_state in {"unresolved", "undetermined"}
+                            ) or (assertion.polarity == "negated" and assertion.diagnosis_state == "explicit")
+                            if is_unresolved and assertion.temporal_scope == "current":
+                                if assertion.scope in {"diagnosis", "treatment_plan"}:
+                                    if row not in strong_candidates:
+                                        strong_candidates.append(row)
+                                elif assertion.scope == "local_problem":
+                                    if row not in local_candidates:
+                                        local_candidates.append(row)
+                                else:
+                                    unknown_candidates.append(row)
+            strong_candidate_rows = tuple(strong_candidates)
+            local_candidate_rows = tuple(local_candidates)
+            unknown_scope_rows = tuple(row for row in unknown_candidates
+                if _row_time(row) is None or (admission_time is not None and _row_time(row) >= admission_time + timedelta(days=7)))
             candidate_time_gap_rows = tuple(
                 row for row in daily_rows
                 if (row in strong_candidate_rows or row in local_candidate_rows)
@@ -2365,11 +2406,16 @@ async def execute_luxian_0609_native_extended_document_rules(
             uncertain_rows = strong_uncertain_rows or local_uncertain_rows
             if source_error:
                 final_state, reason_code = "data_gap", source_error
+            elif extraction_error is not None:
+                final_state, reason_code = extraction_error
             elif admission_time is None:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif not strong_uncertain_rows and candidate_time_gap_rows:
                 # 缺时只表示候选无法定位；不能据此确认七天触发或完整未触发。
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
+            elif not strong_uncertain_rows and unknown_scope_rows:
+                final_state, reason_code = "uncertain", "diagnosis_scope_uncertain"
+                scope_resolution = "unknown"
             elif not uncertain_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif not strong_uncertain_rows:
@@ -2385,7 +2431,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             else:
                 final_state, reason_code = "non_compliant", "required_document_missing"
             scope_uncertain = reason_code == "diagnosis_scope_uncertain"
-            body_gap_only = reason_code == "required_field_missing" and final_state == "data_gap"
+            body_gap_only = reason_code == "required_field_missing" and final_state == "data_gap" and extraction_error is None
             time_gap_only = bool(candidate_time_gap_rows) and reason_code == "authoritative_time_missing"
             selected_time_gap_refs: list[str] = []
             if admission_time is not None and not source_error:
@@ -2404,6 +2450,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ],
                     "discussion_count": len(diffcase_rows),
                 }
+                if scope_resolution != "ready":
+                    facts["diagnosis_scope_resolution"] = scope_resolution
                 if body_gap_only:
                     facts["discussion_body_gap_count"] = len(diffcase_rows)
                 if candidate_time_gap_rows:
@@ -5284,6 +5332,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 course_content_extraction,
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
+                diagnosis_scope_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5298,6 +5347,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 course_content_extraction,
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
+                diagnosis_scope_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5312,6 +5362,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 course_content_extraction,
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
+                diagnosis_scope_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5326,6 +5377,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 course_content_extraction,
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
+                diagnosis_scope_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5340,6 +5392,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 course_content_extraction,
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
+                diagnosis_scope_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,

@@ -59,12 +59,15 @@ def safe_difficult_case_customer_display_facts(
         kind not in {_DISCUSSION_KIND, _SCOPE_UNCERTAIN_KIND, _COURSE_TIME_GAP_KIND, _DISCUSSION_BODY_GAP_KIND}
         or not admission_time
         or not isinstance(record_times, (list, tuple))
-        or len(record_times) > 100
+        or len(record_times) > 200
         or any(not _safe_time(item) for item in record_times)
         or not isinstance(discussion_count, int)
         or isinstance(discussion_count, bool)
         or discussion_count < 0
     ):
+        return None
+    resolution = raw.get("diagnosis_scope_resolution", "ready")
+    if not isinstance(resolution, str) or resolution not in {"ready", "unknown", "capacity_exceeded", "unavailable", "invalid"}:
         return None
     has_time_gap = _COURSE_TIME_GAP_COUNT in raw
     time_gap_count = raw.get(_COURSE_TIME_GAP_COUNT)
@@ -97,6 +100,8 @@ def safe_difficult_case_customer_display_facts(
         safe[_COURSE_TIME_GAP_COUNT] = time_gap_count
     if has_body_gap:
         safe[_DISCUSSION_BODY_GAP_COUNT] = body_gap_count
+    if "diagnosis_scope_resolution" in raw:
+        safe["diagnosis_scope_resolution"] = resolution
     return safe
 
 
@@ -124,11 +129,18 @@ def difficult_case_customer_fact_status_is_valid(
         return True
     if not isinstance(safe_facts, Mapping):
         return False
+    resolution = safe_facts.get("diagnosis_scope_resolution", "ready")
+    if resolution in {"capacity_exceeded", "unavailable"}:
+        return normalized_status == "data_gap"
+    if resolution == "unknown":
+        return normalized_status in {"uncertain", "evaluation_unknown"}
+    if resolution == "invalid":
+        return False
     kind = safe_facts.get("verification_kind")
     records = safe_facts.get("uncertain_record_times")
     discussion_count = safe_facts.get("discussion_count")
     if kind == _SCOPE_UNCERTAIN_KIND:
-        return normalized_status == "uncertain"
+        return normalized_status in {"uncertain", "evaluation_unknown"}
     if kind != _DISCUSSION_KIND or not isinstance(records, list) or not isinstance(
         discussion_count, int
     ):

@@ -6,6 +6,8 @@ import json
 import pytest
 from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
 from antimicrobial_effect_test_support import FrozenAntimicrobialEffectClient
+from diagnosis_scope_test_support import FrozenDiagnosisScopeClient
+from diagnosis_scope_test_support import _fact as _manual_scope_fact
 
 from app.services.luxian_0609 import native_extended_document_execution as module
 from app.services.luxian_0609.continuity_evidence_selection import (
@@ -232,6 +234,8 @@ async def _evaluate(
         },)
     if rule_id == "LX0609-05-01-03" and llm_client is None:
         llm_client = FrozenAntimicrobialEffectClient()
+    if rule_id == "LX0609-03-02-01" and llm_client is None:
+        llm_client = FrozenDiagnosisScopeClient()
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -242,7 +246,7 @@ async def _evaluate(
         decision_rule_ids=(rule_id,),
         llm_client=llm_client,
     )
-    if isinstance(llm_client, FrozenAntimicrobialEffectClient):
+    if isinstance(llm_client, (FrozenAntimicrobialEffectClient, FrozenDiagnosisScopeClient)):
         assert llm_client.fixture_error is None, llm_client.fixture_error
         assert result.llm_call_count == len(llm_client.calls)
         assert result.prompt_tokens == len(llm_client.calls) * 10
@@ -284,6 +288,8 @@ async def _evaluate_selected(
         },)
     if "LX0609-05-01-03" in rule_ids and llm_client is None:
         llm_client = FrozenAntimicrobialEffectClient()
+    if "LX0609-03-02-01" in rule_ids and llm_client is None:
+        llm_client = FrozenDiagnosisScopeClient()
     snapshot, materials = _session(
         rows_by_source,
         unavailable_sources=unavailable_sources,
@@ -296,7 +302,7 @@ async def _evaluate_selected(
         decision_rule_ids=rule_ids,
         llm_client=llm_client,
     )
-    if isinstance(llm_client, FrozenAntimicrobialEffectClient):
+    if isinstance(llm_client, (FrozenAntimicrobialEffectClient, FrozenDiagnosisScopeClient)):
         assert llm_client.fixture_error is None, llm_client.fixture_error
         assert result.llm_call_count == len(llm_client.calls)
         assert result.prompt_tokens == len(llm_client.calls) * 10
@@ -4297,6 +4303,61 @@ async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unknown_field", ["polarity", "temporal_scope", "scope"])
+async def test_050_explicit_fact_with_unknown_dimension_cannot_prove_no_trigger(unknown_field) -> None:
+    # 人工协议事实单独冻结未知维度；即使state=explicit，也不能据此确认完整未触发。
+    body = "该问题的诊断状态描述尚待核实。"
+    fact = _manual_scope_fact(body, "诊断", state="explicit")
+    fact[unknown_field] = "unknown"
+    client = FrozenDiagnosisScopeClient({body: (fact,)})
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-03-02-01",),
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+         "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
+        llm_client=client,
+    )
+    assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced[0].reason_code == "diagnosis_scope_uncertain"
+    canonical = _canonical_extended_result(rule_id="LX0609-03-02-01", snapshot=snapshot,
+        materials=materials, result=result, reduced=reduced)
+    assert canonical["status"] == "uncertain"
+    assert canonical["reason_code"] == "diagnosis_scope_uncertain"
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"]["diagnosis_scope_resolution"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_050_negated_explicit_state_is_current_unresolved_trigger() -> None:
+    body = "目前不能认为该诊断已经明确。"
+    client = FrozenDiagnosisScopeClient({body: (
+        _manual_scope_fact(body, "诊断", state="explicit", polarity="negated"),)})
+    result, reduced = await _evaluate("LX0609-03-02-01",
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+         "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
+        llm_client=client)
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"]["uncertain_record_times"] == ["2026-06-08 09:00:00"]
+
+
+@pytest.mark.asyncio
+async def test_050_confirmed_diagnosis_does_not_cancel_undetermined_treatment_plan() -> None:
+    # 与phase3冻结正文/临床预期一致；不是按产品关键词生成事实。
+    body = "目前肺炎诊断明确，但该患者诊疗方案难以确定。"
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-03-02-01",),
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+         "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
+    )
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+    canonical = _canonical_extended_result(rule_id="LX0609-03-02-01", snapshot=snapshot,
+        materials=materials, result=result, reduced=reduced)
+    assert canonical["status"] == "non_compliant"
+    assert "方案" in canonical["findings"]
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"]["uncertain_record_times"] == ["2026-06-08 09:00:00"]
+
+
+@pytest.mark.asyncio
 async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain() -> None:
     snapshot, materials, result, reduced_items = await _evaluate_selected(
         ("LX0609-03-02-01",),
@@ -4329,8 +4390,8 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         "uncertain_record_times": ["2026-06-09 09:00:00"],
         "discussion_count": 0,
     }
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio

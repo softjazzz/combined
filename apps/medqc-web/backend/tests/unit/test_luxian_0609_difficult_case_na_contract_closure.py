@@ -8,6 +8,7 @@ from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_
 from app.services.luxian_0609.difficult_case_result_mapping import safe_difficult_case_customer_display_facts
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from test_luxian_0609_native_extended_document_execution import _evaluate_selected
+from diagnosis_scope_test_support import FrozenDiagnosisScopeClient
 
 RULE = "LX0609-03-02-01"
 ADMISSION = "2026-06-01 08:00:00"
@@ -38,11 +39,6 @@ def no_external_access(monkeypatch):
     event.remove(Engine, "before_cursor_execute", sqlite_only)
 
 
-class ForbiddenModel:
-    async def generate(self, *args, **kwargs):
-        raise AssertionError("050 program_only/0不得调用模型")
-
-
 def sources(*, body="合成正文", count=1, time=YOUNG, text="目前诊断仍不明确。"):
     discussions = []
     for index in range(count):
@@ -58,13 +54,20 @@ def sources(*, body="合成正文", count=1, time=YOUNG, text="目前诊断仍�
 
 
 async def evaluate(rows):
-    snapshot, materials, execution, reduced = await _evaluate_selected((RULE,), rows, llm_client=ForbiddenModel())
+    client = FrozenDiagnosisScopeClient()
+    snapshot, materials, execution, reduced = await _evaluate_selected((RULE,), rows, llm_client=client)
     results = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": RULE}], execution_results=[], reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
         audit_context={"evidence_snapshot": snapshot, "evidence_materials": materials},
     )
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert client.fixture_error is None, client.fixture_error
+    # YOUNG为本文件人工冻结的未成熟时间，其余为成熟或缺时用例。
+    expected_calls = int(any(row.get("record_time") != YOUNG
+                             for row in rows["daily_course_record"]))
+    assert execution.llm_call_count == len(client.calls) == expected_calls
+    assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (
+        expected_calls * 10, expected_calls * 5, expected_calls * 15)
     return snapshot, materials, execution, reduced[0], results[0]
 
 

@@ -14,6 +14,7 @@ from app.services.luxian_0609.difficult_case_result_mapping import (
 )
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from test_luxian_0609_native_extended_document_execution import _evaluate_selected
+from diagnosis_scope_test_support import FrozenDiagnosisScopeClient
 
 RULE = "LX0609-03-02-01"
 ADMISSION = "2026-06-01 08:00:00"
@@ -47,11 +48,6 @@ def no_external_access(monkeypatch):
     event.remove(Engine, "before_cursor_execute", sqlite_only)
 
 
-class ForbiddenModel:
-    async def generate(self, *args, **kwargs):
-        raise AssertionError("050 program_only/0不得调用模型")
-
-
 def course(*, time=MATURE, document="SYN-COURSE", text="目前诊断仍不明确。", field="record_time"):
     row = {"record_content": text}
     if document is not None:
@@ -69,15 +65,27 @@ def rows(*records, discussion=False):
 
 
 async def evaluate(source_rows, *, unavailable=frozenset()):
+    client = FrozenDiagnosisScopeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        (RULE,), source_rows, unavailable_sources=unavailable, llm_client=ForbiddenModel(),
+        (RULE,), source_rows, unavailable_sources=unavailable, llm_client=client,
     )
     results = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": RULE}], execution_results=[], reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
         audit_context={"evidence_snapshot": snapshot, "evidence_materials": materials},
     )
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert client.fixture_error is None, client.fixture_error
+    # 本文件来源未就绪或完全无入院资料的冻结用例均须在抽取前返回。
+    # 两个精确早期时间是本文件原人工边界oracle；不调用生产时间解析反推计量。
+    early_times = {"2026-06-02 09:00:00", "2026-06-08 07:59:59"}
+    eligible_rows = [row for row in source_rows.get("daily_course_record", ())
+        if next((row[key] for key in ("record_time", "record_datetime", "submit_time", "submit_datetime")
+                 if key in row), None) not in early_times]
+    expected_calls = int(not unavailable and bool(eligible_rows) and bool(
+        source_rows.get("inpat_registration") or source_rows.get("admission_record")))
+    assert execution.llm_call_count == len(client.calls) == expected_calls
+    assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (
+        expected_calls * 10, expected_calls * 5, expected_calls * 15)
     assert len(results) == 1
     assert results[0]["status"] == reduced[0].final_state.value
     return snapshot, materials, execution, results[0]

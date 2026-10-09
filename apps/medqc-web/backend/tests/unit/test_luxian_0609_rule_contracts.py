@@ -260,7 +260,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-07-03-01",
         "LX0609-07-04-01",
         "LX0609-07-04-02",
-        "LX0609-03-02-01",
         "LX0609-06-04-01",
         "LX0609-06-04-02",
         "LX0609-05-01-02",
@@ -288,6 +287,13 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-06-03-02",
         "LX0609-06-02-01",
     }
+    for rule, version, prompt in (
+        ("LX0609-03-02-01", "v2", "lx0609-diagnosis-scope-facts-v1"),
+    ):
+        semantic_contract = next(contract for contract in contracts if contract.rule_id == rule)
+        assert (semantic_contract.contract_version, semantic_contract.decision_authority,
+                semantic_contract.max_llm_calls_per_rule, semantic_contract.prompt_version) == (
+                    version, "program_then_optional_llm", 1, prompt)
     effect_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-05-01-03")
     assert (effect_contract.contract_version, effect_contract.decision_authority,
             effect_contract.max_llm_calls_per_rule, effect_contract.prompt_version) == (

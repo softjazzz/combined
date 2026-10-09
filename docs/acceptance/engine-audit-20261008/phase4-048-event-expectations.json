@@ -1,0 +1,145 @@
+{
+  "schema_version": "phase4-048-independent-events-v1",
+  "created_date": "2026-10-09",
+  "scope": [
+    "048"
+  ],
+  "evidence_level": "独立合成逐事件保护；非临床真实金标或正式链路通过",
+  "rule": "LX0609-07-04-01",
+  "separation_contract": "同一手术键只证明同一手术，不证明手术内多个输注动作逐次对应；总量一致不能抵消按完整datetime关联的逐次剂量不一致。",
+  "source_assumption": "三来源合成正文完整可读、不截断；surgery_id为冻结输入可信手术锚，模型不能生成。",
+  "checks": [
+    {
+      "id": "048_EVENTS_DATED_PERIOD_MATCHED",
+      "expected": "compliant",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-EVENT-surgery_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "2026-10-08 10:00:00。术中实际输注红细胞2U；2026-10-08 11:00:00。术中实际输注红细胞4U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-EVENT-anesthesia_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "2026-10-08 10:00:00。术中实际输注红细胞2U；2026-10-08 11:00:00。术中实际输注红细胞4U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-EVENT-postsurg_firstcourse_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "2026-10-08 10:00:00。术中实际输注红细胞2U；2026-10-08 11:00:00。术中实际输注红细胞4U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "all_documents_actual": true,
+        "event_times": [
+          "2026-10-08 10:00:00",
+          "2026-10-08 11:00:00"
+        ],
+        "doses_by_time_all_sources": [
+          "2U",
+          "4U"
+        ],
+        "same_operation": true,
+        "per_action_time_required": true
+      },
+      "rationale": "两次实际术中输注均有完整datetime，时间后句号不阻断归属；三文书逐次2U/4U一致。"
+    },
+    {
+      "id": "048_EVENTS_SWAPPED_DOSE_SAME_TOTAL",
+      "expected": "non_compliant",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-EVENT-surgery_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "2026-10-08 10:00:00。术中实际输注红细胞2U；2026-10-08 11:00:00。术中实际输注红细胞4U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-EVENT-anesthesia_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "2026-10-08 10:00:00。术中实际输注红细胞4U；2026-10-08 11:00:00。术中实际输注红细胞2U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-EVENT-postsurg_firstcourse_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "2026-10-08 10:00:00。术中实际输注红细胞2U；2026-10-08 11:00:00。术中实际输注红细胞4U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "all_documents_actual": true,
+        "event_times": [
+          "2026-10-08 10:00:00",
+          "2026-10-08 11:00:00"
+        ],
+        "doses_by_time": {
+          "surgery_record": [
+            "2U",
+            "4U"
+          ],
+          "anesthesia_record": [
+            "4U",
+            "2U"
+          ],
+          "postsurg_firstcourse_record": [
+            "2U",
+            "4U"
+          ]
+        },
+        "same_operation": true,
+        "total_each_document": "6U",
+        "per_action_time_required": true
+      },
+      "rationale": "麻醉两次剂量互换，三份总量同为6U仍逐次不一致；不得按手术总量合并判C。"
+    },
+    {
+      "id": "048_EVENTS_UNTIMED_SAME_SURGERY_KEY",
+      "expected": "data_gap",
+      "input": {
+        "surgery_record": [
+          {
+            "document_id": "SYN-EVENT-surgery_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "本次手术术中先实际输注红细胞2U，随后实际输注红细胞4U。"
+          }
+        ],
+        "anesthesia_record": [
+          {
+            "document_id": "SYN-EVENT-anesthesia_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "本次手术术中先实际输注红细胞2U，随后实际输注红细胞4U。"
+          }
+        ],
+        "postsurg_firstcourse_record": [
+          {
+            "document_id": "SYN-EVENT-postsurg_firstcourse_record",
+            "surgery_id": "SYN-OP-EVENT",
+            "content": "本次手术术中先实际输注红细胞2U，随后实际输注红细胞4U。"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "all_documents_actual": true,
+        "event_times": [
+          null,
+          null
+        ],
+        "same_operation": true,
+        "per_action_time_required": true,
+        "association": "ambiguous_within_operation"
+      },
+      "rationale": "两个动作无逐次datetime，surgery_id只定位手术，不能证明手术内逐次对应，保持关联资料不足。"
+    }
+  ],
+  "failure_limit": "同根因最多3失败轮次；新增保护不清零既有TC03失败账；保留原29例与所有失败产物。"
+}
