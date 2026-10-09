@@ -29,6 +29,12 @@ from .pretransfusion_assessment import (
 )
 from .transfusion_order_trigger import TransfusionOrderTriggerResult, classify_transfusion_orders
 from .transfusion_course_presence import TransfusionCoursePresenceResult, classify_transfusion_course_records
+from .intraoperative_transfusion_facts import (
+    SOURCES as INTRAOPERATIVE_SOURCES,
+    IntraoperativeDocument,
+    evaluate_intraoperative_consistency,
+    extract_intraoperative_transfusion_items,
+)
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
@@ -192,12 +198,6 @@ _POSTTRANSFUSION_CLINICAL_PATTERNS = (
         r"|^后(?:评价|评估).{0,8}(?:未见|无)(?:明显)?异常"
     ),
     re.compile(r"疗效|效果|改善|好转|缓解|复查|复测"),
-)
-_SURGERY_TRANSFUSION_PATTERN = re.compile(
-    r"(?:术中|手术中).{0,80}(?:输血|输注.{0,12}(?:红细胞|血浆|血小板|全血))"
-)
-_POSTOP_TRANSFUSION_PATTERN = re.compile(
-    r"输血|输注|红细胞|血浆|血小板|全血"
 )
 _ISO_DATETIME_PATTERN = re.compile(
     r"(?<!\d)(?P<year>\d{4})[-/](?P<month>\d{1,2})[-/]"
@@ -2374,222 +2374,131 @@ def _programmatic_047_status(documents: Mapping[str, Any]) -> tuple[str, str]:
     return assessment.status, assessment.reason_code
 
 
-def _programmatic_048_status(
+@dataclass(frozen=True)
+class _Intraoperative048Assessment:
+    status: str
+    reason_code: str
+    display_facts: Mapping[str, Any] | None = None
+    selected_refs: tuple[tuple[str, str], ...] = ()
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+
+
+_048_TEXT_FIELDS = {
+    "surgery_record": ("surgery_name", "surgery_process", "content", "record_content", "assembled_text"),
+    "anesthesia_record": ("anesthesia_method", "anesthesia_process", "content", "record_content",
+                          "assembled_text"),
+    "postsurg_firstcourse_record": ("content", "record_content", "assembled_text"),
+}
+# 仅采用来源已携带的可信手术身份；模型不生成关联键。
+_048_OPERATION_KEY_FIELDS = ("surgery_id", "operation_id")
+
+
+def _048_document_text(source: str, row: Mapping[str, Any]) -> str:
+    return _clean(" ".join(
+        _clean(row.get(key)) for key in _048_TEXT_FIELDS[source] if _clean(row.get(key))
+    ))
+
+
+async def _intraoperative_048_assessment(
     documents: Mapping[str, Any],
-) -> tuple[str, str, Mapping[str, Any] | None]:
-    """确认术中输血后，按三份文书的成分和剂量做受控比较。"""
+    llm_client: TransfusionLLMClient | None,
+) -> _Intraoperative048Assessment:
+    """三份术中文书各取实际输注原子事实，再由程序比较成分与剂量。"""
 
-    surgery_texts = tuple(
-        _clean(
-            " ".join(
-                _clean(row.get(key))
-                for key in (
-                    "surgery_name",
-                    "surgery_process",
-                    "content",
-                    "record_content",
-                    "assembled_text",
-                )
-                if _clean(row.get(key))
-            )
-        )
-        for row in _source_document_rows(documents, "surgery_record")
-    )
-    anesthesia_texts = tuple(
-        _clean(
-            " ".join(
-                _clean(row.get(key))
-                for key in (
-                    "anesthesia_method",
-                    "anesthesia_process",
-                    "content",
-                    "record_content",
-                    "assembled_text",
-                )
-                if _clean(row.get(key))
-            )
-        )
-        for row in _source_document_rows(documents, "anesthesia_record")
-    )
-    intraoperative_transfusion_is_credible = any(
-        _SURGERY_TRANSFUSION_PATTERN.search(text)
-        and _TRANSFUSION_COMPONENT_PATTERN.search(text)
-        for text in (*surgery_texts, *anesthesia_texts)
-    )
-    if not intraoperative_transfusion_is_credible:
-        has_source_states = isinstance(documents.get("__logical_source_states__"), Mapping)
-        if has_source_states and any(_logical_source_state(documents, source) == "error"
-                                    for source in ("surgery_record", "anesthesia_record")):
-            return "technical_error", "source_query_error", None
-        uncertain_sources = [source for source in ("surgery_record", "anesthesia_record")
-                             if has_source_states and _logical_source_state(documents, source) in {"unavailable", "missing"}]
-        if uncertain_sources:
-            return (
-                "data_gap", "transfusion_comparison_fields_unavailable",
-                {"failure_kind": "transfusion_comparison_material_missing", "missing_sources": uncertain_sources},
-            )
-        return (
-            "not_applicable",
-            "intraoperative_transfusion_fact_absent",
-            {
-                "verification_kind": "intraoperative_transfusion_absent",
-                "checked_sources": ["surgery_record", "anesthesia_record"],
-            },
-        )
-
-    source_keys = (
-        "surgery_record",
-        "anesthesia_record",
-        "postsurg_firstcourse_record",
-    )
+    has_states = isinstance(documents.get("__logical_source_states__"), Mapping)
+    states = {
+        source: _logical_source_state(documents, source) if has_states else "available"
+        for source in INTRAOPERATIVE_SOURCES
+    }
+    if "error" in states.values():
+        return _Intraoperative048Assessment("technical_error", "source_query_error")
+    # 只有标题/空正文的文书没有可阅读的临床内容，视同缺失而不是“已核对无输血”。
     rows_by_source = {
-        source_key: _source_document_rows(documents, source_key)
-        for source_key in source_keys
+        source: [row for row in _source_document_rows(documents, source)
+                 if _048_document_text(source, row)]
+        for source in INTRAOPERATIVE_SOURCES
     }
-    if any(len(rows) != 1 for rows in rows_by_source.values()):
-        if any(len(rows) > 1 for rows in rows_by_source.values()):
-            return "data_gap", "association_failed", None
-        return (
-            "data_gap",
-            "transfusion_comparison_fields_unavailable",
-            {
-                "failure_kind": "transfusion_comparison_material_missing",
-                "missing_sources": sorted(
-                    source for source, rows in rows_by_source.items() if not rows
-                ),
-            },
-        )
-
-    def normalized_values(row: Mapping[str, Any]) -> tuple[dict[str, Any], bool]:
-        from decimal import Decimal
-
-        # 每条成分只消费紧邻自己的剂量；绝不将独立排序的两列重新配对。
-        text = _clean(row.get("surgery_process") or row.get("anesthesia_process") or _row_text(row))
-        components = tuple(_TRANSFUSION_COMPONENT_PATTERN.finditer(text))
-        dose = re.compile(
-            r"\s*(?:[:：]|共|约|计|为|输注量|量|输入|输注)*\s*"
-            r"(?P<quantity>\d+(?:\.\d+)?)\s*"
-            r"(?P<unit>U|单位|m[lL]|毫升|袋|(?:个)?治疗量)", re.IGNORECASE,
-        )
-        units = {"u": "u", "单位": "u", "ml": "ml", "毫升": "ml",
-                 "袋": "袋", "治疗量": "治疗量", "个治疗量": "治疗量"}
-        items: list[dict[str, str]] = []
-        bound_dose_spans: set[tuple[int, int]] = set()
-        times = [match for pattern in (_ISO_DATETIME_PATTERN, _CN_DATETIME_PATTERN)
-                 for match in pattern.finditer(text)]
-        for index, component in enumerate(components):
-            boundary = components[index + 1].start() if index + 1 < len(components) else len(text)
-            match = dose.match(text, component.end(), boundary)
-            if match is None:
-                continue
-            # 只保留正文中本条输注之前的既有时间锚点，文书完成时间不是事件时间。
-            anchor = max((candidate for candidate in times
-                          if candidate.end() <= component.start()
-                          and component.start() - candidate.end() <= 96
-                          and _TRANSFUSION_CONTEXT_PATTERN.search(text[candidate.end():component.start()])
-                          and re.search(r"[。；;\n]|(?<!\d)\.(?!\d)", text[candidate.end():component.start()]) is None),
-                         key=lambda candidate: candidate.end(), default=None)
-            event_time = _datetime_from_match(anchor) if anchor is not None else None
-            bound_dose_spans.add((match.start("quantity"), match.end()))
-            items.append({
-                "event_time": event_time.isoformat(sep=" ") if event_time is not None else "",
-                "component": component.group(),
-                "quantity": format(Decimal(match.group("quantity")).normalize(), "f"),
-                "unit": units[match.group("unit").lower()],
-                "original_dose": text[match.start("quantity"):match.end()],
-            })
-        # 对已有输血对象/动作直接引出的数值单位 token 核对覆盖，其他用药对象不当血量。
-        contexts = tuple(_TRANSFUSION_CONTEXT_PATTERN.finditer(text))
-        sentence_boundary = re.compile(r"[。！？；;\n]|(?<!\d)\.(?!\d)")
-        dose_connectors = re.compile(
-            r"[\s,，、:：]*(?:(?:共|约|计|为|输注量|量|给予|输注)[\s,，、:：]*)*"
-        )
-        has_unpaired_dose = False
-        for token in _TRANSFUSION_DOSE_PATTERN.finditer(text):
-            if (token.start(), token.end()) in bound_dose_spans:
-                continue
-            clause_start = max((boundary.end() for boundary in
-                                sentence_boundary.finditer(text, 0, token.start())), default=0)
-            anchor = max((candidate for candidate in (*components, *contexts)
-                          if clause_start <= candidate.start() and candidate.end() <= token.start()),
-                         key=lambda candidate: candidate.end(), default=None)
-            if anchor is None:
-                continue
-            prefix = _TRANSFUSION_DOSE_PATTERN.sub("", text[anchor.end():token.start()])
-            if dose_connectors.fullmatch(prefix) is not None:
-                has_unpaired_dose = True
-                break
-        return {
-            "components": sorted({item["component"] for item in items}),
-            "doses": sorted({item["quantity"] + item["unit"] for item in items}),
-            # 保留原顺序及重复项供客户核对，不按集合丢失同成分多条。
-            "transfusion_items": items,
-        }, bool(items) and len(items) == len(components) and not has_unpaired_dose
-
-    parsed = {source: normalized_values(rows[0]) for source, rows in rows_by_source.items()}
-    matrix = {source: fields for source, (fields, _) in parsed.items()}
-    missing_fields = {
-        source: sorted(field for field in ("components", "doses") if not fields[field])
-        for source, fields in matrix.items()
-    }
-    missing_fields = {
-        source: fields for source, fields in missing_fields.items() if fields
-    }
-    for source, (_, complete) in parsed.items():
-        if not complete:
-            missing_fields[source] = sorted(set(missing_fields.get(source, [])) | {"doses"})
-    if missing_fields:
-        return (
-            "data_gap",
-            "transfusion_comparison_fields_unavailable",
-            {
-                "failure_kind": "transfusion_comparison_fields_missing",
-                "missing_fields_by_source": missing_fields,
-            },
-        )
-    event_times = [{item["event_time"] for item in fields["transfusion_items"]}
-                   for fields in matrix.values()]
-    if any(times != event_times[0] for times in event_times[1:]) or any(
-        "" in times and len(times) > 1 for times in event_times
-    ):
-        # 事件身份不齐或冲突时，不把别次输注的成分/剂量借来补成一致。
-        return "data_gap", "association_failed", None
-
-    def grouped_quantities(fields: Mapping[str, Any]) -> tuple[tuple[str, str, str, str], ...]:
-        from decimal import Decimal
-
-        totals: dict[tuple[str, str, str], Decimal] = {}
-        for item in fields["transfusion_items"]:
-            key = (item["event_time"], item["component"], item["unit"])
-            totals[key] = totals.get(key, Decimal(0)) + Decimal(item["quantity"])
-        return tuple(sorted((*key, format(value.normalize(), "f")) for key, value in totals.items()))
-
-    differing_fields: list[str] = []
-    if len({tuple(fields["components"]) for fields in matrix.values()}) > 1:
-        differing_fields.append("components")
-    if len({grouped_quantities(fields) for fields in matrix.values()}) > 1:
-        differing_fields.append("doses")
-    if differing_fields:
-        return (
-            "non_compliant",
-            "transfusion_records_inconsistent",
-            {
-                "failure_kind": "transfusion_records_inconsistent",
-                "performed_intraoperative_transfusion_confirmed": True,
-                "differing_fields": differing_fields,
-                "comparison_matrix": matrix,
-            },
-        )
-    return (
-        "compliant",
-        "transfusion_records_consistent",
-        {
-            "verification_kind": "transfusion_records_consistent",
-            "performed_intraoperative_transfusion_confirmed": True,
-            "checked_fields": ["components", "doses"],
-            "comparison_matrix": matrix,
-        },
+    unavailable = sorted(
+        source for source, state in states.items() if state in {"unavailable", "missing"}
     )
+    if any(len(rows) > 1 for rows in rows_by_source.values()):
+        # 多台手术/多份文书尚无可信逐台配对，不静默挑选一份比较。
+        return _Intraoperative048Assessment("data_gap", "association_failed")
+    operation_keys = {
+        key
+        for rows in rows_by_source.values()
+        for row in rows
+        if (key := next((_clean(row.get(field)) for field in _048_OPERATION_KEY_FIELDS
+                         if _clean(row.get(field))), ""))
+    }
+    if len(operation_keys) > 1:
+        return _Intraoperative048Assessment("data_gap", "association_failed")
+    present_sources = [source for source, rows in rows_by_source.items() if rows]
+    if not present_sources:
+        # 手术记录与麻醉记录均确实为空才能确认本次无手术中输血；
+        # 其中任一来源不可用时不能证明不存在。
+        surgical_unavailable = [
+            source for source in unavailable
+            if source in {"surgery_record", "anesthesia_record"}
+        ]
+        if surgical_unavailable:
+            return _Intraoperative048Assessment(
+                "data_gap", "transfusion_comparison_fields_unavailable",
+                {"failure_kind": "transfusion_comparison_material_missing",
+                 "missing_sources": surgical_unavailable},
+            )
+        return _Intraoperative048Assessment(
+            "not_applicable", "intraoperative_transfusion_fact_absent",
+            {"verification_kind": "intraoperative_transfusion_absent",
+             "checked_sources": ["surgery_record", "anesthesia_record"]},
+        )
+    refs = tuple(
+        (source, str(rows_by_source[source][0].get("document_id")
+                     or rows_by_source[source][0].get("id") or ""))
+        for source in present_sources
+    )
+    docs = [
+        IntraoperativeDocument(f"{source}:{ref}", source,
+                               _048_document_text(source, rows_by_source[source][0]))
+        for source, ref in refs
+    ]
+    extraction = await extract_intraoperative_transfusion_items(
+        docs, llm_client, parse_time=_parse_document_datetime,
+    )
+    usage = dict(
+        llm_call_count=extraction.llm_call_count, prompt_tokens=extraction.prompt_tokens,
+        completion_tokens=extraction.completion_tokens, total_tokens=extraction.total_tokens,
+        api_time=extraction.api_time,
+    )
+    if extraction.state != "ready":
+        return _Intraoperative048Assessment(extraction.state, extraction.reason_code, **usage)
+    facts_by_source = {
+        doc.source_type: extraction.facts[doc.document_ref] for doc in docs
+    }
+    missing_sources = sorted(
+        {*unavailable, *(source for source, rows in rows_by_source.items() if not rows)}
+    )
+    if missing_sources:
+        if any(facts.state == "unknown" for facts in facts_by_source.values()):
+            return _Intraoperative048Assessment("data_gap", "semantic_extraction_unresolved", **usage)
+        if all(facts.state == "absent" for facts in facts_by_source.values()) and not unavailable:
+            # 已有文书均确认未术中输血，缺少的只是空来源，仍可确认不适用。
+            status, reason, display = evaluate_intraoperative_consistency(facts_by_source)
+            return _Intraoperative048Assessment(status, reason, display, **usage)
+        # 未接入或缺失的文书不能证明未输血，也无法完成三方一致性比较。
+        return _Intraoperative048Assessment(
+            "data_gap", "transfusion_comparison_fields_unavailable",
+            {"failure_kind": "transfusion_comparison_material_missing",
+             "missing_sources": missing_sources},
+            **usage,
+        )
+    status, reason, display = evaluate_intraoperative_consistency(facts_by_source)
+    selected = refs if status in {"compliant", "non_compliant"} else ()
+    return _Intraoperative048Assessment(status, reason, display, selected, **usage)
 
 
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
@@ -3179,6 +3088,27 @@ async def execute_luxian_0609_native_transfusion_rules(
                 executor_type="program",
             )
             continue
+        if rule_id == "LX0609-07-04-01":
+            # 术中输血只看本次手术的三份文书；病房输血记录不能证明或否定术中实施。
+            if not isinstance(documents, Mapping):
+                emit_outcome(rule_id, "data_gap", "transfusion_projection_unavailable",
+                             executor_type="program")
+                continue
+            assessment_048 = await _intraoperative_048_assessment(documents, llm_client)
+            llm_call_count += assessment_048.llm_call_count
+            prompt_tokens += assessment_048.prompt_tokens
+            completion_tokens += assessment_048.completion_tokens
+            total_tokens += assessment_048.total_tokens
+            api_time += assessment_048.api_time
+            emit_outcome(
+                rule_id,
+                assessment_048.status,
+                assessment_048.reason_code,
+                executor_type="llm" if assessment_048.llm_call_count else "program",
+                display_facts=assessment_048.display_facts,
+                selected_source_document_refs=assessment_048.selected_refs,
+            )
+            continue
         if rule_id in _ORDER_TRIGGER_RULES:
             if typed_rule not in order_trigger_cache:
                 if not isinstance(documents, Mapping):
@@ -3293,16 +3223,6 @@ async def execute_luxian_0609_native_transfusion_rules(
                 conservative_status,
                 conservative_reason,
                 executor_type="program",
-            )
-            continue
-        if rule_id == "LX0609-07-04-01":
-            status, reason_code, display_facts = _programmatic_048_status(documents)
-            emit_outcome(
-                rule_id,
-                status,
-                reason_code,
-                executor_type="program",
-                display_facts=display_facts,
             )
             continue
         # 044–047 的专用输血记录具有更高证据优先级。先尝试确定性判定，

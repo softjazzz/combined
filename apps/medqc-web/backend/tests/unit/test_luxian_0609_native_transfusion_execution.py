@@ -8,6 +8,9 @@ import inspect
 import pytest
 
 from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient
+from intraoperative_transfusion_test_support import (
+    ABSENT, UNKNOWN, FrozenIntraoperativeClient, item, present,
+)
 
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609.evidence_snapshot_provider import (
@@ -120,6 +123,20 @@ _COURSE_LABELS = {
     '16:00输血结束。未记录输血后评价。': 'record',
     '2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
 }
+# 048 术中文书的人工原子事实标注：只有本次术中实际输注才是 present。
+_INTRAOPERATIVE_LABELS = {
+    "术中出血约800ml，输注红细胞2U。": present(item("输注红细胞2U", "红细胞", "2U")),
+    "术后患者生命体征平稳，切口敷料干燥。": ABSENT,
+    "中心静脉置管术，过程顺利。": ABSENT,
+    "术中输注红细胞2U。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术后记录术中输注红细胞2U。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术后记录术中输注血浆200ml。": present(item("术中输注血浆200ml", "血浆", "200ml")),
+    "手术记录中的术中输血信息。": UNKNOWN,
+    "麻醉记录中的术中输血信息。": UNKNOWN,
+    "术后首次病程中的输血信息。": UNKNOWN,
+    "手术记录。": ABSENT,
+    "首次病程记录。": ABSENT,
+}
 _protocol_call_counts: dict[int, int] = {}
 
 
@@ -135,7 +152,10 @@ async def _execute_order_contract(**kwargs):
         documents = dict(payload["programmatic_timeline"]["documents"])
         documents.pop("__logical_source_states__", None)
         kwargs["evidence_payload"] = {"programmatic_timeline": {"documents": documents}}
-    client = FrozenTransfusionProtocolClient(kwargs.get("llm_client"), course_labels=_COURSE_LABELS)
+    client = FrozenTransfusionProtocolClient(
+        kwargs.get("llm_client"), course_labels=_COURSE_LABELS,
+        intraoperative=FrozenIntraoperativeClient(_INTRAOPERATIVE_LABELS),
+    )
     kwargs["llm_client"] = client
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(**kwargs)
     _protocol_call_counts[id(result)] = client.protocol_calls
@@ -1383,6 +1403,10 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
             inpat_drug_order=[],
             bloodtrans_record=[],
             daily_course_record=[{"content": "普通病程仅提到拟输血和备血。"}],
+            # 048 只看本次手术文书；无手术文书即无术中输血事实。
+            surgery_record=[],
+            anesthesia_record=[],
+            postsurg_firstcourse_record=[],
         ),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -1440,7 +1464,8 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         "compliant",
         "non_compliant",
         "compliant",
-        "not_applicable",
+        # 默认夹具的手术/麻醉/术后正文只是“含术中输血信息”的占位，无法判断是否实施。
+        "data_gap",
         "data_gap",
     ]
     assert result.llm_call_count == 1 + _protocol_calls(result)
@@ -3397,14 +3422,12 @@ async def test_048_does_not_claim_three_document_mismatch_before_comparison_cont
     assert result.results[0]["metadata"]["reason_code"] == (
         "transfusion_comparison_fields_unavailable"
     )
+    # 麻醉记录只有空正文，视同缺失；不能据此宣称三份文书不一致。
     assert result.customer_display_facts == ((
         "LX0609-07-04-01",
         {
-            "failure_kind": "transfusion_comparison_fields_missing",
-            "missing_fields_by_source": {
-                "anesthesia_record": ["components", "doses"],
-                "postsurg_firstcourse_record": ["components", "doses"],
-            },
+            "failure_kind": "transfusion_comparison_material_missing",
+            "missing_sources": ["anesthesia_record"],
         },
     ),)
     assert result.llm_call_count == _protocol_calls(result)

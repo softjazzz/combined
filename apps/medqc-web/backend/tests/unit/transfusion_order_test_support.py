@@ -11,19 +11,28 @@ OPEN_TRANSFUSION_ORDER = {
 
 
 class FrozenTransfusionProtocolClient:
-    def __init__(self, delegate=None, *, course_labels=None, default_course_label=None):
+    def __init__(self, delegate=None, *, course_labels=None, default_course_label=None,
+                 intraoperative=None):
         self.delegate = delegate
         self.course_labels = dict(course_labels or {})
         # 仅供正文全部由测试作者写成同一类记录的用例使用，避免逐句重复标注。
         self.default_course_label = default_course_label
+        # 048 术中原子事实协议的人工标注替身（FrozenIntraoperativeClient）。
+        self.intraoperative = intraoperative
         self.protocol_calls = 0
         self.protocol_prompts = []
 
-    async def generate(self, prompt):
+    async def generate(self, prompt, **kwargs):
         if "INPUT_JSON=" not in prompt:
             if self.delegate is None:
                 raise RuntimeError("fixture semantic model unavailable")
             return await self.delegate.generate(prompt)
+        if "lx0609-intraoperative-transfusion-items-v1" in prompt:
+            if self.intraoperative is None:
+                raise RuntimeError("未提供 048 术中事实人工标注")
+            self.protocol_calls += 1
+            self.protocol_prompts.append(prompt)
+            return await self.intraoperative.generate(prompt, **kwargs)
         payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
         self.protocol_calls += 1
         self.protocol_prompts.append(prompt)

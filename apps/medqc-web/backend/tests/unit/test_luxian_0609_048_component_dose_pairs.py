@@ -12,8 +12,49 @@ from app.services.luxian_0609.native_transfusion_execution import execute_luxian
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 
+from intraoperative_transfusion_test_support import FrozenIntraoperativeClient, item, present
+
 RID = "LX0609-07-04-01"
 SOURCES = ("surgery_record", "anesthesia_record", "postsurg_firstcourse_record")
+A = "2026-07-01 14:20"
+B = "2026-07-01 15:20"
+
+# 人工标注：每份正文中本次术中实际输注的原子事实（一个成分、至多一个剂量）。
+ANNOTATIONS = {
+    "术中输注红细胞2U，血小板4U。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("血小板4U", "血小板", "4U")),
+    "术中输注红细胞4U，血小板2U。": present(item("术中输注红细胞4U", "红细胞", "4U"), item("血小板2U", "血小板", "2U")),
+    "术中输注血小板4U，红细胞2U。": present(item("术中输注血小板4U", "血小板", "4U"), item("红细胞2U", "红细胞", "2U")),
+    f"术中{A}输注红细胞2U。术中{B}输注红细胞4U。": present(
+        item(f"术中{A}输注红细胞2U", "红细胞", "2U", A), item(f"术中{B}输注红细胞4U", "红细胞", "4U", B)),
+    f"术中{A}输注红细胞4U。术中{B}输注红细胞2U。": present(
+        item(f"术中{A}输注红细胞4U", "红细胞", "4U", A), item(f"术中{B}输注红细胞2U", "红细胞", "2U", B)),
+    f"术中{B}输注红细胞4U。术中{A}输注红细胞2U。": present(
+        item(f"术中{B}输注红细胞4U", "红细胞", "4U", B), item(f"术中{A}输注红细胞2U", "红细胞", "2U", A)),
+    "术中输注红细胞2U，红细胞2U。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("，红细胞2U", "红细胞", "2U")),
+    "术中输注红细胞2U。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术中输注红细胞4U。": present(item("术中输注红细胞4U", "红细胞", "4U")),
+    "术中输注红细胞2U，红细胞4U。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("红细胞4U", "红细胞", "4U")),
+    "术中输注红细胞4U，红细胞2U。": present(item("术中输注红细胞4U", "红细胞", "4U"), item("红细胞2U", "红细胞", "2U")),
+    "术中输注红细胞2U，血浆200ml。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("血浆200ml", "血浆", "200ml")),
+    "术中输注红细胞2单位，血浆200毫升。": present(
+        item("术中输注红细胞2单位", "红细胞", "2单位"), item("血浆200毫升", "血浆", "200毫升")),
+    "术中输注红细胞2.0u，血浆200mL。": present(item("术中输注红细胞2.0u", "红细胞", "2.0u"), item("血浆200mL", "血浆", "200mL")),
+    "术中输注红细胞2ml。": present(item("术中输注红细胞2ml", "红细胞", "2ml")),
+    # 原文未写单位的数字不是剂量，按缺剂量处理。
+    "术中输注红细胞2U，血小板4。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("血小板4", "血小板")),
+    "术中输注红细胞2。": present(item("术中输注红细胞2", "红细胞")),
+    f"术中{A}输注红细胞2U。": present(item(f"术中{A}输注红细胞2U", "红细胞", "2U", A)),
+    f"术中{B}输注红细胞2U。": present(item(f"术中{B}输注红细胞2U", "红细胞", "2U", B)),
+    f"术中{A}输注红细胞2U。术中另一次输注红细胞4U。": present(
+        item(f"术中{A}输注红细胞2U", "红细胞", "2U", A), item("术中另一次输注红细胞4U", "红细胞", "4U")),
+    # 实际输注了剂量却未写成分：保留为缺成分，不丢弃该剂量。
+    "术中输注红细胞2U，另输注4U。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("另输注4U", None, "4U")),
+    "术中输注红细胞2U，200ml。": present(item("术中输注红细胞2U", "红细胞", "2U"), item("200ml", None, "200ml")),
+    # 生理盐水、胰岛素不是血液成分输注。
+    "术中输注红细胞2U，静滴生理盐水200ml。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术中输注红细胞2U，另输注生理盐水200ml。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术中输注红细胞2U，另输注胰岛素4U。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+}
 
 
 async def evaluate(texts, *, unavailable=(), overrides=None):
@@ -39,7 +80,7 @@ async def evaluate(texts, *, unavailable=(), overrides=None):
         rule_ids=(RID,), wrapper_rules=[{"rule_id": RID}], evidence_payload=None,
         institute_id="048-i", patient_id="048-p", visit_id="048-v", source_schema=None,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-        decision_rule_ids=(RID,), llm_client=None,
+        decision_rule_ids=(RID,), llm_client=FrozenIntraoperativeClient(ANNOTATIONS),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=(RID,), snapshot=session.snapshot,
@@ -50,7 +91,8 @@ async def evaluate(texts, *, unavailable=(), overrides=None):
         customer_display_facts=result.customer_display_facts,
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
-    assert result.llm_call_count == result.total_tokens == 0
+    # 三份术中文书只做一次原子事实抽取；多份文书无法配对时不调用模型。
+    assert result.llm_call_count <= 1
     assert canonical["status"] == reduced[0].final_state.value
     return canonical
 
