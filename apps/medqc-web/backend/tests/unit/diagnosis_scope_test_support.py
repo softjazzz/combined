@@ -111,12 +111,15 @@ MANUAL_DIAGNOSIS_SCOPE_FACTS = {
         _fact("治疗方案仍难以确定", "治疗方案", state="undetermined", scope="treatment_plan"),
         _fact("另一疾病目前已明确诊断为高血压", "高血压", state="explicit"),
     ),
+    # 业务已确认：历史未明确问题未写明已解决时延续为当前未明确；另一疾病明确不算解决。
     "入院时诊断不明确，另一疾病目前已明确诊断为高血压。": (
         _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("入院时诊断不明确", "诊断"),
         _fact("另一疾病目前已明确诊断为高血压", "高血压", state="explicit"),
     ),
     "入院时诊断不明确，目前已明确诊断为另一疾病高血压。": (
         _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("入院时诊断不明确", "诊断"),
         _fact("目前已明确诊断为另一疾病高血压", "高血压", state="explicit"),
     ),
     "入院时诊断不明确，现已明确诊断为肺炎。但至今发热原因未查明，治疗方案仍难以确定。": (

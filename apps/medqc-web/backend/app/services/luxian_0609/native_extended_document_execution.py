@@ -1505,6 +1505,21 @@ def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, .
     return tuple(name for _, name in sorted(zip(positions, names))), None
 
 
+_DISCHARGE_MEDICATION_REQUIRED_GROUPS = (
+    ("drug_name", "generic_name", "name"),
+    ("dose", "single_dose"),
+    ("route", "drug_apply_method"),
+    ("duration", "usage_time", "frequency"),
+)
+
+
+def _discharge_medications_complete(medications: Sequence[Mapping[str, Any]]) -> bool:
+    return bool(medications) and all(
+        all(any(_clean(item.get(key)) for key in group) for group in _DISCHARGE_MEDICATION_REQUIRED_GROUPS)
+        for item in medications
+    )
+
+
 def _structured_discharge_medications(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[Mapping[str, Any]] | None, str, tuple[int, ...]]:
@@ -1565,6 +1580,50 @@ def _structured_discharge_medications(
     if has_unresolved_medications or not has_discharge_instruction:
         return None, "required_field_missing", tuple(selected_indexes) or tuple(range(len(rows)))
     return medications, "", tuple(selected_indexes)
+
+
+async def _resolve_multi_record_discharge_medications(
+    rows: Sequence[Mapping[str, Any]],
+    llm_client: Any,
+    extractions: list[Any],
+) -> tuple[str, str, list[Mapping[str, Any]], tuple[int, ...]] | None:
+    """多份出院记录：以带药明细完整的记录为准，笼统用药叮嘱不再阻断核对。
+
+    业务确认：同次住院一份写有完整带药明细时，其他只写“继续服药”等未指明
+    具体药物的记录不使整体资料不足；但任何记录中出现的具体药物仍须并入核对，
+    不能被完整那份掩盖。返回 None 表示不适用本路径，沿用原资料缺口。
+    返回 (终态, 原因, 药物, 选中行)：终态非空时直接以该状态交付。
+    """
+
+    parsed = [_structured_discharge_medications((row,)) for row in rows]
+    if not any(
+        not error and medications and _discharge_medications_complete(medications)
+        for medications, error, _ in parsed
+    ):
+        return None
+    medications: list[Mapping[str, Any]] = []
+    indexes: list[int] = []
+    for index, (row, (row_medications, error, _)) in enumerate(zip(rows, parsed)):
+        if not error:
+            if row_medications:
+                medications.extend(row_medications)
+                indexes.append(index)
+            continue
+        # 结构化字段格式非法不属于笼统叮嘱，保持原资料缺口。
+        if row.get("discharge_medications") is not None:
+            return None
+        extraction = await extract_discharge_medications(str(row.get("discharge_order") or ""), llm_client)
+        extractions.append(extraction)
+        if extraction.state in {"technical_error", "data_gap"}:
+            return extraction.state, extraction.reason_code, [], ()
+        if extraction.state == "absent" or not extraction.medications:
+            # 明确无带药或未指明任何具体药物：笼统叮嘱，由完整记录覆盖。
+            continue
+        if extraction.state == "unknown":
+            return "uncertain", extraction.reason_code, [], ()
+        medications.extend(extraction.medications)
+        indexes.append(index)
+    return "", "", medications, tuple(indexes)
 
 
 def _course_dates(
@@ -2083,6 +2142,8 @@ async def execute_luxian_0609_native_extended_document_rules(
 ) -> NativeExtendedDocumentExecutionResult:
     course_content_extraction = None
     medication_extraction = None
+    # 多份出院记录时对无法解析的自由文本逐份抽取，用量一并计入。
+    other_medication_extractions: list[Any] = []
     discharge_approval_extraction = None
     course_body_extractions: list[CourseBodyExtraction] = []
     diagnosis_change_extraction = None
@@ -3618,6 +3679,21 @@ async def execute_luxian_0609_native_extended_document_rules(
             ) = _structured_discharge_medications(
                 discharge_rows
             )
+            if medication_error and len(discharge_rows) > 1:
+                resolved = await _resolve_multi_record_discharge_medications(
+                    discharge_rows, llm_client, other_medication_extractions,
+                )
+                if resolved is not None:
+                    resolved_state, resolved_reason, resolved_medications, resolved_indexes = resolved
+                    if resolved_state:
+                        decisions.append(_decision(
+                            rule_id=rule_id, snapshot=evidence_snapshot,
+                            source_keys=("discharge_record",), final_state=resolved_state,
+                            reason_code=resolved_reason,
+                        ))
+                        continue
+                    medications, medication_error = resolved_medications, ""
+                    selected_discharge_row_indexes = resolved_indexes
             use_unstructured_extraction = (
                 medication_error
                 and len(discharge_rows) == 1
@@ -3715,19 +3791,8 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not medications:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
-                required_groups = (
-                    ("drug_name", "generic_name", "name"),
-                    ("dose", "single_dose"),
-                    ("route", "drug_apply_method"),
-                    ("duration", "usage_time", "frequency"),
-                )
-                complete = all(
-                    all(
-                        any(_clean(item.get(key)) for key in group)
-                        for group in required_groups
-                    )
-                    for item in medications
-                )
+                required_groups = _DISCHARGE_MEDICATION_REQUIRED_GROUPS
+                complete = _discharge_medications_complete(medications)
                 final_state = "compliant" if complete else "non_compliant"
                 reason_code = (
                     "requirement_satisfied" if complete else "requirement_violated"
@@ -5338,6 +5403,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
                 *course_body_extractions,
+                *other_medication_extractions,
             )
             if item is not None
         ),
@@ -5353,6 +5419,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
                 *course_body_extractions,
+                *other_medication_extractions,
             )
             if item is not None
         ),
@@ -5368,6 +5435,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
                 *course_body_extractions,
+                *other_medication_extractions,
             )
             if item is not None
         ),
@@ -5383,6 +5451,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
                 *course_body_extractions,
+                *other_medication_extractions,
             )
             if item is not None
         ),
@@ -5398,6 +5467,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
                 *course_body_extractions,
+                *other_medication_extractions,
             )
             if item is not None
         ),
