@@ -8,6 +8,7 @@ import json
 from time import perf_counter
 from typing import Any, Literal, Protocol
 
+from ..structured_output import structured_output_kwargs
 from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from ..transfusion_order_trigger import _json_response_object, _usage
 
@@ -210,7 +211,8 @@ async def extract_diagnosis_scope(
         return DiagnosisScopeResult("technical_error", reason_code="model_transport_error")
     started = perf_counter()
     try:
-        response = await llm_client.generate(prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False)
+        response = await llm_client.generate(prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False,
+                                             **structured_output_kwargs(llm_client))
     except Exception:
         return DiagnosisScopeResult("technical_error", llm_call_count=1, api_time=perf_counter() - started,
                                     reason_code="model_transport_error")

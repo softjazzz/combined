@@ -8,6 +8,7 @@ import json
 from time import perf_counter
 from typing import Any, Literal
 
+from .structured_output import structured_output_kwargs
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, _json_response_object, _usage
 
@@ -146,7 +147,7 @@ async def classify_transfusion_course_records(
         started = perf_counter()
         calls += 1
         try:
-            response = await llm_client.generate(_prompt(batch))
+            response = await llm_client.generate(_prompt(batch), **structured_output_kwargs(llm_client))
         except Exception:
             api_time += perf_counter() - started
             return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_transport_error")

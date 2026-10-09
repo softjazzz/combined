@@ -1365,10 +1365,37 @@ def _compact_dose(value: str) -> str:
     return re.sub(r"\s+", "", value).lower()
 
 
+def _chemotherapy_fact_date_text(row: Mapping[str, Any], fact: Any) -> str:
+    """该次给药的日期依据文本。
+
+    优先用模型绑定的日期原文或片段本身；片段内无日期时退到片段所在的同一句，
+    该句只有一个日期表述时才算归属（如“2026-04-26 使用奥沙利铂120mg 静滴。”），
+    多个日期仍交由时间比较判为未知，不跨句借用日期。
+    """
+
+    if fact.date_quote:
+        return fact.date_quote
+    if _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN.search(fact.quote) or _CHEMOTHERAPY_RELATIVE_DATE_PATTERN.search(fact.quote):
+        return fact.quote
+    body = _course_record_text(row)
+    start = body.find(fact.quote)
+    if start < 0 or body.find(fact.quote, start + 1) >= 0:
+        return fact.quote
+    end = start + len(fact.quote)
+    separators = list(_CLINICAL_CLAUSE_SEPARATOR.finditer(body))
+    sentence_start = max((m.end() for m in separators if m.end() <= start), default=0)
+    sentence_end = min((m.start() for m in separators if m.start() >= end), default=len(body))
+    sentence = body[sentence_start:sentence_end]
+    date_mentions = len(_CHEMOTHERAPY_EXPLICIT_DATE_PATTERN.findall(sentence)) + len(
+        _CHEMOTHERAPY_RELATIVE_DATE_PATTERN.findall(sentence)
+    )
+    return sentence if date_mentions == 1 else fact.quote
+
+
 def _chemotherapy_fact_date(row: Mapping[str, Any], fact: Any) -> date | None:
     """该次给药片段内唯一可确定的临床日期；多个或无法绑定时返回 None。"""
 
-    text = fact.date_quote or fact.quote
+    text = _chemotherapy_fact_date_text(row, fact)
     dates = set()
     for match in _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN.finditer(text):
         try:
@@ -1389,7 +1416,7 @@ def _chemotherapy_fact_time_state(prescribed: Any, row: Mapping[str, Any], fact:
     return _chemotherapy_time_state(
         prescribed=prescribed,
         drug_name="",
-        course_rows=(_project_course_clause(row, fact.date_quote or fact.quote),),
+        course_rows=(_project_course_clause(row, _chemotherapy_fact_date_text(row, fact)),),
     )
 
 

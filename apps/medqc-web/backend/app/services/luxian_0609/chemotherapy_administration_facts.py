@@ -16,6 +16,7 @@ import re
 from time import perf_counter
 from typing import Any
 
+from .structured_output import structured_output_kwargs
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .transfusion_order_trigger import _json_response_object, _usage
 
@@ -211,6 +212,7 @@ async def extract_chemotherapy_administrations(
             _prompt(documents, target_drugs),
             max_completion_tokens=MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
+            **structured_output_kwargs(llm_client),
         )
     except Exception:
         return AdministrationExtraction("technical_error", "model_transport_error",

@@ -129,6 +129,23 @@ async def test_026_no_adverse_reaction_does_not_negate_given_dose():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("text, dose, expected", [
+    # 真实模型曾只引用“使用奥沙利铂120mg 静滴”：同句唯一日期仍是该次给药日期。
+    (f"{D} 使用奥沙利铂120mg 静滴。另予昂丹司琼130mg 静滴。", "120mg", "non_compliant"),
+    (f"{D} 使用奥沙利铂130mg 静滴。", "130mg", "compliant"),
+    # 日期在另一句，不跨句借用。
+    (f"{D} 查房。使用奥沙利铂130mg 静滴。", "130mg", "data_gap"),
+    # 同句两个日期无法唯一归属。
+    (f"{D} 至2026-04-27 使用奥沙利铂130mg 静滴。", "130mg", "data_gap"),
+])
+async def test_026_date_outside_quote_binds_only_within_same_sentence(text, dose, expected):
+    client = FrozenChemotherapyAdministrationClient(
+        {text: (fact(f"使用奥沙利铂{dose} 静滴", dose=dose, route="静滴"),)})
+    _execution, final, _client = await _run(_course(text), client=client)
+    assert final["status"] == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("bad_fact", [
     # 一条事实同时夹带目标药与其他药物的剂量。
     fact(f"{D} 使用奥沙利铂120mg 静滴。另予昂丹司琼130mg", dose="130mg", route="静滴", date=D),
