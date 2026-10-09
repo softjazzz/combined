@@ -246,6 +246,9 @@ _EXECUTION_TRACE_BOUNDARY_PROMPT = (
     "例如病程写‘今遵会诊意见完善相关检查，并复查肾功、电解质’，已经包含具体动作，"
     "必须判specific_trace。病程写‘继续中药内服，方选消风散加减’同样是具体治疗动作，"
     "不能因使用‘继续’二字判成no_trace。"
+    "病程明确写明某条建议不执行、暂缓或停用，并说明具体原因（如检验异常、禁忌证、患者或家属拒绝）时，"
+    "已记录该建议的执行情况，判specific_trace且recommendation_coverage_state=complete；"
+    "只写暂不执行、未写原因的判generic_trace。"
     "‘余治疗方案同前’‘继续当前治疗’不得自动关联到本次新会诊建议；"
     "同一病程未明确写出该建议对应动作时按no_trace判断。"
 )
