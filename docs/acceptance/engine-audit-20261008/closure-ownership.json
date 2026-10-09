@@ -395,10 +395,10 @@
     },
     {
       "id": "TC01-SCOPE",
-      "owner": "/root",
+      "owner": "/root/resume_transfusion",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-transfusion-family-20261008",
-      "state": "root_takeover_capacity_errors_new97_green_family356_91fail_unintegrated",
+      "state": "411_passed_3_production_contract_failures_root_review_pending",
       "responsibility": [
         "native_transfusion_execution.py:043-047 only",
         "new versioned performance scope extractor",
@@ -409,14 +409,17 @@
         "customer_renderer.py:043-047 mixed NC disclosure only",
         "canonical_result_finalizer.py:043-047 count and explanation only"
       ],
-      "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model. Author twice terminal model capacity errors; root sole writer now. Initial65 failures retained; new97 pass incl synthetic SQLite; family356=265pass91fail pending classification. No integration."
+      "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model. Author twice terminal model capacity errors; root sole writer now. Initial65 failures retained; new97 pass incl synthetic SQLite; family356=265pass91fail pending classification. No integration.",
+      "historical_owner": "/root",
+      "historical_state": "root_takeover_capacity_errors_new97_green_family356_91fail_unintegrated",
+      "resumption_responsibility_note": "仅root精确授权文件；共享Renderer/Finalizer归root，原responsibility保留历史，非并行写授权。"
     },
     {
       "id": "N10-BODY",
-      "owner": "/root/repair_iml01",
+      "owner": "/root/resume_course",
       "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
       "branch": "codex/qc-fix-course-body-20261008",
-      "state": "technical_direction_approved_freeze_and_original_red_preparation",
+      "state": "engineering_integrated_real_semantics_and_formal_chain_pending",
       "responsibility": [
         "new course_body_fact_extraction.py",
         "native_extended_document_execution.py:065/067 only",
@@ -424,7 +427,11 @@
         "extension contracts/catalog:065/067 only",
         "new dedicated tests/document"
       ],
-      "note": "Reuse clean tree base0683dfb9e. Preserve old medical inputs/oracles; original missing row metadata not invented. Each rule1 bounded call; no real model/PG/env/network. TC01 owns renderer/Finalizer/rule_contracts.py: N10 must request serial support, no concurrent edits."
+      "note": "Reuse clean tree base0683dfb9e. Preserve old medical inputs/oracles; original missing row metadata not invented. Each rule1 bounded call; no real model/PG/env/network. TC01 owns renderer/Finalizer/rule_contracts.py: N10 must request serial support, no concurrent edits.",
+      "historical_owner": "/root/repair_iml01",
+      "historical_state": "technical_direction_approved_freeze_and_original_red_preparation",
+      "resumption_responsibility_note": "仅root精确授权文件；共享Renderer/Finalizer归root，原responsibility保留历史，非并行写授权。",
+      "resumption_commit": "1fb745b4312a1b932654703e9f6323f095ebee25"
     }
   ],
   "rules": [
@@ -442,9 +449,66 @@
     }
   ],
   "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
-  "integration_head": "2d66663b632efa5543809109fefff48bea5e283d",
+  "integration_head": "1fb745b4312a1b932654703e9f6323f095ebee25",
   "current_test_slot_owner": null,
-  "queued_tests": [
-    "TC01 green when ready; sole slot requires root grant"
-  ]
+  "queued_tests": [],
+  "resumption": {
+    "date": "2026-10-08",
+    "baseline": "4757e4dee6ff1b1161db7b474e22b3d77a528e3e",
+    "plan": "docs/plans/2026-10-08-main-agent-resumption.md",
+    "snapshot_index": ".tmp/resumption-20261008/index.json",
+    "max_failed_repair_rounds_per_root_cause": 3,
+    "no_hardcoded_case_repairs": true,
+    "test_slot_owner": null,
+    "agents": {
+      "transfusion": "/root/resume_transfusion",
+      "course_body": "/root/resume_course",
+      "independent_review": "/root/resume_review",
+      "reconciliation": "/root/resume_reconciliation"
+    },
+    "shared_file_owner": "/root",
+    "note": "旧owner保留历史；新写入由本段及root精确授予路径控制。基线红测不计修复轮；3轮失败停止报root，禁止改名重置。",
+    "shared_copy_validation": {
+      "baseline": "4 failed / 4 passed",
+      "focused": "8 passed",
+      "full_renderer_finalizer": "504 passed",
+      "artifact": ".tmp/resumption-20261008/root-test-00021a8634",
+      "review": "resumption-review.md",
+      "commit": "3c2338024",
+      "minimum_gates": "encoding: 3 staged files passed; npm run lint exit 0; hook passed"
+    },
+    "repair_rounds": {
+      "transfusion_capacity": {
+        "implementation_rounds": 2,
+        "state": "focused_passed"
+      },
+      "transfusion_046_full_body": {
+        "implementation_rounds": 1,
+        "state": "focused_passed"
+      },
+      "transfusion_legacy_scope_protocol": {
+        "implementation_rounds": 2,
+        "state": "protocol_closed_411_passed_3_production_contract_failures_preserved"
+      },
+      "course_shared_customer_copy": {
+        "implementation_rounds": 1,
+        "state": "passed_committed"
+      },
+      "course_timezone_fixture": {
+        "implementation_rounds": 1,
+        "state": "passed_original_naive_time_counterexamples_preserved"
+      },
+      "course_deep_json_boundary": {
+        "implementation_rounds": 1,
+        "state": "red_reproduced_then_passed"
+      }
+    },
+    "course_validation": {
+      "facts": "85 passed (original 84 + deep JSON receipt)",
+      "legacy": "133 passed",
+      "artifact_prefix": ".tmp/resumption-20261008/r2-",
+      "integration": "committed 1fb745b4312a1b932654703e9f6323f095ebee25; root 85+133+8 passed, encoding16/hook passed; only design markdown formatted by hook",
+      "persistence": "8 isolated SQLite new-engine reload cases passed"
+    }
+  }
 }

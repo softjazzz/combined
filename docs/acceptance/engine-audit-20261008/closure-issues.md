@@ -5,7 +5,7 @@ Fixed production: `35909964a`; latest evidence after `2f44aa44e`. Limited issue 
 | Issue | State | Owner | Dependencies |
 |---|---|---|---|
 |N12|carrier_engineering_closed_integrated_f1c6ec095_real_model_pending|/root/repair_iml01||
-|N10|queued_evidence_review|unassigned||
+|N10|engineering_integrated_real_semantics_and_formal_chain_pending|/root|1fb745b43；85+133+8通过，真实语义及正式链待验|
 |N13|limited_engineering_repair_integrated_business_acceptance_open|/root/repair_chemo||
 |TR-044-MULTI|queued_evidence_review|unassigned||
 |SURGERY-029030|old_normal_regressions_not_reproduced_current_two_controls_pass_negative_coverage_open|/root/audit_course_timing||
