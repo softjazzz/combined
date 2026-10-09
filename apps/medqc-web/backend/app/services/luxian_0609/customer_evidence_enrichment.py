@@ -77,6 +77,8 @@ _EXCERPT_FIELDS = (
     "chief_complaint",
     "diagnosis",
     "order_name",
+    "generic_name",
+    "brand_name",
     "document_title",
 )
 _TIME_PATTERN = re.compile(
@@ -91,7 +93,7 @@ _SHARED_PARENT_DOCUMENT_SOURCES = {
 
 
 def _text(value: Any) -> str:
-    return str(value or "").strip()
+    return str(value if value is not None else "").strip()
 
 
 def _row_has_identity(row: Mapping[str, Any], document_id: str) -> bool:

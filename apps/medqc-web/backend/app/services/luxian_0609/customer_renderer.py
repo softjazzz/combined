@@ -1229,18 +1229,18 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "无需按本质控点处理。",
     ),
     ("LX0609-07-01-02", "trigger_absent_complete"): (
-        "本次未实施输血，不要求形成输血前评估",
-        "已核对输血申请、医嘱和输血记录，未发现输血事件。",
+        "未发现未取消的输血医嘱，本规则不适用",
+        "已核对本次就诊医嘱，未发现未取消的输血医嘱。",
         "无需按本质控点处理。",
     ),
     ("LX0609-07-02-01", "trigger_absent_complete"): (
-        "本次未实施输血，不要求形成输血病程记录",
-        "已核对输血申请、医嘱和输血记录，未发现输血事件。",
+        "未发现未取消的输血医嘱，本规则不适用",
+        "已核对本次就诊医嘱，未发现未取消的输血医嘱。",
         "无需按本质控点处理。",
     ),
     ("LX0609-07-02-02", "trigger_absent_complete"): (
-        "本次未实施输血，不启动输血病程记录规范性核对",
-        "已核对输血申请、医嘱和输血记录，未发现输血事件。",
+        "未发现未取消的输血医嘱，本规则不适用",
+        "已核对本次就诊医嘱，未发现未取消的输血医嘱。",
         "无需按本质控点处理。",
     ),
     ("LX0609-07-03-01", "trigger_absent_complete"): (
@@ -3517,7 +3517,7 @@ def customer_finding_from_controlled_facts(
         }:
             missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
             if kind == "pretransfusion_assessment_missing":
-                return "已确认实施输血，但未找到可核对的输血前评估记录。"
+                return "已开立输血医嘱，但未找到可核对的输血前评估记录。"
             return f"输血前评估缺少：{missing}。" if missing else ""
         if kind == "pretransfusion_assessment_time_conflict":
             application_time = str(facts.get("application_time") or "")

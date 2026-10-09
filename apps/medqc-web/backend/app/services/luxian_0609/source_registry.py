@@ -511,9 +511,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "presurg_discussion",
         "consultation_record",
     ),
-    # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定
-    # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。申请、同意书、检验和
-    # 围术期文书均保持独立来源，禁止再借用输血记录或收费行伪装。
+    # 输血族逐规则绑定来源；044/045/046按开立且未取消的医嘱触发，
+    # 专用病程与首页输血信息仅供记录/字段/时序核验，不代替医嘱。
+    # 其他规则保留现有事件合同，各文书与收费仍保持独立来源。
     "LX0609-11-03-01": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
     "LX0609-11-03-02": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
     "LX0609-07-01-01": (
@@ -524,9 +524,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_master",
         "labtest_item_report",
     ),
-    "LX0609-07-01-02": ("bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
-    "LX0609-07-02-01": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
-    "LX0609-07-02-02": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-07-01-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
+    "LX0609-07-02-01": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-07-02-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
     "LX0609-07-03-01": (
         "evaluation_context.horizon",
         "bloodtrans_record",

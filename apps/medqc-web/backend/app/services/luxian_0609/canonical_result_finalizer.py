@@ -1070,6 +1070,23 @@ def finalize_luxian_0609_executor_customer_display_facts(
         surgery_gate_status_valid
         or postoperative_status_valid
         or (
+            rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
+            and (
+                (
+                    finalized.get("status") == "not_applicable"
+                    and finalized.get("reason_code") == "transfusion_order_absent"
+                )
+                or (
+                    finalized.get("status") == "data_gap"
+                    and finalized.get("reason_code") in {
+                        "transfusion_source_unavailable",
+                        "transfusion_projection_unavailable",
+                        "transfusion_rule_projection_incomplete",
+                    }
+                )
+            )
+        )
+        or (
             is_transfusion_public_fact_ref_evidence_rule(rule_id)
             and transfusion_status_valid
         )

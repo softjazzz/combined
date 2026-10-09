@@ -34,6 +34,14 @@ _SYSTEM_GAP_REASONS = {
     "LX0609-11-03-02": "consent_signature_contract_unavailable",
     "LX0609-07-01-01": "pretransfusion_item_contract_unavailable",
     "LX0609-07-01-02": "pretransfusion_assessment_source_unavailable",
+    "LX0609-07-02-01": frozenset({
+        "transfusion_course_source_unavailable",
+        "transfusion_course_record_content_unavailable",
+    }),
+    "LX0609-07-02-02": frozenset({
+        "transfusion_course_source_unavailable",
+        "transfusion_course_record_content_unavailable",
+    }),
     "LX0609-07-04-01": "transfusion_comparison_fields_unavailable",
 }
 
@@ -65,11 +73,20 @@ def _safe_system_gap(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
     expected_reason = _SYSTEM_GAP_REASONS.get(rule_id)
     if expected_reason is None or raw.get("failure_kind") != "system_data_contract_gap":
         return None
+    if isinstance(expected_reason, frozenset):
+        reason = raw.get("system_gap_reason")
+        if not isinstance(reason, str) or reason not in expected_reason:
+            return None
+        expected_reason = reason
+    if rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"} and "transfusion_order_present" in raw:
+        if raw["transfusion_order_present"] is not True:
+            return None
+        raw = {key: value for key, value in raw.items() if key != "transfusion_order_present"}
     # Finalizer 已剥离文案后的公开形状仍须能通过保存/读取时的同一校验。
     # 只接受精确字段及本规则原因；不接收任意宽松子集。
     public_keys = {"failure_kind", "system_gap_reason", "gap_owner"}
     if (
-        rule_id == "LX0609-07-01-02"
+        rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
         and set(raw) == public_keys
         and raw.get("system_gap_reason") == expected_reason
         and raw.get("gap_owner") == "system_integration"
@@ -384,7 +401,7 @@ def _safe_044(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     )
     if (
         missing is None
-        or raw.get("performed_transfusion_confirmed") is not True
+        or raw.get("transfusion_order_present") is not True
         or (kind != "pretransfusion_assessment_time_unavailable" and checked != expected_fields)
         or (kind == "pretransfusion_assessment_complete" and missing)
         or (kind in {"pretransfusion_assessment_incomplete", "pretransfusion_assessment_missing"} and not missing)
@@ -392,7 +409,7 @@ def _safe_044(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     result: dict[str, Any] = {
         "verification_kind" if kind == "pretransfusion_assessment_complete" else "failure_kind": kind,
-        "performed_transfusion_confirmed": True,
+        "transfusion_order_present": True,
         "checked_fields": checked or [],
         "missing_fields": missing,
     }
@@ -427,11 +444,11 @@ def _safe_045(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     sources = _controlled_list(
         raw.get("checked_sources"), allowed={"bloodtrans_record", "daily_course_record"}
     )
-    if sources is None or raw.get("performed_transfusion_confirmed") is not True:
+    if sources is None or raw.get("transfusion_order_present") is not True:
         return None
     result: dict[str, Any] = {
         "verification_kind" if str(kind).endswith("present") else "failure_kind": kind,
-        "performed_transfusion_confirmed": True,
+        "transfusion_order_present": True,
         "checked_sources": sources,
     }
     if isinstance(raw.get("record_count"), int):
@@ -453,14 +470,14 @@ def _safe_046(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if (
         checked is None
         or missing is None
-        or raw.get("performed_transfusion_confirmed") is not True
+        or raw.get("transfusion_order_present") is not True
         or type(record_count) is not int
         or record_count < 0
     ):
         return None
     result: dict[str, Any] = {
         "verification_kind" if kind == "transfusion_course_record_complete" else "failure_kind": kind,
-        "performed_transfusion_confirmed": True,
+        "transfusion_order_present": True,
         "record_count": record_count,
         "checked_fields": checked,
         "missing_fields": missing,
@@ -713,6 +730,13 @@ def transfusion_customer_fact_status_is_valid(
     kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
     if safe_facts.get("failure_kind") == "system_data_contract_gap":
         return status == "data_gap"
+    if normalized_rule_id == "LX0609-07-02-02":
+        expected_status = {
+            "transfusion_course_record_complete": "compliant",
+            "transfusion_course_record_incomplete": "non_compliant",
+            "transfusion_requirement_not_documented": "non_compliant",
+        }.get(str(kind))
+        return expected_status is not None and status == expected_status
     expected_status = {
         "pretransfusion_assessment_complete": "compliant",
         "pretransfusion_assessment_incomplete": "non_compliant",

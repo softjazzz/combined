@@ -11,6 +11,7 @@ from app.services.luxian_0609.transfusion_result_mapping import (
     is_transfusion_customer_rule,
     is_transfusion_public_fact_ref_evidence_rule,
     safe_transfusion_customer_display_facts,
+    transfusion_customer_fact_status_is_valid,
 )
 from app.services.luxian_0609.native_transfusion_execution import (
     TRANSFUSION_RULE_IDS,
@@ -68,7 +69,7 @@ def test_transfusion_fact_status_conflict_is_isolated_technical_error() -> None:
         },
         raw_facts={
             "failure_kind": "pretransfusion_assessment_missing",
-            "performed_transfusion_confirmed": True,
+            "transfusion_order_present": True,
             "checked_fields": [
                 "indication",
                 "laboratory_indicator",
@@ -260,3 +261,133 @@ def test_aggregator_has_no_070_reference() -> None:
     ).read_text(encoding="utf-8")
 
     assert "LX0609-07-01-03" not in source
+
+
+def test_044_to_046_mapping_requires_order_facts_and_strips_performed_claim() -> None:
+    """已开医嘱是触发事实，不能将其公开为已实际实施输血。"""
+
+    cases = [
+        ("LX0609-07-01-02", {
+            "verification_kind": "pretransfusion_assessment_complete",
+            "checked_fields": ["application_reason", "laboratory_indicator"],
+            "missing_fields": [],
+        }),
+        ("LX0609-07-01-02", {
+            "failure_kind": "pretransfusion_assessment_missing",
+            "checked_fields": ["application_reason", "laboratory_indicator"],
+            "missing_fields": ["application_reason", "laboratory_indicator"],
+        }),
+        ("LX0609-07-02-01", {
+            "verification_kind": "transfusion_course_record_present",
+            "checked_sources": ["bloodtrans_record", "daily_course_record"],
+            "record_count": 1,
+        }),
+        ("LX0609-07-02-01", {
+            "failure_kind": "transfusion_course_record_missing",
+            "checked_sources": ["bloodtrans_record", "daily_course_record"],
+            "record_count": 0,
+        }),
+        ("LX0609-07-02-02", {
+            "verification_kind": "transfusion_course_record_complete",
+            "checked_fields": ["reason_or_indication", "dose"],
+            "missing_fields": [],
+            "record_count": 1,
+            "incomplete_record_count": 0,
+            "missing_field_record_counts": {},
+        }),
+        ("LX0609-07-02-02", {
+            "failure_kind": "transfusion_course_record_incomplete",
+            "checked_fields": ["reason_or_indication", "dose"],
+            "missing_fields": ["dose"],
+            "record_count": 1,
+            "incomplete_record_count": 1,
+            "missing_field_record_counts": {"dose": 1},
+        }),
+    ]
+    for rule_id, facts in cases:
+        expected = {**facts, "transfusion_order_present": True}
+        assert safe_transfusion_customer_display_facts(
+            rule_id=rule_id,
+            raw={**expected, "performed_transfusion_confirmed": True},
+        ) == expected
+        assert safe_transfusion_customer_display_facts(
+            rule_id=rule_id, raw=expected,
+        ) == expected
+        for order_present in (None, False, 1, "true"):
+            legacy = {**facts, "performed_transfusion_confirmed": True}
+            if order_present is not None:
+                legacy["transfusion_order_present"] = order_present
+            assert safe_transfusion_customer_display_facts(
+                rule_id=rule_id, raw=legacy,
+            ) is None
+
+
+def test_046_clinical_field_facts_require_matching_terminal_status() -> None:
+    """资料不足不能公开为临床字段缺失，合规与缺项事实必须匹配终态。"""
+
+    for kind, expected_status in (
+        ("transfusion_course_record_complete", "compliant"),
+        ("transfusion_course_record_incomplete", "non_compliant"),
+        ("transfusion_requirement_not_documented", "non_compliant"),
+    ):
+        for status in ("compliant", "non_compliant", "data_gap", "technical_error", "not_applicable"):
+            assert transfusion_customer_fact_status_is_valid(
+                rule_id="LX0609-07-02-02",
+                status=status,
+                safe_facts={"verification_kind" if expected_status == "compliant" else "failure_kind": kind},
+            ) is (status == expected_status)
+
+
+def test_046_system_gaps_are_safe_without_clinical_missing_fields() -> None:
+    for reason in ("transfusion_course_source_unavailable", "transfusion_course_record_content_unavailable"):
+        expected = {
+            "failure_kind": "system_data_contract_gap",
+            "system_gap_reason": reason,
+            "gap_owner": "system_integration",
+        }
+        raw = {
+            **expected,
+            "conclusion": "输血病程资料不足，暂无法核对字段。",
+            "handling_suggestion": "补齐输血病程资料。",
+            "transfusion_order_present": True,
+        }
+        assert safe_transfusion_customer_display_facts(rule_id="LX0609-07-02-02", raw=raw) == expected
+        assert safe_transfusion_customer_display_facts(rule_id="LX0609-07-02-02", raw=expected) == expected
+        assert safe_transfusion_customer_display_facts(
+            rule_id="LX0609-07-02-02", raw={**raw, "system_gap_reason": "unapproved_reason"},
+        ) is None
+        result, handled = finalize_luxian_0609_executor_customer_display_facts(
+            result={"rule_id": "LX0609-07-02-02", "status": "data_gap", "reason_code": reason},
+            raw_facts=raw,
+        )
+        assert handled is True
+        assert result["status"] == "data_gap"
+        assert result["customer_display_facts"] == expected
+
+
+def test_order_trigger_rules_preserve_controlled_no_fact_terminal_states() -> None:
+    for rule_id in ("LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"):
+        for status, reason in (
+            ("not_applicable", "transfusion_order_absent"),
+            ("data_gap", "transfusion_source_unavailable"),
+            ("data_gap", "transfusion_projection_unavailable"),
+            ("data_gap", "transfusion_rule_projection_incomplete"),
+        ):
+            result, handled = finalize_luxian_0609_executor_customer_display_facts(
+                result={"rule_id": rule_id, "status": status, "reason_code": reason},
+                raw_facts=None,
+            )
+            assert handled is True
+            assert (result["status"], result["reason_code"]) == (status, reason)
+            assert "customer_display_facts" not in result
+        result, _ = finalize_luxian_0609_executor_customer_display_facts(
+            result={"rule_id": rule_id, "status": "compliant", "reason_code": "requirement_satisfied"},
+            raw_facts=None,
+        )
+        assert result["status"] == "technical_error"
+
+    result, _ = finalize_luxian_0609_executor_customer_display_facts(
+        result={"rule_id": "LX0609-07-03-01", "status": "not_applicable", "reason_code": "transfusion_order_absent"},
+        raw_facts=None,
+    )
+    assert result["status"] == "technical_error"
