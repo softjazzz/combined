@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
 
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -41,6 +42,14 @@ def _run(rule, *, valid=False, approval=True, llm_client=None):
     def reader(**kwargs):
         source = kwargs["source_key"]
         return SnapshotSourceRows.create(source_key=source, rows=rows.get(source, []), truncated=False, limit_rows=50)
+
+    # 仅067有已定时窗口正文时使用逐字人工事实；068原client/0调用不变。
+    if rule == "LX0609-08-02-01" and valid:
+        assert llm_client is None
+        llm_client = FrozenCourseBodyClient({
+            "上级医师查看患者，同意明日出院。": ("present", "同意明日出院"),
+            "上级医师查看患者，同意今日出院。": ("present", "同意今日出院"),
+        })
 
     session = build_luxian_0609_evidence_read_session(
         selected_rule_ids=(rule,), institute_id="I", patient_id="P", visit_id="V",
@@ -96,6 +105,7 @@ def test_valid_window_evidence_is_not_blocked_by_undated_document(rule):
     assert result.decisions[0].reason_code == "requirement_satisfied"
     assert "missing_time_count" not in dict(result.customer_display_facts)[rule]
     assert len(result.decisions[0].fact_refs) == 1
+    assert result.llm_call_count == (1 if rule == "LX0609-08-02-01" else 0)
 
 
 def test_068_without_approval_keeps_original_missing_semantics():

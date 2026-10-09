@@ -1,6 +1,7 @@
 """纯标题与签名不得证明已有临床正文，短正文仍有效。"""
 
 import pytest
+from luxian_0609_course_body_test_facts import LEGACY_MANUAL_COURSE_BODY_FACTS
 from test_luxian_0609_round2_document_boundaries import _final, _surgery
 
 
@@ -41,7 +42,7 @@ async def _run(rule, body):
             "discharge_record": [{"document_id": "d", "discharge_date": "2026-07-03"}],
             "daily_course_record": [row],
         }
-    return await _final(rule, rows)
+    return await _final(rule, rows, course_body_facts={body: LEGACY_MANUAL_COURSE_BODY_FACTS[body]})
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 
 import pytest
+from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
 
 from app.services.luxian_0609 import native_extended_document_execution as module
 from app.services.luxian_0609.continuity_evidence_selection import (
@@ -1436,6 +1437,7 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
                 "record_content": "上级医师查房后同意患者出院。",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房后同意患者出院。': ('present', '同意患者出院')}),
     )
 
     decisions = {item.rule_id: item for item in reduced}
@@ -1447,7 +1449,8 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
     assert facts["LX0609-08-01-01"]["discharge_time_source"] == "evaluation_context.horizon"
     assert facts["LX0609-08-02-01"]["checked_dates"] == ["2026-07-02", "2026-07-03"]
     assert facts["LX0609-08-02-02"]["checked_dates"] == ("2026-07-02", "2026-07-03")
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -1761,6 +1764,7 @@ async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -
                 {"record_time": "2026-07-02 09:00:00", "author_name": "王医生"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
@@ -3736,6 +3740,7 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
                 {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
     assert [item.final_state for item in reduced] == [
@@ -3746,7 +3751,8 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
     assert facts_by_rule["LX0609-04-05-01"]["performed_surgery_count"] == 2
     assert [item["document_id"] for item in facts_by_rule["LX0609-04-05-01"]["surgery_events"]] == ["E1", "E2"]
     assert [item["document_id"] for item in facts_by_rule["LX0609-04-05-02"]["surgery_events"]] == ["E1", "E2"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
     assert snapshot.snapshot_hash
 
 
@@ -3996,6 +4002,7 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
                 {"record_time": "2026-07-11 10:03:29", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-02",
@@ -4020,7 +4027,8 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
     )
     assert horizon_fact_ref not in result.decisions[0].fact_refs
     assert "术后 72 小时内上级医师查房时间" in canonical["findings"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -4052,6 +4060,7 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
                 {"record_time": "2026-07-02 15:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-02",
@@ -4083,7 +4092,8 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
         "2026-07-02 15:00:00",
     ]
     assert "共2台手术中，1台手术结束后72小时内未查到上级医师查房" in canonical["findings"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -4208,6 +4218,7 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
                 {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -4215,7 +4226,8 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
     assert facts["unmet_surgery_events"] == [
         {"document_id": "E2", "senior_round_times": []}
     ]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -8965,7 +8977,7 @@ async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round
                 {
                     "document_id": "SENIOR-065-MATCH",
                     "record_time": "2026-07-02 10:00:00",
-                    "record_content": "上级医师术后查房。",
+                    "record_content": "上级医师查房，病情稳定，继续观察。",
                 },
                 {
                     "document_id": "SENIOR-065-LATE",
@@ -8979,6 +8991,7 @@ async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round
                 "basis": "evaluation_as_of",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ("present", "病情稳定")}),
     )
 
     refs_by_document_id = {
@@ -9129,12 +9142,12 @@ async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -
                 {
                     "document_id": "SENIOR-065-A",
                     "record_time": "2026-07-02 10:00:00",
-                    "record_content": "术后上级查房。",
+                    "record_content": "上级医师查房，病情稳定，继续观察。",
                 },
                 {
                     "document_id": "SENIOR-065-B",
                     "record_time": "2026-07-09 10:00:00",
-                    "record_content": "术后上级查房。",
+                    "record_content": "上级医师查房，病情稳定，继续观察。",
                 },
                 {
                     "document_id": "SENIOR-065-OTHER",
@@ -9148,6 +9161,7 @@ async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -
                 "basis": "evaluation_as_of",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ("present", "病情稳定")}),
     )
 
     refs_by_document_id = {
@@ -9296,6 +9310,7 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
                 },
             ),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定'), '缺少权威记录时间': ('unknown', None)}),
     )
 
     canonical = _canonical_extended_result(
@@ -9314,7 +9329,8 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
         "field_path": "record_content",
         "excerpt_kind": "文书级依据",
     }]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -9332,6 +9348,7 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
                 "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定')}),
     )
 
     canonical = _canonical_extended_result(
@@ -9350,7 +9367,8 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
         "field_path": "record_content",
         "excerpt_kind": "文书级依据",
     }]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -9365,14 +9383,15 @@ async def test_067_multiple_selected_courses_project_each_exact_coordinate() -> 
             "daily_course_record": ({
                 "document_id": "DAILY-WINDOW-067",
                 "record_time": "2026-07-02 09:00:00",
-                "record_content": "出院前日常病程记录",
+                "record_content": "病情稳定",
             },),
             "senior_course_record": ({
                 "document_id": "SENIOR-WINDOW-067",
                 "record_time": "2026-07-03 08:00:00",
-                "record_content": "上级医师出院前查房记录",
+                "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ("present", "病情稳定")}),
     )
 
     canonical = _canonical_extended_result(
@@ -9415,15 +9434,16 @@ async def test_067_duplicate_selected_document_id_never_guesses_customer_evidenc
                 {
                     "document_id": "DAILY-DUPLICATE",
                     "record_time": "2026-07-02 08:00:00",
-                    "record_content": "出院前病程记录 A",
+                    "record_content": "病情稳定",
                 },
                 {
                     "document_id": "DAILY-DUPLICATE",
                     "record_time": "2026-07-02 09:00:00",
-                    "record_content": "出院前病程记录 B",
+                    "record_content": "病情稳定",
                 },
             ),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ("present", "病情稳定")}),
     )
 
     canonical = _canonical_extended_result(
@@ -9445,7 +9465,8 @@ async def test_067_duplicate_selected_document_id_never_guesses_customer_evidenc
     assert set(execution.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
     assert not (selected_material_refs & set(execution.decisions[0].fact_refs))
     assert "customer_evidence" not in canonical
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -9467,6 +9488,7 @@ async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> 
                 "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定')}),
     )
 
     canonical = _canonical_extended_result(
@@ -9505,6 +9527,7 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
                 "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定')}),
     )
 
     canonical = _canonical_extended_result(

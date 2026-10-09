@@ -43,8 +43,13 @@ from .extended_document.discharge_documentation import (
 )
 from .extended_document.discharge_course_content import evaluate_discharge_course_content
 from .extended_document.discharge_course import (
-    _has_course_body as _has_clinical_course_body,
+    PredischargeCourseOutcome,
     evaluate_predischarge_course_presence,
+)
+from .course_body_fact_extraction import (
+    CourseBodyDocument,
+    CourseBodyExtraction,
+    extract_course_body_facts,
 )
 from .extended_document.diagnosis_change_extraction import (
     DiagnosisChangeDocumentInput,
@@ -360,6 +365,30 @@ def _source_rows(
     except EvidenceMaterialUnavailable:
         return (), "source_unavailable"
     return tuple(dict(row) for row in rows), ""
+
+
+
+def _course_body_candidate_inputs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    candidates: Sequence[tuple[str, int, Mapping[str, Any]]],
+) -> tuple[tuple[CourseBodyDocument, ...], Mapping[tuple[str, int], str]]:
+    """按原行occurrence绑定，不能把摘要排序与原行索引zip或按docID合并。"""
+    available: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
+    documents: list[CourseBodyDocument] = []
+    refs: dict[tuple[str, int], str] = {}
+    for source, ordinal, row in candidates:
+        if source not in available:
+            available[source] = list(materials.document_rows(source, snapshot=snapshot))
+        matches = available[source]
+        position = next((index for index, (_ref, original) in enumerate(matches) if original == row), None)
+        if position is None:
+            raise ValueError("course body material occurrence mismatch")
+        ref, _original = matches.pop(position)
+        refs[(source, ordinal)] = ref
+        documents.append(CourseBodyDocument(ref, source, row.get("record_content")))
+    return tuple(documents), refs
 
 
 def _has_source_observation(
@@ -2076,6 +2105,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     course_content_extraction = None
     medication_extraction = None
     discharge_approval_extraction = None
+    course_body_extractions: list[CourseBodyExtraction] = []
     diagnosis_change_extraction = None
     antimicrobial_action_extraction = None
     transfusion_performance_extraction = None
@@ -3892,11 +3922,47 @@ async def execute_luxian_0609_native_extended_document_rules(
                     event_facts: list[dict[str, Any]] = []
                     unmet_events: list[dict[str, Any]] = []
                     not_mature_events: list[dict[str, Any]] = []
+                    mature_events = tuple(
+                        event for event in surgery_events
+                        if event.surgery_end_time is not None
+                        and (
+                            evaluation_time >= event.surgery_end_time + timedelta(hours=72)
+                            if evaluation_time is not None
+                            else evaluation_date > (event.surgery_end_time + timedelta(hours=72)).date()
+                        )
+                    )
+                    dated_candidates = tuple(
+                        ("senior_course_record", ordinal, row)
+                        for ordinal, row in enumerate(senior_rows)
+                        if (value := _row_time(row)) is not None
+                        and any(event.surgery_end_time <= value <= event.surgery_end_time + timedelta(hours=72) for event in mature_events)
+                    )
                     undated_senior_rows = tuple(
                         row for row in senior_rows
                         if _row_time(row) is None
-                        and _has_clinical_course_body(row)
+                        and isinstance(row.get("record_content"), str)
+                        and row["record_content"].strip()
                     )
+                    body_states: dict[tuple[str, int], str] = {}
+                    body_issue = ""
+                    if dated_candidates:
+                        candidates = (*dated_candidates, *(
+                            ("senior_course_record", ordinal, row)
+                            for ordinal, row in enumerate(senior_rows)
+                            if _row_time(row) is None
+                        ))
+                        try:
+                            body_documents, body_refs = _course_body_candidate_inputs(
+                                snapshot=evidence_snapshot, materials=evidence_materials, candidates=candidates,
+                            )
+                        except (ValueError, EvidenceMaterialUnavailable):
+                            extraction = CourseBodyExtraction("data_gap", "source_readiness_unproven")
+                        else:
+                            extraction = await extract_course_body_facts(body_documents, llm_client)
+                            body_states = {key: extraction.states.get(ref, "unknown") for key, ref in body_refs.items()}
+                        course_body_extractions.append(extraction)
+                        body_issue = extraction.reason_code if extraction.state != "ready" else ""
+                    unresolved_senior_semantics = False
                     unresolved_senior_time = False
                     unresolved_senior_body = False
                     for event in surgery_events:
@@ -3916,8 +3982,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                         )
                         # 只核正文存在，不评价临床充分性；日期和纯签名不能代替查房正文。
                         matched_senior_rows = tuple(
-                            row for row in dated_senior_rows
-                            if _has_clinical_course_body(row)
+                            row for ordinal, row in enumerate(senior_rows)
+                            if any(row is candidate for candidate in dated_senior_rows)
+                            and body_states.get(("senior_course_record", ordinal)) == "present"
                         )
                         selected_postoperative_rows.extend(
                             matched_senior_rows or dated_senior_rows
@@ -3948,13 +4015,24 @@ async def execute_luxian_0609_native_extended_document_rules(
                             unresolved_senior_time = True
                             selected_postoperative_rows.extend(undated_senior_rows)
                         elif not senior_round_times and dated_senior_rows:
-                            unresolved_senior_body = True
+                            if any(
+                                body_states.get(("senior_course_record", ordinal)) == "unknown"
+                                for ordinal, row in enumerate(senior_rows)
+                                if any(row is candidate for candidate in dated_senior_rows)
+                            ):
+                                unresolved_senior_semantics = True
+                            else:
+                                unresolved_senior_body = True
                         elif not senior_round_times:
                             unmet_events.append({
                                 "document_id": event.document_id,
                                 "senior_round_times": [],
                             })
-                    if unresolved_senior_time:
+                    if body_issue:
+                        final_state, reason_code = "data_gap", body_issue
+                    elif unresolved_senior_semantics:
+                        final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                    elif unresolved_senior_time:
                         final_state, reason_code = "data_gap", "authoritative_time_missing"
                     elif unresolved_senior_body:
                         final_state, reason_code = "data_gap", "required_field_missing"
@@ -3989,7 +4067,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         ),
                         "senior_round_times": senior_round_delivery_values,
                     }
-                    if not unresolved_senior_body or unresolved_senior_time:
+                    if not body_issue and not unresolved_senior_semantics and (not unresolved_senior_body or unresolved_senior_time):
                         display.append((rule_id, {
                             "verification_kind": "postoperative_senior_round_window_unavailable",
                             "issue": "authoritative_time_missing",
@@ -4194,6 +4272,38 @@ async def execute_luxian_0609_native_extended_document_rules(
                 if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS
                 else ""
             )
+            course_discharge_time = _discharge_time(
+                registration_rows, discharge_rows, horizon_rows, discharge_horizon_error,
+            )
+            body_states = {}
+            body_issue = ""
+            if (death_state != "present" and not (death_state == "unknown" and death_error)
+                    and not (registration_error or discharge_horizon_error or discharge_error or daily_error or senior_error)
+                    and course_discharge_time is not None):
+                valid_dates = {course_discharge_time.date(), (course_discharge_time - timedelta(days=1)).date()}
+                dated_candidates = tuple(
+                    (source, ordinal, row)
+                    for source, rows in (("daily_course_record", daily_rows), ("senior_course_record", senior_rows))
+                    for ordinal, row in enumerate(rows)
+                    if (value := _row_time(row)) is not None and value.date() in valid_dates
+                )
+                if dated_candidates:
+                    candidates = (*dated_candidates, *(
+                        (source, ordinal, row)
+                        for source, rows in (("daily_course_record", daily_rows), ("senior_course_record", senior_rows))
+                        for ordinal, row in enumerate(rows) if _row_time(row) is None
+                    ))
+                    try:
+                        body_documents, body_refs = _course_body_candidate_inputs(
+                            snapshot=evidence_snapshot, materials=evidence_materials, candidates=candidates,
+                        )
+                    except (ValueError, EvidenceMaterialUnavailable):
+                        extraction = CourseBodyExtraction("data_gap", "source_readiness_unproven")
+                    else:
+                        extraction = await extract_course_body_facts(body_documents, llm_client)
+                        body_states = {key: extraction.states.get(ref, "unknown") for key, ref in body_refs.items()}
+                    course_body_extractions.append(extraction)
+                    body_issue = extraction.reason_code if extraction.state != "ready" else ""
             outcome = evaluate_predischarge_course_presence(
                 death_state=death_state,
                 death_error=death_error,
@@ -4211,7 +4321,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                 senior_error=senior_error,
                 daily_rows=daily_rows,
                 senior_rows=senior_rows,
+                clinical_body_states=body_states,
             )
+            if body_issue:
+                outcome = PredischargeCourseOutcome("data_gap", body_issue)
             selected_course_document_ids: tuple[tuple[str, str], ...] = ()
             if outcome.display_facts is not None:
                 display_facts = dict(outcome.display_facts)
@@ -5170,6 +5283,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                *course_body_extractions,
             )
             if item is not None
         ),
@@ -5182,6 +5296,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                *course_body_extractions,
             )
             if item is not None
         ),
@@ -5194,6 +5309,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                *course_body_extractions,
             )
             if item is not None
         ),
@@ -5206,6 +5322,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                *course_body_extractions,
             )
             if item is not None
         ),
@@ -5218,6 +5335,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                *course_body_extractions,
             )
             if item is not None
         ),

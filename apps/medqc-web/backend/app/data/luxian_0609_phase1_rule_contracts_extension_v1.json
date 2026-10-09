@@ -166,12 +166,12 @@
   },
   {
     "rule_id": "LX0609-04-05-02",
-    "contract_version": "v1",
+    "contract_version": "v2",
     "family_key": "extended_document",
     "executor_key": "extended_document",
     "execution_mode": "native_async",
-    "decision_authority": "program_only",
-    "max_llm_calls_per_rule": 0,
+    "decision_authority": "program_then_optional_llm",
+    "max_llm_calls_per_rule": 1,
     "source_contract_state": "typed_shadow_v1",
     "golden_gate_state": "pending"
   },
@@ -188,12 +188,12 @@
   },
   {
     "rule_id": "LX0609-08-02-01",
-    "contract_version": "v1",
+    "contract_version": "v2",
     "family_key": "extended_document",
     "executor_key": "extended_document",
     "execution_mode": "native_async",
-    "decision_authority": "program_only",
-    "max_llm_calls_per_rule": 0,
+    "decision_authority": "program_then_optional_llm",
+    "max_llm_calls_per_rule": 1,
     "source_contract_state": "typed_shadow_v1",
     "golden_gate_state": "pending"
   },

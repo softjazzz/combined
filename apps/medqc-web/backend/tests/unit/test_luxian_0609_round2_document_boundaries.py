@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
+from luxian_0609_course_body_test_facts import FrozenCourseBodyClient, LEGACY_MANUAL_COURSE_BODY_FACTS
 from test_luxian_0609_native_extended_document_execution import _session as extended_session
 
 from app.services.luxian_0609.canonical_result_finalizer import (
@@ -30,7 +31,7 @@ class NoModel:
         raise AssertionError("本组规则禁止模型调用")
 
 
-async def _final(rule, rows, *, anesthesia_facts=None):
+async def _final(rule, rows, *, anesthesia_facts=None, course_body_facts=None, course_body_calls=1):
     def reader(**kwargs):
         key = kwargs["source_key"]
         return SnapshotSourceRows.create(
@@ -50,6 +51,9 @@ async def _final(rule, rows, *, anesthesia_facts=None):
         session = SimpleNamespace(snapshot=snapshot, materials=materials)
     assert anesthesia_facts is None or rule == "LX0609-04-04-02"
     client = NoModel() if anesthesia_facts is None else ExplicitAnesthesiaFactClient(anesthesia_facts)
+    if course_body_facts is not None:
+        assert rule in {"LX0609-04-05-02", "LX0609-08-02-01"} and anesthesia_facts is None
+        client = FrozenCourseBodyClient(course_body_facts)
     kwargs = dict(
         rule_ids=(rule,), decision_rule_ids=(rule,),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
@@ -61,7 +65,11 @@ async def _final(rule, rows, *, anesthesia_facts=None):
         )
     else:
         result = await execute_luxian_0609_native_extended_document_rules(**kwargs)
-    if anesthesia_facts is None:
+    if course_body_facts is not None:
+        assert client.fixture_error is None
+        assert result.llm_call_count == len(client.calls) == course_body_calls
+        assert result.total_tokens == 15 * course_body_calls
+    elif anesthesia_facts is None:
         assert result.llm_call_count == result.total_tokens == 0
     else:
         assert result.llm_call_count == len(client.calls) == 1
@@ -161,7 +169,7 @@ async def test_065_undated_existing_round_is_not_missing(time, expected):
     rows["senior_course_record"] = [{"document_id": "round-A",
         "document_title": "主任医师查房记录", "record_time": time,
         "record_content": "主任医师查房，伤口愈合良好，继续观察。"}]
-    final = await _final("LX0609-04-05-02", rows)
+    final = await _final("LX0609-04-05-02", rows, course_body_facts={"主任医师查房，伤口愈合良好，继续观察。": ("present", "伤口愈合良好")}, course_body_calls=int(time == "2026-07-02 09:00:00"))
     assert final["status"] == expected
     if expected == "data_gap":
         assert final["reason_code"] == "authoritative_time_missing"
@@ -175,7 +183,7 @@ async def test_065_dated_valid_round_is_not_blocked_by_another_undated_record():
         {"document_id": "round-A", "record_time": "2026-07-02 09:00:00", "record_content": "查房，病情稳定。"},
         {"document_id": "round-B", "record_content": "查房，病情稳定。"},
     ]
-    assert (await _final("LX0609-04-05-02", rows))["status"] == "compliant"
+    assert (await _final("LX0609-04-05-02", rows, course_body_facts={"查房，病情稳定。": ("present", "病情稳定")}))["status"] == "compliant"
 
 
 @pytest.mark.asyncio
@@ -193,7 +201,7 @@ async def test_067_signature_only_is_not_clinical_course(body, expected):
         "discharge_record": [{"document_id": "discharge-A", "discharge_date": "2026-07-03"}],
         "daily_course_record": [{"document_id": "course-A", "record_time": "2026-07-02 09:00:00", "record_content": body}],
     }
-    final = await _final("LX0609-08-02-01", deepcopy(rows))
+    final = await _final("LX0609-08-02-01", deepcopy(rows), course_body_facts={body: LEGACY_MANUAL_COURSE_BODY_FACTS[body]} if isinstance(body, str) and body.strip() else {}, course_body_calls=int(isinstance(body, str) and bool(body.strip())))
     assert final["status"] == expected
     if expected == "data_gap":
         assert final["reason_code"] == "required_field_missing"
@@ -218,7 +226,7 @@ async def test_065_dated_signature_only_is_not_a_clinical_round(body, expected):
     }]
     if body is None:
         rows["senior_course_record"][0].pop("record_content")
-    final = await _final("LX0609-04-05-02", rows)
+    final = await _final("LX0609-04-05-02", rows, course_body_facts={body: LEGACY_MANUAL_COURSE_BODY_FACTS[body]} if isinstance(body, str) and body.strip() else {}, course_body_calls=int(isinstance(body, str) and bool(body.strip())))
     assert final["status"] == expected
     if expected == "data_gap":
         assert final["reason_code"] == "required_field_missing"
@@ -236,4 +244,4 @@ async def test_065_valid_round_is_not_blocked_by_signature_only_row():
         {"document_id": "round-body-B", "record_time": "2026-07-02 10:00:00",
          "record_content": "病情稳定。"},
     ]
-    assert (await _final("LX0609-04-05-02", rows))["status"] == "compliant"
+    assert (await _final("LX0609-04-05-02", rows, course_body_facts={"医生签名：张医生": ("absent", None), "病情稳定。": ("present", "病情稳定")}))["status"] == "compliant"

@@ -49,6 +49,7 @@ def evaluate_predischarge_course_presence(
     senior_error: str,
     daily_rows: Sequence[Mapping[str, Any]],
     senior_rows: Sequence[Mapping[str, Any]],
+    clinical_body_states: Mapping[tuple[str, int], str] | None = None,
 ) -> PredischargeCourseOutcome:
     """仅核对出院日及前一日的日常/上级医师病程。"""
 
@@ -95,7 +96,15 @@ def evaluate_predischarge_course_presence(
         for row in rows
         if _row_time(row) is not None and _row_time(row).date() in valid_dates
     )
-    body_rows = tuple((source_key, row) for source_key, row in matched_course_rows if _has_course_body(row))
+    # 原行序号仅用于请求内关联已验证原子事实，不以docID合并正文。
+    states = clinical_body_states or {}
+    indexed_matched = tuple(
+        (source, ordinal, row)
+        for source, rows in (("daily_course_record", daily_rows), ("senior_course_record", senior_rows))
+        for ordinal, row in enumerate(rows)
+        if (value := _row_time(row)) is not None and value.date() in valid_dates
+    )
+    body_rows = tuple((source, row) for source, ordinal, row in indexed_matched if states.get((source, ordinal)) == "present")
     present = bool(body_rows)
     if not present and missing_time_rows:
         return PredischargeCourseOutcome(
@@ -113,6 +122,12 @@ def evaluate_predischarge_course_presence(
                 ],
             },
         )
+
+    if not present and any(
+        states.get((source, ordinal), "unknown" if isinstance(row.get("record_content"), str) and row["record_content"].strip() else "unreadable") == "unknown"
+        for source, ordinal, row in indexed_matched
+    ):
+        return PredischargeCourseOutcome("data_gap", "semantic_extraction_unresolved")
 
     if not present and matched_course_rows:
         return PredischargeCourseOutcome(
