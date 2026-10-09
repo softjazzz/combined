@@ -4,6 +4,11 @@ from datetime import datetime
 
 import pytest
 
+from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
+
+SENIOR_BODY = "李主任查房：术后第1天，切口无渗血，继续抗感染治疗。"
+DAILY_BODY = "术后第1天病程：患者生命体征平稳，切口敷料干燥。"
+
 from app.services.case_identity import CaseRef
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
@@ -59,12 +64,14 @@ async def test_065_single_rule_entry_executes_with_known_surgery_end_and_frozen_
                 {
                     "record_time": "2026-07-02 08:00:00",
                     "author_name": "李主任",
+                    "record_content": SENIOR_BODY,
                 },
             ),
             "daily_course_record": (
                 {
                     "record_time": "2026-07-02 09:00:00",
                     "author_name": "王医生",
+                    "record_content": DAILY_BODY,
                 },
             ),
         }
@@ -90,7 +97,13 @@ async def test_065_single_rule_entry_executes_with_known_surgery_end_and_frozen_
     horizon = session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
     assert horizon[0]["horizon_datetime"] == "2026-07-05T12:00:00"
 
+    # 065 须确认查房记录含真实临床正文（N10 合同）；正文事实由人工标注替身提供。
+    client = FrozenCourseBodyClient({
+        SENIOR_BODY: ("present", SENIOR_BODY),
+        DAILY_BODY: ("present", DAILY_BODY),
+    })
     execution = await execute_luxian_0609_native_extended_document_rules(
+        llm_client=client,
         rule_ids=("LX0609-04-05-02",),
         decision_rule_ids=("LX0609-04-05-02",),
         evidence_snapshot=session.snapshot,
@@ -105,4 +118,5 @@ async def test_065_single_rule_entry_executes_with_known_surgery_end_and_frozen_
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert client.fixture_error is None, client.fixture_error
+    assert execution.llm_call_count == len(client.calls) == 1
