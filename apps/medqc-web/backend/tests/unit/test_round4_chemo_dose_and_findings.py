@@ -5,6 +5,8 @@ from itertools import permutations
 
 import pytest
 
+from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient
+
 from test_round2_tumor_dose_discharge_boundaries import execute
 from app.services.qc_workspace.canonical_result_store import (
     canonical_envelope_items_are_consistent,
@@ -180,7 +182,7 @@ async def test_ambiguous_association_does_not_claim_initialized_fields_are_verif
         patient_id="safe-patient",
         visit_id="safe-visit",
         source_schema=None,
-        llm_client=NoModel(),
+        llm_client=FrozenChemotherapyAdministrationClient(auto=True),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=(rule,),
@@ -197,7 +199,7 @@ async def test_ambiguous_association_does_not_claim_initialized_fields_are_verif
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count <= 1
     # 受控关联缺口贯穿执行、归约、Finalizer，字段初始matched不等于已核对。
     raw_facts = dict(result.customer_display_facts)[rule]
     absent = mixed in {"absent", "absent_time", "absent_known", "absent_conflict"}

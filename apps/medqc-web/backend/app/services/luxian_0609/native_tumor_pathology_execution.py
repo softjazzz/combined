@@ -28,6 +28,7 @@ from .malignancy_fact import (
     build_stage_malignancy_sources,
     resolve_malignancy_visit_stage,
 )
+from .chemotherapy_administration_facts import CourseDocument, extract_chemotherapy_administrations
 from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
@@ -1306,73 +1307,6 @@ def _project_course_clause(
     return projected
 
 
-def _course_event_candidates(
-    rows: Sequence[Mapping[str, Any]],
-    *,
-    target_drug_names: Sequence[str],
-) -> tuple[Mapping[str, Any], ...]:
-    """单药病程可跨相邻句；多药同篇病程必须有可分离的局部片段。"""
-
-    normalized_targets = tuple(
-        value
-        for value in {
-            _normalized_comparison_text(drug_name) for drug_name in target_drug_names
-        }
-        if value
-    )
-    candidates: list[Mapping[str, Any]] = []
-    for row in rows:
-        raw_text = _course_record_text(row)
-        if not raw_text:
-            continue
-        normalized_row = _normalized_comparison_text(raw_text)
-        matched_targets = tuple(
-            target for target in normalized_targets if target in normalized_row
-        )
-        if len(matched_targets) == 1:
-            candidates.append(_project_course_clause(row, raw_text))
-            continue
-        if len(matched_targets) < 2:
-            continue
-        clauses = tuple(
-            normalized_clause
-            for clause in _CLINICAL_CLAUSE_SEPARATOR.split(raw_text)
-            if (normalized_clause := _clean(clause))
-        )
-        clause_targets = tuple(
-            tuple(
-                target
-                for target in matched_targets
-                if target in _normalized_comparison_text(clause)
-            )
-            for clause in clauses
-        )
-        target_clause_indexes = tuple(
-            index for index, targets in enumerate(clause_targets) if targets
-        )
-        for index in target_clause_indexes:
-            targets = clause_targets[index]
-            # 同一句同时提及多种药物时，不能猜测剂量/用法属于其中哪一种。
-            if len(targets) != 1:
-                candidates.append(_project_course_clause(row, clauses[index]))
-                continue
-            next_target_index = next(
-                (
-                    candidate_index
-                    for candidate_index in target_clause_indexes
-                    if candidate_index > index
-                ),
-                len(clauses),
-            )
-            # 一个药名句可吸收紧随的详情句，但绝不跨到下一种目标药名。
-            candidates.append(
-                _project_course_clause(
-                    row, "。".join(clauses[index:next_target_index])
-                )
-            )
-    return tuple(candidates)
-
-
 _CHEMO_MASS_UNIT_FACTORS = {
     "mg": Decimal(1), "毫克": Decimal(1), "g": Decimal(1000), "克": Decimal(1000),
     "μg": Decimal("0.001"), "ug": Decimal("0.001"), "mcg": Decimal("0.001"), "微克": Decimal("0.001"),
@@ -1427,35 +1361,72 @@ def _chemotherapy_dose_matches(expected: str, observed: str) -> bool:
     )
 
 
-def _chemotherapy_candidate_has_independent_owner(
+def _compact_dose(value: str) -> str:
+    return re.sub(r"\s+", "", value).lower()
+
+
+def _chemotherapy_fact_date(row: Mapping[str, Any], fact: Any) -> date | None:
+    """该次给药片段内唯一可确定的临床日期；多个或无法绑定时返回 None。"""
+
+    text = fact.date_quote or fact.quote
+    dates = set()
+    for match in _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN.finditer(text):
+        try:
+            dates.add(datetime(int(match.group("year")), int(match.group("month")), int(match.group("day"))).date())
+        except ValueError:
+            return None
+    if _CHEMOTHERAPY_RELATIVE_DATE_PATTERN.search(text):
+        record_date = _course_record_date(row)
+        if record_date is None:
+            return None
+        dates.add(record_date)
+    return next(iter(dates)) if len(dates) == 1 else None
+
+
+def _chemotherapy_fact_time_state(prescribed: Any, row: Mapping[str, Any], fact: Any) -> str:
+    """只用该条给药事实片段内的日期（今日/当日绑定临床记录时间）核对医嘱日期。"""
+
+    return _chemotherapy_time_state(
+        prescribed=prescribed,
+        drug_name="",
+        course_rows=(_project_course_clause(row, fact.date_quote or fact.quote),),
+    )
+
+
+def _chemotherapy_candidate_course_rows(
+    rows: Sequence[Mapping[str, Any]],
     *,
-    candidate: Mapping[str, Any],
-    selected_event: Mapping[str, str],
-    all_events: Sequence[Mapping[str, str]],
-) -> bool:
-    """检查所有医嘱的可能归属；待核剂量/途径不用于反向证明事件身份。"""
+    chemotherapy_orders: Sequence[Mapping[str, Any]],
+    target_names: Sequence[str],
+) -> tuple[Mapping[str, Any], ...]:
+    """医嘱日期前后时间窗内的病程，及点名目标药的病程；其余病程不送模型。"""
 
-    text = _normalized_comparison_text(_row_text(candidate))
-    selected_name = _normalized_comparison_text(selected_event["drug_name"])
-    for competing_event in all_events:
-        # 仅跳过本请求内同一事件描述对象，不把文书ID或医嘱ID虚构为跨表关联键。
-        if competing_event is selected_event:
+    prescribed_dates = [
+        value for row in chemotherapy_orders
+        if (value := _date_value(_clean(row.get("prescribed_datetime") or row.get("order_time"))))
+    ]
+    normalized_targets = [_normalized_comparison_text(name) for name in target_names]
+    selected = []
+    for row in rows:
+        text = _course_record_text(row)
+        if not text:
             continue
-        competing_name = _normalized_comparison_text(competing_event["drug_name"])
-        if competing_name and competing_name != selected_name:
-            if competing_name not in text:
-                continue
-            # 同一片段还提及另一目标药，日期不能补足药物与剂量的局部归属。
-            return False
-        # 正文日期尚未绑定该次给药，不以任意日期排除同药或缺药名的竞争事件。
-        return False
-    return True
+        record_date = _course_record_date(row)
+        in_window = record_date is not None and any(
+            -1 <= (record_date - value).days <= 7 for value in prescribed_dates
+        )
+        names_target = any(target and target in _normalized_comparison_text(text) for target in normalized_targets)
+        if in_window or names_target:
+            selected.append(row)
+    return tuple(selected)
 
 
-def _typed_chemotherapy_comparison(
+async def _typed_chemotherapy_comparison(
     *,
     orders: SourceMaterial,
     course_records: SourceMaterial,
+    llm_client: Any = None,
+    extractions: list[Any] | None = None,
 ) -> tuple[
     str,
     str,
@@ -1545,74 +1516,111 @@ def _typed_chemotherapy_comparison(
     unknown_time_event_count = 0
     selected_course_rows: list[Mapping[str, Any]] = []
     if expected_events:
-        course_clauses = _course_event_candidates(
-            course_records.rows,
-            target_drug_names=tuple(target_drug_names),
+        # 目标药物身份只给模型药名（不给剂量），由模型逐份病程抽取给药原子事实。
+        target_names = list({
+            _normalized_comparison_text(name): name for name in reversed(target_drug_names)
+        }.values())[::-1]
+        target_index = {_normalized_comparison_text(name): index for index, name in enumerate(target_names)}
+        candidate_rows = _chemotherapy_candidate_course_rows(
+            course_records.rows, chemotherapy_orders=chemotherapy_orders, target_names=target_names,
         )
-        claimed_clause_indexes: set[int] = set()
+        documents = [
+            CourseDocument(f"c{index}", _course_record_text(row)) for index, row in enumerate(candidate_rows)
+        ]
+        extraction = await extract_chemotherapy_administrations(documents, target_names, llm_client)
+        if extractions is not None:
+            extractions.append(extraction)
+        if extraction.state != "ready":
+            # 沿用本执行器的模型错误原因码约定。
+            reason = {"model_invalid_output": "tumor_llm_invalid_output",
+                      "model_transport_error": "tumor_llm_failure"}.get(extraction.reason_code, extraction.reason_code)
+            return extraction.state, reason, None, chemotherapy_orders, ()
+        related_by_target: dict[int, list[tuple[Mapping[str, Any], Any]]] = {}
+        for row, document in zip(candidate_rows, documents):
+            for fact in extraction.facts.get(document.document_ref, ()):
+                related_by_target.setdefault(fact.target_index, []).append((row, fact))
+        # 有病程未能完整核查目标药提及时，“没抽到”不能证明病程未记录。
+        coverage_incomplete = bool(extraction.uncovered_documents)
+        incomplete_events = [event for event in all_events if event not in expected_events]
+        claimed_facts: set[int] = set()
         for event in expected_events:
             normalized_drug = _normalized_comparison_text(event["drug_name"])
-            candidates = tuple(
-                (index, clause)
-                for index, clause in enumerate(course_clauses)
-                if normalized_drug
-                in _normalized_comparison_text(_row_text(clause))
-            )
-            if not candidates:
-                missing_course_event_count += 1
-                field_results["drug_name"] = "mismatched"
+            related = related_by_target.get(target_index[normalized_drug], [])
+            # 有病程未能完整核查时，已抽到的事实也可能不全，不能据此确认一致或缺失。
+            if coverage_incomplete or any(fact.action == "unknown" for _, fact in related):
+                unresolved_event_count += 1
                 continue
-
-            timed_candidates = tuple(
-                (index, clause)
-                for index, clause in candidates
-                if _chemotherapy_time_state(
-                    prescribed=event["prescribed"],
-                    drug_name=event["drug_name"],
-                    course_rows=(clause,),
-                )
-                == "matched"
-            )
-            if len(timed_candidates) == 1:
-                candidate_index, candidate = timed_candidates[0]
-            elif len(timed_candidates) > 1 or len(candidates) > 1:
+            administered = [(row, fact) for row, fact in related if fact.action == "administered"]
+            planned = [(row, fact) for row, fact in related if fact.action == "planned"]
+            withheld = [(row, fact) for row, fact in related if fact.action == "withheld"]
+            if not administered:
+                if withheld:
+                    # 病程明确未给/停用而医嘱为执行：记录与医嘱不一致。
+                    field_results["drug_name"] = "mismatched"
+                    selected_course_rows.extend(row for row, _ in withheld)
+                elif planned:
+                    # 仅计划不能证明已实施，也不能断言未记录。
+                    unresolved_event_count += 1
+                else:
+                    missing_course_event_count += 1
+                    field_results["drug_name"] = "mismatched"
+                continue
+            administered_rows = {id(row) for row, _ in administered}
+            administered_doses = {_compact_dose(fact.dose_quote) for _, fact in administered}
+            if any(
+                id(row) in administered_rows and fact.dose_quote
+                and _compact_dose(fact.dose_quote) not in administered_doses
+                for row, fact in planned
+            ):
+                # 同篇既有实际给药又有不同剂量的计划改量：医嘱可能对应任一方案，归属不明。
+                unresolved_event_count += 1
+                continue
+            timed = [
+                (row, fact) for row, fact in administered
+                if _chemotherapy_fact_time_state(event["prescribed"], row, fact) == "matched"
+            ]
+            if len(timed) == 1:
+                row, fact = timed[0]
+            elif len(timed) > 1 or len(administered) > 1:
                 unresolved_event_count += 1
                 continue
             else:
-                candidate_index, candidate = candidates[0]
-
-            # 缺字段与已确认缺陷并存时，只有可独立归属的完整事件才能确认不一致。
-            if missing_order_event_count and not _chemotherapy_candidate_has_independent_owner(
-                candidate=candidate, selected_event=event, all_events=all_events,
+                row, fact = administered[0]
+            if id(fact) in claimed_facts:
+                unresolved_event_count += 1
+                continue
+            # 缺字段医嘱若同药或药名不明，只有该次给药的临床日期能将其排除为归属。
+            fact_date = _chemotherapy_fact_date(row, fact)
+            if any(
+                (not _normalized_comparison_text(other["drug_name"])
+                 or _normalized_comparison_text(other["drug_name"]) == normalized_drug)
+                and not (
+                    fact_date is not None
+                    and (other_date := _date_value(other["prescribed"])) is not None
+                    and fact_date != other_date
+                )
+                for other in incomplete_events
             ):
                 unresolved_event_count += 1
                 continue
-            # 一个片段不能同时证明两个独立化疗事件；无法唯一关联时拒绝猜测。
-            if candidate_index in claimed_clause_indexes:
-                unresolved_event_count += 1
-                continue
-            claimed_clause_indexes.add(candidate_index)
-            selected_course_rows.append(candidate)
-            candidate_text = _row_text(candidate)
-            comparison_text = _normalized_comparison_text(candidate_text)
-            if not _chemotherapy_dose_matches(event["dose"], candidate_text):
+            claimed_facts.add(id(fact))
+            selected_course_rows.append(row)
+            # 片段已保证至多一个剂量；在整条片段上沿用既有剂量边界规则（d1、分母、千分位等）。
+            if not fact.dose_quote or not _chemotherapy_dose_matches(event["dose"], fact.quote):
                 field_results["dose"] = (
-                    "unknown" if _chemotherapy_dose_unit_unconfirmed(event["dose"], candidate_text)
+                    "unknown" if fact.dose_quote
+                    and _chemotherapy_dose_unit_unconfirmed(event["dose"], fact.quote)
                     and field_results["dose"] != "mismatched" else "mismatched"
                 )
-            if _normalized_comparison_text(event["route"]) not in comparison_text:
+            route_text = _normalized_comparison_text(fact.route_quote or fact.quote)
+            if _normalized_comparison_text(event["route"]) not in route_text:
                 field_results["route"] = "mismatched"
-            time_state = _chemotherapy_time_state(
-                prescribed=event["prescribed"],
-                drug_name=event["drug_name"],
-                course_rows=(candidate,),
-            )
+            time_state = _chemotherapy_fact_time_state(event["prescribed"], row, fact)
             if time_state == "unknown":
                 unknown_time_event_count += 1
             if time_state == "mismatched" or (
                 time_state == "unknown" and field_results["time"] != "mismatched"
             ):
-                # 已确认时间不一致不被后续未知事件覆盖；未知计数仍保留资料不足。
                 field_results["time"] = time_state
 
     if missing_order_event_count or unresolved_event_count or missing_course_event_count:
@@ -2129,15 +2137,23 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     display_facts,
                     selected_order_rows,
                     selected_course_rows,
-                ) = _typed_chemotherapy_comparison(
+                ) = await _typed_chemotherapy_comparison(
                     orders=chemotherapy_orders,
                     course_records=course_records,
+                    llm_client=llm_client,
+                    extractions=(chemo_extractions := []),
                 )
+                for extraction in chemo_extractions:
+                    llm_call_count += extraction.llm_call_count
+                    prompt_tokens += extraction.prompt_tokens
+                    completion_tokens += extraction.completion_tokens
+                    total_tokens += extraction.total_tokens
+                    api_time += extraction.api_time
                 emit_outcome(
                     rule_id,
                     status,
                     reason_code,
-                    executor_type="program",
+                    executor_type="llm" if chemo_extractions else "program",
                     display_facts=display_facts,
                     fact_refs=typed_document_refs(
                         ("inpat_drug_order", selected_order_rows),

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient
+
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_reduced_customer_result,
@@ -84,7 +86,7 @@ async def execute(
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=NoModel(),
+        llm_client=FrozenChemotherapyAdministrationClient(auto=True),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=(rule,),
@@ -101,7 +103,7 @@ async def execute(
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count <= 1
     return final
 
 

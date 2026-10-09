@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient
+
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
@@ -243,7 +245,8 @@ async def _execute_and_aggregate(
         patient_id="tumor-freeze-patient",
         visit_id="tumor-freeze-visit",
         source_schema=None,
-        llm_client=client,
+        # 026 给药原子事实由人工标注替身回答，其余提示词仍交原客户端。
+        llm_client=None if client is None else FrozenChemotherapyAdministrationClient(delegate=client, auto=True),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
     )
@@ -292,7 +295,9 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
         "requirement_violated",
     ]
     assert all(item.fact_refs for item in reduced)
-    assert execution.llm_call_count == execution.prompt_tokens == execution.total_tokens == 0
+    # 仅 026 一次给药原子事实抽取（替身不计 token）；恶性肿瘤判断不调用模型。
+    assert execution.llm_call_count == 1
+    assert execution.prompt_tokens == execution.total_tokens == 0
     assert client.prompts == []
 
     facts = dict(execution.customer_display_facts)

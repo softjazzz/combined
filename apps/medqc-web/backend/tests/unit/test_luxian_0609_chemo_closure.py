@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pytest
 
+from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient, fact
+
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_reduced_customer_result,
@@ -32,7 +34,7 @@ class _NoModel:
         raise AssertionError("合成化疗比较不得访问模型")
 
 
-async def _run(course_rows, *, order=None, orders=None):
+async def _run(course_rows, *, order=None, orders=None, annotations=None, coverage_unknown=()):
     rows = {
         "diagnosis": ({"document_id": "synthetic-diagnosis", "diagnosis_code": "C18.9"},),
         "inpat_drug_order": tuple(orders) if orders is not None else (ORDER if order is None else order,),
@@ -57,7 +59,8 @@ async def _run(course_rows, *, order=None, orders=None):
     execution = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=(RULE,), decision_rule_ids=(RULE,), wrapper_rules=[], evidence_payload=None,
         institute_id="synthetic-I", patient_id="synthetic-P", visit_id="synthetic-V",
-        source_schema=None, llm_client=_NoModel(), evidence_snapshot=session.snapshot,
+        source_schema=None, llm_client=FrozenChemotherapyAdministrationClient(
+            annotations, auto=True, coverage={text: "unknown" for text in coverage_unknown}), evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
@@ -68,7 +71,8 @@ async def _run(course_rows, *, order=None, orders=None):
         decision=reduced, raw_customer_display_facts=dict(execution.customer_display_facts).get(RULE),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
-    assert execution.llm_call_count == execution.total_tokens == 0
+    # 026 每例至多一次给药原子事实抽取（标注替身，token 为 0）。
+    assert execution.llm_call_count <= 1 and execution.total_tokens == 0
     assert execution.results == ()
     return execution, reduced, final
 
@@ -265,9 +269,9 @@ async def test_missing_field_does_not_turn_shared_unassociated_clause_into_defec
               {**ORDER, "document_id": "synthetic-missing-order", "generic_name": "紫杉醇", "single_dose_unit": ""}]
     if reverse:
         orders.reverse()
-    _execution, _reduced, final = await _run(
-        _course("2026-04-26 使用奥沙利铂和顺铂130mg 静滴。"), orders=orders,
-    )
+    text = "2026-04-26 使用奥沙利铂和顺铂130mg 静滴。"
+    _execution, _reduced, final = await _run(_course(text), orders=orders, annotations={text: ()},
+                                             coverage_unknown=(text,))
     assert final["status"] == "data_gap"
     facts = final["customer_display_facts"]
     assert facts["missing_order_event_count"] == 1
@@ -350,7 +354,10 @@ async def test_unrelated_date_cannot_exclude_possible_same_drug_order(reverse, t
                       "prescribed_datetime": "2026-04-25 09:00:00"}]
     if reverse:
         orders.reverse()
-    _execution, _reduced, final = await _run(_course(text), orders=orders)
+    annotations = {}
+    if "昨日" in text:
+        annotations[text] = (fact("昨日给予奥沙利铂120mg 静滴", dose="120mg", route="静滴", date="昨日"),)
+    _execution, _reduced, final = await _run(_course(text), orders=orders, annotations=annotations)
     assert final["status"] == "data_gap"
     facts = final["customer_display_facts"]
     assert facts["missing_order_event_count"] == facts["unresolved_event_count"] == 1
@@ -368,7 +375,7 @@ async def test_unrelated_date_cannot_exclude_possible_same_drug_order(reverse, t
     ("unknown_name", "2026-04-26 使用奥沙利铂120mg 静滴。"),
 ])
 async def test_explicit_date_capability_gap_is_reported_without_changing_business_oracle(reverse, case, text):
-    """工程当前行为保护；对应原业务oracle仍NC，不能据本例宣称语义能力达标。"""
+    """原能力缺口：他日缺字段医嘱现可由该次给药临床日期排除，达到原业务口径不合规。"""
     partial = {**ORDER, "document_id": "synthetic-other-day-partial", "single_dose": "150",
                "single_dose_unit": "", "prescribed_datetime": "2026-04-27 09:00:00"}
     if case == "unknown_name":
@@ -377,10 +384,10 @@ async def test_explicit_date_capability_gap_is_reported_without_changing_busines
     if reverse:
         orders.reverse()
     _execution, _reduced, final = await _run(_course(text), orders=orders)
-    assert final["status"] == "data_gap"
+    assert final["status"] == "non_compliant"
     facts = final["customer_display_facts"]
-    assert facts["missing_order_event_count"] == facts["unresolved_event_count"] == 1
-    assert set(facts["field_results"].values()) == {"unknown"}
-    assert "记录不一致" not in final["findings"]
+    assert facts["missing_order_event_count"] == 1
+    assert facts["unresolved_event_count"] == 0
+    assert facts["field_results"]["dose"] == "mismatched"
     from test_026_association_contract import assert_sqlite_roundtrip
     assert_sqlite_roundtrip(final)
