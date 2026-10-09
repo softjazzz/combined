@@ -132,6 +132,10 @@ _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
     "applicability_source_gap": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
 }
 _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
+    ("LX0609-04-05-02", "semantic_extraction_unresolved"): "现有上级医师查房正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
+    ("LX0609-04-05-02", "candidate_scope_incomplete"): "现有上级医师查房正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
+    ("LX0609-08-02-01", "semantic_extraction_unresolved"): "现有出院前病程正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
+    ("LX0609-08-02-01", "candidate_scope_incomplete"): "现有出院前病程正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。',
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
     ("LX0609-07-01-03", "source_readiness_unproven"): '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。',
@@ -563,6 +567,26 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-04-05-02", "semantic_extraction_unresolved"): (
+        "上级医师查房正文暂无法确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-04-05-02", "semantic_extraction_unresolved")],
+        "请复核现有病程正文或重试质控。",
+    ),
+    ("LX0609-04-05-02", "candidate_scope_incomplete"): (
+        "上级医师查房正文超出本次可核范围",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-04-05-02", "candidate_scope_incomplete")],
+        "请复核现有材料或联系质控系统支持。",
+    ),
+    ("LX0609-08-02-01", "semantic_extraction_unresolved"): (
+        "出院前病程正文暂无法确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-08-02-01", "semantic_extraction_unresolved")],
+        "请复核现有病程正文或重试质控。",
+    ),
+    ("LX0609-08-02-01", "candidate_scope_incomplete"): (
+        "出院前病程正文超出本次可核范围",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-08-02-01", "candidate_scope_incomplete")],
+        "请复核现有材料或联系质控系统支持。",
+    ),
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): ('输血实施事实暂无法确认', '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。', '请复核现有输血正文或重试质控；不要据此补写或改写记录。'),
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): ('输血实施事实暂无法确认', '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。', '请复核现有记录及实际输血事件；不要据此补写输血或检验记录。'),
     ("LX0609-07-01-03", "source_readiness_unproven"): ('输血记录正文暂不可读取', '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。', '请核对源记录正文及同步映射后重新质控；不要据此补写或改写记录。'),
@@ -4188,6 +4212,10 @@ def render_luxian_0609_customer_result(
                 ("LX0609-09-01-01", "document_completion_time_missing"),
                 ("LX0609-03-02-01", "diagnosis_scope_uncertain"),
                 ("LX0609-04-04-02", "semantic_extraction_unresolved"),
+                ("LX0609-04-05-02", "semantic_extraction_unresolved"),
+                ("LX0609-04-05-02", "candidate_scope_incomplete"),
+                ("LX0609-08-02-01", "semantic_extraction_unresolved"),
+                ("LX0609-08-02-01", "candidate_scope_incomplete"),
                 ("LX0609-07-01-03", "semantic_extraction_unresolved"),
                 ("LX0609-07-01-03", "positive_assertion_not_explicit"),
                 ("LX0609-07-01-03", "source_readiness_unproven"),
