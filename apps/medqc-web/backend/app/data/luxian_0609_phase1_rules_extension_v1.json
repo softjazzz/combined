@@ -247,7 +247,7 @@
     "dependency_type": "事件触发内容存在性",
     "executor_type": "program",
     "rule_version": "2026-07-31",
-    "prompt_version": "lx0609_diagnosis_change_documentation_v1-quote-2026-10-07",
+    "prompt_version": "lx0609_diagnosis_change_documentation_v2-semantic-2026-10-09",
     "mapped_rule_ids": ["LX0609-12-02-01"],
     "primary_execution_rule_id": "LX0609-12-02-01"
   },

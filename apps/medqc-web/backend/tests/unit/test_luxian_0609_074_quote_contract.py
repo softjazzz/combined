@@ -120,11 +120,10 @@ def roundtrip(final, tmp_path, *, accepted):
 async def test_prompt_requires_verbatim_span_and_distinguishes_unverified_from_missing():
     _, client = await run([item()])
     prompt = client.calls[0][0]
-    assert "保留编号、引号、空白和标点" in prompt
-    assert "不得删去中间的词句或列表标签" in prompt
-    assert "不得新增省略号" in prompt
-    assert "不能仅因无法提供合格引文就判missing" in prompt
-    assert "对应local_doc_id的text" in prompt
+    assert "逐字复制，保留编号、空白和标点" in prompt
+    assert "不得删改、拼接或省略" in prompt
+    assert "missing表示未记录" in prompt
+    assert "unknown表示无法可靠判断" in prompt
 
 
 @pytest.mark.asyncio

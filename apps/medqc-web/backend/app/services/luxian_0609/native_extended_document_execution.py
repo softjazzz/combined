@@ -21,7 +21,6 @@ from .decision_model import (
 from .continuity_evidence_selection import (
     bind_consumed_continuity_document_rows,
     bind_consultation_evidence,
-    bind_diagnosis_change_evidence,
     bind_handoff_evidence,
     bind_transfer_evidence,
 )
@@ -170,14 +169,17 @@ _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院
 _DISCHARGE_DIAGNOSIS_TYPES = frozenset(("出院诊断", "死亡诊断"))
 _UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确")
 _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS = ("原因待查", "性质待定")
+# “修正诊断为：X”与“修正诊断为X”“修正诊断：X”同为已落地的变更表述。
 _DIAGNOSIS_CHANGE_EVENT_PATTERN = re.compile(
-    r"(?:修正诊断|补充诊断)\s*(?:为|[:：])\s*"
+    r"(?:修正诊断|补充诊断)\s*(?:为\s*[:：]?|[:：])\s*"
     r"[^\s，,。；;：:！？!?][^，,。；;\r\n]*"
 )
 _DIAGNOSIS_CHANGE_NON_EVENT_PREFIX_PATTERN = re.compile(
     r"(?:暂不|无需|不需|不必|不予|未予|未作|若需|如需|是否|应记录|应当记录).{0,8}$"
 )
 _ADMISSION_DIAGNOSIS_CHANGE_TYPES = frozenset({"修正诊断", "补充诊断"})
+# 诊断栏列表分隔：分号或“1.”“2、”等序号（不拆“1.5cm”“2型”）。
+_ADMISSION_DIAGNOSIS_LIST_SEPARATOR = re.compile(r"[；;\n]|(?<![\d.])\d{1,2}[.、．](?!\d)")
 # 客户入院记录诊断把签名与记录时间拼在诊断名尾部；解析“变更后诊断名”时
 # 必须剥离，否则同条关联判据永远匹配不上病程正文。
 _ADMISSION_DIAGNOSIS_LABEL_PATTERN = re.compile(
@@ -187,14 +189,9 @@ _ADMISSION_DIAGNOSIS_TIME_PATTERN = re.compile(
     r"\d{4}[-/年]\d{1,2}(?:[-/月]\d{1,2}日?)?"
     r"(?:[ T]?\d{1,2}[:：]\d{1,2}(?:[:：]\d{1,2})?)?"
 )
-# 074 的唯一理由/依据标记门禁：新旧两条触发路径共用，禁止把普通病程直接
-# 送受控抽取器。
-_DIAGNOSIS_CHANGE_REASON_MARKERS = (
-    "修正诊断",
-    "补充诊断",
-    "修改理由",
-)
-_DIAGNOSIS_CHANGE_BASIS_MARKERS = ("诊断依据", "依据为", "依据：", "依据:")
+# 074 每次诊断变更最多送检的候选病程数：理由与依据通常记在变更后最先的几份病程里，
+# 限定数量使长住院中反复提及同名诊断的病程不会无界送模。
+_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE = 3
 _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?:药品|药物|用药|服药|服用|口服|停药|带药|注射|静滴|静脉滴注|"
     r"外用|外涂|涂抹|吸入|滴眼|滴耳|滴鼻|含服|舌下|肛塞|"
@@ -991,32 +988,83 @@ def _diagnosis_change_declarations(
         if _clean(row.get("diagnosis_type")) not in _ADMISSION_DIAGNOSIS_CHANGE_TYPES:
             continue
         name = _normalized_admission_diagnosis_name(row.get("diagnosis_name"))
-        if name and name not in declarations:
-            declarations.append(name)
+        # 一栏常以“1.甲；2.乙”列出多个变更诊断，逐个作为独立变更与病程关联。
+        for part in _ADMISSION_DIAGNOSIS_LIST_SEPARATOR.split(name):
+            part = part.strip(" \t\r\n;；,，。.")
+            if part and part not in declarations:
+                declarations.append(part)
     return tuple(declarations)
 
 
-def _reason_and_basis_candidate_rows(
+def _diagnosis_change_candidates(
     rows_by_source: Sequence[tuple[str, Sequence[Mapping[str, Any]]]],
     *,
-    changed_diagnosis_names: Sequence[str],
+    diagnosis_name: str,
+    not_before: datetime | None = None,
 ) -> tuple[tuple[datetime | None, str, str, Mapping[str, Any]], ...]:
-    """复用 074 旧路径的理由/依据标记门禁，确认病程确实记录了变更事由。"""
+    """提及变更后诊断名的病程候选（按记录时间排序，未计时排后）。
 
-    reason_markers = _DIAGNOSIS_CHANGE_REASON_MARKERS
-    basis_markers = _DIAGNOSIS_CHANGE_BASIS_MARKERS
-    candidates = tuple(
+    是否记录了理由与依据由受控语义抽取判断，这里只做名称与时序上的候选收集。
+    """
+
+    candidates = [
         (_row_time(row), _row_text(row), source_key, row)
         for source_key, source_rows in rows_by_source
         for row in source_rows
-        if any(marker in _row_text(row) for marker in reason_markers)
-        and any(marker in _row_text(row) for marker in basis_markers)
+        if diagnosis_name and diagnosis_name in _row_text(row)
+    ]
+    if not_before is not None:
+        candidates = [
+            item for item in candidates if item[0] is None or item[0] >= not_before
+        ]
+    return tuple(sorted(candidates, key=lambda item: (item[0] is None, item[0] or datetime.min)))
+
+
+async def _assess_diagnosis_change_documentation(
+    pairs: Sequence[tuple[str, Mapping[str, Any], str, str]],
+    change_names: Sequence[str],
+    llm_client: Any,
+) -> tuple[str, str, dict[str, Any] | None, Any]:
+    """对 (来源, 病程行, 正文, 变更诊断名) 候选做一次受控抽取并按诊断汇总。
+
+    同一变更诊断的理由与依据可分记于不同病程；任一诊断确定未记录→不合规，
+    仅因语义未知而无法确认→不确定。
+    """
+
+    extraction = await extract_diagnosis_change_documentation(
+        tuple(
+            DiagnosisChangeDocumentInput(
+                local_doc_id=f"doc_{index:02d}",
+                source_type=source_key,
+                text=text,
+                changed_diagnosis=name,
+            )
+            for index, (source_key, _row, text, name) in enumerate(pairs, 1)
+        ),
+        llm_client,
     )
-    return tuple(
-        candidate
-        for candidate in candidates
-        if any(name in candidate[1] for name in changed_diagnosis_names)
-    )
+    if extraction.state != "ready":
+        return extraction.state, extraction.reason_code, None, extraction
+    reason = {name: False for name in change_names}
+    basis = {name: False for name in change_names}
+    unknown = {name: False for name in change_names}
+    for (_source_key, _row, _text, name), assertion in zip(pairs, extraction.assertions):
+        reason[name] = reason[name] or assertion.reason_state == "present"
+        basis[name] = basis[name] or assertion.basis_state == "present"
+        unknown[name] = unknown[name] or "unknown" in (assertion.reason_state, assertion.basis_state)
+    unsatisfied = [name for name in change_names if not (reason[name] and basis[name])]
+    if not unsatisfied:
+        final_state, reason_code = "compliant", "requirement_satisfied"
+    elif any(not unknown[name] for name in unsatisfied):
+        final_state, reason_code = "non_compliant", "requirement_violated"
+    else:
+        return "uncertain", "semantic_low_confidence", None, extraction
+    return final_state, reason_code, {
+        "verification_kind": "diagnosis_change_documentation_check",
+        "diagnosis_change_count": len(change_names),
+        "reason_recorded": all(reason.values()),
+        "basis_recorded": all(basis.values()),
+    }, extraction
 
 
 def _material_text(row: Mapping[str, Any]) -> str:
@@ -4982,24 +5030,48 @@ async def execute_luxian_0609_native_extended_document_rules(
                             )
                             and _clean(row.get("document_id") or row.get("id"))
                         )
-                        structured_candidate_rows = _reason_and_basis_candidate_rows(
+                        course_sources = (
+                            ("daily_course_record", daily_rows),
+                            ("senior_course_record", senior_rows),
+                        )
+                        declared_candidates = {
+                            name: _diagnosis_change_candidates(
+                                course_sources, diagnosis_name=name,
+                            )[:_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE]
+                            for name in declared_diagnosis_names
+                        }
+                        structured_pairs = tuple(
+                            (source_key, row, text, name)
+                            for name, candidates in declared_candidates.items()
+                            for _time, text, source_key, row in candidates
+                        )
+                        if not all(declared_candidates.values()):
+                            # 有声明的变更诊断在病程中从未提及：确定未记录理由与依据。
+                            final_state, reason_code = (
+                                "non_compliant",
+                                "requirement_violated",
+                            )
+                            structured_facts = {
+                                "verification_kind": "diagnosis_change_documentation_check",
+                                "diagnosis_change_count": len(declared_diagnosis_names),
+                                "reason_recorded": False,
+                                "basis_recorded": False,
+                            }
+                        else:
                             (
-                                ("daily_course_record", daily_rows),
-                                ("senior_course_record", senior_rows),
-                            ),
-                            changed_diagnosis_names=declared_diagnosis_names,
-                        )
-                        final_state, reason_code = (
-                            "non_compliant",
-                            "requirement_violated",
-                        )
-                        has_reason_and_basis = bool(structured_candidate_rows)
-                        display.append((rule_id, {
-                            "verification_kind": "diagnosis_change_documentation_check",
-                            "diagnosis_change_count": len(declared_diagnosis_names),
-                            "reason_recorded": has_reason_and_basis,
-                            "basis_recorded": has_reason_and_basis,
-                        }))
+                                final_state,
+                                reason_code,
+                                structured_facts,
+                                diagnosis_change_extraction,
+                            ) = await _assess_diagnosis_change_documentation(
+                                structured_pairs, declared_diagnosis_names, llm_client,
+                            )
+                        if structured_facts is not None:
+                            display.append((rule_id, structured_facts))
+                        consumed_course_rows: list[tuple[str, Mapping[str, Any]]] = []
+                        for source_key, row, _text, _name in structured_pairs:
+                            if not any(row is seen for _key, seen in consumed_course_rows):
+                                consumed_course_rows.append((source_key, row))
                         structured_binding = bind_consumed_continuity_document_rows(
                             snapshot=evidence_snapshot,
                             materials=evidence_materials,
@@ -5007,10 +5079,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 ("admission_record_diagnosis", row)
                                 for row in declaration_rows
                             )
-                            + tuple(
-                                (source_key, row)
-                                for _time, _text, source_key, row in structured_candidate_rows
-                            ),
+                            + tuple(consumed_course_rows),
                         )
                         decisions.append(
                             _decision(
@@ -5148,8 +5217,6 @@ async def execute_luxian_0609_native_extended_document_rules(
             candidate_rows: tuple[
                 tuple[datetime | None, str, str, Mapping[str, Any]], ...
             ] = ()
-            matching_course_indexes: tuple[tuple[int, ...], ...] = ()
-            uniquely_matched = False
             if diagnosis_error or daily_error or senior_error:
                 final_state, reason_code = (
                     "data_gap",
@@ -5226,138 +5293,86 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "trigger_absent_complete",
                     )
                 else:
-                    course_rows = tuple(
-                        (_row_time(row), _row_text(row), source_key, row)
-                        for source_key, source_rows in (
-                            ("daily_course_record", daily_rows),
-                            ("senior_course_record", senior_rows),
-                        )
-                        for row in source_rows
+                    course_sources = (
+                        ("daily_course_record", daily_rows),
+                        ("senior_course_record", senior_rows),
                     )
-                    candidate_rows = tuple(
-                        (record_time, text, source_key, row)
-                        for record_time, text, source_key, row in course_rows
-                        if any(
-                            marker in text
-                            for marker in _DIAGNOSIS_CHANGE_REASON_MARKERS
+                    change_names = tuple(dict.fromkeys(name for _time, name, _row in change_events))
+                    selected: list[tuple[datetime | None, str, str, Mapping[str, Any]]] = []
+                    table_pairs: list[tuple[str, Mapping[str, Any], str, str]] = []
+                    untimed_only = False
+                    unmentioned = False
+                    for change_time, diagnosis_name, _change_row in change_events:
+                        mentions = _diagnosis_change_candidates(
+                            course_sources, diagnosis_name=diagnosis_name,
                         )
-                        and any(
-                            marker in text
-                            for marker in _DIAGNOSIS_CHANGE_BASIS_MARKERS
+                        candidates = tuple(
+                            item for item in mentions if item[0] is None or item[0] >= change_time
                         )
-                    )
-                    if len(change_events) == 1:
-                        changed_diagnosis_name = change_events[0][1]
-                        # 名称、依据与时间必须属于同一条病程，不能借用其他诊断的时间。
-                        candidate_rows = tuple(
-                            candidate for candidate in candidate_rows
-                            if changed_diagnosis_name in candidate[1]
-                        )
-                        has_changed_diagnosis_reference = bool(candidate_rows)
-                        if not has_changed_diagnosis_reference:
-                            # 有带时间的理由/依据候选，但未提及本次变更后的
-                            # 诊断名称时，不能把其他诊断的记录当作本次变更
-                            # 的证明；按既有规则合同保留为确定问题。
-                            final_state, reason_code = (
-                                "non_compliant",
-                                "requirement_violated",
+                        # 名称、理由与依据必须属于变更之后的同一条病程，不借用其他诊断的时间。
+                        timed = tuple(item for item in candidates if item[0] is not None)
+                        timed = timed[:_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE]
+                        if timed:
+                            table_pairs.extend(
+                                (source_key, row, text, diagnosis_name)
+                                for _time, text, source_key, row in timed
                             )
-                            has_reason_and_basis = False
+                            selected.extend(
+                                item for item in timed
+                                if not any(item[3] is seen[3] for seen in selected)
+                            )
+                        elif candidates:
+                            untimed_only = True
+                            selected.extend(candidates)
                         else:
-                            matching_timed_candidates = tuple(
-                                candidate
-                                for candidate in candidate_rows
-                                if candidate[0] is not None
-                                and candidate[0] >= change_events[0][0]
-                            )
-                            untimed_candidates = tuple(
-                                candidate
-                                for candidate in candidate_rows
-                                if candidate[0] is None
-                            )
-                            if matching_timed_candidates:
-                                candidate_rows = matching_timed_candidates
-                                has_reason_and_basis = True
-                            elif untimed_candidates:
-                                candidate_rows = untimed_candidates
-                                has_reason_and_basis = False
-                            else:
-                                # 剩余候选均有时间且早于诊断变更，只能形成确定缺陷。
-                                has_reason_and_basis = False
-                        if has_changed_diagnosis_reference and not has_reason_and_basis and any(
-                            record_time is None
-                            for record_time, _text, _source_key, _row in candidate_rows
-                        ):
-                            final_state, reason_code = (
-                                "data_gap",
-                                "authoritative_time_missing",
-                            )
-                            display.append((rule_id, {
-                                "failure_kind": "diagnosis_change_documentation_time_missing",
-                                "diagnosis_change_count": len(change_events),
-                                "untimed_document_count": len(candidate_rows),
-                                "issue": "candidate_document_time_missing",
-                            }))
-                        elif has_changed_diagnosis_reference:
-                            final_state = (
-                                "compliant" if has_reason_and_basis else "non_compliant"
-                            )
-                            reason_code = (
-                                "requirement_satisfied"
-                                if has_reason_and_basis
-                                else "requirement_violated"
-                            )
-                    else:
-                        matching_course_indexes = tuple(
-                            tuple(
-                                index
-                                for index, (record_time, text, _source_key, _row) in enumerate(candidate_rows)
-                                if record_time is not None
-                                and record_time >= change_time
-                                and diagnosis_name in text
-                            )
-                            for change_time, diagnosis_name, _change_row in change_events
+                            unmentioned = True
+                            # 仅有变更之前的提及：不能证明本次变更的理由，作为不合规证据展示。
+                            selected.extend(mentions)
+                    candidate_rows = tuple(selected)
+                    if unmentioned:
+                        # 变更后诊断在变更之后的病程中从未提及：确定未记录理由与依据。
+                        final_state, reason_code = (
+                            "non_compliant",
+                            "requirement_violated",
                         )
-                        uniquely_matched = (
-                            len(matching_course_indexes) == len(change_events)
-                            and all(len(indexes) == 1 for indexes in matching_course_indexes)
-                            and len({indexes[0] for indexes in matching_course_indexes})
-                            == len(matching_course_indexes)
-                        )
-                        if uniquely_matched:
-                            final_state, reason_code = (
-                                "compliant",
-                                "requirement_satisfied",
-                            )
-                        else:
-                            final_state, reason_code = (
-                                "data_gap",
-                                "association_failed",
-                            )
-                            display.append((rule_id, {
-                                "failure_kind": "diagnosis_change_association_failed",
-                                "diagnosis_record_count": len(diagnosis_rows),
-                                "diagnosis_change_count": len(change_events),
-                                "association_issue": "multiple_changes_unresolved",
-                            }))
-                        has_reason_and_basis = uniquely_matched
-                    if reason_code not in {
-                        "association_failed",
-                        "authoritative_time_missing",
-                    }:
                         display.append((rule_id, {
                             "verification_kind": "diagnosis_change_documentation_check",
                             "diagnosis_change_count": len(change_events),
-                            "reason_recorded": has_reason_and_basis,
-                            "basis_recorded": has_reason_and_basis,
+                            "reason_recorded": False,
+                            "basis_recorded": False,
                         }))
-            diagnosis_binding = bind_diagnosis_change_evidence(
+                    elif untimed_only:
+                        final_state, reason_code = (
+                            "data_gap",
+                            "authoritative_time_missing",
+                        )
+                        display.append((rule_id, {
+                            "failure_kind": "diagnosis_change_documentation_time_missing",
+                            "diagnosis_change_count": len(change_events),
+                            "untimed_document_count": sum(item[0] is None for item in candidate_rows),
+                            "issue": "candidate_document_time_missing",
+                        }))
+                    else:
+                        (
+                            final_state,
+                            reason_code,
+                            table_facts,
+                            diagnosis_change_extraction,
+                        ) = await _assess_diagnosis_change_documentation(
+                            table_pairs, change_names, llm_client,
+                        )
+                        if table_facts is not None:
+                            display.append((rule_id, table_facts))
+            diagnosis_binding = bind_consumed_continuity_document_rows(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
-                change_events=change_events,
-                candidate_rows=candidate_rows,
-                matching_course_indexes=matching_course_indexes,
-                uniquely_matched=uniquely_matched,
+                consumed_rows=tuple(
+                    ("diagnosis", row) for _time, _name, row in change_events
+                )
+                + tuple(
+                    (source_key, row)
+                    for _time, _text, source_key, row in candidate_rows
+                ),
             )
             decisions.append(
                 _decision(

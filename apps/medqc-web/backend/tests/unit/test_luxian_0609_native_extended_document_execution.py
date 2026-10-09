@@ -384,6 +384,39 @@ class _DiagnosisChangeClient:
         }
 
 
+class _DiagnosisChangeStateClient:
+    """按送检顺序返回给定的理由/依据状态；present 时引用整段送检正文。"""
+
+    def __init__(self, *states):
+        self.states = list(states)
+        self.calls = []
+
+    async def generate(self, prompt, **kwargs):
+        self.calls.append((prompt, kwargs))
+        documents = json.loads(prompt[prompt.rindex("\n") + 1:])
+        items = []
+        for index, document in enumerate(documents):
+            reason, basis = self.states[min(index, len(self.states) - 1)]
+            items.append({
+                "local_doc_id": document["local_doc_id"],
+                "reason_state": reason,
+                "reason_quote": document["text"] if reason == "present" else "",
+                "basis_state": basis,
+                "basis_quote": document["text"] if basis == "present" else "",
+            })
+        return {
+            "choices": [{
+                "message": {"content": json.dumps({
+                    "schema_version": DIAGNOSIS_CHANGE_SCHEMA_VERSION,
+                    "items": items,
+                }, ensure_ascii=False)},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100},
+            "_api_time": 0.1,
+        }
+
+
 def _diagnosis_change_item(
     local_doc_id,
     *,
@@ -3386,6 +3419,7 @@ async def test_074_changed_diagnosis_requires_reason_and_basis() -> None:
                 },
             ),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3451,6 +3485,7 @@ async def test_074_single_change_with_changed_diagnosis_reference_is_compliant()
                 ),
             },),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3515,6 +3550,7 @@ async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
                 "record_content": "补充诊断为细菌性肺炎。",
             },),
         },
+        llm_client=_DiagnosisChangeStateClient(("missing", "missing")),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -3637,7 +3673,14 @@ async def test_074_reason_and_basis_without_authoritative_course_time_are_data_g
 
 
 @pytest.mark.asyncio
-async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_change() -> None:
+@pytest.mark.parametrize(("second_states", "expected_state", "recorded"), [
+    (("present", "present"), CustomerFinalState.COMPLIANT, True),
+    (("missing", "present"), CustomerFinalState.NON_COMPLIANT, False),
+])
+async def test_074_multiple_changes_are_assessed_per_changed_diagnosis(
+    second_states, expected_state, recorded
+) -> None:
+    client = _DiagnosisChangeStateClient(("present", "present"), second_states)
     execution, reduced = await _evaluate(
         "LX0609-12-02-01",
         {
@@ -3669,21 +3712,20 @@ async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_cha
                 ),
             },),
         },
+        llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
-    assert execution.customer_display_facts == ((
-        "LX0609-12-02-01",
-        {
-            "failure_kind": "diagnosis_change_association_failed",
-            "diagnosis_record_count": 3,
-            "diagnosis_change_count": 2,
-            "association_issue": "multiple_changes_unresolved",
-        },
-    ),)
-    assert execution.llm_call_count == 0
-    assert execution.total_tokens == 0
+    # 同一病程提及两个变更诊断：按诊断分别送检，一次调用内各占一项。
+    assert reduced.final_state is expected_state
+    assert execution.llm_call_count == len(client.calls) == 1
+    sent = json.loads(client.calls[0][0][client.calls[0][0].rindex("\n") + 1:])
+    assert [item["changed_diagnosis"] for item in sent] == ["细菌性肺炎", "重症肺炎"]
+    assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
+        "verification_kind": "diagnosis_change_documentation_check",
+        "diagnosis_change_count": 2,
+        "reason_recorded": recorded,
+        "basis_recorded": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -9799,6 +9841,7 @@ async def test_074_fact_refs_only_include_changed_diagnosis_and_matching_course(
                 },
             ),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
     refs = {
         row["document_id"]: ref
@@ -9907,6 +9950,7 @@ async def test_074_diagnosis_reference_and_time_must_belong_to_same_course(
                 },
             ),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
     assert reduced.final_state is expected_state
 
@@ -10030,11 +10074,12 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
     assert reduced[0].reason_code == "requirement_violated"
     assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
         "verification_kind": "diagnosis_change_documentation_check",
-        "diagnosis_change_count": 1,
+        # 一栏“1.甲；2.乙”是两项变更诊断。
+        "diagnosis_change_count": 2,
         "reason_recorded": False,
         "basis_recorded": False,
     }
-    # 结构化声明本身没有理由/依据标记的病程候选，不得触发受控抽取。
+    # 声明的诊断在病程中从未提及：确定未记录，不触发受控抽取。
     assert execution.llm_call_count == 0
     assert client.calls == []
     declaration_ref = next(
@@ -10045,6 +10090,47 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
         if row["document_id"] == "ADMISSION-DIAG-CHANGE-074"
     )
     assert execution.decisions[0].fact_refs == (declaration_ref,)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("states", "expected_state"), [
+    ((("present", "present"),), CustomerFinalState.COMPLIANT),
+    ((("missing", "present"),), CustomerFinalState.NON_COMPLIANT),
+    ((("unknown", "present"),), CustomerFinalState.EVALUATION_UNKNOWN),
+])
+async def test_074_structured_declaration_is_judged_semantically_from_course_mentions(states, expected_state):
+    """诊断栏声明变更、病程未写“修正诊断为”字样时，由受控抽取判断是否记录理由与依据。"""
+
+    client = _DiagnosisChangeStateClient(*states)
+    _snapshot, _materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-12-02-01",),
+        {
+            "admission_record_diagnosis": ({
+                "document_id": "ADMISSION-DIAG-CHANGE-074-SEMANTIC",
+                "diagnosis_type": "补充诊断",
+                "diagnosis_name": "细菌性肺炎",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-074-MENTION",
+                    "record_time": "2025-08-20 10:00:00",
+                    "record_content": "结合痰培养结果考虑细菌性肺炎。诊断依据：痰培养提示肺炎克雷伯菌。",
+                },
+                {
+                    "document_id": "COURSE-074-OTHER",
+                    "record_time": "2025-08-21 10:00:00",
+                    "record_content": "今日查房，患者一般情况可。",
+                },
+            ),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is expected_state
+    assert execution.llm_call_count == len(client.calls) == 1
+    sent = json.loads(client.calls[0][0][client.calls[0][0].rindex("\n") + 1:])
+    # 只送检提及声明诊断的病程，并携带该声明诊断名。
+    assert [(item["changed_diagnosis"], item["text"][:6]) for item in sent] == [("细菌性肺炎", "结合痰培养结")]
 
 
 @pytest.mark.asyncio
@@ -10119,7 +10205,7 @@ async def test_074_no_declaration_produces_no_display_facts_or_evidence():
 
 
 def test_074_structured_declaration_strips_signature_and_record_time() -> None:
-    """入院记录诊断名尾部的签名与记录时间必须剥离，不能进入变更后诊断名。"""
+    """入院记录诊断名尾部的签名与记录时间必须剥离；列表中的每项是独立的变更诊断。"""
 
     assert module._diagnosis_change_declarations((
         {
@@ -10129,7 +10215,7 @@ def test_074_structured_declaration_strips_signature_and_record_time() -> None:
                 "医师签名：郭映江                               记录时间：2025-8-23"
             ),
         },
-    )) == ("1.左膝半月板损伤；2.肺结节",)
+    )) == ("左膝半月板损伤", "肺结节")
 
 
 @pytest.mark.asyncio

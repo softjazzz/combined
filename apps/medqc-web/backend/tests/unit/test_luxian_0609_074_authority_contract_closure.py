@@ -12,7 +12,7 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from test_luxian_0609_native_extended_document_execution import _evaluate_selected
 
 RULE = "LX0609-12-02-01"
-PROMPT_VERSION = "lx0609_diagnosis_change_documentation_v1-quote-2026-10-07"
+PROMPT_VERSION = "lx0609_diagnosis_change_documentation_v2-semantic-2026-10-09"
 REASON = "结合症状及检查，修正诊断：甲病"
 BASIS = "诊断依据：1.症状反复出现；2.检查提示甲病"
 TEXT = REASON + "。" + BASIS + "。"

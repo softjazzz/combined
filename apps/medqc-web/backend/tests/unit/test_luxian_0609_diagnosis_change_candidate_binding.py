@@ -6,6 +6,7 @@ import pytest
 
 from app.services.luxian_0609.decision_reducer import CustomerFinalState
 from tests.unit.test_luxian_0609_native_extended_document_execution import (
+    _DiagnosisChangeStateClient,
     _evaluate_selected,
 )
 
@@ -40,12 +41,14 @@ def _course(document_id: str, record_time: str | None) -> dict[str, str]:
 
 
 async def _evaluate_courses(*course_rows: dict[str, str]):
+    # 送检病程的理由与依据由受控抽取判定；此处固定为均已记录，只验证候选选择与绑定。
     return await _evaluate_selected(
         ("LX0609-12-02-01",),
         {
             "diagnosis": _diagnoses(),
             "daily_course_record": course_rows,
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
 
 
