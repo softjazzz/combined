@@ -1,5 +1,6 @@
-"""N-05 取消医嘱与明确实际给药冲突：合成正式链，不调用模型。"""
+"""N-05 取消医嘱与明确实际给药冲突：合成正式链，仅用人工语义替身，不调用真实模型。"""
 import pytest
+from antimicrobial_effect_test_support import FrozenAntimicrobialEffectClient
 
 from test_luxian_0609_antimicrobial_audit_regressions import _rows
 from test_luxian_0609_native_extended_document_execution import (
@@ -20,9 +21,10 @@ async def _final(suffix, content, *, senior=False):
         "horizon_date": "2099-01-01", "basis": "evaluation_as_of",
     },)
     snapshot, materials = _session(rows)
+    client = FrozenAntimicrobialEffectClient() if suffix == "03" else None
     result = await execute_luxian_0609_native_extended_document_rules(
         rule_ids=(rule,), evidence_snapshot=snapshot,
-        evidence_materials=materials, decision_rule_ids=(rule,), llm_client=None,
+        evidence_materials=materials, decision_rule_ids=(rule,), llm_client=client,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=(rule,),
@@ -32,7 +34,14 @@ async def _final(suffix, content, *, senior=False):
         rule_id=rule, snapshot=snapshot, materials=materials,
         result=result, reduced=reduced,
     )
-    assert result.llm_call_count == 0
+    if client is not None:
+        assert client.fixture_error is None, client.fixture_error
+        assert result.llm_call_count == len(client.calls)
+        assert result.prompt_tokens == len(client.calls) * 10
+        assert result.completion_tokens == len(client.calls) * 5
+        assert result.total_tokens == len(client.calls) * 15
+    else:
+        assert result.llm_call_count == 0
     return final
 
 

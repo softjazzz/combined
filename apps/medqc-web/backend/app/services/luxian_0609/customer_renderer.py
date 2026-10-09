@@ -3038,6 +3038,17 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-05-01-03" and kind == "antimicrobial_effect_evaluation_check":
+        resolution = facts.get("evaluation_resolution")
+        if resolution == "time_unresolved":
+            return "治疗起始、病程或评价截止时间缺失或冲突，暂不能核对48～72小时疗效评价窗口。"
+        if resolution == "unknown":
+            return "目标抗菌药的疗效评价语义或归属尚无法确认，暂不能判断评价是否完成。"
+        if resolution == "capacity_exceeded":
+            return "完整病程材料超出本次疗效事实抽取预算，尚未完成核对。"
+        if resolution == "unavailable":
+            return "病程正文缺失或不可读，暂不能核对抗菌药疗效评价。"
+        if resolution == "invalid":
+            return "疗效事实抽取未取得有效响应，暂不能完成核对。"
         medicines = joined("antimicrobials")
         intervals = joined("evaluation_intervals")
         unmatched = joined("unmatched_antimicrobials")

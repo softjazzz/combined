@@ -5,6 +5,7 @@ import json
 
 import pytest
 from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
+from antimicrobial_effect_test_support import FrozenAntimicrobialEffectClient
 
 from app.services.luxian_0609 import native_extended_document_execution as module
 from app.services.luxian_0609.continuity_evidence_selection import (
@@ -229,6 +230,8 @@ async def _evaluate(
             "horizon_date": "2099-01-01",
             "basis": "evaluation_as_of",
         },)
+    if rule_id == "LX0609-05-01-03" and llm_client is None:
+        llm_client = FrozenAntimicrobialEffectClient()
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -239,6 +242,12 @@ async def _evaluate(
         decision_rule_ids=(rule_id,),
         llm_client=llm_client,
     )
+    if isinstance(llm_client, FrozenAntimicrobialEffectClient):
+        assert llm_client.fixture_error is None, llm_client.fixture_error
+        assert result.llm_call_count == len(llm_client.calls)
+        assert result.prompt_tokens == len(llm_client.calls) * 10
+        assert result.completion_tokens == len(llm_client.calls) * 5
+        assert result.total_tokens == len(llm_client.calls) * 15
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=(rule_id,),
@@ -273,6 +282,8 @@ async def _evaluate_selected(
             "horizon_date": "2099-01-01",
             "basis": "evaluation_as_of",
         },)
+    if "LX0609-05-01-03" in rule_ids and llm_client is None:
+        llm_client = FrozenAntimicrobialEffectClient()
     snapshot, materials = _session(
         rows_by_source,
         unavailable_sources=unavailable_sources,
@@ -285,6 +296,12 @@ async def _evaluate_selected(
         decision_rule_ids=rule_ids,
         llm_client=llm_client,
     )
+    if isinstance(llm_client, FrozenAntimicrobialEffectClient):
+        assert llm_client.fixture_error is None, llm_client.fixture_error
+        assert result.llm_call_count == len(llm_client.calls)
+        assert result.prompt_tokens == len(llm_client.calls) * 10
+        assert result.completion_tokens == len(llm_client.calls) * 5
+        assert result.total_tokens == len(llm_client.calls) * 15
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=rule_ids,
@@ -5702,7 +5719,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         llm_client=client,
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    expected_calls = 1 if rule_id == "LX0609-05-01-02" else 0
+    expected_calls = 1 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-03"} else 0
     assert result.llm_call_count == expected_calls
     assert result.prompt_tokens == expected_calls * 10
     assert result.completion_tokens == expected_calls * 5
@@ -6900,10 +6917,10 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
     assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == []
-    assert result.llm_call_count == 0
-    assert result.prompt_tokens == 0
-    assert result.completion_tokens == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.prompt_tokens == 10
+    assert result.completion_tokens == 5
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio

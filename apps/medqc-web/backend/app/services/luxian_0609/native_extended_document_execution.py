@@ -65,6 +65,7 @@ from .extended_document.antimicrobial_action_extraction import (
     extract_confirmed_antimicrobial_actions,
     linked_order_id as _linked_order_id,
 )
+from .extended_document.antimicrobial_effect_extraction import extract_antimicrobial_effects
 from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
@@ -200,11 +201,6 @@ _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?<![a-z])(?:po|sc|ih|im|iv|ivgtt)(?![a-z])|"
     r"\d+(?:\.\d+)?\s*(?:mg|μg|ug|ml|g|单位|片|粒|袋|支)(?![a-z]))",
     re.IGNORECASE,
-)
-_ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
-    "有效", "好转", "改善", "感染控制", "疗效不佳", "效果不佳",
-    "无改善", "未改善", "无效", "治疗失败", "感染未控制", "病情加重",
-    "恶化", "调整方案", "更换抗菌药", "升级抗菌药", "降阶梯", "停用",
 )
 _ANTIMICROBIAL_REASON_MARKERS = (
     "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
@@ -1184,23 +1180,6 @@ def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
     )
 
 
-def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
-    """只接受明确治疗评价，不以单独的检验趋势替代病程评价。"""
-
-    text = _material_text(row)
-    has_outcome = any(
-        marker in text for marker in _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES
-    )
-    if not has_outcome:
-        return False
-    has_antimicrobial_context = any(
-        marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS
-    ) or bool(_antimicrobial_names_in(row))
-    # “治疗效果/疗效评价”本身可能描述镇痛、补液等非抗菌治疗；必须同时
-    # 出现抗菌/抗感染语境或具体抗菌药名，才能作为本规则的疗效评价。
-    return has_antimicrobial_context
-
-
 def _is_special_antimicrobial_expert_support(row: Mapping[str, Any]) -> bool:
     """排除明确拒绝/未完成的会诊文字，避免否定句充当支持证据。"""
 
@@ -2108,6 +2087,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     course_body_extractions: list[CourseBodyExtraction] = []
     diagnosis_change_extraction = None
     antimicrobial_action_extraction = None
+    antimicrobial_effect_extraction = None
     transfusion_performance_extraction = None
     selected = tuple(
         rule_id
@@ -2627,10 +2607,6 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for order, _name, start in order_events
                     if start is not None
                 )
-                effect_evaluation_rows = tuple(
-                    row for row in course_rows
-                    if _is_antimicrobial_effect_evaluation(row)
-                )
                 event_windows: list[dict[str, Any]] = []
                 mature_events: list[tuple[Mapping[str, Any], str, datetime]] = []
                 immature_states: list[str] = []
@@ -2667,24 +2643,57 @@ async def execute_luxian_0609_native_extended_document_rules(
                             immature_states.append(state)
                     else:
                         final_state = reason_code = ""
-                ambiguous_evaluation = len(mature_events) > 1 and any(
-                    not _linked_order_id(row)
-                    and (
-                        not (mentioned := _antimicrobial_names_in(row))
-                        or any(
-                            sum(
-                                name == event_name
-                                for _, event_name, _ in mature_events
-                            ) > 1
-                            for name in mentioned
-                        )
+                # 先由程序确定窗口，再完整抽取各目标药的评价；不以结果词筛正文。
+                effect_rows_by_name: dict[str, list[Mapping[str, Any]]] = {}
+                evaluation_resolution = "ready"
+                unassigned_regimen = False
+                if not final_state and mature_events:
+                    targets = tuple(dict.fromkeys(name for _, name, _ in mature_events))
+                    antimicrobial_effect_extraction = await extract_antimicrobial_effects(
+                        course_rows, targets, llm_client,
+                        max_prompt_bytes=65536, max_completion_tokens=16384,
                     )
-                    for row in effect_evaluation_rows
+                    extraction = antimicrobial_effect_extraction
+                    if extraction.state != "ready":
+                        final_state = extraction.state
+                        reason_code = (
+                            "candidate_scope_incomplete"
+                            if extraction.reason_code == "source_capacity_exceeded"
+                            else extraction.reason_code
+                        )
+                        evaluation_resolution = (
+                            "capacity_exceeded" if reason_code == "candidate_scope_incomplete"
+                            else "unavailable" if final_state == "data_gap" else "invalid"
+                        )
+                    else:
+                        for assertion in extraction.assertions:
+                            row = course_rows[assertion.row_index]
+                            name = targets[assertion.target_index]
+                            if assertion.state == "present":
+                                effect_rows_by_name.setdefault(name, []).append(row)
+                            elif assertion.state == "regimen":
+                                if len(order_events) == 1:
+                                    effect_rows_by_name.setdefault(name, []).append(row)
+                                else:
+                                    unassigned_regimen = True
+                            elif assertion.state == "unknown":
+                                # 窗外未知不能阻止已成熟事件的窗内评价；缺时仍不可排除。
+                                value = _row_time(row)
+                                if value is None or any(
+                                    event_name == name and 48 <= (value - start).total_seconds() / 3600 <= 72
+                                    for _, event_name, start in mature_events
+                                ):
+                                    final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                                    evaluation_resolution = "unknown"
+                ambiguous_evaluation = unassigned_regimen or any(
+                    not _linked_order_id(row)
+                    and sum(name == event_name for _, event_name, _ in order_events) > 1
+                    for name, rows in effect_rows_by_name.items() for row in rows
                 )
                 intervals: list[float] = []
                 unmatched_names: list[str] = []
                 has_untimed_match = False
-                if final_state == "data_gap":
+                if final_state in {"data_gap", "technical_error"}:
                     pass
                 elif ambiguous_evaluation:
                     final_state, reason_code = "data_gap", "association_failed"
@@ -2692,19 +2701,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for order, name, start in mature_events:
                         order_id = _clean(order.get("order_id"))
                         matching_rows = tuple(
-                            row
-                            for row in effect_evaluation_rows
-                            if (
-                                (_linked_order_id(row) == order_id and bool(order_id) and (
-                                    name in _antimicrobial_names_in(row)
-                                    or len(_antimicrobial_names_in(order)) == 1
-                                ))
-                                or (
-                                    not _linked_order_id(row)
-                                    and name in _antimicrobial_names_in(row)
-                                )
-                                or (not _linked_order_id(row) and len(order_events) == 1)
-                            )
+                            row for row in effect_rows_by_name.get(name, ())
+                            if not _linked_order_id(row)
+                            or (bool(order_id) and _linked_order_id(row) == order_id)
                         )
                         event_intervals = [
                             (value - start).total_seconds() / 3600
@@ -2739,8 +2738,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                         final_state, reason_code = "data_gap", "authoritative_time_missing"
                     else:
                         final_state, reason_code = "non_compliant", "threshold_exceeded"
+                if final_state == "data_gap" and reason_code in {
+                    "authoritative_time_missing", "authoritative_time_conflict"
+                }:
+                    evaluation_resolution = "time_unresolved"
                 display_facts: dict[str, Any] = {
                     "verification_kind": "antimicrobial_effect_evaluation_check",
+                    "evaluation_resolution": evaluation_resolution,
                     "antimicrobials": list(dict.fromkeys(
                         name for _, name, _ in order_events
                     )),
@@ -5279,6 +5283,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
+                antimicrobial_effect_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5292,6 +5297,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
+                antimicrobial_effect_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5305,6 +5311,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
+                antimicrobial_effect_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5318,6 +5325,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
+                antimicrobial_effect_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5331,6 +5339,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
+                antimicrobial_effect_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
