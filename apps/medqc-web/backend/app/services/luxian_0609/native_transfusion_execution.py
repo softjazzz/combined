@@ -2830,50 +2830,59 @@ async def _performed_source_state(
 
     rows_by_source: dict[str, list[Mapping[str, Any]]] = {}
     failed = False
-    for source_key in _TRIGGER_SOURCES:
+
+    def available_without_query(source_key: str) -> bool:
+        return evidence_materials is not None or (
+            isinstance(documents, Mapping) and isinstance(documents.get(source_key), list)
+        )
+
+    def load(source_key: str) -> list[Mapping[str, Any]]:
+        nonlocal failed
+        if source_key in rows_by_source:
+            return rows_by_source[source_key]
+        rows: list[Mapping[str, Any]] = []
         # 同一证据会话的快照材料是权威来源；仅旧入口没有快照时，才采用
-        # bundle 已携带的同次就诊来源以避免重复查库。
-        if (
-            evidence_materials is None
-            and isinstance(documents, Mapping)
-            and isinstance(documents.get(source_key), list)
-        ):
-            rows_by_source[source_key] = _source_document_rows(documents, source_key)
-            continue
-        if evidence_materials is None and not all((institute_id, patient_id, visit_id)):
-            rows_by_source[source_key] = []
+        # bundle 已携带的同次就诊来源，缺少时再按需查库。
+        if evidence_materials is not None:
+            try:
+                rows = [dict(row) for row in evidence_materials.rows(source_key)]
+            except Exception:
+                failed = True
+        elif isinstance(documents, Mapping) and isinstance(documents.get(source_key), list):
+            rows = list(_source_document_rows(documents, source_key))
+        elif not all((institute_id, patient_id, visit_id)):
             failed = True
-            continue
-        try:
-            if evidence_materials is not None:
-                rows_by_source[source_key] = [
-                    dict(row) for row in evidence_materials.rows(source_key)
-                ]
-            else:
-                rows_by_source[source_key] = read_luxian_0609_native_source_rows(
+        else:
+            try:
+                rows = read_luxian_0609_native_source_rows(
                     source_key=source_key,
                     institute_id=institute_id,
                     patient_id=patient_id,
                     visit_id=visit_id,
                     source_schema=source_schema,
                 )
-        except Exception:
-            rows_by_source[source_key] = []
-            failed = True
+            except Exception:
+                failed = True
+        rows_by_source[source_key] = rows
+        return rows
 
-    if any(
-        _structured_transfusion_performed(row)
-        for row in rows_by_source.get("mr_bloodtrans", ())
-    ):
+    def structured_performed() -> bool:
+        return any(_structured_transfusion_performed(row) for row in load("mr_bloodtrans"))
+
+    if available_without_query("mr_bloodtrans") and structured_performed():
         return "present", ""
-    record_rows = rows_by_source.get("bloodtrans_record", [])
+    record_rows = load("bloodtrans_record")
     if record_rows:
         presence = await classify_course_records(record_rows)
         if presence.state == "present":
             return "present", ""
+        if structured_performed():
+            return "present", ""
         if presence.state == "technical_error":
             return "technical_error", presence.reason_code or "model_invalid_output"
         return "data_gap", ""
+    if structured_performed():
+        return "present", ""
     if failed or any(rows_by_source.values()):
         return "data_gap", ""
     return "absent", ""

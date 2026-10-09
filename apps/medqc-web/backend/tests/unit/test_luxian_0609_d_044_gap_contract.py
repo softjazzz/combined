@@ -4,6 +4,8 @@ from datetime import datetime
 
 import pytest
 
+from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient
+
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_reduced_customer_result,
 )
@@ -43,6 +45,8 @@ def reject_network_and_non_sqlite(monkeypatch):
 
 def sources():
     return {
+        # 044 按已开立且未取消的输血医嘱触发。
+        "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
         "mr_bloodtrans": [{
             "document_id": "E1", "transfution_datetime": datetime(2026, 7, 16, 10),
         }],
@@ -75,10 +79,11 @@ async def formal(rows, *, unavailable=None, truncated=None, forged_facts=None):
     execution = await execute_luxian_0609_native_transfusion_rules(
         rule_ids=(RULE,), wrapper_rules=[{"rule_id": RULE}], evidence_payload=None,
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
-        llm_client=None, evidence_materials=session.materials,
+        llm_client=FrozenTransfusionProtocolClient(), evidence_materials=session.materials,
         evidence_snapshot=session.snapshot, decision_rule_ids=(RULE,),
     )
-    assert execution.llm_call_count == 0
+    # 仅一次输血医嘱分类；申请/评估判定本身不调用模型。
+    assert execution.llm_call_count == 1
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions, expected_rule_ids=(RULE,),
         snapshot=session.snapshot, evidence_materials=session.materials,

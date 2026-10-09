@@ -4,6 +4,8 @@ from datetime import datetime
 
 import pytest
 
+from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient
+
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609.customer_evidence_enrichment import (
     project_selected_document_evidence,
@@ -158,7 +160,7 @@ def test_044_customer_projection_preserves_controlled_times_and_conflict_delta()
         rule_id="LX0609-07-01-02",
         raw={
             "failure_kind": "pretransfusion_assessment_time_conflict",
-            "performed_transfusion_confirmed": True,
+            "transfusion_order_present": True,
             "checked_fields": ["application_reason", "laboratory_indicator"],
             "missing_fields": [],
             "application_time": "2026-08-20 15:00:00",
@@ -169,7 +171,7 @@ def test_044_customer_projection_preserves_controlled_times_and_conflict_delta()
 
     assert facts == {
         "failure_kind": "pretransfusion_assessment_time_conflict",
-        "performed_transfusion_confirmed": True,
+        "transfusion_order_present": True,
         "checked_fields": ["application_reason", "laboratory_indicator"],
         "missing_fields": [],
         "application_time": "2026-08-20 15:00:00",
@@ -183,6 +185,8 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
     """044 的真实 native 决策经 Binding 和公共投影保留两份判定文书。"""
 
     rows_by_source = {
+        # 044 按已开立且未取消的输血医嘱触发。
+        "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
         "mr_bloodtrans": [
             {"transfution_datetime": datetime(2026, 8, 20, 14, 0)}
         ],
@@ -230,7 +234,7 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
         patient_id="044-evidence-patient",
         visit_id="044-evidence-visit",
         source_schema=None,
-        llm_client=None,
+        llm_client=FrozenTransfusionProtocolClient(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=("LX0609-07-01-02",),
@@ -253,4 +257,9 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
     assert {
         (item["source_type"], item["source_document_id"])
         for item in projected
-    } == {("blood_application", "BA-001"), ("bloodtrans_record", "BT-001")}
+    } == {
+        ("blood_application", "BA-001"),
+        ("bloodtrans_record", "BT-001"),
+        # 触发 044 的输血医嘱同属本条依据。
+        ("inpat_nondrug_order", OPEN_TRANSFUSION_ORDER["order_id"]),
+    }

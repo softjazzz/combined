@@ -53,8 +53,9 @@ def assessment_facts(kind, *, legacy=False):
     if kind == "transfusion_requirement_not_documented":
         return {"failure_kind": kind, "requirement": "pretransfusion_assessment", "checked_sources": ["bloodtrans_record", "blood_application", "course_record"]}
     fields = ["indication", "laboratory_indicator", "risk_history_or_status"] if legacy else ["application_reason", "laboratory_indicator"]
+    # 044 按已开立输血医嘱触发：只声明存在有效医嘱，不宣称已实际输血。
     return {"verification_kind" if kind.endswith("complete") and not kind.endswith("incomplete") else "failure_kind": kind,
-            "performed_transfusion_confirmed": True, "checked_fields": fields,
+            "transfusion_order_present": True, "checked_fields": fields,
             "missing_fields": [fields[0]] if kind in {"pretransfusion_assessment_incomplete", "pretransfusion_assessment_missing"} else []}
 
 

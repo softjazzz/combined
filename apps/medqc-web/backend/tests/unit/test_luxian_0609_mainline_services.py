@@ -7,6 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient
+from intraoperative_transfusion_test_support import UNKNOWN, FrozenIntraoperativeClient
+
 from app.core.settings import Settings
 from app.routers.qc_sichuan import _build_record_status_counts
 from app.services.luxian_0609_result_aggregator import (
@@ -634,6 +637,8 @@ def _transfusion_044_047_evidence_session() -> Luxian0609EvidenceReadSession:
         "2026-01-01 16:10 输血结束后评价未见异常，无输血不良反应。"
     )
     rows_by_source = {
+        # 044–046 按已开立且未取消的输血医嘱触发。
+        "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
         "mr_bloodtrans": [
             {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
         ],
@@ -1496,7 +1501,8 @@ async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_d
                 }
             }
         },
-        llm_client=None,
+        # 医嘱分类与专用记录实施核验由人工标注替身提供。
+        llm_client=FrozenTransfusionProtocolClient(default_course_label="record"),
         settings=_all_native_settings(
             LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
             LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED=True,
@@ -1516,7 +1522,8 @@ async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_d
         "compliant",
     ]
     assert all(item.fact_refs for item in context.reduced_decisions)
-    assert context.native_llm_call_count == 0
+    # 一次医嘱分类 + 一次专用记录实施核验（045/046/047 共享）。
+    assert context.native_llm_call_count == 2
     assert context.native_total_tokens == 0
 
 
@@ -1585,7 +1592,8 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
     )
 
     assert [item["rule_id"] for item in context.native_results] == list(selected)
-    assert [item["status"] for item in context.native_results] == ["compliant"]
+    # 兼容入口的证据投影不携带医嘱身份字段，045 的医嘱触发只能保守判资料不足。
+    assert [item["status"] for item in context.native_results] == ["data_gap"]
     assert context.reduced_decisions == ()
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
@@ -3318,9 +3326,11 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         raise AssertionError("原生输血族不应派发旧规则")
 
     raw_body_marker = "SAFE_TRANSFUSION_BODY_MARKER"
+    # 正式 bundle 组装会携带文书身份；语义核验按文书绑定结果。
     documents = {
         "bloodtrans_record": [
             {
+                "document_id": "BT-MAIN-1",
                 "content": (
                     "2026年6月5日16:10输注完毕。"
                     "输血后复查血红蛋白较前改善，未见输血不良反应。"
@@ -3336,7 +3346,9 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         "surgery_record": [{"content": "手术记录中的术中输血信息。"}],
         "anesthesia_record": [{"content": "麻醉记录中的术中输血信息。"}],
         "postsurg_firstcourse_record": [{"content": "术后首次病程中的输血信息。"}],
-        "inpat_nondrug_order": [{"content": "输血医嘱中的成分和数量。"}],
+        # 044–046 按已开立且未取消的输血医嘱触发。
+        "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
+        "inpat_drug_order": [],
         "inpat_bill_item": [{"content": "输血收费中的成分和数量。"}],
     }
     monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
@@ -3348,7 +3360,16 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
     service = SichuanQCService()
     client = _Client()
-    service.adjudicator_client = client
+    # 医嘱分类、专用记录实施核验与 048 术中事实走人工标注替身；其余提示词交给通用替身。
+    service.adjudicator_client = FrozenTransfusionProtocolClient(
+        client,
+        course_labels={documents["bloodtrans_record"][0]["content"]: "record"},
+        intraoperative=FrozenIntraoperativeClient({
+            "手术记录中的术中输血信息。": UNKNOWN,
+            "麻醉记录中的术中输血信息。": UNKNOWN,
+            "术后首次病程中的输血信息。": UNKNOWN,
+        }),
+    )
     monkeypatch.setattr(
         service,
         "get_rule_by_id",
@@ -3372,49 +3393,27 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
 
     assert dispatched == []
     assert reader_calls == []
-    # 041/042 缺同意书、043 缺版本化九项及时序契约，045/047 已由专用记录
-    # 确定性完成；仅 044 的输血前评估语义需要一次受控模型判断。
-    assert len(client.prompts) == 1
+    # 041/042 缺同意书、043 缺版本化九项清单；047 由已核验的实际输注记录确定完成。
+    # 兼容入口的证据投影不携带医嘱身份字段，044–046 的医嘱触发只能保守判资料不足；
+    # 正式主链（统一引擎 + typed 决策）读取完整源表行，不受此限制。
+    assert client.prompts == []
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
-    assert [item["status"] for item in result["evaluation_results"][:2]] == [
-        "data_gap",
-        "data_gap",
-    ]
-    rule_043 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-01-01"
-    )
-    assert rule_043["status"] == "data_gap"
-    assert (
-        rule_043["metadata"]["reason_code"]
-        == "pretransfusion_item_contract_unavailable"
-    )
-    rule_045 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-02-01"
-    )
-    assert rule_045["status"] == "compliant"
-    assert (
-        rule_045["metadata"]["reason_code"]
-        == "transfusion_course_record_present"
-    )
-    rule_046 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-02-02"
-    )
-    assert rule_046["status"] == "non_compliant"
-    assert (
-        rule_046["metadata"]["reason_code"]
-        == "transfusion_purpose_or_indication_missing"
-    )
-    rule_047 = next(
-        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-07-03-01"
-    )
-    assert rule_047["status"] == "compliant"
-    assert rule_047["metadata"]["reason_code"] == "posttransfusion_evaluation_complete"
-    assert result["token_usage"] == {
-        "total_tokens": 110,
-        "prompt_tokens": 100,
-        "completion_tokens": 10,
+    statuses = {
+        item["rule_id"]: (item["status"], item["metadata"].get("reason_code"))
+        for item in result["evaluation_results"]
     }
-    assert result["executor_breakdown"]["llm"] == 1
+    assert statuses == {
+        "LX0609-11-03-01": ("data_gap", "consent_source_unavailable"),
+        "LX0609-11-03-02": ("data_gap", "consent_signature_contract_unavailable"),
+        "LX0609-07-01-01": ("data_gap", "pretransfusion_item_contract_unavailable"),
+        "LX0609-07-01-02": ("data_gap", "transfusion_source_unavailable"),
+        "LX0609-07-02-01": ("data_gap", "transfusion_source_unavailable"),
+        "LX0609-07-02-02": ("data_gap", "transfusion_source_unavailable"),
+        "LX0609-07-03-01": ("compliant", "posttransfusion_evaluation_complete"),
+        # 默认夹具的术中文书只是占位正文，无法判断是否实施。
+        "LX0609-07-04-01": ("data_gap", "semantic_extraction_unresolved"),
+        "LX0609-07-04-02": ("not_executed", "policy_definition_pending"),
+    }
     executable_mappings = {
         rule_id: raw_ids
         for rule_id, raw_ids in mappings.items()
