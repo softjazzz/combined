@@ -502,4 +502,4 @@ def test_070_controlled_performance_extraction_contract_is_optional_single_call_
     assert contract.contract_version == "v2"
     assert contract.decision_authority == "program_then_optional_llm"
     assert contract.max_llm_calls_per_rule == 1
-    assert contract.prompt_version == "lx0609-transfusion-performance-v1"
+    assert contract.prompt_version == "lx0609-transfusion-performance-v2"

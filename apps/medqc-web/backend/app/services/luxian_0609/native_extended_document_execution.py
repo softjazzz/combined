@@ -3294,9 +3294,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                 # 全部专用行均用于事实抽取或范围门控；否定资料不计入实施事件。
                 consumed_bloodtrans_rows = list(bloodtrans_record_rows)
                 confirmed_records = []
-                for row, state in zip(bloodtrans_record_rows, transfusion_performance_extraction.states):
+                for row, state, event_time in zip(
+                    bloodtrans_record_rows,
+                    transfusion_performance_extraction.states,
+                    transfusion_performance_extraction.event_times,
+                ):
                     if state == "performed" and _parse_datetime(row.get("record_time")) is not None:
-                        confirmed_records.append(row)
+                        # 正文写明实际开始时刻时按开始时刻核对“输血前”；否则沿用记录时间合同。
+                        confirmed_records.append(
+                            {**row, "transfution_datetime": event_time.isoformat(sep=" ")}
+                            if event_time is not None else row
+                        )
                     elif state in {"performed", "unknown"}:
                         unconfirmed_record_count += 1
                         performed_time_missing = performed_time_missing or state == "performed"

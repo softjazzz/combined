@@ -493,7 +493,7 @@
     "dependency_type": "事件触发检验完整性",
     "executor_type": "program",
     "rule_version": "2026-08-02",
-    "prompt_version": "lx0609-transfusion-performance-v1",
+    "prompt_version": "lx0609-transfusion-performance-v2",
     "mapped_rule_ids": ["LX0609-07-01-03"],
     "primary_execution_rule_id": "LX0609-07-01-03"
   },
