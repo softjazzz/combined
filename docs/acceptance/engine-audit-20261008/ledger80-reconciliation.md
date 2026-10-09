@@ -170,175 +170,175 @@
 - 范围说明：0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：policy_definition_pending；independent_consultation_source_missing
-- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) 
+- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /rules/0
 
 ### LX0609-03-01-02
 
 - 范围说明：0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：policy_definition_pending；consultation_application_source_missing
-- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) 
+- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /rules/1
 
 ### LX0609-03-01-03
 
 - 范围说明：0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：policy_definition_pending；consultation_opinion_source_missing
-- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) 
+- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /rules/2
 
 ### LX0609-03-01-04
 
 - 范围说明：0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：old_policy_evidence_not_portable；conditional_recommendation_contract_pending
-- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) ；[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) 
+- 证据：[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /risks/4；[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /rules/3
 
 ### LX0609-03-02-01
 
 - 范围说明：0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：course-timing:CT-01；course-timing:CT-02；course-timing:CT-03；course-timing:CT-04
 - 附加待办：historical_counterexample_not_rerun_in_this_ledger；CT-02_closed；CT-03_closed；CT-04_closed；CT-R02_policy_dispute
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) ；[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/11；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/12；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/13；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/38；[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /findings/0; /risks/1；[course-timing.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/course-timing.json>) /rules/4
 
 ### LX0609-04-01-01
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：SURGERY-029030
 - 附加待办：old_regression_not_reproduced；multi_event_negative_coverage_missing；source_association_contract_missing
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[review-v1.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/4；[review-v1.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json>) /cases/0；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/0
 
 ### LX0609-04-01-02
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：participant_semantic_gold_missing；emergency_exception_gold_missing
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/1
 
 ### LX0609-04-01-03
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：SURGERY-FREEZE
 - 附加待办：freeze_contract_difference；clinical_error_not_proven
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/9；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /freeze_differences/1；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/2
 
 ### LX0609-04-01-04
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：PREOP-MEDICAL
 - 附加待办：PREOP-MEDICAL_business_dispute；bounded_real_validation_only
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/5；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/3
 
 ### LX0609-04-01-05
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：PREOP-MEDICAL
 - 附加待办：PREOP-MEDICAL_business_dispute；bounded_real_validation_only
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/5；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/4
 
 ### LX0609-04-02-01
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_event_coverage_evidence
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/5
 
 ### LX0609-04-02-02
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：SURGERY-029030；SURGERY-FREEZE
 - 附加待办：old_regression_not_reproduced；freeze_contract_difference；multi_event_negative_coverage_missing
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[review-v1.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/4；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/9；[review-v1.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json>) /cases/1；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /freeze_differences/0；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/6
 
 ### LX0609-04-02-03
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：malignancy_and_dissection_semantic_gold_missing
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/7
 
 ### LX0609-04-02-04
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：pending_definition；implant_five_field_real_gold_pending
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/8
 
 ### LX0609-04-02-05
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_identity_and_event_evidence
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/9
 
 ### LX0609-04-02-06
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：current_binding_gap_closed；historical_source_sha_binding_missing；real_death_positive_gold_missing
-- 证据：[review-v1.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/death060-current/review-v1.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[review-v1.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/death060-current/review-v1.json>) /rules/0; /historical_binding; /remaining_validation_gaps；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/10
 
 ### LX0609-04-02-07
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_consultation_timeliness_evidence
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/11
 
 ### LX0609-04-02-08
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_death_time_evidence
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/12
 
 ### LX0609-04-03-01
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：SURGERY-FREEZE
 - 附加待办：freeze_contract_difference；clinical_error_not_proven
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) ；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/9；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /freeze_differences/0；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/13
 
 ### LX0609-04-04-01
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：pending_definition；anesthesia_visit_sources_unavailable_customer_scope
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/14
 
 ### LX0609-04-04-02
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：N12
 - 附加待办：N12_engineering_closed；new_controlled_semantics_real_model_pending；marker_probe_bounded
-- 证据：[resumption-reconciliation.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-reconciliation.md>) 行28、34：N12麻醉正式载体及过时状态纠正；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[independent-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/n12-carrier-integration/independent-review.md>) 行5-13：375绿色、原首红保留及有限marker/真实语义边界；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[resumption-reconciliation.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-reconciliation.md>) 行28、34：N12麻醉正式载体及过时状态纠正；[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/0；[independent-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/n12-carrier-integration/independent-review.md>) 行5-13：375绿色、原首红保留及有限marker/真实语义边界；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/15
 
 ### LX0609-04-04-03
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_anesthesia_presence_evidence
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/16
 
 ### LX0609-04-05-01
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_postoperative_window_evidence；N10_not_this_rule
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/17
 
 ### LX0609-04-05-02
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：N10
 - 附加待办：N10_engineering_closed；new_controlled_semantics_real_model_pending；TRUNCATED_snapshot_missing；fixture_adjustments_separately_disclosed
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[resumption-execution.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-execution.md>) 病程正文出口支持；[resumption-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-review.md>) R2最终工程集成结论，行92-100；N10四个旧坐标夹具追加独审，行162起；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/1；[resumption-execution.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-execution.md>) 病程正文出口支持；[resumption-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-review.md>) R2最终工程集成结论，行92-100；N10四个旧坐标夹具追加独审，行162起；[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/18
 
 ### LX0609-04-05-03
 
 - 范围说明：0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：bounded_first_postoperative_course_evidence；N10_not_this_rule
-- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) 
+- 证据：[surgery-anesthesia.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/surgery-anesthesia.json>) /rules/19
 
 ### LX0609-05-01-02
 
@@ -520,42 +520,42 @@
 - 范围说明：0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：current_binding_gap_closed；historical_execution_manifest_missing；pure_timeliness_only
-- 证据：[current-evidence-review.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/discharge-death-current/current-evidence-review.json>) ；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) 
+- 证据：[current-evidence-review.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/discharge-death-current/current-evidence-review.json>) /rules/0; /attempts/4；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) /rules/0
 
 ### LX0609-08-01-02
 
 - 范围说明：0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：discharge-death:DD-F02
 - 附加待办：authority_discharge_medication_contract_missing；wrong_drug_or_dose_oracle_missing；mechanism_observation_not_clinical_failure
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[boundary.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/discharge-medication/boundary.md>) 原要求含完整性和药名/剂量错误；原反例与限制；必须补件；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/15；[boundary.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/discharge-medication/boundary.md>) 原要求含完整性和药名/剂量错误；原反例与限制；必须补件；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) /rules/1
 
 ### LX0609-08-01-03
 
 - 范围说明：0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：discharge-death:DD-F01
 - 附加待办：DD-F01_engineering_closed；bounded_diagnosis_evidence
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/14；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) /rules/2
 
 ### LX0609-08-01-04
 
 - 范围说明：0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：discharge-death:DD-F05
 - 附加待办：DD-F05_business_basis_dispute；malignancy_applicability_evidence_missing
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/16；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) /rules/3
 
 ### LX0609-08-02-01
 
 - 范围说明：0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：N10
 - 附加待办：N10_engineering_closed；new_controlled_semantics_real_model_pending；TRUNCATED_snapshot_missing；fixture_adjustments_separately_disclosed
-- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) ；[resumption-execution.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-execution.md>) 病程正文出口支持；[resumption-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-review.md>) R2最终工程集成结论，行92-100；N10四个旧坐标夹具追加独审，行162起；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) 
+- 证据：[closure-issues.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json>) /issues/1；[resumption-execution.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-execution.md>) 病程正文出口支持；[resumption-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-review.md>) R2最终工程集成结论，行92-100；N10四个旧坐标夹具追加独审，行162起；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) /rules/5
 
 ### LX0609-08-02-02
 
 - 范围说明：0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。
 - 问题ID：无规则专属未闭问题
 - 附加待办：current_binding_gap_closed；historical_execution_manifest_missing；declarative_initialization_substitute
-- 证据：[resumption-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-review.md>) R2最终工程集成结论，行98-100；R2工程集成候选复核与缺件，行74；[current-evidence-review.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/discharge-death-current/current-evidence-review.json>) ；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) 
+- 证据：[resumption-review.md](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-review.md>) R2最终工程集成结论，行98-100；R2工程集成候选复核与缺件，行74；[current-evidence-review.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/independent-closure/discharge-death-current/current-evidence-review.json>) /rules/1; /attempts/4；[discharge-death.json](<F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/discharge-death.json>) /rules/6
 
 ### LX0609-09-01-01
 
