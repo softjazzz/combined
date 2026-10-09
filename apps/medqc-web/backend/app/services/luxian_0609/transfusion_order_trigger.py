@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
 import math
+import re
 from time import perf_counter
 from typing import Any, Literal
 
@@ -39,6 +40,17 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError("duplicate response key")
         result[key] = value
     return result
+
+
+def _json_response_object(content: Any) -> Any:
+    """只容忍完整包裹JSON的单一代码块，不从解释文本中抽取局部对象。"""
+    if not isinstance(content, str):
+        raise ValueError("invalid response text")
+    text = content.strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+    if fenced is not None:
+        text = fenced.group(1)
+    return json.loads(text, object_pairs_hook=_unique_object)
 
 
 def _field(value: Any, limit: int) -> str | int | float | None:
@@ -126,7 +138,7 @@ def _classifications(response: Mapping[str, Any], batch: Sequence[Mapping[str, A
         if response.get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = response.get("content", response.get("text"))
-    payload = json.loads(content, object_pairs_hook=_unique_object)
+    payload = _json_response_object(content)
     if not isinstance(payload, dict) or set(payload) != {"schema_version", "orders"} or payload["schema_version"] != SCHEMA_VERSION:
         raise ValueError("invalid response schema")
     expected = {row["index"]: row["name"] for row in batch}

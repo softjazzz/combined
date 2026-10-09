@@ -9,7 +9,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
-from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, _unique_object, _usage
+from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, _json_response_object, _usage
 
 
 SCHEMA_VERSION = "lx0609-transfusion-course-presence-v1"
@@ -101,7 +101,7 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
         if response.get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = response.get("content", response.get("text"))
-    payload = json.loads(content, object_pairs_hook=_unique_object)
+    payload = _json_response_object(content)
     if not isinstance(payload, dict) or set(payload) != {"schema_version", "records"} or payload["schema_version"] != SCHEMA_VERSION:
         raise ValueError("invalid response schema")
     expected = {item["index"]: item["content"] for item in batch}

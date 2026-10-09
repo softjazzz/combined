@@ -234,7 +234,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('.rule-code').text()).toBe(selectedRuleId)
     await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
     await wrapper.get('[data-testid="qc-result-feedback-correct"]').trigger('click')
-    expect(wrapper.emitted('submit-feedback')).toEqual([[selectedRuleId, { feedback_type: 'correct' }]])
+    expect(wrapper.emitted('submit-feedback')).toEqual([
+      [selectedRuleId, { feedback_type: 'correct' }],
+    ])
 
     await wrapper.get('[data-testid="copy-single-qc-debug-result"]').trigger('click')
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
@@ -818,6 +820,32 @@ describe('SingleRecordQcResultPanel', () => {
     expect(detailGrid.text()).toContain('输血病程记录')
   })
 
+  it('展示输血医嘱触发事实，不将医嘱显示为已实施输血', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-07-02-01',
+            rule_name: '输血记录：无输血病程记录',
+            status: 'non_compliant',
+            conclusion: '已开立输血医嘱，但未找到输血病程记录。',
+            customer_display_facts: {
+              failure_kind: 'transfusion_course_record_missing',
+              transfusion_order_present: true,
+              record_count: 0,
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    expect(wrapper.get('.decision-fact-block .fact-list').text()).toContain('已开立输血医嘱')
+    expect(wrapper.text()).not.toContain('已实施输血')
+    expect(wrapper.text()).not.toContain('transfusion_order_present')
+  })
+
   it('将输血证据显示为输血记录而不是泛化的来源文书', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
@@ -1331,7 +1359,13 @@ describe('SingleRecordQcResultPanel', () => {
     expect(more.attributes('open')).toBeUndefined()
     expect(more.get('summary').text()).toBe('另有 5 次：不适用 5')
     const folded = more.findAll('[data-testid="exam-event-row"]')
-    expect(folded.map((row) => row.text().match(/第 (\d) 次/)?.[1])).toEqual(['1', '2', '4', '5', '6'])
+    expect(folded.map((row) => row.text().match(/第 (\d) 次/)?.[1])).toEqual([
+      '1',
+      '2',
+      '4',
+      '5',
+      '6',
+    ])
     expect(folded[0]?.text()).toContain('2026-07-08 11:05:49')
     expect(folded[0]?.text()).toContain('不适用')
     // 当前数据没有逐次文书对应关系：明细行只展示，不含任何可点击元素

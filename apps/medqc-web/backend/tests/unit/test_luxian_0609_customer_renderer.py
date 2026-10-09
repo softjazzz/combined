@@ -1305,7 +1305,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "verification_kind": "pretransfusion_assessment_complete",
                 "missing_fields": [],
             },
-            "输血申请单已记录申请理由及输血前客观指标，且在实际输血前完成。",
+            "输血申请单已记录申请理由及输血前客观指标。",
         ),
         (
             "LX0609-07-01-02",
@@ -1323,7 +1323,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "failure_kind": "pretransfusion_assessment_missing",
                 "missing_fields": ["indication", "laboratory_indicator"],
             },
-            "已确认实施输血，但未找到可核对的输血前评估记录。",
+            "已开立输血医嘱，但未找到可核对的输血前评估记录。",
         ),
         (
             "LX0609-07-02-02",

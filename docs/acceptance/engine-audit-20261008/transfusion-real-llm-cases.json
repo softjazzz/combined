@@ -1,0 +1,330 @@
+{
+  "schema_version": "transfusion-real-llm-cases-v1",
+  "purpose": "冻结真实LLM语义验证的合成输入与人工预期；本文件不包含模型观察结果。",
+  "synthetic_only": true,
+  "expectation_basis": "根据每例明示中文语义独立人工判读；仅参考服务输入输出字段协议，未用算法、模型或数据库反推预期。",
+  "boundaries": [
+    "所有姓名、品牌、标识及日期均为专门构造的合成值，不含真实病历。",
+    "order验证输血治疗医嘱开立事实，不要求实际执行；明确撤销、取消、作废排除，停止不等于取消。",
+    "course验证专用输血记录是否存在实际开始或完成输注过程，不评价记录字段完整性。",
+    "仅冻结16个语义病例；不覆盖数字状态码、数据缺失、传输异常、批次上限、引用协议攻击或其他规则最终质控结论。",
+    "预期必须在真实模型调用前冻结；运行结果应另存，不能据运行结果改写本文件预期。"
+  ],
+  "cases": [
+    {
+      "id": "ORDER-01",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_nondrug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-01",
+            "order_name": "输注去白悬浮红细胞2单位",
+            "order_type": "临时医嘱",
+            "order_status": "已开立，尚未执行",
+            "start_time": null,
+            "execution_time": null
+          }
+        }
+      ],
+      "expected": {
+        "state": "present",
+        "selected_identities": [
+          [
+            "inpat_nondrug_order",
+            "SYN-ORD-ORDER-01"
+          ]
+        ]
+      },
+      "rationale": "医嘱已经开立输注红细胞治疗；尚未执行描述执行进度，不能否定开立事实。"
+    },
+    {
+      "id": "ORDER-02",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_nondrug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-02",
+            "order_name": "输注去白悬浮红细胞2单位",
+            "order_type": "临时医嘱",
+            "order_status": "已撤销：输血医嘱取消，未执行"
+          }
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "selected_identities": []
+      },
+      "rationale": "文字明确撤销此输血医嘱，不保留有效治疗开立触发。"
+    },
+    {
+      "id": "ORDER-03",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_nondrug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-03",
+            "order_name": "输注去白悬浮红细胞2单位",
+            "order_type": "临时医嘱",
+            "order_status": "停止"
+          }
+        }
+      ],
+      "expected": {
+        "state": "present",
+        "selected_identities": [
+          [
+            "inpat_nondrug_order",
+            "SYN-ORD-ORDER-03"
+          ]
+        ]
+      },
+      "rationale": "名称明确为血液成分输注治疗；停止没有明确撤销或作废语义，不能替换为取消。"
+    },
+    {
+      "id": "ORDER-04",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_drug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-04",
+            "order_name": "0.9%氯化钠注射液500ml 静脉滴注",
+            "order_type": "临时医嘱",
+            "order_status": "已开立",
+            "generic_name": "氯化钠注射液",
+            "brand_name": "合成品牌甲"
+          }
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "selected_identities": []
+      },
+      "rationale": "普通补液不是全血或血液成分输注。"
+    },
+    {
+      "id": "ORDER-05",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_nondrug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-05",
+            "order_name": "血沉测定",
+            "order_type": "临时医嘱",
+            "order_status": "已开立"
+          }
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "selected_identities": []
+      },
+      "rationale": "血沉是检验项目，其名称中的血字不代表输血治疗。"
+    },
+    {
+      "id": "ORDER-06",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_nondrug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-06",
+            "order_name": "血浆引流管护理及更换",
+            "order_type": "临时医嘱",
+            "order_status": "已开立"
+          }
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "selected_identities": []
+      },
+      "rationale": "这是一项管路护理医嘱，没有输注血浆或其他血液成分治疗。"
+    },
+    {
+      "id": "ORDER-07",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_nondrug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-07",
+            "order_name": "交叉配血试验，备去白悬浮红细胞2单位",
+            "order_type": "临时医嘱",
+            "order_status": "已开立"
+          }
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "selected_identities": []
+      },
+      "rationale": "仅配血与备血准备，没有开立输注治疗。"
+    },
+    {
+      "id": "ORDER-08",
+      "kind": "order",
+      "rows": [
+        {
+          "source_key": "inpat_drug_order",
+          "row": {
+            "order_id": "SYN-ORD-ORDER-08",
+            "order_name": "去白单采血小板1治疗量 静脉输注",
+            "order_type": "临时医嘱",
+            "order_status": "已开立",
+            "generic_name": "去白单采血小板",
+            "brand_name": null
+          }
+        }
+      ],
+      "expected": {
+        "state": "present",
+        "selected_identities": [
+          [
+            "inpat_drug_order",
+            "SYN-ORD-ORDER-08"
+          ]
+        ]
+      },
+      "rationale": "虽以血液成分产品名称开头，剂量与输注途径明确组成血小板输注治疗医嘱。"
+    },
+    {
+      "id": "COURSE-01",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-01",
+          "document_title": "输血记录",
+          "content": "已开始输注红细胞，观察中。"
+        }
+      ],
+      "expected": {
+        "state": "present",
+        "valid_document_ids": [
+          "SYN-DOC-COURSE-01"
+        ]
+      },
+      "rationale": "简短正文明确记载已经开始输注，不需要用长度或字段完整性否认实际过程。"
+    },
+    {
+      "id": "COURSE-02",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-02",
+          "document_title": "输血记录",
+          "content": "合成日期D1 09:00核对血袋后开始输注去白悬浮红细胞2单位，09:15复查生命体征平稳，11:00输注结束。输注期间未见寒战、皮疹或呼吸困难。记录者：合成医师甲。"
+        }
+      ],
+      "expected": {
+        "state": "present",
+        "valid_document_ids": [
+          "SYN-DOC-COURSE-02"
+        ]
+      },
+      "rationale": "完整正文明确记载开始、观察及完成输注的实际过程。"
+    },
+    {
+      "id": "COURSE-03",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-03",
+          "document_title": "输血记录",
+          "content": "因贫血拟于明日输注去白悬浮红细胞2单位，今日申请配血，待血液到位后实施。"
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "valid_document_ids": []
+      },
+      "rationale": "全部是将来安排及准备，未记载已经开始的输注过程。"
+    },
+    {
+      "id": "COURSE-04",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-04",
+          "document_title": "输血记录",
+          "content": "已向合成患者甲说明输血方案，患者明确拒绝，今日未予输血。"
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "valid_document_ids": []
+      },
+      "rationale": "正文明确拒绝并未输血，无实际输注过程。"
+    },
+    {
+      "id": "COURSE-05",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-05",
+          "document_title": "输血记录",
+          "content": "原拟今日输注红细胞，因发热暂缓，延期至复评后决定，今日未开始输注。"
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "valid_document_ids": []
+      },
+      "rationale": "计划延期且明确没有开始，不能把拟定方案当成实际过程。"
+    },
+    {
+      "id": "COURSE-06",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-06",
+          "document_title": "输血记录",
+          "content": "复查后取消本次输血安排，相关输血医嘱已撤销，本次未输注。"
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "valid_document_ids": []
+      },
+      "rationale": "正文明确取消且未输注，仅有取消记录没有实际输注过程。"
+    },
+    {
+      "id": "COURSE-07",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-07",
+          "document_title": "输血记录",
+          "content": "输血记录\n输血开始时间：____\n输血结束时间：____\n血液成分及量：____\n输血反应：____\n记录者：合成医师乙"
+        }
+      ],
+      "expected": {
+        "state": "absent",
+        "valid_document_ids": []
+      },
+      "rationale": "标题、空白字段与署名形成模板，未填写任何实际输注事实。"
+    },
+    {
+      "id": "COURSE-08",
+      "kind": "course",
+      "rows": [
+        {
+          "document_id": "SYN-DOC-COURSE-08",
+          "document_title": "输血记录",
+          "content": "合成日期D2上午已输注去白悬浮红细胞1单位，输注结束后无不适。拟次日再输注1单位，待复查后确认。"
+        }
+      ],
+      "expected": {
+        "state": "present",
+        "valid_document_ids": [
+          "SYN-DOC-COURSE-08"
+        ]
+      },
+      "rationale": "同份正文中今日已完成输注是明确实际事实，后续计划不会抹去已经存在的过程。"
+    }
+  ]
+}

@@ -3510,7 +3510,7 @@ def customer_finding_from_controlled_facts(
                 if application_time and transfusion_time
                 else ""
             )
-            return f"输血申请单已记录申请理由及输血前客观指标，且在实际输血前完成。{timing}"
+            return f"输血申请单已记录申请理由及输血前客观指标。{timing}"
         if kind in {
             "pretransfusion_assessment_missing",
             "pretransfusion_assessment_incomplete",

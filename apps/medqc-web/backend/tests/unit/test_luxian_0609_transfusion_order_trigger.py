@@ -194,3 +194,18 @@ def test_truncated_provider_response_rejected():
             response["finish_reason"] = "length"
             return response
     assert _run([_row()], TruncatedClient()).state == "technical_error"
+
+
+@pytest.mark.parametrize("prefix,suffix,expected", [
+    ("```json\n", "\n```", "absent"),
+    ("```\n", "\n```", "absent"),
+    ("解释：```json\n", "\n```", "technical_error"),
+    ("```json\n", "\n```附言", "technical_error"),
+])
+def test_json_fence_transport_wrapper_only(prefix, suffix, expected):
+    class WrappedClient(FakeClient):
+        async def generate(self, prompt):
+            response = await super().generate(prompt)
+            response["content"] = prefix + response["content"] + suffix
+            return response
+    assert _run([_row()], WrappedClient()).state == expected
