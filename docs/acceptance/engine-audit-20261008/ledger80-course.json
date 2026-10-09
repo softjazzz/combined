@@ -1,0 +1,883 @@
+{
+  "schema_version": "ledger80-course-v1",
+  "classification_base_commit": "7d92984a6",
+  "evidence_policy": "最新closure/resumption/专项补证优先于冻结1958历史overlay；历史候选未重跑不宣称当前复现。",
+  "scope": {
+    "groups": {
+      "surgery-anesthesia": 20,
+      "course-timing": 5,
+      "discharge-death": 6
+    },
+    "included_count": 31,
+    "denominator_source": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json /rules; 排除status=scope_catalog_only",
+    "excluded_rule_ids": [
+      "LX0609-08-01-05"
+    ]
+  },
+  "primary_class_priority": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "class_definitions": {
+    "A": "明确反例且未关闭的缺陷待处理",
+    "B": "受改动影响需复验，含新增/变更LLM语义",
+    "C": "特定证据、合同、争议或暂停条件待补",
+    "D": "可继承既有有限证据，不代表整条验收"
+  },
+  "common_gaps": [
+    "全组既有证据均有验证层限制；缺完整真实临床独立预期、客户来源覆盖、正式HTTP/Store/API/UI链或医学签字的共通部分，不机械将所有规则列C。",
+    "已有测试、模型调用、SQLite或有限源码绑定的数量只按各自报告范围继承；不得互相替代，不得把规则级状态一致称全量医学通过。",
+    "本轮只读证据文档并生成台账；无新代码审查、测试、模型调用、数据库或患者材料读取。"
+  ],
+  "historical_overlay": {
+    "path": "docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+    "fixed_commit": "1958ae3bb",
+    "role": "历史问题与证据线索，不作为当前未关闭缺陷的唯一依据"
+  },
+  "summary": {
+    "total": 31,
+    "primary_class_counts": {
+      "C": 12,
+      "B": 7,
+      "A": 1,
+      "D": 11
+    }
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-03-01-01",
+      "name": "会诊记录：有会诊记录单无请会诊执行记录",
+      "primary_class": "C",
+      "reason": "正式暂停：现有会诊物理文书属于执行记录，缺独立会诊记录单；旧真实重放不能证明当前正式启用。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/rules/0",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "客户确认独立意见文书与执行记录的源合同，接入验收后再决定解除暂停。",
+      "secondary_flags": [
+        "policy_definition_pending",
+        "independent_consultation_source_missing"
+      ],
+      "scope_note": "0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-03-01-02",
+      "name": "会诊记录：会诊申请单会诊目的不明确",
+      "primary_class": "C",
+      "reason": "正式暂停：未同步会诊申请单，没有会诊目的的权威来源。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/rules/1",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "补会诊申请单供数与目的字段合同；不得由执行记录推测申请目的。",
+      "secondary_flags": [
+        "policy_definition_pending",
+        "consultation_application_source_missing"
+      ],
+      "scope_note": "0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-03-01-03",
+      "name": "会诊记录：会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）",
+      "primary_class": "C",
+      "reason": "正式暂停：独立会诊意见源缺失，不能把旧词语判定或旧模型重放移作当前验收。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/rules/2",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "先确认意见来源和清晰性口径，完成来源验收后再排专属验证。",
+      "secondary_flags": [
+        "policy_definition_pending",
+        "consultation_opinion_source_missing"
+      ],
+      "scope_note": "0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-03-01-04",
+      "name": "会诊记录：会诊建议未落实或执行记录不具体",
+      "primary_class": "B",
+      "reason": "当前口径已包括未找到执行证据，旧54/54采用无痕迹不适用，不能跨口径继承；逐建议匹配语义仍需复验。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/risks/4",
+          "note": "CT-R05条件未来建议门控合同需补。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/rules/3",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "按当前合同冻结逐建议预期，复验条件/未来建议、数量、关联和低置信安全降级。",
+      "secondary_flags": [
+        "old_policy_evidence_not_portable",
+        "conditional_recommendation_contract_pending"
+      ],
+      "scope_note": "0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-03-02-01",
+      "name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+      "primary_class": "A",
+      "reason": "CT-01否定/未来条件误触发有明确合成反例，最新关闭清单仍排队；本次文档整理未重新运行。CT-02/03/04后续已关闭，不能继续并称四项当前缺陷。",
+      "issue_ids": [
+        "course-timing:CT-01",
+        "course-timing:CT-02",
+        "course-timing:CT-03",
+        "course-timing:CT-04"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/11",
+          "note": "最新状态：queued_shared_module"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/12",
+          "note": "最新状态：integrated_limited_engineering_closed"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/13",
+          "note": "最新状态：integrated_limited_engineering_closed"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/38",
+          "note": "最新状态：integrated_limited_engineering_closed"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/findings/0; /risks/1",
+          "note": "CT-01具体反例050_negated_marker、050_planned_marker；CT-R02独立业务争议。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+          "pointer": "/rules/4",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "仅围绕CT-01根因制定可泛化方案并另行授权验证；讨论成熟时间/问题关联的CT-R02另补业务合同。",
+      "secondary_flags": [
+        "historical_counterexample_not_rerun_in_this_ledger",
+        "CT-02_closed",
+        "CT-03_closed",
+        "CT-04_closed",
+        "CT-R02_policy_dispute"
+      ],
+      "scope_note": "0609实质审查分母；course-timing。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-01-01",
+      "name": "术前小结：无术前小结（有手术医嘱）",
+      "primary_class": "C",
+      "reason": "029原正常回退在当前两例控制中未重现，故不列A；多事件逐医嘱覆盖、模糊名称负向覆盖与注入关联键的真实供数证明仍缺。",
+      "issue_ids": [
+        "SURGERY-029030"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/4",
+          "note": "最新状态：old_normal_regressions_not_reproduced_current_two_controls_pass_negative_coverage_open"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json",
+          "pointer": "/cases/0",
+          "note": "原正常控制当前未重现回退；/conclusion、/limitations保留负向覆盖边界。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/0",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "补多事件负向预期及业务键来源证明；保留原正常控制，不把2/2扩大为整条验收。",
+      "secondary_flags": [
+        "old_regression_not_reproduced",
+        "multi_event_negative_coverage_missing",
+        "source_association_contract_missing"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-01-02",
+      "name": "术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。",
+      "primary_class": "C",
+      "reason": "已有确定性冻结与空讨论/来源失败保护；报告明确缺参与者语义、紧急抢救豁免的当前独立金标。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/1",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "先冻结术者参与与紧急抢救例外的独立预期及来源，再验证专属语义场景。",
+      "secondary_flags": [
+        "participant_semantic_gold_missing",
+        "emergency_exception_gold_missing"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-01-03",
+      "name": "术前多学科讨论记录：四级手术术前讨论未多学科讨论。",
+      "primary_class": "B",
+      "reason": "来源查询失败分支公开facts与旧MDT冻结不同；最新SURGERY-FREEZE仅关闭已识别夹具/目录漂移，剩余差异仍开。没有证据证明临床状态误判。",
+      "issue_ids": [
+        "SURGERY-FREEZE"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/9",
+          "note": "最新状态：identified_fixture_and_catalog_drift_corrected_other_semantic_items_open"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/freeze_differences/1",
+          "note": "历史冻结差异；最新SURGERY-FREEZE仅部分关闭，未在本次重跑。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/2",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "明确查询失败公开事实合同，针对原冻结差异复验，不直接反改医学预期。",
+      "secondary_flags": [
+        "freeze_contract_difference",
+        "clinical_error_not_proven"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-01-04",
+      "name": "术前小结：内容不完整",
+      "primary_class": "C",
+      "reason": "有限真实验证及工程保护可继承，但C04/C12诊断充分性/术式归属仍有医学争议；最新清单未作改代码决定。",
+      "issue_ids": [
+        "PREOP-MEDICAL"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/5",
+          "note": "最新状态：business_basis_review_no_code_decision"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/3",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "由医学负责人明确争议项口径及独立预期，再决定是否需要实现修改。",
+      "secondary_flags": [
+        "PREOP-MEDICAL_business_dispute",
+        "bounded_real_validation_only"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-01-05",
+      "name": "术前讨论记录：内容不完整",
+      "primary_class": "C",
+      "reason": "有限术前讨论验证无新增确认缺陷；医学充分性与术式归属争议仍未裁定，状态一致不能替代充分性判断。",
+      "issue_ids": [
+        "PREOP-MEDICAL"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/5",
+          "note": "最新状态：business_basis_review_no_code_decision"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/4",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "先对齐争议医学合同，保留逐文书证据与已有有限验证，不重复已完成专项。",
+      "secondary_flags": [
+        "PREOP-MEDICAL_business_dispute",
+        "bounded_real_validation_only"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-01",
+      "name": "手术记录：手术后24小时内是否完成",
+      "primary_class": "D",
+      "reason": "逐台手术记录覆盖已修复，组报告104 gate及20逐台保护可继承；未发现本条特定新缺陷或未关闭输出漂移。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/5",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承限定工程证据；正式临床验收按统一缺口另排。",
+      "secondary_flags": [
+        "bounded_event_coverage_evidence"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-02",
+      "name": "手术记录：无手术记录（有手术医嘱）",
+      "primary_class": "B",
+      "reason": "030原正常回退当前控制未重现；新增触发facts及presence冻结差异仍未全部关闭，故按B列定向复验。",
+      "issue_ids": [
+        "SURGERY-029030",
+        "SURGERY-FREEZE"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/4",
+          "note": "最新状态：old_normal_regressions_not_reproduced_current_two_controls_pass_negative_coverage_open"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/9",
+          "note": "最新状态：identified_fixture_and_catalog_drift_corrected_other_semantic_items_open"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json",
+          "pointer": "/cases/1",
+          "note": "原正常控制当前未重现回退；/conclusion、/limitations保留负向覆盖边界。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/freeze_differences/0",
+          "note": "历史冻结差异；最新SURGERY-FREEZE仅部分关闭，未在本次重跑。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/6",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "先核剩余presence公开输出合同再复验；另补多事件逐医嘱负向覆盖与关联键供数证明。",
+      "secondary_flags": [
+        "old_regression_not_reproduced",
+        "freeze_contract_difference",
+        "multi_event_negative_coverage_missing"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-03",
+      "name": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
+      "primary_class": "C",
+      "reason": "受控抽取后的程序判定和否定/计划保护可继承；报告专门指出恶性适用性及淋巴结处理语义缺独立金标，通用gate回归不能补足。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/7",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "补恶性/非恶性、处理/未处理原因的独立医学预期与多事件对应，再安排验证。",
+      "secondary_flags": [
+        "malignancy_and_dissection_semantic_gold_missing"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-04",
+      "name": "手术记录：手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息",
+      "primary_class": "C",
+      "reason": "主表仍pending_definition，原因implant_five_field_real_gold_pending；五字段合同已冻结但多台、缺文书、冲突金标未补。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/8",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "补五字段真实独立预期并确认正式启用条件；shadow或直接执行器成功不能解除暂停。",
+      "secondary_flags": [
+        "pending_definition",
+        "implant_five_field_real_gold_pending"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-05",
+      "name": "手术记录：手术记录非手术者签字（质控术者及签名医生）",
+      "primary_class": "D",
+      "reason": "术者/签名资格不取提交人且已补逐台覆盖，组报告相关保护通过；无本条新增确认缺陷。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/9",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承身份与逐台签名保护的限定证据；后续按统一验收边界补正式链。",
+      "secondary_flags": [
+        "bounded_identity_and_event_evidence"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-06",
+      "name": "死亡记录：死亡患者无死亡记录",
+      "primary_class": "D",
+      "reason": "后续060专属11项当前源码绑定回放全通过，无确认阻断；当前绑定缺口已补，可继承此限定证据。原历史SHA不可追溯和六例无死亡触发仅限制旧证据外推。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/death060-current/review-v1.json",
+          "pointer": "/rules/0; /historical_binding; /remaining_validation_gaps",
+          "note": "11项当前绑定全过；历史SHA与真实死亡阳性限制仍保留。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/10",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承当前11项工程保护；历史SHA不可恢复不作为继续补审任务，死亡阳性临床与正式链按统一验收缺口另排。",
+      "secondary_flags": [
+        "current_binding_gap_closed",
+        "historical_source_sha_binding_missing",
+        "real_death_positive_gold_missing"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-07",
+      "name": "会诊记录：会诊记录单未在会诊申请24小时内完成",
+      "primary_class": "D",
+      "reason": "空申请时间已按authoritative_time_missing降级，关联/时间文案8项保护可继承；未见新的时限误判反例。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/11",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承申请—完成时间与关联的限定证据；真实多申请和正式链后续按统一范围补。",
+      "secondary_flags": [
+        "bounded_consultation_timeliness_evidence"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-02-08",
+      "name": "死亡记录：死亡时间缺失",
+      "primary_class": "D",
+      "reason": "死亡时间空正文/source_empty及completeness解释已有工程证据；没有本条未关闭新缺陷，不能用完成时间替代死亡时间。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/12",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承限定死亡时间证据；死亡阳性源覆盖与正式链仍按统一缺口验收。",
+      "secondary_flags": [
+        "bounded_death_time_evidence"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-03-01",
+      "name": "手术安全核查表：无手术安全核查表（有手术记录）",
+      "primary_class": "B",
+      "reason": "032无触发文案、关联失败公开坐标与旧presence冻结存在剩余差异；状态未因此翻转，最新清单未关闭这些差异。",
+      "issue_ids": [
+        "SURGERY-FREEZE"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/9",
+          "note": "最新状态：identified_fixture_and_catalog_drift_corrected_other_semantic_items_open"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/freeze_differences/0",
+          "note": "历史冻结差异；最新SURGERY-FREEZE仅部分关闭，未在本次重跑。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/13",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "冻结当前公开facts/文案/坐标合同后定向复验原presence差异。",
+      "secondary_flags": [
+        "freeze_contract_difference",
+        "clinical_error_not_proven"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-04-01",
+      "name": "麻醉访视：无麻醉术前/麻醉术后访视记录（局麻除外）；",
+      "primary_class": "C",
+      "reason": "客户源不提供麻醉术前/术后访视，正式pending_definition未解除；直接执行器测试不是正式启用证据。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/14",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "由客户重新确认访视供数范围，补来源覆盖后再审批解除暂停。",
+      "secondary_flags": [
+        "pending_definition",
+        "anesthesia_visit_sources_unavailable_customer_scope"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-04-02",
+      "name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+      "primary_class": "B",
+      "reason": "N12 core与carrier已集成，旧空标签工程问题已关闭；新增受控语义及sN载体仅有有限合成证据，真实模型语义仍待验。",
+      "issue_ids": [
+        "N12"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-reconciliation.md",
+          "section": "行28、34：N12麻醉正式载体及过时状态纠正",
+          "note": "0683dfb9e补同ID sN标记2合成病例/3文书捕获；旧独审未覆盖sN的限制已有有限补证，真实语义继续未验。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/0",
+          "note": "最新状态：carrier_engineering_closed_integrated_f1c6ec095_real_model_pending"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/n12-carrier-integration/independent-review.md",
+          "section": "行5-13：375绿色、原首红保留及有限marker/真实语义边界",
+          "note": "core/carrier工程已关闭；375保护与有限sN合成探针不等于真实模型语义验收。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/15",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "在冻结来源/预期后验证自然访视正文、事件关联及模型语义；保留375工程与有限marker证据边界。",
+      "secondary_flags": [
+        "N12_engineering_closed",
+        "new_controlled_semantics_real_model_pending",
+        "marker_probe_bounded"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-04-03",
+      "name": "麻醉记录单：无麻醉记录单（局麻除外）；",
+      "primary_class": "D",
+      "reason": "存在性历史独立预期及计划/未实施、局麻、来源失败保护可继承；未见特定新增缺陷或输出漂移。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/16",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承限定麻醉记录存在性证据，不扩大为多麻醉真实全量验收。",
+      "secondary_flags": [
+        "bounded_anesthesia_presence_evidence"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-05-01",
+      "name": "术后连续三天查房记录：术后三天无连续病程记录或术者查房记录",
+      "primary_class": "D",
+      "reason": "逐台第1–3日病程/术者查房及精确引用有既有冻结，组报告相关mapping通过；N10新正文语义不覆盖本规则。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/17",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承现有连续病程限定证据；不要将065/067新测试当064语义验收。",
+      "secondary_flags": [
+        "bounded_postoperative_window_evidence",
+        "N10_not_this_rule"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-05-02",
+      "name": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+      "primary_class": "B",
+      "reason": "N10受控正文事实与共享出口支持已集成，85事实/133旧回归/8合成SQLite通过；新增LLM语义尚未真实独立验收。",
+      "issue_ids": [
+        "N10"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/1",
+          "note": "最新状态：engineering_integrated_real_semantics_and_formal_chain_pending"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "section": "病程正文出口支持",
+          "note": "工程集成与85+133+8有限合成验证；夹具修正和RecursionError首红/绿单列。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-review.md",
+          "section": "R2最终工程集成结论，行92-100；N10四个旧坐标夹具追加独审，行162起",
+          "note": "工程关闭；未授权真实语义、完整正式API/UI或专用TRUNCATED快照验收。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/18",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "验证自然正文语义与独立预期，补专用TRUNCATED快照；时间/事件仍保持权威程序合同。",
+      "secondary_flags": [
+        "N10_engineering_closed",
+        "new_controlled_semantics_real_model_pending",
+        "TRUNCATED_snapshot_missing",
+        "fixture_adjustments_separately_disclosed"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-04-05-03",
+      "name": "术后首次病程记录：无术后首次病程记录",
+      "primary_class": "D",
+      "reason": "每台首次术后病程及缺失事件精确引用有既有冻结，相关mapping通过；无本条特定新缺陷。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+          "pointer": "/rules/19",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承限定首次病程关联证据；真实同日多台可靠性后续按统一缺口验收。",
+      "secondary_flags": [
+        "bounded_first_postoperative_course_evidence",
+        "N10_not_this_rule"
+      ],
+      "scope_note": "0609实质审查分母；surgery-anesthesia。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-08-01-01",
+      "name": "出院记录：出院记录未在出院后24小时内完成",
+      "primary_class": "D",
+      "reason": "后续061原7项时限预期在当前责任源码绑定下全通过，当前定位已补；没有必须补验的特定原反例。旧执行manifest不可追溯仅限制历史运行证明。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/discharge-death-current/current-evidence-review.json",
+          "pointer": "/rules/0; /attempts/4",
+          "note": "原预期未改且当前绑定完整；原执行manifest仍不可证明。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+          "pointer": "/rules/0",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承当前7项纯时限证据；保留旧manifest限制，不为恢复历史运行追加审查。",
+      "secondary_flags": [
+        "current_binding_gap_closed",
+        "historical_execution_manifest_missing",
+        "pure_timeliness_only"
+      ],
+      "scope_note": "0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-08-01-02",
+      "name": "出院记录：出院带药不详细",
+      "primary_class": "C",
+      "reason": "062现有非空字段保护不涵盖错药/错剂量一致性；最新结论要求权威出院药来源及错误定义，没有实跑错药金标，不能列确认临床误判。",
+      "issue_ids": [
+        "discharge-death:DD-F02"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/15",
+          "note": "最新状态：authority_discharge_medication_source_and_error_scope_required"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/discharge-medication/boundary.md",
+          "section": "原要求含完整性和药名/剂量错误；原反例与限制；必须补件",
+          "note": "特定来源及错误定义缺件；5项旧正常输入不能证明错药识别。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+          "pointer": "/rules/1",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "明确带药权威表、版本/停用/关联、药品编码和剂量单位及错误定义，再冻结独立错药预期。",
+      "secondary_flags": [
+        "authority_discharge_medication_contract_missing",
+        "wrong_drug_or_dose_oracle_missing",
+        "mechanism_observation_not_clinical_failure"
+      ],
+      "scope_note": "0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-08-01-03",
+      "name": "出院记录：出院诊断或死亡诊断错填漏填顺序错误",
+      "primary_class": "D",
+      "reason": "DD-F01死亡无出院记录漏执行已集成b13043c3d，独审39/root73通过；旧漏执行反例不再当当前缺陷。",
+      "issue_ids": [
+        "discharge-death:DD-F01"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/14",
+          "note": "最新状态：integrated_limited_engineering_closed"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+          "pointer": "/rules/2",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承修复后的有限诊断证据与原反例保护，正式验收按统一缺口补。",
+      "secondary_flags": [
+        "DD-F01_engineering_closed",
+        "bounded_diagnosis_evidence"
+      ],
+      "scope_note": "0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-08-01-04",
+      "name": "出院记录：出院记录（恶性肿瘤患者）中是否有出院后肿瘤相关治疗的出院治疗计划",
+      "primary_class": "C",
+      "reason": "旧基线治疗或随访与当前客户主表肿瘤治疗口径不一致，DD-F05仍为业务依据复核；未决定改实现。",
+      "issue_ids": [
+        "discharge-death:DD-F05"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/16",
+          "note": "最新状态：business_basis_review_no_code_decision"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+          "pointer": "/rules/3",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "对齐口径文档并取得医学确认，保持当前客户已确认治疗合同，另补完整恶性适用链预期。",
+      "secondary_flags": [
+        "DD-F05_business_basis_dispute",
+        "malignancy_applicability_evidence_missing"
+      ],
+      "scope_note": "0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "name": "出院前病程记录：无出院前一天或当天的病程记录",
+      "primary_class": "B",
+      "reason": "N10正文present/absent/unknown工程已集成，旧标题/签名问题保护已补；新增LLM语义及自然正文判断仍待真实独立验收。",
+      "issue_ids": [
+        "N10"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "pointer": "/issues/1",
+          "note": "最新状态：engineering_integrated_real_semantics_and_formal_chain_pending"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "section": "病程正文出口支持",
+          "note": "工程集成与85+133+8有限合成验证；夹具修正和RecursionError首红/绿单列。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-review.md",
+          "section": "R2最终工程集成结论，行92-100；N10四个旧坐标夹具追加独审，行162起",
+          "note": "工程关闭；未授权真实语义、完整正式API/UI或专用TRUNCATED快照验收。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+          "pointer": "/rules/5",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "验证自然出院前病程语义并补专用TRUNCATED快照；保留原字面无正文反例与单独夹具修正记录。",
+      "secondary_flags": [
+        "N10_engineering_closed",
+        "new_controlled_semantics_real_model_pending",
+        "TRUNCATED_snapshot_missing",
+        "fixture_adjustments_separately_disclosed"
+      ],
+      "scope_note": "0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    },
+    {
+      "rule_id": "LX0609-08-02-02",
+      "name": "出院前病程记录：无上级医师同意出院的意见",
+      "primary_class": "D",
+      "reason": "后续068原4项native→Binding→Canonical源码绑定回放通过，当前定位已补；R2后续133旧保护还包含缺时间及native选中引用保护。旧manifest及初始化替身仅限制证据层，不构成当前必补原反例。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-review.md",
+          "section": "R2最终工程集成结论，行98-100；R2工程集成候选复核与缺件，行74",
+          "note": "133旧保护包含native相关参数；继承当前集成验证层，不外推医学或正式完整链。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/discharge-death-current/current-evidence-review.json",
+          "pointer": "/rules/1; /attempts/4",
+          "note": "原预期未改且当前绑定完整；原执行manifest仍不可证明。"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+          "pointer": "/rules/6",
+          "note": "本条原审查范围和限定证据；后续状态以本行所列关闭清单/专项补证优先。"
+        }
+      ],
+      "next_action": "继承当前4项及R2后续相关旧保护；保留原历史manifest和初始化替身限制，不无限追补历史日志。",
+      "secondary_flags": [
+        "current_binding_gap_closed",
+        "historical_execution_manifest_missing",
+        "declarative_initialization_substitute"
+      ],
+      "scope_note": "0609实质审查分母；discharge-death。本次仅文档台账分类，未重审生产代码、未重跑测试/模型；主类不代表整条临床或正式发布验收。"
+    }
+  ]
+}

@@ -1,0 +1,944 @@
+{
+  "schema_version": "ledger80-specialty-v1",
+  "classification_head": "7d92984a6",
+  "scope": "0609，仅imaging-laboratory13+tumor-pathology5+treatment-consultation7，按证据索引排除scope_catalog_only；不重审代码",
+  "method": "只读既有证据、最新问题账/修复记录及1958历史叠加；无新测试、模型、DB或当前反例复现。A>B>C>D；具体次级缺件/争议保留；共通正式链缺口不令全体主C。",
+  "primary_class_labels": {
+    "A": "确认缺陷待处理",
+    "B": "受改动影响需复验",
+    "C": "证据或合同待补",
+    "D": "可继承有限既有证据"
+  },
+  "summary": {
+    "rules": 25,
+    "by_primary_class": {
+      "C": 8,
+      "A": 8,
+      "B": 7,
+      "D": 2
+    },
+    "by_group": {
+      "imaging-laboratory": 13,
+      "tumor-pathology": 5,
+      "treatment-consultation": 7
+    }
+  },
+  "excluded_scope_catalog_only_in_owned_groups": [
+    "LX0609-05-01-01",
+    "LX0609-05-01-04",
+    "LX0609-05-03-01",
+    "LX0609-06-03-01",
+    "LX0609-07-04-02"
+  ],
+  "historical_overlay": {
+    "path": "docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+    "fixed_head": "1958ae3bb",
+    "usage": "仅历史证据，当前分类逐条继承后续集成，不继承旧next_action计数"
+  },
+  "nonintegrated_candidates": {
+    "transfusion": "425通过/3失败为候选联合回归，未集成，不是五条通过或失败计数",
+    "chemotherapy": "67中65通过/2语义失败及旧115未恢复，未集成"
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-05-01-02",
+      "name": "抗菌药物：用药调整无充分理由",
+      "group": "tumor-pathology",
+      "primary_class": "C",
+      "reason": "42db89910已补指定合成来源绑定，13组中本条6例3符合预期；计划/否定无client的technical_error是模型输入限制，未证真实误判。药品目录范围TP-Q03及理由分支阅读绑定仍有具体缺件，不将旧5差异统称缺陷。",
+      "issue_ids": [
+        "TP-L01",
+        "TP-Q03"
+      ],
+      "next_action": "补院方抗菌目录/批准映射及原054理由分支阅读证据；独立冻结计划/否定动作预期，已有合成正常/缺理由证据继承。",
+      "secondary_flags": [
+        "synthetic_source_binding_completed",
+        "real_semantics_pending_without_new_input_change",
+        "specific_catalog_contract_missing"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/antibiotic-current/review.md",
+          "locator": "精确输入与结果；完成层级与剩余门禁"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/35"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/tumor-pathology.md",
+          "locator": "不按确定缺陷认领的差异"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/35",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-05-01-03",
+      "name": "抗菌药物：48至72小时内无效果评价",
+      "group": "tumor-pathology",
+      "primary_class": "A",
+      "reason": "TP-D05原明确药物效果评价“体温下降”在48/60/72小时被判缺评价，闭合账仍queued_shared_module；未找到后续关闭。当前7d92984a6未新重现，不能按旧词覆盖自动宣布修复。",
+      "issue_ids": [
+        "tumor-pathology:TP-D05"
+      ],
+      "next_action": "沿原明确评价及47/73小时正常反向保护收口，固定通用效果事实与原医学预期，不扩关键词凑绿。",
+      "secondary_flags": [
+        "current_counterexample_not_reproduced",
+        "clinical_gold_pending"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/31"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/tumor-pathology.md",
+          "locator": "可修问题：TP-D05"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+          "locator": "/findings/4"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/36",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-05-01-05",
+      "name": "抗菌药物：经验用药未说明理由",
+      "group": "tumor-pathology",
+      "primary_class": "C",
+      "reason": "42db当前指定7合成5符合，另两差异分别是无样可采原因充分性与会诊同文来源范围，保持原TP-Q05/Q04争议；不是确认漏写。057分支历史阅读定位亦待绑定。",
+      "issue_ids": [
+        "TP-Q04",
+        "TP-Q05"
+      ],
+      "next_action": "确认会诊来源参与触发范围及“无痰标本可采”充分性；补原057分支/来源定位，保留原7输入与预期。",
+      "secondary_flags": [
+        "synthetic_source_binding_completed",
+        "business_basis_dispute",
+        "real_semantics_pending_without_new_input_change"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/antibiotic-current/review.md",
+          "locator": "精确输入与结果case19/21；完成层级与剩余门禁"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/38"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/38",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-05-01-06",
+      "name": "抗菌药物：特殊级用药缺少专家查房或会诊",
+      "group": "tumor-pathology",
+      "primary_class": "C",
+      "reason": "TP-D04已由35dd/2f402集成，原18+补17独审35及SQLite3可继承，不能继续标跨药支持确认缺陷；仍具体缺院方特殊级目录、专家授权与未知药名自然资料签认。",
+      "issue_ids": [
+        "tumor-pathology:TP-D04"
+      ],
+      "next_action": "取得院方特殊级目录/专家身份授权依据和未知药名签认，沿原跨药/时间归属/半覆盖保护继承，不重修已闭子项。",
+      "secondary_flags": [
+        "limited_engineering_subissue_closed",
+        "clinical_source_signoff_pending"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/30"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/integration-progress.md",
+          "locator": "N12 and TP-D04 fixed integration"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.md",
+          "locator": "必须保留的限定结论：TP-D04（1958历史）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/39",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-05-02-01",
+      "name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+      "group": "tumor-pathology",
+      "primary_class": "A",
+      "reason": "TP-D01及N13不假matched/错误日期排除子项已集成；TP-D02跨药剂量及否定实施、TP-D03取消状态仍开放。隔离候选67/65/2保留negated原NC实际DG、widened坏关系原NC实际C，旧115保护未恢复验证；此轮未重现当前集成。",
+      "issue_ids": [
+        "tumor-pathology:TP-D02",
+        "tumor-pathology:TP-D03",
+        "N13",
+        "tumor-pathology:TP-D01"
+      ],
+      "next_action": "按可泛化目标药物-动作-剂量关系解决，保留两个坏fake原oracle/N13六NC两计数/旧保护；三轮失败停报，整体候选未闭不集成。",
+      "secondary_flags": [
+        "current_counterexample_not_reproduced",
+        "candidate_not_integrated",
+        "limited_N13_and_TPD01_inherited",
+        "legacy_regression_unverified",
+        "real_semantics_pending",
+        "unit_time_contract_disputes"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/28；/issues/29；/issues/2；/issues/27"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-reconciliation.md",
+          "locator": "五、化疗候选具体核对；附录A"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "locator": "化疗与剩余项"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/40",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-01",
+      "name": "CT/MRI检查记录：医嘱与病程一致性",
+      "group": "imaging-laboratory",
+      "primary_class": "B",
+      "reason": "IML01 US/培养角色有限修复已集成，新身份字段影响实际输入需复验。本条原联合case没有orders/course，不能继承06-01-03的C观察或把合同pending变本条已确认误判。",
+      "issue_ids": [
+        "imaging-laboratory:IML-01"
+      ],
+      "next_action": "用本条适用的医嘱-检查-病程完整输入复验新身份字段、合并医嘱与单次抽取；保留CT/MRI剩余合同到相应消费规则，不臆造当前A。",
+      "secondary_flags": [
+        "partial_engineering_integrated",
+        "rule_attribution_unknown_for_original_joint_case",
+        "specific_identity_contract_pending"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/integration-progress.md",
+          "locator": "IML01 precise consumers mapped（118行）"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/17"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-reconciliation.md",
+          "locator": "四、IML01"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/42",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-02",
+      "name": "CT/MRI 检查记录：CT/MRI检查前有无病程记录（无行CT/MRI检查原因）",
+      "group": "imaging-laboratory",
+      "primary_class": "C",
+      "reason": "检查前原因被硬裁前48小时；原业务基线仅检查前原因，未找到48小时院方确认依据。IML-D02最新为业务口径review，不能以旧测试固定行为当确认缺陷。",
+      "issue_ids": [
+        "imaging-laboratory:IML-D02"
+      ],
+      "next_action": "确认有效原因有无48小时有效期及评价范围，保留已有R-02身份投影保护与原检查前正常例。",
+      "secondary_flags": [
+        "business_basis_dispute",
+        "old_R02_limited_fix_inherited"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/20"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "IML-D02；逐规则06-01-02"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/43",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-03",
+      "name": "CT/MRI检查记录：报告单完整性",
+      "group": "imaging-laboratory",
+      "primary_class": "C",
+      "reason": "已集成US角色净修复保留；CT/MRI同键联合事件gap-vs-C及取消主记录配有效报告的最终/历史语义仍未定，IML-D01明确暂不计确认P1。归本条具体合同待补，不能沿原IML01五条共享标签直接A。",
+      "issue_ids": [
+        "imaging-laboratory:IML-01",
+        "imaging-laboratory:IML-D01"
+      ],
+      "next_action": "裁定同键联合CT/MRI与取消状态/正式报告权威合同，绑定原case与正常保护；保持acceptance_only不擅自启用。",
+      "secondary_flags": [
+        "partial_engineering_integrated",
+        "business_basis_dispute",
+        "acceptance_only_default_off",
+        "program_only_no_model_needed"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/integration-progress.md",
+          "locator": "IML01 precise consumers mapped"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/17；/issues/19"
+        }
+      ],
+      "scope_note": "acceptance_only，已撤出默认，仅显式范围；分类不授权启用。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/44",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-04",
+      "name": "CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内在病程中未记录",
+      "group": "imaging-laboratory",
+      "primary_class": "B",
+      "reason": "报告后24小时结果记录原C09/C10输入在移除DR后已变，CT-INPUT-CHANGE仍需当前输入真实复验。原C12/C04逐字相同历史响应可有限回放，不能代替新模型；本条阅读摘录绑定待补为次级C。",
+      "issue_ids": [
+        "CT-INPUT-CHANGE"
+      ],
+      "next_action": "固定当前完整送模文书目录和本条独立人工预期，核同次结果/记录与提交时间及阳性分析；补旧分支摘录，不从零重审。",
+      "secondary_flags": [
+        "specific_source_reading_locator_missing",
+        "historical_real_response_limited_inheritance"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/6"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "旧CT真实证据；逐规则06-01-04"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/45"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/45",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-01-05",
+      "name": "CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内阳性结果未进行分析",
+      "group": "imaging-laboratory",
+      "primary_class": "B",
+      "reason": "阳性结果24小时分析原C09/C10输入在移除DR后已变，CT-INPUT-CHANGE仍需当前输入真实复验。原C12/C04逐字相同历史响应可有限回放，不能代替新模型；本条阅读摘录绑定待补为次级C。",
+      "issue_ids": [
+        "CT-INPUT-CHANGE"
+      ],
+      "next_action": "固定当前完整送模文书目录和本条独立人工预期，核同次结果/记录与提交时间及阳性分析；补旧分支摘录，不从零重审。",
+      "secondary_flags": [
+        "specific_source_reading_locator_missing",
+        "historical_real_response_limited_inheritance"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/6"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "旧CT真实证据；逐规则06-01-05"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/46"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/46",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-02-01",
+      "name": "病理检查记录：报告单完整性",
+      "group": "imaging-laboratory",
+      "primary_class": "C",
+      "reason": "历史阶段A P01–P03真实Session/确定性发布技术证据与当前ID命名空间可继承；本条病理完整性阅读函数/行号/hash仍未绑定，不在42db七条补证范围。没有具体新未闭误判或受改动复验ID。",
+      "issue_ids": [],
+      "next_action": "绑定既有病理完整性源码阅读摘录和执行身份，复用P01–P03限定证据；保持acceptance_only，不把缺阅读定位说成从未审。",
+      "secondary_flags": [
+        "specific_source_reading_locator_missing",
+        "historical_technical_chain_limited_inheritance",
+        "acceptance_only_default_off",
+        "program_only_no_model_needed"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/47"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "逐规则06-02-01；历史证据界限"
+        }
+      ],
+      "scope_note": "acceptance_only，已撤出默认，仅显式范围；分类不授权启用。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/47",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-02-02",
+      "name": "病理检查：取材情况未在病程记录/手术记录中进行记录。",
+      "group": "imaging-laboratory",
+      "primary_class": "B",
+      "reason": "取材记录曾有历史审查；跨事件同键、标本/诊断关联与报告后时间门禁已变化，PATH-INPUT-CHANGE最新仍复验准备。旧响应不能证明当前关联输入正确。",
+      "issue_ids": [
+        "PATH-INPUT-CHANGE"
+      ],
+      "next_action": "以完整适用多事件报告/标本与对应取材记录冻结输入及独立预期，复验同命名空间、唯一关联/未决和报告时序，保留历史限定成果。",
+      "secondary_flags": [
+        "historical_review_inherited",
+        "event_linkage_inputs_changed"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/7"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "逐规则06-02-02；病理历史与复验界限"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/48",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-02-03",
+      "name": "病理检查：病理检查结果在手术记录、病程中未记录",
+      "group": "imaging-laboratory",
+      "primary_class": "B",
+      "reason": "病理结果记录曾有历史审查；跨事件同键、标本/诊断关联与报告后时间门禁已变化，PATH-INPUT-CHANGE最新仍复验准备。旧响应不能证明当前关联输入正确。",
+      "issue_ids": [
+        "PATH-INPUT-CHANGE"
+      ],
+      "next_action": "以完整适用多事件报告/标本与对应病理结果记录冻结输入及独立预期，复验同命名空间、唯一关联/未决和报告时序，保留历史限定成果。",
+      "secondary_flags": [
+        "historical_review_inherited",
+        "event_linkage_inputs_changed"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/7"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "逐规则06-02-03；病理历史与复验界限"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/49",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-03-02",
+      "name": "微生物培养检查记录：报告单完整性",
+      "group": "imaging-laboratory",
+      "primary_class": "B",
+      "reason": "IML01培养明细角色修复已集成；exam-only CT/MRI联合case不适用于本条，不能据其未闭合同认定本条A。仍明确需新身份字段在培养多行真实输入/交付上的影响复验。",
+      "issue_ids": [
+        "imaging-laboratory:IML-01"
+      ],
+      "next_action": "准备培养主/明细同test_id与非目标常规报告的完整实际输入，复验新字段与角色归属；继续acceptance_only，程序规则不制造模型调用。",
+      "secondary_flags": [
+        "limited_culture_role_fix_inherited",
+        "acceptance_only_default_off",
+        "program_only_no_model_needed"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/integration-progress.md",
+          "locator": "IML01 precise consumers mapped"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/17"
+        }
+      ],
+      "scope_note": "acceptance_only，已撤出默认，仅显式范围；分类不授权启用。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/51",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-03-03",
+      "name": "细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）",
+      "group": "imaging-laboratory",
+      "primary_class": "C",
+      "reason": "42db已补当前合成版本绑定，旧015身份literal由5f34698a2仅测试适配，root45/45；不能继续算失败。该条历史自然培养材料/真实语义批次执行SHA与case manifest未齐，专属阅读摘录仍待绑定；无具体新A或输入改动B。",
+      "issue_ids": [],
+      "next_action": "补历史真实执行SHA/完整输入manifest与本条源阅读锚点，保留45节点分层（10直接+33共享+解析器/提示）；不以合成回放倒填历史真实运行。",
+      "secondary_flags": [
+        "current_synthetic_binding_and_literal_restored",
+        "historical_real_manifest_missing",
+        "specific_source_reading_locator_missing"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/evidence-binding-current.md",
+          "locator": "培养两条及2026-10-08后续45/45"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/culture-current/current-review.md",
+          "locator": "Binding and limits"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/52"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/52",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-03-04",
+      "name": "细菌培养结果无分析：细菌培养结果有阳性菌，在病程记录中无分析（报告出具后24小时内）。",
+      "group": "imaging-laboratory",
+      "primary_class": "C",
+      "reason": "42db已补当前合成版本绑定，旧015身份literal由5f34698a2仅测试适配，root45/45；不能继续算失败。该条历史自然培养材料/真实语义批次执行SHA与case manifest未齐，专属阅读摘录仍待绑定；无具体新A或输入改动B。",
+      "issue_ids": [],
+      "next_action": "补历史真实执行SHA/完整输入manifest与本条源阅读锚点，保留45节点分层（10直接+33共享+解析器/提示）；不以合成回放倒填历史真实运行。",
+      "secondary_flags": [
+        "current_synthetic_binding_and_literal_restored",
+        "historical_real_manifest_missing",
+        "specific_source_reading_locator_missing"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/evidence-binding-current.md",
+          "locator": "培养两条及2026-10-08后续45/45"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/culture-current/current-review.md",
+          "locator": "Binding and limits"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+          "locator": "/rules/53"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/53",
+        "status_as_historical": "substantive_review_reading_locator_incomplete"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-04-01",
+      "name": "危急值记录：6小时内未书写危急值处置记录",
+      "group": "imaging-laboratory",
+      "primary_class": "D",
+      "reason": "IML02记录时间冒充报告时间与别名冲突子项已a8ad74e69集成；原缺时间/冲突及6小时处置窗口、SQLite限定工程证据可继承。最新账无本条具体未闭A/B/C新增待办，共通客户链缺口不把整条改C。",
+      "issue_ids": [
+        "imaging-laboratory:IML-02"
+      ],
+      "next_action": "沿原报告时间权威/等价时区、多事件及6小时处置窗口保护继承，最终发布批次按共享验收计划核相关链路，不重修IML02。",
+      "secondary_flags": [
+        "limited_engineering_subissue_closed",
+        "not_whole_rule_clinical_acceptance",
+        "common_formal_chain_pending"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/18"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-ownership.json",
+          "locator": "/tasks/2（IML-02集成a8ad74e69）"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "T1 IML-02关闭标准（原历史）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/54",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-06-04-02",
+      "name": "危急值记录：危急值报告后无处置记录",
+      "group": "imaging-laboratory",
+      "primary_class": "D",
+      "reason": "IML02记录时间冒充报告时间与别名冲突子项已a8ad74e69集成；原缺时间/冲突及处置存在性/先后时间、SQLite限定工程证据可继承。最新账无本条具体未闭A/B/C新增待办，共通客户链缺口不把整条改C。",
+      "issue_ids": [
+        "imaging-laboratory:IML-02"
+      ],
+      "next_action": "沿原报告时间权威/等价时区、多事件及处置存在性/先后时间保护继承，最终发布批次按共享验收计划核相关链路，不重修IML02。",
+      "secondary_flags": [
+        "limited_engineering_subissue_closed",
+        "not_whole_rule_clinical_acceptance",
+        "common_formal_chain_pending"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/18"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-ownership.json",
+          "locator": "/tasks/2（IML-02集成a8ad74e69）"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.md",
+          "locator": "T1 IML-02关闭标准（原历史）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/55",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-01-01",
+      "name": "输血前辅助检查：输血前常规检查不完整；",
+      "group": "treatment-consultation",
+      "primary_class": "A",
+      "reason": "TC01原TF_PLAN/TF_REFUSED/TF_POSTPONED把未实施判gate=present；准备报告明确正式executor逐条043共用_performed_source_state，门控后evaluate_pretransfusion_nine_items消费九项检查。这是明确影响本条的共同实施事实缺陷，不是五条各六例终态验证；当前集成未新重现。候选425/3未集成不计本条关闭。",
+      "issue_ids": [
+        "treatment-consultation:TC-01"
+      ],
+      "next_action": "沿原六冻结实施gate与本条九项检查正常保护固定版本复验/独审候选；保留计划/拒绝/暂缓原DG，不按词表或病例特判。",
+      "secondary_flags": [
+        "current_integrated_counterexample_not_reproduced",
+        "shared_gate_defect_explicit_rule_path",
+        "candidate_not_integrated",
+        "candidate425_3_not_rule_pass_count"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/tc01-original-cases.json",
+          "locator": "/checks/0；/checks/1；/checks/2；/original_observations"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/review.md",
+          "locator": "共用helper和各规则还缺的事实：043路径；旧结果边界"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/24"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "locator": "2026-10-09：来源就绪状态修复（425/3，未集成）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/56",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-01-02",
+      "name": "输血前评估：无输血前评估记录或输血前评估记录不完整；",
+      "group": "treatment-consultation",
+      "primary_class": "A",
+      "reason": "TC01原TF_PLAN/TF_REFUSED/TF_POSTPONED把未实施判gate=present；准备报告明确正式executor逐条044共用_performed_source_state，门控后_programmatic_044_status消费评估存在/完整性。这是明确影响本条的共同实施事实缺陷，不是五条各六例终态验证；当前集成未新重现。候选425/3未集成不计本条关闭。",
+      "issue_ids": [
+        "treatment-consultation:TC-01",
+        "TR-044-MULTI"
+      ],
+      "next_action": "沿原六冻结实施gate与本条评估存在/完整性正常保护固定版本复验/独审候选；保留计划/拒绝/暂缓原DG，不按词表或病例特判。TR044原三node/rows/expected manifest缺件单列，勿造新例冒充。",
+      "secondary_flags": [
+        "current_integrated_counterexample_not_reproduced",
+        "shared_gate_defect_explicit_rule_path",
+        "candidate_not_integrated",
+        "candidate425_3_not_rule_pass_count",
+        "TR044_exact_manifest_missing",
+        "closed_db4_contract_inherited"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/tc01-original-cases.json",
+          "locator": "/checks/0；/checks/1；/checks/2；/original_observations"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/review.md",
+          "locator": "共用helper和各规则还缺的事实：044路径；旧结果边界"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/24；/issues/3"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "locator": "2026-10-09：来源就绪状态修复（425/3，未集成）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/57",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-01-03",
+      "name": "输血前评估：未做输血前相关九项检查",
+      "group": "treatment-consultation",
+      "primary_class": "B",
+      "reason": "TC02原取消记录record_time当实施事实已由011d26b86+35909964a有限工程闭环，root289/289可继承；当前缺实际模型正确提取performed/plan/cancel及多时钟/多事件语义，不再把原取消反例归A。",
+      "issue_ids": [
+        "treatment-consultation:TC-02"
+      ],
+      "next_action": "固定已集成070版本和自然实际/计划/取消/未知及多时钟输入，先核可信身份/硬预算后真实语义复验；保留正常C缺labID精确卡边界，不扩成043–047候选通过。",
+      "secondary_flags": [
+        "limited_engineering_and_formal_wrapper_closed",
+        "real_model_semantics_pending_after_input_change",
+        "normal_C_labID_precise_card_limit"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/25"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/independent-closure/tc02-integration/pv-carrier-review.md",
+          "locator": "fixed-196d independent acceptance"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/integration-progress.md",
+          "locator": "TC02固定独审、串行集成与root复跑"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/58",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-02-01",
+      "name": "输血记录：无输血病程记录；",
+      "group": "treatment-consultation",
+      "primary_class": "A",
+      "reason": "TC01原TF_PLAN/TF_REFUSED/TF_POSTPONED把未实施判gate=present；准备报告明确正式executor逐条045共用_performed_source_state，门控后_programmatic_045_status消费病程记录存在。这是明确影响本条的共同实施事实缺陷，不是五条各六例终态验证；当前集成未新重现。候选425/3未集成不计本条关闭。",
+      "issue_ids": [
+        "treatment-consultation:TC-01"
+      ],
+      "next_action": "沿原六冻结实施gate与本条病程记录存在正常保护固定版本复验/独审候选；保留计划/拒绝/暂缓原DG，不按词表或病例特判。",
+      "secondary_flags": [
+        "current_integrated_counterexample_not_reproduced",
+        "shared_gate_defect_explicit_rule_path",
+        "candidate_not_integrated",
+        "candidate425_3_not_rule_pass_count"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/tc01-original-cases.json",
+          "locator": "/checks/0；/checks/1；/checks/2；/original_observations"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/review.md",
+          "locator": "共用helper和各规则还缺的事实：045路径；旧结果边界"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/24"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "locator": "2026-10-09：来源就绪状态修复（425/3，未集成）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/59",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-02-02",
+      "name": "输血记录：输血病程记录不完整或不规范；",
+      "group": "treatment-consultation",
+      "primary_class": "A",
+      "reason": "TC01原TF_PLAN/TF_REFUSED/TF_POSTPONED把未实施判gate=present；准备报告明确正式executor逐条046共用_performed_source_state，门控后_programmatic_046_status消费逐份目的/指征及字段。这是明确影响本条的共同实施事实缺陷，不是五条各六例终态验证；当前集成未新重现。TF_PLAN_COMPLETE_FIELDS另有046纯函数NC误入分支证据。候选425/3未集成不计本条关闭。",
+      "issue_ids": [
+        "treatment-consultation:TC-01"
+      ],
+      "next_action": "沿原六冻结实施gate与本条逐份目的/指征及字段正常保护固定版本复验/独审候选；保留计划/拒绝/暂缓原DG，不按词表或病例特判。",
+      "secondary_flags": [
+        "current_integrated_counterexample_not_reproduced",
+        "shared_gate_defect_explicit_rule_path",
+        "candidate_not_integrated",
+        "candidate425_3_not_rule_pass_count"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/tc01-original-cases.json",
+          "locator": "/checks/0；/checks/1；/checks/2；/original_observations；/original_observations/5"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/review.md",
+          "locator": "共用helper和各规则还缺的事实：046路径；旧结果边界"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/24"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "locator": "2026-10-09：来源就绪状态修复（425/3，未集成）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/60",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-03-01",
+      "name": "输血后评价：无输血后评价",
+      "group": "treatment-consultation",
+      "primary_class": "A",
+      "reason": "TC01原TF_PLAN/TF_REFUSED/TF_POSTPONED把未实施判gate=present；准备报告明确正式executor逐条047共用_performed_source_state，门控后_programmatic_047_assessment消费结束后评价窗口。这是明确影响本条的共同实施事实缺陷，不是五条各六例终态验证；当前集成未新重现。候选425/3未集成不计本条关闭。",
+      "issue_ids": [
+        "treatment-consultation:TC-01"
+      ],
+      "next_action": "沿原六冻结实施gate与本条结束后评价窗口正常保护固定版本复验/独审候选；保留计划/拒绝/暂缓原DG，不按词表或病例特判。",
+      "secondary_flags": [
+        "current_integrated_counterexample_not_reproduced",
+        "shared_gate_defect_explicit_rule_path",
+        "candidate_not_integrated",
+        "candidate425_3_not_rule_pass_count"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/tc01-original-cases.json",
+          "locator": "/checks/0；/checks/1；/checks/2；/original_observations"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/next-batch/transfusion-family/review.md",
+          "locator": "共用helper和各规则还缺的事实：047路径；旧结果边界"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/24"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/resumption-execution.md",
+          "locator": "2026-10-09：来源就绪状态修复（425/3，未集成）"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/61",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    },
+    {
+      "rule_id": "LX0609-07-04-01",
+      "name": "输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容记录不一致。",
+      "group": "treatment-consultation",
+      "primary_class": "A",
+      "reason": "TC03原048_NEGATED_INTRAOPERATIVE三份均明确未输血，仅备血2U/4U/2U仍实际NC且confirmed=true；closure仍queued。b4a98783e配对/单位合同已关，TR048-REAL样本不足属次级B/C，不覆盖本明确未闭反例。当前集成未新重现。",
+      "issue_ids": [
+        "treatment-consultation:TC-03",
+        "TR-048-REAL"
+      ],
+      "next_action": "沿原术中否定/备血反例与048_MATCHED/TIME_CONFLICT固定实际术中事件事实，不重开b4配对；另补真实实际触发及三类完整文书再复验。",
+      "secondary_flags": [
+        "current_counterexample_not_reproduced",
+        "closed_pairing_contract_inherited",
+        "affected_real_validation_pending",
+        "complete_three_document_sample_missing"
+      ],
+      "latest_evidence": [
+        {
+          "path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+          "locator": "/findings/2（048_NEGATED_INTRAOPERATIVE）"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "locator": "/issues/26；/issues/10"
+        },
+        {
+          "path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+          "locator": "/closed_work_preserved/0"
+        }
+      ],
+      "scope_note": "默认执行范围的有限分类；不等于整条临床/发布验收完成。",
+      "documentary_index": {
+        "path": "docs/acceptance/engine-audit-20261008/remaining-audit-evidence.json",
+        "json_pointer": "/rules/62",
+        "status_as_historical": "source_contract_reading_locatable"
+      }
+    }
+  ]
+}
