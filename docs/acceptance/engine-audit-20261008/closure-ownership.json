@@ -398,7 +398,7 @@
       "owner": "/root/resume_transfusion",
       "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
       "branch": "codex/qc-fix-transfusion-family-20261008",
-      "state": "411_passed_3_production_contract_failures_root_review_pending",
+      "state": "425_passed_3_contract_failures_readiness_closed_candidate_not_integrated",
       "responsibility": [
         "native_transfusion_execution.py:043-047 only",
         "new versioned performance scope extractor",
@@ -501,6 +501,15 @@
       "course_deep_json_boundary": {
         "implementation_rounds": 1,
         "state": "red_reproduced_then_passed"
+      },
+      "transfusion_source_readiness": {
+        "implementation_rounds": 1,
+        "state": "independently reviewed engineering subitem closed; 14 passed, 428 combined425 passed3 unchanged contract failures",
+        "production_sha256": "0517c4b7402c7cf7438177969c5a94fbdf6dd6a73d4b3a8b5a35a26d3561d2e6",
+        "semantic_validation": "not performed; deterministic source-readiness change only",
+        "verification_attempts_completed": 3,
+        "test_helper_correction_state": "two erroneous test assertions corrected within three validation attempts; all first failures retained",
+        "integration": "candidate only; not integrated"
       }
     },
     "course_validation": {

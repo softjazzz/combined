@@ -99,6 +99,54 @@ integration亲跑三组经只读核验：85facts、133legacy、8Store全部绿�
 
 这项结论仅为固定候选的离线工程集成。独立TRUNCATED快照反例尚未实测（源码仍在既有来源完整性门控拒绝），真实模型/临床语义、正式API/UI完整链仍待验。已有保存新engine回读证据可以继承到该固定包，不能扩大为真实语义或整条065/067客户验收完成。旧占位/时区夹具变化已单列，未稀释原医学/引用断言，不能声称原同输入全部零回退。
 
+## R1剩余045/046及custom129合同独立复核
+
+读取critical `.tmp/tc01-scope-closure/resume-three-production-residuals-readonly.md`、原规则/标准/测试和当前源码。本批只读，无生产或旧预期修改、无pytest/模型/PG。414=411通过3失败仅为修复者已有运行证据，不是本复核实跑；原冻结医学期望继续保留，不能靠改断言使绿色。三轮同根因失败停止门禁继续适用。
+
+**045/046分工依据：** `apps/medqc-web/docs/0602/泸县0609质控点-业务标准基线-v1.md` 第131/132行明确045“有可靠输血事件时，应有对应输血病程记录”，046“输血病程至少记录原因或指征、时间、成分、血型、输血量、过程观察、不良反应及处置、输注效果”。正式目录两规则适用源均含bloodtrans_record与daily_course_record，046正反例对应存在文书的完整/不完整，而045负例为实际输血缺对应记录。实施事实、对应文书存在和已有文书字段缺陷应分别持有真实证据，不能因门禁共享而混成一个事实。
+
+MR可信实际实施不被专用取消行推翻；取消行不能被重标performed、不能补实际记录字段或充当046缺字段文书。只有MR+cancel时，045若所有批准候选源完整且对应事件可核、无unknown，有明确“无对应实际病程”证据，可以按存在性缺陷NC；若日常病程仍可能存在对应正文或事件归属未知，应gap。当前scope只抽bloodtrans_record，MR+没有actual专用行便045立即NC的分支不能独立证明daily_course_record没有对应记录，应补正式批准源及事件归属边界证明，不能凭专用行全cancel就宣称整规则不存在对应病程。
+
+046现有 `_safe_046` 与事实投影是已定位实际文书字段合同：NC的incomplete_record_count需≥1且≤record_count，missing_field_record_counts每项≥1且≤incomplete_count。实际文书集合为空时，不能用record_count=1引用取消行，或record_count=0与缺字段次数0伪造旧字段NC。合理最小分工是045承接可证明的整份缺失，046在无法定位实际文书时保持无法核对字段的前提缺口；若客户明确要求046也对缺整份记录NC，应另定missing-document原因/facts/证据/文案合同，并解释与045是否重复扣分，不能沿旧“记录字段缺项”载荷追原NC。当前原MR+cancel/046 NC期望作为未闭合同冲突保留；本独审不授权修改。
+
+“空模板”例同理：旧通用bool True只证明旧fake给过答案，不能迁成正文存在或performed人工事实。当前unknown是诚实的范围事实，045原C与原输入无法由受控事实合同证明一致。最小可泛化后续方案是独立抽取批准病程材料的clinical_record presence及原文证据，事件候选与权威实施时刻由程序关联；presence不等于performed，cancel也不等于整源absent。逐事件候选完整/未知/对应正文三态归约，避免任意另一事件的记录补本事件。版本、预算与失败语义需先固定，不加“空模板”关键词或测试编号分支。已有旧时间入口/正常字段保护不得改预期。
+
+**custom129与预算：** 原selected-evidence helper显式source_limit=129且truncated=False；generic SnapshotSourceRows合法接纳caller声明的完整材料。独立按原 `_complete_course` 字面拼接计算单正文87字符、129总11223字符，低于12000总字符预算；因此该原例不是总字符超限，仍被50文书容量挡在scope之前。正式SQL51行会TRUNCATED是另一来源合同，不能据此把合法custom129宣称schema错误或加rawcount>50/>128技术分支凑原绿。
+
+原测试明确保护最终RuleDecision的128引用上限。最终基数为允许source observation refs与实际selected document refs合并去重，重复业务ID可能映射多个真实材料ref；文书数/事件数并不等于union基数。可泛化最小工程证据应在同真实snapshot材料上测试selected identities解析、实际ref合并、精确union128合法/129拒绝、重复ID/跨源同ID去重边界与rule-local executor_exception隔离；不能预先把所有候选假定已选中。这个独立保护即使绿色，仍不等于原129全链路径恢复。
+
+若必须兼容custom129，不能只扩MAX_DOCUMENTS：还须明定consumer支持来源能力、每body/总输入字符、严格逐文书states/action完整覆盖的最坏输出规模与MAX_COMPLETION_TOKENS=2048。129条JSON结构和引文会增加输出，fake usage15不证明真实预算足够；输出length/非法必须一次计账缓存、不能接收前缀答案或隐式重试。可先设计更紧凑的版本化逐文书语义协议及最小引文，再由程序绑定回原材料；如分批，需明确总调用/Token硬上限、缺批未知及全部结果覆盖，修改合同/成本归因并证明旧正常保护。现有单次2048合同下不能宣称任意129份可成功覆盖。
+
+若root维持正式来源50的scope能力，上限来源继续唯一权威函数，custom超能力保持诚实scope gap并明示旧custom端到端行为未恢复；不能修改原technical_error预期后声称零回退。若root新增consumer-envelope技术合同，必须作为独立版本能力变更，而非原最终128护栏修复。两种取舍均需明确账目，本复核不据3个红例发明临床/技术前置限制。可信MR+文书归属与custom容量是合同决策，不应靠反复试补丁耗尽三轮。
+
+## R1 readiness窄修复写前独审
+
+只读审 `.tmp/resumption-20261008/apply_readiness_fix.py` old/new及critical原scope分支，**认可该最小方案**。改动仅在没有raw_records/mr_rows、无可信MR/实际文书的空投影分支：旧入口 `legacy_source_state != absent` 保留data_gap/source_readiness_unproven；typed完整同snapshot空来源和legacy已证明absent仍NA。物理present或未知/读取故障不能因payload空变成“未发生输血”；该补丁只表达投影不足，不发布临床实施或字段缺项事实。
+
+复用已计算来源状态，不新查库/新client，不读取病例ID/文书ID/关键词/样例答案，scope空材料0call且预算不变。新原因沿scope gap路径不产生C/NC facts，符合事实owner边界。应用脚本固定源码hash、唯一hunk及原文backup是安全冻结措施，不进入产品分支，不属于业务硬编码。typed源失败/truncated在原门控之前拒绝，本补丁不改时间或来源完整性合同。
+
+建议冻结独立红绿：空legacy投影+物理未知行/物理实际行/查询故障分别gap+0call；legacy可信全空和typed可信全空分别NA+0call；MR-only零scope调用及正常实际材料原事实/引用不变。原shell测试后段必须独立触达，不从前段原C合同冲突推断后段已验。此为写前方案审查，尚未据此声称修复实跑通过；根因轮次继续按真实红绿计数。
+
+## R1 readiness实际补丁与14保护静态复核
+
+2026-10-09只读比较原hash `8ee08a4312bfcf583f251e942ccea5971e02a1936d7da03c57d24354d9b37aef` 的integration备份与当前native，确认仅一个hunk：原单行NA改五行注释/legacy非absent gap/else NA（净增4行），当前SHA256 `0517c4b7402c7cf7438177969c5a94fbdf6dd6a73d4b3a8b5a35a26d3561d2e6`。无其它生产变更，符合写前独审；固定hash与backup不参与医学判定。
+
+新 `test_luxian_0609_transfusion_source_readiness_resumption.py` 共14项：5个空legacy投影下物理null/空/未知/MR实际/专用实际，2个legacy触发源查询错误，legacy可信全空1、typed完整同snapshot全空1、MR-only045原缺记录1、typed两触发源TRUNCATED2、typed两触发源查询错误2。所有路径均独立NoModelProbe断言0call及三项Token0；gap/technical路径禁止customer_display_facts，typed来源通过真实Evidence Session/Binding/Reducer，错误保持source_query_error技术失败，truncated保持来源gap，不套legacy错误语义。
+
+静态无新增临床判断、关键词/文书ID/样例特判、预算改变或未知正文伪缺项。legacy异常仍沿旧gap（新readiness原因），typed错误仍technical，体现既有入口合同差异。legacy前7项目前只断言status/facts，未断言精确reason；代码新reason已静态核，后续可独立加强出口原因保护，不据此改变当前预期。本次尚等待14/428真实结果与产物完整性，不先宣布工程子项通过。
+
+green01原XML独立计数14项=11pass/3fail，manifest pytest_exit1、unchanged/target路径均true。三首失败分别是两typed query测试helper漏必填truncated，以及MR-only把native `transfusion_course_record_missing` 与Reducer `requirement_violated` 混层断言；不是生产readiness三项失败。原7个legacy来源首红已恢复，生产hash0517c4未再变。root已授权精确测试接线修正及旧shell后段0scope预算恢复（先前错误增加1），不改原首段C临床冲突；待green02和428复验。本根因生产仍首轮一次窄实现，不能把三测试helper失败称生产三轮，也不重命名隐藏测试修正记录。
+
+## R1 readiness最终工程子项结论
+
+**readiness工程子项可关闭；整批输血仍不验收、不集成。** 独立读取XML：green01=11pass/3fail，green02=13pass/1fail，green03=14pass/0fail。green02在修正Reducer断言后仍把相同业务原因错误期待放到typed RuleDecision，原typed reason实际也为requirement_violated；green03保留NC和0call，按既有typed reason断言，并用真实customer_display_facts.failure_kind证明transfusion_course_record_missing。两helper显式truncated=False恢复真实完整source envelope。以上错误与调整完整保留，未改生产、临床NC或业务facts来追绿。
+
+独立比对首红XML7个失败nodeid与green03通过集合，七例均恢复。新14保护全部0模型调用、0Token，typed同snapshot可信空、TRUNCATED、query_error与MR-only路径均达到断言。旧shell后段scope调用错误预算已恢复原0，首段C合同冲突仍冻结。当前生产native SHA `0517c4b7402c7cf7438177969c5a94fbdf6dd6a73d4b3a8b5a35a26d3561d2e6` 未再改，新readiness测试SHA `69553539ec90f3f1981962a9a726b82968e07bae6a96b0ac6f57ba341c603d4a`、旧native测试SHA `929f0e78a5624102e7418a198bc6142ce850be703d20d659468cdac034020867` 与最终产物一致。green03与family428 manifest均pre/post unchanged、all_app_in_target=true，当前所有post文件hash完全匹配。
+
+联合原八文件414与新14形成428=425pass/3fail；与原 `resume-family03-results.xml` 的414=411pass/3fail独立比对失败classname/name集合完全相同，无新增或消失。三项仍是空模板原C、custom129最终引用/容量、MR+cancel的046 NC合同冲突；readiness子项绿色不能据此宣称它们关闭或整批零回退。
+
+最终log SHA：green03 `b2250f1f45f54043055532269d59a2658bc6daf0bacf55f3bdfb9351e008b159`，family428 `f5c52bf6ef802d68f948da4315f445ab507f1641eb2ba4e565bfd5c59c26341e`；XML SHA分别 `7aad0803cf63e0f328652083389a69adb5fb123deef316a8f1038f05fcc051d8`、`fbdb8979486ee3f789df79226b8438fcd49ff3c0511540b5ae0508cff2fa44f4`，均位于critical `.tmp/tc01-scope-closure/`。辅助三次运行按真实测试接线过程记录，生产根因仅首轮一窄实现，不将helper失败计作生产三轮、不隐藏失败。真实语义/原TR-044-MULTI/整批正式链仍未验收，本复核未运行pytest或任何模型/数据库调用。
+
 ## 待排队最小验证与保护
 
 根代理唯一测试槽先复验别名7项，再原第9份、辅助源两例、MR+cancel/046归属与预算保护；最后复用原八文件356集合，保留旧医学/facts/refs断言，只调整获授权的抽取协议与预算新增步骤。数量可能因新测试增加，不能用小集合冒充原回归。使用严格offline guard，不直接裸运行涉及历史数据库fixture的测试。
