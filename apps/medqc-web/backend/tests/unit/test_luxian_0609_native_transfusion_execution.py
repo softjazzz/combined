@@ -107,6 +107,18 @@ _COURSE_LABELS = {
     '空模板': 'not_record',
     '输血结束，继续观察。': 'record',
     '输血后继续观察。': 'record',
+    # 047 时间/评价用例：均为测试作者写成的实际输注记录。
+    **{f'{end_text}，复查血红蛋白较前改善，未见输血不良反应。': 'record' for end_text in (
+        '2026-06-05 16:10:00+08输血结束', '2026-06-05 16:10:00+08:00输血结束',
+        '2026-06-05 16:10输血结束后', '2026年6月5日16:10输注完毕后')},
+    **{f'2026-06-05 16:10输血结束。{text}': 'record' for text in (
+        '未见输血后评价异常。', '无输血后评价异常。', '输血后评价未见异常。',
+        '未记录输血后评价。', '缺少输血后评价。', '未书写输血后评价。')},
+    '2026-06-05 16:10记录：输血结束。生命体征平稳。': 'record',
+    '2026-06-05 16:10输血结束，输注过程顺利。': 'record',
+    '2026-06-05 10:00输血结束。输血后复查血红蛋白改善。': 'record',
+    '16:00输血结束。未记录输血后评价。': 'record',
+    '2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
 }
 _protocol_call_counts: dict[int, int] = {}
 
@@ -2962,9 +2974,10 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
         ],
         daily_rows=[{"content": "普通病程：继续观察。"}],
     )
+    # 只有计划记录、没有结构化实施时间：停在实施门控，不进入结束时间判定。
     assert planned.results[0]["status"] == "data_gap"
     assert planned.results[0]["metadata"]["reason_code"] == (
-        "transfusion_end_time_unavailable"
+        "transfusion_source_unavailable"
     )
 
     document_time = await _execute(
@@ -3021,9 +3034,9 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
         daily_rows=[{"content": "普通病程：继续观察。"}],
     )
     assert one_of_two_missing.results[0]["status"] == "data_gap"
-    assert planned.llm_call_count == weak_context.llm_call_count == 0
-    assert document_time.llm_call_count == unresolved_row.llm_call_count == 0
-    assert one_of_two_missing.llm_call_count == 0 + _protocol_calls(one_of_two_missing)
+    # 每次只有一次专用记录实施核验，047 时间判定本身不调用模型。
+    for result in (planned, weak_context, document_time, unresolved_row, one_of_two_missing):
+        assert result.llm_call_count == _protocol_calls(result) == 1
 
 
 @pytest.mark.asyncio

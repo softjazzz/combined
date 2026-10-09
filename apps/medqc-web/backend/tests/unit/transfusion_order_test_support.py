@@ -11,9 +11,11 @@ OPEN_TRANSFUSION_ORDER = {
 
 
 class FrozenTransfusionProtocolClient:
-    def __init__(self, delegate=None, *, course_labels=None):
+    def __init__(self, delegate=None, *, course_labels=None, default_course_label=None):
         self.delegate = delegate
         self.course_labels = dict(course_labels or {})
+        # 仅供正文全部由测试作者写成同一类记录的用例使用，避免逐句重复标注。
+        self.default_course_label = default_course_label
         self.protocol_calls = 0
         self.protocol_prompts = []
 
@@ -42,10 +44,13 @@ class FrozenTransfusionProtocolClient:
             rows = payload["records"]
             assert len({row["index"] for row in rows}) == len(rows)
             for row in rows:
-                assert row["content"] in self.course_labels, "未人工标注的病例正文"
+                assert row["content"] in self.course_labels or self.default_course_label, (
+                    "未人工标注的病例正文"
+                )
             output = {
                 "schema_version": "lx0609-transfusion-course-presence-v1",
-                "records": [{"index": row["index"], "kind": self.course_labels[row["content"]],
+                "records": [{"index": row["index"],
+                             "kind": self.course_labels.get(row["content"], self.default_course_label),
                              "quote": row["content"]} for row in rows],
             }
         return {"content": json.dumps(output, ensure_ascii=False), "_api_time": 0.2,

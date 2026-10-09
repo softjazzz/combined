@@ -15,6 +15,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows, build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.source_evidence_reader import SourceEvidenceUnavailable
+from app.services.luxian_0609.transfusion_course_presence import TransfusionCoursePresenceResult
 
 RULES = ("LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01")
 CANCELLED = "患者原计划输血，经再次评估后取消，本次住院未实施输血。"
@@ -96,16 +97,55 @@ def test_unknown_short_text_is_not_absence():
     assert {result[rule] for rule in LEGACY_PERFORMED_RULES} == {"data_gap"}
 
 
-@pytest.mark.parametrize("content, expected", [(CANCELLED, "data_gap"), (PERFORMED, "present")])
-def test_documents_shortcut_checks_nonperformance(monkeypatch, content, expected):
-    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", lambda **kwargs: [
-        {"record_content": content}
-    ] if kwargs["source_key"] == "bloodtrans_record" else [])
-    state = transfusion._performed_source_state(
-        documents={"bloodtrans_record": [{"content": content}]}, institute_id="I", patient_id="P",
-        visit_id="V", source_schema=None,
-    )
+@pytest.mark.parametrize("kind, expected", [
+    ("not_record", ("data_gap", "")),
+    ("unknown", ("data_gap", "")),
+    ("record", ("present", "")),
+])
+def test_documents_shortcut_uses_semantic_record_verification(monkeypatch, kind, expected):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", lambda **kwargs: (
+        _ for _ in ()).throw(AssertionError("bundle 已携带来源时不应查库")))
+    seen = []
+
+    async def classify(rows):
+        seen.append([row["content"] for row in rows])
+        return TransfusionCoursePresenceResult(
+            "present" if kind == "record" else "data_gap" if kind == "unknown" else "absent",
+            ("R0",) if kind == "record" else (),
+        )
+
+    state = asyncio.run(transfusion._performed_source_state(
+        documents={"mr_bloodtrans": [], "bloodtrans_record": [{"document_id": "R0", "content": CANCELLED}]},
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        classify_course_records=classify,
+    ))
     assert state == expected
+    assert seen == [[CANCELLED]]
+
+
+def test_structured_time_proves_performance_without_semantic_call():
+    async def classify(rows):
+        raise AssertionError("结构化实际输注时间已足以证明实施")
+
+    state = asyncio.run(transfusion._performed_source_state(
+        documents={"mr_bloodtrans": [{"transfution_datetime": "2026-07-16 12:00:00"}],
+                   "bloodtrans_record": [{"document_id": "R0", "content": CANCELLED}]},
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        classify_course_records=classify,
+    ))
+    assert state == ("present", "")
+
+
+def test_semantic_verification_failure_is_technical_error_not_absence():
+    async def classify(rows):
+        return TransfusionCoursePresenceResult("technical_error", reason_code="model_transport_error")
+
+    state = asyncio.run(transfusion._performed_source_state(
+        documents={"mr_bloodtrans": [], "bloodtrans_record": [{"document_id": "R0", "content": PERFORMED}]},
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        classify_course_records=classify,
+    ))
+    assert state == ("technical_error", "model_transport_error")
 
 
 def test_pretransfusion_context_does_not_negate_completed_transfusion():

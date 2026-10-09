@@ -5,6 +5,8 @@ from typing import Any
 
 import pytest
 
+from transfusion_order_test_support import FrozenTransfusionProtocolClient
+
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -65,7 +67,8 @@ async def _execute(session: Any):
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=None,
+        # 本文件专用输血记录均由测试作者写成实际输注过程；只验证 047 时间与关联。
+        llm_client=FrozenTransfusionProtocolClient(default_course_label="record"),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=("LX0609-07-03-01",),
@@ -290,5 +293,6 @@ async def test_047_uses_one_assessment_for_status_and_display_facts(
     result = await _execute(session)
 
     assert calls == 1
-    assert result.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），状态与展示事实不重复计算。
+    assert result.llm_call_count == 1
     assert result.customer_display_facts == ()

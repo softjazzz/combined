@@ -5,6 +5,8 @@ from typing import Any
 
 import pytest
 
+from transfusion_order_test_support import FrozenTransfusionProtocolClient
+
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -69,7 +71,8 @@ async def _evaluate(*, session: Any):
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=None,
+        # 本文件专用输血记录均由测试作者写成实际输注过程；只验证 047 时间与关联。
+        llm_client=FrozenTransfusionProtocolClient(default_course_label="record"),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=("LX0609-07-03-01",),
@@ -113,7 +116,8 @@ async def test_047_two_nonoverlapping_episodes_bind_their_own_daily_evaluations(
         "compliant",
         "requirement_satisfied",
     )
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
     refs = dict(execution.customer_display_facts)["LX0609-07-03-01"]["source_document_refs"]
     assert {item["source_document_id"] for item in refs} == {
         "BT-1", "BT-2", "DC-1", "DC-2",
@@ -240,7 +244,8 @@ async def test_047_multi_episode_daily_source_error_is_technical_without_clinica
         "source_query_error",
     )
     assert execution.customer_display_facts == ()
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -262,7 +267,8 @@ async def test_047_multi_episode_daily_source_unavailable_is_a_data_gap():
         "source_unavailable",
     )
     assert execution.customer_display_facts == ()
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -284,7 +290,8 @@ async def test_047_pre_end_daily_anchor_is_a_time_gap_not_a_late_evaluation():
         "data_gap",
         "authoritative_time_missing",
     )
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -386,7 +393,8 @@ async def test_047_future_daily_anchor_ambiguity_does_not_override_frozen_deadli
         "non_compliant",
         "requirement_violated",
     )
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -410,7 +418,8 @@ async def test_047_unusable_daily_does_not_preempt_later_unique_episodes():
         "compliant",
         "requirement_satisfied",
     )
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -433,7 +442,8 @@ async def test_047_timely_daily_can_supersede_late_same_record_evaluation():
         "compliant",
         "requirement_satisfied",
     )
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -471,7 +481,8 @@ async def test_047_ambiguous_daily_evaluation_never_fans_out_to_multiple_episode
         session, "bloodtrans_record", {"BT-1", "BT-2"}
     ).union(_selected_document_refs(session, "daily_course_record", {"DC-AMB"}))
     assert expected_refs.issubset(set(execution.decisions[0].fact_refs))
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -548,4 +559,5 @@ async def test_047_missing_episode_keeps_existing_maturity_priority(
     execution, canonical = await _evaluate(session=session)
 
     assert (canonical.final_state.value, canonical.reason_code) == expected
-    assert execution.llm_call_count == 0
+    # 仅一次专用记录实施核验（与 045/046 共享），时间关联本身不调用模型。
+    assert execution.llm_call_count == 1

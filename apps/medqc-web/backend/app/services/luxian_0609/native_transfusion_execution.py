@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 import json
 import re
 import unicodedata
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Protocol, Sequence
 
 from .decision_model import (
     ApplicabilityState,
@@ -2891,36 +2891,50 @@ def _authoritative_record_time(row: Mapping[str, Any]) -> datetime | None:
     return None
 
 
-def _dedicated_record_supports_performance(content: str) -> bool:
-    # 保留专用来源门控，但明确取消/未实施不能凭正文长度证明已经输注。
-    # 此处只排除确定的非实施表述；“无输血反应”不否定输血本身。
-    if re.search(r"(?:取消|撤销)(?:本次)?输血|(?:未|没有)(?:实际)?(?:实施|进行|开始)?输血(?!前|(?:不良)?反应)|"
-                 r"输血(?:计划|申请)?(?:已)?(?:取消|撤销)", content):
-        return False
-    return len(content) >= 16
+CoursePresenceClassifier = Callable[
+    [Sequence[Mapping[str, Any]]], Awaitable[TransfusionCoursePresenceResult]
+]
 
 
-def _performed_source_state(
+def _structured_transfusion_performed(row: Mapping[str, Any]) -> bool:
+    """输血结构化记录中的实际输注时间是实施事实的权威来源。"""
+
+    return _parse_document_datetime(row.get("transfution_datetime")) is not None
+
+
+async def _performed_source_state(
     *,
     documents: Mapping[str, Any] | None,
     institute_id: str,
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
+    classify_course_records: CoursePresenceClassifier,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
-) -> str:
-    # 正式 bundle 已携带同次就诊专用输血记录时直接采用，避免重复查库；
-    # 普通病程/手术文本中的“输血”字样不进入该分支。
-    if isinstance(documents, Mapping) and any(
-        _dedicated_record_supports_performance(content)
-        for content in _source_rows(documents, "bloodtrans_record")
-    ):
-        return "present"
-    if not all((institute_id, patient_id, visit_id)):
-        return "data_gap"
-    rows_by_source: dict[str, list[dict[str, Any]]] = {}
+) -> tuple[str, str]:
+    """确认本次就诊是否实际输血，返回 (状态, 技术错误原因)。
+
+    结构化实际输注时间可直接证明实施；否则专用输血记录是否记载实际输注
+    与 045/046 共用同一语义分类结果，不按正文长度或关键词推断。计划、拒绝、
+    延期、取消等记录存在但不能证明实施时保持资料不足，不降为“无输血”。
+    """
+
+    rows_by_source: dict[str, list[Mapping[str, Any]]] = {}
     failed = False
     for source_key in _TRIGGER_SOURCES:
+        # 同一证据会话的快照材料是权威来源；仅旧入口没有快照时，才采用
+        # bundle 已携带的同次就诊来源以避免重复查库。
+        if (
+            evidence_materials is None
+            and isinstance(documents, Mapping)
+            and isinstance(documents.get(source_key), list)
+        ):
+            rows_by_source[source_key] = _source_document_rows(documents, source_key)
+            continue
+        if evidence_materials is None and not all((institute_id, patient_id, visit_id)):
+            rows_by_source[source_key] = []
+            failed = True
+            continue
         try:
             if evidence_materials is not None:
                 rows_by_source[source_key] = [
@@ -2938,19 +2952,22 @@ def _performed_source_state(
             rows_by_source[source_key] = []
             failed = True
 
-    structured_performed = any(
-        isinstance(row.get("transfution_datetime"), datetime)
+    if any(
+        _structured_transfusion_performed(row)
         for row in rows_by_source.get("mr_bloodtrans", ())
-    )
-    dedicated_record_present = any(
-        _dedicated_record_supports_performance(_clean(row.get("record_content")))
-        for row in rows_by_source.get("bloodtrans_record", ())
-    )
-    if structured_performed or dedicated_record_present:
-        return "present"
+    ):
+        return "present", ""
+    record_rows = rows_by_source.get("bloodtrans_record", [])
+    if record_rows:
+        presence = await classify_course_records(record_rows)
+        if presence.state == "present":
+            return "present", ""
+        if presence.state == "technical_error":
+            return "technical_error", presence.reason_code or "model_invalid_output"
+        return "data_gap", ""
     if failed or any(rows_by_source.values()):
-        return "data_gap"
-    return "absent"
+        return "data_gap", ""
+    return "absent", ""
 
 
 async def execute_luxian_0609_native_transfusion_rules(
@@ -3112,16 +3129,6 @@ async def execute_luxian_0609_native_transfusion_rules(
                         rule_id=typed_rule_id,
                     )
                 )
-    legacy_source_state = "data_gap"
-    if any(rule_id not in _ORDER_TRIGGER_RULES for rule_id in selected):
-        legacy_source_state = _performed_source_state(
-            documents=legacy_documents,
-            institute_id=str(institute_id or ""),
-            patient_id=str(patient_id or ""),
-            visit_id=str(visit_id or ""),
-            source_schema=source_schema,
-            evidence_materials=evidence_materials,
-        )
     wrappers_by_id = {
         str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper(): wrapper
         for wrapper in wrapper_rules
@@ -3130,8 +3137,29 @@ async def execute_luxian_0609_native_transfusion_rules(
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     order_trigger_cache: dict[bool, TransfusionOrderTriggerResult] = {}
-    course_cache: dict[bool, TransfusionCoursePresenceResult] = {}
+    course_cache: dict[
+        tuple[tuple[str, str], ...], TransfusionCoursePresenceResult
+    ] = {}
+    performed_cache: dict[bool, tuple[str, str]] = {}
     order_identities: tuple[tuple[str, str], ...] = ()
+
+    async def classify_course_records(
+        rows: Sequence[Mapping[str, Any]],
+    ) -> TransfusionCoursePresenceResult:
+        # 同一批专用记录在门控、045/046 与 047 之间只做一次语义核验。
+        nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
+        key = tuple(
+            (str(row.get("document_id", row.get("id"))), _row_text(row)) for row in rows
+        )
+        if key not in course_cache:
+            presence = await classify_transfusion_course_records(rows, llm_client)
+            course_cache[key] = presence
+            llm_call_count += presence.llm_call_count
+            prompt_tokens += presence.prompt_tokens
+            completion_tokens += presence.completion_tokens
+            total_tokens += presence.total_tokens
+            api_time += presence.api_time
+        return course_cache[key]
     for rule_id in selected:
         order_identities = ()
         typed_rule = rule_id in typed_requested
@@ -3177,18 +3205,32 @@ async def execute_luxian_0609_native_transfusion_rules(
                 emit_outcome(rule_id, "technical_error", order_result.reason_code or "model_invalid_output", executor_type="llm")
                 continue
         else:
-            source_state = (
-                _performed_source_state(
+            if typed_rule:
+                performed_state = await _performed_source_state(
                     documents=documents,
                     institute_id=str(institute_id or ""),
                     patient_id=str(patient_id or ""),
                     visit_id=str(visit_id or ""),
                     source_schema=source_schema,
+                    classify_course_records=classify_course_records,
                     evidence_materials=evidence_materials,
                 )
-                if typed_rule
-                else legacy_source_state
-            )
+            else:
+                if False not in performed_cache:
+                    performed_cache[False] = await _performed_source_state(
+                        documents=legacy_documents,
+                        institute_id=str(institute_id or ""),
+                        patient_id=str(patient_id or ""),
+                        visit_id=str(visit_id or ""),
+                        source_schema=source_schema,
+                        classify_course_records=classify_course_records,
+                        evidence_materials=evidence_materials,
+                    )
+                performed_state = performed_cache[False]
+            source_state, performed_error = performed_state
+            if source_state == "technical_error":
+                emit_outcome(rule_id, "technical_error", performed_error, executor_type="llm")
+                continue
         if source_state != "present":
             emit_outcome(
                 rule_id,
@@ -3384,17 +3426,9 @@ async def execute_luxian_0609_native_transfusion_rules(
             if course_state not in {"available", "empty"}:
                 emit_outcome(rule_id, "data_gap", "transfusion_course_source_unavailable", executor_type="program")
                 continue
-            if typed_rule not in course_cache:
-                presence = await classify_transfusion_course_records(
-                    _source_document_rows(documents, "bloodtrans_record"), llm_client,
-                )
-                course_cache[typed_rule] = presence
-                llm_call_count += presence.llm_call_count
-                prompt_tokens += presence.prompt_tokens
-                completion_tokens += presence.completion_tokens
-                total_tokens += presence.total_tokens
-                api_time += presence.api_time
-            presence = course_cache[typed_rule]
+            presence = await classify_course_records(
+                _source_document_rows(documents, "bloodtrans_record")
+            )
             if presence.state in {"data_gap", "technical_error"}:
                 emit_outcome(rule_id, presence.state,
                              (presence.reason_code or "model_invalid_output") if presence.state == "technical_error"
@@ -3534,6 +3568,26 @@ async def execute_luxian_0609_native_transfusion_rules(
                 )
                 continue
         if rule_id == "LX0609-07-03-01":
+            # 只有被确认为实际输注过程的专用记录才能提供结束时间和评价；
+            # 计划、取消等记录既不产生评价义务，也不能抹掉已知的实际输血事件。
+            record_rows = _source_document_rows(documents, "bloodtrans_record")
+            if record_rows:
+                presence = await classify_course_records(record_rows)
+                if presence.state == "technical_error":
+                    emit_outcome(rule_id, "technical_error",
+                                 presence.reason_code or "model_invalid_output", executor_type="llm")
+                    continue
+                if presence.state == "data_gap":
+                    # 有记录不能确定是否为实际输注，可能缺少一次输血的结束与评价。
+                    emit_outcome(rule_id, "data_gap",
+                                 "transfusion_performance_unresolved", executor_type="llm")
+                    continue
+                valid_ids = set(presence.valid_document_ids)
+                documents = dict(documents)
+                documents["bloodtrans_record"] = [
+                    row for row in record_rows
+                    if str(row.get("document_id", row.get("id"))) in valid_ids
+                ]
             assessment = _programmatic_047_assessment(documents)
             status, reason_code = assessment.status, assessment.reason_code
             emit_outcome(
