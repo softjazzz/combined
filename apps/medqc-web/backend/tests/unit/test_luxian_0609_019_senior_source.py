@@ -35,6 +35,7 @@ from test_luxian_0609_native_tumor_pathology_execution import _Client, _wrapper
 
 
 CREATED_AT = "2026-09-10T12:00:00+08:00"
+RECORD_TIME = "2025-08-16 09:00:00"
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 C30_SENIOR_TEXT = (
@@ -46,8 +47,8 @@ C30_SENIOR_TEXT = (
 def _session(
     *,
     senior_rows: tuple[dict, ...],
-    surgery_rows: tuple[dict, ...] = ({"record_content": "术后情况平稳。"},),
-    daily_rows: tuple[dict, ...] = ({"record_content": "继续观察病情变化。"},),
+    surgery_rows: tuple[dict, ...] = ({"record_content": "术后情况平稳。", "record_time": RECORD_TIME},),
+    daily_rows: tuple[dict, ...] = ({"record_content": "继续观察病情变化。", "record_time": RECORD_TIME},),
 ):
     rows_by_source = {
         "pathology_exam_master": ({"specimen_name": "胃组织"},),
@@ -124,31 +125,25 @@ def test_019_runtime_prompt_accepts_senior_as_course_sampling_evidence() -> None
 
 @pytest.mark.asyncio
 async def test_019_c30_senior_text_enters_single_semantic_call_and_exact_refs() -> None:
-    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT},))
+    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
     client = _Client([{"is_compliant": False}])
 
     result = await _execute(session, client)
 
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
-    assert "[senior_course_record-1]" in client.prompts[0]
-    assert "贲门息肉，内镜下钳除术" in client.prompts[0]
+    # 写有病理相关内容却未对上本次标本：不能据此断言已记录或未记录。
+    assert result.llm_call_count == 0
+    assert result.decisions[0].reason_code == "association_failed"
     senior_ref = session.materials.document_rows(
         "senior_course_record", snapshot=session.snapshot
     )[0][0]
+    # 上级医师查房记录已纳入本规则核对范围。
     assert senior_ref.removeprefix("sha256:") in result.decisions[0].fact_refs
-    facts = dict(result.customer_display_facts)["LX0609-06-02-02"]
-    assert [item["source"] for item in facts["checked_target_sources"]] == [
-        "surgery_record",
-        "daily_course_record",
-        "senior_course_record",
-    ]
 
 
 @pytest.mark.asyncio
 async def test_019_senior_documented_sampling_is_programmatic() -> None:
     session = _session(
-        senior_rows=({"record_content": "术中切取组织标本，已送病理检查。"},)
+        senior_rows=({"record_content": "术中切取胃组织标本，已送病理检查。", "record_time": RECORD_TIME},)
     )
     client = _Client([])
 
@@ -176,14 +171,13 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
     ),
 )
 async def test_019_senior_plan_or_result_only_stays_semantic(content: str) -> None:
-    session = _session(senior_rows=({"record_content": content},))
+    session = _session(senior_rows=({"record_content": content, "record_time": RECORD_TIME},))
     client = _Client([{"is_compliant": False}])
 
     result = await _execute(session, client)
 
-    assert result.llm_call_count == 1
-    assert content in client.prompts[0]
-    assert result.decisions[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == 0
+    assert result.decisions[0].reason_code == "association_failed"
 
 
 def test_019_mapping_accepts_legacy_two_sources_and_new_three_sources() -> None:
@@ -275,7 +269,7 @@ def test_019_trigger_absent_does_not_claim_target_sources_were_checked() -> None
 
 @pytest.mark.asyncio
 async def test_013_does_not_consume_senior_course_source() -> None:
-    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT},))
+    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
     client = _Client([{"is_compliant": True}])
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=("LX0609-06-02-03",),
@@ -291,8 +285,8 @@ async def test_013_does_not_consume_senior_course_source() -> None:
         decision_rule_ids=("LX0609-06-02-03",),
     )
 
-    assert result.llm_call_count == 1
-    assert "senior_course_record" not in client.prompts[0]
+    assert result.llm_call_count == 0
+    assert result.decisions[0].reason_code == "requirement_violated"
     senior_ref = session.materials.document_rows(
         "senior_course_record", snapshot=session.snapshot
     )[0][0]

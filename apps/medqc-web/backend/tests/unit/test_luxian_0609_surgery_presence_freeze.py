@@ -136,7 +136,9 @@ def _assert_typed_native_without_llm(execution: Any) -> None:
             ("not_applicable", "not_applicable"),
             ("trigger_absent_complete", "trigger_absent_complete"),
             ({}, {}),
-            ("本次未发现已实施手术，不要求形成手术记录", "本次未发现已实施手术，不要求形成手术安全核查表"),
+            ("本次未发现已实施手术，不要求形成手术记录",
+             # 032 以正式手术记录为触发依据（fbe6e383）：缺记录不等于未手术。
+             "未检索到本规则核查所需的正式手术记录，本项暂不适用"),
             (set(), set()),
             id="complete-sources-without-performed-surgery",
         ),
@@ -164,6 +166,8 @@ def _assert_typed_native_without_llm(execution: Any) -> None:
                     "verification_kind": "surgery_document_present",
                     "target_document": "surgery_record",
                     "performed_surgery_confirmed": True,
+                    # 030 显式记录触发来源（4125e032）。
+                    "surgery_trigger_kind": "performed_surgery",
                 },
                 {
                     "verification_kind": "surgery_document_present",
@@ -203,6 +207,8 @@ def _assert_typed_native_without_llm(execution: Any) -> None:
                     "verification_kind": "surgery_document_present",
                     "target_document": "surgery_record",
                     "performed_surgery_confirmed": True,
+                    # 030 显式记录触发来源（4125e032）。
+                    "surgery_trigger_kind": "performed_surgery",
                 },
                 {
                     "failure_kind": "surgery_document_missing",
@@ -230,7 +236,9 @@ def _assert_typed_native_without_llm(execution: Any) -> None:
             ("not_applicable", "not_applicable"),
             ("trigger_absent_complete", "trigger_absent_complete"),
             ({}, {}),
-            ("本次未发现已实施手术，不要求形成手术记录", "本次未发现已实施手术，不要求形成手术安全核查表"),
+            ("本次未发现已实施手术，不要求形成手术记录",
+             # 032 以正式手术记录为触发依据（fbe6e383）：缺记录不等于未手术。
+             "未检索到本规则核查所需的正式手术记录，本项暂不适用"),
             (set(), set()),
             id="cancelled-plan-without-trusted-actual-time",
         ),
@@ -370,7 +378,13 @@ def test_surgery_presence_freeze_two_surgeries_requires_explicit_minute_associat
             ("surgery_record", "SURG-1", "record_content", ""),
             ("surgery_record", "SURG-2", "record_content", ""),
         },
-        set(),
+        # 关联失败时展示执行器选中的真实候选文书供核对，不由聚合器反查猜测。
+        {
+            ("surgery_record", "SURG-1", "record_content", ""),
+            ("surgery_record", "SURG-2", "record_content", ""),
+            ("surgery_safecheck_record", "CHECK-1", "record_content", ""),
+            ("surgery_safecheck_record", "CHECK-2-DUPLICATE", "record_content", ""),
+        },
     ]
     assert set(ambiguous_reduced[0].fact_refs) == _material_refs(
         ambiguous_session, "surgery_record"
@@ -487,6 +501,7 @@ def test_surgery_presence_freeze_safecheck_error_preserves_032_technical_error()
         "verification_kind": "surgery_document_present",
         "target_document": "surgery_record",
         "performed_surgery_confirmed": True,
+        "surgery_trigger_kind": "performed_surgery",
     }
     assert results[1].get("customer_display_facts", {}) == {}
     assert results[1]["findings"] == "质控执行未完成"

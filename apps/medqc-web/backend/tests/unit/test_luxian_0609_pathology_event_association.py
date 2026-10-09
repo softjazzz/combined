@@ -154,3 +154,56 @@ async def test_explicit_report_numbers_disambiguate_repeated_diagnoses():
     rows["daily_course_record"][0]["record_content"] = "病理号A。胆囊病理结果：慢性胆囊炎。"
     rows["daily_course_record"].append({"document_id": "course-B", "record_time": "2026-07-04 12:00:00", "record_content": "病理号B。胆囊病理结果：慢性胆囊炎。"})
     assert (await _run(rows, RESULT))["status"] == "compliant"
+
+
+# 唯一病理事件：资料齐全可核对时，“没有任何取材/结果记录”必须能判为未记录，
+# 不能因关联不到文书而一律降为资料不足；任何无法归属的病理表述仍保守处理。
+NO_MENTION = ("手术顺利，术后安返病房。", "生命体征平稳，继续观察。")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
+async def test_single_event_without_any_record_is_not_documented(rule_id):
+    rows = _rows()
+    rows["surgery_record"][0]["surgery_process"], rows["daily_course_record"][0]["record_content"] = NO_MENTION
+    result = await _run(rows, rule_id)
+    assert result["status"] == "non_compliant"
+    assert {row["source_document_id"] for row in result["customer_evidence"]} >= {"surgery-A", "course-A"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
+async def test_untimed_target_record_cannot_prove_not_documented(rule_id):
+    rows = _rows()
+    rows["surgery_record"][0]["surgery_process"], rows["daily_course_record"][0]["record_content"] = NO_MENTION
+    rows["daily_course_record"].append({"document_id": "course-untimed", "record_content": "胆囊标本已送病理。"})
+    assert (await _run(rows, rule_id))["status"] == "data_gap"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["拟于明日取材送病理检查。", "追踪病检结果。"])
+async def test_unbound_pathology_wording_is_not_treated_as_absence(text):
+    rows = _rows()
+    rows["surgery_record"][0]["surgery_process"] = text
+    rows["daily_course_record"] = []
+    assert (await _run(rows, SAMPLING))["status"] == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_single_event_with_generic_specimen_binds_timed_sampling_record():
+    rows = _rows()
+    for key in ("pathology_exam_master", "pathology_exam_report"):
+        rows[key][0]["specimen_name"] = "组织"
+    rows["surgery_record"][0]["surgery_process"] = "术中切取组织标本，已送病理检查。"
+    assert (await _run(rows, SAMPLING))["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_two_events_without_records_stay_unresolved():
+    rows = _rows()
+    second = deepcopy(rows["pathology_exam_report"][0])
+    second.update(document_id="report-B", pathology_exam_id="B", specimen_name="胃", diagnosis="胃腺癌",
+                  report_datetime="2026-07-04 10:00:00")
+    rows["pathology_exam_report"].append(second)
+    rows["surgery_record"][0]["surgery_process"], rows["daily_course_record"][0]["record_content"] = NO_MENTION
+    assert (await _run(rows, RESULT))["status"] == "data_gap"

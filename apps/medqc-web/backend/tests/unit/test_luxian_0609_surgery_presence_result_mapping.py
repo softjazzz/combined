@@ -189,6 +189,7 @@ def test_surgery_presence_rule_membership_and_targets_are_frozen() -> None:
         "LX0609-04-02-02": "surgery_record",
         "LX0609-04-03-01": "surgery_safecheck_record",
     }
-    assert is_surgery_presence_customer_rule("lx0609-030") is True
+    # 四段式统一身份大小写不敏感（原 030）。
+    assert is_surgery_presence_customer_rule("lx0609-04-02-02") is True
     assert is_surgery_presence_customer_rule("LX0609-04-03-01") is True
     assert is_surgery_presence_customer_rule("LX0609-04-01-01") is False
