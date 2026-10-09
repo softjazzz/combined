@@ -58,10 +58,15 @@ _LABELLED_PHONE = re.compile(
     r"现住址电话|工作单位电话|电话)[ \t]*[:：][ \t]*)"
     r"(?P<value>[+＋()（）0-9\-－ \t]{6,28})"
 )
+# 自由文本取值止于换行、分号、JSON 转义序列（\n、\" 等）和裸引号：正文常以 JSON
+# 字符串嵌入 prompt，发送包装器会对整段 prompt 再脱敏一次，不能越过转义换行吞掉
+# 后续正文和 JSON 结构；已是脱敏占位符的取值不再重复匹配，保证二次脱敏幂等。
+_FREE_TEXT_CHAR = r'(?:(?!\\[\\"/bfnrtu])[^\n\r；;"])'
+_ALREADY_REDACTED = r"(?!\[[^\]\n]{1,16}已脱敏\])"
 _ADDRESS = re.compile(
     r"(?P<label>(?:现住址|家庭住址|户籍地址|通讯地址|联系地址|联系人地址|"
     r"工作单位地址|详细地址|地址)\s*[:：]\s*)"
-    r"(?P<value>[^\n\r；;]{2,160})"
+    rf"(?P<value>{_ALREADY_REDACTED}{_FREE_TEXT_CHAR}{{2,160}})"
 )
 _MEDICAL_IDENTIFIER = re.compile(
     r"(?P<label>(?:住院号|病历号|门诊号|就诊号|医保号|社保号|患者ID|"
@@ -76,7 +81,7 @@ _BIRTH_DATE = re.compile(
 )
 _WORK_UNIT = re.compile(
     r"(?P<label>(?:工作单位|单位名称)\s*[:：]\s*)"
-    r"(?P<value>[^\n\r；;]{2,120})"
+    rf"(?P<value>{_ALREADY_REDACTED}{_FREE_TEXT_CHAR}{{2,120}})"
 )
 _EMAIL = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"

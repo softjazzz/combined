@@ -102,3 +102,21 @@ def test_wrapper_keeps_none_and_is_idempotent():
     delegate = _CaptureClient()
     wrapped = wrap_luxian_0609_llm_client(delegate)
     assert wrap_luxian_0609_llm_client(wrapped) is wrapped
+
+
+@pytest.mark.parametrize("body", [
+    "现住址：某镇测试街道12号\n14:00悬浮红细胞2U输注完毕。",
+    "工作单位：测试单位甲\n输注完毕。",
+])
+@pytest.mark.parametrize("pre_redacted", [False, True])
+def test_json_embedded_labelled_address_survives_wrapper_redaction(body, pre_redacted):
+    """抽取器以 JSON 承载正文，发送包装器再对整段 prompt 脱敏：不能越过转义换行吞掉 JSON。"""
+    import json
+
+    sent_body = redact_luxian_0609_patient_privacy(body) if pre_redacted else body
+    prompt = "INPUT_JSON=" + json.dumps({"documents": [{"body": sent_body}]}, ensure_ascii=False)
+    redacted = redact_luxian_0609_patient_privacy(prompt)
+    payload = json.loads(redacted.removeprefix("INPUT_JSON="))
+    assert payload["documents"][0]["body"] == redact_luxian_0609_patient_privacy(body)
+    assert "某镇测试街道12号" not in redacted and "测试单位甲" not in redacted
+    assert redact_luxian_0609_patient_privacy(redacted) == redacted
