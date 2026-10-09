@@ -13,6 +13,7 @@ from app.services.luxian_0609.difficult_case_result_mapping import (
 )
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from test_luxian_0609_native_extended_document_execution import _evaluate_selected
+from diagnosis_scope_test_support import FrozenDiagnosisScopeClient
 
 RULE = "LX0609-03-02-01"
 ADMISSION = "2026-06-01 08:00:00"
@@ -72,15 +73,18 @@ def rows(*discussions, course_time=MATURE, course_text="目前诊断仍不明确
 
 
 async def evaluate(source_rows, *, unavailable=frozenset()):
+    # 已满 7 天的候选病程需要一次诊断明确性语义抽取（人工标注替身）；讨论正文缺口由程序判定。
+    client = FrozenDiagnosisScopeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        (RULE,), source_rows, unavailable_sources=unavailable, llm_client=ForbiddenModel(),
+        (RULE,), source_rows, unavailable_sources=unavailable, llm_client=client,
     )
     results = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": RULE}], execution_results=[], reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
         audit_context={"evidence_snapshot": snapshot, "evidence_materials": materials},
     )
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert client.fixture_error is None, client.fixture_error
+    assert execution.llm_call_count == len(client.calls) <= 1
     assert len(results) == 1
     assert results[0]["status"] == {"evaluation_unknown": "uncertain"}.get(reduced[0].final_state.value, reduced[0].final_state.value)
     return snapshot, materials, execution, results[0]

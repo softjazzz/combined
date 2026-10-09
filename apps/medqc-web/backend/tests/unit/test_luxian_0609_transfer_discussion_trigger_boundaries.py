@@ -48,4 +48,5 @@ async def test_difficult_discussion_requires_current_uncertainty(content, expect
             "record_content": content}],
     })
     assert decision.final_state.value == expected
-    assert result.llm_call_count == 0
+    # 诊断/方案明确性由一次受控语义抽取提供（人工标注替身），时间窗与讨论存在性由程序判定。
+    assert result.llm_call_count == 1

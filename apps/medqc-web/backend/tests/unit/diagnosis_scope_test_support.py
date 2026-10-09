@@ -72,6 +72,59 @@ MANUAL_DIAGNOSIS_SCOPE_FACTS = {
         _fact("目前肺炎诊断明确", "肺炎", state="explicit"),
         _fact("但该患者诊疗方案难以确定。", "诊疗方案", state="undetermined", scope="treatment_plan"),
     ),
+    # 转科/讨论触发边界用例（test_luxian_0609_transfer_discussion_trigger_boundaries）。
+    "入院时诊断不明确，现已明确诊断为细菌性肺炎，诊疗方案已确定。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("现已明确诊断为细菌性肺炎", "细菌性肺炎", state="explicit"),
+        _fact("诊疗方案已确定", "诊疗方案", state="explicit", scope="treatment_plan"),
+    ),
+    "既往诊断不明确，目前诊断已明确。": (
+        _fact("既往诊断不明确", "诊断", temporal="historical"),
+        _fact("目前诊断已明确", "诊断", state="explicit"),
+    ),
+    "目前诊断仍不明确，诊疗方案难以确定。": (
+        _fact("目前诊断仍不明确", "诊断"),
+        _fact("诊疗方案难以确定", "诊疗方案", state="undetermined", scope="treatment_plan"),
+    ),
+    "入院时诊断不明确，目前诊断仍不明确。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("目前诊断仍不明确", "诊断"),
+    ),
+    "入院时诊断不明确，现已明确诊断为肺炎。但新的发热诊断仍不明确。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("现已明确诊断为肺炎", "肺炎", state="explicit"),
+        _fact("但新的发热诊断仍不明确", "发热"),
+    ),
+    "入院时诊断不明确，现已明确诊断为肺炎。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("现已明确诊断为肺炎", "肺炎", state="explicit"),
+    ),
+    "诊断不明确。": (_fact("诊断不明确。", "诊断"),),
+    "入院时诊断不明确，至今发热原因未查明，治疗方案仍难以确定。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("至今发热原因未查明", "发热原因"),
+        _fact("治疗方案仍难以确定", "治疗方案", state="undetermined", scope="treatment_plan"),
+    ),
+    "入院时诊断不明确，至今发热原因未查明，治疗方案仍难以确定。另一疾病目前已明确诊断为高血压。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("至今发热原因未查明", "发热原因"),
+        _fact("治疗方案仍难以确定", "治疗方案", state="undetermined", scope="treatment_plan"),
+        _fact("另一疾病目前已明确诊断为高血压", "高血压", state="explicit"),
+    ),
+    "入院时诊断不明确，另一疾病目前已明确诊断为高血压。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("另一疾病目前已明确诊断为高血压", "高血压", state="explicit"),
+    ),
+    "入院时诊断不明确，目前已明确诊断为另一疾病高血压。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("目前已明确诊断为另一疾病高血压", "高血压", state="explicit"),
+    ),
+    "入院时诊断不明确，现已明确诊断为肺炎。但至今发热原因未查明，治疗方案仍难以确定。": (
+        _fact("入院时诊断不明确", "诊断", temporal="historical"),
+        _fact("现已明确诊断为肺炎", "肺炎", state="explicit"),
+        _fact("但至今发热原因未查明", "发热原因"),
+        _fact("治疗方案仍难以确定", "治疗方案", state="undetermined", scope="treatment_plan"),
+    ),
     "肺炎与胸腔积液曾均待明确。目前其中一项已明确，另一项尚未明确。": (
         _fact("肺炎与胸腔积液曾均待明确。", "肺炎", temporal="historical"),
         _fact("肺炎与胸腔积液曾均待明确。", "胸腔积液", temporal="historical"),
