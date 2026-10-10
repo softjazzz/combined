@@ -6918,11 +6918,16 @@ async def test_018_sends_only_lowest_structured_admission_diagnosis_to_model():
 @pytest.mark.parametrize(
     "diagnoses",
     [
+        # 多条无序号诊断不能由数据库行序补位；单条无序号诊断见下方正向测试。
         [
             {
                 "diagnosis_type": "入院诊断",
                 "diagnosis_name": "不稳定型心绞痛",
-            }
+            },
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "急性胆囊炎",
+            },
         ],
         [
             {
@@ -6955,6 +6960,33 @@ async def test_018_missing_or_conflicting_structured_order_fails_closed(
 
     assert [item["status"] for item in result.results] == ["data_gap"]
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_018_single_unnumbered_preliminary_diagnosis_is_the_first_diagnosis():
+    """0910 真实样本：初步诊断仅一条且无序号时不存在顺序歧义，应进入主诉核对。"""
+    client = _Client([{
+        "diagnostic_relation_state": "supported",
+        "diagnostic_reason_dimensions": ["symptom_pattern"],
+        "diagnostic_rationale_code": "supported",
+    }])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [_row("主诉：双侧腹股沟区可复性包块2年。现病史完整。")],
+                "admission_record_diagnosis": [
+                    {"diagnosis_type": "入院诊断", "diagnosis_name": ""},
+                    {"diagnosis_type": "初步诊断", "diagnosis_name": "双侧腹股沟斜疝"},
+                ],
+            }
+        ),
+        llm_client=client,
+    )
+
+    assert result.llm_call_count == 1
+    assert "双侧腹股沟斜疝" in client.prompts[0]
 
 
 @pytest.mark.asyncio

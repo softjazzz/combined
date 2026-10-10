@@ -1853,6 +1853,7 @@ def customer_finding_from_controlled_facts(
     if rule_id not in {
         "LX0609-01-01-01",
         "LX0609-01-02-01",
+        "LX0609-02-01-04",
         "LX0609-04-02-01",
         "LX0609-09-01-01",
         "LX0609-02-01-01",
@@ -1979,6 +1980,30 @@ def customer_finding_from_controlled_facts(
                 f"{document_label}于{relation_label} {elapsed_hours:g} 小时完成"
                 f"（{anchor_label} {anchor_time}；记录时间 {observed_time}），"
                 f"超过 {threshold_hours} 小时要求 {overdue_hours:g} 小时。"
+            )
+
+    if (
+        rule_id in basic_timeliness_labels
+        and kind == "timeliness_requirement_not_met"
+        and facts.get("timeliness_state") == "missing"
+        and isinstance(facts.get("anchor_time"), str)
+        and isinstance(facts.get("threshold_hours"), int)
+        and not facts.get("document_content_state")
+    ):
+        document_label, relation_label, anchor_label = basic_timeliness_labels[rule_id]
+        return (
+            f"未找到{document_label}（{anchor_label} {facts['anchor_time']}；"
+            f"要求{relation_label} {facts['threshold_hours']} 小时内完成）。"
+        )
+
+    if rule_id == "LX0609-02-01-04" and kind == "severity_course_gap_exceeded":
+        gap_days = facts.get("gap_days")
+        threshold_days = facts.get("threshold_days")
+        if isinstance(gap_days, int) and isinstance(threshold_days, int):
+            return (
+                f"病重期间（{facts.get('anchor_date')} 起）{facts.get('gap_start_date')} 至 "
+                f"{facts.get('gap_end_date')} 连续 {gap_days} 天无病程记录，"
+                f"超过病重患者每 {threshold_days} 天至少记录一次的要求。"
             )
 
     if rule_id == "LX0609-04-02-01" and kind in {"surgery_record_late", "surgery_record_within_threshold"}:

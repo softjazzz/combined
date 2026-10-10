@@ -3184,3 +3184,39 @@ def test_068_missing_approval_with_window_courses_renders_defect_finding() -> No
         },
     )
     assert finding == "出院日期 2026-07-03；2026-07-02、2026-07-03 共有 2 份病程记录，均未记录上级医师同意出院的意见。"
+
+
+def test_006_missing_first_senior_round_renders_specific_finding() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-02-01-02",
+        facts={
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "senior_course_record",
+            "timeliness_state": "missing",
+            "threshold_hours": 72,
+            "source_label": "副主任医师或主任医师首次查房记录",
+            "anchor_time": "2025-08-26 09:14:42",
+        },
+    )
+    assert finding == "未找到副主任医师或主任医师首次查房记录（入院时间 2025-08-26 09:14:42；要求入院后 72 小时内完成）。"
+
+
+def test_008_severity_course_gap_renders_specific_finding() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-02-01-04",
+        facts={
+            "failure_kind": "severity_course_gap_exceeded",
+            "severity": "serious",
+            "threshold_days": 2,
+            "anchor_date": "2025-07-09",
+            "horizon_date": "2025-07-16",
+            "gap_start_date": "2025-07-11",
+            "gap_end_date": "2025-07-15",
+            "gap_days": 4,
+            "recorded_dates": ["2025-07-10", "2025-07-11", "2025-07-15"],
+        },
+    )
+    assert finding == (
+        "病重期间（2025-07-09 起）2025-07-11 至 2025-07-15 连续 4 天无病程记录，"
+        "超过病重患者每 2 天至少记录一次的要求。"
+    )
