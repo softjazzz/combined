@@ -522,7 +522,6 @@ async def test_typed_019_uses_same_session_surgery_process_not_stale_payload(
         "checked_target_sources": [
             {"source": "surgery_record", "state": "present"},
             {"source": "daily_course_record", "state": "present"},
-            {"source": "senior_course_record", "state": "empty"},
         ],
         "documented_sources": ["surgery_record"],
         "requirement_met": True,
@@ -700,7 +699,6 @@ async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review()
             "checked_target_sources": [
                 {"source": "surgery_record", "state": "empty"},
                 {"source": "daily_course_record", "state": "present"},
-                {"source": "senior_course_record", "state": "empty"},
             ],
         },
     ),)
@@ -833,7 +831,6 @@ async def test_typed_019_complete_empty_targets_are_programmatic_defect():
         "checked_target_sources": [
             {"source": "surgery_record", "state": "empty"},
             {"source": "daily_course_record", "state": "empty"},
-            {"source": "senior_course_record", "state": "empty"},
         ],
     }),)
     assert result.llm_call_count == 0

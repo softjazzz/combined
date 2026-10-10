@@ -419,7 +419,6 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-06-02-02": (
         "pathology_exam_master",
         "pathology_exam_report",
-        "senior_course_record",
     ),
     # 026 绑定同一请求内的恶性事实、化疗医嘱和对应病程，禁止跨快照补证。
     "LX0609-05-02-01": (
