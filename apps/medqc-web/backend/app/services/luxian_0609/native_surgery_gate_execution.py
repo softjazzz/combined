@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -891,13 +891,20 @@ def _surgery_records_cover_master_rows(
             re.sub(r"[\s,，、;；:：]+", "", _clean(row.get("surgeon"))),
         )
 
+    def same_time(left: datetime, right: datetime) -> bool:
+        # 0910 真实源库病案首页手术时间只精确到日（00:00:00）；任一侧为整日精度时
+        # 按日历日比较，否则要求时间完全一致。
+        if left.time() == time.min or right.time() == time.min:
+            return left.date() == right.date()
+        return left == right
+
     masters = tuple(identity(row) for row in master_rows)
     records = tuple(identity(row) for row in record_rows)
     for master in masters:
         matches = []
         for record in records:
             shared_times = [(a, b) for a, b in zip(master[:2], record[:2]) if a and b]
-            if any(a != b for a, b in shared_times):
+            if any(not same_time(a, b) for a, b in shared_times):
                 continue
             if master[2] and record[2] and master[2] != record[2]:
                 continue
@@ -910,8 +917,9 @@ def _surgery_records_cover_master_rows(
         for matched in matches:
             candidates = [
                 other for other in masters
-                if any(a and b and a == b for a, b in zip(other[:2], matched[:2]))
-                and not any(a and b and a != b for a, b in zip(other, matched))
+                if any(a and b and same_time(a, b) for a, b in zip(other[:2], matched[:2]))
+                and not any(a and b and not same_time(a, b) for a, b in zip(other[:2], matched[:2]))
+                and not (other[2] and matched[2] and other[2] != matched[2])
             ]
             if len(candidates) > 1 and len(set(candidates)) > 1:
                 return False

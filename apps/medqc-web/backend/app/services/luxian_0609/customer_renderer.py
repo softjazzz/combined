@@ -1852,6 +1852,7 @@ def customer_finding_from_controlled_facts(
     if rule_id not in {
         "LX0609-01-01-01",
         "LX0609-01-02-01",
+        "LX0609-04-02-01",
         "LX0609-09-01-01",
         "LX0609-02-01-01",
         "LX0609-02-01-02",
@@ -1978,6 +1979,19 @@ def customer_finding_from_controlled_facts(
                 f"（{anchor_label} {anchor_time}；记录时间 {observed_time}），"
                 f"超过 {threshold_hours} 小时要求 {overdue_hours:g} 小时。"
             )
+
+    if rule_id == "LX0609-04-02-01" and kind in {"surgery_record_late", "surgery_record_within_threshold"}:
+        end_time = facts.get("surgery_end_time")
+        record_time = facts.get("record_time")
+        elapsed_hours = facts.get("elapsed_hours")
+        if isinstance(end_time, str) and isinstance(record_time, str) and isinstance(elapsed_hours, (int, float)):
+            detail = f"（手术结束时间 {end_time}；手术记录时间 {record_time}）"
+            if kind == "surgery_record_late":
+                return (
+                    f"手术记录于手术结束后 {elapsed_hours:g} 小时完成{detail}，"
+                    f"超过 24 小时要求 {round(elapsed_hours - 24, 2):g} 小时。"
+                )
+            return f"手术记录于手术结束后 {elapsed_hours:g} 小时完成{detail}，在 24 小时内。"
 
     if rule_id == "LX0609-12-02-01" and kind == "diagnosis_change_association_failed":
         diagnosis_record_count = facts.get("diagnosis_record_count")

@@ -3146,3 +3146,26 @@ def test_preop_extraction_invalid_message_is_explicit_and_not_a_verdict():
     assert "术前讨论记录的自动抽取结果未通过原文核验（术前准备）" in findings
     assert "未据此判定合规或不合规" in evidence
     assert "人工核对" in suggestion
+
+
+@pytest.mark.parametrize(("kind", "hours", "expected_tail"), [
+    ("surgery_record_late", 39.03, "超过 24 小时要求 15.03 小时。"),
+    ("surgery_record_within_threshold", 19.51, "在 24 小时内。"),
+])
+def test_003_surgery_record_timeliness_renders_specific_finding(kind, hours, expected_tail) -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-04-02-01",
+        facts={
+            "failure_kind": kind,
+            "performed_surgery_confirmed": True,
+            "surgery_end_time": "2026-07-07 10:00:00",
+            "record_time": "2026-07-09 01:01:48",
+            "elapsed_hours": hours,
+            "elapsed_seconds": hours * 3600,
+            "threshold_hours": 24,
+            "source_label": "手术记录",
+        },
+    )
+    assert finding.startswith(f"手术记录于手术结束后 {hours:g} 小时完成")
+    assert finding.endswith(expected_tail)
+
