@@ -346,6 +346,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-09-01-02": ("rescue_record", "inpat_nondrug_order.rescue_order"),
     "LX0609-06-02-01": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-06-01-01": (
+        # 时限未到（在院运行中）与出院终末须区分评价。
+        "evaluation_context.horizon", "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
         "first_course_record", "daily_course_record", "senior_course_record", "rescue_record",
     ),
@@ -353,6 +355,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
     ),
     "LX0609-06-03-02": (
+        # 时限未到（在院运行中）与出院终末须区分评价。
+        "evaluation_context.horizon", "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.exam_lab_order", "labtest_master", "labtest_item_report",
     ),
     "LX0609-06-01-02": (

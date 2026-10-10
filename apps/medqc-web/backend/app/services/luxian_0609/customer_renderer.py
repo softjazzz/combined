@@ -3947,6 +3947,26 @@ def handbook_customer_message(
                 "检查执行由本次事件材料确认，病程对应关系来自正文语义提取；Python校验引用并形成判定。",
                 "",
             )
+        issue_kinds = {
+            item.get("issue_kind") for item in facts.get("event_results", ())
+            if isinstance(item, Mapping)
+        }
+        if normalized_status == "not_applicable" and "course_not_yet_due" in issue_kinds:
+            return (
+                "CT/MRI报告出具尚未满24小时，病程暂未记载，暂不评价。",
+                "当前为在院运行中质控，已执行检查的报告出具未满24小时，留待后续质控核对。",
+                "",
+            )
+        if normalized_status == "non_compliant" and "course_record_missing" in issue_kinds:
+            missing = sum(
+                1 for item in facts.get("event_results", ())
+                if isinstance(item, Mapping) and item.get("issue_kind") == "course_record_missing"
+            )
+            return (
+                f"有{missing}次已执行的CT/MRI检查在本次住院病程中未见记载",
+                "已读取本次住院全部病程记录，检查已有正式报告，但病程中未找到对应该次检查的记载。",
+                "请在病程中补充该次检查的检查原因、结果及临床意义，保留修改痕迹；不得倒签。",
+            )
         if normalized_status == "not_applicable":
             return (
                 "当前材料中未发现需要核对的已执行CT/MRI检查事件。",
@@ -3966,6 +3986,27 @@ def handbook_customer_message(
             return (
                 f"已核对{event_count}次{label}，均找到可读取的对应报告。",
                 "系统已按本次住院的业务键逐次关联检查主记录与正式报告。",
+                "",
+            )
+        report_issues = {
+            item.get("issue_kind") for item in facts.get("event_results", ())
+            if isinstance(item, Mapping)
+        }
+        if normalized_status == "non_compliant" and "report_missing" in report_issues:
+            missing = sum(
+                1 for item in facts.get("event_results", ())
+                if isinstance(item, Mapping) and item.get("issue_kind") == "report_missing"
+                and item.get("event_status") == "non_compliant"
+            )
+            return (
+                f"患者已出院，有{missing}次已执行的{label}未找到对应报告",
+                "已按本次住院检验业务键核对已执行事件与正式报告，报告来源读取完整但没有该次报告。",
+                "请核对源系统是否已出具报告；确属漏报告的，按院内流程补发报告并归档。",
+            )
+        if normalized_status == "not_applicable" and "report_not_yet_due" in report_issues:
+            return (
+                f"{label}报告尚未出具，暂不评价。",
+                "当前为在院运行中质控，培养通常需数日出结果，留待报告出具或出院后核对。",
                 "",
             )
         if normalized_status == "not_applicable":

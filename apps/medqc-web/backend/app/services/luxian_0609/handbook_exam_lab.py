@@ -1,8 +1,9 @@
 """2026 手册检查检验事件台账、报告完整性与安全展示合同。
 
 本模块只消费同一次证据会话。CDM 的 COMPLETE 证明查询未截断，不能证明
-上游已全部同步；因此单纯未找到报告/医嘱/病程只能构成资料缺口。既有五条
-规则继续使用原合同，本模块不改变其触发范围、24 小时窗口或模型调用。
+上游已全部同步；因此单纯未找到报告/医嘱/病程默认只构成资料缺口。院方口径
+（2026-10-10）：已执行培养在出院终末质控时仍无报告判不合规；在院运行中
+缺报告或报告仍在培养中属时限未到，暂不评价。既有五条规则继续使用原合同。
 """
 
 from __future__ import annotations
@@ -33,7 +34,9 @@ FINAL_STATES = frozenset({"compliant", "non_compliant", "not_applicable", "data_
 ISSUE_KINDS = frozenset({
     "report_present", "report_missing", "report_content_unavailable", "execution_unconfirmed",
     "association_unresolved", "source_scope_incomplete", "no_performed_event",
+    "report_not_yet_due",
 })
+HORIZON_SOURCE = "evaluation_context.horizon"
 _IMAGING = re.compile(r"(?<![A-Za-z])(?:CT|MRI)(?![A-Za-z])|计算机断层|磁共振|核磁", re.I)
 _SUPPLY = re.compile(r"胶片|光盘|耗材|打印|刻录")
 _EXCLUDED = re.compile(r"取消|撤销|作废|未执行|未实施|计划|拟行|待执行|预约|cancelled|canceled|planned", re.I)
@@ -364,6 +367,28 @@ def build_handbook_ledger(*, rule_ids: Sequence[str], snapshot: Luxian0609Eviden
     return HandbookLedger(sources, {family: items[:MAX_EVENTS] for family, items in events.items()}, overflow)
 
 
+def evaluation_horizon(
+    snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, datetime | None]:
+    """返回（"discharge"|"running"|""，评价截止时刻）；仅有日期时按当日零点。"""
+    rows = _read_source(snapshot, materials, HORIZON_SOURCE)
+    if not rows.complete or len(rows.rows) != 1:
+        return "", None
+    row = rows.rows[0][1]
+    moment = None
+    for value in (row.get("horizon_datetime"), row.get("horizon_date")):
+        if clean(value):
+            try:
+                moment = datetime.fromisoformat(clean(value).replace("Z", "+00:00"))
+                break
+            except ValueError:
+                return "", None
+    if moment is None:
+        return "", None
+    basis = {"discharge_date": "discharge", "evaluation_as_of": "running"}.get(clean(row.get("basis")), "")
+    return (basis, moment) if basis else ("", None)
+
+
 def finish_evaluation(rule_id: str, findings: Sequence[HandbookFinding], *, complete: bool) -> HandbookEvaluation:
     findings = tuple(findings)
     if not complete and len(findings) < MAX_EVENTS:
@@ -377,7 +402,11 @@ def finish_evaluation(rule_id: str, findings: Sequence[HandbookFinding], *, comp
     issue = next((item.issue for item in findings if item.status == status), "no_performed_event")
     reason = {
         "compliant": "requirement_satisfied", "non_compliant": "requirement_violated",
-        "not_applicable": "performed_event_absent", "data_gap": (
+        "not_applicable": (
+            "evaluation_window_not_mature"
+            if any(item.issue == "report_not_yet_due" for item in findings)
+            else "performed_event_absent"
+        ), "data_gap": (
             "source_truncated" if not complete else "association_failed" if issue == "association_unresolved"
             else "target_report_missing" if issue in {"report_missing", "report_content_unavailable"}
             else "source_readiness_unproven" if issue in {"course_without_order", "executed_order_without_course"}
@@ -401,7 +430,11 @@ def finish_evaluation(rule_id: str, findings: Sequence[HandbookFinding], *, comp
     return HandbookEvaluation(rule_id, status, reason, refs, display)
 
 
-def evaluate_report_completeness(rule_id: str, ledger: HandbookLedger) -> HandbookEvaluation:
+def evaluate_report_completeness(
+    rule_id: str, ledger: HandbookLedger, *, horizon_basis: str = "",
+) -> HandbookEvaluation:
+    """horizon_basis 仅对培养生效：discharge=出院终末，running=在院运行中。"""
+    culture = REPORT_RULES[rule_id] == "culture"
     findings: list[HandbookFinding] = []
     for event in ledger.events[REPORT_RULES[rule_id]]:
         if event.excluded:
@@ -413,9 +446,18 @@ def evaluate_report_completeness(rule_id: str, ledger: HandbookLedger) -> Handbo
         elif event.reports and event.formal_report_present:
             status, issue = "compliant", "report_present"
         elif event.reports:
-            status, issue = "data_gap", "report_content_unavailable"
+            pending = any(_report_pending(row) for _, row in (*event.rows, *event.reports))
+            status, issue = (
+                ("not_applicable", "report_not_yet_due")
+                if culture and pending and horizon_basis == "running"
+                else ("data_gap", "report_content_unavailable")
+            )
+        elif culture and horizon_basis == "discharge":
+            status, issue = "non_compliant", "report_missing"
+        elif culture and horizon_basis == "running":
+            status, issue = "not_applicable", "report_not_yet_due"
         else:
-            # 完整 CDM 检索仍不能将同步缺口定性为临床漏报告。
+            # 无评价截止依据时不能区分同步缺口与临床漏报告。
             status, issue = "data_gap", "report_missing"
         findings.append(HandbookFinding(status, issue, event.refs, event.name))
     return finish_evaluation(rule_id, findings, complete=ledger.complete(rule_id))

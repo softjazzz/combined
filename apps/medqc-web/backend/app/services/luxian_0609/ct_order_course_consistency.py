@@ -46,6 +46,10 @@ _ISSUE_STATES = {
     "execution_unconfirmed": "data_gap",
     "association_unresolved": "data_gap",
     "executed_order_without_course": "data_gap",
+    # 院方口径（2026-10-10）：病程来源完整而全程未记载已执行检查，判不合规；
+    # 在院运行中报告出具未满24小时的暂不评价。
+    "course_record_missing": "non_compliant",
+    "course_not_yet_due": "not_applicable",
     "course_without_order": "data_gap",
     "source_scope_incomplete": "data_gap",
     "course_content_unavailable": "data_gap",
@@ -78,6 +82,8 @@ class CtReviewInput:
     clauses: tuple[CourseClause, ...]
     initial_findings: Mapping[int, HandbookFinding]
     complete: bool
+    horizon_basis: str = ""
+    horizon: datetime | None = None
 
     @property
     def reference_budget_exceeded(self) -> bool:
@@ -90,9 +96,43 @@ class CtReviewInput:
                 and bool(self.eligible_positions) and bool(self.clauses))
 
 
+_COURSE_DUE_HOURS = 24
+
+
+def _report_moment(event: HandbookEvent) -> datetime | None:
+    moments = []
+    for _, row in event.reports:
+        value = row.get("report_time") or row.get("report_datetime")
+        try:
+            parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None)
+        moments.append(parsed)
+    return max(moments) if moments else None
+
+
+def _missing_course_issue(
+    *, event: HandbookEvent, complete: bool, horizon_basis: str, horizon: datetime | None,
+) -> str:
+    """病程全程未见已执行检查时的事件结论；来源不完整仍是资料缺口。"""
+    if not complete:
+        return "executed_order_without_course"
+    if horizon_basis == "running":
+        reported = _report_moment(event)
+        if reported is None or horizon is None:
+            return "executed_order_without_course"
+        cutoff = horizon.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None) if horizon.tzinfo else horizon
+        if cutoff - reported < timedelta(hours=_COURSE_DUE_HOURS):
+            return "course_not_yet_due"
+    return "course_record_missing"
+
+
 def build_ct_review_input(
     *, ledger: HandbookLedger, snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    horizon_basis: str = "", horizon: datetime | None = None,
 ) -> CtReviewInput:
     """未裁剪的病程范围独立于旧010/011的时间窗口。"""
     complete = ledger.complete(REPORT_RULE_ID)
@@ -144,7 +184,15 @@ def build_ct_review_input(
             findings[position] = HandbookFinding(_ISSUE_STATES[issue], issue, event.refs, event.name)
         else:
             eligible.append(position)
-    return CtReviewInput(events, tuple(eligible), tuple(clauses), findings, complete)
+    if not clauses:
+        for position, finding in tuple(findings.items()):
+            if finding.issue == "executed_order_without_course":
+                issue = _missing_course_issue(
+                    event=events[position - 1], complete=complete,
+                    horizon_basis=horizon_basis, horizon=horizon,
+                )
+                findings[position] = HandbookFinding(_ISSUE_STATES[issue], issue, finding.refs, finding.name)
+    return CtReviewInput(events, tuple(eligible), tuple(clauses), findings, complete, horizon_basis, horizon)
 
 
 def _event_orders(event: HandbookEvent) -> tuple[Mapping[str, Any], ...]:
@@ -464,7 +512,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
                     "order_course_conflict" if _has_explicit_event_identifier(event, order_position, clauses)
                     else "association_unresolved"
                 ),
-                "absent": "executed_order_without_course",
+                "absent": _missing_course_issue(
+                    event=event, complete=review.complete,
+                    horizon_basis=review.horizon_basis, horizon=review.horizon,
+                ),
                 "unknown": "semantic_fact_unknown",
             }[state]
             refs = tuple(dict.fromkeys((*event.refs, *(clause.document_ref for clause in clauses))))
@@ -492,7 +543,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
         extras.append(HandbookFinding("data_gap", "source_scope_incomplete"))
     all_findings = tuple(findings[key] for key in sorted(findings)) + tuple(extras)
     status = _aggregate_status(all_findings, review.complete)
-    reason = {"compliant": "requirement_satisfied", "non_compliant": "requirement_violated", "data_gap": "required_field_missing", "not_applicable": "performed_event_absent"}[status]
+    reason = {"compliant": "requirement_satisfied", "non_compliant": "requirement_violated", "data_gap": "required_field_missing", "not_applicable": (
+        "evaluation_window_not_mature" if any(item.issue == "course_not_yet_due" for item in all_findings)
+        else "performed_event_absent"
+    )}[status]
     display = {
         "verification_kind": "ct_order_course_review", "subject": "ct_mri",
         "requirement": "order_course_consistency", "review_scope_complete": review.complete,
@@ -579,7 +633,8 @@ def validate_ct_display_facts(raw: Any) -> dict[str, Any] | None:
                     or not 0 <= location["start"] < location["end"]
                     or type(location["clause_id"]) is not str or re.fullmatch(r"C[1-9][0-9]{0,2}", location["clause_id"]) is None):
                 return None
-        if order["status"] in {"compliant", "non_compliant"} and not locations:
+        if (order["status"] in {"compliant", "non_compliant"} and not locations
+                and order["issue_kind"] != "course_record_missing"):
             return None
         by_event.setdefault(event_position, []).append(HandbookFinding(order["status"], order["issue_kind"]))
     for position, event in enumerate(results[:count], 1):

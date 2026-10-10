@@ -53,6 +53,7 @@ from .handbook_exam_lab import (
     REPORT_RULES as HANDBOOK_REPORT_RULES,
     build_handbook_ledger,
     evaluate_report_completeness,
+    evaluation_horizon,
 )
 from .ct_order_course_consistency import (
     RULE_ID as CT_CONSISTENCY_RULE,
@@ -1945,8 +1946,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
+            horizon_basis, horizon_moment = evaluation_horizon(evidence_snapshot, evidence_materials)
             for rule_id in handbook_report_ids:
-                evaluation = evaluate_report_completeness(rule_id, handbook_ledger)
+                evaluation = evaluate_report_completeness(
+                    rule_id, handbook_ledger, horizon_basis=horizon_basis,
+                )
                 emit_typed(
                     rule_id,
                     evaluation.status,
@@ -1959,6 +1963,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 review = build_ct_review_input(
                     ledger=handbook_ledger, snapshot=evidence_snapshot,
                     materials=evidence_materials,
+                    horizon_basis=horizon_basis, horizon=horizon_moment,
                 )
                 payload = None
                 model_failure = None

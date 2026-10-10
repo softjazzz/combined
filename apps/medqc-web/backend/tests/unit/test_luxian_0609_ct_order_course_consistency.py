@@ -59,9 +59,34 @@ def test_complete_positive_facts_keep_same_event_refs_and_publish_without_text()
     assert not ct_display_status_matches("non_compliant", result.display_facts)
 
 
-@pytest.mark.parametrize("state,clauses", [("absent", []), ("unknown", [])])
-def test_no_clinical_defect_from_missing_or_uncertain_material(state, clauses):
-    assert evaluate_ct_review(_review(), _payload(state, clauses=clauses)).status == "data_gap"
+def test_uncertain_semantics_is_not_a_clinical_defect():
+    assert evaluate_ct_review(_review(), _payload("unknown", clauses=[])).status == "data_gap"
+
+
+def test_executed_exam_absent_from_complete_course_scope_is_non_compliant():
+    """院方口径：病程来源完整而全程未记载已执行检查，判不合规。"""
+    result = evaluate_ct_review(_review(), _payload("absent", clauses=[]))
+    assert (result.status, result.reason_code) == ("non_compliant", "requirement_violated")
+    assert result.display_facts["event_results"][0]["issue_kind"] == "course_record_missing"
+    assert validate_ct_display_facts(result.display_facts) == result.display_facts
+
+
+def test_absent_exam_with_incomplete_course_scope_stays_data_gap():
+    result = evaluate_ct_review(_review(complete=False), _payload("absent", clauses=[]))
+    assert result.status == "data_gap"
+
+
+@pytest.mark.parametrize("horizon,expected", [
+    ("2026-09-01T20:00:00", ("not_applicable", "evaluation_window_not_mature")),
+    ("2026-09-03T00:00:00", ("non_compliant", "requirement_violated")),
+])
+def test_running_record_absent_course_waits_24_hours_after_report(horizon, expected):
+    from datetime import datetime
+    review = replace(_review(), horizon_basis="running", horizon=datetime.fromisoformat(horizon))
+    payload = _payload("absent", clauses=[])
+    result = evaluate_ct_review(review, payload)
+    assert (result.status, result.reason_code) == expected
+    assert validate_ct_display_facts(result.display_facts) == result.display_facts
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -93,7 +118,8 @@ def test_one_merged_report_cannot_use_one_order_to_cover_all_body_sites():
     payload["events"].append({"event_position": 1, "order_position": 2,
                               "record_state": "absent", "clause_ids": []})
     result = evaluate_ct_review(review, payload)
-    assert result.status == "data_gap"
+    # 胸部CT那条医嘱在完整病程中未见记载，不能被左膝CT的记载覆盖。
+    assert result.status == "non_compliant"
     assert result.display_facts["event_count"] == 1
 
 
@@ -224,7 +250,9 @@ def test_gaps_stop_model_and_prevent_false_compliance(change):
         rows["exam_master"][0]["exam_name"] = "左膝CT"
     review = _project(rows, ("daily_course_record",) if change == "unproven_course" else ())
     assert not review.needs_model
-    assert evaluate_ct_review(review).status == "data_gap"
+    # 病程来源完整但没有任何病程：已执行检查未被记载，按院方口径判不合规。
+    expected = "non_compliant" if change == "empty_course" else "data_gap"
+    assert evaluate_ct_review(review).status == expected
 
 
 def test_empty_sources_and_course_only_trigger_have_different_results():
@@ -691,3 +719,18 @@ def test_abbreviated_course_cannot_pick_between_same_site_same_modality_events()
     payload["events"].append({"event_position": 2, "order_position": 1, "record_state": "absent", "clause_ids": []})
     result = evaluate_ct_review(review, payload)
     assert result.display_facts["event_results"][0]["issue_kind"] == "association_unresolved"
+
+
+def test_course_record_missing_and_not_yet_due_have_specific_customer_copy():
+    from datetime import datetime
+    from app.services.luxian_0609.customer_renderer import handbook_customer_message
+
+    missing = evaluate_ct_review(_review(), _payload("absent", clauses=[]))
+    message = handbook_customer_message(rule_id=RULE_ID, status="non_compliant", facts=missing.display_facts)
+    assert message[0] == "有1次已执行的CT/MRI检查在本次住院病程中未见记载"
+    waiting = evaluate_ct_review(
+        replace(_review(), horizon_basis="running", horizon=datetime(2026, 9, 1, 20)),
+        _payload("absent", clauses=[]),
+    )
+    message = handbook_customer_message(rule_id=RULE_ID, status="not_applicable", facts=waiting.display_facts)
+    assert message[0] == "CT/MRI报告出具尚未满24小时，病程暂未记载，暂不评价。"
