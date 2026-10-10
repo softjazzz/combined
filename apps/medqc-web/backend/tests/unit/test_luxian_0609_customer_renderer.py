@@ -3169,3 +3169,18 @@ def test_003_surgery_record_timeliness_renders_specific_finding(kind, hours, exp
     assert finding.startswith(f"手术记录于手术结束后 {hours:g} 小时完成")
     assert finding.endswith(expected_tail)
 
+
+
+def test_068_missing_approval_with_window_courses_renders_defect_finding() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-08-02-02",
+        facts={
+            "failure_kind": "senior_discharge_approval_missing",
+            "discharge_date": "2026-07-03",
+            "checked_dates": ["2026-07-02", "2026-07-03"],
+            "checked_source": "daily_course_record,senior_course_record",
+            "approval_present": False,
+            "window_course_count": 2,
+        },
+    )
+    assert finding == "出院日期 2026-07-03；2026-07-02、2026-07-03 共有 2 份病程记录，均未记录上级医师同意出院的意见。"

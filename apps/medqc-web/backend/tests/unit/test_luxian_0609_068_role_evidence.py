@@ -99,7 +99,7 @@ async def test_daily_approval_without_role_evidence_does_not_block_senior_condit
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.reason_code == "semantic_extraction_unresolved"
     assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
     assert result.llm_call_count == 1
     assert result.total_tokens == 100
@@ -216,7 +216,7 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
     )
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "source_empty"
+    assert reduced[0].reason_code == "semantic_extraction_unresolved"
     assert result.llm_call_count == 1
     assert result.total_tokens == 100
     assert len(client.calls) == 1

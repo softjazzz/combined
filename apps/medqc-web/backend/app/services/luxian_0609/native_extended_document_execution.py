@@ -4814,6 +4814,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     and _discharge_approval_path(row, source_key=source_key)
                 ) if not present else ()
                 approval_resolution_blocked = False
+                approval_unresolved = False
                 if approval_match is None and (daily_error or senior_error):
                     final_state, reason_code = (
                         "data_gap",
@@ -4870,6 +4871,20 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 ),
                                 None,
                             )
+                            # 模型称已同意但身份或引文未能确认时，不能确认“缺意见”；
+                            # 其余（未知、附条件、拒绝、患者要求）均不构成明确上级同意。
+                            approval_unresolved = any(
+                                row_time is not None
+                                and assertion.opinion == "approved"
+                                and (
+                                    assertion.role == "unknown"
+                                    or (
+                                        assertion.role == "senior"
+                                        and not _has_confirmed_discharge_approval(assertion.quote)
+                                    )
+                                )
+                                for _source_key, _row, row_time, assertion in extracted_candidates
+                            )
                             semantic_undated = tuple(
                                 (source_key, row)
                                 for source_key, row, row_time, assertion
@@ -4920,12 +4935,35 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "missing_time_count": len(undated_approvals),
                     }))
                 else:
-                    final_state = "compliant" if present else "data_gap"
-                    reason_code = (
-                        "requirement_satisfied"
-                        if present
-                        else "source_empty"
+                    # 院方口径（2026-10-10）：出院当天或前一天已有病程记录却无上级医师
+                    # 同意出院意见判不合规；窗口内无病程时仍资料不足（缺病程由 067 报告）。
+                    window_course_count = sum(
+                        1
+                        for rows in (daily_rows, senior_rows)
+                        for row in rows
+                        if _row_time(row) is not None and _row_time(row).date() in valid_dates
                     )
+                    if present:
+                        final_state, reason_code = "compliant", "requirement_satisfied"
+                    elif window_course_count and approval_unresolved:
+                        window_course_count = 0
+                        final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                    elif window_course_count:
+                        final_state, reason_code = "non_compliant", "requirement_violated"
+                        # 证据为窗口内实际核对过的病程文书。
+                        selected_course_document_ids = tuple(
+                            (source_key, document_id)
+                            for source_key, rows in (
+                                ("daily_course_record", daily_rows),
+                                ("senior_course_record", senior_rows),
+                            )
+                            for row in rows
+                            if _row_time(row) is not None
+                            and _row_time(row).date() in valid_dates
+                            and (document_id := _clean(row.get("document_id") or row.get("id")))
+                        )
+                    else:
+                        final_state, reason_code = "data_gap", "source_empty"
                     render_display = True
                 if render_display:
                     approval_facts: dict[str, Any] = {}
@@ -4963,6 +5001,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 ),
                                 "approval_present": present,
                                 **approval_facts,
+                                **(
+                                    {"window_course_count": window_course_count}
+                                    if not present and window_course_count
+                                    else {}
+                                ),
                             },
                         )
                     )
@@ -4975,6 +5018,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 consumed_source_keys = (approval_match[0],)
             elif final_state == "not_applicable":
                 consumed_source_keys = ("inpat_registration", "discharge_record")
+            elif final_state == "non_compliant":
+                consumed_source_keys = ("daily_course_record", "senior_course_record")
             else:
                 consumed_source_keys = ()
             decisions.append(

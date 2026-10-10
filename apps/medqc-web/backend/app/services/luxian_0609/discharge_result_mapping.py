@@ -504,6 +504,7 @@ def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 "checked_source",
                 "approval_present",
                 "approval_path",
+                "window_course_count",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -535,6 +536,10 @@ def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             != "daily_course_record,senior_course_record"
             or approval_present is not False
             or "approval_path" in raw
+            or (
+                "window_course_count" in raw
+                and (type(raw["window_course_count"]) is not int or raw["window_course_count"] <= 0)
+            )
         ):
             return None
         kind_key = "failure_kind"
@@ -550,6 +555,10 @@ def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
     if "approval_path" in raw:
         facts["approval_path"] = raw["approval_path"]
+    if "window_course_count" in raw and kind == "senior_discharge_approval_missing":
+        facts["window_course_count"] = raw["window_course_count"]
+    elif "window_course_count" in raw:
+        return None
     return facts
 
 
@@ -726,9 +735,11 @@ def validate_published_discharge_facts(
                         or raw["approval_path"] not in {"automatic_discharge", "senior_approval"}):
                     return None
             elif raw.get("failure_kind") == "senior_discharge_approval_missing":
-                if (keys != base | {"failure_kind"}
+                count = raw.get("window_course_count")
+                if (keys not in (base | {"failure_kind"}, base | {"failure_kind", "window_course_count"})
                         or raw.get("checked_source") != "daily_course_record,senior_course_record"
-                        or raw["approval_present"] is not False):
+                        or raw["approval_present"] is not False
+                        or ("window_course_count" in raw and (type(count) is not int or count <= 0))):
                     return None
             else:
                 return None
@@ -792,7 +803,11 @@ def discharge_customer_fact_status_is_valid(
         )
     if normalized == "LX0609-08-02-02":
         return normalized_status == (
-            "compliant" if safe_facts.get("approval_present") is True else "data_gap"
+            "compliant"
+            if safe_facts.get("approval_present") is True
+            else "non_compliant"
+            if safe_facts.get("window_course_count")
+            else "data_gap"
         )
     return False
 

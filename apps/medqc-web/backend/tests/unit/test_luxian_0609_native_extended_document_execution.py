@@ -1991,8 +1991,8 @@ async def test_068_does_not_match_nonapproval_yuyi_discharge(
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert result.llm_call_count == 1
     assert len(client.calls) == 1
 
@@ -2018,14 +2018,15 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-08-02-02"] == {
         "failure_kind": "senior_discharge_approval_missing",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
         "checked_source": "daily_course_record,senior_course_record",
         "approval_present": False,
+        "window_course_count": 1,
     }
     assert result.llm_call_count == 1
     assert len(client.calls) == 1
@@ -2214,8 +2215,8 @@ async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
 
 
 @pytest.mark.asyncio
@@ -2242,8 +2243,8 @@ async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> No
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
 
 
 @pytest.mark.asyncio
@@ -2316,8 +2317,8 @@ async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
     assert result.llm_call_count == 1
 

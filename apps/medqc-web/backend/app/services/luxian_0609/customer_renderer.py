@@ -135,6 +135,7 @@ _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     ("LX0609-04-05-02", "semantic_extraction_unresolved"): "现有上级医师查房正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
     ("LX0609-04-05-02", "candidate_scope_incomplete"): "现有上级医师查房正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
     ("LX0609-08-02-01", "semantic_extraction_unresolved"): "现有出院前病程正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
+    ("LX0609-08-02-02", "semantic_extraction_unresolved"): "出院前病程中疑似有上级医师同意出院的意见，但医师身份或原文未能可靠确认，暂时无法判定。",
     ("LX0609-08-02-01", "candidate_scope_incomplete"): "现有出院前病程正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。',
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
@@ -3422,6 +3423,14 @@ def customer_finding_from_controlled_facts(
     if rule_id == "LX0609-08-02-01" and kind == "predischarge_course_presence_check":
         state = "已找到" if facts.get("course_present") is True else "未找到"
         return f"出院日期 {facts.get('discharge_date')}；已核对 {joined('checked_dates')}，{state}出院前病程记录。"
+
+    if rule_id == "LX0609-08-02-02" and kind == "senior_discharge_approval_missing":
+        count = facts.get("window_course_count")
+        if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+            return (
+                f"出院日期 {facts.get('discharge_date')}；{joined('checked_dates')} 共有 {count} 份病程记录，"
+                "均未记录上级医师同意出院的意见。"
+            )
 
     if rule_id == "LX0609-04-02-07" and kind == "consultation_timeliness_check":
         events = facts.get("event_results")
