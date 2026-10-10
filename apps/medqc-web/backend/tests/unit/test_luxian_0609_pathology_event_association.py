@@ -1,4 +1,8 @@
-"""病理记录须属于每次检查，跨事件证据不能互相替代。"""
+"""013/019 病理记录：模型抽取每次检查的取材/结果记录与原文引用，程序核验并判定。
+
+关联语义（标本是否对应、是否算记录结果）由模型抽取并在真实模型上验证；本文件
+锁定程序职责：送模范围与时间过滤、引用核验、事件级状态映射、证据坐标。
+"""
 
 from copy import deepcopy
 
@@ -8,6 +12,8 @@ from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows, build_luxian_0609_evidence_read_session
 from app.services.luxian_0609.native_tumor_pathology_execution import execute_luxian_0609_native_tumor_pathology_rules
+
+from luxian_0609_pathology_test_facts import PathologyFactsClient, default_pathology_facts
 
 
 SAMPLING = "LX0609-06-02-02"
@@ -23,7 +29,7 @@ def _rows():
     }
 
 
-async def _run(rows, rule_id):
+async def _run(rows, rule_id, client=None):
     def reader(**kwargs):
         key = kwargs["source_key"]
         return SnapshotSourceRows.create(source_key=key, rows=rows.get(key, []), truncated=False, limit_rows=500)
@@ -32,10 +38,11 @@ async def _run(rows, rule_id):
         selected_rule_ids=(rule_id,), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-07-10T00:00:00+08:00", row_reader=reader,
     )
+    client = client if client is not None else PathologyFactsClient()
     result = await execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=(rule_id,), wrapper_rules=[], evidence_payload={},
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
-        llm_client=None, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
         decision_rule_ids=(rule_id,),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
@@ -46,164 +53,162 @@ async def _run(rows, rule_id):
         decision=reduced, raw_customer_display_facts=dict(result.customer_display_facts).get(rule_id),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
-    assert result.llm_call_count == result.total_tokens == 0
+    final["_llm_call_count"] = result.llm_call_count
     return final
+
+
+def _documents(final):
+    return {row["source_document_id"] for row in final.get("customer_evidence") or []}
+
+
+def _scripted(*states):
+    """按事件顺序返回指定状态；documented 时沿用默认规则找到的引用。"""
+
+    def script(sampling, events, documents):
+        found = default_pathology_facts(sampling, events, documents)
+        answers = []
+        for event, state, default in zip(events, states, found):
+            if state == "documented":
+                assert default["state"] == "documented"
+                answers.append(default)
+            else:
+                answers.append({"event": event["event"], "state": state, "document": None, "quote": None})
+        return answers
+
+    return PathologyFactsClient(script)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id,cited", [(SAMPLING, "surgery-A"), (RESULT, "course-A")])
+async def test_documented_single_event_is_compliant_with_cited_document(rule_id, cited):
+    final = await _run(_rows(), rule_id)
+    assert (final["status"], final["_llm_call_count"]) == ("compliant", 1)
+    assert cited in _documents(final)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
-async def test_matching_single_event_remains_compliant(rule_id):
-    assert (await _run(_rows(), rule_id))["status"] == "compliant"
+async def test_not_documented_is_non_compliant_with_checked_documents(rule_id):
+    final = await _run(_rows(), rule_id, _scripted("not_documented"))
+    assert final["status"] == "non_compliant"
+    expected = {"surgery-A", "course-A"} if rule_id == SAMPLING else {"course-A"}
+    assert _documents(final) >= expected
 
 
 @pytest.mark.asyncio
-async def test_first_report_record_does_not_cover_second_report():
+@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
+async def test_unknown_attribution_is_association_gap(rule_id):
+    final = await _run(_rows(), rule_id, _scripted("unknown"))
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+
+
+@pytest.mark.asyncio
+async def test_paraphrased_result_and_specimen_reach_model_without_verbatim_matching():
+    """标本名/诊断不再逐字匹配：病理单“（胃窦）组织”“（胃窦）中分化腺癌”，病程转述也交模型判断。"""
     rows = _rows()
-    rows["pathology_exam_master"].append({"document_id": "master-B", "pathology_exam_id": "B", "specimen_name": "胃", "request_datetime": "2026-07-03 09:00:00"})
-    rows["pathology_exam_report"].append({"document_id": "report-B", "pathology_exam_id": "B", "specimen_name": "胃", "diagnosis": "胃腺癌", "report_datetime": "2026-07-04 10:00:00"})
-    result = await _run(rows, RESULT)
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "association_failed"
+    for key in ("pathology_exam_master", "pathology_exam_report"):
+        rows[key][0]["specimen_name"] = "（胃窦）组织"
+    rows["pathology_exam_report"][0]["diagnosis"] = "（胃窦）中分化腺癌"
+    rows["surgery_record"][0]["surgery_process"] = "行远端胃切除术，切除标本送病理检查。"
+    rows["daily_course_record"][0]["record_content"] = "术后病理回报胃窦中分化腺癌，拟下周化疗。"
+    for rule_id in (SAMPLING, RESULT):
+        assert (await _run(rows, rule_id))["status"] == "compliant"
 
 
 @pytest.mark.asyncio
-async def test_record_before_report_cannot_prove_current_result():
+async def test_result_rule_only_sends_records_after_report_time():
     rows = _rows()
-    rows["daily_course_record"][0]["record_time"] = "2026-06-01 12:00:00"
-    result = await _run(rows, RESULT)
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "association_failed"
+    client = PathologyFactsClient()
+    final = await _run(rows, RESULT, client)
+    prompt = client.prompts[0]
+    assert "胆囊病理结果" in prompt
+    assert "已切除胆囊" not in prompt  # 手术记录早于报告，不能证明记录了本次结果
+    assert final["status"] == "compliant"
 
 
 @pytest.mark.asyncio
-async def test_other_specimen_sampling_cannot_cover_current_event():
+async def test_result_with_every_target_before_report_is_not_documented_without_model():
     rows = _rows()
-    rows["surgery_record"][0]["surgery_process"] = "已切除胃息肉，标本送病理检查。"
-    rows["daily_course_record"] = []
-    result = await _run(rows, SAMPLING)
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "association_failed"
+    rows["daily_course_record"][0]["record_time"] = "2026-07-01 12:00:00"
+    final = await _run(rows, RESULT)
+    assert (final["status"], final["_llm_call_count"]) == ("non_compliant", 0)
 
 
 @pytest.mark.asyncio
-async def test_two_reports_with_their_own_records_remain_compliant():
+@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
+async def test_untimed_record_blocks_result_absence_but_not_sampling_review(rule_id):
+    rows = _rows()
+    rows["daily_course_record"].append({"document_id": "course-untimed", "record_content": "胆囊标本已送病理。"})
+    final = await _run(rows, rule_id, _scripted("not_documented"))
+    # 013 无时间文书无法核对先后，不能据此断言未记录；019 取材无时间要求，照常送模。
+    assert final["status"] == ("non_compliant" if rule_id == SAMPLING else "data_gap")
+
+
+@pytest.mark.asyncio
+async def test_two_reports_each_need_their_own_record():
     rows = _rows()
     second = deepcopy(rows["pathology_exam_report"][0])
     second.update(document_id="report-B", pathology_exam_id="B", specimen_name="胃", diagnosis="胃腺癌", report_datetime="2026-07-04 10:00:00")
     rows["pathology_exam_report"].append(second)
+    rows["pathology_exam_master"].append({"document_id": "master-B", "pathology_exam_id": "B", "specimen_name": "胃", "request_datetime": "2026-07-03 09:00:00"})
     rows["daily_course_record"].append({"document_id": "course-B", "record_time": "2026-07-04 12:00:00", "record_content": "胃病理结果：胃腺癌。"})
-    result = await _run(rows, RESULT)
-    assert result["status"] == "compliant"
-    assert {row["source_document_id"] for row in result["customer_evidence"]} == {"report-A", "report-B", "course-A", "course-B"}
+    final = await _run(rows, RESULT)
+    assert final["status"] == "compliant"
+    assert _documents(final) >= {"report-A", "report-B", "course-A", "course-B"}
+    partial = await _run(rows, RESULT, _scripted("documented", "not_documented"))
+    assert partial["status"] == "non_compliant"
 
 
 @pytest.mark.asyncio
-async def test_repeated_same_specimen_diagnosis_needs_event_identity():
+async def test_citation_before_its_own_report_cannot_prove_that_result():
+    """第二份报告晚于被引用的病程时，该引用不能证明第二份结果已记录。"""
     rows = _rows()
     second = deepcopy(rows["pathology_exam_report"][0])
-    second.update(document_id="report-B", pathology_exam_id="B", report_datetime="2026-07-04 10:00:00")
+    second.update(document_id="report-B", pathology_exam_id="B", report_datetime="2026-07-05 10:00:00")
     rows["pathology_exam_report"].append(second)
-    rows["daily_course_record"][0]["record_time"] = "2026-07-04 12:00:00"
-    result = await _run(rows, RESULT)
-    assert result["status"] == "data_gap"
+    rows["pathology_exam_master"].append({"document_id": "master-B", "pathology_exam_id": "B", "specimen_name": "胆囊", "request_datetime": "2026-07-04 09:00:00"})
+    final = await _run(rows, RESULT)
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+
+
+@pytest.mark.asyncio
+async def test_ungrounded_quote_fails_whole_extraction():
+    def script(sampling, events, documents):
+        return [{"event": events[0]["event"], "state": "documented", "document": documents[0]["document"],
+                 "quote": "病程中并不存在的这句话。"}]
+
+    final = await _run(_rows(), SAMPLING, PathologyFactsClient(script))
+    assert (final["status"], final["reason_code"]) == ("technical_error", "model_invalid_output")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
-async def test_submission_time_does_not_replace_missing_record_time(rule_id):
+async def test_duplicate_master_for_one_report_is_association_gap_without_model(rule_id):
     rows = _rows()
-    for source in ("surgery_record", "daily_course_record"):
-        for row in rows[source]:
-            row.pop("record_time")
-            row["submit_datetime"] = "2026-07-05 12:00:00"
-    assert (await _run(rows, rule_id))["status"] == "data_gap"
+    rows["pathology_exam_master"].append(dict(rows["pathology_exam_master"][0], document_id="master-dup"))
+    final = await _run(rows, rule_id)
+    assert (final["status"], final["_llm_call_count"]) == ("data_gap", 0)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
-async def test_conflicting_master_report_specimen_is_not_compliant(rule_id):
+async def test_sampling_request_without_report_cannot_be_covered_by_other_event():
     rows = _rows()
-    rows["pathology_exam_master"][0]["specimen_name"] = "胃"
-    assert (await _run(rows, rule_id))["status"] == "data_gap"
+    rows["pathology_exam_master"].append({"document_id": "master-B", "pathology_exam_id": "B", "specimen_name": "胃", "request_datetime": "2026-07-03 09:00:00"})
+    final = await _run(rows, SAMPLING)
+    assert (final["status"], final["_llm_call_count"]) == ("data_gap", 0)
 
 
 @pytest.mark.asyncio
-async def test_specimen_mention_in_other_sentence_does_not_bind_sampling():
+async def test_sampling_facts_name_only_sources_the_model_cited():
     rows = _rows()
-    rows["surgery_record"][0]["surgery_process"] = "胆囊检查未见明显异常。已切除胃息肉，标本送病理检查。"
-    rows["daily_course_record"] = []
-    assert (await _run(rows, SAMPLING))["status"] == "data_gap"
+    rows["daily_course_record"][0]["record_content"] = "患者一般情况可。"
+    final = await _run(rows, SAMPLING)
+    assert final["status"] == "compliant"
+    assert final["customer_display_facts"]["documented_sources"] == ["surgery_record"]
+    assert "course-A" not in _documents(final)
 
 
 @pytest.mark.asyncio
-async def test_sampling_facts_only_name_sources_with_linked_sampling():
-    rows = _rows()
-    rows["daily_course_record"][0]["record_content"] = "已切除胃息肉，标本送病理检查。"
-    result = await _run(rows, SAMPLING)
-    assert result["status"] == "compliant"
-    assert result["customer_display_facts"]["documented_sources"] == ["surgery_record"]
-    assert "course-A" not in {row["source_document_id"] for row in result["customer_evidence"]}
-
-
-@pytest.mark.asyncio
-async def test_explicit_report_numbers_disambiguate_repeated_diagnoses():
-    rows = _rows()
-    second = deepcopy(rows["pathology_exam_report"][0])
-    second.update(document_id="report-B", pathology_exam_id="B", report_datetime="2026-07-04 10:00:00")
-    rows["pathology_exam_report"].append(second)
-    rows["daily_course_record"][0]["record_content"] = "病理号A。胆囊病理结果：慢性胆囊炎。"
-    rows["daily_course_record"].append({"document_id": "course-B", "record_time": "2026-07-04 12:00:00", "record_content": "病理号B。胆囊病理结果：慢性胆囊炎。"})
-    assert (await _run(rows, RESULT))["status"] == "compliant"
-
-
-# 唯一病理事件：资料齐全可核对时，“没有任何取材/结果记录”必须能判为未记录，
-# 不能因关联不到文书而一律降为资料不足；任何无法归属的病理表述仍保守处理。
-NO_MENTION = ("手术顺利，术后安返病房。", "生命体征平稳，继续观察。")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
-async def test_single_event_without_any_record_is_not_documented(rule_id):
-    rows = _rows()
-    rows["surgery_record"][0]["surgery_process"], rows["daily_course_record"][0]["record_content"] = NO_MENTION
-    result = await _run(rows, rule_id)
-    assert result["status"] == "non_compliant"
-    assert {row["source_document_id"] for row in result["customer_evidence"]} >= {"surgery-A", "course-A"}
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
-async def test_untimed_target_record_cannot_prove_not_documented(rule_id):
-    rows = _rows()
-    rows["surgery_record"][0]["surgery_process"], rows["daily_course_record"][0]["record_content"] = NO_MENTION
-    rows["daily_course_record"].append({"document_id": "course-untimed", "record_content": "胆囊标本已送病理。"})
-    assert (await _run(rows, rule_id))["status"] == "data_gap"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("text", ["拟于明日取材送病理检查。", "追踪病检结果。"])
-async def test_unbound_pathology_wording_is_not_treated_as_absence(text):
-    rows = _rows()
-    rows["surgery_record"][0]["surgery_process"] = text
-    rows["daily_course_record"] = []
-    assert (await _run(rows, SAMPLING))["status"] == "data_gap"
-
-
-@pytest.mark.asyncio
-async def test_single_event_with_generic_specimen_binds_timed_sampling_record():
-    rows = _rows()
-    for key in ("pathology_exam_master", "pathology_exam_report"):
-        rows[key][0]["specimen_name"] = "组织"
-    rows["surgery_record"][0]["surgery_process"] = "术中切取组织标本，已送病理检查。"
-    assert (await _run(rows, SAMPLING))["status"] == "compliant"
-
-
-@pytest.mark.asyncio
-async def test_two_events_without_records_stay_unresolved():
-    rows = _rows()
-    second = deepcopy(rows["pathology_exam_report"][0])
-    second.update(document_id="report-B", pathology_exam_id="B", specimen_name="胃", diagnosis="胃腺癌",
-                  report_datetime="2026-07-04 10:00:00")
-    rows["pathology_exam_report"].append(second)
-    rows["surgery_record"][0]["surgery_process"], rows["daily_course_record"][0]["record_content"] = NO_MENTION
-    assert (await _run(rows, RESULT))["status"] == "data_gap"
+async def test_missing_model_client_is_technical_failure_not_a_judgement():
+    final = await _run(_rows(), RESULT, client=object())
+    assert (final["status"], final["reason_code"]) == ("technical_error", "model_transport_error")

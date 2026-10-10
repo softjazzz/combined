@@ -31,7 +31,8 @@ from app.services.luxian_0609.tumor_pathology_result_mapping import (
     safe_tumor_pathology_customer_display_facts,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
-from test_luxian_0609_native_tumor_pathology_execution import _Client, _wrapper
+from test_luxian_0609_native_tumor_pathology_execution import _wrapper
+from luxian_0609_pathology_test_facts import PathologyFactsClient
 
 
 CREATED_AT = "2026-09-10T12:00:00+08:00"
@@ -126,12 +127,16 @@ def test_019_runtime_prompt_accepts_senior_as_course_sampling_evidence() -> None
 @pytest.mark.asyncio
 async def test_019_c30_senior_text_enters_single_semantic_call_and_exact_refs() -> None:
     session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
-    client = _Client([{"is_compliant": False}])
 
+    def unknown(sampling, events, documents):
+        return [{"event": event["event"], "state": "unknown", "document": None, "quote": None} for event in events]
+
+    client = PathologyFactsClient(unknown)
     result = await _execute(session, client)
 
-    # 写有病理相关内容却未对上本次标本：不能据此断言已记录或未记录。
-    assert result.llm_call_count == 0
+    # 上级医师查房记录进入同一次抽取；模型无法确定归属时为关联缺口。
+    assert result.llm_call_count == 1
+    assert "追踪病检结果" in client.prompts[0]
     assert result.decisions[0].reason_code == "association_failed"
     senior_ref = session.materials.document_rows(
         "senior_course_record", snapshot=session.snapshot
@@ -145,7 +150,7 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
     session = _session(
         senior_rows=({"record_content": "术中切取胃组织标本，已送病理检查。", "record_time": RECORD_TIME},)
     )
-    client = _Client([])
+    client = PathologyFactsClient()
 
     result = await _execute(session, client)
 
@@ -157,7 +162,7 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
     )[0]
     assert reduced.final_state.value == "compliant"
     assert reduced.reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     facts = dict(result.customer_display_facts)["LX0609-06-02-02"]
     assert facts["documented_sources"] == ["senior_course_record"]
 
@@ -170,14 +175,14 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
         "病理结果提示慢性炎症，继续随访。",
     ),
 )
-async def test_019_senior_plan_or_result_only_stays_semantic(content: str) -> None:
+async def test_019_senior_plan_or_result_only_is_not_sampling(content: str) -> None:
     session = _session(senior_rows=({"record_content": content, "record_time": RECORD_TIME},))
-    client = _Client([{"is_compliant": False}])
 
-    result = await _execute(session, client)
+    result = await _execute(session, PathologyFactsClient())
 
-    assert result.llm_call_count == 0
-    assert result.decisions[0].reason_code == "association_failed"
+    # 计划取材或只写结果都不是已实施的取材记录（语义由模型抽取，此处为脚本化事实）。
+    assert result.llm_call_count == 1
+    assert result.decisions[0].reason_code == "requirement_violated"
 
 
 def test_019_mapping_accepts_legacy_two_sources_and_new_three_sources() -> None:
@@ -270,7 +275,7 @@ def test_019_trigger_absent_does_not_claim_target_sources_were_checked() -> None
 @pytest.mark.asyncio
 async def test_013_does_not_consume_senior_course_source() -> None:
     session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
-    client = _Client([{"is_compliant": True}])
+    client = PathologyFactsClient()
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=("LX0609-06-02-03",),
         wrapper_rules=[_wrapper("LX0609-06-02-03")],
@@ -285,7 +290,8 @@ async def test_013_does_not_consume_senior_course_source() -> None:
         decision_rule_ids=("LX0609-06-02-03",),
     )
 
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
+    assert "追踪病检结果" not in client.prompts[0]
     assert result.decisions[0].reason_code == "requirement_violated"
     senior_ref = session.materials.document_rows(
         "senior_course_record", snapshot=session.snapshot

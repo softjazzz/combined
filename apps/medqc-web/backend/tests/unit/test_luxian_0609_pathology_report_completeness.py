@@ -7,6 +7,11 @@ import json
 
 import pytest
 
+from luxian_0609_pathology_test_facts import PathologyFactsClient
+from app.services.luxian_0609.pathology_documentation_extraction import (
+    SCHEMA_VERSION as PATHOLOGY_SCHEMA_VERSION,
+)
+
 from app.services.custom_qc_workspace_service import project_customer_safe_result_item
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
@@ -399,8 +404,11 @@ async def test_legacy_payload_without_a_session_cannot_claim_report_scope(monkey
 class _FixedClient:
     def __init__(self):
         self.prompts = []
+        self.pathology = PathologyFactsClient()
 
     async def generate(self, prompt, **_kwargs):
+        if PATHOLOGY_SCHEMA_VERSION in prompt:
+            return await self.pathology.generate(prompt)
         self.prompts.append(prompt)
         return {"choices": [{"message": {"content": json.dumps({"is_compliant": True})}}], "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110}, "_api_time": 0.2}
 

@@ -4,6 +4,11 @@ import json
 
 import pytest
 
+from luxian_0609_pathology_test_facts import PathologyFactsClient
+from app.services.luxian_0609.pathology_documentation_extraction import (
+    SCHEMA_VERSION as PATHOLOGY_SCHEMA_VERSION,
+)
+
 from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient, fact
 
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
@@ -73,9 +78,12 @@ def _payload(*, facts: list[dict] | None = None, **overrides: list[dict]) -> dic
 
 
 class _Client:
-    def __init__(self, outputs: list[object]) -> None:
+    """其他调用按脚本输出；013/019 病理记录抽取交给协议一致的病理事实假客户端。"""
+
+    def __init__(self, outputs: list[object], *, pathology: PathologyFactsClient | None = None) -> None:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
+        self.pathology = pathology or PathologyFactsClient()
 
     async def generate(
         self,
@@ -83,7 +91,10 @@ class _Client:
         *,
         max_completion_tokens: int | None = None,
         allow_length_retry: bool = True,
+        **kwargs,
     ) -> dict:
+        if PATHOLOGY_SCHEMA_VERSION in prompt:
+            return await self.pathology.generate(prompt)
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
@@ -244,7 +255,7 @@ def _material_session(
             else (
                 ()
                 if empty_targets
-                else ({"record_content": "病程记录中已记录病理结果与处理计划。"},)
+                else ({"record_content": "病程记录中已记录病理结果：病理诊断资料，并制定处理计划。"},)
             )
         ),
     }
@@ -460,7 +471,7 @@ async def test_typed_013_accepts_documentation_from_either_complete_target_sourc
         result.decisions[0]
     ).final_state.value == "compliant"
     assert dict(result.customer_display_facts)["LX0609-06-02-03"]["requirement_met"] is True
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -487,14 +498,14 @@ async def test_typed_019_uses_same_session_surgery_process_not_stale_payload(
         patient_id="safe-patient",
         visit_id="safe-visit",
         source_schema=None,
-        llm_client=None,
+        llm_client=_Client([]),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=("LX0609-06-02-02",),
     )
 
     assert result.results == ()
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     assert [item.rule_id for item in result.decisions] == ["LX0609-06-02-02"]
     assert (
         reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value
@@ -539,7 +550,7 @@ async def test_typed_019_material_change_updates_state_snapshot_and_refs(monkeyp
         "patient_id": "safe-patient",
         "visit_id": "safe-visit",
         "source_schema": None,
-        "llm_client": None,
+        "llm_client": _Client([]),
         "decision_rule_ids": ("LX0609-06-02-02",),
     }
 
@@ -559,8 +570,8 @@ async def test_typed_019_material_change_updates_state_snapshot_and_refs(monkeyp
     ).final_state.value == "compliant"
     assert reduce_luxian_0609_rule_decision(
         negative.decisions[0]
-    ).final_state.value == "technical_error"
-    assert negative.decisions[0].reason_code == "model_transport_error"
+    ).final_state.value == "non_compliant"
+    assert negative.decisions[0].reason_code == "requirement_violated"
     assert positive.decisions[0].snapshot_hash != negative.decisions[0].snapshot_hash
     assert positive.decisions[0].fact_refs != negative.decisions[0].fact_refs
 
@@ -610,9 +621,11 @@ async def test_typed_019_optional_llm_matches_raw_state_calls_tokens_and_prompt(
         typed.decisions[0]
     ).final_state.value == "non_compliant"
     assert typed.results == ()
+    # 旧入口仍是整题提示词；typed 主链改为病理记录事实抽取，各一次调用。
     assert raw.llm_call_count == typed.llm_call_count == 1
-    assert raw.total_tokens == typed.total_tokens == 110
-    assert raw_client.prompts == typed_client.prompts
+    assert (raw.total_tokens, typed.total_tokens) == (110, 120)
+    assert len(raw_client.prompts) == 1
+    assert typed_client.prompts == [] and len(typed_client.pathology.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -692,7 +705,7 @@ async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review()
         },
     ),)
     assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
+    assert len(client.pathology.prompts) == 1
     assert "SAFE_PRIVATE_TARGET" not in repr(result)
 
 
@@ -753,8 +766,8 @@ async def test_typed_019_strong_surgery_sampling_overrides_complete_empty_daily(
     decision = result.decisions[0]
     assert reduce_luxian_0609_rule_decision(decision).final_state.value == "compliant"
     assert decision.reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert client.prompts == [] and len(client.pathology.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -901,7 +914,7 @@ async def test_typed_019_preserves_pathology_source_four_states(
         patient_id="safe-patient",
         visit_id="safe-visit",
         source_schema=None,
-        llm_client=None,
+        llm_client=_Client([]),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=("LX0609-06-02-02",),
@@ -910,7 +923,7 @@ async def test_typed_019_preserves_pathology_source_four_states(
 
     assert reduce_luxian_0609_rule_decision(decision).final_state.value == expected_state
     assert decision.reason_code == expected_reason
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
     assert "private unavailable detail" not in repr(result)
     assert "private query detail" not in repr(result)
 
@@ -1222,7 +1235,7 @@ def _typed_013_027_session(
             {"surgery_process": "术中切取病灶标本并送病理检查。", "record_content": "病理号PATH-1。", "record_time": "2026-04-26 11:00:00"},
         ),
         "daily_course_record": (
-            {"record_content": "病理号PATH-1。病程记录中已记录病理结果与处理计划。", "record_time": "2026-04-26 11:00:00"},
+            {"record_content": "病理号PATH-1。病程记录中已记录病理结果：病理诊断资料，并制定处理计划。", "record_time": "2026-04-26 11:00:00"},
         ),
         "diagnosis": ({"diagnosis_code": diagnosis_code},),
         "discharge_record": ({"treatment_course": discharge_text},),
@@ -1293,8 +1306,9 @@ async def test_typed_013_027_emit_ordered_decisions_from_same_session(monkeypatc
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
     ] == ["compliant", "compliant"]
+    # 013 为一次病理结果记录事实抽取（120）；027 为确定性计划事实，不调用模型。
     assert result.llm_call_count == 1
-    assert result.total_tokens == 110
+    assert result.total_tokens == 120
 
 
 @pytest.mark.asyncio
@@ -1349,11 +1363,12 @@ async def test_typed_027_uses_deterministic_plan_facts_while_legacy_stays_unchan
     ] == ["compliant", "compliant"]
     assert typed.results == ()
     assert raw.llm_call_count == 2
+    # typed 013 为一次病理记录事实抽取（120），027 为确定性计划事实。
     assert typed.llm_call_count == 1
     assert raw.total_tokens == 220
-    assert typed.total_tokens == 110
+    assert typed.total_tokens == 120
     assert len(raw_client.prompts) == 2
-    assert len(typed_client.prompts) == 1
+    assert len(typed_client.prompts) == 0 and len(typed_client.pathology.prompts) == 1
 
 
 @pytest.mark.asyncio

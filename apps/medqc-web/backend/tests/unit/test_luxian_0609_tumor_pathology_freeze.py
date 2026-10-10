@@ -7,6 +7,11 @@ from typing import Any
 
 import pytest
 
+from luxian_0609_pathology_test_facts import PathologyFactsClient
+from app.services.luxian_0609.pathology_documentation_extraction import (
+    SCHEMA_VERSION as PATHOLOGY_SCHEMA_VERSION,
+)
+
 from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient
 
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
@@ -49,10 +54,14 @@ def _wrapper(rule_id: str) -> dict[str, str]:
 
 
 class _ControlledMalignancyClient:
-    """只固定现有恶性肿瘤事实抽取输出，不能替代规则判定。"""
+    """只固定现有恶性肿瘤事实抽取输出，不能替代规则判定。
+
+    013/019 病理记录事实抽取交给协议一致的病理事实替身，不计入 prompts。
+    """
 
     def __init__(self) -> None:
         self.prompts: list[str] = []
+        self.pathology = PathologyFactsClient()
 
     async def generate(
         self,
@@ -60,8 +69,11 @@ class _ControlledMalignancyClient:
         *,
         max_completion_tokens: int | None = None,
         allow_length_retry: bool = True,
+        **_kwargs: Any,
     ) -> dict[str, Any]:
         del max_completion_tokens, allow_length_retry
+        if PATHOLOGY_SCHEMA_VERSION in prompt:
+            return await self.pathology.generate(prompt)
         self.prompts.append(prompt)
         return {
             "choices": [
@@ -295,10 +307,12 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
         "requirement_violated",
     ]
     assert all(item.fact_refs for item in reduced)
-    # 仅 026 一次给药原子事实抽取（替身不计 token）；恶性肿瘤判断不调用模型。
-    assert execution.llm_call_count == 1
-    assert execution.prompt_tokens == execution.total_tokens == 0
+    # 026 一次给药原子事实抽取（替身不计 token）；013/019 各一次病理记录事实抽取
+    # （替身各 120 token）；恶性肿瘤判断不调用模型。
+    assert execution.llm_call_count == 3
+    assert (execution.prompt_tokens, execution.total_tokens) == (200, 240)
     assert client.prompts == []
+    assert len(client.pathology.prompts) == 2
 
     facts = dict(execution.customer_display_facts)
     assert facts["LX0609-06-02-03"]["verification_kind"] == "pathology_result_documentation_check"
@@ -542,10 +556,10 @@ async def test_tumor_pathology_direct_missing_semantic_client_freezes_llm_aggreg
 
 
 @pytest.mark.asyncio
-async def test_tumor_pathology_semantic_fallback_normal_output_is_unchanged() -> None:
-    """正常语义兜底仍只产生一次调用及原有合规结论。"""
+async def test_tumor_pathology_019_extraction_is_one_call_through_binding() -> None:
+    """typed 019 不再走整题提示词兜底：一次病理记录事实抽取，由程序判定。"""
 
-    client = _FixedRuleClient(_semantic_response('{"is_compliant": true}'))
+    client = PathologyFactsClient()
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
         rows_by_source=_semantic_fallback_rows(),
         rule_ids=("LX0609-06-02-02",),
@@ -556,10 +570,11 @@ async def test_tumor_pathology_semantic_fallback_normal_output_is_unchanged() ->
     assert execution.results == ()
     assert execution.llm_call_count == 1
     assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (
-        17,
-        5,
-        22,
+        100,
+        20,
+        120,
     )
-    assert [item.final_state.value for item in reduced] == ["compliant"]
-    assert [item["status"] for item in customer_results] == ["compliant"]
+    # 文书只写“术后一般情况平稳”“继续观察”，替身事实为未记录取材。
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert [item["status"] for item in customer_results] == ["non_compliant"]
     assert len(client.prompts) == 1
