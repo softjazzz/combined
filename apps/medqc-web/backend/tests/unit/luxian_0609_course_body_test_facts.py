@@ -3,26 +3,8 @@ import json
 
 
 def read_course_body_documents(prompt):
-    tail = prompt.split("\nINPUT_JSON=", 1)[1]
-    line = tail.split("\n", 1)[0]
-    documents = json.loads(line)["documents"]
-    cursor = len(line)
-    for doc in documents:
-        spans = {}
-        for sid, count in doc["span_char_counts"].items():
-            begin, end = f"\nSPAN_BEGIN {sid}\n", f"\nSPAN_END {sid}\n"
-            assert tail.startswith(begin, cursor)
-            assert type(count) is int and count >= 0
-            start = cursor + len(begin)
-            stop = start + count
-            assert tail.startswith(end, stop)
-            spans[sid] = tail[start:stop]
-            cursor = stop + len(end)
-        doc["body"] = "".join(spans.values())
-        doc["spans"] = spans
-        assert type(doc["body_char_count"]) is int and doc["body_char_count"] == len(doc["body"])
-    assert cursor == len(tail)
-    return documents
+    """读实际发送的 INPUT_JSON 正文；正文即模型可引用的原文。"""
+    return json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["documents"]
 
 
 class FrozenCourseBodyClient:
@@ -42,19 +24,16 @@ class FrozenCourseBodyClient:
             for doc in documents:
                 state, quote = self.facts[doc["body"]]
                 if state == "present":
-                    start = doc["body"].index(quote)
-                    sid = next(sid for sid, text in doc["spans"].items() if quote in text)
-                    atom = {"state": state, "span_id": sid, "start": start, "end": start + len(quote), "quote": quote}
-                elif state == "absent":
-                    atom = {"state": state, "span_id": None, "start": 0, "end": len(doc["body"]), "quote": None}
+                    assert quote in doc["body"]
+                    atom = {"state": state, "quote": quote}
                 else:
-                    assert state == "unknown" and quote is None
-                    atom = {"state": state, "span_id": None, "start": None, "end": None, "quote": None}
+                    assert state in {"absent", "unknown"} and quote is None
+                    atom = {"state": state, "quote": None}
                 items.append({"document_ref": doc["document_ref"], "clinical_body": atom})
             if self.mode == "invalid_batch":
                 assert len(items) == 2
                 items[1]["clinical_body"]["unregistered_key"] = True
-            payload = {"schema_version": "lx0609-course-body-facts-v1", "documents": items}
+            payload = {"schema_version": "lx0609-course-body-facts-v2", "documents": items}
             self.payloads.append(payload)
             return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload, ensure_ascii=False)}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
         except Exception as error:

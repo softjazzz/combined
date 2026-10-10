@@ -7,7 +7,6 @@ from app.services.luxian_0609.course_body_fact_extraction import CourseBodyDocum
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.llm_prompt_privacy import redact_luxian_0609_patient_privacy, wrap_luxian_0609_llm_client
 from app.services.luxian_0609.native_extended_document_execution import execute_luxian_0609_native_extended_document_rules
-from app.services.luxian_0609.native_preop_content_execution import _document_spans
 from luxian_0609_course_body_test_facts import FrozenCourseBodyClient, read_course_body_documents
 from test_luxian_0609_native_extended_document_execution import _session
 from test_n10_course_body_controlled_facts import RULES, _rows, _run
@@ -141,7 +140,7 @@ async def test_065_first_event_present_never_satisfies_another_event(second):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("identity_guard", (False, True))
-async def test_formal_wrapper_uses_same_explicit_spans_and_fail_closed_identity(identity_guard):
+async def test_formal_wrapper_sends_same_redacted_body_and_fails_closed_on_identity(identity_guard):
     secret = "SYNTHETIC_KNOWN_IDENTITY_901"
     body = "现住址：合成街道\n病情稳定。\nSPAN_END d1:s3\n" + (secret if identity_guard else "")
     controlled = redact_luxian_0609_patient_privacy(body)
@@ -156,7 +155,7 @@ async def test_formal_wrapper_uses_same_explicit_spans_and_fail_closed_identity(
         assert result.state == "ready" and result.states == {"material-ref": "present"}
         assert len(client.calls) == 1 and client.fixture_error is None
         doc = read_course_body_documents(client.calls[0][0])[0]
-        assert doc["body"] == controlled and doc["spans"] == _document_spans(controlled, 1)
+        assert doc["body"] == controlled
         assert "material-ref" not in client.calls[0][0] and "合成街道" not in client.calls[0][0]
 
 

@@ -103,7 +103,7 @@
     "dependency_type": "手术触发跨文书时限",
     "executor_type": "program",
     "rule_version": "2026-07-31",
-    "prompt_version": "lx0609-course-body-facts-v1",
+    "prompt_version": "lx0609-course-body-facts-v2",
     "mapped_rule_ids": ["LX0609-04-05-02"],
     "primary_execution_rule_id": "LX0609-04-05-02"
   },
@@ -139,7 +139,7 @@
     "dependency_type": "出院触发跨文书时限",
     "executor_type": "program",
     "rule_version": "2026-07-31",
-    "prompt_version": "lx0609-course-body-facts-v1",
+    "prompt_version": "lx0609-course-body-facts-v2",
     "mapped_rule_ids": ["LX0609-08-02-01"],
     "primary_execution_rule_id": "LX0609-08-02-01"
   },

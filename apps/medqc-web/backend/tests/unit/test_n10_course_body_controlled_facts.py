@@ -86,7 +86,7 @@ def test_compiled_065_067_permissions_and_prompt_are_consistent():
     contracts = {c.rule_id: c for c in load_luxian_0609_rule_contracts()}
     for rule in RULES:
         c = contracts[rule]
-        assert (c.contract_version, c.decision_authority, c.max_llm_calls_per_rule, c.prompt_version) == ("v2", "program_then_optional_llm", 1, "lx0609-course-body-facts-v1")
+        assert (c.contract_version, c.decision_authority, c.max_llm_calls_per_rule, c.prompt_version) == ("v2", "program_then_optional_llm", 1, "lx0609-course-body-facts-v2")
 
 
 @pytest.mark.asyncio
