@@ -194,6 +194,16 @@ def _freeze_identity_values(values: Iterable[str]) -> tuple[str, ...]:
 
 
 _UNICODE_ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")
+# 正文常以 JSON 字符串嵌在 prompt 里，整段 prompt 不是合法 JSON；简单转义（如 \n）
+# 紧贴身份值时会让 ASCII 标识的边界判断失效，核查时一并按解码后的文本比对。
+_JSON_SIMPLE_ESCAPE = re.compile(r'\\([\\"/bfnrt])')
+_JSON_SIMPLE_ESCAPE_VALUES = {
+    "\\": "\\", '"': '"', "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t",
+}
+
+
+def _decode_json_simple_escapes(text: str) -> str:
+    return _JSON_SIMPLE_ESCAPE.sub(lambda match: _JSON_SIMPLE_ESCAPE_VALUES[match.group(1)], text)
 _MAX_DECODE_LAYERS = 8
 _MAX_REQUEST_DEPTH = 32
 
@@ -245,7 +255,7 @@ def _check_identity_residue(
         if any(
             _contains_identity(text, identity)
             for identity in identities
-            for text in (current, decoded)
+            for text in (current, decoded, _decode_json_simple_escapes(decoded))
         ):
             raise PatientPrivacyViolation("Patient identity remains in model request")
         try:

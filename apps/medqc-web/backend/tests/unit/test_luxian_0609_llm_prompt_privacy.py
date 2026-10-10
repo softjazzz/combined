@@ -120,3 +120,15 @@ def test_json_embedded_labelled_address_survives_wrapper_redaction(body, pre_red
     assert payload["documents"][0]["body"] == redact_luxian_0609_patient_privacy(body)
     assert "某镇测试街道12号" not in redacted and "测试单位甲" not in redacted
     assert redact_luxian_0609_patient_privacy(redacted) == redacted
+
+
+def test_known_ascii_identity_after_json_escape_is_still_rejected():
+    """正文以 JSON 嵌入 prompt 时“\n”紧贴身份值，不能因 token 边界判断而漏检。"""
+    import json
+
+    from app.services.luxian_0609.llm_prompt_privacy import PatientPrivacyViolation, assert_no_known_identity
+
+    prompt = "INPUT_JSON=" + json.dumps({"body": "正文\nSYNTHETIC_ID_901"}, ensure_ascii=False)
+    with pytest.raises(PatientPrivacyViolation):
+        assert_no_known_identity(prompt, ["SYNTHETIC_ID_901"])
+    assert_no_known_identity("130mg 1.5 Patient", ["1", "P"])
