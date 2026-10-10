@@ -6550,3 +6550,27 @@ async def test_typed_value_failure_retries_only_failed_rule_and_keeps_valid_sibl
     assert '"rule_id":"LX0609-06-01-04"' in client.prompts[1]
     assert '"rule_id":"LX0609-06-01-05"' not in client.prompts[1]
     assert result.parse_failure_kinds == ("value",)
+
+
+@pytest.mark.asyncio
+async def test_prompt_requires_result_content_for_recorded_result_not_just_report_received(monkeypatch):
+    """011/014“记录结果”须写出结果内容；只写“已回报/详见报告”不算（真实模型曾误判为已记录）。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "exam_id": "EXAM-011", "exam_type": "CT", "exam_name": "胸部CT",
+            "exam_time": "2026-04-26 08:00:00", "report_time": "2026-04-26 12:00:00",
+            "exam_conclusion": "右肺上叶见约8mm实性结节。",
+        },),
+        course_rows=({"record_time": "2026-04-26 16:00:00", "record_content": "胸部CT结果已回报，详见报告。"},),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-30"},),
+    )
+    client = _Client([_fact_response(("LX0609-06-01-04",), semantic_state="absent")])
+    await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-06-01-04",), wrapper_rules=[_wrapper("LX0609-06-01-04")], evidence_payload=None,
+        llm_client=client, evidence_snapshot=snapshot, evidence_materials=materials,
+        decision_rule_ids=("LX0609-06-01-04",),
+    )
+    prompt = client.prompts[0]
+    assert "必须在病程中写出本次报告的结果内容" in prompt
+    assert "只写“结果已回报”“详见报告”“已查看报告”而没有任何结果内容的，为absent" in prompt
