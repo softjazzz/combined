@@ -1046,7 +1046,6 @@ def _pathology_sampling_display_facts(
     pathology_report: SourceMaterial,
     surgery_record: SourceMaterial,
     daily_course_record: SourceMaterial,
-    documented_sources: Sequence[str] | None = None,
 ) -> Mapping[str, Any] | None:
     trigger_sources, target_sources = _pathology_checked_sources(
         pathology_master=pathology_master,
@@ -1056,7 +1055,7 @@ def _pathology_sampling_display_facts(
     )
     if not trigger_sources or len(target_sources) != 2:
         return None
-    documented_sources = list(documented_sources) if documented_sources is not None else [
+    documented_sources = [
         source
         for source, material in (
             ("surgery_record", surgery_record),
@@ -1070,6 +1069,40 @@ def _pathology_sampling_display_facts(
         "checked_target_sources": target_sources,
         "documented_sources": documented_sources,
         "requirement_met": bool(documented_sources),
+    }
+
+
+def _lx019_typed_display_facts(
+    *,
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+    checked: Sequence[tuple[str, SourceMaterial]],
+    documented_sources: Sequence[str] | None,
+) -> Mapping[str, Any] | None:
+    """019 投影实际核对的来源；documented_sources 为 None 表示未记录。"""
+
+    triggers = [
+        source for source, material in (
+            ("pathology_exam_master", pathology_master),
+            ("pathology_exam_report", pathology_report),
+        )
+        if material.state == "present"
+    ]
+    targets = [{"source": source, "state": material.state} for source, material in checked]
+    if not triggers or any(item["state"] not in {"present", "empty"} for item in targets):
+        return None
+    if documented_sources is None:
+        return {
+            "failure_kind": "pathology_sampling_not_documented",
+            "pathology_trigger_sources": triggers,
+            "checked_target_sources": targets,
+        }
+    return {
+        "verification_kind": "pathology_sampling_documentation_check",
+        "pathology_trigger_sources": triggers,
+        "checked_target_sources": targets,
+        "documented_sources": list(documented_sources),
+        "requirement_met": True,
     }
 
 
@@ -2446,9 +2479,23 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if typed_rule and rule_id in {"LX0609-06-02-02", "LX0609-06-02-03"}:
             target_materials = {key: materials[key] for key in required_sources}
             sampling_rule = rule_id == "LX0609-06-02-02"
+            # 院方口径（2026-10-10）：019 有手术记录时只认手术记录中的取材记录；
+            # 本次没有手术记录（内镜、穿刺等活检）时，核对日常病程记录。
+            sampling_checked = (
+                (("surgery_record", target_materials["surgery_record"]),)
+                if target_materials["surgery_record"].state == "present"
+                else (
+                    ("surgery_record", target_materials["surgery_record"]),
+                    ("daily_course_record", target_materials["daily_course_record"]),
+                )
+            ) if sampling_rule else ()
             documentation = await _typed_pathology_documentation(
                 rule_id=rule_id, master=master, report=report,
-                targets=target_materials, llm_client=llm_client,
+                targets=(
+                    {source: material for source, material in sampling_checked if material.state == "present"}
+                    if sampling_rule else target_materials
+                ),
+                llm_client=llm_client,
             )
             llm_call_count += documentation.llm_call_count
             prompt_tokens += documentation.prompt_tokens
@@ -2469,10 +2516,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 continue
             if documentation.status == "compliant":
                 display_facts = (
-                    _pathology_sampling_display_facts(
-                        pathology_master=master, pathology_report=report,
-                        surgery_record=target_materials["surgery_record"],
-                        daily_course_record=target_materials["daily_course_record"],
+                    _lx019_typed_display_facts(
+                        pathology_master=master, pathology_report=report, checked=sampling_checked,
                         documented_sources=list(dict.fromkeys(source for source, _ in documentation.cited)),
                     )
                     if sampling_rule
@@ -2485,10 +2530,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 selected_rows = documentation.cited
             else:
                 display_facts = (
-                    _lx019_missing_sampling_display_facts(
-                        pathology_master=master, pathology_report=report,
-                        surgery_record=target_materials["surgery_record"],
-                        daily_course_record=target_materials["daily_course_record"],
+                    _lx019_typed_display_facts(
+                        pathology_master=master, pathology_report=report, checked=sampling_checked,
+                        documented_sources=None,
                     )
                     if sampling_rule
                     else _pathology_result_display_facts(

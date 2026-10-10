@@ -1454,7 +1454,7 @@ _RULE_COMPLIANT_FINDINGS = {
     "LX0609-12-01-01": "已核对入院记录现病史与首次病程记录病例特点，两段内容并非完全相同。",
     "LX0609-12-01-02": "已核对病程记录，未发现相似度达到或超过 70% 的重复记录。",
     "LX0609-01-01-02": "已确认主诉长度及诊断指向符合书写要求。",
-    "LX0609-06-02-02": "已确认病理取材情况已在手术记录或日常病程记录中记录。",
+    "LX0609-06-02-02": "已确认病理取材情况已有记录（有手术记录时核对手术记录，本次无手术时核对日常病程记录）。",
     "LX0609-03-01-01": "已确认会诊记录具备对应的会诊执行记录。",
     "LX0609-03-01-02": "已核对会诊申请单，会诊目的表述明确。",
     "LX0609-03-01-03": "已核对会诊记录单，会诊意见表述明确。",
@@ -2554,7 +2554,9 @@ def customer_finding_from_controlled_facts(
             and all(isinstance(item, Mapping) for item in checked_sources)
             else []
         )
-        if checked_names == ["surgery_record", "daily_course_record"]:
+        if checked_names == ["surgery_record"]:
+            checked_scope = "手术记录"
+        elif checked_names == ["surgery_record", "daily_course_record"]:
             checked_scope = "手术记录和病程记录"
         elif checked_names == [
             "surgery_record",

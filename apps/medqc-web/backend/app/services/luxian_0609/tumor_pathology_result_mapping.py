@@ -228,6 +228,9 @@ def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         expected=(
             _LX019_TARGET_SOURCES
             if isinstance(raw_checked, list) and len(raw_checked) == 3
+            # 有手术记录时 019 只核对手术记录。
+            else ("surgery_record",)
+            if isinstance(raw_checked, list) and len(raw_checked) == 1
             else _TARGET_SOURCES
         ),
     )

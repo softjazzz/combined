@@ -519,9 +519,9 @@ async def test_typed_019_uses_same_session_surgery_process_not_stale_payload(
             "pathology_exam_master",
             "pathology_exam_report",
         ],
+        # 有手术记录时 019 只核对手术记录。
         "checked_target_sources": [
             {"source": "surgery_record", "state": "present"},
-            {"source": "daily_course_record", "state": "present"},
         ],
         "documented_sources": ["surgery_record"],
         "requirement_met": True,

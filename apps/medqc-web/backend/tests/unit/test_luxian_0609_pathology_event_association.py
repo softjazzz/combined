@@ -91,8 +91,11 @@ async def test_documented_single_event_is_compliant_with_cited_document(rule_id,
 async def test_not_documented_is_non_compliant_with_checked_documents(rule_id):
     final = await _run(_rows(), rule_id, _scripted("not_documented"))
     assert final["status"] == "non_compliant"
-    expected = {"surgery-A", "course-A"} if rule_id == SAMPLING else {"course-A"}
+    # 019 有手术记录时只核对手术记录；013 核对报告之后的记录。
+    expected = {"surgery-A"} if rule_id == SAMPLING else {"course-A"}
     assert _documents(final) >= expected
+    if rule_id == SAMPLING:
+        assert "course-A" not in _documents(final)
 
 
 @pytest.mark.asyncio
@@ -212,3 +215,38 @@ async def test_sampling_facts_name_only_sources_the_model_cited():
 async def test_missing_model_client_is_technical_failure_not_a_judgement():
     final = await _run(_rows(), RESULT, client=object())
     assert (final["status"], final["reason_code"]) == ("technical_error", "model_transport_error")
+
+
+@pytest.mark.asyncio
+async def test_019_with_surgery_record_ignores_sampling_written_only_in_course():
+    """院方口径：有手术记录时取材须写在手术记录中，病程里写了送检不算。"""
+    rows = _rows()
+    rows["surgery_record"][0]["surgery_process"] = "已切除胆囊，手术顺利。"
+    rows["daily_course_record"][0]["record_content"] = "术中切除胆囊标本已送病理检查。"
+    client = PathologyFactsClient()
+    final = await _run(rows, SAMPLING, client)
+    assert final["status"] == "non_compliant"
+    assert "已送病理检查" not in client.prompts[0]
+    assert final["customer_display_facts"]["checked_target_sources"] == [
+        {"source": "surgery_record", "state": "present"},
+    ]
+    assert "已核对手术记录，均未找到取材情况记录" in final["findings"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("course,expected", [
+    ("胃镜下于胃窦取活检组织4块送病理检查。", "compliant"),
+    ("胃镜检查顺利，患者无不适。", "non_compliant"),
+])
+async def test_019_without_surgery_record_checks_daily_course(course, expected):
+    """院方口径：本次无手术记录（内镜、穿刺等活检）时核对日常病程。"""
+    rows = _rows()
+    rows["surgery_record"] = []
+    rows["daily_course_record"][0]["record_content"] = course
+    rows["daily_course_record"][0]["record_time"] = "2026-07-01 12:00:00"
+    final = await _run(rows, SAMPLING)
+    assert final["status"] == expected
+    assert final["customer_display_facts"]["checked_target_sources"] == [
+        {"source": "surgery_record", "state": "empty"},
+        {"source": "daily_course_record", "state": "present"},
+    ]

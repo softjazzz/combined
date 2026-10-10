@@ -117,7 +117,7 @@ def test_019_runtime_prompt_excludes_senior_from_sampling_evidence() -> None:
 
     assert "适用文书: daily_course_record、surgery_record\n" in prompt
     assert "上级医师查房记录不作为取材记录来源" in prompt
-    assert "已明确实施的取材情况" in prompt
+    assert "有手术记录时，取材情况须记录在手术记录中" in prompt
     assert "不得把取材部位、数量或送检信息作为额外强制条件" in prompt
 
 
@@ -130,11 +130,10 @@ async def test_019_senior_text_is_not_sent_or_cited() -> None:
 
     assert result.llm_call_count == 1
     assert "追踪病检结果" not in client.prompts[0]
-    # 手术记录与日常病程均未写取材：不合规；查房记录不参与核对。
+    # 手术记录未写取材：不合规；查房记录不参与核对，有手术记录时也不看日常病程。
     assert result.decisions[0].reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-06-02-02"]["checked_target_sources"] == [
         {"source": "surgery_record", "state": "present"},
-        {"source": "daily_course_record", "state": "present"},
     ]
 
 
