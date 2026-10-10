@@ -25,7 +25,7 @@ from .source_evidence_reader import (
     parse_strict_performed_time,
     read_luxian_0609_native_source_rows,
 )
-from .surgery_applicability import resolve_surgery_applicability
+from .surgery_applicability import performed_surgery_rows, resolve_surgery_applicability
 from .surgery_procedure_catalog import (
     _COMPOSITE_SEPARATOR,
     catalog_surgery_state,
@@ -206,6 +206,40 @@ def _formal_surgery_matches_target(
             return False
         return not target_name or not formal_name or name_match
     return name_match
+
+
+def _formal_level4_surgeries(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[tuple[tuple[Mapping[str, Any], datetime], ...], bool]:
+    """从正式手术记录取四级手术及其开始时间。
+
+    运行病历质控时病案首页多未生成，手术时间与等级须先取运行文书；首页只作
+    回退。返回（有严格开始时间的四级手术，是否存在缺开始时间的四级手术）。
+    """
+
+    observation = next(
+        (item for item in snapshot.observations if item.source_key == "surgery_record"),
+        None,
+    )
+    if observation is None or observation.query_state.value != "available":
+        return (), False
+    try:
+        rows = tuple(materials.rows("surgery_record"))
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return (), False
+    timed: list[tuple[Mapping[str, Any], datetime]] = []
+    untimed = False
+    for row in performed_surgery_rows(source_key="surgery_record", rows=rows):
+        if effective_surgery_level(row) != "四级":
+            continue
+        start = _strict_formal_surgery_begin(row)
+        if start is None:
+            untimed = True
+        else:
+            timed.append((row, start))
+    return tuple(timed), untimed
 
 
 def _formal_surgery_start_for_midnight_level4(
@@ -853,6 +887,13 @@ async def execute_luxian_0609_native_mdt_rule(
             materials=evidence_materials,
             source_keys=_SURGERY_TRIGGER_SOURCE_KEYS,
         )
+        if surgery_applicability.state == "technical_error":
+            # 手术来源查询失败时实施与否未知，不能输出“未确认已实施手术”等事实。
+            return finish(
+                _MdtRuleOutcome(
+                    "technical_error", "technical_failure", "source_query_error"
+                )
+            )
         display_facts.update(
             {
                 "performed_surgery_confirmed": (
@@ -873,12 +914,6 @@ async def execute_luxian_0609_native_mdt_rule(
             display_facts["procedure_code"] = surgery_applicability.procedure_code
         if surgery_applicability.procedure_name:
             display_facts["procedure_name"] = surgery_applicability.procedure_name
-        if surgery_applicability.state == "technical_error":
-            return finish(
-                _MdtRuleOutcome(
-                    "technical_error", "technical_failure", "source_query_error"
-                )
-            )
         if surgery_applicability.state == "data_gap":
             return finish(
                 _MdtRuleOutcome(
@@ -978,87 +1013,140 @@ async def execute_luxian_0609_native_mdt_rule(
             )
         )
 
-    performed = [
-        row
-        for row in surgeries
-        if _parse_datetime(row.get("surgery_begin_datetime")) is not None
-        and catalog_surgery_state(row) is not False
-    ]
-    if not performed:
-        return finish(
-            _MdtRuleOutcome(
-                "not_applicable", "trigger_absent", "performed_surgery_absent"
-            ),
-            selected_fact_refs=(
-                _selected_material_fact_refs(
-                    materials=evidence_materials,
-                    snapshot=evidence_snapshot,
-                    source_key="mr_surgery",
-                    rows=surgeries,
-                    fallback_to_source=True,
-                )
-                if typed_requested
-                else ()
-            ),
+    formal_level4: tuple[tuple[Mapping[str, Any], datetime], ...] = ()
+    formal_level4_untimed = False
+    if typed_requested:
+        assert evidence_snapshot is not None
+        assert evidence_materials is not None
+        formal_level4, formal_level4_untimed = _formal_level4_surgeries(
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
         )
-    level4 = [
-        row
-        for row in performed
-        if effective_surgery_level(row) == "四级"
-    ]
-    if not level4:
-        # 040只由“四级手术”积极事实触发。等级空缺不等于四级手术，
-        # 不能要求病历补充MDT材料；手术等级完整性应由其专属规则处理。
-        return finish(
-            _MdtRuleOutcome(
-                "not_applicable", "trigger_absent", "level4_surgery_absent"
-            ),
-            selected_fact_refs=(
-                _selected_material_fact_refs(
-                    materials=evidence_materials,
-                    snapshot=evidence_snapshot,
-                    source_key="mr_surgery",
-                    rows=performed,
-                    fallback_to_source=True,
-                )
-                if typed_requested
-                else ()
-            ),
-        )
-    selected_trigger_fact_refs = (
-        _selected_material_fact_refs(
+    if formal_level4:
+        assert evidence_snapshot is not None
+        assert evidence_materials is not None
+        level4 = [row for row, _ in formal_level4]
+        selected_trigger_fact_refs = _selected_material_fact_refs(
+            materials=evidence_materials,
+            snapshot=evidence_snapshot,
+            source_key="surgery_record",
+            rows=tuple(level4),
+            fallback_to_source=True,
+        ) + _selected_material_fact_refs(
+            # 首页若已生成且能按编码/名称对应同一手术，一并作为触发证据。
             materials=evidence_materials,
             snapshot=evidence_snapshot,
             source_key="mr_surgery",
-            rows=level4,
-            fallback_to_source=True,
-        )
-        if typed_requested
-        else ()
-    )
-    level4_session_times = {
-        start
-        for row in level4
-        if (start := _parse_datetime(row.get("surgery_begin_datetime"))) is not None
-    }
-    if len(level4_session_times) > 1:
-        return finish(
-            _MdtRuleOutcome(
-                "data_gap", "data_gap", "multiple_level4_sessions_unresolved"
+            rows=tuple(
+                target
+                for target in surgeries
+                if any(
+                    _formal_surgery_matches_target(target=target, formal=formal)
+                    for formal in level4
+                )
             ),
-            selected_fact_refs=selected_trigger_fact_refs,
         )
-    earliest_level4 = min(level4_session_times)
-    formal_level4_match = _formal_surgery_start_for_midnight_level4(
-        level4=level4,
-        snapshot=evidence_snapshot,
-        materials=evidence_materials,
-    )
-    if formal_level4_match is not None:
-        earliest_level4, formal_ref = formal_level4_match
-        selected_trigger_fact_refs = tuple(
-            dict.fromkeys((*selected_trigger_fact_refs, formal_ref))
+        level4_session_times = {start for _, start in formal_level4}
+        if len(level4_session_times) > 1:
+            return finish(
+                _MdtRuleOutcome(
+                    "data_gap", "data_gap", "multiple_level4_sessions_unresolved"
+                ),
+                selected_fact_refs=selected_trigger_fact_refs,
+            )
+        earliest_level4 = min(level4_session_times)
+    else:
+        performed = [
+            row
+            for row in surgeries
+            if _parse_datetime(row.get("surgery_begin_datetime")) is not None
+            and catalog_surgery_state(row) is not False
+        ]
+        if not performed and formal_level4_untimed:
+            return finish(
+                _MdtRuleOutcome(
+                    "data_gap", "data_gap", "authoritative_time_missing"
+                ),
+                selected_fact_refs=_surgery_source_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                ),
+            )
+        if not performed:
+            return finish(
+                _MdtRuleOutcome(
+                    "not_applicable", "trigger_absent", "performed_surgery_absent"
+                ),
+                selected_fact_refs=(
+                    _selected_material_fact_refs(
+                        materials=evidence_materials,
+                        snapshot=evidence_snapshot,
+                        source_key="mr_surgery",
+                        rows=surgeries,
+                        fallback_to_source=True,
+                    )
+                    if typed_requested
+                    else ()
+                ),
+            )
+        level4 = [
+            row
+            for row in performed
+            if effective_surgery_level(row) == "四级"
+        ]
+        if not level4:
+            # 040只由“四级手术”积极事实触发。等级空缺不等于四级手术，
+            # 不能要求病历补充MDT材料；手术等级完整性应由其专属规则处理。
+            return finish(
+                _MdtRuleOutcome(
+                    "not_applicable", "trigger_absent", "level4_surgery_absent"
+                ),
+                selected_fact_refs=(
+                    _selected_material_fact_refs(
+                        materials=evidence_materials,
+                        snapshot=evidence_snapshot,
+                        source_key="mr_surgery",
+                        rows=performed,
+                        fallback_to_source=True,
+                    )
+                    if typed_requested
+                    else ()
+                ),
+            )
+        selected_trigger_fact_refs = (
+            _selected_material_fact_refs(
+                materials=evidence_materials,
+                snapshot=evidence_snapshot,
+                source_key="mr_surgery",
+                rows=level4,
+                fallback_to_source=True,
+            )
+            if typed_requested
+            else ()
         )
+        level4_session_times = {
+            start
+            for row in level4
+            if (start := _parse_datetime(row.get("surgery_begin_datetime"))) is not None
+        }
+        if len(level4_session_times) > 1:
+            return finish(
+                _MdtRuleOutcome(
+                    "data_gap", "data_gap", "multiple_level4_sessions_unresolved"
+                ),
+                selected_fact_refs=selected_trigger_fact_refs,
+            )
+        earliest_level4 = min(level4_session_times)
+        formal_level4_match = _formal_surgery_start_for_midnight_level4(
+            level4=level4,
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
+        )
+        if formal_level4_match is not None:
+            earliest_level4, formal_ref = formal_level4_match
+            selected_trigger_fact_refs = tuple(
+                dict.fromkeys((*selected_trigger_fact_refs, formal_ref))
+            )
 
     try:
         documents: list[tuple[int, datetime, str, str, str]] = []
