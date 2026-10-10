@@ -209,3 +209,18 @@ def test_json_fence_transport_wrapper_only(prefix, suffix, expected):
             response["content"] = prefix + response["content"] + suffix
             return response
     assert _run([_row()], WrappedClient()).state == expected
+
+
+class _StructuredClient(FakeClient):
+    def supports_strict_json_schema(self):
+        return True
+
+    async def generate(self, prompt, **kwargs):
+        self.kwargs = kwargs
+        return await super().generate(prompt)
+
+
+def test_capable_client_classifies_with_thinking_disabled():
+    client = _StructuredClient({0: ("transfusion", False)})
+    assert _run([_row()], client).state == "present"
+    assert client.kwargs == {"enable_thinking": False}

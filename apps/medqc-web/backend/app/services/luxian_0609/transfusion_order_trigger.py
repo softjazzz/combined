@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .structured_output import structured_output_kwargs
 
 
 MAX_BATCH_ROWS = 64
@@ -201,7 +202,8 @@ async def classify_transfusion_orders(
         started = perf_counter()
         calls += 1
         try:
-            response = await llm_client.generate(_prompt(batch))
+            # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
+            response = await llm_client.generate(_prompt(batch), **structured_output_kwargs(llm_client))
         except Exception:
             api_time += perf_counter() - started
             return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_transport_error")
