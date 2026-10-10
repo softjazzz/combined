@@ -236,3 +236,34 @@ async def test_invalid_response_shared_without_automatic_retry():
     assert resolver.claim_usage(second_result).llm_call_count == 0
     assert await resolver.resolve(_source("占位性质待定")) is first_result
     assert client.calls == 1
+
+
+class _StructuredClient:
+    def __init__(self, *, fail_transport: bool = False) -> None:
+        self.fail_transport = fail_transport
+        self.kwargs: dict = {}
+
+    def supports_strict_json_schema(self) -> bool:
+        return True
+
+    async def generate(self, prompt: str, **kwargs) -> dict:
+        self.kwargs = kwargs
+        if self.fail_transport:
+            raise ConnectionError("upstream closed")
+        return _response("explicit_malignant")
+
+
+@pytest.mark.asyncio
+async def test_resolver_disables_thinking_for_strict_json() -> None:
+    client = _StructuredClient()
+    result = await MalignancyFactResolver(client).resolve(_source("肺恶性肿瘤待排"))
+    assert client.kwargs["enable_thinking"] is False
+    assert result.state == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_resolver_reports_transport_failure_separately_from_invalid_output() -> None:
+    result = await MalignancyFactResolver(_StructuredClient(fail_transport=True)).resolve(
+        _source("肺恶性肿瘤待排")
+    )
+    assert (result.state, result.reason_code) == ("technical_error", "malignancy_llm_transport_error")

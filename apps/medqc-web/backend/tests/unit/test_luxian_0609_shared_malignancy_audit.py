@@ -140,7 +140,8 @@ async def test_shared_malignancy_invalid_response_is_shared_and_counted_once():
     assert surgery_result.llm_call_count + tumor_result.llm_call_count == 1
     assert surgery_result.total_tokens + tumor_result.total_tokens == 15
     reasons = [result.decisions[0].reason_code for result in (surgery_result, tumor_result)]
-    assert reasons == ["model_transport_error", "executor_exception"]
+    # 同一次共享恶性判定输出无效：024/027 均如实报告模型输出无效。
+    assert reasons == ["model_invalid_output", "model_invalid_output"]
 
 
 @pytest.mark.asyncio

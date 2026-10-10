@@ -2022,6 +2022,9 @@ def _decision_from_surgery_outcome(
         "source_query_error": "source_query_error",
         "surgery_llm_invalid_output": "model_invalid_output",
         "surgery_llm_failure": "model_transport_error",
+        # 共享恶性肿瘤判定的失败原因按传输/输出无效分别报告。
+        "malignancy_llm_invalid": "model_invalid_output",
+        "malignancy_llm_transport_error": "model_transport_error",
     }.get(outcome.reason_code, "model_transport_error")
     mapping = {
         "compliant": (

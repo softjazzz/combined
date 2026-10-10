@@ -339,9 +339,9 @@ def _typed_decision_from_outcome(
             if outcome.reason_code
             in {"source_query_error", "malignancy_source_query_error"}
             else "model_invalid_output"
-            if outcome.reason_code == "tumor_llm_invalid_output"
+            if outcome.reason_code in {"tumor_llm_invalid_output", "malignancy_llm_invalid"}
             else "model_transport_error"
-            if outcome.reason_code == "tumor_llm_failure"
+            if outcome.reason_code in {"tumor_llm_failure", "malignancy_llm_transport_error"}
             else "executor_exception"
         )
         dimensions = (
