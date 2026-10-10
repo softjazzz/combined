@@ -887,6 +887,9 @@ def build_luxian_0609_evidence_read_session(
             EVALUATION_HORIZON_SOURCE_KEY,
             horizon_material.rows,
         )
+        # 派生来源同样须登记进快照文书引用，否则按快照读取该来源会判身份不符，
+        # 遍历全部来源的发送前身份核验随之失败，整例模型调用被拒发。
+        all_document_refs.extend(horizon_refs)
         horizon_query_state = (
             QueryStatus.AVAILABLE if horizon_rows else QueryStatus.EMPTY
         )

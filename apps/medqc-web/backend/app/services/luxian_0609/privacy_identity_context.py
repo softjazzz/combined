@@ -7,6 +7,7 @@ from ..case_identity import CaseRef
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, build_luxian_0609_visit_ref
 from .source_manifest import QueryStatus
+from .source_registry import SourceAccessMode, resolve_luxian_0609_physical_source_entry
 
 
 class PrivacyIdentityContextUnavailable(ValueError):
@@ -141,6 +142,14 @@ class _Luxian0609IdentityCollector:
         self._cases.clear()
 
 
+def _is_controlled_fact_source(source_key: str) -> bool:
+    try:
+        entry = resolve_luxian_0609_physical_source_entry(source_key)
+    except (KeyError, ValueError):
+        return False
+    return entry.access_mode is SourceAccessMode.CONTROLLED_FACT_V1
+
+
 def build_luxian_0609_identity_provider(
     *, institute_id: str = "", patient_id: str = "", visit_id: str = "",
     evidence_payload: Mapping[str, Any] | None = None,
@@ -204,6 +213,9 @@ def build_luxian_0609_identity_provider(
                 for observation in snapshot.observations:
                     # 没有可发送行的不可用来源不补查；声明有行却不可读则阻止本次发送。
                     if observation.query_state not in (QueryStatus.AVAILABLE, QueryStatus.EMPTY):
+                        continue
+                    # 受控事实来源只产出有/无事实、不入材料库，没有可发送的原始行。
+                    if _is_controlled_fact_source(observation.source_key):
                         continue
                     for _, row in materials.document_rows(observation.source_key, snapshot=snapshot):
                         row_values(row, observation.source_key)

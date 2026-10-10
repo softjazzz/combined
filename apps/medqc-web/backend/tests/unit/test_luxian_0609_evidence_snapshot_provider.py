@@ -2803,3 +2803,67 @@ def test_snapshot_reader_rejects_source_without_approved_projection_before_sql(m
             visit_id="v",
             source_schema=None,
         )
+
+
+def test_derived_horizon_rows_are_readable_by_snapshot_and_identity_gate() -> None:
+    """评价时点派生来源须登记进快照文书引用；否则遍历全部来源的发送前身份
+    核验在读取它时判身份不符，整例模型调用被拒发（0910 真实样本复现）。"""
+    from app.services.luxian_0609.privacy_identity_context import build_luxian_0609_identity_provider
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(source_key, [{"discharge_datetime": "2026-07-13 09:00:00"}], limit_rows=1)
+        return _rows(source_key, [])
+
+    coordinates = {
+        "institute_id": "institute-horizon-gate",
+        "patient_id": "patient-horizon-gate",
+        "visit_id": "visit-horizon-gate",
+    }
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-02-01-04",),
+        source_schema=None,
+        evaluation_as_of_date="2026-07-16",
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=reader,
+        **coordinates,
+    )
+
+    rows = session.materials.document_rows(EVALUATION_HORIZON_SOURCE_KEY, snapshot=session.snapshot)
+    assert len(rows) == 1
+    provider = build_luxian_0609_identity_provider(
+        **coordinates, snapshot=session.snapshot, materials=session.materials,
+    )
+    assert set(coordinates.values()) <= set(provider())
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_controlled_fact_source_without_material_does_not_block_identity_gate(present: bool) -> None:
+    """受控事实来源只产出有/无事实、不入材料库；发送前身份核验不能因读不到
+    它的原始行而拒发整例模型调用（0910 真实样本复现）。"""
+    from app.services.luxian_0609.privacy_identity_context import build_luxian_0609_identity_provider
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            return _rows(source_key, [{"present": True}] if present else [], limit_rows=1)
+        return _rows(source_key, [])
+
+    coordinates = {
+        "institute_id": "institute-controlled-gate",
+        "patient_id": "patient-controlled-gate",
+        "visit_id": "visit-controlled-gate",
+    }
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-02-01-03",),
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        **coordinates,
+    )
+    assert not session.materials.has_source(CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY)
+    provider = build_luxian_0609_identity_provider(
+        **coordinates, snapshot=session.snapshot, materials=session.materials,
+    )
+    assert set(coordinates.values()) <= set(provider())
