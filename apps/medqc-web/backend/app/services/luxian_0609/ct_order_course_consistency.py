@@ -248,21 +248,58 @@ def _normalized_name(value: Any) -> str:
     return "".join(char for char in unicodedata.normalize("NFKC", str(value or "")).casefold()
                    if char.isalnum())
 
+# CT/MRI 医嘱名称中的模态与扫描方式词；去掉后剩下的是检查部位。
+_MODALITY_TOKENS = {
+    "ct": ("ct",),
+    "mr": ("磁共振", "核磁", "mri", "mr"),
+}
+_METHOD_TOKENS = ("核磁共振", "磁共振", "核磁", "mri", "mr", "ct", "平扫", "增强", "检查", "扫描", "成像")
+
+
+def _order_modality(name: str) -> str:
+    """医嘱名称（已归一化）所属模态；CT 与 MR 同时出现时不确定。"""
+    found = {key for key, tokens in _MODALITY_TOKENS.items() if any(token in name for token in tokens)}
+    return next(iter(found)) if len(found) == 1 else ""
+
+
+def _order_site(name: str) -> str:
+    for token in _METHOD_TOKENS:
+        name = name.replace(token, "")
+    return name
+
+
+def _exam_key(order: Mapping[str, Any]) -> tuple[str, str] | None:
+    name = _normalized_name(order.get("order_name"))
+    modality, site = _order_modality(name), _order_site(name)
+    return (modality, site) if modality and site else None
 
 
 def _has_explicit_order_description(
     event: HandbookEvent, order_position: int, clauses: tuple[CourseClause, ...],
 ) -> bool:
-    """首版只接纳可直接复核的名称或医嘱号；结果部位不能代替检查名称。
+    """模型判一致时，程序复核引用分句确实写的是这项检查。
 
-    只归一化Unicode、大小写和标点，不删除部位/增强方法，不扩充同义词表。
-    临床简称可能真实等价，但本轮保留关联缺口，不能仅依赖模型猜测为合规。
+    接纳医嘱号/检查号、医嘱全称，或同一模态（CT；MRI/磁共振）加同一部位
+    （医嘱名称去掉模态与平扫/增强等方式词后的部分）。病程很少照抄医嘱全称，
+    “胸部CT示…”即对应“胸部CT平扫”。仅有结果部位而无模态不算。
     """
     if _has_explicit_event_identifier(event, order_position, clauses):
         return True
 
-    name = _normalized_name(_event_orders(event)[order_position - 1].get("order_name"))
-    return bool(name) and any(name in _normalized_name(clause.text) for clause in clauses)
+    order = _event_orders(event)[order_position - 1]
+    name = _normalized_name(order.get("order_name"))
+    if name and any(name in _normalized_name(clause.text) for clause in clauses):
+        return True
+    key = _exam_key(order)
+    if key is None:
+        return False
+    modality, site = key
+    # 部位须紧接模态（可夹平扫/增强），“左膝CT：胸部另见…”不能证明胸部CT。
+    pattern = re.compile(
+        re.escape(site) + r"(?:平扫|增强)*(?:"
+        + "|".join(re.escape(token) for token in _MODALITY_TOKENS[modality]) + ")"
+    )
+    return any(pattern.search(_normalized_name(clause.text)) for clause in clauses)
 
 
 def _aggregate_status(findings: tuple[HandbookFinding, ...], complete: bool) -> str:
@@ -282,12 +319,18 @@ def _unique_temporal_anchor(
     event = review.events[position - 1]
     if _has_explicit_event_identifier(event, order_position, clauses):
         return True
-    name = _normalized_name(_event_orders(event)[order_position - 1].get("order_name"))
+    order = _event_orders(event)[order_position - 1]
+    name = _normalized_name(order.get("order_name"))
+    key = _exam_key(order)
+    # 同名或同模态同部位的其他已执行事件都可能被同一段病程描述；
+    # 只有本住院内唯一时，模型给出的归属才可直接接纳。
     candidates = [candidate for candidate in review.events if not candidate.excluded
-                  and any(_normalized_name(order.get("order_name"))
-                          and any(_normalized_name(order.get("order_name")) in _normalized_name(clause.text)
-                                  for clause in clauses)
-                          for order in _event_orders(candidate))]
+                  and any(_normalized_name(other.get("order_name"))
+                          and (any(_normalized_name(other.get("order_name")) in _normalized_name(clause.text)
+                                   for clause in clauses)
+                               or _normalized_name(other.get("order_name")) == name
+                               or (key is not None and _exam_key(other) == key))
+                          for other in _event_orders(candidate))]
     if len(candidates) <= 1:
         return True
 

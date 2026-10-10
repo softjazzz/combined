@@ -639,3 +639,32 @@ def test_rescue_content_message_names_only_confirmed_missing_fields():
     assert "抢救时间" in message[0]
     assert "专业技术职称" in message[0]
     assert "不得补造" in message[2]
+
+
+def test_culture_identification_and_susceptibility_rows_stay_one_event_beside_routine_lab():
+    """同 test_id 的菌种鉴定/药敏明细名不是检验身份；并行常规检验不进入培养事件。"""
+
+    report_time = "2026-09-04 10:00:00"
+    result, _, _ = _evaluate(
+        CULTURE_RULE,
+        rows={
+            ORDER: (
+                {"order_id": "O1", "order_name": "血培养+药敏", "order_status": "已执行"},
+                {"order_id": "O2", "order_name": "血常规", "order_status": "已执行"},
+            ),
+            "labtest_master": (
+                {"test_id": "T1", "order_id": "O1", "labtest_subject": "血培养+药敏",
+                 "specimen_collection_datetime": "2026-09-01 08:00:00"},
+                {"test_id": "T2", "order_id": "O2", "labtest_subject": "血常规",
+                 "specimen_collection_datetime": "2026-09-01 08:00:00"},
+            ),
+            "labtest_item_report": (
+                {"test_id": "T1", "lab_item_name": "细菌鉴定", "result": "大肠埃希菌", "report_time": report_time},
+                {"test_id": "T1", "lab_item_name": "头孢曲松", "result": "S 敏感", "report_time": report_time},
+                {"test_id": "T1", "lab_item_name": "左氧氟沙星", "result": "R 耐药", "report_time": report_time},
+                {"test_id": "T2", "lab_item_name": "白细胞计数", "result": "12.5", "report_time": "2026-09-01 10:00:00"},
+            ),
+        },
+    )
+    assert (result.status, result.reason_code) == ("compliant", "requirement_satisfied")
+    assert [item["issue_kind"] for item in result.display_facts["event_results"]] == ["report_present"]

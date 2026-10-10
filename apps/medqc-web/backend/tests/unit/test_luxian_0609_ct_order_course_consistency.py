@@ -657,3 +657,37 @@ def test_r1_yesterday_uses_beijing_document_day(written, expected_first):
     result = evaluate_ct_review(review, payload)
     assert result.display_facts["order_results"][0]["status"] == expected_first
     assert result.display_facts["order_results"][1]["status"] == "data_gap"
+
+
+def _named_event(name, key="EXAM-001", order_id="ORDER-001"):
+    return replace(_event(key), name=name, orders=(("order:" + order_id, {"order_id": order_id, "order_name": name}),))
+
+
+@pytest.mark.parametrize("order_name,text", [
+    ("胸部CT平扫", "今日胸部CT示右肺上叶结节。"),
+    ("头颅MRI平扫+增强", "头颅磁共振增强示左侧基底节梗死。"),
+    ("上腹部CT增强", "上腹部增强CT示肝内低密度灶。"),
+])
+def test_course_need_not_copy_full_order_name_when_modality_and_site_match(order_name, text):
+    result = evaluate_ct_review(_review(text, events=(_named_event(order_name),)), _payload())
+    assert result.status == "compliant"
+
+
+@pytest.mark.parametrize("order_name,text", [
+    ("胸部CT平扫", "今日头颅CT未见异常。"),
+    ("胸部CT平扫", "胸部MRI示纵隔占位。"),
+    ("头颅MRI平扫", "头颅CT未见出血。"),
+])
+def test_modality_and_site_must_both_match_the_order(order_name, text):
+    result = evaluate_ct_review(_review(text, events=(_named_event(order_name),)), _payload())
+    assert result.status == "data_gap"
+
+
+def test_abbreviated_course_cannot_pick_between_same_site_same_modality_events():
+    events = (_named_event("胸部CT平扫"), _named_event("胸部CT增强", key="EXAM-002", order_id="ORDER-002"))
+    review = CtReviewInput(events, (1, 2), (CourseClause("C1", "course:1", "胸部CT示右肺结节。",
+                                                         field_path="record_content", end=9),), {}, True)
+    payload = _payload()
+    payload["events"].append({"event_position": 2, "order_position": 1, "record_state": "absent", "clause_ids": []})
+    result = evaluate_ct_review(review, payload)
+    assert result.display_facts["event_results"][0]["issue_kind"] == "association_unresolved"
