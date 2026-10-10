@@ -1429,7 +1429,7 @@ def read_luxian_0609_discharge_horizon_rows(
     visit_id: str,
     source_schema: str | None,
 ) -> SnapshotSourceRows:
-    """读取本次住院的权威出院时间，登记表缺行时回退病案首页。"""
+    """读取本次住院的权威出院时间，登记表缺行或出院时间为空时回退病案首页。"""
 
     trusted_schema = bundle_assembly._default_source_schema()
     if source_schema not in (None, trusted_schema):
@@ -1480,6 +1480,12 @@ def read_luxian_0609_discharge_horizon_rows(
         except Exception:
             query_failed = True
             continue
+        # 登记表有行但出院时间为空（客户 CDM 常见）与缺行同样回退病案首页；
+        # 否则时间界限会静默落回评价日，已出院病例被按“至今未查房”误判。
+        candidate_rows = [
+            row for row in candidate_rows
+            if str(row.get("discharge_datetime") or "").strip()
+        ]
         if candidate_rows:
             raw_rows = list(candidate_rows)
             selected_table = table_name
