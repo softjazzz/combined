@@ -3087,7 +3087,7 @@ def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text()
     projected = project_customer_safe_result_item(
         {
             "rule_id": "LX0609-03-02-01",
-            "status": "uncertain",
+            "status": "data_gap",
             "reason_code": "diagnosis_scope_uncertain",
             "customer_display_facts": {
                 "verification_kind": "uncertain_diagnosis_scope_unverified",
@@ -3101,7 +3101,7 @@ def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text()
         hmac_key="unit-test-key",
     )
 
-    assert projected["status"] == "uncertain"
+    assert projected["status"] == "data_gap"
     assert projected["reason_code"] == "diagnosis_scope_uncertain"
     assert "2026-08-09 09:00:00" in projected["conclusion"]
     assert "不能据此认定缺少疑难病例讨论" in projected["conclusion"]

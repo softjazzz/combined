@@ -4410,11 +4410,11 @@ async def test_050_explicit_fact_with_unknown_dimension_cannot_prove_no_trigger(
          "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
         llm_client=client,
     )
-    assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "diagnosis_scope_uncertain"
     canonical = _canonical_extended_result(rule_id="LX0609-03-02-01", snapshot=snapshot,
         materials=materials, result=result, reduced=reduced)
-    assert canonical["status"] == "uncertain"
+    assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "diagnosis_scope_uncertain"
     assert dict(result.customer_display_facts)["LX0609-03-02-01"]["diagnosis_scope_resolution"] == "unknown"
 
@@ -4473,9 +4473,9 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         reduced=reduced_items,
     )
 
-    assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "diagnosis_scope_uncertain"
-    assert canonical["status"] == "uncertain"
+    assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "diagnosis_scope_uncertain"
     assert "不能据此认定缺少疑难病例讨论" in canonical["findings"]
     assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {

@@ -2542,12 +2542,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                 # 缺时只表示候选无法定位；不能据此确认七天触发或完整未触发。
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif not strong_uncertain_rows and unknown_scope_rows:
-                final_state, reason_code = "uncertain", "diagnosis_scope_uncertain"
+                # 院方口径（2026-10-10）：诊断范围无法确认按资料不足交付，不交付 uncertain。
+                final_state, reason_code = "data_gap", "diagnosis_scope_uncertain"
                 scope_resolution = "unknown"
             elif not uncertain_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif not strong_uncertain_rows:
-                final_state, reason_code = "uncertain", "diagnosis_scope_uncertain"
+                final_state, reason_code = "data_gap", "diagnosis_scope_uncertain"
             elif diffcase_rows and not any(
                 isinstance(row.get("record_content"), str) and row["record_content"].strip()
                 for row in diffcase_rows

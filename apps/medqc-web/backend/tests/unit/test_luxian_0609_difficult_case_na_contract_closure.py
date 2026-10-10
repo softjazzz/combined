@@ -82,7 +82,7 @@ NATIVE_CASES = [
     ("N08_exact_nc", {"time": "2026-06-08 08:00:00", "count": 0}, "non_compliant", "required_document_missing", OLD),
     ("N09_exact_c", {"time": "2026-06-08 08:00:00"}, "compliant", "requirement_satisfied", OLD),
     ("N10_time_gap", {"time": None}, "data_gap", "authoritative_time_missing", "uncertain_diagnosis_course_time_gap"),
-    ("N11_local", {"time": MATURE, "text": "患者发热原因待查，当前诊断为社区获得性肺炎。"}, "uncertain", "diagnosis_scope_uncertain", "uncertain_diagnosis_scope_unverified"),
+    ("N11_local", {"time": MATURE, "text": "患者发热原因待查，当前诊断为社区获得性肺炎。"}, "data_gap", "diagnosis_scope_uncertain", "uncertain_diagnosis_scope_unverified"),
     ("N12_body_gap", {"time": MATURE, "body": " "}, "data_gap", "required_field_missing", "uncertain_diagnosis_discussion_body_gap"),
 ]
 

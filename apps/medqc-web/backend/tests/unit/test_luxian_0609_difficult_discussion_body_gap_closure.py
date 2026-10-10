@@ -156,7 +156,7 @@ async def test_existing_source_time_and_scope_priority_is_not_changed_by_blank_b
         expected_kind = "uncertain_diagnosis_course_time_gap"
     else:
         source_rows["daily_course_record"][0]["record_content"] = "发热原因待查。"
-        status, reason = "uncertain", "diagnosis_scope_uncertain"
+        status, reason = "data_gap", "diagnosis_scope_uncertain"
         expected_kind = "uncertain_diagnosis_scope_unverified"
     _, _, _, result = await evaluate(source_rows, unavailable=unavailable)
     assert result["status"] == status

@@ -199,7 +199,7 @@ def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> Non
             rule_id="LX0609-03-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
-            evidence_state=EvidenceState.CONFLICT,
+            evidence_state=EvidenceState.DATA_GAP,
             qc_direction=QcDirection.UNKNOWN,
             reason_code="diagnosis_scope_uncertain",
             fact_refs=(FACT_REF,),
@@ -209,7 +209,7 @@ def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> Non
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["status"] == "uncertain"
+    assert result["status"] == "data_gap"
     assert result["reason_code"] == "diagnosis_scope_uncertain"
     assert result["is_compliant"] is None
 

@@ -133,14 +133,14 @@ def difficult_case_customer_fact_status_is_valid(
     if resolution in {"capacity_exceeded", "unavailable"}:
         return normalized_status == "data_gap"
     if resolution == "unknown":
-        return normalized_status in {"uncertain", "evaluation_unknown"}
+        return normalized_status == "data_gap"
     if resolution == "invalid":
         return False
     kind = safe_facts.get("verification_kind")
     records = safe_facts.get("uncertain_record_times")
     discussion_count = safe_facts.get("discussion_count")
     if kind == _SCOPE_UNCERTAIN_KIND:
-        return normalized_status in {"uncertain", "evaluation_unknown"}
+        return normalized_status == "data_gap"
     if kind != _DISCUSSION_KIND or not isinstance(records, list) or not isinstance(
         discussion_count, int
     ):

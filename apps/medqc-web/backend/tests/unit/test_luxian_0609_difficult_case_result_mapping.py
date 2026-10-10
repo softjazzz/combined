@@ -56,7 +56,8 @@ def test_050_finalizer_keeps_decision_and_rejects_status_fact_conflict() -> None
     assert "findings" not in conflict
 
 
-def test_050_scope_uncertainty_requires_uncertain_status() -> None:
+def test_050_scope_uncertainty_is_delivered_as_data_gap() -> None:
+    # 院方口径（2026-10-10）：诊断范围无法确认按资料不足交付。
     facts = {
         "verification_kind": "uncertain_diagnosis_scope_unverified",
         "admission_time": "2026-08-01 08:00:00",
@@ -66,10 +67,10 @@ def test_050_scope_uncertainty_requires_uncertain_status() -> None:
     finalized, _ = finalize_luxian_0609_executor_customer_display_facts(
         result={
             "rule_id": "LX0609-03-02-01",
-            "status": "uncertain",
+            "status": "data_gap",
             "reason_code": "diagnosis_scope_uncertain",
         },
         raw_facts=facts,
     )
-    assert finalized["status"] == "uncertain"
+    assert finalized["status"] == "data_gap"
     assert finalized["customer_display_facts"] == facts
