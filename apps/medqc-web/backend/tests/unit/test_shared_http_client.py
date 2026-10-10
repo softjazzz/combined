@@ -524,3 +524,50 @@ async def test_four_production_http_exits_share_one_global_peak_four(monkeypatch
 
     assert len(results) == 8
     assert state == {"active": 0, "peak": 4}
+
+
+class _ScriptedClient:
+    def __init__(self, outcomes: list[Any]) -> None:
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    def post(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+def _post(client: _ScriptedClient) -> dict[str, Any]:
+    return http_module._post_json(client, "https://example.test/v1", {}, {"a": 1}, 5)
+
+
+def test_post_json_retries_once_when_server_disconnects_without_response():
+    client = _ScriptedClient([
+        http_module.httpx.RemoteProtocolError("Server disconnected without sending a response."),
+        _FakeResponse(body={"ok": "second"}),
+    ])
+    assert _post(client) == {"ok": "second"}
+    assert client.calls == 2
+
+
+def test_post_json_retries_disconnect_only_once():
+    error = http_module.httpx.RemoteProtocolError("Server disconnected without sending a response.")
+    client = _ScriptedClient([error, error])
+    with pytest.raises(http_module.httpx.RemoteProtocolError):
+        _post(client)
+    assert client.calls == 2
+
+
+@pytest.mark.parametrize("error", [
+    http_module.httpx.RemoteProtocolError("peer closed connection without sending complete message body"),
+    http_module.httpx.ReadTimeout("read timed out"),
+    http_module.httpx.ConnectTimeout("connect timed out"),
+])
+def test_post_json_does_not_retry_other_transport_errors(error):
+    client = _ScriptedClient([error, _FakeResponse()])
+    with pytest.raises(type(error)):
+        _post(client)
+    assert client.calls == 1
+

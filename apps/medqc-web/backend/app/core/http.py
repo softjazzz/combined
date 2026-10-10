@@ -158,6 +158,10 @@ def _is_allowed_host(host: str) -> bool:
     return any(host == a or host.endswith("." + a) for a in allow)
 
 
+def _is_disconnected_without_response(error: httpx.RemoteProtocolError) -> bool:
+    return "without sending a response" in str(error)
+
+
 def _post_json(
     client: httpx.Client,
     url: str,
@@ -165,12 +169,25 @@ def _post_json(
     payload: Dict[str, Any],
     timeout_seconds: int,
 ) -> Dict[str, Any]:
-    resp = client.post(
-        url,
-        headers=headers,
-        json=payload,
-        timeout=timeout_seconds,
-    )
+    try:
+        resp = client.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=timeout_seconds,
+        )
+    except httpx.RemoteProtocolError as error:
+        # 只对“服务端未返回任何响应即断开”重试一次：多为连接池复用了已被对端关闭的
+        # 空闲连接，或并发突增时上游直接断开，请求未得到处理。收到部分响应后断开、
+        # 超时、连接失败等其他异常仍原样抛出，不重试。
+        if not _is_disconnected_without_response(error):
+            raise
+        resp = client.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=timeout_seconds,
+        )
     # 不直接 raise，尽量返回上游的 JSON 错误体，供调用方包装。
     try:
         body = resp.json() if resp.text else {}
