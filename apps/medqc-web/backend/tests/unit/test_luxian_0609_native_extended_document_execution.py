@@ -357,6 +357,55 @@ def _approval_item(
     }
 
 
+def _with_064_surgeon_rounds(rows, *, skip_documents=(), post=True):
+    """院方口径：术者须在术前24小时内、术后24小时内亲自查房。
+
+    为既有 064 夹具的每台手术补齐开始时间（缺失时取结束前2小时），并在日常病程中
+    补术前1小时、术后1小时的术者查房；两条均在手术当天，不改变“术后次日起连续
+    3天”的覆盖。skip_documents 中的手术不补；post=False 只补术前，用于测术后术者
+    查房识别分支。
+    """
+    from datetime import datetime as _datetime, timedelta as _timedelta
+
+    from app.services.luxian_0609.native_extended_document_execution import parse_strict_performed_time
+
+    rows = dict(rows)
+    extra = []
+
+    def add_rounds(document_id, surgeon, begin, end):
+        if not surgeon or begin is None or end is None or document_id in skip_documents:
+            return
+        moments = [("pre", begin - _timedelta(hours=1))]
+        if post:
+            moments.append(("post", end + _timedelta(hours=1)))
+        for label, moment in moments:
+            extra.append({
+                "document_id": f"ROUND-{label}-{document_id}",
+                "record_time": moment.strftime("%Y-%m-%d %H:%M:%S"),
+                "author_name": surgeon,
+                "record_content": "术者查房，评估病情并交代注意事项。",
+            })
+
+    if rows.get("surgery_record"):
+        surgeries = []
+        for surgery in rows["surgery_record"]:
+            surgery = dict(surgery)
+            end = parse_strict_performed_time(surgery.get("surgery_end_time"))
+            if end is not None and not surgery.get("surgery_begin_time"):
+                surgery["surgery_begin_time"] = (end - _timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S+08")
+            surgeries.append(surgery)
+            add_rounds(surgery.get("document_id"), surgery.get("surgeon") or surgery.get("surgeon_sign"),
+                       parse_strict_performed_time(surgery.get("surgery_begin_time")), end)
+        rows["surgery_record"] = tuple(surgeries)
+    else:
+        for index, surgery in enumerate(rows.get("mr_surgery", ()), start=1):
+            begin, end = surgery.get("surgery_begin_datetime"), surgery.get("surgery_end_datetime")
+            if isinstance(begin, _datetime) and isinstance(end, _datetime):
+                add_rounds(surgery.get("document_id") or f"mr-{index}", surgery.get("surgeon"), begin, end)
+    rows["daily_course_record"] = (*rows.get("daily_course_record", ()), *extra)
+    return rows
+
+
 class _DiagnosisChangeClient:
     def __init__(self, *items, error=None):
         self.items = list(items)
@@ -1573,7 +1622,7 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "mr_surgery": (
                 {
                     "surgery_code": "01.2400X013",
@@ -1588,7 +1637,7 @@ async def test_064_requires_three_dates_and_surgeon_round() -> None:
                 {"record_time": "2026-07-03 08:00:00", "author_name": "张医生"},
                 {"record_time": "2026-07-04 08:00:00", "author_name": "李医生"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
@@ -1652,7 +1701,7 @@ async def test_064_fails_closed_when_surgeon_identity_is_anonymized() -> None:
 async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present() -> None:
     _result, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E-mixed-identity",
@@ -1667,7 +1716,7 @@ async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present
                 {"record_time": "2026-07-03 08:00:00", "author_name": "李医生"},
                 {"record_time": "2026-07-04 08:00:00", "author_name": "王医生"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -1677,7 +1726,7 @@ async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present
 async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None:
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "mr_surgery": (
                 {
                     "surgery_code": "01.2400X013",
@@ -1692,7 +1741,7 @@ async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None
                 {"record_time": "2026-07-03 20:00:00", "author_name": "张医生"},
                 {"record_time": "2026-07-04 20:00:00", "author_name": "李医生"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
@@ -3761,7 +3810,7 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
     """正式手术记录是一台手术的唯一事件基准，操作目录不能增加台次。"""
     snapshot, _materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01", "LX0609-04-05-02"),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -3804,7 +3853,7 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
                 {"record_time": "2026-07-08 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
                 {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
-        },
+        }),
         llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
@@ -3826,7 +3875,7 @@ async def test_064_requires_surgeon_title_before_round_marker_not_later_mention(
     """术者姓名出现在“查房记录”之后或普通叙述中，不能算术者查房。"""
     _snapshot, _materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E1",
                 "surgery_code": "01.2400X013",
@@ -3847,7 +3896,7 @@ async def test_064_requires_surgeon_title_before_round_marker_not_later_mention(
                     "document_title": "手术由韩平副主任医师完成，李四主任医师查房记录",
                 },
             ),
-        },
+        }, post=False),
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -3861,7 +3910,7 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
     """手术事件仅采纳术者专属字段，病程作者字段仍可作为查房医师。"""
     signed_result, signed_reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E-signed",
                 "surgery_code": "01.2400X013",
@@ -3873,11 +3922,11 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
             ),
-        },
+        }, post=False),
     )
     generic_result, generic_reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E-generic",
                 "surgery_code": "01.2400X013",
@@ -3890,7 +3939,7 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
             ),
-        },
+        }),
     )
 
     assert signed_reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3905,7 +3954,7 @@ async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
     """“术后查房”是查房标题，不应被误认为术者说明。"""
     result, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E-postop-round",
                 "surgery_code": "01.2400X013",
@@ -3923,7 +3972,7 @@ async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
                     "2026-07-10 08:00:00",
                 )
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3936,7 +3985,7 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
     """多台手术的汇总事实必须穿过 Reducer、Aggregator 和 Renderer。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -3957,7 +4006,7 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
                 {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-11 08:00:00", "author_name": "曾亚丽"},
             ),
-        },
+        }),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-01",
@@ -3983,7 +4032,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
     """相邻两台手术必须逐台展示术后3天与术者，不能合并成4天窗口。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -4005,7 +4054,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
                 }
                 for day in range(8, 12)
             ),
-        },
+        }, post=False),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-01",
@@ -4023,6 +4072,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
             "required_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
             "covered_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
             "surgeon_round_present": False,
+            "preop_surgeon_round_present": True,
         },
         {
             "surgery_time": "2026-07-08 17:15:00",
@@ -4030,16 +4080,17 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
             "required_postop_dates": ["2026-07-09", "2026-07-10", "2026-07-11"],
             "covered_postop_dates": ["2026-07-09", "2026-07-10", "2026-07-11"],
             "surgeon_round_present": False,
+            "preop_surgeon_round_present": True,
         },
     ]
     assert "共核对 2 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）" in canonical["findings"]
     assert (
         "手术 1：2026-07-07 18:30:00，术者 韩平；应记录日期 2026-07-08、2026-07-09、2026-07-10，"
-        "实际均已覆盖；未查到韩平术者查房记录。"
+        "实际均已覆盖；术后24小时内未查到韩平术者查房记录，术前24小时内已查到术者查房记录。"
     ) in canonical["findings"]
     assert (
         "手术 2：2026-07-08 17:15:00，术者 曾亚丽；应记录日期 2026-07-09、2026-07-10、2026-07-11，"
-        "实际均已覆盖；未查到曾亚丽术者查房记录。"
+        "实际均已覆盖；术后24小时内未查到曾亚丽术者查房记录，术前24小时内已查到术者查房记录。"
     ) in canonical["findings"]
     assert "术后应记录日期为 2026-07-08、2026-07-09、2026-07-10、2026-07-11" not in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
@@ -4165,7 +4216,7 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
 async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E1",
                 "surgery_code": "01.2400X013",
@@ -4176,7 +4227,7 @@ async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary()
                 {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
             ),
-        },
+        }),
     )
 
     canonical = _canonical_extended_result(
@@ -4227,7 +4278,7 @@ async def test_064_data_gap_delivery_keeps_missing_surgery_time_explanation() ->
 async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_day() -> None:
     result, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -4247,7 +4298,7 @@ async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_d
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-10 08:00:00", "document_title": "曾亚丽主治医师查房记录"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -4257,6 +4308,7 @@ async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_d
             "document_id": "E2",
             "missing_postop_dates": ["2026-07-11"],
             "surgeon_round_present": True,
+            "preop_surgeon_round_present": True,
         }
     ]
     assert result.llm_call_count == result.total_tokens == 0
@@ -9020,7 +9072,7 @@ async def test_066_requires_authoritative_postoperative_course_time_for_per_even
 async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_round() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "SURGERY-064",
                 "surgery_code": "01.2400X013",
@@ -9055,7 +9107,7 @@ async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_rou
                 "horizon_date": "2026-07-05",
                 "basis": "evaluation_as_of",
             },),
-        },
+        }),
     )
 
     refs_by_document_id = {
@@ -9076,6 +9128,9 @@ async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_rou
         refs_by_document_id["COURSE-064-DAY-1"],
         refs_by_document_id["COURSE-064-DAY-2"],
         refs_by_document_id["COURSE-064-DAY-3"],
+        # 术前、术后24小时内的术者查房同为支撑结论的证据。
+        refs_by_document_id["ROUND-pre-SURGERY-064"],
+        refs_by_document_id["ROUND-post-SURGERY-064"],
     )))
     assert refs_by_document_id["COURSE-064-OTHER"] not in execution.decisions[0].fact_refs
     assert horizon_ref not in execution.decisions[0].fact_refs
@@ -10505,3 +10560,40 @@ async def test_074_model_failure_is_technical_and_never_retries(
     assert execution.llm_call_count == 1
     assert execution.total_tokens == expected_tokens
     assert len(client.calls) == 1
+
+
+def _064_rows(*, begin="2026-07-07 16:30:00+08", rounds=()):
+    surgery = {"document_id": "E-24H", "surgery_code": "01.2400X013", "surgery_end_time": "2026-07-07 18:30:00+08", "surgeon": "韩平"}
+    if begin is not None:
+        surgery["surgery_begin_time"] = begin
+    return {
+        "surgery_record": (surgery,),
+        "daily_course_record": (
+            *({"record_time": f"2026-07-{day:02d} 08:00:00", "author_name": "其他医师", "record_content": "术后恢复中。"} for day in (8, 9, 10)),
+            *({"record_time": moment, "author_name": "韩平", "record_content": "术者查房，评估病情。"} for moment in rounds),
+        ),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rounds,expected,post,pre", [
+    # 术前1小时、术后1小时均有术者查房。
+    (("2026-07-07 15:30:00", "2026-07-07 19:30:00"), CustomerFinalState.COMPLIANT, True, True),
+    # 术者术后查房在术后第2天（超过24小时）。
+    (("2026-07-07 15:30:00", "2026-07-09 09:00:00"), CustomerFinalState.NON_COMPLIANT, False, True),
+    # 术者术前查房早于术前24小时。
+    (("2026-07-06 09:00:00", "2026-07-07 19:30:00"), CustomerFinalState.NON_COMPLIANT, True, False),
+])
+async def test_064_surgeon_must_round_within_24_hours_before_and_after_surgery(rounds, expected, post, pre):
+    result, reduced = await _evaluate("LX0609-04-05-01", _064_rows(rounds=rounds))
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert reduced.final_state is expected
+    assert facts["surgeon_round_present"] is post
+    assert facts["preop_surgeon_round_present"] is pre
+
+
+@pytest.mark.asyncio
+async def test_064_missing_surgery_begin_time_cannot_verify_preoperative_round():
+    _result, reduced = await _evaluate("LX0609-04-05-01", _064_rows(begin=None, rounds=("2026-07-07 19:30:00",)))
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "required_field_missing"

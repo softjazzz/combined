@@ -3270,12 +3270,26 @@ def customer_finding_from_controlled_facts(
                 )
                 if not surgeon:
                     surgeon_round = "术者姓名缺失，暂无法核对术者查房记录"
-                elif event.get("surgeon_round_present") is True:
-                    surgeon_round = f"已查到{surgeon}术者查房记录"
-                elif event.get("course_time_unresolved") is True:
-                    surgeon_round = f"病程日期不可用，暂无法核对{surgeon}术者查房记录"
+                elif event.get("course_time_unresolved") is True and not (
+                    event.get("surgeon_round_present") is True
+                    and event.get("preop_surgeon_round_present") is not False
+                ):
+                    surgeon_round = f"病程或手术时间不可用，暂无法核对{surgeon}术者查房记录"
                 else:
-                    surgeon_round = f"未查到{surgeon}术者查房记录"
+                    post_text = (
+                        f"术后24小时内已查到{surgeon}术者查房记录"
+                        if event.get("surgeon_round_present") is True
+                        else f"术后24小时内未查到{surgeon}术者查房记录"
+                    )
+                    if "preop_surgeon_round_present" in event:
+                        pre_text = (
+                            "术前24小时内已查到术者查房记录"
+                            if event.get("preop_surgeon_round_present") is True
+                            else "术前24小时内未查到术者查房记录"
+                        )
+                        surgeon_round = f"{post_text}，{pre_text}"
+                    else:
+                        surgeon_round = post_text
                 surgery_name = event.get("surgery_name")
                 event_label = f"手术 {index}"
                 if isinstance(surgery_name, str) and surgery_name:
@@ -3288,7 +3302,15 @@ def customer_finding_from_controlled_facts(
         required = joined("required_postop_dates")
         covered = joined("covered_postop_dates") or "无"
         surgeon = "有" if facts.get("surgeon_round_present") is True else "无"
-        return f"手术时间 {facts.get('surgery_time')}；术后应记录日期为 {required}，实际覆盖 {covered}；{surgeon}术者查房记录。"
+        preop = (
+            ""
+            if "preop_surgeon_round_present" not in facts
+            else f"；术前24小时内{'有' if facts.get('preop_surgeon_round_present') is True else '无'}术者查房记录"
+        )
+        return (
+            f"手术时间 {facts.get('surgery_time')}；术后应记录日期为 {required}，实际覆盖 {covered}；"
+            f"术后24小时内{surgeon}术者查房记录{preop}。"
+        )
 
     if rule_id == "LX0609-04-05-01" and kind == "postoperative_three_day_window_not_mature":
         surgery_times = joined("surgery_times") or "未提供"

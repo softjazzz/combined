@@ -1781,8 +1781,11 @@ class _PostoperativeSurgeryEvent:
     surgery_end_time: datetime | None
     surgeon_names: tuple[str, ...]
     surgeon_tokens: frozenset[str]
+    surgery_begin_time: datetime | None = None
 
 
+# 064 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
+_SURGEON_ROUND_WINDOW_HOURS = 24
 _PHYSICIAN_TITLE_SUFFIXES = (
     "副主任医师",
     "主任医师",
@@ -1886,6 +1889,21 @@ def _title_round_physician_tokens(
     return frozenset(identities.intersection(candidate_tokens))
 
 
+def _actual_surgery_begin_time(
+    *, source_key: str, row: Mapping[str, Any]
+) -> datetime | None:
+    """术前查房时限只读取实际开始字段；不得回退到申请或文书时间。"""
+
+    for field in ("surgery_begin_time", "surgery_begin_datetime"):
+        value = row.get(field)
+        if source_key == "surgery_record":
+            if (parsed := parse_strict_performed_time(value)) is not None:
+                return parsed
+        elif source_key == "mr_surgery" and isinstance(value, datetime) and value.tzinfo is None:
+            return value
+    return None
+
+
 def _actual_surgery_end_time(
     *, source_key: str, row: Mapping[str, Any]
 ) -> datetime | None:
@@ -1926,6 +1944,7 @@ def _postoperative_surgery_events(
             surgery_end_time=_actual_surgery_end_time(source_key=source_key, row=row),
             surgeon_names=_surgery_event_surgeon_names(row),
             surgeon_tokens=_surgery_event_surgeon_tokens(row),
+            surgery_begin_time=_actual_surgery_begin_time(source_key=source_key, row=row),
         )
         for index, row in enumerate(source_rows, start=1)
     )
@@ -4324,24 +4343,47 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     key=lambda row: _row_time(row) or datetime.max,
                                 )
                             )
-                        surgeon_round_row = next(
-                            (
-                                row
-                                for row in postop_rows
-                                if event.surgeon_tokens
-                                and event.surgeon_tokens.intersection(
-                                    _course_record_physician_tokens(row)
-                                    | _title_round_physician_tokens(
-                                        row,
-                                        candidate_tokens=event.surgeon_tokens,
+                        def surgeon_round_in(window_start: datetime, window_end: datetime) -> Mapping[str, Any] | None:
+                            # 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
+                            return next(
+                                (
+                                    row
+                                    for row in sorted(
+                                        (*daily_rows, *senior_rows),
+                                        key=lambda item: _row_time(item) or datetime.max,
                                     )
-                                )
-                            ),
-                            None,
+                                    if (record_time := _row_time(row)) is not None
+                                    and window_start <= record_time <= window_end
+                                    and _course_row_has_body(row)
+                                    and event.surgeon_tokens
+                                    and event.surgeon_tokens.intersection(
+                                        _course_record_physician_tokens(row)
+                                        | _title_round_physician_tokens(
+                                            row,
+                                            candidate_tokens=event.surgeon_tokens,
+                                        )
+                                    )
+                                ),
+                                None,
+                            )
+
+                        surgeon_round_row = surgeon_round_in(
+                            event.surgery_end_time,
+                            event.surgery_end_time + timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS),
                         )
-                        if surgeon_round_row is not None:
-                            selected_postoperative_rows.append(surgeon_round_row)
+                        preop_round_row = (
+                            surgeon_round_in(
+                                event.surgery_begin_time - timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS),
+                                event.surgery_begin_time,
+                            )
+                            if event.surgery_begin_time is not None
+                            else None
+                        )
+                        for round_row in (preop_round_row, surgeon_round_row):
+                            if round_row is not None:
+                                selected_postoperative_rows.append(round_row)
                         surgeon_round = surgeon_round_row is not None
+                        preop_surgeon_round = preop_round_row is not None
                         missing_dates = sorted(
                             item.isoformat()
                             for item in required_dates.difference(covered_dates)
@@ -4355,12 +4397,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 item.isoformat() for item in covered_dates
                             ),
                             "surgeon_round_present": surgeon_round,
+                            "preop_surgeon_round_present": preop_surgeon_round,
                         })
                         if not event.surgeon_tokens:
                             missing_surgeon_events.append(event.document_id)
                         if unresolved_empty_body_dates:
                             empty_body_events.append(event.document_id)
-                        if missing_dates or not surgeon_round:
+                        if event.surgery_begin_time is None and not preop_surgeon_round:
+                            # 无手术开始时间时无法核对术前24小时术者查房，不能判缺失。
+                            unresolved_time_events.append(event.document_id)
+                            event_facts[-1]["course_time_unresolved"] = True
+                        elif missing_dates or not surgeon_round or not preop_surgeon_round:
                             if undated_course_rows:
                                 # 候选不能定日时，既不能补齐，也不能确认该手术缺项。
                                 unresolved_time_events.append(event.document_id)
@@ -4371,6 +4418,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     "document_id": event.document_id,
                                     "missing_postop_dates": missing_dates,
                                     "surgeon_round_present": surgeon_round,
+                                    "preop_surgeon_round_present": preop_surgeon_round,
                                 })
                     if missing_surgeon_events or empty_body_events or unresolved_time_events:
                         final_state, reason_code = (
@@ -4402,6 +4450,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         }),
                         "surgeon_round_present": all(
                             item["surgeon_round_present"] is True
+                            for item in event_facts
+                        ),
+                        "preop_surgeon_round_present": all(
+                            item["preop_surgeon_round_present"] is True
                             for item in event_facts
                         ),
                     }
