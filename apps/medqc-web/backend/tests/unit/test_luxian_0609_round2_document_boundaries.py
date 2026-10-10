@@ -88,16 +88,21 @@ async def _final(rule, rows, *, anesthesia_facts=None, course_body_facts=None, c
 
 
 def _visits():
+    from luxian_0609_anesthesia_test_facts import POST_TEXT, PRE_TEXT
+
     return {
+        # 运行病历形态：手术记录已完成，病案首页尚未归档。
+        "surgery_record": [{"document_id": "surg-A", "record_time": "2026-07-01 11:00:00",
+            "surgery_begin_time": "2026-07-01 08:00:00", "surgery_end_time": "2026-07-01 10:00:00"}],
         "anesthesia_record": [{"document_id": "ane-A", "application_id": "A",
             "anesthesia_method": "全身麻醉",
             "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"}],
         "preane_surveil_record": [{"document_id": "pre-A", "application_id": "A",
             "record_time": "2026-07-01 07:00:00", "anesthetist_sign": "测试医师",
-            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"}],
+            "record_content": PRE_TEXT}],
         "postane_surveil_record": [{"document_id": "post-A", "application_id": "A",
             "record_time": "2026-07-02 08:00:00", "anesthetist_sign": "测试医师",
-            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"}],
+            "record_content": POST_TEXT}],
     }
 
 
@@ -110,9 +115,9 @@ async def test_037_complete_visits_and_valid_negatives_stay_compliant():
 async def test_037_empty_template_labels_are_not_complete():
     rows = _visits()
     rows["preane_surveil_record"][0]["record_content"] = (
-        "ASA：；气道评估：；禁食禁饮：；麻醉史：；麻醉风险告知：；"
+        "一般情况：；简要病史：；相关检查：；拟行手术及麻醉：；适应证：；注意事项：；术前医嘱："
     )
-    rows["postane_surveil_record"][0]["record_content"] = "神志：；呼吸：；循环：；并发症：；"
+    rows["postane_surveil_record"][0]["record_content"] = "恢复情况：；神志：；拔管：；医嘱：；特殊情况："
     final = await _final("LX0609-04-04-02", rows, anesthesia_facts="round2_empty_labels")
     assert final["status"] == "non_compliant"
     assert "已核对" not in final["findings"]
@@ -130,7 +135,9 @@ async def test_037_invalid_record_time_is_not_complete():
 @pytest.mark.parametrize("field", ["application_id", "anesthesia_id", "surgery_id"])
 async def test_037_different_event_postvisit_cannot_complete_anesthesia(field):
     rows = _visits()
-    for row_list in rows.values():
+    for key, row_list in rows.items():
+        if key == "surgery_record":
+            continue
         row = row_list[0]
         row.pop("application_id")
         row[field] = "A"
@@ -144,7 +151,7 @@ async def test_037_different_event_postvisit_cannot_complete_anesthesia(field):
 async def test_037_different_document_ids_without_event_keys_keep_single_event_control():
     rows = _visits()
     for row_list in rows.values():
-        row_list[0].pop("application_id")
+        row_list[0].pop("application_id", None)
     assert (await _final("LX0609-04-04-02", rows, anesthesia_facts="round2_without_event_keys"))["status"] == "compliant"
 
 

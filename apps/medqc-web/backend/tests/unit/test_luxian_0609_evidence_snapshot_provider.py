@@ -1535,6 +1535,8 @@ def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
         "postane_surveil_record",
         "preane_surveil_record",
         "surgery_inform_consent",
+        # 037 术后48小时内访视按手术记录的结束时间核对（病案首页仅作回退）。
+        "surgery_record",
     ]
     observations = {item.source_key: item for item in snapshot.observations}
     assert all(

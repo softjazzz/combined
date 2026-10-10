@@ -8,10 +8,10 @@ from test_luxian_0609_pathology_event_association import _rows, _run, SAMPLING, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source,old,new,field", [
-    ("preane_surveil_record", "否认麻醉史", "既往麻醉史：", "anesthesia_history"),
-    ("postane_surveil_record", "无麻醉并发症", "术后并发症：", "complication_assessment"),
+    ("preane_surveil_record", "胆囊结石2年，否认麻醉史", "", "brief_history"),
+    ("postane_surveil_record", "无麻醉并发症", "特殊情况：", "special_situations"),
     ("postane_surveil_record", "神志清醒", "术后意识：", "consciousness_status"),
-    ("postane_surveil_record", "呼吸平稳", "呼吸系统：", "respiratory_status"),
+    ("postane_surveil_record", "恢复良好，呼吸循环稳定", "恢复情况：", "recovery_status"),
 ])
 async def test_prefixed_blank_label_cannot_prove_content(source, old, new, field):
     rows = _visits()
@@ -37,7 +37,7 @@ async def test_prefixed_blank_signature_cannot_prove_signature():
 async def test_prefixed_label_with_negative_value_remains_complete(suffix):
     rows = _visits()
     rows["postane_surveil_record"][0]["record_content"] = (
-        "术后意识：清醒；呼吸系统：平稳；循环：稳定；术后并发症：" + suffix
+        "术后意识：清醒；恢复情况：良好；拔管：已拔除；医嘱：继续监护；特殊情况：" + suffix
     )
     assert (await _final("LX0609-04-04-02", rows, anesthesia_facts=N04_NEGATIVE_CASES[suffix]))["status"] == "compliant"
 
@@ -53,7 +53,8 @@ async def test_sampling_before_request_day_is_not_excluded(rule_id):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["generic_specimen", "missing_request_time"])
-async def test_unconfirmed_association_policy_stays_unchanged(kind):
+async def test_single_pathology_event_links_generic_specimen_or_untimed_request(kind):
+    """本次住院唯一病理事件：通用标本名或缺申请时间不再阻断关联（be5bb7dbd 口径）。"""
     rows = _rows()
     if kind == "generic_specimen":
         for source in ("pathology_exam_master", "pathology_exam_report"):
@@ -61,16 +62,15 @@ async def test_unconfirmed_association_policy_stays_unchanged(kind):
     else:
         rows["pathology_exam_master"][0].pop("request_datetime")
     result = await _run(rows, SAMPLING)
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "association_failed"
+    assert result["status"] == "compliant"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("body,missing,present", [
-    ("术后意识： 呼吸系统：平稳；循环：稳定；术后并发症：无", "consciousness_status", "respiratory_status"),
-    ("术后意识：呼吸系统：平稳；循环：稳定；术后并发症：无", "consciousness_status", "respiratory_status"),
-    ("术后意识清醒 呼吸系统：；循环：稳定；术后并发症：无", "respiratory_status", "consciousness_status"),
-    ("神志清醒；呼吸平稳；循环稳定；术后并发症： 备注：已访视", "complication_assessment", "consciousness_status"),
+    ("术后意识： 恢复情况：良好；拔管：已拔除；医嘱：继续监护；特殊情况：无", "consciousness_status", "recovery_status"),
+    ("术后意识：恢复情况：良好；拔管：已拔除；医嘱：继续监护；特殊情况：无", "consciousness_status", "recovery_status"),
+    ("术后意识清醒 恢复情况：；拔管：已拔除；医嘱：继续监护；特殊情况：无", "recovery_status", "consciousness_status"),
+    ("神志清醒；恢复良好；已拔管；医嘱：继续监护；特殊情况： 备注：已访视", "special_situations", "consciousness_status"),
 ])
 async def test_adjacent_labels_do_not_borrow_values(body, missing, present):
     rows = _visits()
@@ -87,6 +87,6 @@ async def test_adjacent_labels_do_not_borrow_values(body, missing, present):
 async def test_adjacent_filled_labels_keep_their_values(separator):
     rows = _visits()
     rows["postane_surveil_record"][0]["record_content"] = separator.join([
-        "术后意识：清醒", "呼吸系统：平稳", "循环：稳定", "术后并发症：未见异常",
+        "术后意识：清醒", "恢复情况：良好", "拔管：已拔除", "医嘱：继续监护", "特殊情况：未见异常",
     ])
     assert (await _final("LX0609-04-04-02", rows, anesthesia_facts=N04_FILLED_CASES[separator]))["status"] == "compliant"

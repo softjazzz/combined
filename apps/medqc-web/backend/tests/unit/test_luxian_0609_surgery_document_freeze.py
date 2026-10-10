@@ -384,7 +384,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-04-02",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "mr_surgery": _rows(_mr_surgery("mr-surgery-1")),
                 "preane_surveil_record": _rows(_visit("pre-visit-1", post=False)),
                 "postane_surveil_record": _rows(_visit("post-visit-1", post=True)),
             },
@@ -396,27 +396,32 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "checked_sources": ["preane_surveil_record", "postane_surveil_record"],
                 "checked_fields_by_visit": {
                     "preanesthesia_visit": [
-                        "asa_level",
-                        "airway_assessment",
-                        "fasting_status",
-                        "anesthesia_history",
-                        "risk_discussion",
+                        "general_condition",
+                        "brief_history",
+                        "relevant_examinations",
+                        "planned_procedure_and_anesthesia",
+                        "anesthesia_indication",
+                        "precautions",
+                        "preoperative_orders",
                         "anesthetist_signature",
                         "record_time",
                     ],
                     "postanesthesia_visit": [
+                        "visit_within_48h",
+                        "recovery_status",
                         "consciousness_status",
-                        "respiratory_status",
-                        "circulatory_status",
-                        "complication_assessment",
+                        "extubation_status",
+                        "postoperative_orders",
+                        "special_situations",
                         "anesthetist_signature",
                         "record_time",
                     ],
                 },
             },
             (
-                ("material", "mr_surgery", "mr-surgery-1"),
+                # 内容寻址引用按摘要排序；病案首页手术行带权威结束时间后摘要随之变化。
                 ("material", "preane_surveil_record", "pre-visit-1"),
+                ("material", "mr_surgery", "mr-surgery-1"),
                 ("material", "postane_surveil_record", "post-visit-1"),
             ),
             {
@@ -425,9 +430,9 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 ("preane_surveil_record", "pre-visit-1"),
             },
             (
-                "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、"
-                "麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、"
-                "呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。"
+                "麻醉术前访视已核对：一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
+                "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后48小时内访视、恢复情况、"
+                "清醒情况、拔管情况、术后医嘱、特殊情况、麻醉医师签名、记录时间。"
             ),
         ),
         (

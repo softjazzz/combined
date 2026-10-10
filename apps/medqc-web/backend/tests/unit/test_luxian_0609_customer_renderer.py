@@ -1650,18 +1650,18 @@ def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
         facts={
             "failure_kind": "anesthesia_visit_incomplete",
             "missing_fields_by_visit": {
-                "preanesthesia_visit": ["airway_assessment", "risk_discussion"],
+                "preanesthesia_visit": ["relevant_examinations", "preoperative_orders"],
                 "postanesthesia_visit": [
-                    "respiratory_status",
-                    "complication_assessment",
+                    "visit_within_48h",
+                    "special_situations",
                 ],
             },
         },
     )
 
     assert finding == (
-        "麻醉术前访视缺少气道评估、麻醉风险告知；"
-        "麻醉术后访视缺少呼吸情况、麻醉并发症评估。"
+        "麻醉术前访视缺少相关检查、术前医嘱；"
+        "麻醉术后访视缺少术后48小时内访视、特殊情况。"
     )
 
 
@@ -1677,28 +1677,32 @@ def test_anesthesia_visit_complete_facts_render_compliance_reason():
             ],
             "checked_fields_by_visit": {
                 "preanesthesia_visit": [
-                    "asa_level",
-                    "airway_assessment",
-                    "fasting_status",
-                    "anesthesia_history",
-                    "risk_discussion",
+                    "general_condition",
+                    "brief_history",
+                    "relevant_examinations",
+                    "planned_procedure_and_anesthesia",
+                    "anesthesia_indication",
+                    "precautions",
+                    "preoperative_orders",
                     "anesthetist_signature",
                     "record_time",
                 ],
                 "postanesthesia_visit": [
+                    "visit_within_48h",
+                    "recovery_status",
                     "consciousness_status",
-                    "respiratory_status",
-                    "circulatory_status",
-                    "complication_assessment",
+                    "extubation_status",
+                    "postoperative_orders",
+                    "special_situations",
                     "anesthetist_signature",
                     "record_time",
                 ],
             },
         },
     ) == (
-        "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、"
-        "麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、"
-        "呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。"
+        "麻醉术前访视已核对：一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
+        "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后48小时内访视、恢复情况、"
+        "清醒情况、拔管情况、术后医嘱、特殊情况、麻醉医师签名、记录时间。"
     )
 
 

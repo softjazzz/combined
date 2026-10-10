@@ -964,6 +964,13 @@ def _typed_037_session(
         ),
     }
 
+    if mr_surgery_mode == "with_end":
+        # 术后访视（07-31 08:00）在手术结束后48小时内。
+        rows_by_source["mr_surgery"] = ({
+            "surgery_id": "S-037", "anesthesia_method": anesthesia_method or "全身麻醉",
+            "surgery_begin_datetime": "2026-07-30 09:00:00", "surgery_end_datetime": "2026-07-30 11:00:00",
+        },)
+
     visit_rows = {
         "preane_surveil_record": {
             "record_time": "2026-07-30 08:00:00",
@@ -1066,7 +1073,8 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
         preanesthesia_content=(
             "未见ASA分级；无气道评估（未作气道评估）；已核对禁食禁饮；"
             "否认麻醉史；未见麻醉风险告知。"
-        )
+        ),
+        mr_surgery_mode="with_end",
     )
 
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
@@ -1092,9 +1100,8 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
         "performed_anesthesia_confirmed": True,
         "missing_fields_by_visit": {
             "preanesthesia_visit": [
-                "asa_level",
-                "airway_assessment",
-                "risk_discussion",
+                "anesthesia_indication",
+                "precautions",
             ]
         },
     }

@@ -461,8 +461,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "preane_surveil_record",
         "postane_surveil_record",
     ),
+    # 术后48小时内访视按手术结束时间核对：运行病历优先取手术记录，
+    # 病案首页（mr_surgery）往往出院归档后才有，只作回退。
     "LX0609-04-04-02": (
         "mr_surgery",
+        "surgery_record",
         "preane_surveil_record",
         "postane_surveil_record",
     ),

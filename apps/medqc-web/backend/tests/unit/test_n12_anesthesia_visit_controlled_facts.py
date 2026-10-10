@@ -1,9 +1,14 @@
 """N12预先冻结工程合同：原输入不变，受控Fake只给原子事实。"""
 
-import json
 
 import pytest
-from luxian_0609_anesthesia_test_facts import read_sent_anesthesia_documents
+from luxian_0609_anesthesia_test_facts import (
+    POST_TEXT,
+    SCHEMA_VERSION,
+    anesthesia_fact_atom,
+    anesthesia_fact_response,
+    read_sent_anesthesia_documents,
+)
 
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
@@ -15,17 +20,9 @@ from tests.unit.test_luxian_0609_round2_document_boundaries import _visits
 
 
 RULE = "LX0609-04-04-02"
-GOLD_QUOTES = {
-    "preane_surveil_record": {"asa_level": "ASA II级", "airway_assessment": "气道评估正常",
-        "fasting_status": "禁食禁饮已核对", "anesthesia_history": "否认麻醉史", "risk_discussion": "已完成麻醉风险告知"},
-    "postane_surveil_record": {"consciousness_status": "神志清醒", "respiratory_status": "呼吸平稳",
-        "circulatory_status": "循环稳定", "complication_assessment": "无麻醉并发症"},
-}
-
-
 class FrozenFactClient:
     def __init__(self, *, absent=(), unknown=(), mode="valid", overrides=None):
-        self.absent, self.unknown, self.mode = set(absent), set(unknown), mode
+        self.absent, self.unknown, self.mode = frozenset(absent), frozenset(unknown), mode
         self.overrides = overrides or {}
         self.calls = []
 
@@ -34,23 +31,10 @@ class FrozenFactClient:
         if self.mode == "transport":
             raise RuntimeError("synthetic transport failure")
         documents = read_sent_anesthesia_documents(prompt)
-        items = []
-        for doc in documents:
-            fields = {}
-            for field in doc["required_fields"]:
-                key = (doc["source_type"], field)
-                if key in self.unknown:
-                    atom = {"state": "unknown", "span_id": None, "start": None, "end": None, "quote": None}
-                elif key in self.absent:
-                    atom = {"state": "absent", "span_id": None, "start": 0, "end": len(doc["body"]), "quote": None}
-                else:
-                    quote = self.overrides.get(key, GOLD_QUOTES[doc["source_type"]][field])
-                    start = doc["body"].index(quote)
-                    span_id = next(sid for sid, span in doc["spans"].items() if quote in span)
-                    atom = {"state": "present", "span_id": span_id, "start": start, "end": start + len(quote), "quote": quote}
-                fields[field] = atom
-            items.append({"document_ref": doc["document_ref"], "fields": fields})
-        payload = {"schema_version": "lx0609-anesthesia-visit-facts-v1", "documents": items}
+        items = [{"document_ref": doc["document_ref"], "fields": {
+            field: anesthesia_fact_atom(doc, field, absent=self.absent, unknown=self.unknown, overrides=self.overrides)
+            for field in doc["required_fields"]}} for doc in documents]
+        payload = {"schema_version": SCHEMA_VERSION, "documents": items}
         if self.mode == "bad_schema":
             payload["schema_version"] = "invalid"
         elif self.mode == "duplicate_doc":
@@ -58,16 +42,15 @@ class FrozenFactClient:
         elif self.mode == "missing_field":
             items[0]["fields"].pop(next(iter(items[0]["fields"])))
         elif self.mode == "extra_field":
-            items[0]["fields"]["invented_required_field"] = {"state": "unknown", "span_id": None, "start": None, "end": None, "quote": None}
+            items[0]["fields"]["invented_required_field"] = {"state": "unknown", "quote": None}
         elif self.mode == "cross_document_quote":
-            atom = items[0]["fields"]["airway_assessment"]
-            atom.update(quote="神志清醒", start=0, end=4)
-        elif self.mode == "wrong_absent_scope":
-            items[1]["fields"]["consciousness_status"] = {"state": "absent", "span_id": None, "start": 0, "end": 1, "quote": None}
-        elif self.mode == "cross_document_span":
-            items[0]["fields"]["airway_assessment"]["span_id"] = next(iter(documents[1]["spans"]))
-        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload, ensure_ascii=False)}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+            # 术前字段借用术后访视原文。
+            items[0]["fields"]["precautions"] = {"state": "present", "quote": "神志清醒"}
+        elif self.mode == "absent_with_quote":
+            items[1]["fields"]["consciousness_status"] = {"state": "absent", "quote": "神志清醒"}
+        elif self.mode == "not_applicable_disallowed":
+            items[1]["fields"]["consciousness_status"] = {"state": "not_applicable", "quote": "神志清醒"}
+        return anesthesia_fact_response(payload)
 
 
 async def _run(rows, client):
@@ -97,9 +80,9 @@ def test_only_n12_contract_explicitly_authorizes_one_controlled_call():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source,field,old,new,visit", [
     ("postane_surveil_record", "consciousness_status", "神志清醒", "术后意识状态：", "postanesthesia_visit"),
-    ("postane_surveil_record", "respiratory_status", "呼吸平稳", "术后呼吸情况：", "postanesthesia_visit"),
-    ("postane_surveil_record", "complication_assessment", "无麻醉并发症", "术后并发症情况：", "postanesthesia_visit"),
-    ("preane_surveil_record", "airway_assessment", "气道评估正常", "Mallampati气道分级：", "preanesthesia_visit"),
+    ("postane_surveil_record", "recovery_status", "恢复良好，呼吸循环稳定", "恢复情况：", "postanesthesia_visit"),
+    ("postane_surveil_record", "special_situations", "无麻醉并发症", "特殊情况：", "postanesthesia_visit"),
+    ("preane_surveil_record", "relevant_examinations", "血常规、凝血功能未见异常", "", "preanesthesia_visit"),
 ])
 async def test_original_n12_empty_labels_remain_original_input_and_are_missing(source, field, old, new, visit):
     rows = _visits()
@@ -118,7 +101,7 @@ async def test_original_n12_empty_labels_remain_original_input_and_are_missing(s
 async def test_original_normal_negatives_and_adjacent_unrelated_labels_stay_compliant(suffix):
     rows = _visits()
     if suffix is not None:
-        rows["postane_surveil_record"][0]["record_content"] = "神志清醒" + suffix + "；呼吸平稳；循环稳定；无麻醉并发症。"
+        rows["postane_surveil_record"][0]["record_content"] = POST_TEXT.replace("神志清醒", "神志清醒" + suffix, 1)
     client = FrozenFactClient()
     final, execution = await _run(rows, client)
     assert final["status"] == "compliant"
@@ -126,7 +109,7 @@ async def test_original_normal_negatives_and_adjacent_unrelated_labels_stay_comp
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["transport", "bad_schema", "duplicate_doc", "missing_field", "extra_field", "cross_document_quote", "wrong_absent_scope", "cross_document_span"])
+@pytest.mark.parametrize("mode", ["transport", "bad_schema", "duplicate_doc", "missing_field", "extra_field", "cross_document_quote", "absent_with_quote", "not_applicable_disallowed"])
 async def test_invalid_or_failed_controlled_facts_never_claim_filled_or_complete(mode):
     final, execution = await _run(_visits(), FrozenFactClient(mode=mode))
     assert final["status"] == "data_gap"
@@ -166,17 +149,32 @@ async def test_trusted_structural_empty_body_does_not_need_model_or_invent_fille
     rows = _visits()
     for source in ("preane_surveil_record", "postane_surveil_record"):
         rows[source][0]["record_content"] = ""
-    rows["preane_surveil_record"][0]["ASA_level"] = "II级"
     client = FrozenFactClient()
     final, execution = await _run(rows, client)
     assert final["status"] == "non_compliant"
-    assert "asa_level" not in final["customer_display_facts"]["missing_fields_by_visit"]["preanesthesia_visit"]
+    missing = final["customer_display_facts"]["missing_fields_by_visit"]
+    # 结构化可信的签名、时间与术后48小时内访视不需送模，也不被判缺失。
+    assert "anesthetist_signature" not in missing["preanesthesia_visit"]
+    assert "record_time" not in missing["postanesthesia_visit"]
+    assert "visit_within_48h" not in missing["postanesthesia_visit"]
+    assert "general_condition" in missing["preanesthesia_visit"]
     assert execution.llm_call_count == len(client.calls) == 0
 
 
 @pytest.mark.asyncio
+async def test_structured_visit_columns_are_sent_as_document_text():
+    rows = _visits()
+    rows["preane_surveil_record"][0]["record_content"] = ""
+    rows["preane_surveil_record"][0]["planned_anesthesia_method"] = "全身麻醉"
+    client = FrozenFactClient()
+    await _run(rows, client)
+    sent = read_sent_anesthesia_documents(client.calls[0][0])
+    assert any(doc["body"] == "拟施麻醉方式：全身麻醉" for doc in sent)
+
+
+@pytest.mark.asyncio
 async def test_unknown_in_same_receipt_blocks_a_definite_missing_result():
-    client = FrozenFactClient(absent=(("preane_surveil_record", "airway_assessment"),), unknown=(("postane_surveil_record", "consciousness_status"),))
+    client = FrozenFactClient(absent=(("preane_surveil_record", "precautions"),), unknown=(("postane_surveil_record", "consciousness_status"),))
     final, execution = await _run(_visits(), client)
     assert final["status"] == "data_gap"
     assert execution.llm_call_count == 1
@@ -186,7 +184,7 @@ async def test_unknown_in_same_receipt_blocks_a_definite_missing_result():
 def test_final_compiled_prompt_version_and_definition_are_consistent():
     from app.services.luxian_0609_rule_master import LUXIAN_0609_RULE_DEFINITION_VERSION
     contract = next(c for c in load_luxian_0609_rule_contracts() if c.rule_id == RULE)
-    assert contract.prompt_version == "lx0609-anesthesia-visit-facts-v1"
+    assert contract.prompt_version == "lx0609-anesthesia-visit-facts-v2"
     assert contract.definition_version == LUXIAN_0609_RULE_DEFINITION_VERSION
     assert contract.max_llm_calls_per_rule == 1
 
@@ -266,3 +264,100 @@ async def test_unavailable_or_nonstring_body_does_not_become_a_full_document(bod
     final, execution = await _run(rows, client)
     assert final["status"] == "data_gap"
     assert execution.llm_call_count == len(client.calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_postanesthesia_visit_after_48_hours_is_a_missing_timeliness_item():
+    rows = _visits()
+    # 手术 07-01 10:00 结束，术后访视 07-03 11:00 已超过48小时。
+    rows["postane_surveil_record"][0]["record_time"] = "2026-07-03 11:00:00"
+    client = FrozenFactClient()
+    final, execution = await _run(rows, client)
+    assert final["status"] == "non_compliant"
+    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"postanesthesia_visit": ["visit_within_48h"]}
+    assert "术后48小时内访视" in final["findings"]
+    assert execution.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["no_surgery_row", "no_end_time"])
+async def test_missing_surgery_end_time_cannot_verify_48_hour_visit(mode):
+    rows = _visits()
+    if mode == "no_surgery_row":
+        rows.pop("surgery_record")
+    else:
+        rows["surgery_record"][0].pop("surgery_end_time")
+    client = FrozenFactClient()
+    final, execution = await _run(rows, client)
+    assert (final["status"], final["reason_code"]) == ("data_gap", "authoritative_time_missing")
+    assert execution.llm_call_count == len(client.calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_running_record_without_front_page_uses_surgery_record_end_time():
+    """运行病历质控时病案首页尚未生成：只凭手术记录结束时间即可核对48小时。"""
+    rows = _visits()
+    assert "mr_surgery" not in rows
+    final, _execution = await _run(rows, FrozenFactClient())
+    assert final["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_front_page_end_time_is_only_a_fallback_for_untimed_surgery_record():
+    rows = _visits()
+    rows["surgery_record"][0].pop("surgery_end_time")
+    rows["mr_surgery"] = [{"surgery_id": "S-A", "anesthesia_method": "全身麻醉",
+                           "surgery_begin_datetime": "2026-07-01 08:00:00", "surgery_end_datetime": "2026-07-01 10:00:00"}]
+    final, _execution = await _run(rows, FrozenFactClient())
+    assert final["status"] == "compliant"
+    # 手术记录写明结束时间时以手术记录为准，不被病案首页覆盖。
+    rows = _visits()
+    rows["mr_surgery"] = [{"surgery_id": "S-A", "anesthesia_method": "全身麻醉",
+                           "surgery_begin_datetime": "2026-06-28 08:00:00", "surgery_end_datetime": "2026-06-28 10:00:00"}]
+    final, _execution = await _run(rows, FrozenFactClient())
+    assert final["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_extubation_not_applicable_without_intubation_stays_compliant():
+    class NotIntubatedClient(FrozenFactClient):
+        async def generate(self, prompt, **kwargs):
+            response = await super().generate(prompt, **kwargs)
+            import json as _json
+            payload = _json.loads(response["choices"][0]["message"]["content"])
+            for item in payload["documents"]:
+                if "extubation_status" in item["fields"]:
+                    item["fields"]["extubation_status"] = {"state": "not_applicable", "quote": "神志清醒"}
+            response["choices"][0]["message"]["content"] = _json.dumps(payload, ensure_ascii=False)
+            return response
+
+    final, execution = await _run(_visits(), NotIntubatedClient())
+    assert final["status"] == "compliant"
+    assert execution.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote,expected", [
+    # 真实模型曾跳过中间一句拼接两段原文：逐句均来自本文书时接受。
+    ("神志清醒。无麻醉并发症", "compliant"),
+    # 任一句不是本文书原文即拒收整批。
+    ("神志清醒。术后无任何不适", "data_gap"),
+])
+async def test_stitched_quote_is_accepted_only_when_every_sentence_is_verbatim(quote, expected):
+    client = FrozenFactClient(overrides={("postane_surveil_record", "special_situations"): quote})
+
+    original = client.generate
+
+    async def generate(prompt, **kwargs):
+        import json as _json
+        response = await original(prompt, **kwargs)
+        payload = _json.loads(response["choices"][0]["message"]["content"])
+        for item in payload["documents"]:
+            if "special_situations" in item["fields"]:
+                item["fields"]["special_situations"]["quote"] = quote
+        response["choices"][0]["message"]["content"] = _json.dumps(payload, ensure_ascii=False)
+        return response
+
+    client.generate = generate
+    final, _execution = await _run(_visits(), client)
+    assert final["status"] == expected

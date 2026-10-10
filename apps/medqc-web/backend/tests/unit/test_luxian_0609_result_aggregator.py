@@ -4330,11 +4330,11 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "performed_anesthesia_confirmed": True,
                 "missing_fields_by_visit": {
                     "preanesthesia_visit": [
-                        "airway_assessment",
-                        "risk_discussion",
+                        "relevant_examinations",
+                        "precautions",
                         "PRIVATE_FIELD",
                     ],
-                    "postanesthesia_visit": ["respiratory_status"],
+                    "postanesthesia_visit": ["recovery_status"],
                     "PRIVATE_VISIT": ["record_time"],
                 },
                 "raw_visit_text": "PRIVATE_VISIT_TEXT",
@@ -4344,10 +4344,10 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "performed_anesthesia_confirmed": True,
                 "missing_fields_by_visit": {
                     "preanesthesia_visit": [
-                        "airway_assessment",
-                        "risk_discussion",
+                        "relevant_examinations",
+                        "precautions",
                     ],
-                    "postanesthesia_visit": ["respiratory_status"],
+                    "postanesthesia_visit": ["recovery_status"],
                 },
             },
         ),

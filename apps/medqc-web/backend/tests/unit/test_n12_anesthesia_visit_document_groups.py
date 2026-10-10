@@ -1,10 +1,14 @@
 """N12附加7项预先冻结：同实际文书分段与同事件多文书不得混淆。"""
-import json
-
 import pytest
-from luxian_0609_anesthesia_test_facts import read_sent_anesthesia_documents
+from luxian_0609_anesthesia_test_facts import (
+    PRE_TEXT,
+    SCHEMA_VERSION,
+    anesthesia_fact_atom,
+    anesthesia_fact_response,
+    read_sent_anesthesia_documents,
+)
 
-from test_n12_anesthesia_visit_controlled_facts import GOLD_QUOTES, _run, _visits
+from test_n12_anesthesia_visit_controlled_facts import _run, _visits
 
 
 class FrozenPerDocumentFactClient:
@@ -19,21 +23,12 @@ class FrozenPerDocumentFactClient:
         documents = read_sent_anesthesia_documents(prompt)
         items = []
         for index, doc in enumerate(documents):
-            fields = {}
-            for name in doc["required_fields"]:
-                if name in self.unknown_by_index.get(index, ()):
-                    atom = {"state": "unknown", "span_id": None, "start": None, "end": None, "quote": None}
-                elif name in self.absent_by_index.get(index, ()):
-                    atom = {"state": "absent", "span_id": None, "start": 0, "end": len(doc["body"]), "quote": None}
-                else:
-                    quote = GOLD_QUOTES[doc["source_type"]][name]
-                    start = doc["body"].index(quote)
-                    atom = {"state": "present", "span_id": next(sid for sid, span in doc["spans"].items() if quote in span),
-                        "start": start, "end": start + len(quote), "quote": quote}
-                fields[name] = atom
-            items.append({"document_ref": doc["document_ref"], "fields": fields})
-        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"schema_version": "lx0609-anesthesia-visit-facts-v1", "documents": items}, ensure_ascii=False)}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+            source = doc["source_type"]
+            absent = frozenset((source, name) for name in self.absent_by_index.get(index, ()))
+            unknown = frozenset((source, name) for name in self.unknown_by_index.get(index, ()))
+            items.append({"document_ref": doc["document_ref"], "fields": {
+                name: anesthesia_fact_atom(doc, name, absent=absent, unknown=unknown) for name in doc["required_fields"]}})
+        return anesthesia_fact_response({"schema_version": SCHEMA_VERSION, "documents": items})
 
 
 def _same_event_two_previsits():
@@ -54,12 +49,12 @@ async def test_multiple_individually_complete_visits_in_one_reliable_event_stay_
 @pytest.mark.asyncio
 async def test_two_partial_documents_cannot_fill_each_others_missing_fields():
     rows = _same_event_two_previsits()
-    rows["preane_surveil_record"][0]["record_content"] = rows["preane_surveil_record"][0]["record_content"].replace("气道评估正常", "")
-    rows["preane_surveil_record"][1]["record_content"] = rows["preane_surveil_record"][1]["record_content"].replace("禁食禁饮已核对", "")
-    client = FrozenPerDocumentFactClient(absent_by_index={0: {"airway_assessment"}, 1: {"fasting_status"}})
+    rows["preane_surveil_record"][0]["record_content"] = rows["preane_surveil_record"][0]["record_content"].replace("防误吸", "")
+    rows["preane_surveil_record"][1]["record_content"] = rows["preane_surveil_record"][1]["record_content"].replace("禁食8小时禁饮2小时", "")
+    client = FrozenPerDocumentFactClient(absent_by_index={0: {"precautions"}, 1: {"preoperative_orders"}})
     final, execution = await _run(rows, client)
     assert final["status"] == "non_compliant"
-    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"preanesthesia_visit": ["airway_assessment", "fasting_status"]}
+    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"preanesthesia_visit": ["precautions", "preoperative_orders"]}
     assert execution.llm_call_count == len(client.calls) == 1
 
 
@@ -80,7 +75,7 @@ async def test_multiple_visits_do_not_bypass_original_event_identity_gate(identi
 
 @pytest.mark.asyncio
 async def test_any_unknown_document_blocks_definite_multi_document_judgment():
-    client = FrozenPerDocumentFactClient(unknown_by_index={1: {"airway_assessment"}})
+    client = FrozenPerDocumentFactClient(unknown_by_index={1: {"precautions"}})
     final, execution = await _run(_same_event_two_previsits(), client)
     assert (final["status"], final["reason_code"]) == ("data_gap", "semantic_extraction_unresolved")
     assert "missing_fields_by_visit" not in final.get("customer_display_facts", {})
@@ -95,17 +90,9 @@ class FrozenWholeDocumentFactClient:
     async def generate(self, prompt, **kwargs):
         self.calls.append((prompt, kwargs))
         documents = read_sent_anesthesia_documents(prompt)
-        items = []
-        for doc in documents:
-            fields = {}
-            for name in doc["required_fields"]:
-                quote = GOLD_QUOTES[doc["source_type"]].get(name, "测试医师")
-                start = max(0, doc["body"].find(quote))
-                span_id = next((sid for sid, text in doc["spans"].items() if quote in text), next(iter(doc["spans"])))
-                fields[name] = {"state": "present", "span_id": span_id, "start": start, "end": start + len(quote), "quote": quote}
-            items.append({"document_ref": doc["document_ref"], "fields": fields})
-        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"schema_version": "lx0609-anesthesia-visit-facts-v1", "documents": items}, ensure_ascii=False)}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+        items = [{"document_ref": doc["document_ref"], "fields": {
+            name: anesthesia_fact_atom(doc, name) for name in doc["required_fields"]}} for doc in documents]
+        return anesthesia_fact_response({"schema_version": SCHEMA_VERSION, "documents": items})
 
 
 @pytest.mark.asyncio
@@ -113,8 +100,8 @@ class FrozenWholeDocumentFactClient:
 async def test_same_actual_document_parts_preserve_complete_content_and_trusted_structure(distributed_structure):
     rows = _visits()
     pre = rows["preane_surveil_record"][0]
-    parts = [{**pre, "record_content": "ASA II级；气道评估正常；"},
-        {**pre, "record_content": "禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"}]
+    split = PRE_TEXT.index("拟行手术及麻醉")
+    parts = [{**pre, "record_content": PRE_TEXT[:split]}, {**pre, "record_content": PRE_TEXT[split:]}]
     if distributed_structure:
         parts[0].pop("anesthetist_sign")
         parts[0]["ASA_level"] = "II级"
