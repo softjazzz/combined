@@ -305,7 +305,25 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _safe_main_diagnosis_check(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    keys = {"verification_kind", "authoritative_main", "written_main", "main_consistent"}
+    if "diagnosis_scope" in raw:
+        keys.add("diagnosis_scope")
+    if (
+        set(raw) != keys
+        or any(type(raw.get(key)) is not str or not raw[key].strip() for key in ("authoritative_main", "written_main"))
+        or type(raw.get("main_consistent")) is not bool
+        or (raw["authoritative_main"] == raw["written_main"] and raw["main_consistent"] is not True)
+    ):
+        return None
+    return dict(raw)
+
+
 def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "discharge_main_diagnosis_check":
+        if "diagnosis_scope" in raw and raw["diagnosis_scope"] != "death":
+            return None
+        return _safe_main_diagnosis_check(raw)
     if "diagnosis_scope" in raw and (type(raw["diagnosis_scope"]) is not str or raw["diagnosis_scope"] not in {"death", "discharge"}):
         return None
     scope_gap_values = {"scope_conflict", "scope_unknown"}
@@ -646,7 +664,10 @@ def validate_published_discharge_facts(
                 or raw["authoritative_gap"] not in scope_gap_values
                     or raw.get("written_gap") is not None or "diagnosis_scope" in raw):
                 return None
-        if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
+        if raw.get("verification_kind") == "discharge_main_diagnosis_check":
+            if _safe_main_diagnosis_check(raw) is None:
+                return None
+        elif raw.get("verification_kind") == "discharge_diagnosis_data_gap":
             gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
             allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
                        "equivalence_unresolved"}
@@ -758,6 +779,8 @@ def discharge_customer_fact_status_is_valid(
     if normalized == "LX0609-08-01-03":
         if safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap":
             return normalized_status == "data_gap"
+        if safe_facts.get("verification_kind") == "discharge_main_diagnosis_check":
+            return normalized_status == ("compliant" if safe_facts.get("main_consistent") is True else "non_compliant")
         return normalized_status == (
             "compliant"
             if safe_facts.get("diagnoses_consistent") is True

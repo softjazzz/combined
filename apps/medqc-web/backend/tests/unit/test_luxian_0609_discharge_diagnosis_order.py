@@ -157,3 +157,36 @@ async def test_one_sided_extra_name_needs_no_model_call():
     assert client.calls == 0
     assert reduced.final_state.value == "non_compliant"
 
+
+
+_AUTHORITY_ORDERED = [{"diagnosis_no": 1, "diagnosis_name": "肺炎"}, {"diagnosis_no": 2, "diagnosis_name": "高血压病"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("main_name,status", [("肺炎", "compliant"), ("高血压", "non_compliant")])
+async def test_unordered_written_diagnoses_check_main_selection_only(main_name, status):
+    # 院方口径（2026-10-10）：书写诊断无序号仅有主诊断标记时，内容一致后只核对主诊断。
+    client = DiagnosisEquivalenceClient(same={"高血压病": "高血压"})
+    written = [
+        {"diagnosis_name": "高血压", "diagnosis_main": "是" if main_name == "高血压" else "否"},
+        {"diagnosis_name": "肺炎", "diagnosis_main": "是" if main_name == "肺炎" else "否"},
+    ]
+    reduced, facts = await _case(_AUTHORITY_ORDERED, written, client)
+    assert reduced.final_state.value == status
+    assert facts["verification_kind"] == "discharge_main_diagnosis_check"
+    assert facts["authoritative_main"] == "肺炎"
+    assert facts["written_main"] == main_name
+    text = customer_finding_from_controlled_facts(rule_id="LX0609-08-01-03", facts=facts)
+    assert ("主要诊断选择一致" in text) is (status == "compliant")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flags", [("否", "否"), ("是", "是")])
+async def test_unordered_written_diagnoses_without_unique_main_stay_data_gap(flags):
+    written = [
+        {"diagnosis_name": "高血压病", "diagnosis_main": flags[0]},
+        {"diagnosis_name": "肺炎", "diagnosis_main": flags[1]},
+    ]
+    reduced, facts = await _case(_AUTHORITY_ORDERED, written)
+    assert reduced.final_state.value == "data_gap"
+    assert facts["written_gap"] == "order_missing"

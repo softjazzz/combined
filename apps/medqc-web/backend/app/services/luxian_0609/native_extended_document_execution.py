@@ -1514,6 +1514,24 @@ def _antimicrobial_document_refs(
     return tuple(dict.fromkeys(refs))
 
 
+_MAIN_DIAGNOSIS_FLAGS = frozenset({"是", "1", "Y", "y", "true", "True"})
+
+
+def _written_main_diagnosis(rows: Sequence[Mapping[str, Any]]) -> str | None:
+    """唯一标记为主诊断且未罗列多条诊断的书写诊断名称；否则无法核对返回 None。"""
+
+    flagged = [
+        _clean(row.get("diagnosis_name") or row.get("diagnosis"))
+        for row in rows
+        if _clean(row.get("diagnosis_main")) in _MAIN_DIAGNOSIS_FLAGS
+    ]
+    if len(flagged) != 1 or not flagged[0]:
+        return None
+    if len(split_numbered_diagnoses(flagged)) != 1:
+        return None
+    return flagged[0]
+
+
 def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, ...], str | None]:
     """名称完整后才比较内容；多行仅以唯一合法序号建立顺序。"""
     if not rows:
@@ -3325,6 +3343,26 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "diagnoses_consistent": False,
                             "order_comparable": order_comparable,
                             **pair_facts,
+                        }))
+                    elif (
+                        authority_gap is None
+                        and written_gap == "order_missing"
+                        and (written_main := _written_main_diagnosis(written_rows)) is not None
+                    ):
+                        # 院方口径（2026-10-10）：出院记录诊断无排列序号、仅有主诊断标记时，
+                        # 内容一致后只核对主诊断选择（病案首页第 1 诊断）。
+                        authority_main = authority[0]
+                        main_consistent = written_main == authority_main or (
+                            (authority_main, written_main) in equivalent_pairs
+                        )
+                        final_state = "compliant" if main_consistent else "non_compliant"
+                        reason_code = "requirement_satisfied" if main_consistent else "requirement_violated"
+                        display.append((rule_id, {
+                            "verification_kind": "discharge_main_diagnosis_check",
+                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
+                            "authoritative_main": authority_main,
+                            "written_main": written_main,
+                            "main_consistent": main_consistent,
                         }))
                     elif authority_gap in order_gap or written_gap in order_gap:
                         final_state, reason_code = "data_gap", "required_field_missing"

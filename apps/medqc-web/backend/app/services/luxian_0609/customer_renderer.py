@@ -3227,6 +3227,21 @@ def customer_finding_from_controlled_facts(
                 gaps.append(f"{label}中部分名称与{authority_label}是否为同一诊断尚无法可靠确认")
         return "；".join(gaps) + "，暂时无法完成诊断内容及顺序核对。"
 
+    if rule_id == "LX0609-08-01-03" and kind == "discharge_main_diagnosis_check":
+        death_scope = facts.get("diagnosis_scope") == "death"
+        authority_label = "权威死亡诊断" if death_scope else "权威出院诊断"
+        written_label = "书写死亡诊断" if death_scope else "出院记录"
+        if facts.get("main_consistent") is True:
+            return (
+                f"诊断内容一致；{authority_label}首位为“{facts.get('authoritative_main')}”，"
+                f"{written_label}标记的主诊断为“{facts.get('written_main')}”，主要诊断选择一致。"
+                "出院记录诊断未提供排列序号，其余诊断未核对顺序。"
+            )
+        return (
+            f"诊断内容一致，但{authority_label}首位为“{facts.get('authoritative_main')}”，"
+            f"{written_label}标记的主诊断为“{facts.get('written_main')}”，主要诊断选择不一致。"
+        )
+
     if rule_id == "LX0609-08-01-03" and kind == "discharge_diagnosis_consistency_check":
         death_scope = facts.get("diagnosis_scope") == "death"
         authority_label = "权威死亡诊断" if death_scope else "权威出院诊断"
