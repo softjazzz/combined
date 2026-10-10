@@ -204,11 +204,12 @@ def _material_coordinates(
             set(),
             {"surgery_record", "mr_surgery", "rescue_record", "presurg_discussion"},
         ),
+        # 院方口径（2026-10-10）：文书未写急诊即视为非急诊，无术前讨论判不合规。
         (
             "LX0609-04-01-02",
             {"surgery_record": _rows(_surgery("surgery-1"))},
             frozenset(),
-            "data_gap",
+            "non_compliant",
             {("surgery_record", "surgery-1")},
             {"surgery_record"},
         ),

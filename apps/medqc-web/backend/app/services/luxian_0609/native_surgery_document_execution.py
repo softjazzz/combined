@@ -259,6 +259,7 @@ def _typed_decision_from_outcome(
                     "anesthesia_visit_absent",
                     "local_anesthesia_exception",
                     "emergency_rescue_exception",
+                    "endoscopic_procedure_exception",
                 }
                 else "evaluation_window_not_mature"
                 if outcome.reason_code == "evaluation_window_not_mature"
@@ -1387,9 +1388,12 @@ def _typed_terminal_outcome(
                 )
                 != "unknown"
             }
+            # 院方口径（2026-10-10）：文书未写急诊即视为非急诊；仅来源间明确冲突时未知。
             emergency_state = (
                 next(iter(emergency_states))
                 if len(emergency_states) == 1
+                else "absent"
+                if not emergency_states
                 else "unknown"
             )
         else:
@@ -2082,12 +2086,45 @@ def _typed_029_trigger_display_facts(*, performed_triggered: bool) -> dict[str, 
     }
 
 
+# 院方口径（2026-10-10）：纤维支气管镜下活检、内镜下息肉切除等自然腔道内镜操作不需要
+# 术前小结；腹腔镜、胸腔镜、关节镜等镜下手术仍按手术核对。
+_ENDOSCOPIC_PROCEDURE_PATTERN = re.compile(r"支气管镜|纤支镜|胃镜|肠镜|十二指肠镜|内镜|内窥镜")
+_SURGICAL_SCOPE_PATTERN = re.compile(r"腹腔镜|胸腔镜|关节镜|宫腔镜|膀胱镜|输尿管镜|椎间孔镜|鼻内镜|耳内镜")
+
+
+def _only_endoscopic_procedures(materials: Luxian0609EvidenceMaterialStore) -> bool:
+    names: list[str] = []
+    for source_key in ("surgery_record", "mr_surgery"):
+        try:
+            rows = materials.rows(source_key)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, KeyError, ValueError):
+            return False
+        names.extend(
+            _clean(row.get("surgery_name") or row.get("operation_name") or row.get("procedure_name"))
+            for row in rows
+        )
+    return bool(names) and all(
+        name
+        and _ENDOSCOPIC_PROCEDURE_PATTERN.search(name)
+        and not _SURGICAL_SCOPE_PATTERN.search(name)
+        for name in names
+    )
+
+
 async def _typed_029_outcome(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
 ) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
     """029：确认手术事件覆盖后，核对每台手术的术前小结存在性。"""
+
+    if _only_endoscopic_procedures(materials):
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-04-01-01", "not_applicable", "endoscopic_procedure_exception", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
 
     # 029 是纯存在性规则：已证明仅一台手术时，只看术前小结正文是否为
     # 非空、非占位值。多台手术缺少稳定关联时不得让任一小结覆盖全部事件。

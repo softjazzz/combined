@@ -1586,6 +1586,29 @@ _DISCHARGE_MEDICATION_REQUIRED_GROUPS = (
 )
 
 
+# 院方口径（2026-10-10）：片剂、胶囊、糖浆（及名称已写明口服的制剂）未写给药途径时按剂型
+# 默认口服；舌下、含化、阴道、泡腾、贴剂等非常规口服片剂不推定。
+_ORAL_DOSAGE_FORM_PATTERN = re.compile(r"(?:片|胶囊|糖浆|口服液|口服溶液)")
+_NON_ORAL_TABLET_PATTERN = re.compile(r"(?:舌下片|含片|阴道片|泡腾片|贴片)")
+
+
+def _with_dosage_form_oral_route(
+    medications: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    result: list[Mapping[str, Any]] = []
+    for item in medications:
+        name = " ".join(_clean(item.get(key)) for key in ("drug_name", "generic_name", "name"))
+        if (
+            not any(_clean(item.get(key)) for key in ("route", "drug_apply_method"))
+            and _ORAL_DOSAGE_FORM_PATTERN.search(name)
+            and not _NON_ORAL_TABLET_PATTERN.search(name)
+        ):
+            result.append({**item, "route": "口服（按剂型推定）"})
+        else:
+            result.append(item)
+    return result
+
+
 def _discharge_medications_complete(medications: Sequence[Mapping[str, Any]]) -> bool:
     return bool(medications) and all(
         all(any(_clean(item.get(key)) for key in group) for group in _DISCHARGE_MEDICATION_REQUIRED_GROUPS)
@@ -3972,6 +3995,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
                 required_groups = _DISCHARGE_MEDICATION_REQUIRED_GROUPS
+                medications = _with_dosage_form_oral_route(medications)
                 complete = _discharge_medications_complete(medications)
                 final_state = "compliant" if complete else "non_compliant"
                 reason_code = (

@@ -22,9 +22,11 @@ _017_THRESHOLD_EXCEEDED_KIND = "copy_similarity_threshold_exceeded"
 _017_WITHIN_THRESHOLD_KIND = "copy_similarity_within_threshold"
 _017_SEMANTIC_REVIEW_PASSED_KIND = "copy_semantic_review_passed"
 _017_TEMPLATE_SHELL_ONLY_KIND = "copy_template_shell_only"
+_017_DUPLICATE_SAVE_SUSPECTED_KIND = "copy_duplicate_save_suspected"
 _017_HIGH_SIMILARITY_PASS_KINDS = frozenset({
     _017_SEMANTIC_REVIEW_PASSED_KIND,
     _017_TEMPLATE_SHELL_ONLY_KIND,
+    _017_DUPLICATE_SAVE_SUSPECTED_KIND,
 })
 _DATETIME = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")

@@ -1119,6 +1119,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "现有出院诊断未表明本次属于需要核对后续肿瘤治疗计划的病例。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-04-01-01", "eligibility_not_met"): (
+        "本次实施的为内镜操作，按院方口径不要求术前小结",
+        "纤维支气管镜下活检、内镜下息肉切除等自然腔道内镜操作不属于需书写术前小结的手术。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-04-01-01", "performed_event_absent"): (
         "本次未实施手术，不要求形成术前小结",
         "已核对手术主表、手术医嘱和手术记录，未发现已实施手术事件。",
@@ -1516,7 +1521,7 @@ def _017_high_similarity_compliant_finding(
     """渲染017中超过候选阈值但已通过语义或模板壳核对的结果。"""
 
     kind = facts.get("failure_kind")
-    if kind not in {"copy_semantic_review_passed", "copy_template_shell_only"}:
+    if kind not in {"copy_semantic_review_passed", "copy_template_shell_only", "copy_duplicate_save_suspected"}:
         return ""
     source_types = facts.get("copy_document_sources")
     record_times = facts.get("copy_document_record_times")
@@ -1545,6 +1550,13 @@ def _017_high_similarity_compliant_finding(
     }
     similarity_percent = f"{round(float(similarity) * 100, 2):g}%"
     threshold_percent = f"{round(float(threshold) * 100, 2):g}%"
+    if kind == "copy_duplicate_save_suspected":
+        return (
+            f"疑点：{source_labels[source_types[0]]}（{record_times[0]}）与"
+            f"{source_labels[source_types[1]]}（{record_times[1]}）同日相隔不足 30 分钟，"
+            f"全文相似度 {similarity_percent}，疑似同一记录重复保存，未按复制病历判定；"
+            "请核实是否存在重复文书。"
+        )
     review_statement = (
         "经语义复核确认属于模板或必要重复，未认定为实质复制。"
         if kind == "copy_semantic_review_passed"
@@ -1854,6 +1866,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-01-01-01",
         "LX0609-01-02-01",
         "LX0609-02-01-04",
+        "LX0609-04-01-02",
         "LX0609-04-02-01",
         "LX0609-09-01-01",
         "LX0609-02-01-01",
@@ -2005,6 +2018,13 @@ def customer_finding_from_controlled_facts(
                 f"{facts.get('gap_end_date')} 连续 {gap_days} 天无病程记录，"
                 f"超过病重患者每 {threshold_days} 天至少记录一次的要求。"
             )
+
+    if rule_id == "LX0609-04-01-02" and facts.get("emergency_rescue_exception_absent") is True:
+        # 院方口径（2026-10-10）：文书未写急诊即视为非急诊手术。
+        if kind == "preop_discussion_missing":
+            return "已确认实施手术，文书未记载为紧急抢救手术，但未找到术前讨论记录。"
+        if kind == "surgeon_not_in_preop_discussion":
+            return "已确认实施手术并找到术前讨论记录，文书未记载为紧急抢救手术，但术者未在讨论参加人员中。"
 
     if rule_id == "LX0609-04-02-01" and kind in {"surgery_record_late", "surgery_record_within_threshold"}:
         end_time = facts.get("surgery_end_time")
@@ -2276,7 +2296,7 @@ def customer_finding_from_controlled_facts(
         return ""
 
     if rule_id == "LX0609-12-01-02":
-        if kind in {"copy_semantic_review_passed", "copy_template_shell_only"}:
+        if kind in {"copy_semantic_review_passed", "copy_template_shell_only", "copy_duplicate_save_suspected"}:
             return _017_high_similarity_compliant_finding(facts)
         if kind != "copy_similarity_threshold_exceeded":
             return ""

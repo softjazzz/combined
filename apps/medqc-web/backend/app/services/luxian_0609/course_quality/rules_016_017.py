@@ -52,6 +52,10 @@ _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
 _COPY_SEMANTIC_REVIEW_PASSED_REASON = "copy_semantic_review_passed"
 _COPY_TEMPLATE_SHELL_ONLY_REASON = "copy_template_shell_only"
+# 院方口径（2026-10-10）：同类病程同日数分钟内几乎相同，更像同一记录重复保存，
+# 不算复制病历，但须向客户提出疑点。
+_COPY_DUPLICATE_SAVE_SUSPECTED_REASON = "copy_duplicate_save_suspected"
+_COPY_DUPLICATE_SAVE_MAX_SECONDS = 30 * 60
 _COPY_FAST_SHINGLE_CHARS = 5
 _COPY_PRECISE_CANDIDATE_LIMIT = 20
 _COPY_DISPLAY_PAIR_LIMIT = 4
@@ -543,10 +547,54 @@ def _assess_copy(
         }
     )
     assert best_pair is not None
-    left_material = _material_for_copy_coverage(best_pair[0][2])
-    right_material = _material_for_copy_coverage(best_pair[1][2])
+
+    def duplicate_save(left: Any, right: Any) -> bool:
+        return (
+            left[1] == right[1]
+            and left[0].date() == right[0].date()
+            and abs((left[0] - right[0]).total_seconds()) <= _COPY_DUPLICATE_SAVE_MAX_SECONDS
+        )
+
+    duplicate_pairs = [
+        (similarity, left, right)
+        for similarity, left, right in precise_pairs
+        if similarity >= _COPY_SIMILARITY_THRESHOLD and duplicate_save(left, right)
+    ]
+    precise_pairs = [
+        item for item in precise_pairs
+        if not (item[0] >= _COPY_SIMILARITY_THRESHOLD and duplicate_save(item[1], item[2]))
+    ]
+    if duplicate_pairs and not any(
+        similarity >= _COPY_SIMILARITY_THRESHOLD for similarity, _left, _right in precise_pairs
+    ) and not missing_time_count:
+        similarity, left, right = max(duplicate_pairs, key=lambda item: item[0])
+        safe_metadata.update({
+            "maximum_similarity": round(similarity, 4),
+            "best_match_source_types": [left[1], right[1]],
+            "best_match_record_times": [
+                left[0].strftime("%Y-%m-%d %H:%M:%S"),
+                right[0].strftime("%Y-%m-%d %H:%M:%S"),
+            ],
+            "best_match_pairs": [],
+        })
+        return _CopyRuleOutcome(
+            status="compliant",
+            reason_code=_COPY_DUPLICATE_SAVE_SUSPECTED_REASON,
+            executor_type="program",
+            safe_metadata=safe_metadata,
+        )
+    if duplicate_pairs and best_pair is not None and duplicate_save(best_pair[0], best_pair[1]):
+        # 最高相似对为疑似重复保存时，不能据其走“全文完全相同即复制”的程序分支。
+        best_pair = None
+    left_material = (
+        _material_for_copy_coverage(best_pair[0][2]) if best_pair is not None else ""
+    )
+    right_material = (
+        _material_for_copy_coverage(best_pair[1][2]) if best_pair is not None else None
+    )
     if (
-        maximum == 1.0
+        best_pair is not None
+        and maximum == 1.0
         and not (best_pair[0][3] and best_pair[1][3])
         and len(left_material) >= _MIN_COMPARABLE_CHARS
         and left_material == right_material
@@ -954,6 +1002,10 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
         if float(maximum) < float(threshold):
             return None
         failure_kind = _COPY_TEMPLATE_SHELL_ONLY_REASON
+    elif outcome.reason_code == _COPY_DUPLICATE_SAVE_SUSPECTED_REASON:
+        if float(maximum) < float(threshold):
+            return None
+        failure_kind = _COPY_DUPLICATE_SAVE_SUSPECTED_REASON
     elif outcome.reason_code == "copy_similarity_within_threshold":
         if float(maximum) >= float(threshold):
             return None
@@ -1147,6 +1199,7 @@ def _rule_017_decision(
                 in {
                     _COPY_SEMANTIC_REVIEW_PASSED_REASON,
                     _COPY_TEMPLATE_SHELL_ONLY_REASON,
+                    _COPY_DUPLICATE_SAVE_SUSPECTED_REASON,
                 }
                 else "requirement_within_threshold"
             ),

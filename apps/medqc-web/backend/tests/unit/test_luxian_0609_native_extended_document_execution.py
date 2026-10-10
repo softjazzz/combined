@@ -10664,3 +10664,33 @@ async def test_064_missing_surgery_begin_time_cannot_verify_preoperative_round()
     _result, reduced = await _evaluate("LX0609-04-05-01", _064_rows(begin=None, rounds=("2026-07-07 19:30:00",)))
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "required_field_missing"
+
+
+@pytest.mark.parametrize(("drug_name", "inferred"), [
+    ("阿司匹林肠溶片", True),
+    ("大活络胶囊", True),
+    ("复方福尔可定糖浆", True),
+    ("依达拉奉舌下片", False),
+    ("西地碘含片", False),
+    ("注射用头孢曲松钠", False),
+])
+def test_062_route_inferred_as_oral_only_for_oral_dosage_forms(drug_name, inferred) -> None:
+    """院方口径（2026-10-10）：片剂、胶囊、糖浆未写途径按剂型默认口服。"""
+    from app.services.luxian_0609.native_extended_document_execution import (
+        _discharge_medications_complete,
+        _with_dosage_form_oral_route,
+    )
+
+    medications = _with_dosage_form_oral_route(
+        [{"drug_name": drug_name, "dose": "每次1片", "duration": "每日1次"}]
+    )
+    assert _discharge_medications_complete(medications) is inferred
+
+
+def test_062_written_route_is_never_overridden_by_dosage_form() -> None:
+    from app.services.luxian_0609.native_extended_document_execution import _with_dosage_form_oral_route
+
+    medications = _with_dosage_form_oral_route(
+        [{"drug_name": "依达拉奉舌下片", "dose": "每次1片", "route": "舌下含服", "duration": "每日2次"}]
+    )
+    assert medications[0]["route"] == "舌下含服"

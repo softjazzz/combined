@@ -3220,3 +3220,20 @@ def test_008_severity_course_gap_renders_specific_finding() -> None:
         "病重期间（2025-07-09 起）2025-07-11 至 2025-07-15 连续 4 天无病程记录，"
         "超过病重患者每 2 天至少记录一次的要求。"
     )
+
+
+@pytest.mark.parametrize(("facts", "expected"), [
+    (
+        {"failure_kind": "preop_discussion_missing", "performed_surgery_confirmed": True,
+         "emergency_rescue_exception_absent": True, "checked_sources": ["presurg_discussion"]},
+        "已确认实施手术，文书未记载为紧急抢救手术，但未找到术前讨论记录。",
+    ),
+    (
+        {"failure_kind": "surgeon_not_in_preop_discussion", "performed_surgery_confirmed": True,
+         "emergency_rescue_exception_absent": True, "discussion_state": "present",
+         "surgeon_participation_state": "absent"},
+        "已确认实施手术并找到术前讨论记录，文书未记载为紧急抢救手术，但术者未在讨论参加人员中。",
+    ),
+])
+def test_039_defects_render_specific_findings(facts, expected) -> None:
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-04-01-02", facts=facts) == expected

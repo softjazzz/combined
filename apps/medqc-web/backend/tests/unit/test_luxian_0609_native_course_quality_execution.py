@@ -7399,3 +7399,64 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
     assert result.llm_call_count == 1
+
+
+_017_SPECIFIC_REPEAT = (
+    "患者病情稳定，生命体征平稳，查体无明显异常，"
+    "CT提示右下肺炎，诊断社区获得性肺炎，继续头孢曲松静滴治疗。"
+)
+
+
+def test_017_same_day_minutes_apart_repeat_is_duplicate_save_suspicion_not_copy():
+    """院方口径（2026-10-10）：同类病程同日数分钟内几乎相同不算复制，但提出疑点。"""
+    from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
+
+    result = course._copy_result(
+        {
+            "senior_course_record": [
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:20:38"),
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:26:51"),
+            ]
+        },
+        source_complete=True,
+    )
+
+    assert result["status"] == "compliant"
+    assert result["metadata"]["reason_code"] == "copy_duplicate_save_suspected"
+    from app.services.luxian_0609.course_quality_result_mapping import (
+        safe_course_quality_customer_display_facts,
+    )
+    from app.services.luxian_0609.course_quality.rules_016_017 import (
+        _assess_copy,
+        _copy_customer_display_facts,
+    )
+
+    raw_facts = _copy_customer_display_facts(_assess_copy(
+        {
+            "senior_course_record": [
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:20:38"),
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:26:51"),
+            ]
+        },
+        source_complete=True,
+    ))
+    facts = safe_course_quality_customer_display_facts(rule_id="LX0609-12-01-02", raw=raw_facts)
+    assert facts is not None and facts["failure_kind"] == "copy_duplicate_save_suspected"
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-12-01-02", facts=facts)
+    assert finding.startswith("疑点：")
+    assert "疑似同一记录重复保存" in finding
+
+
+@pytest.mark.parametrize("second_time", ["2026-06-01 12:30:00", "2026-06-02 10:20:38"])
+def test_017_repeat_beyond_duplicate_window_remains_copy(second_time):
+    result = course._copy_result(
+        {
+            "senior_course_record": [
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:20:38"),
+                _row(_017_SPECIFIC_REPEAT, second_time),
+            ]
+        },
+        source_complete=True,
+    )
+
+    assert result["status"] == "non_compliant"

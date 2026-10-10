@@ -487,7 +487,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 ("material", "surgery_record", "surgery-2"),
             ),
             {("surgery_record", "surgery-1"), ("surgery_record", "surgery-2")},
-            "发现质控问题",
+            "已确认实施手术，文书未记载为紧急抢救手术，但未找到术前讨论记录。",
         ),
     ),
 )
