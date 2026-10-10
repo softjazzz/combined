@@ -4,6 +4,8 @@ from datetime import datetime
 import json
 
 import pytest
+from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
+from app.services.luxian_0609.postoperative_result_mapping import safe_postoperative_customer_display_facts
 
 from luxian_0609_diagnosis_equivalence_test_client import DiagnosisEquivalenceClient
 from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
@@ -4351,8 +4353,9 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
 
 
 @pytest.mark.asyncio
-async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_missing() -> None:
-    _snapshot, _materials, _result, reduced = await _evaluate_selected(
+async def test_064_065_use_begin_time_not_record_time_when_surgery_end_time_is_missing() -> None:
+    """院方口径（2026-10-10）：缺结束时间按同行实际开始时间推算，仍不得用文书时间。"""
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01", "LX0609-04-05-02"),
         {
             "surgery_record": ({
@@ -4373,14 +4376,73 @@ async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_mi
         },
     )
 
-    assert [item.final_state for item in reduced] == [
-        CustomerFinalState.DATA_GAP,
-        CustomerFinalState.DATA_GAP,
-    ]
-    assert [item.reason_code for item in reduced] == [
-        "authoritative_time_missing",
-        "authoritative_time_missing",
-    ]
+    assert all(item.reason_code != "authoritative_time_missing" for item in reduced)
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert facts["surgery_time"] == "2026-07-07 16:30:00"
+    assert facts["surgery_time_basis"] == "begin_time"
+    safe = safe_postoperative_customer_display_facts(rule_id="LX0609-04-05-01", raw=facts)
+    assert safe is not None and safe["surgery_time_basis"] == "begin_time"
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-04-05-01", facts=safe)
+    assert finding.endswith("术后时间按手术开始时间推算。")
+
+
+def _064_begin_time_rows(*, mr_rows, course_dates):
+    return {
+        "surgery_record": ({
+            "document_id": "E1",
+            "surgery_code": "01.2400X013",
+            "surgery_begin_time": "2026-07-07 16:30:00+08",
+            "record_time": "2026-07-07 21:00:00+08",
+        },),
+        "mr_surgery": mr_rows,
+        "daily_course_record": tuple(
+            {"record_time": f"{value} 08:00:00", "author_name": "韩平", "record_content": "术后查看患者。"}
+            for value in course_dates
+        ),
+    }
+
+
+@pytest.mark.asyncio
+async def test_064_surgeon_falls_back_to_unique_mr_surgery_with_same_begin_time() -> None:
+    """运行文书优先、病案首页回退：手术记录无术者时取同一开始时间首页手术的术者。"""
+    _s, _m, result, _reduced = await _evaluate_selected(
+        ("LX0609-04-05-01",),
+        _064_begin_time_rows(
+            # 首页手术时间只到日、同台手术拆两行术式且术者一致。
+            mr_rows=(
+                {"surgery_code": "01.2400X013", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "韩平"},
+                {"surgery_code": "01.2400X014", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "韩平"},
+            ),
+            course_dates=("2026-07-08", "2026-07-09", "2026-07-10"),
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert facts["surgery_events"][0]["surgeon_names"] == ["韩平"]
+
+
+@pytest.mark.asyncio
+async def test_064_surgeon_fallback_refuses_conflicting_same_day_mr_surgeons() -> None:
+    _s, _m, result, _reduced = await _evaluate_selected(
+        ("LX0609-04-05-01",),
+        _064_begin_time_rows(
+            mr_rows=(
+                {"surgery_code": "01.2400X013", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "韩平"},
+                {"surgery_code": "01.2400X014", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "李明"},
+            ),
+            course_dates=("2026-07-08", "2026-07-09", "2026-07-10"),
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert facts["surgery_events"][0]["surgeon_names"] == []
+
+
+@pytest.mark.asyncio
+async def test_064_definite_missing_postop_day_is_defect_even_without_surgeon() -> None:
+    _s, _m, _result, reduced = await _evaluate_selected(
+        ("LX0609-04-05-01",),
+        _064_begin_time_rows(mr_rows=(), course_dates=("2026-07-08", "2026-07-10")),
+    )
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
 
 
 @pytest.mark.asyncio

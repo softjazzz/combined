@@ -295,6 +295,13 @@ def safe_postoperative_customer_display_facts(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if not isinstance(raw, Mapping) or normalized_rule_id not in _POSTOPERATIVE_KINDS_BY_RULE:
         return None
+    if "surgery_time_basis" in raw:
+        # 院方口径（2026-10-10）：缺结束时间时按开始时间推算，仅允许这一种标记。
+        if raw["surgery_time_basis"] != "begin_time":
+            return None
+        rest = {key: value for key, value in raw.items() if key != "surgery_time_basis"}
+        safe = safe_postoperative_customer_display_facts(rule_id=rule_id, raw=rest)
+        return None if safe is None else {**safe, "surgery_time_basis": "begin_time"}
     kind = raw.get("verification_kind")
     if kind not in _POSTOPERATIVE_KINDS_BY_RULE[normalized_rule_id]:
         return None

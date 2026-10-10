@@ -1810,6 +1810,19 @@ def customer_finding_from_controlled_facts(
 ) -> str:
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
+    if (
+        rule_id in {"LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"}
+        and isinstance(facts, Mapping)
+        and facts.get("surgery_time_basis") == "begin_time"
+    ):
+        finding = customer_finding_from_controlled_facts(
+            rule_id=rule_id,
+            facts={key: value for key, value in facts.items() if key != "surgery_time_basis"},
+            status=status,
+        )
+        note = "源库未提供手术结束时间，术后时间按手术开始时间推算。"
+        return f"{finding}{note}" if finding else note
+
     if rule_id == "LX0609-08-01-05" and isinstance(facts, Mapping):
         if facts.get("verification_kind") == "discharge_course_pending":
             if facts.get("state") == "not_applicable":

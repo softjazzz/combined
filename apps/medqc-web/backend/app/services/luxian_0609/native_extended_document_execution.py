@@ -1807,6 +1807,8 @@ class _PostoperativeSurgeryEvent:
     surgeon_names: tuple[str, ...]
     surgeon_tokens: frozenset[str]
     surgery_begin_time: datetime | None = None
+    # 院方口径（2026-10-10）：源库缺实际结束时间时以开始时间推算术后起点。
+    surgery_time_estimated: bool = False
 
 
 # 064 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
@@ -1956,8 +1958,27 @@ def _postoperative_surgery_events(
     )
     source_key = "surgery_record" if qualified_record_rows else "mr_surgery"
     source_rows = qualified_record_rows if qualified_record_rows else _qualified_mr_rows
-    return tuple(
-        _PostoperativeSurgeryEvent(
+    events = []
+    for index, row in enumerate(source_rows, start=1):
+        end_time = _actual_surgery_end_time(source_key=source_key, row=row)
+        begin_time = _actual_surgery_begin_time(source_key=source_key, row=row)
+        surgeon_row = row
+        if source_key == "surgery_record" and not _surgery_event_surgeon_names(row) and begin_time is not None:
+            # 运行文书优先、病案首页回退：手术记录无术者时取首页同一手术日的术者。
+            # 0910 真实源库首页手术时间只精确到日，且一台手术常拆为多行术式；仅当
+            # 同日首页各行术者完全一致时采用，术者不一致或无同日记录保持缺失。
+            same_day = [
+                candidate
+                for candidate in _qualified_mr_rows
+                if (candidate_time := _actual_surgery_begin_time(source_key="mr_surgery", row=candidate)) is not None
+                and candidate_time.date() == begin_time.date()
+            ]
+            surgeon_sets = {_surgery_event_surgeon_names(candidate) for candidate in same_day}
+            if len(surgeon_sets) == 1 and next(iter(surgeon_sets)):
+                surgeon_row = same_day[0]
+        # 院方口径（2026-10-10）：0910 真实源库手术记录与病案首页均无结束时间，
+        # 缺结束时间时以同一行实际开始时间推算术后起点，并在客户结论中注明。
+        events.append(_PostoperativeSurgeryEvent(
             source_key=source_key,
             row=row,
             document_id=_clean(row.get("document_id") or row.get("id")) or f"{source_key}:{index}",
@@ -1966,13 +1987,13 @@ def _postoperative_surgery_events(
                 or row.get("operation_name")
                 or row.get("procedure_name")
             ),
-            surgery_end_time=_actual_surgery_end_time(source_key=source_key, row=row),
-            surgeon_names=_surgery_event_surgeon_names(row),
-            surgeon_tokens=_surgery_event_surgeon_tokens(row),
-            surgery_begin_time=_actual_surgery_begin_time(source_key=source_key, row=row),
-        )
-        for index, row in enumerate(source_rows, start=1)
-    )
+            surgery_end_time=end_time if end_time is not None else begin_time,
+            surgeon_names=_surgery_event_surgeon_names(surgeon_row),
+            surgeon_tokens=_surgery_event_surgeon_tokens(surgeon_row),
+            surgery_begin_time=begin_time,
+            surgery_time_estimated=end_time is None and begin_time is not None,
+        ))
+    return tuple(events)
 
 
 def _postoperative_document_refs(
@@ -2244,6 +2265,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     diagnosis_scope_extraction = None
     diagnosis_equivalence_extraction = None
     transfusion_performance_extraction = None
+    postoperative_time_estimated_rules: set[str] = set()
     selected = tuple(
         rule_id
         for rule_id in EXTENDED_DOCUMENT_RULE_IDS
@@ -4008,6 +4030,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                     mr_surgery_rows=mr_surgery_rows,
                     surgery_record_rows=surgery_record_rows,
                 )
+                if any(event.surgery_time_estimated for event in surgery_events):
+                    postoperative_time_estimated_rules.add(rule_id)
                 linkage_error = postop_first_error
                 if not linkage_error:
                     linked_events, linkage_error = _link_postoperative_first_course_records(
@@ -4112,6 +4136,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 mr_surgery_rows=mr_surgery_rows,
                 surgery_record_rows=surgery_record_rows,
             )
+            if any(event.surgery_time_estimated for event in surgery_events):
+                postoperative_time_estimated_rules.add(rule_id)
             selected_postoperative_rows: list[Mapping[str, Any]] = []
             if (
                 gate_outcome == ("not_applicable", "performed_event_absent")
@@ -4364,6 +4390,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     event_facts = []
                     unmet_events = []
                     missing_surgeon_events = []
+                    definite_missing_events: list[str] = []
                     empty_body_events = []
                     unresolved_time_events = []
                     undated_course_rows = tuple(
@@ -4497,13 +4524,22 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 event_facts[-1]["course_time_unresolved"] = True
                                 selected_postoperative_rows.extend(undated_course_rows)
                             else:
+                                # 空正文日仅为未决，不算确定缺失日。
+                                if set(missing_dates).difference(
+                                    item.isoformat() for item in unresolved_empty_body_dates
+                                ):
+                                    definite_missing_events.append(event.document_id)
                                 unmet_events.append({
                                     "document_id": event.document_id,
                                     "missing_postop_dates": missing_dates,
                                     "surgeon_round_present": surgeon_round,
                                     "preop_surgeon_round_present": preop_surgeon_round,
                                 })
-                    if missing_surgeon_events or empty_body_events or unresolved_time_events:
+                    if definite_missing_events:
+                        # 已确定某个术后日完全没有病程记录，属确定缺陷，不被术者身份等
+                        # 其他资料缺口遮蔽。
+                        final_state, reason_code = "non_compliant", "requirement_violated"
+                    elif missing_surgeon_events or empty_body_events or unresolved_time_events:
                         final_state, reason_code = (
                             "data_gap",
                             "required_field_missing",
@@ -5544,6 +5580,13 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
         )
 
+    if postoperative_time_estimated_rules:
+        display = [
+            (rule_id, {**facts, "surgery_time_basis": "begin_time"})
+            if rule_id in postoperative_time_estimated_rules and isinstance(facts, Mapping)
+            else (rule_id, facts)
+            for rule_id, facts in display
+        ]
     return NativeExtendedDocumentExecutionResult(
         results=(),
         planned_rule_ids=selected,
