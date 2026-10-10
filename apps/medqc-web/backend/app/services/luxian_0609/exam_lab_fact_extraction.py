@@ -16,6 +16,8 @@ from typing import Any, Callable, Mapping, Sequence
 from .evidence_material import build_material_document_refs
 from .source_evidence_reader import canonical_source_evidence
 from .imaging_report_scope import is_guidance_only_imaging_rows
+from .exam_order_linkage import resolve_exam_master_order_ids
+from .basic_timeliness_facts import AdmissionAnchorState, extract_admission_anchor
 from .exam_lab_course_time import (
     course_restates_event_result,
     is_time_conflict_candidate,
@@ -103,6 +105,10 @@ class ExamLabSingleEvent:
     result_texts: tuple[str, ...] = ()
     # 仅含 CT 引导操作标签，不代表影像阴性；010仍可适用。
     guidance_only: bool = False
+    # 检查主记录经 order_id/exam_id 显式关联的 CT/MRI 医嘱最早开立时间（仅 010 锚点）。
+    order_time: datetime | None = None
+    # 关联医嘱在入院 24 小时内开立（010 豁免：首次病程往往尚未书写）。
+    within_admission_window: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -209,13 +215,14 @@ def _course_refs_for_rule_event(
     )
     event = events[event_position - 1]
     if rule_id == "LX0609-06-01-02":
-        if event.exam_time is None:
+        window = exam_reason_window(event)
+        if window is None:
             return ()
         return tuple(
             ref
             for ref in refs
             if (course_time := projection.course_times.get(ref)) is not None
-            and event.exam_time - timedelta(hours=48) <= course_time <= event.exam_time
+            and window[0] <= course_time <= window[1]
         )
 
     # 010为了判断检查原因会读取检查前48小时全部病程；其他规则继续沿用原有
@@ -506,6 +513,57 @@ def _material_document_refs_by_row(
     return resolved
 
 
+_EXAM_ORDER_SOURCE_KEY = "inpat_nondrug_order.exam_lab_order"
+
+
+def exam_reason_anchor_time(event: "ExamLabSingleEvent") -> datetime | None:
+    """010 检查前病程窗口的起算锚点：医嘱开立时间优先，其次检查时间、报告时间。"""
+
+    return event.order_time or event.exam_time or event.report_time
+
+
+def exam_reason_window(event: "ExamLabSingleEvent") -> tuple[datetime, datetime] | None:
+    """010 检查前病程窗口。
+
+    院方口径（2026-10-10）：以关联 CT/MRI 医嘱开立时间为锚点，取开立前 48 小时起；
+    检查发生在开立与报告之间，源库检查主记录普遍不回传检查时间，故窗口截至报告
+    时间。来源提供检查时间时截至检查时间；无关联医嘱时以检查/报告时间为锚点。
+    """
+
+    anchor = exam_reason_anchor_time(event)
+    if anchor is None:
+        return None
+    if event.exam_time is not None:
+        end = event.exam_time
+    elif event.order_time is not None and event.report_time is not None:
+        end = max(event.report_time, event.order_time)
+    else:
+        end = anchor
+    return anchor - timedelta(hours=48), end
+
+
+def _linked_exam_order_time(
+    rows: Sequence[Mapping[str, Any]],
+    order_rows: Sequence[Mapping[str, Any]],
+) -> datetime | None:
+    known = tuple(_clean(row.get("order_id")) for row in order_rows if _clean(row.get("order_id")))
+    linked = {
+        order_id
+        for row in rows
+        for order_id in resolve_exam_master_order_ids(row, known_order_ids=known)
+    }
+    times = [
+        parsed
+        for row in order_rows
+        if _clean(row.get("order_id")) in linked
+        and (parsed := _parse_datetime(
+            row.get("prescribed_datetime") or row.get("order_time") or row.get("start_time")
+        )) is not None
+    ]
+    # 合并检查可覆盖多条医嘱；检查原因须在最早一条医嘱开立前已记录。
+    return min(times) if times else None
+
+
 def _unique_role_time(
     rows: Sequence[Mapping[str, Any]], fields: Sequence[str]
 ) -> tuple[datetime | None, bool]:
@@ -587,6 +645,17 @@ def build_exam_lab_text_projection(
     ] = {}
     course_entries: list[tuple[int, str, int, Mapping[str, Any], str]] = []
     material_document_refs = _material_document_refs_by_row(rows_by_source)
+    admission_anchor = extract_admission_anchor(
+        registration_rows=tuple(rows_by_source.get("inpat_registration", ())),
+        admission_rows=tuple(rows_by_source.get("admission_record", ())),
+        discharge_rows=(),
+        allow_date_fallback=False,
+    )
+    admission_time = (
+        admission_anchor.anchor_time
+        if admission_anchor.state is AdmissionAnchorState.EXACT
+        else None
+    )
 
     for source_position, source_key in enumerate(source_order, start=1):
         rows = tuple(rows_by_source.get(source_key, ()))
@@ -668,6 +737,17 @@ def build_exam_lab_text_projection(
         )
         if conflict:
             conflicts.add("report_time")
+        order_time = (
+            _linked_exam_order_time(
+                rows,
+                tuple(
+                    row for row in rows_by_source.get(_EXAM_ORDER_SOURCE_KEY, ())
+                    if isinstance(row, Mapping)
+                ),
+            )
+            if family == "exam"
+            else None
+        )
         material = " ".join(_row_text(row) for row in rows)
         identity_text = " ".join(
             dict.fromkeys(
@@ -824,6 +904,13 @@ def build_exam_lab_text_projection(
             document_refs=tuple(row_refs),
             exam_time=exam_time,
             report_time=report_time,
+            order_time=order_time,
+            # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免。
+            within_admission_window=(
+                admission_time is not None
+                and order_time is not None
+                and order_time <= admission_time + timedelta(hours=24)
+            ),
             conflict_roles=frozenset(conflicts),
             positive_hint=positive_hint,
             target_confirmed=target_confirmed,
@@ -982,6 +1069,14 @@ def build_exam_lab_text_projection(
     for family, events in (("exam", imaging_events), ("culture", culture_events)):
         for event_position, event in enumerate(events, start=1):
             keys: set[tuple[int, str, int]] = set()
+            reason_window = exam_reason_window(event) if family == "exam" else None
+            if reason_window is not None:
+                # 010 窗口内全部病程（医嘱开立前 48 小时至报告时间）。
+                keys.update(
+                    (item[0], item[1], item[2])
+                    for item in parsed_course_entries
+                    if reason_window[0] <= item[5] <= reason_window[1]
+                )
             if event.exam_time is not None:
                 all_before_exam = tuple(
                     item
@@ -1056,7 +1151,7 @@ def build_exam_lab_text_projection(
         anchors = tuple(
             value
             for event in (*imaging_events, *culture_events)
-            for value in (event.exam_time, event.report_time)
+            for value in (event.exam_time, event.report_time, event.order_time)
             if value is not None
         )
         entry_by_key = {

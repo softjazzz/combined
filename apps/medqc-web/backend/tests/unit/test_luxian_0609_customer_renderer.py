@@ -389,6 +389,47 @@ def test_001_blank_or_placeholder_admission_record_renders_specific_customer_cop
     assert finding == "已检到入院记录，但未发现可核验的有效文书内容。"
 
 
+def _merged_exam_association_facts() -> dict:
+    # 0910 真实样本形态：合并检查一条主记录覆盖多条医嘱，7 条医嘱全部唯一关联到
+    # 5 条主记录，另有主记录找不到对应医嘱。
+    return {
+        "failure_kind": "exam_order_exam_association_failed",
+        "subject": "ct_mri",
+        "checked_sources": ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"],
+        "requirement": "order_course_report_consistency",
+        "requirement_met": False,
+        "order_count": 7,
+        "exam_master_count": 5,
+        "uniquely_linked_order_count": 7,
+        "unmatched_or_ambiguous_order_count": 0,
+        "association_issue_kind": "exam_master_without_order",
+    }
+
+
+def test_010_merged_exam_association_facts_pass_contract_and_render() -> None:
+    from app.services.luxian_0609.exam_lab_result_mapping import (
+        safe_exam_lab_customer_display_facts,
+    )
+
+    facts = _merged_exam_association_facts()
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-02", raw=facts) is not None
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-06-01-02", facts=facts)
+    assert finding == (
+        "已核对7条CT/MRI医嘱与5条检查主记录；医嘱均已唯一关联，但有检查主记录未找到唯一对应医嘱，"
+        "暂无法确认属于同一次诊疗事件。"
+    )
+
+
+def test_010_association_facts_still_reject_linked_count_above_orders() -> None:
+    from app.services.luxian_0609.exam_lab_result_mapping import (
+        safe_exam_lab_customer_display_facts,
+    )
+
+    facts = {**_merged_exam_association_facts(), "uniquely_linked_order_count": 8,
+             "unmatched_or_ambiguous_order_count": -1}
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-02", raw=facts) is None
+
+
 def test_010_association_facts_render_exact_customer_counts() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-06-01-02",
@@ -1363,7 +1404,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "discharge_time": "2026-06-09 10:00:00",
                 "actual_interval_hours": -1.0,
             },
-            "出院记录时间早于权威出院时间 1小时（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。",
+            "出院记录于出院前 1小时完成（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），满足出院后 24 小时内完成的要求。",
         ),
         (
             "LX0609-04-05-03",
@@ -1411,7 +1452,7 @@ def test_061_boundary_overdue_duration_does_not_round_to_threshold() -> None:
     )
 
 
-def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
+def test_061_one_second_negative_interval_renders_completed_before_discharge() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-08-01-01",
         facts={
@@ -1424,9 +1465,9 @@ def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
     )
 
     assert finding == (
-        "出院记录时间早于权威出院时间 1秒"
+        "出院记录于出院前 1秒完成"
         "（记录时间 2026-06-09 09:59:59；出院时间 2026-06-09 10:00:00），"
-        "时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。"
+        "满足出院后 24 小时内完成的要求。"
     )
 
 

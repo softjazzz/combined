@@ -1008,6 +1008,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已核对手术主表和手术记录，未发现已实施手术事件。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-06-01-02", "eligibility_not_met"): (
+        "本次 CT/MRI 检查均在入院 24 小时内开立，按院方口径不核对检查前病程记录",
+        "入院 24 小时内首次病程常尚未书写，院方口径对此类检查豁免检查前病程核对。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-02-01-03", "eligibility_not_met"): (
         "本次存在病危或病重医嘱，不按病情稳定患者规则核对",
         "病情稳定患者 3 天查房频次规则仅适用于未下病危、病重医嘱的住院阶段。",
@@ -2272,7 +2277,7 @@ def customer_finding_from_controlled_facts(
             uniquely_linked = facts["uniquely_linked_order_count"]
             unmatched = facts["unmatched_or_ambiguous_order_count"]
             if (
-                uniquely_linked > min(order_count, master_count)
+                uniquely_linked > order_count
                 or unmatched != order_count - uniquely_linked
             ):
                 return ""
@@ -2282,10 +2287,10 @@ def customer_finding_from_controlled_facts(
                     f"其中{unmatched}条医嘱未找到唯一对应检查主记录，"
                     "暂无法确认属于同一次诊疗事件。"
                 )
-            unlinked_master_count = max(0, master_count - uniquely_linked)
+            # 合并检查下主记录与医嘱不是一一对应，不能用两数相减推出未关联主记录数。
             return (
                 f"已核对{order_count}条CT/MRI医嘱与{master_count}条检查主记录；"
-                f"其中{unlinked_master_count}条检查主记录未找到唯一对应医嘱，"
+                "医嘱均已唯一关联，但有检查主记录未找到唯一对应医嘱，"
                 "暂无法确认属于同一次诊疗事件。"
             )
         if kind == "exam_order_reason_missing":
@@ -3169,10 +3174,10 @@ def customer_finding_from_controlled_facts(
                 threshold_hours=None,
             )
             return (
-                "出院记录时间早于权威出院时间 "
-                f"{lead_duration or f'{abs(interval):g} 小时'}"
+                "出院记录于出院前 "
+                f"{lead_duration or f'{abs(interval):g} 小时'}完成"
                 f"（记录时间 {facts.get('record_time')}；出院时间 {facts.get('discharge_time')}），"
-                "时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。"
+                "满足出院后 24 小时内完成的要求。"
             )
         exact_duration = _format_exact_elapsed_duration(
             started_at=facts.get("discharge_time"),
@@ -3218,6 +3223,8 @@ def customer_finding_from_controlled_facts(
                 gaps.append(f"{label}缺少可靠排列序号")
             elif gap == "order_invalid":
                 gaps.append(f"{label}排列序号无效或重复")
+            elif gap == "equivalence_unresolved":
+                gaps.append(f"{label}中部分名称与{authority_label}是否为同一诊断尚无法可靠确认")
         return "；".join(gaps) + "，暂时无法完成诊断内容及顺序核对。"
 
     if rule_id == "LX0609-08-01-03" and kind == "discharge_diagnosis_consistency_check":
@@ -3229,7 +3236,14 @@ def customer_finding_from_controlled_facts(
         if facts.get("order_comparable") is False:
             return f"{authority_label}包含“{authority}”，{written_label}包含“{written}”，两者内容不一致；顺序尚无法核对，以上列示不代表诊断排列顺序。"
         state = "一致" if facts.get("diagnoses_consistent") is True else "不一致"
-        return f"{authority_label}为“{authority}”，{written_label}为“{written}”，两者顺序及内容{state}。"
+        pairs = facts.get("equivalent_pairs")
+        pair_note = (
+            "其中" + "、".join(f"“{pair[1]}”与“{pair[0]}”" for pair in pairs)
+            + "表述不同但为同一诊断。"
+            if isinstance(pairs, list) and pairs and all(isinstance(pair, list) and len(pair) == 2 for pair in pairs)
+            else ""
+        )
+        return f"{authority_label}为“{authority}”，{written_label}为“{written}”，两者顺序及内容{state}。{pair_note}"
 
     if rule_id == "LX0609-04-05-01" and kind == "postoperative_three_day_coverage_check":
         surgery_events = facts.get("surgery_events")

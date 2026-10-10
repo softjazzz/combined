@@ -13,6 +13,10 @@ import math
 import re
 from typing import Any
 
+from .extended_document.discharge_diagnosis_equivalence import (
+    map_equivalent_diagnoses,
+    valid_equivalent_pairs,
+)
 from .extended_document.discharge_course_content import FIELDS, SOURCES, content_state
 from .extended_document.discharge_course_stages import valid_review
 
@@ -318,7 +322,8 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
         if (set(raw) != allowed or not any(gaps)
                 or any(value is not None and (not isinstance(value, str) or value not in {
-                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown"
+                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
+                    "equivalence_unresolved",
                 }) for value in gaps)):
             return None
         return dict(raw)
@@ -331,6 +336,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "diagnoses_consistent",
             "order_comparable",
             "diagnosis_scope",
+            "equivalent_pairs",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -341,12 +347,18 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     authoritative = _safe_text_list(raw.get("authoritative_diagnoses"), minimum=1)
     written = _safe_text_list(raw.get("written_diagnoses"), minimum=1)
     order_comparable = raw.get("order_comparable", True)
+    pairs = None
+    if authoritative is not None and written is not None and "equivalent_pairs" in raw:
+        pairs = valid_equivalent_pairs(raw["equivalent_pairs"], authoritative=authoritative, written=written)
+        if pairs is None:
+            return None
+    mapped = map_equivalent_diagnoses(written or [], pairs or [])
     if (
         authoritative is None
         or written is None
-        or raw["diagnoses_consistent"] != (authoritative == written)
+        or raw["diagnoses_consistent"] != (authoritative == mapped)
         or type(order_comparable) is not bool
-        or (not order_comparable and (raw["diagnoses_consistent"] or sorted(authoritative) == sorted(written)))
+        or (not order_comparable and (raw["diagnoses_consistent"] or sorted(authoritative) == sorted(mapped)))
     ):
         return None
     return {
@@ -356,6 +368,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "diagnoses_consistent": raw["diagnoses_consistent"],
         **({"order_comparable": order_comparable} if "order_comparable" in raw else {}),
         **({"diagnosis_scope": raw["diagnosis_scope"]} if "diagnosis_scope" in raw else {}),
+        **({"equivalent_pairs": pairs} if pairs is not None else {}),
     }
 
 
@@ -635,7 +648,8 @@ def validate_published_discharge_facts(
                 return None
         if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
             gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
-            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown"}
+            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
+                       "equivalence_unresolved"}
             if (keys != {"verification_kind", "authoritative_gap", "written_gap"} | scope_keys
                     or not any(gaps)
                     or any(value is not None and (type(value) is not str or value not in allowed) for value in gaps)):
@@ -646,11 +660,19 @@ def validate_published_discharge_facts(
             comparable = raw.get("order_comparable", True)
             consistent = raw.get("diagnoses_consistent")
             base = {"verification_kind", "authoritative_diagnoses", "written_diagnoses", "diagnoses_consistent"}
-            if (keys not in (base | scope_keys, base | {"order_comparable"} | scope_keys)
+            pair_keys = {"equivalent_pairs"} if "equivalent_pairs" in raw else set()
+            pairs = (
+                valid_equivalent_pairs(raw["equivalent_pairs"], authoritative=authoritative, written=written)
+                if pair_keys and authoritative is not None and written is not None
+                else None
+            )
+            mapped = map_equivalent_diagnoses(written or [], pairs or [])
+            if (keys not in (base | scope_keys | pair_keys, base | {"order_comparable"} | scope_keys | pair_keys)
+                    or (pair_keys and pairs is None)
                     or raw.get("verification_kind") != "discharge_diagnosis_consistency_check"
                     or authoritative is None or written is None or type(consistent) is not bool
-                    or type(comparable) is not bool or consistent != (authoritative == written)
-                    or (not comparable and (consistent or sorted(authoritative) == sorted(written)))):
+                    or type(comparable) is not bool or consistent != (authoritative == mapped)
+                    or (not comparable and (consistent or sorted(authoritative) == sorted(mapped)))):
                 return None
     elif rid in {"LX0609-08-02-01", "LX0609-08-02-02"}:
         gap_kind = ("predischarge_course_time_missing" if rid == "LX0609-08-02-01"
@@ -721,7 +743,6 @@ def discharge_customer_fact_status_is_valid(
         return normalized_status == (
             "data_gap"
             if safe_facts.get("actual_interval_hours") is None
-            or safe_facts["actual_interval_hours"] < 0
             else "compliant"
             if safe_facts["actual_interval_hours"] <= 24
             else "non_compliant"

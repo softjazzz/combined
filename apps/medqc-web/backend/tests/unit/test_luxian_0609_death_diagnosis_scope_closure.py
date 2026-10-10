@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+from luxian_0609_diagnosis_equivalence_test_client import DiagnosisEquivalenceClient
+
 from app.services.luxian_0609.discharge_result_mapping import (
     discharge_customer_fact_status_is_valid,
     safe_discharge_customer_display_facts,
@@ -51,21 +53,19 @@ def sqlite_and_no_network(monkeypatch):
     event.remove(Engine, "before_cursor_execute", sqlite_only)
 
 
-class ForbiddenModel:
-    async def generate(self, *args, **kwargs):
-        raise AssertionError("063不得调用模型")
-
-
 async def evaluate(rows, *, unavailable_sources=frozenset()):
+    # 院方口径（2026-10-10）：只有逐字未匹配的剩余名称才交模型判同义；
+    # 替身默认判“无同一诊断”，调用次数须与执行结果计量一致。
+    client = DiagnosisEquivalenceClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        (RULE,), rows, unavailable_sources=unavailable_sources, llm_client=ForbiddenModel(),
+        (RULE,), rows, unavailable_sources=unavailable_sources, llm_client=client,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": RULE}], execution_results=[], reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
         audit_context={"evidence_snapshot": snapshot, "evidence_materials": materials},
     )
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert execution.llm_call_count == client.calls <= 1
     assert len(canonical) == len(reduced) == 1
     assert canonical[0]["status"] == reduced[0].final_state.value
     return snapshot, materials, execution, reduced[0], canonical[0]

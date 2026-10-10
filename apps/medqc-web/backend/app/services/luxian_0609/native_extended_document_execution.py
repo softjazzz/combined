@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -31,6 +33,11 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .extended_document.diagnosis_scope_extraction import extract_diagnosis_scope
+from .extended_document.discharge_diagnosis_equivalence import (
+    extract_discharge_diagnosis_equivalence,
+    map_equivalent_diagnoses as _map_equivalent_diagnoses,
+    split_numbered_diagnoses,
+)
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
 )
@@ -2217,6 +2224,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     antimicrobial_action_extraction = None
     antimicrobial_effect_extraction = None
     diagnosis_scope_extraction = None
+    diagnosis_equivalence_extraction = None
     transfusion_performance_extraction = None
     selected = tuple(
         rule_id
@@ -3255,6 +3263,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 consumed.extend(("discharge_record_diagnosis", row) for row in written_rows)
                 authority, authority_gap = _diagnosis_sequence(authority_rows)
                 written, written_gap = _diagnosis_sequence(written_rows)
+                authority = split_numbered_diagnoses(authority)
+                written = split_numbered_diagnoses(written)
                 names_complete = (
                     authority_gap not in {"diagnoses_missing", "name_missing"}
                     and written_gap not in {"diagnoses_missing", "name_missing"}
@@ -3273,7 +3283,39 @@ async def execute_luxian_0609_native_extended_document_rules(
                     # 顺序字段缺失不妨碍识别确定的错填或漏填：先比较名称
                     # 多重集（保留重复数量），只有内容一致时才需要可靠顺序。
                     content_consistent = sorted(authority) == sorted(written)
+                    equivalent_pairs: tuple[tuple[str, str], ...] = ()
+                    equivalence_state = "ready"
                     if not content_consistent:
+                        # 院方口径（2026-10-10）：逐字未匹配的剩余名称交模型判同义，程序裁定。
+                        authority_rest = list((Counter(authority) - Counter(written)).elements())
+                        written_rest = list((Counter(written) - Counter(authority)).elements())
+                        diagnosis_equivalence_extraction = await extract_discharge_diagnosis_equivalence(
+                            authority_rest, written_rest, llm_client,
+                        )
+                        equivalence_state = diagnosis_equivalence_extraction.state
+                        equivalent_pairs = diagnosis_equivalence_extraction.pairs
+                        content_consistent = (
+                            equivalence_state == "ready"
+                            and len(equivalent_pairs) == len(authority_rest) == len(written_rest)
+                        )
+                    mapped_written = _map_equivalent_diagnoses(written, equivalent_pairs)
+                    pair_facts = (
+                        {"equivalent_pairs": [list(pair) for pair in equivalent_pairs]}
+                        if equivalent_pairs
+                        else {}
+                    )
+                    if equivalence_state == "technical_error":
+                        final_state = "technical_error"
+                        reason_code = diagnosis_equivalence_extraction.reason_code or "model_invalid_output"
+                    elif equivalence_state == "unresolved":
+                        final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                        display.append((rule_id, {
+                            "verification_kind": "discharge_diagnosis_data_gap",
+                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
+                            "authoritative_gap": None,
+                            "written_gap": "equivalence_unresolved",
+                        }))
+                    elif not content_consistent:
                         final_state, reason_code = "non_compliant", "requirement_violated"
                         display.append((rule_id, {
                             "verification_kind": "discharge_diagnosis_consistency_check",
@@ -3282,6 +3324,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "written_diagnoses": sorted(written),
                             "diagnoses_consistent": False,
                             "order_comparable": order_comparable,
+                            **pair_facts,
                         }))
                     elif authority_gap in order_gap or written_gap in order_gap:
                         final_state, reason_code = "data_gap", "required_field_missing"
@@ -3292,7 +3335,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "written_gap": written_gap,
                         }))
                     else:
-                        complete = authority == written
+                        complete = list(authority) == mapped_written
                         final_state = "compliant" if complete else "non_compliant"
                         reason_code = (
                             "requirement_satisfied"
@@ -3306,6 +3349,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "written_diagnoses": list(written),
                             "diagnoses_consistent": complete,
                             "order_comparable": True,
+                            **pair_facts,
                         }))
 
             # 只绑定实际消费的作用域与诊断行，另一终末场景不进入事实引用。
@@ -5474,6 +5518,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
+                diagnosis_equivalence_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5490,6 +5535,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
+                diagnosis_equivalence_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5506,6 +5552,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
+                diagnosis_equivalence_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5522,6 +5569,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
+                diagnosis_equivalence_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -5538,6 +5586,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 antimicrobial_action_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
+                diagnosis_equivalence_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,

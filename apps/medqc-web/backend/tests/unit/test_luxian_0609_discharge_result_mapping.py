@@ -15,7 +15,7 @@ from app.services.luxian_0609.extended_document.discharge_documentation import e
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_executor_customer_display_facts
 
 
-@pytest.mark.parametrize("seconds,status", [(-7200, "data_gap"), (-1, "data_gap"), (0, "compliant"), (86400, "compliant"), (90000, "non_compliant")])
+@pytest.mark.parametrize("seconds,status", [(-7200, "compliant"), (-1, "compliant"), (0, "compliant"), (86400, "compliant"), (90000, "non_compliant")])
 def test_061_executor_facts_survive_final_delivery(seconds, status):
     discharge = datetime(2026, 9, 8, 12)
     outcome = evaluate_discharge_documentation_timeliness(
@@ -32,8 +32,9 @@ def test_061_executor_facts_survive_final_delivery(seconds, status):
     assert result["reason_code"] == outcome.reason_code
     assert result["customer_display_facts"] == outcome.display_facts
     if seconds < 0:
+        # 出院前完成按院方口径为合规，不能再以资料不足交付。
         assert not discharge_customer_fact_status_is_valid(
-            rule_id="LX0609-08-01-01", status="compliant", safe_facts=result["customer_display_facts"])
+            rule_id="LX0609-08-01-01", status="data_gap", safe_facts=result["customer_display_facts"])
 
 
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf"), True, "-2"])

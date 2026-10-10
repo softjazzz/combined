@@ -34,6 +34,8 @@ from .exam_lab_fact_extraction import (
     event_for_fact,
     event_result_carried_by_course,
     events_for_family,
+    exam_reason_anchor_time,
+    exam_reason_window,
     parse_exam_lab_fact_response,
     parse_exam_lab_fact_response_isolated,
 )
@@ -217,6 +219,8 @@ _HORIZON_SOURCE_KEYS = (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
 )
+# 010 入院 24 小时豁免的入院锚点：可选读取，缺失时不豁免（按常规核对，更严格）。
+_ADMISSION_ANCHOR_SOURCE_KEYS = ("inpat_registration", "admission_record")
 _EXAM_CONTROLLED_FIELDS = (
     "exam_type",
     "modality",
@@ -1406,14 +1410,23 @@ def _single_text_fact_outcome(
                 refs,
             )
 
-    role = "exam_time" if rule_id == "LX0609-06-01-02" else "report_time"
     if event is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_event_missing", refs)
-    if role in event.conflict_roles:
-        return _ExamLabOutcome(
-            rule_id, "data_gap", "multiple_event_or_time_conflict", refs
-        )
-    event_time = event.exam_time if role == "exam_time" else event.report_time
+    if rule_id == "LX0609-06-01-02" and event.within_admission_window:
+        return _ExamLabOutcome(rule_id, "not_applicable", "admission_window_exempt", refs)
+    if rule_id == "LX0609-06-01-02":
+        # 院方口径（2026-10-10）：锚点为关联医嘱开立时间，无医嘱时取报告时间。
+        if event.order_time is None and "report_time" in event.conflict_roles:
+            return _ExamLabOutcome(
+                rule_id, "data_gap", "multiple_event_or_time_conflict", refs
+            )
+        event_time = exam_reason_anchor_time(event)
+    else:
+        if "report_time" in event.conflict_roles:
+            return _ExamLabOutcome(
+                rule_id, "data_gap", "multiple_event_or_time_conflict", refs
+            )
+        event_time = event.report_time
     if event_time is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_time_missing", refs)
 
@@ -1480,9 +1493,9 @@ def _single_text_fact_outcome(
         )
     intervals = tuple(item - event_time for item in course_times if item is not None)
     if rule_id == "LX0609-06-01-02":
-        compliant = any(
-            -timedelta(hours=48) <= interval <= timedelta(0)
-            for interval in intervals
+        window = exam_reason_window(event)
+        compliant = window is not None and any(
+            window[0] <= item <= window[1] for item in course_times if item is not None
         )
         if not compliant and projection.course_projection_truncated:
             return _ExamLabOutcome(
@@ -2089,6 +2102,17 @@ async def execute_luxian_0609_native_exam_lab_rules(
             )
             if material.state in {"present", "empty"}:
                 rows_by_source[source_key] = material.rows
+        if "LX0609-06-01-02" in eligible_rule_ids:
+            for source_key in _ADMISSION_ANCHOR_SOURCE_KEYS:
+                if source_key not in observed_source_keys:
+                    continue
+                material = _typed_source(
+                    source_key=source_key,
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+                if material.state in {"present", "empty"}:
+                    rows_by_source[source_key] = material.rows
         if eligible_rule_ids:
             if "LX0609-06-01-02" in eligible_rule_ids:
                 # 医嘱—检查—报告关联先由结构化键完成；只有结构可靠时，
@@ -2226,15 +2250,30 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             "exam_lab_candidate_text_missing",
                         )
                         typed_processed.add(rule_id)
+                    elif rule_id == "LX0609-06-01-02" and events and all(
+                        event.target_confirmed and event.within_admission_window
+                        for event in events
+                    ):
+                        # 全部检查均在入院 24 小时内开立：豁免，无需模型调用。
+                        safe_refs = projection.safe_refs or {}
+                        emit_typed(
+                            rule_id,
+                            "not_applicable",
+                            "admission_window_exempt",
+                            fact_refs=tuple(dict.fromkeys(
+                                safe_refs[ref]
+                                for event in events
+                                for ref in event.document_refs
+                                if ref in safe_refs
+                            )),
+                        )
+                        typed_processed.add(rule_id)
                     elif any(
                         event.target_confirmed
                         and (
                             (
                                 rule_id == "LX0609-06-01-02"
-                                and (
-                                    "exam_time" in event.conflict_roles
-                                    or event.exam_time is None
-                                )
+                                and exam_reason_anchor_time(event) is None
                             )
                             or (
                                 rule_id != "LX0609-06-01-02"

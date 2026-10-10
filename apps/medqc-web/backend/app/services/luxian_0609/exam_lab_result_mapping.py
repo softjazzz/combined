@@ -224,8 +224,10 @@ def safe_exam_lab_customer_display_facts(
             master_count = counts["exam_master_count"]
             uniquely_linked = counts["uniquely_linked_order_count"]
             unmatched = counts["unmatched_or_ambiguous_order_count"]
+            # 合并检查的一条主记录可显式覆盖多条医嘱，唯一关联医嘱数可以超过
+            # 主记录数；只要求不超过医嘱数。
             if (
-                uniquely_linked > min(order_count, master_count)
+                uniquely_linked > order_count
                 or unmatched != order_count - uniquely_linked
             ):
                 return None
@@ -611,6 +613,8 @@ def build_exam_lab_rule_decision(
             QcDirection.UNKNOWN,
             "evaluation_window_not_mature"
             if outcome.reason_code == "evaluation_window_not_mature"
+            else "eligibility_not_met"
+            if outcome.reason_code == "admission_window_exempt"
             else "trigger_absent_complete",
         )
     elif outcome.status == "data_gap":

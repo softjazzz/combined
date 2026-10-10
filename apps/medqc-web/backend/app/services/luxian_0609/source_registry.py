@@ -367,6 +367,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "first_course_record",
         "rescue_record",
         "senior_course_record",
+        # 入院 24 小时内开立的检查豁免需要入院锚点。
+        "inpat_registration",
+        "admission_record",
     ),
     "LX0609-06-01-04": (
         "evaluation_context.horizon",

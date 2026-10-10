@@ -4,6 +4,8 @@ from datetime import datetime
 import json
 
 import pytest
+
+from luxian_0609_diagnosis_equivalence_test_client import DiagnosisEquivalenceClient
 from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
 from antimicrobial_effect_test_support import FrozenAntimicrobialEffectClient
 from diagnosis_scope_test_support import FrozenDiagnosisScopeClient
@@ -1316,7 +1318,8 @@ async def test_061_exposes_the_authoritative_discharge_time_source() -> None:
 
 
 @pytest.mark.asyncio
-async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() -> None:
+async def test_061_discharge_record_completed_before_discharge_is_compliant() -> None:
+    # 院方口径（2026-10-10）：出院前已完成同样满足出院后 24 小时内完成。
     result, reduced = await _evaluate(
         "LX0609-08-01-01",
         {
@@ -1330,8 +1333,8 @@ async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_conflict"
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
     assert result.customer_display_facts == (
         (
             "LX0609-08-01-01",
@@ -1362,7 +1365,7 @@ async def test_061_preserves_a_one_second_negative_interval_for_customer_display
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
     facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["actual_interval_hours"] == pytest.approx(-1 / 3600)
 
@@ -1546,8 +1549,8 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
     )
 
     decisions = {item.rule_id: item for item in reduced}
-    assert decisions["LX0609-08-01-01"].final_state is CustomerFinalState.DATA_GAP
-    assert decisions["LX0609-08-01-01"].reason_code == "authoritative_time_conflict"
+    assert decisions["LX0609-08-01-01"].final_state is CustomerFinalState.COMPLIANT
+    assert decisions["LX0609-08-01-01"].reason_code == "requirement_within_threshold"
     assert decisions["LX0609-08-02-01"].final_state is CustomerFinalState.COMPLIANT
     assert decisions["LX0609-08-02-02"].final_state is CustomerFinalState.COMPLIANT
     facts = dict(result.customer_display_facts)
@@ -1611,8 +1614,8 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_conflict"
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
     facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["discharge_time"] == "2026-07-03 12:00:00"
     assert facts["discharge_time_source"] == "discharge_record.discharge_time"
@@ -8449,6 +8452,7 @@ async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_ord
                 },
             ),
         },
+        llm_client=DiagnosisEquivalenceClient(),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
