@@ -3795,20 +3795,20 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
         use_execution_cache=False,
     )
 
-    # 暂停规则（含来源缺失而暂停的麻醉访视 04-04-01）不得进入任何执行批次。
-    paused = {"LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-04-01"}
+    # 暂停规则（含来源缺失而暂停的麻醉访视 04-04-01/04-04-02）不得进入任何执行批次。
+    paused = {"LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-04-01", "LX0609-04-04-02"}
     assert paused.isdisjoint(rule_id for _key, batch in calls for rule_id in batch)
     assert dispatched == []
     assert calls == [
         ("course_quality", ("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02")),
         ("surgery_gate", ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-05", "LX0609-11-01-01")),
-        ("surgery_document", ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-02", "LX0609-04-04-03", "LX0609-04-01-02")),
+        ("surgery_document", ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-03", "LX0609-04-01-02")),
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [
         item["status"] for item in result["evaluation_results"]
         if item["rule_id"] in paused
-    ] == ["not_executed"] * 3
+    ] == ["not_executed"] * 4
     anesthesia = next(
         item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-04-04-01"
     )
@@ -3818,7 +3818,7 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
     assert [
         item["status"] for item in result["evaluation_results"]
         if item["rule_id"] not in paused
-    ] == ["data_gap"] * 15
+    ] == ["data_gap"] * 14
     assert result["token_usage"]["total_tokens"] == 0
     legacy_ids = {
         raw_id

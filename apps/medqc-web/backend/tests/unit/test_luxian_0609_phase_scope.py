@@ -123,6 +123,8 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-04-02-04",
         "LX0609-05-01-01",
         "LX0609-04-04-01",
+        # 访视来源缺失，与 04-04-01 同口径暂停（2026-10-10）。
+        "LX0609-04-04-02",
         "LX0609-07-04-02",
         "LX0609-05-01-04",
         "LX0609-05-03-01",

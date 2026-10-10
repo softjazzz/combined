@@ -88,6 +88,7 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
             "LX0609-04-02-04",
             "LX0609-05-01-01",
             "LX0609-04-04-01",
+            "LX0609-04-04-02",
             "LX0609-07-04-02",
             "LX0609-05-01-04",
             "LX0609-05-03-01",
