@@ -98,6 +98,14 @@ def _performed_rows(
     return tuple(result)
 
 
+def performed_surgery_rows(
+    *, source_key: str, rows: Sequence[Mapping[str, object]]
+) -> tuple[Mapping[str, object], ...]:
+    """返回本解析器认定为已实施手术的行，供执行器定位触发文书。"""
+
+    return _performed_rows(source_key=source_key, rows=rows)
+
+
 def _is_iso_datetime(value: str) -> bool:
     try:
         datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
@@ -249,4 +257,8 @@ def resolve_surgery_applicability(
     )
 
 
-__all__ = ["SurgeryApplicability", "resolve_surgery_applicability"]
+__all__ = [
+    "SurgeryApplicability",
+    "performed_surgery_rows",
+    "resolve_surgery_applicability",
+]

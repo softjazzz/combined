@@ -4203,6 +4203,27 @@ def render_luxian_0609_customer_result(
         ):
             findings = "已开立手术医嘱，但未找到对应手术记录"
             evidence = "已核对本次住院的手术医嘱与手术记录资料，当前仅确认手术医嘱触发。"
+        elif (
+            decision.rule_id == "LX0609-04-02-02"
+            and isinstance(safe_customer_display_facts, Mapping)
+            and safe_customer_display_facts.get("surgery_trigger_kind")
+            == "performed_surgery"
+            and safe_customer_display_facts.get("performed_surgery_confirmed") is True
+        ):
+            findings = "已确认本次实施手术，但未找到对应手术记录"
+            evidence = "已核对本次住院的已实施手术信息与手术记录资料，未检索到手术记录。"
+        if (
+            decision.rule_id == "LX0609-04-03-01"
+            and isinstance(safe_customer_display_facts, Mapping)
+            and safe_customer_display_facts.get("performed_surgery_confirmed") is True
+        ):
+            failure_kind = safe_customer_display_facts.get("failure_kind")
+            if failure_kind == "surgery_document_missing":
+                findings = "已有手术记录，但未找到对应的手术安全核查表"
+                evidence = "已核对本次手术记录与手术安全核查表资料，未检索到对应的手术安全核查表。"
+            elif failure_kind == "surgery_document_blank":
+                findings = "已有手术记录，但手术安全核查表正文为空"
+                evidence = "已核对手术安全核查表，正文未填写有效核查内容。"
         if decision.rule_id == "LX0609-01-01-02":
             findings = _lx018_criterion_finding(decision.criterion_results) or findings
             evidence = "已分别核对主诉字数及主诉与入院第一诊断的诊断指向。"
