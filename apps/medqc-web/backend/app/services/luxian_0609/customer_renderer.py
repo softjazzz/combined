@@ -1173,6 +1173,16 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "局部麻醉不适用本项核对；如非局部麻醉但麻醉访视记录缺失，则由 LX0609-04-04-01 先行核对，本项仅在两类访视记录均存在时核对填写规范。",
         "如适用非局部麻醉，请先补齐麻醉访视记录，再核对记录填写是否规范。",
     ),
+    ("LX0609-04-04-01", "evaluation_window_not_mature"): (
+        "手术结束尚未满24小时，暂不判定麻醉术后访视缺失",
+        "截至本次冻结评价时点，术后24小时访视时限尚未结束。",
+        "无需提前补写；请在术后24小时内完成麻醉术后访视，时限结束后将重新评估。",
+    ),
+    ("LX0609-04-04-02", "evaluation_window_not_mature"): (
+        "手术结束尚未满24小时，暂不判定麻醉术后访视缺失",
+        "截至本次冻结评价时点，术后24小时访视时限尚未结束。",
+        "无需提前补写；请在术后24小时内完成麻醉术后访视，时限结束后将重新评估。",
+    ),
     ("LX0609-04-04-02", "performed_event_absent"): (
         "本次未实施需访视的麻醉，不启动麻醉访视填写规范核对",
         "已核对麻醉主表、麻醉方式和麻醉记录，未发现适用的麻醉事件。",
@@ -1735,7 +1745,8 @@ _ANESTHESIA_VISIT_FIELD_LABELS = {
     "anesthesia_indication": "适应证",
     "precautions": "注意事项",
     "preoperative_orders": "术前医嘱",
-    "visit_within_48h": "术后48小时内访视",
+    "preop_visit_within_24h": "术前24小时内访视",
+    "postop_visit_within_24h": "术后24小时内访视",
     "recovery_status": "恢复情况",
     "consciousness_status": "清醒情况",
     "extubation_status": "拔管情况",

@@ -396,6 +396,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "checked_sources": ["preane_surveil_record", "postane_surveil_record"],
                 "checked_fields_by_visit": {
                     "preanesthesia_visit": [
+                        "preop_visit_within_24h",
                         "general_condition",
                         "brief_history",
                         "relevant_examinations",
@@ -407,7 +408,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                         "record_time",
                     ],
                     "postanesthesia_visit": [
-                        "visit_within_48h",
+                        "postop_visit_within_24h",
                         "recovery_status",
                         "consciousness_status",
                         "extubation_status",
@@ -430,8 +431,8 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 ("preane_surveil_record", "pre-visit-1"),
             },
             (
-                "麻醉术前访视已核对：一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
-                "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后48小时内访视、恢复情况、"
+                "麻醉术前访视已核对：术前24小时内访视、一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
+                "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后24小时内访视、恢复情况、"
                 "清醒情况、拔管情况、术后医嘱、特殊情况、麻醉医师签名、记录时间。"
             ),
         ),

@@ -1531,11 +1531,13 @@ def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
     assert calls == [
         "anesthesia_record",
         "consent_form",
+        # 036/037 术后24小时访视时限需评价截止时间（由住院登记派生）。
+        "inpat_registration",
         "mr_surgery",
         "postane_surveil_record",
         "preane_surveil_record",
         "surgery_inform_consent",
-        # 037 术后48小时内访视按手术记录的结束时间核对（病案首页仅作回退）。
+        # 036/037 访视时限按手术记录起止时间核对（病案首页仅作回退）。
         "surgery_record",
     ]
     observations = {item.source_key: item for item in snapshot.observations}

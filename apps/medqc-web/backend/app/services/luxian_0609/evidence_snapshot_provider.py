@@ -347,6 +347,9 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-04-05-02",
             "LX0609-08-02-01",
             "LX0609-08-02-02",
+            # 036/037 术后24小时访视时限未到时暂不判缺失。
+            "LX0609-04-04-01",
+            "LX0609-04-04-02",
         }.intersection(selected_rule_ids)
     )
     if (

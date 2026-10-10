@@ -1652,7 +1652,7 @@ def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
             "missing_fields_by_visit": {
                 "preanesthesia_visit": ["relevant_examinations", "preoperative_orders"],
                 "postanesthesia_visit": [
-                    "visit_within_48h",
+                    "postop_visit_within_24h",
                     "special_situations",
                 ],
             },
@@ -1661,7 +1661,7 @@ def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
 
     assert finding == (
         "麻醉术前访视缺少相关检查、术前医嘱；"
-        "麻醉术后访视缺少术后48小时内访视、特殊情况。"
+        "麻醉术后访视缺少术后24小时内访视、特殊情况。"
     )
 
 
@@ -1677,6 +1677,7 @@ def test_anesthesia_visit_complete_facts_render_compliance_reason():
             ],
             "checked_fields_by_visit": {
                 "preanesthesia_visit": [
+                    "preop_visit_within_24h",
                     "general_condition",
                     "brief_history",
                     "relevant_examinations",
@@ -1688,7 +1689,7 @@ def test_anesthesia_visit_complete_facts_render_compliance_reason():
                     "record_time",
                 ],
                 "postanesthesia_visit": [
-                    "visit_within_48h",
+                    "postop_visit_within_24h",
                     "recovery_status",
                     "consciousness_status",
                     "extubation_status",
@@ -1700,8 +1701,8 @@ def test_anesthesia_visit_complete_facts_render_compliance_reason():
             },
         },
     ) == (
-        "麻醉术前访视已核对：一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
-        "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后48小时内访视、恢复情况、"
+        "麻醉术前访视已核对：术前24小时内访视、一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
+        "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后24小时内访视、恢复情况、"
         "清醒情况、拔管情况、术后医嘱、特殊情况、麻醉医师签名、记录时间。"
     )
 

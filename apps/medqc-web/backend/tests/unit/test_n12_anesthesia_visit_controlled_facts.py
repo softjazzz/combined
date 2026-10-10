@@ -153,10 +153,10 @@ async def test_trusted_structural_empty_body_does_not_need_model_or_invent_fille
     final, execution = await _run(rows, client)
     assert final["status"] == "non_compliant"
     missing = final["customer_display_facts"]["missing_fields_by_visit"]
-    # 结构化可信的签名、时间与术后48小时内访视不需送模，也不被判缺失。
+    # 结构化可信的签名、时间与术后24小时内访视不需送模，也不被判缺失。
     assert "anesthetist_signature" not in missing["preanesthesia_visit"]
     assert "record_time" not in missing["postanesthesia_visit"]
-    assert "visit_within_48h" not in missing["postanesthesia_visit"]
+    assert "postop_visit_within_24h" not in missing["postanesthesia_visit"]
     assert "general_condition" in missing["preanesthesia_visit"]
     assert execution.llm_call_count == len(client.calls) == 0
 
@@ -274,8 +274,8 @@ async def test_postanesthesia_visit_after_48_hours_is_a_missing_timeliness_item(
     client = FrozenFactClient()
     final, execution = await _run(rows, client)
     assert final["status"] == "non_compliant"
-    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"postanesthesia_visit": ["visit_within_48h"]}
-    assert "术后48小时内访视" in final["findings"]
+    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"postanesthesia_visit": ["postop_visit_within_24h"]}
+    assert "术后24小时内访视" in final["findings"]
     assert execution.llm_call_count == 1
 
 
@@ -361,3 +361,57 @@ async def test_stitched_quote_is_accepted_only_when_every_sentence_is_verbatim(q
     client.generate = generate
     final, _execution = await _run(_visits(), client)
     assert final["status"] == expected
+
+
+async def _run_visit_rule(rule_id, rows, *, as_of):
+    def reader(**kwargs):
+        key = kwargs["source_key"]
+        return SnapshotSourceRows.create(source_key=key, rows=tuple(rows.get(key, ())), truncated=False, limit_rows=50)
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=(rule_id,), institute_id="synthetic", patient_id="synthetic", visit_id="synthetic",
+        source_schema=None, created_at="2026-07-10T12:00:00", evaluation_as_of_date=as_of, row_reader=reader)
+    execution = await execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=(rule_id,), decision_rule_ids=(rule_id,), wrapper_rules=[], evidence_payload=None,
+        llm_client=FrozenFactClient(), evidence_snapshot=session.snapshot, evidence_materials=session.materials)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions, expected_rule_ids=(rule_id,), snapshot=session.snapshot,
+        evidence_materials=session.materials)
+    return finalize_luxian_0609_reduced_customer_result(
+        decision=reduced[0], raw_customer_display_facts=dict(execution.customer_display_facts).get(rule_id),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ["LX0609-04-04-01", "LX0609-04-04-02"])
+@pytest.mark.parametrize("as_of,expected", [
+    # 手术 07-01 10:00 结束；评价日期 07-01（按零点计）尚未满24小时，术后访视时限未到。
+    ("2026-07-01", ("not_applicable", "evaluation_window_not_mature")),
+    # 评价日期 07-03 已满24小时仍无术后访视：确定缺失。
+    ("2026-07-03", ("non_compliant", "required_document_missing")),
+])
+async def test_missing_postvisit_waits_for_24_hour_window(rule_id, as_of, expected):
+    rows = _visits()
+    rows["postane_surveil_record"] = []
+    final = await _run_visit_rule(rule_id, rows, as_of=as_of)
+    assert (final["status"], final["reason_code"]) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ["LX0609-04-04-01", "LX0609-04-04-02"])
+async def test_missing_previsit_is_not_deferred_by_postoperative_window(rule_id):
+    rows = _visits()
+    rows["preane_surveil_record"] = []
+    rows["postane_surveil_record"] = []
+    final = await _run_visit_rule(rule_id, rows, as_of="2026-07-01")
+    assert final["status"] == "non_compliant"
+
+
+@pytest.mark.asyncio
+async def test_previsit_more_than_24_hours_before_surgery_is_a_missing_timeliness_item():
+    rows = _visits()
+    # 手术 07-01 08:00 开始，术前访视 06-29 07:00 早于术前24小时。
+    rows["preane_surveil_record"][0]["record_time"] = "2026-06-29 07:00:00"
+    final, _execution = await _run(rows, FrozenFactClient())
+    assert final["status"] == "non_compliant"
+    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"preanesthesia_visit": ["preop_visit_within_24h"]}
+    assert "术前24小时内访视" in final["findings"]

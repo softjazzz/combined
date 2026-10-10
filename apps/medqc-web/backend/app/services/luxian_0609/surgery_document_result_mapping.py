@@ -36,9 +36,10 @@ _CONSENT_FIELDS = (
 _VISIT_SOURCES = ("preane_surveil_record", "postane_surveil_record")
 # 按业务基线 037：术前访视含一般情况、简要病史、相关检查、拟行手术和麻醉方式、
 # 适应证、注意事项、术前医嘱、签名和日期；术后48小时内至少访视1次，记录恢复、
-# 清醒、拔管、术后医嘱、特殊情况、签名和时间。
+# 清醒、拔管、术后医嘱、特殊情况、签名和时间。院方口径：术前24小时内、术后24小时内须访视。
 _VISIT_FIELDS = {
     "preanesthesia_visit": (
+        "preop_visit_within_24h",
         "general_condition",
         "brief_history",
         "relevant_examinations",
@@ -50,7 +51,7 @@ _VISIT_FIELDS = {
         "record_time",
     ),
     "postanesthesia_visit": (
-        "visit_within_48h",
+        "postop_visit_within_24h",
         "recovery_status",
         "consciousness_status",
         "extubation_status",

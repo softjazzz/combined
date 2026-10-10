@@ -260,6 +260,8 @@ def _typed_decision_from_outcome(
                     "local_anesthesia_exception",
                     "emergency_rescue_exception",
                 }
+                else "evaluation_window_not_mature"
+                if outcome.reason_code == "evaluation_window_not_mature"
                 else "performed_event_absent"
             ),
         )
@@ -1086,7 +1088,8 @@ _VISIT_STRUCTURED_TEXT_FIELDS = {
         ("resume_descirption", "恢复情况"),
     ),
 }
-_POSTANESTHESIA_VISIT_WINDOW_SECONDS = 48 * 3600
+# 院方口径：术前和术后24小时内须访视（替代基线的术后48小时）。
+_POSTANESTHESIA_VISIT_WINDOW_SECONDS = 24 * 3600
 
 
 def _visit_document_body(row: Mapping[str, Any], source: str) -> Any:
@@ -1112,13 +1115,13 @@ def _visit_datetime(value: Any) -> datetime | None:
     return _parse_datetime(value)
 
 
-def _surgery_end_times(
+def _surgery_times(
     materials: Luxian0609EvidenceMaterialStore,
-) -> tuple[datetime, ...] | None:
-    """本次住院非局麻手术的结束时间；无法可靠取得时返回 None。
+) -> tuple[tuple[datetime, datetime], ...] | None:
+    """本次住院非局麻手术的 (开始, 结束) 时间；无法可靠取得时返回 None。
 
-    运行病历质控时病案首页（mr_surgery）通常尚未生成，优先用手术记录的结束时间；
-    手术记录缺失或任一份未写结束时间时，才回退到病案首页。
+    运行病历质控时病案首页（mr_surgery）通常尚未生成，优先用手术记录的起止时间；
+    手术记录缺失或任一份起止时间不全时，才回退到病案首页。
     """
 
     def rows(source_key: str) -> tuple[Mapping[str, Any], ...]:
@@ -1127,44 +1130,77 @@ def _surgery_end_times(
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, KeyError):
             return ()
 
+    def first_time(row: Mapping[str, Any], fields: Sequence[str]) -> datetime | None:
+        return next((parsed for key in fields if (parsed := _visit_datetime(row.get(key))) is not None), None)
+
     candidates = (
-        ("surgery_record", ("surgery_end_time", "surgery_end_datetime")),
-        ("mr_surgery", ("surgery_end_datetime",)),
+        ("surgery_record", ("surgery_begin_time", "surgery_begin_datetime"), ("surgery_end_time", "surgery_end_datetime")),
+        ("mr_surgery", ("surgery_begin_datetime",), ("surgery_end_datetime",)),
     )
-    for source_key, fields in candidates:
+    for source_key, begin_fields, end_fields in candidates:
         surgeries = [
             row for row in rows(source_key)
             if _clean(row.get("anesthesia_method")) not in _LOCAL_ANESTHESIA_VALUES
         ]
         if not surgeries:
             continue
-        end_times = [
-            next((parsed for key in fields if (parsed := _visit_datetime(row.get(key))) is not None), None)
-            for row in surgeries
-        ]
-        if all(value is not None for value in end_times):
-            return tuple(end_times)
+        times = [(first_time(row, begin_fields), first_time(row, end_fields)) for row in surgeries]
+        if all(begin is not None and end is not None and begin <= end for begin, end in times):
+            return tuple(times)  # type: ignore[arg-type]
     return None
 
 
-def _postanesthesia_visit_window_state(
+def _surgery_end_times(materials: Luxian0609EvidenceMaterialStore) -> tuple[datetime, ...] | None:
+    times = _surgery_times(materials)
+    return tuple(end for _begin, end in times) if times else None
+
+
+def _visit_window_states(
     materials: Luxian0609EvidenceMaterialStore, snapshot: Luxian0609EvidenceSnapshot,
-) -> str:
-    """每台非局麻手术结束后48小时内须至少有一次术后访视：present/absent/unknown。"""
+) -> tuple[str, str]:
+    """院方口径：每台非局麻手术开始前24小时内须有术前访视、结束后24小时内须有术后访视。"""
+
+    times = _surgery_times(materials)
+    if not times:
+        return "unknown", "unknown"
+
+    def visit_times(source_key: str) -> list[datetime]:
+        return [
+            visit_time
+            for _ref, row in materials.document_rows(source_key, snapshot=snapshot)
+            if (visit_time := _visit_datetime(row.get("record_time") or row.get("submit_datetime"))) is not None
+        ]
+
+    pre_visits, post_visits = visit_times("preane_surveil_record"), visit_times("postane_surveil_record")
+    window = _POSTANESTHESIA_VISIT_WINDOW_SECONDS
+    pre = all(any(0 <= (begin - visit).total_seconds() <= window for visit in pre_visits) for begin, _end in times)
+    post = all(any(0 <= (visit - end).total_seconds() <= window for visit in post_visits) for _begin, end in times)
+    return ("present" if pre else "absent"), ("present" if post else "absent")
+
+
+def _postanesthesia_window_mature(materials: Luxian0609EvidenceMaterialStore) -> bool | None:
+    """评价截止时间是否已过所有手术结束后24小时；无法判断时返回 None。"""
 
     end_times = _surgery_end_times(materials)
     if not end_times:
-        return "unknown"
-    visit_times = [
-        visit_time
-        for _ref, row in materials.document_rows("postane_surveil_record", snapshot=snapshot)
-        if (visit_time := _visit_datetime(row.get("record_time") or row.get("submit_datetime"))) is not None
-    ]
-    covered = all(
-        any(0 <= (visit - end).total_seconds() <= _POSTANESTHESIA_VISIT_WINDOW_SECONDS for visit in visit_times)
-        for end in end_times
-    )
-    return "present" if covered else "absent"
+        return None
+    try:
+        horizon_rows = tuple(materials.rows("evaluation_context.horizon"))
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, KeyError):
+        return None
+    if len(horizon_rows) != 1:
+        return None
+    horizon = _visit_datetime(horizon_rows[0].get("horizon_datetime"))
+    if horizon is None:
+        horizon_date = _clean(horizon_rows[0].get("horizon_date"))
+        try:
+            # 仅有日期时按当日零点计，宁可暂不评价也不提前判缺陷。
+            horizon = datetime.fromisoformat(horizon_date) if horizon_date else None
+        except ValueError:
+            horizon = None
+    if horizon is None:
+        return None
+    return all((horizon - end).total_seconds() >= _POSTANESTHESIA_VISIT_WINDOW_SECONDS for end in end_times)
 
 
 async def _typed_037_controlled_outcome(
@@ -1173,9 +1209,9 @@ async def _typed_037_controlled_outcome(
 ) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
     if outcome.reason_code not in {"anesthesia_visits_complete", "anesthesia_visit_incomplete"}:
         return outcome, 0, 0, 0, 0, 0.0
-    window_state = _postanesthesia_visit_window_state(materials, snapshot)
-    if window_state == "unknown":
-        # 无法取得手术结束时间时不能核对“术后48小时内访视”，不送模、不作确定结论。
+    pre_window, post_window = _visit_window_states(materials, snapshot)
+    if "unknown" in (pre_window, post_window):
+        # 无法取得手术起止时间时不能核对术前/术后24小时内访视，不送模、不作确定结论。
         return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", "authoritative_time_missing", "program"), 0, 0, 0, 0, 0.0
     documents = []
     reliable: dict[str, dict[str, str]] = {}
@@ -1188,8 +1224,10 @@ async def _typed_037_controlled_outcome(
             signature = _clean(row.get("anesthetist_sign"))
             if signature and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(signature):
                 states["anesthetist_signature"] = "present"
-            if visit == "postanesthesia_visit":
-                states["visit_within_48h"] = window_state
+            if visit == "preanesthesia_visit":
+                states["preop_visit_within_24h"] = pre_window
+            else:
+                states["postop_visit_within_24h"] = post_window
             reliable[ref] = states
             group_keys[ref] = (source, _clean(row.get("document_id")) or _clean(row.get("id")) or ref)
             scope = "source_truncated" if any(row.get(key) is True for key in ("truncated", "content_truncated", "record_content_truncated")) else (
@@ -1616,6 +1654,9 @@ def _typed_terminal_outcome(
             for source_key in typed_visit_sources
             if _typed_observation_state(snapshot, source_key) == "empty"
         )
+        if missing_visit_sources == ("postane_surveil_record",) and _postanesthesia_window_mature(materials) is False:
+            # 只缺术后访视且手术结束尚未满24小时：访视时限未到，不提前判缺失。
+            return _SurgeryDocumentOutcome(rule_id, "not_applicable", "evaluation_window_not_mature", "program")
         if missing_visit_sources:
             facts = _with_trigger_document_id(
                 {

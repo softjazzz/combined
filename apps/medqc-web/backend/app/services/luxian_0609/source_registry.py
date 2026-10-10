@@ -456,16 +456,19 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 本次住院是否实施麻醉以及麻醉方式，才能正确处理局麻例外。
     "LX0609-11-02-01": ("mr_surgery",),
     "LX0609-11-02-02": ("mr_surgery",),
+    # 036/037 术后访视时限按手术结束后24小时（院方口径）与评价截止时间核对；
+    # 运行病历优先手术记录，病案首页（mr_surgery）往往出院归档后才有，只作回退。
     "LX0609-04-04-01": (
         "mr_surgery",
+        "surgery_record",
+        "evaluation_context.horizon",
         "preane_surveil_record",
         "postane_surveil_record",
     ),
-    # 术后48小时内访视按手术结束时间核对：运行病历优先取手术记录，
-    # 病案首页（mr_surgery）往往出院归档后才有，只作回退。
     "LX0609-04-04-02": (
         "mr_surgery",
         "surgery_record",
+        "evaluation_context.horizon",
         "preane_surveil_record",
         "postane_surveil_record",
     ),

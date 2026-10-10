@@ -40,7 +40,8 @@ def _rows_for(rule_id: str) -> dict[str, tuple[Mapping[str, Any], ...]]:
         "anesthesia_method": "全身麻醉",
         "record_content": "麻醉诱导和复苏记录完整",
     }
-    surgery = {**_surgery("mr-surgery-1"), "surgery_end_datetime": "2026-09-01 17:00:00"}
+    surgery = {**_surgery("mr-surgery-1"), "surgery_begin_datetime": "2026-09-01 16:00:00",
+               "surgery_end_datetime": "2026-09-01 17:00:00"}
     pre = {
         "document_id": "pre-1",
         "document_title": "麻醉术前访视记录",
