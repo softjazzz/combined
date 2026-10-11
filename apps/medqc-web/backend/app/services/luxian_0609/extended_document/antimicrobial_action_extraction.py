@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from ...llm_observability import safe_status_for_exception
 from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..structured_output import structured_output_kwargs
 from .shared import _clean
 
 
@@ -661,6 +662,7 @@ async def extract_antimicrobial_actions(
             _prompt(safe_candidates),
             max_completion_tokens=MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
+            **structured_output_kwargs(llm_client),
         )
     except Exception as error:
         is_timeout = (

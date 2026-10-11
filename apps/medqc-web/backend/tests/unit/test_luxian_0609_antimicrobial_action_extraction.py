@@ -431,3 +431,23 @@ def test_strict_duplicate_order_events_keep_sixty_second_and_signature_boundary(
     assert len(extraction.build_antimicrobial_order_events((first, at_boundary))) == 1
     assert len(extraction.build_antimicrobial_order_events((first, outside_boundary))) == 2
     assert len(extraction.build_antimicrobial_order_events((first, changed_signature))) == 2
+
+
+class _StructuredClient(_Client):
+    def supports_strict_json_schema(self):
+        return True
+
+
+@pytest.mark.asyncio
+async def test_capable_client_extracts_with_thinking_disabled():
+    candidate = _candidate()
+    client = _StructuredClient(_response([_item(candidate, quote="启用美罗培南")]))
+
+    result = await extraction.extract_antimicrobial_actions((candidate,), client)
+
+    assert result.state == "ready"
+    assert client.calls[0][1] == {
+        "max_completion_tokens": 2048,
+        "allow_length_retry": False,
+        "enable_thinking": False,
+    }
