@@ -734,3 +734,24 @@ def test_course_record_missing_and_not_yet_due_have_specific_customer_copy():
     )
     message = handbook_customer_message(rule_id=RULE_ID, status="not_applicable", facts=waiting.display_facts)
     assert message[0] == "CT/MRI报告出具尚未满24小时，病程暂未记载，暂不评价。"
+
+
+@pytest.mark.asyncio
+async def test_capable_client_extracts_ct_facts_with_thinking_disabled():
+    class StructuredClient(_Client):
+        def supports_strict_json_schema(self):
+            return True
+
+        async def generate(self, prompt, *, allow_length_retry, **kwargs):
+            self.kwargs = kwargs
+            return await super().generate(prompt, allow_length_retry=allow_length_retry)
+
+    snapshot, material = _session(_rows())
+    client = StructuredClient()
+    result = await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(RULE_ID,), decision_rule_ids=(RULE_ID,), wrapper_rules=(),
+        evidence_payload=None, llm_client=client, evidence_snapshot=snapshot, evidence_materials=material,
+    )
+    assert result.decisions[0].reason_code == "requirement_satisfied"
+    assert client.kwargs["enable_thinking"] is False
+    assert client.kwargs["response_format"]["type"] == "json_schema"

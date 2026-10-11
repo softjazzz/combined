@@ -68,6 +68,7 @@ from .ct_order_course_consistency import (
     CtEvidenceBudgetExceeded,
 )
 from .native_execution import build_luxian_0609_native_result
+from .structured_output import structured_output_kwargs
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
@@ -1992,6 +1993,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                     build_ct_fact_prompt(review),
                                     response_format=ct_fact_response_format(review),
                                     allow_length_retry=False,
+                                    **structured_output_kwargs(llm_client),
                                 )
                             else:
                                 response = await cast(_SinglePassCtClient, llm_client).generate(
