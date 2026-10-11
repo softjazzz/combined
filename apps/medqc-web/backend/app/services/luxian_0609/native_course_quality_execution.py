@@ -65,6 +65,7 @@ from .course_quality.shared import (
     source_rows as _source_rows,
     substantive_rows as _substantive_rows,
 )
+from .structured_output import structured_output_kwargs
 from .source_evidence_reader import (
     authoritative_document_time_value,
     has_luxian_0609_current_visit_unstable_order,
@@ -959,6 +960,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         {
                             "max_completion_tokens": 600,
                             "allow_length_retry": False,
+                            **structured_output_kwargs(llm_client),
                         }
                         if rule_id == "LX0609-01-01-02"
                         else {}
@@ -1341,6 +1343,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     {
                         "max_completion_tokens": 600,
                         "allow_length_retry": False,
+                        **structured_output_kwargs(llm_client),
                     }
                     if rule_id == "LX0609-01-01-02"
                     else {}

@@ -525,3 +525,59 @@ def test_course_quality_rules_have_no_aggregator_specific_branches() -> None:
     ).read_text(encoding="utf-8")
     for rule_id in _FAMILY_RULE_IDS:
         assert rule_id not in aggregator
+
+
+class _StructuredStubClient(_StubClient):
+    def __init__(self, *payloads: Mapping[str, Any]) -> None:
+        super().__init__(*payloads)
+        self.call_kwargs: list[dict[str, Any]] = []
+
+    def supports_strict_json_schema(self) -> bool:
+        return True
+
+    async def generate(self, prompt: str, **kwargs: Any) -> dict[str, Any]:
+        self.call_kwargs.append(kwargs)
+        return await super().generate(prompt)
+
+
+@pytest.mark.asyncio
+async def test_lx018_atomic_facts_disable_thinking_for_capable_client() -> None:
+    client = _StructuredStubClient(
+        {
+            "chief_signal_kind": "localized_symptom_or_sign",
+            "anatomic_relation": "not_applicable",
+            "laterality_relation": "not_applicable",
+            "symptom_relation": "supports",
+            "disease_course_relation": "not_applicable",
+            "disease_direction_relation": "not_applicable",
+            "medical_analysis": "主诉与第一诊断方向一致。",
+        }
+    )
+    _session, execution, _reduced, result = await _run_chain(
+        "LX0609-01-01-02",
+        {
+            "admission_record": (
+                {
+                    "document_id": "admission-18",
+                    "record_content": "入院记录正文完整。",
+                    "chief_complaint": "反复胸痛3个月",
+                },
+            ),
+            "diagnosis": (
+                {
+                    "document_id": "diagnosis-18",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                    "diagnosis_name": "稳定型心绞痛",
+                },
+            ),
+        },
+        client=client,
+    )
+
+    assert result["status"] == "compliant"
+    assert execution.llm_call_count == 1
+    assert client.call_kwargs == [
+        {"max_completion_tokens": 600, "allow_length_retry": False, "enable_thinking": False}
+    ]
+
