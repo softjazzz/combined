@@ -10811,3 +10811,38 @@ def test_062_written_route_is_never_overridden_by_dosage_form() -> None:
         [{"drug_name": "依达拉奉舌下片", "dose": "每次1片", "route": "舌下含服", "duration": "每日2次"}]
     )
     assert medications[0]["route"] == "舌下含服"
+
+
+def _medication_extraction(*items):
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import Extraction
+
+    return Extraction(
+        "unknown", "semantic_low_confidence",
+        medications=tuple({"drug_name": name, "dose": "每次10ml", "route": None, "duration": "每天3次"}
+                          for name, _assertions in items),
+        llm_call_count=1,
+        field_assertions=tuple(
+            {"drug_name": "present", "dose": "present", "route": "present", "duration": "present", **assertions}
+            for _name, assertions in items
+        ),
+    )
+
+
+@pytest.mark.parametrize(("items", "expected"), [
+    # 0910 真实样本：两种糖浆边界清楚，模型仍把途径报为不确定 → 按剂型推定口服。
+    ((("合成糖浆甲", {"route": "uncertain"}), ("合成片乙", {"route": "uncertain"})), "ready"),
+    ((("合成糖浆甲", {"route": "uncertain"}), ("注射用合成丙", {"route": "uncertain"})), "unknown"),
+    ((("合成舌下片丁", {"route": "uncertain"}),), "unknown"),
+    ((("合成糖浆甲", {"route": "uncertain", "dose": "uncertain"}),), "unknown"),
+])
+def test_062_oral_dosage_form_route_uncertainty_does_not_block_decision(items, expected) -> None:
+    from app.services.luxian_0609.native_extended_document_execution import (
+        _discharge_medications_complete,
+        _with_dosage_form_oral_route,
+        _with_oral_route_uncertainty_resolved,
+    )
+
+    resolved = _with_oral_route_uncertainty_resolved(_medication_extraction(*items))
+    assert resolved.state == expected
+    if expected == "ready":
+        assert _discharge_medications_complete(_with_dosage_form_oral_route(resolved.medications))

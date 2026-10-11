@@ -2661,10 +2661,10 @@ def customer_finding_from_controlled_facts(
                     f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
                     f"找到 {response_count} 份报告后相关病程{timing}，{missing_content}。"
                 )
-            requirement = "阳性结果分析" if analysis_rule else "报告结果记录"
+            requirement = "阳性结果分析记录" if analysis_rule else "报告结果记录"
             return (
                 f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                f"未找到报告后 24 小时内的{requirement}记录。"
+                f"未找到报告后 24 小时内的{requirement}。"
             )
 
     if rule_id == "LX0609-06-02-03" and kind == "pathology_result_documentation_check":

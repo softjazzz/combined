@@ -435,6 +435,9 @@ def _time_case(time_text: str, *, before: str = "", inline_before: str = "",
     ("抢救时间：2026-07-16 09:00", "抢救措施：吸氧。"),
     ("于2026.7.16 09:00予以", "吸氧并持续监护。"),
     ("于09:00开始", "实施胸外按压。"),
+    # 0910 真实样本写法：时间后直接接以“予以”开头的措施引文。
+    ("2026.7.16 09:39", "予以合成溶栓药45mg行静脉溶栓。"),
+    ("2026.7.16 09:39", "立即给予胸外按压。"),
 ])
 def test_actual_rescue_time_with_label_or_action_link_is_present(time_text, measures):
     session, payload = _time_case(time_text, measures=measures)
@@ -453,6 +456,7 @@ def test_actual_rescue_time_with_label_or_action_link_is_present(time_text, meas
     ("于2026-07-16 09:00予以", "", "治疗。\n"),
     ("于2026-07-16 09:00", "", "抢救措施：吸氧。\n"),
     ("于2026-07-16 25:99予以", "", ""),
+    ("于2026-07-16 09:00", "", "未予以"),
 ])
 def test_non_rescue_or_unlinked_time_remains_unknown(time_text, before, after):
     session, payload = _time_case(time_text, before=before, after=after)

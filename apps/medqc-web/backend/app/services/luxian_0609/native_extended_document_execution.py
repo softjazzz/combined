@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import Counter
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
@@ -1620,6 +1620,31 @@ def _with_dosage_form_oral_route(
     return result
 
 
+def _oral_dosage_form(name: Any) -> bool:
+    text = _clean(name)
+    return bool(_ORAL_DOSAGE_FORM_PATTERN.search(text)) and not _NON_ORAL_TABLET_PATTERN.search(text)
+
+
+def _with_oral_route_uncertainty_resolved(extraction: Any) -> Any:
+    """口服剂型未写途径按院方口径推定口服，模型对途径的“不确定”不再阻断判定。
+
+    仅当全部不确定字段都是口服剂型药物的给药途径时升级为 ready；药名、剂量、
+    用药时间不确定或非口服剂型的途径不确定，仍保持 unknown。
+    """
+
+    if extraction.state != "unknown" or not extraction.field_assertions:
+        return extraction
+    for medication, assertions in zip(extraction.medications, extraction.field_assertions):
+        for name, assertion in assertions.items():
+            if assertion == "uncertain" and not (
+                name == "route"
+                and assertions.get("drug_name") == "present"
+                and _oral_dosage_form(medication.get("drug_name"))
+            ):
+                return extraction
+    return replace(extraction, state="ready", reason_code="discharge_medications_extracted")
+
+
 def _discharge_medications_complete(medications: Sequence[Mapping[str, Any]]) -> bool:
     return bool(medications) and all(
         all(any(_clean(item.get(key)) for key in group) for group in _DISCHARGE_MEDICATION_REQUIRED_GROUPS)
@@ -1719,7 +1744,9 @@ async def _resolve_multi_record_discharge_medications(
         # 结构化字段格式非法不属于笼统叮嘱，保持原资料缺口。
         if row.get("discharge_medications") is not None:
             return None
-        extraction = await extract_discharge_medications(str(row.get("discharge_order") or ""), llm_client)
+        extraction = _with_oral_route_uncertainty_resolved(
+            await extract_discharge_medications(str(row.get("discharge_order") or ""), llm_client)
+        )
         extractions.append(extraction)
         if extraction.state in {"technical_error", "data_gap"}:
             return extraction.state, extraction.reason_code, [], ()
@@ -4001,8 +4028,10 @@ async def execute_luxian_0609_native_extended_document_rules(
             # 仅在结构化资料缺失且固定标签无法解析时裁剪出院医嘱。
             # 多份记录不能猜选一份；不覆盖已提供但格式非法的结构化字段。
             if use_unstructured_extraction:
-                medication_extraction = await extract_discharge_medications(
-                    str(discharge_rows[0]["discharge_order"]), llm_client
+                medication_extraction = _with_oral_route_uncertainty_resolved(
+                    await extract_discharge_medications(
+                        str(discharge_rows[0]["discharge_order"]), llm_client
+                    )
                 )
                 # 已确认药物的明确缺项足以证明不完整；未知字段不可冒充缺项。
                 if medication_extraction.state == "unknown":

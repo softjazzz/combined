@@ -34,6 +34,9 @@ _LABELED_TIME = re.compile(
 _CLOCK_TIME = re.compile(r"(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)(?::([0-5]\d))?(?!\d)")
 _DATE_BEFORE_TIME = re.compile(r"(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})日?\s*$")
 _ACTUAL_ACTION = re.compile(r"予以|给予|实施|进行|开始|抢救|复苏|胸外按压")
+# 措施引文本身以给药/实施动作开头（如“09:39予以阿替普酶静脉溶栓”）时，时间与措施之间没有
+# 间隔文字；只认开头的动作动词，不把“抢救措施：”这类栏目标签当作动作。
+_LEADING_ACTION = re.compile(r"(?:立即|即)?(?:予以|给予|实施|进行|开始)")
 _NON_ASSERTED_ACTION = re.compile(r"未|不|没有|若|如果|假如|倘若|一旦|如需|待")
 _OTHER_TIME_ROLE = re.compile(r"记录时间|签字时间|签名时间|提交时间|完成时间|补记时间|入院时间|"
                               r"既往|曾于|计划|拟于|预计|准备|将于")
@@ -136,7 +139,9 @@ def _narrated_rescue_time(body: str, time_atom: Mapping[str, Any], measures_atom
         return False
     if _CLAUSE_END.search(body[end:measure_start]):
         return False
-    action = _ACTUAL_ACTION.search(body[start + clock.end():measure_start])
+    action = _ACTUAL_ACTION.search(body[start + clock.end():measure_start]) or _LEADING_ACTION.match(
+        body, measure_start, measure_end
+    )
     if action is None:
         return False
     # 局部否定或条件语气只能排除，未命中并不证明医学事实已发生。
