@@ -25,15 +25,21 @@ def test_catalog_contains_the_92_therapeutic_and_interventional_items() -> None:
     assert {"内镜下胃息肉切除术", "经导管肝动脉栓塞术", "血液透析"} <= {item.name for item in catalog}
 
 
-def test_candidate_orders_skip_lab_nursing_and_cancelled() -> None:
+def test_candidate_orders_keep_only_treatment_exam_surgery_types() -> None:
     rows = (
         {"order_name": "血常规", "order_type": "检验"},
         {"order_name": "引流管护理", "order_type": "护理"},
+        {"order_name": "一次性使用吸引引流袋", "order_type": "其他"},
         {"order_name": "胸腔闭式引流术", "order_type": "治疗", "order_status": "作废"},
-        {"order_name": "经纤支镜治疗(止血)", "order_type": "治疗", "order_status": "执行"},
+        {"order_name": "动脉穿刺置管术", "order_type": "治疗", "order_status": "执行"},
+        {"order_name": "经纤支镜治疗(止血)", "order_type": "检查"},
+        {"order_name": "胸腔闭式引流术", "order_type": "手术"},
+        {"order_name": "新类型医嘱", "order_type": ""},
     )
 
-    assert [row["order_name"] for row in candidate_order_rows(rows)] == ["经纤支镜治疗(止血)"]
+    assert [row["order_name"] for row in candidate_order_rows(rows)] == [
+        "动脉穿刺置管术", "经纤支镜治疗(止血)", "胸腔闭式引流术", "新类型医嘱",
+    ]
 
 
 def test_front_page_code_matches_catalog_exactly() -> None:

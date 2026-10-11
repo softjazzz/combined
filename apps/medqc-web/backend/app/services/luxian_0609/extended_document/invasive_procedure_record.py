@@ -39,8 +39,11 @@ MAX_RECORDS = 20
 MAX_RECORD_CHARS = 1500
 MAX_QUOTE_CHARS = 80
 RECORD_WINDOW_DAYS = 3
-# 麻醉类医嘱是手术的麻醉方式（如“腰麻硬膜外联合阻滞”），不是独立的有创治疗操作。
-_EXCLUDED_ORDER_TYPES = frozenset({"检验", "护理", "麻醉"})
+# 用户口径（2026-10-11）：只看“治疗、检查、手术”三类非药医嘱（内镜下治疗归在“检查”）。
+# 其他（耗材器械）、检验、护理、麻醉（手术的麻醉方式）不送模型；类型为空或未知的新类型
+# 仍送模型兜底，避免其他机构分类不同时漏掉操作。
+_PROCEDURE_ORDER_TYPES = frozenset({"治疗", "检查", "手术"})
+_NON_PROCEDURE_ORDER_TYPES = frozenset({"其他", "检验", "护理", "麻醉"})
 _CANCELLED_ORDER_STATUS = re.compile(r"作废|取消|撤销|撤回|退回|未执行|删除")
 _DATA_PATH = (
     Path(__file__).resolve().parents[3] / "data" / "luxian_0609_invasive_procedure_catalog_2026.csv"
@@ -132,12 +135,12 @@ def _first_time(row: Mapping[str, Any], fields: Sequence[str]) -> datetime | Non
 
 
 def candidate_order_rows(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
-    """排除检验、护理、麻醉及已作废/取消的医嘱；其余交模型判断是否为目录内有创操作。"""
+    """只保留治疗、检查、手术类（及类型未知）且未作废的医嘱，交模型判断是否为目录内有创操作。"""
 
     return tuple(
         row for row in rows
         if _normalize(row.get("order_name"))
-        and str(row.get("order_type") or "").strip() not in _EXCLUDED_ORDER_TYPES
+        and str(row.get("order_type") or "").strip() not in _NON_PROCEDURE_ORDER_TYPES
         and not _CANCELLED_ORDER_STATUS.search(str(row.get("order_status") or ""))
     )
 
