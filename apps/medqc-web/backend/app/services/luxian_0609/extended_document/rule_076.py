@@ -19,12 +19,15 @@ _DEATH_TIME_VALUE = (
     r"(?![\dA-Za-z_:+-]|[.,](?=[\dA-Za-z_]))"
 )
 _LABELED_TIME_PATTERNS = (
-    re.compile(r"死亡时间\s*[:：]\s*(?P<value>" + _DEATH_TIME_VALUE + r")"),
+    re.compile(r"死亡(?:时间|时刻|日期)\s*[:：]\s*(?P<value>" + _DEATH_TIME_VALUE + r")"),
+    # “于〈日期时刻〉……死亡”在同一句内（不跨句号/分号），如“于X因感染性休克死亡”
+    # “于X心跳呼吸停止，经抢救无效宣告临床死亡”；入院、转入等时刻不算死亡时间。
     re.compile(
         r"于\s*(?P<value>" + _DEATH_TIME_VALUE + r")"
-        r"\s*(?:宣告|宣布)?临床死亡"
+        r"(?P<tail>[^。；;！!？?\n]{0,40}?)死亡"
     ),
 )
+_NON_DEATH_EVENT_PATTERN = re.compile(r"入院|转入|转出|就诊|手术|出院")
 
 
 @dataclass(frozen=True)
@@ -67,16 +70,25 @@ def _parse_time(value: Any) -> datetime | None:
         return None
 
 
+def death_time_from_body(row: Mapping[str, Any]) -> datetime | None:
+    """死亡记录正文中明确记载的死亡日期和时刻。"""
+
+    body = _clean(row.get("record_content") or row.get("content"))
+    for pattern in _LABELED_TIME_PATTERNS:
+        for match in pattern.finditer(body):
+            tail = match.groupdict().get("tail") or ""
+            if _NON_DEATH_EVENT_PATTERN.search(tail):
+                continue
+            if parsed := _parse_time(match.group("value")):
+                return parsed
+    return None
+
+
 def _death_time(row: Mapping[str, Any]) -> datetime | None:
     for field in ("death_datetime", "death_time"):
         if parsed := _parse_time(row.get(field)):
             return parsed
-    body = _clean(row.get("record_content") or row.get("content"))
-    for pattern in _LABELED_TIME_PATTERNS:
-        match = pattern.search(body)
-        if match and (parsed := _parse_time(match.group("value"))):
-            return parsed
-    return None
+    return death_time_from_body(row)
 
 
 def _criterion(

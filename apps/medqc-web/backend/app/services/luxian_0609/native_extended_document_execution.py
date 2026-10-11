@@ -82,7 +82,7 @@ from .extended_document.antimicrobial_action_extraction import (
 from .extended_document.antimicrobial_effect_extraction import extract_antimicrobial_effects
 from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
 from .extended_document.physician_handoff import evaluate_physician_handoff
-from .extended_document.rule_076 import evaluate_rule_076
+from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document.discharge_medication_extraction import extract_discharge_medications
 from .extended_document.discharge_approval_extraction import (
@@ -845,6 +845,13 @@ def _death_context(
         )
         is not None
     }
+    if not explicit_death_times:
+        # 结构化死亡时间缺失时，取死亡记录正文明确记载的死亡日期和时刻。
+        explicit_death_times = {
+            candidate
+            for row in death_rows
+            if (candidate := death_time_from_body(row)) is not None
+        }
     if len(explicit_death_times) > 1:
         return "conflict", None
 

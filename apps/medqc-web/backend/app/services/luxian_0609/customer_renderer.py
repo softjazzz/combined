@@ -3258,8 +3258,8 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-04-02-06" and kind == "death_record_presence_check":
         return (
-            f"已确认患者死亡（死亡时间 {facts.get('death_time') or '未返回'}），"
-            f"死亡记录 {facts.get('death_record_count')} 份。"
+            (f"已确认患者死亡（死亡时间 {facts['death_time']}），" if facts.get("death_time") else "已确认患者死亡，")
+            + f"死亡记录 {facts.get('death_record_count')} 份。"
         )
 
     if rule_id == "LX0609-08-01-01" and kind == "discharge_record_timeliness_check":
