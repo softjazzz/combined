@@ -21,6 +21,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
+from .structured_output import structured_output_kwargs
 from .source_evidence_reader import (
     parse_strict_performed_time,
     read_luxian_0609_native_source_rows,
@@ -1255,7 +1256,8 @@ async def execute_luxian_0609_native_mdt_rule(
     )
     try:
         response = await llm_client.generate(
-            _prompt(surgery_names=names, context=context)
+            _prompt(surgery_names=names, context=context),
+            **structured_output_kwargs(llm_client),
         )
     except Exception:
         return finish(
