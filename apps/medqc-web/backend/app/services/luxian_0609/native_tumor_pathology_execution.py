@@ -195,7 +195,10 @@ _DISCHARGE_PLAN_FUTURE_PATTERN = re.compile(r"(?:后续|出院后|继续|定期|
 _DISCHARGE_PLAN_TREATMENT_PATTERN = re.compile(
     r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤|治疗计划)"
 )
-_DISCHARGE_PLAN_FOLLOW_UP_PATTERN = re.compile(r"(?:随访|复查|门诊)")
+# 业务基线 027：后续肿瘤治疗或随访计划任一项即可。随访只认明确的随访/定期复查安排；
+# 单项化验复查（如“门诊复查血常规”）和“如有不适随诊”类附条件叮嘱不算随访计划。
+_DISCHARGE_PLAN_FOLLOW_UP_PATTERN = re.compile(r"(?:随访|定期复查|定期复诊)")
+_DISCHARGE_PLAN_CONDITIONAL_PATTERN = re.compile(r"(?:不适|如有|若有|如出现|若出现|必要时)")
 _DISCHARGE_PLAN_NEGATIVE_TREATMENT_PATTERN = re.compile(
     r"(?:暂不|不予|无需|未予|取消|停止|拒绝|不建议|不考虑|不行|不实施).{0,8}"
     r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤)"
@@ -1795,9 +1798,11 @@ def _typed_discharge_plan_outcome(
     )
     treatment_plan = bool(treatment_plan_clauses)
     follow_up_plan = any(
-        _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(item) for item in clauses
+        _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(item)
+        and not _DISCHARGE_PLAN_CONDITIONAL_PATTERN.search(item)
+        for item in clauses
     )
-    compliant = treatment_plan
+    compliant = treatment_plan or follow_up_plan
     return (
         "compliant" if compliant else "non_compliant",
         "malignant_discharge_plan_recorded"

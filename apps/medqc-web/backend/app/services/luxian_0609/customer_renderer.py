@@ -1498,7 +1498,7 @@ _RULE_COMPLIANT_FINDINGS = {
     "LX0609-04-02-03": "已核对目标恶性肿瘤手术记录，淋巴结处理情况或未处理原因已有记录。",
     "LX0609-04-02-04": "已核对手术记录，未发现植入物信息缺项。",
     "LX0609-05-02-01": "已核对化学治疗记录与医嘱，未发现用药信息不一致。",
-    "LX0609-08-01-04": "已核对恶性肿瘤患者出院记录，已记录后续治疗计划。",
+    "LX0609-08-01-04": "已核对恶性肿瘤患者出院记录，已记录出院后肿瘤相关治疗或随访计划。",
     "LX0609-05-01-01": "已核对预防性抗菌药物使用时长，符合规定要求。",
     "LX0609-04-01-01": "已确认本次手术具备术前小结。",
     "LX0609-04-02-02": "已确认本次手术具备手术记录。",
@@ -2930,19 +2930,8 @@ def customer_finding_from_controlled_facts(
         return f"已读取诊断，其中{facts.get('uncertain_diagnosis_count')}条的恶性性质尚不明确，暂不能确定本条出院治疗计划质控是否适用。请通过证据定位复核相关诊断。"
 
     if rule_id == "LX0609-08-01-04" and kind == "malignant_discharge_plan_check":
-        items = facts.get("plan_items")
-        if isinstance(items, Mapping):
-            missing = "、".join(
-                label
-                for key, label in {
-                    "future_plan": "后续诊疗计划",
-                    "tumor_treatment": "肿瘤相关治疗安排",
-                    "follow_up": "随访安排",
-                }.items()
-                if items.get(key) is False
-            )
-            if missing:
-                return f"已确认出院诊断包含恶性肿瘤，但出院记录缺少：{missing}。"
+        if facts.get("requirement_met") is False:
+            return "已确认出院诊断包含恶性肿瘤，但出院记录未写明出院后肿瘤相关治疗或随访安排。"
 
     if rule_id == "LX0609-04-04-02":
         if kind == "anesthesia_visits_complete":

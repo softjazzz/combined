@@ -556,9 +556,9 @@
     "rule_id": "LX0609-01-02-02",
     "rule_code": "LX0609-01-02-02",
     "name": "首次病程记录：鉴别诊断未与第一诊断相关联",
-    "description": "首次病程记录中已写出的鉴别诊断应围绕初步诊断中的第一诊断展开。",
+    "description": "首次病程记录中已写出的鉴别诊断至少一项应围绕初步诊断中的第一诊断展开；全部与第一诊断无关时不合规。",
     "positive_example": "第一诊断为急性胆囊炎，鉴别诊断围绕消化性溃疡穿孔、急性胰腺炎展开。",
-    "negative_example": "鉴别诊断列出与第一诊断明显无关的系统疾病，且未说明关联。",
+    "negative_example": "鉴别诊断所列各项均与第一诊断的临床问题无关，且未说明关联。",
     "category": "首次病程记录",
     "applicable_documents": ["first_course_record", "first_course_record_diagnosis"],
     "applicable_document_labels": ["首次病程记录"],
@@ -566,7 +566,7 @@
     "dependency_type": "受控语义关联",
     "executor_type": "llm",
     "rule_version": "2026-09-05",
-    "prompt_version": "lx0609-077-v1",
+    "prompt_version": "lx0609-077-v2",
     "criteria": [
       {
         "criterion_id": "differential_diagnosis_relation",

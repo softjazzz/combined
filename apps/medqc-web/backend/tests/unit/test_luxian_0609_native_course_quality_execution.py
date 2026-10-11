@@ -7460,3 +7460,18 @@ def test_017_repeat_beyond_duplicate_window_remains_copy(second_time):
     )
 
     assert result["status"] == "non_compliant"
+
+
+def test_077_prompt_requires_no_related_item_for_unrelated() -> None:
+    """用户口径（2026-10-11）：鉴别诊断至少一项围绕第一诊断即合规，全部无关才不合规。"""
+    from app.services.luxian_0609.course_quality.rule_077 import _prompt
+
+    prompt = _prompt(
+        first_diagnosis="合成症状待查：合成病甲？",
+        full_diagnosis="合成症状待查：合成病甲？；合成病乙",
+        differential="1.合成病丙：不支持。2.合成病甲完全型：暂不考虑。",
+    )
+    assert "只要有任一项鉴别诊断围绕第一诊断的临床问题展开即判 related" in prompt
+    assert "没有任何一项与第一诊断的临床问题相关" in prompt
+    assert "no_related_item" in prompt
+    assert "至少一项明显无关" not in prompt

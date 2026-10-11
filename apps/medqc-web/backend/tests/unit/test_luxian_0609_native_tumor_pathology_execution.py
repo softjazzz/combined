@@ -1893,10 +1893,11 @@ async def test_typed_027_requires_future_tumor_treatment_in_one_plan_clause(
     ).final_state.value == "non_compliant"
     assert result.decisions[0].reason_code == "requirement_violated"
     facts = dict(result.customer_display_facts)["LX0609-08-01-04"]
+    # 单项化验复查不是肿瘤随访计划，不能替代治疗安排。
     assert facts["plan_items"] == {
         "future_plan": True,
         "tumor_treatment": False,
-        "follow_up": True,
+        "follow_up": False,
     }
     assert facts["requirement_met"] is False
     assert result.llm_call_count == 0
@@ -1907,8 +1908,8 @@ async def test_typed_027_requires_future_tumor_treatment_in_one_plan_clause(
 @pytest.mark.parametrize(
     ("discharge_text", "expected_state", "expected_treatment"),
     (
-        ("出院后暂不化疗，定期复查。", "non_compliant", False),
-        ("出院后不建议化疗，定期复查。", "non_compliant", False),
+        ("出院后暂不化疗。", "non_compliant", False),
+        ("出院后不建议化疗。", "non_compliant", False),
         ("出院后计划化疗，待病理明确后决定。", "non_compliant", False),
         ("出院后无不适，建议化疗。", "compliant", True),
         (
@@ -3168,3 +3169,48 @@ def test_pathology_result_and_explicit_missing_facts_are_programmatic() -> None:
         missing_surgery,
         missing_course,
     )
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("discharge_text", "expected_state", "follow_up"),
+    (
+        # 0910 真实写法：无治疗安排但有明确随访周期，业务基线“治疗或随访”即合规。
+        ("1.1周后电话咨询基因检测结果。随访方式:门诊随访周期:每1个月。", "compliant", True),
+        ("出院后暂不化疗，定期复查。", "compliant", True),
+        ("建议门诊复查血常规。", "non_compliant", False),
+        ("如有不适门诊随访。", "non_compliant", False),
+    ),
+)
+async def test_typed_027_follow_up_plan_satisfies_baseline_without_treatment(
+    monkeypatch, discharge_text, expected_state, follow_up,
+):
+    """业务基线 027：后续肿瘤治疗或随访计划任一项即合规；附条件叮嘱和单项化验复查不算随访。"""
+
+    session = _typed_013_027_session(discharge_text=discharge_text)
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-08-01-04",),
+        wrapper_rules=[_wrapper("LX0609-08-01-04")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-08-01-04",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == expected_state
+    facts = dict(result.customer_display_facts)["LX0609-08-01-04"]
+    assert facts["plan_items"]["follow_up"] is follow_up
+    assert facts["plan_items"]["tumor_treatment"] is False
+    assert facts["requirement_met"] is (expected_state == "compliant")

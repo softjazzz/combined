@@ -646,7 +646,7 @@
       "qc_point": "鉴别诊断未与初步诊断中第一诊断相关联",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "沿用已确认规则 LX-011：首次病程中已写出的鉴别诊断应围绕第一诊断的临床问题展开。"
+      "policy_summary": "沿用已确认规则 LX-011；用户口径（2026-10-11）：鉴别诊断至少一项围绕第一诊断的临床问题即合规，全部与第一诊断无关才不合规。"
     },
     {
       "rule_id": "LX0609-04-01-04",
