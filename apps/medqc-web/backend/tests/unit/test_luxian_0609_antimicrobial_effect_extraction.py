@@ -212,3 +212,17 @@ def test_empty_complete_material_does_not_require_model():
     result = run(None, documents=[])
     assert result.state == "ready"
     assert result.llm_call_count == 0
+
+
+class _StructuredClient(Client):
+    def supports_strict_json_schema(self):
+        return True
+
+
+def test_capable_client_extracts_with_thinking_disabled():
+    client = _StructuredClient({(0, 0): ("present", BODY, TARGET)})
+    result = run(client)
+    assert result.state == "ready"
+    assert client.calls[0][1] == {
+        "max_completion_tokens": 1_000_000, "allow_length_retry": False, "enable_thinking": False,
+    }
