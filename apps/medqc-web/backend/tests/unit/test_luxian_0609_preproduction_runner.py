@@ -910,3 +910,20 @@ asyncio.run(main())
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_safe_string_allows_controlled_text_quoting_body_datetimes() -> None:
+    body = "抢救经过：患者突发室颤，予电除颤。抢救结束时间：2026-06-02 10:00:00，生命体征平稳。"
+    finding = (
+        "抢救记录于抢救结束后 7 小时完成（抢救结束时间 2026-06-02 10:00:00；"
+        "记录时间 2026-06-02 17:00:00），超过 6 小时要求 1 小时。"
+    )
+
+    assert preproduction_runner._safe_string(finding, private_terms={body}) == finding
+
+
+def test_safe_string_still_redacts_body_text_around_datetimes() -> None:
+    body = "抢救经过：患者突发室颤，予电除颤。抢救结束时间：2026-06-02 10:00:00，生命体征平稳。"
+    quote = "2026-06-02 10:00:00 患者突发室颤，予电除颤。"
+
+    assert preproduction_runner._safe_string(quote, private_terms={body}) == "[redacted]"

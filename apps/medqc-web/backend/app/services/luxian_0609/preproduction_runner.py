@@ -150,6 +150,10 @@ _PUBLIC_DATETIME_EXACT_KEYS = frozenset(
 )
 _PUBLIC_DATETIME_SUFFIXES = ("_time", "_date", "_datetime", "_timestamp")
 _MIN_PRIVATE_FRAGMENT_CHARS = 12
+_DATETIME_TOKEN_RE = re.compile(
+    r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?"
+    r"(?:[ T]?\d{1,2}[:时]\d{1,2}(?:[:分]\d{1,2}(?:\.\d+)?秒?)?分?)?"
+)
 
 
 def _catalog_rule_ids() -> tuple[str, ...]:
@@ -221,7 +225,19 @@ def _safe_string(value: Any, *, private_terms: set[str]) -> str:
             return "[redacted]"
         if len(term) < _MIN_PRIVATE_FRAGMENT_CHARS:
             continue
+        # 受控文案常引用正文中的日期时刻（如“抢救结束时间 2026-06-02 10:00:00”），
+        # 日期时刻本身不是正文内容；覆盖日期时刻的窗口不参与片段比对，其余文字照常比对。
+        datetime_chars = {
+            index
+            for match in _DATETIME_TOKEN_RE.finditer(candidate)
+            for index in range(match.start(), match.end())
+        }
         for start in range(len(candidate) - _MIN_PRIVATE_FRAGMENT_CHARS + 1):
+            if any(
+                index in datetime_chars
+                for index in range(start, start + _MIN_PRIVATE_FRAGMENT_CHARS)
+            ):
+                continue
             fragment = candidate[start : start + _MIN_PRIVATE_FRAGMENT_CHARS]
             if fragment in term:
                 return "[redacted]"
