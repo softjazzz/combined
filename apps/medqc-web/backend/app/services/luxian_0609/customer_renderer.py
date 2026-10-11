@@ -258,6 +258,7 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-10-02-01": ("转科医嘱时间、转入记录或转出记录时间",),
     "LX0609-10-02-02": ("转科医嘱、转入记录或转出记录",),
     "LX0609-12-02-01": ("诊断修正时间、修改理由或诊断依据",),
+    "LX0609-10-03-01": ("非药医嘱、操作时间或病程/手术记录",),
     "LX0609-04-02-08": ("死亡记录中的具体死亡时间",),
     "LX0609-01-02-02": ("首次病程记录、第一诊断或鉴别诊断",),
     "LX0609-04-01-04": ("术前小结正文",),
@@ -362,7 +363,7 @@ _RULE_DATA_GAP_MESSAGES = {
     ),
     "LX0609-04-02-03": (
         "暂无法核对目标恶性肿瘤手术的淋巴结处理记录",
-        "当前缺少可确认恶性肿瘤性质的诊断资料、目标手术类型或完整正式手术记录。",
+        "当前缺少可确认恶性肿瘤性质的诊断资料、手术编码、胃癌手术根治性、结肠癌分期、病理报告或完整正式手术记录。",
         "请确认诊断、病理和本次正式手术记录已完整同步后重新评估。",
     ),
     "LX0609-05-02-01": (
@@ -564,6 +565,11 @@ _RULE_DATA_GAP_MESSAGES = {
         "暂无法核对诊断修正或补充记录",
         "当前缺少诊断修正时间、对应修改理由或诊断依据。",
         "请确认诊断变更及对应病程记录已完整同步后重新评估。",
+    ),
+    "LX0609-10-03-01": (
+        "暂无法核对有创操作记录",
+        "当前缺少可读取的非药医嘱、操作时间或病程/手术记录，或无法可靠判断是否已有操作记录。",
+        "请确认医嘱、病程与手术记录已完整同步后重新评估。",
     ),
 }
 
@@ -952,6 +958,11 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "已核对诊断修正或补充记录中的修改理由及诊断依据。",
         "请对每次诊断修正或补充记录修改理由及诊断依据。",
     ),
+    "LX0609-10-03-01": (
+        "有创操作医嘱未找到对应的有创操作记录",
+        "已按院方有创操作目录核对操作当日起 3 天内的病程及手术记录。",
+        "请在操作完成后即刻书写操作记录，写明操作名称、时间、步骤、结果、患者情况及注意事项。",
+    ),
     "LX0609-04-02-08": (
         "死亡记录未填写具体死亡时间",
         "已核对死亡记录自身的死亡时间字段及明确死亡时间表述；记录完成时间未作为替代。",
@@ -1097,6 +1108,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
     ("LX0609-03-01-03", "trigger_absent_complete"): (
         "本次未发现会诊记录单，不启动会诊意见明确性核对",
         "已核对会诊资料，未发现需要检查意见是否明确的会诊记录。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-04-02-03", "eligibility_not_met"): (
+        "本次恶性肿瘤手术不在需核对淋巴结清扫的病种—术式目录内",
+        "院方目录仅要求核对肺癌、乳腺癌、胃癌根治性手术及 T2–4N0–2M0 结肠癌的指定术式。",
         "无需按本质控点处理。",
     ),
     ("LX0609-04-02-03", "trigger_absent_complete"): (
@@ -1277,6 +1293,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
     ("LX0609-07-04-01", "trigger_absent_complete"): (
         "本次未发现术中输血，不启动三份文书输血内容一致性核对",
         "已核对输血记录、手术记录和麻醉记录，未发现术中输血事件。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-10-03-01", "trigger_absent_complete"): (
+        "本次未发现有创操作，不启动有创操作记录核对",
+        "已核对非药医嘱（终末病历同时核对病案首页手术操作），未发现院方有创操作目录内的操作。",
         "无需按本质控点处理。",
     ),
     ("LX0609-12-02-01", "trigger_absent_complete"): (
@@ -1464,6 +1485,7 @@ _RULE_COMPLIANT_FINDINGS = {
     "LX0609-06-03-04": "已确认细菌培养阳性结果在报告后 24 小时内完成分析记录。",
     "LX0609-12-01-01": "已核对入院记录现病史与首次病程记录病例特点，两段内容并非完全相同。",
     "LX0609-12-01-02": "已核对病程记录，未发现相似度达到或超过 70% 的重复记录。",
+    "LX0609-10-03-01": "已核对有创操作，操作后均有对应操作记录。",
     "LX0609-01-01-02": "已确认主诉长度及诊断指向符合书写要求。",
     "LX0609-06-02-02": "已确认病理取材情况已有记录（有手术记录时核对手术记录，本次无手术时核对日常病程记录）。",
     "LX0609-03-01-01": "已确认会诊记录具备对应的会诊执行记录。",
@@ -1928,6 +1950,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-12-02-01",
         "LX0609-10-03-01",
         "LX0609-07-01-03",
+        "LX0609-04-02-03",
     }:
         return ""
     if not isinstance(facts, Mapping):
@@ -1955,6 +1978,29 @@ def customer_finding_from_controlled_facts(
     ):
         display = transfer_event_association_gap_display(facts)
         return display[1] if display is not None else ""
+
+    if rule_id == "LX0609-04-02-03" and kind == "colon_pathology_lymph_node_items_missing":
+        labels = {"lymph_node_count": "淋巴结清扫个数", "pathologic_stage": "pTNM/ypTNM 分期"}
+        missing = facts.get("missing_items")
+        if isinstance(missing, list) and missing and all(item in labels for item in missing):
+            return "结肠癌目标手术的病理报告未记录：" + "、".join(labels[item] for item in missing) + "。"
+        return ""
+
+    if rule_id == "LX0609-10-03-01" and kind in {
+        "invasive_procedure_record_missing", "invasive_procedure_record_complete",
+    }:
+        procedures = facts.get("procedures")
+        if not isinstance(procedures, list) or not procedures:
+            return ""
+        if kind == "invasive_procedure_record_complete":
+            return "已核对有创操作：" + "、".join(procedures) + "，操作后 3 天内均有对应操作记录。"
+        missing = facts.get("missing_procedures")
+        if not isinstance(missing, list) or not missing:
+            return ""
+        return (
+            f"共核对 {len(procedures)} 项有创操作，以下操作在操作当日起 3 天内的病程或手术记录中"
+            "未找到对应操作记录：" + "、".join(missing) + "。"
+        )
 
     if rule_id == "LX0609-04-02-07" and kind == "consultation_business_time_missing":
         display = consultation_business_time_gap_display(facts)

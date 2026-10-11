@@ -128,7 +128,6 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-07-04-02",
         "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
         "LX0609-06-03-01",
     }
 
@@ -139,7 +138,6 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
         ("LX0609-05-01-04", "key_antimicrobial_catalog_missing"),
         ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
-        ("LX0609-10-03-01", "invasive_procedure_catalog_missing"),
     ),
 )
 def test_pending_definition_result_has_one_empty_evidence_contract(

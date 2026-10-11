@@ -38,6 +38,14 @@ from .extended_document.discharge_diagnosis_equivalence import (
     map_equivalent_diagnoses as _map_equivalent_diagnoses,
     split_numbered_diagnoses,
 )
+from .extended_document.invasive_procedure_record import (
+    candidate_order_rows as _invasive_candidate_order_rows,
+    check_invasive_procedure_records,
+    front_page_triggers as _invasive_front_page_triggers,
+    map_orders_to_invasive_catalog,
+    merge_triggers as _merge_invasive_triggers,
+    order_triggers as _invasive_order_triggers,
+)
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
 )
@@ -236,10 +244,6 @@ _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
     r"(?:未(?:行|完成|进行)|尚未|缺失|不存在|无)",
 )
 _LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_INVASIVE_PROCEDURES = (
-    "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
-    "气管插管", "支气管镜", "动脉置管",
-)
 _DISCHARGE_APPROVAL_PATTERN = re.compile(
     r"(?:同意|批准|准许|准予)(?:患者|其)?(?:于|拟于)?"
     r"(?:今日|明日|次日)?(?:安排|办理)?出院"
@@ -2287,6 +2291,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     antimicrobial_effect_extraction = None
     diagnosis_scope_extraction = None
     diagnosis_equivalence_extraction = None
+    invasive_extractions: list[Any] = []
     transfusion_performance_extraction = None
     postoperative_time_estimated_rules: set[str] = set()
     selected = tuple(
@@ -2403,6 +2408,11 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     nondrug_order_rows, nondrug_order_error = _source_rows(
         evidence_materials, "inpat_nondrug_order"
+    )
+    first_course_rows, first_course_error = (
+        _source_rows(evidence_materials, "first_course_record")
+        if "LX0609-10-03-01" in selected
+        else ((), "")
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
     mr_diagnosis_rows, mr_diagnosis_error = (
@@ -3563,40 +3573,86 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-10-03-01":
-            invasive_orders = tuple(
-                row for row in nondrug_order_rows
-                if any(name in _material_text(row) for name in _INVASIVE_PROCEDURES)
-            )
+            # 院方口径（2026-10-11）：有创操作目录为院方目录中的治疗性操作与介入治疗
+            # 共 92 项。运行病历只看医嘱（模型把不规范的医嘱名称归入目录）；终末质控
+            # 有病案首页时同时按首页手术操作编码精确匹配。
+            final_state, reason_code = "", ""
+            triggers: tuple[Any, ...] = ()
+            order_rows = _invasive_candidate_order_rows(nondrug_order_rows)
             if nondrug_order_error:
                 final_state, reason_code = "data_gap", nondrug_order_error
-            elif not invasive_orders:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif daily_error:
-                final_state, reason_code = "data_gap", daily_error
             else:
-                ordered_names = tuple(
-                    name for name in _INVASIVE_PROCEDURES
-                    if any(name in _material_text(row) for row in invasive_orders)
+                mapping = await map_orders_to_invasive_catalog(
+                    [row.get("order_name") for row in order_rows], llm_client,
                 )
-                complete = all(_has_any_text(daily_rows, (name,)) for name in ordered_names)
-                final_state = "compliant" if complete else "non_compliant"
-                reason_code = "requirement_satisfied" if complete else "required_document_missing"
-                display.append((rule_id, {
+                invasive_extractions.append(mapping)
+                if mapping.state == "technical_error":
+                    final_state, reason_code = "technical_error", mapping.reason_code
+                elif mapping.state == "unresolved":
+                    final_state, reason_code = "data_gap", mapping.reason_code
+                else:
+                    triggers = _merge_invasive_triggers((
+                        *_invasive_order_triggers(order_rows, mapping.mapped),
+                        *(() if mr_surgery_error else _invasive_front_page_triggers(mr_surgery_rows)),
+                    ))
+                    if not triggers:
+                        final_state, reason_code = "not_applicable", "trigger_absent_complete"
+                    elif any(trigger.anchor_date is None for trigger in triggers):
+                        final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    elif (
+                        first_course_error or daily_error or senior_error
+                        or postop_first_error or surgery_record_error
+                    ):
+                        final_state, reason_code = "data_gap", (
+                            first_course_error or daily_error or senior_error
+                            or postop_first_error or surgery_record_error
+                        )
+            if not final_state:
+                # 0910 源库日常病程为空、病程多记于查房记录，操作记录须同时核对
+                # 首次病程、日常病程、查房记录、术后首次病程与手术记录。
+                documentation = await check_invasive_procedure_records(
+                    triggers,
                     (
-                        "verification_kind"
-                        if complete
-                        else "failure_kind"
-                    ): (
-                        "invasive_procedure_course_record_complete"
-                        if complete
-                        else "invasive_procedure_course_record_missing"
+                        *first_course_rows, *daily_rows, *senior_rows,
+                        *postop_first_rows, *surgery_record_rows,
                     ),
-                    "ordered_procedures": list(ordered_names),
-                    "course_documented": complete,
-                }))
+                    llm_client,
+                )
+                invasive_extractions.append(documentation)
+                states = dict(documentation.states)
+                names = [trigger.procedure.name for trigger in triggers]
+                missing = [
+                    trigger.procedure.name for trigger in triggers
+                    if states.get(trigger.procedure.code) == "not_documented"
+                ]
+                if documentation.state == "technical_error":
+                    final_state, reason_code = "technical_error", documentation.reason_code
+                elif documentation.state == "unresolved":
+                    final_state, reason_code = "data_gap", documentation.reason_code
+                elif missing:
+                    final_state, reason_code = "non_compliant", "required_document_missing"
+                    display.append((rule_id, {
+                        "failure_kind": "invasive_procedure_record_missing",
+                        "procedures": names,
+                        "procedure_count": len(names),
+                        "missing_procedures": missing,
+                    }))
+                elif any(state == "uncertain" for state in states.values()):
+                    final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                else:
+                    final_state, reason_code = "compliant", "requirement_satisfied"
+                    display.append((rule_id, {
+                        "verification_kind": "invasive_procedure_record_complete",
+                        "procedures": names,
+                        "procedure_count": len(names),
+                    }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=("inpat_nondrug_order", "daily_course_record"),
+                source_keys=(
+                    "inpat_nondrug_order", "first_course_record", "daily_course_record",
+                    "senior_course_record", "postsurg_firstcourse_record", "surgery_record",
+                    "mr_surgery",
+                ),
                 final_state=final_state, reason_code=reason_code,
             ))
             continue
@@ -5675,6 +5731,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 transfusion_performance_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
+                *invasive_extractions,
             )
             if item is not None
         ),
@@ -5692,6 +5749,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 transfusion_performance_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
+                *invasive_extractions,
             )
             if item is not None
         ),
@@ -5709,6 +5767,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 transfusion_performance_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
+                *invasive_extractions,
             )
             if item is not None
         ),
@@ -5726,6 +5785,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 transfusion_performance_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
+                *invasive_extractions,
             )
             if item is not None
         ),
@@ -5743,6 +5803,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 transfusion_performance_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
+                *invasive_extractions,
             )
             if item is not None
         ),

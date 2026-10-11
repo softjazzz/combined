@@ -9,7 +9,10 @@ from typing import Any
 
 
 CONTINUITY_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-04-02-07", "LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02", "LX0609-12-02-01"}
+    {
+        "LX0609-04-02-07", "LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02",
+        "LX0609-12-02-01", "LX0609-10-03-01",
+    }
 )
 
 _KINDS_BY_RULE = {
@@ -34,6 +37,9 @@ _KINDS_BY_RULE = {
         "diagnosis_change_documentation_check", "diagnosis_change_association_failed",
         "diagnosis_change_documentation_time_missing",
     }),
+    "LX0609-10-03-01": frozenset({
+        "invasive_procedure_record_complete", "invasive_procedure_record_missing",
+    }),
 }
 
 _ALLOWED_KEYS = {
@@ -53,6 +59,8 @@ _ALLOWED_KEYS = {
     "diagnosis_change_documentation_check": {"diagnosis_change_count", "reason_recorded", "basis_recorded"},
     "diagnosis_change_association_failed": {"diagnosis_record_count", "diagnosis_change_count", "association_issue"},
     "diagnosis_change_documentation_time_missing": {"diagnosis_change_count", "untimed_document_count", "issue"},
+    "invasive_procedure_record_complete": {"procedures", "procedure_count"},
+    "invasive_procedure_record_missing": {"procedures", "procedure_count", "missing_procedures"},
 }
 
 _PUBLISHED_NUMERIC_FIELDS = frozenset({"threshold_hours", "handover_threshold_hours"})
@@ -63,7 +71,7 @@ _PUBLISHED_INTEGER_FIELDS = frozenset({
     "daily_course_record_count", "eligible_daily_course_count", "missing_title_count",
     "missing_time_count", "missing_signature_count", "transfer_order_count",
     "transfer_in_count", "transfer_out_count", "diagnosis_change_count",
-    "diagnosis_record_count", "untimed_document_count",
+    "diagnosis_record_count", "untimed_document_count", "procedure_count",
 })
 
 
@@ -89,6 +97,8 @@ def safe_continuity_customer_display_facts(
     if kind == "transfer_event_association_gap" and not _valid_transfer_event_association_gap(raw):
         return None
     if kind == "consultation_business_time_missing" and not _valid_consultation_business_time_gap(raw):
+        return None
+    if kind.startswith("invasive_procedure_record_") and not _valid_invasive_procedure_facts(kind, raw):
         return None
 
     safe: dict[str, Any] = {kind_key: kind}
@@ -229,6 +239,8 @@ def validate_published_continuity_facts(
             valid = _valid_signature_timeline(raw)
         elif kind == "physician_handoff_record_time_missing":
             valid = _valid_missing_record_times(raw)
+        elif kind.startswith("invasive_procedure_record_"):
+            valid = _valid_invasive_procedure_facts(kind, raw)
         else:
             valid = True
     except (TypeError, ValueError, OverflowError):
@@ -240,10 +252,43 @@ def validate_published_continuity_facts(
     return (True, dict(raw)) if valid else (False, None)
 
 
+def _valid_invasive_procedure_facts(kind: str, raw: Mapping[str, Any]) -> bool:
+    """075 操作名称只能来自院方有创操作目录，不承载病历原文。"""
+    from .extended_document.invasive_procedure_record import invasive_procedure_names
+
+    catalog_names = invasive_procedure_names()
+    procedures = raw.get("procedures")
+    if (
+        type(procedures) is not list
+        or not procedures
+        or len(set(procedures)) != len(procedures)
+        or any(type(name) is not str or name not in catalog_names for name in procedures)
+        or raw.get("procedure_count") != len(procedures)
+    ):
+        return False
+    if kind == "invasive_procedure_record_complete":
+        return set(raw) == {"verification_kind", "procedures", "procedure_count"}
+    missing = raw.get("missing_procedures")
+    return (
+        set(raw) == {"failure_kind", "procedures", "procedure_count", "missing_procedures"}
+        and type(missing) is list
+        and bool(missing)
+        and len(set(missing)) == len(missing)
+        and all(name in procedures for name in missing)
+    )
+
+
 def continuity_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None,
 ) -> bool:
     """071 缺权威时间的受控事实仅能对应资料不足，不重判其他连续性事实。"""
+    if str(rule_id or "").strip().upper() == "LX0609-10-03-01" and isinstance(safe_facts, Mapping):
+        kind = safe_facts.get("failure_kind") or safe_facts.get("verification_kind")
+        expected = {
+            "invasive_procedure_record_missing": "non_compliant",
+            "invasive_procedure_record_complete": "compliant",
+        }.get(str(kind or ""))
+        return expected is None or status == expected
     if str(rule_id or "").strip().upper() != "LX0609-10-01-01":
         return True
     if isinstance(safe_facts, Mapping) and (

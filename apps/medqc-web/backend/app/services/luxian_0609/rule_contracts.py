@@ -193,7 +193,7 @@ class Luxian0609RuleContract:
             0
             if self.decision_authority == "program_only"
             else 2
-            if self.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03"}
+            if self.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01"}
             else 1
         )
         if self.max_llm_calls_per_rule != expected_calls:

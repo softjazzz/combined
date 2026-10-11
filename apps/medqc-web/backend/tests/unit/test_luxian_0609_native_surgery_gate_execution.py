@@ -1029,12 +1029,13 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_code": "32.4100",
                 "surgery_process": "术中置入人工硬脑膜。",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
             "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
             "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
-            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER", "diagnosis_code": "C34.100"},),
             "inpat_drug_order": ({"generic_name": "SAFE_DRUG_MARKER"},),
             "daily_course_record": ({
                 "record_time": "2026-01-01 12:00:00+08",
@@ -1304,6 +1305,7 @@ async def test_typed_024_short_circuits_confirmed_lymph_fact_before_unrelated_so
         "document_id": "c04-surgery-1",
         "surgery_begin_time": "2026-01-01 08:00:00+08",
         "surgery_name": "胸腔镜下右肺上叶切除+纵隔淋巴结清扫术",
+        "surgery_code": "32.4100",
         "surgery_process": "术中清扫11组、10组、7组淋巴结，送冰冻切片。",
     }
 
@@ -1500,11 +1502,12 @@ async def test_joint_033_rejects_surgery_only_evidence_ref() -> None:
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_code": "32.4100",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
             "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
             "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
-            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER", "diagnosis_code": "C34.100"},),
             "surgery_inform_consent": ({"record_content": "SAFE_CONSENT_MARKER"},),
         }
         return SnapshotSourceRows.create(
@@ -1561,6 +1564,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_code": "32.4100",
                 "surgery_process": "术中置入人工硬脑膜。",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
@@ -1569,7 +1573,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
                 for index in range(7)
             ),
             "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
-            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER", "diagnosis_code": "C34.100"},),
         }
         return SnapshotSourceRows.create(
             source_key=source_key,

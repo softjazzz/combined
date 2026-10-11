@@ -499,7 +499,7 @@ def test_v2_default_gate_rejects_incomplete_or_inconsistent_matrix(
         batch["cases"][0]["response"]["results"].pop()
     elif mutation == "extra":
         extra = copy.deepcopy(batch["cases"][0]["response"]["results"][0])
-        extra["rule_id"] = "LX0609-10-03-01"
+        extra["rule_id"] = "LX0609-05-03-01"
         batch["cases"][0]["response"]["results"].append(extra)
     else:
         second_case = copy.deepcopy(batch["cases"][0])

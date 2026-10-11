@@ -629,10 +629,8 @@
       "source_document": "有创操作记录",
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "invasive_procedure_catalog_missing",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "有创操作目录尚未冻结，本质控点暂不执行；不得因目录或操作记录缺失生成数据不足或不合规结论。"
+      "policy_summary": "院方口径（2026-10-11）：有创操作目录为院方《2026年三四级手术及有创操作目录》中的治疗性操作与介入治疗共92项。运行病历只看医嘱，由模型把不规范的医嘱名称归入目录、程序校验目录项；终末质控有病案首页时同时按首页手术操作编码精确匹配。操作当日起3天内的病程或手术记录须明确写明已实施该操作。"
     },
     {
       "rule_id": "LX0609-04-02-08",

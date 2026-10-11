@@ -92,7 +92,6 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
             "LX0609-07-04-02",
             "LX0609-05-01-04",
             "LX0609-05-03-01",
-            "LX0609-10-03-01",
         }
     )
 
@@ -151,7 +150,7 @@ def test_unified_engine_off_keeps_only_always_typed_extended_rules() -> None:
     assert resolved == tuple(
         rule_id
         for rule_id in _rule_ids(50, 77)
-        if rule_id not in {"LX0609-05-01-04", "LX0609-05-03-01", "LX0609-10-03-01"}
+        if rule_id not in {"LX0609-05-01-04", "LX0609-05-03-01"}
     )
 
 
@@ -200,7 +199,6 @@ def test_disabled_rollout_flag_only_removes_its_group() -> None:
         ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
         ("LX0609-05-01-04", "key_antimicrobial_catalog_missing"),
         ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
-        ("LX0609-10-03-01", "invasive_procedure_catalog_missing"),
     ),
 )
 def test_public_execution_returns_controlled_not_executed_for_pending_rule(

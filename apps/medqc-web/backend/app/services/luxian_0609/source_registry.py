@@ -441,11 +441,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
+    # mr_diagnosis 仅供院方“病种—术式”目录按 ICD 编码确认癌种，不送入模型。
     "LX0609-04-02-03": (
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
         "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
-        "discharge_record",
+        "discharge_record", "mr_diagnosis",
     ),
     "LX0609-04-02-04": ("surgery_record", "mr_surgery", "daily_course_record"),
     "LX0609-05-01-01": (
@@ -653,6 +654,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-10-02-01": ("evaluation_context.horizon", "inpat_nondrug_order"),
     "LX0609-10-02-02": ("inpat_nondrug_order",),
     "LX0609-12-02-01": ("diagnosis", "admission_record_diagnosis"),
+    # 075：医嘱触发（运行病历）＋病案首页编码触发（终末），操作记录核对病程与手术记录。
+    "LX0609-10-03-01": (
+        "inpat_nondrug_order", "first_course_record", "daily_course_record",
+        "senior_course_record", "postsurg_firstcourse_record", "surgery_record", "mr_surgery",
+    ),
 })
 
 

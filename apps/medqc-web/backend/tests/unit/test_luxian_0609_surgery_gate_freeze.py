@@ -134,6 +134,8 @@ def _rows() -> dict[str, list[dict[str, Any]]]:
         "mr_surgery": [
             {
                 "surgery_name": "手术甲",
+                # 024 院方目录（2026-10-11）按编码确认“肺癌+肺叶切除”组合。
+                "surgery_code": "32.4100",
                 "surgery_begin_datetime": "2026-01-01 08:00:00+08:00",
                 "surgery_end_datetime": "2026-01-01 10:00:00",
                 "surgeon": "术者甲",
@@ -142,7 +144,7 @@ def _rows() -> dict[str, list[dict[str, Any]]]:
         ],
         "pathology_exam_master": [{"specimen_name": "病理标本"}],
         "pathology_exam_report": [{"diagnosis": "恶性肿瘤"}],
-        "diagnosis": [{"diagnosis_name": "恶性肿瘤"}],
+        "diagnosis": [{"diagnosis_name": "恶性肿瘤", "diagnosis_code": "C34.100"}],
         "inpat_drug_order": [{"generic_name": "头孢唑啉", "order_status": "执行"}],
         "daily_course_record": [{"document_id": "course-gate-1", "record_content": "术后病程记录"}],
         "surgery_inform_consent": [

@@ -4,6 +4,9 @@ from datetime import datetime
 import json
 
 import pytest
+
+from luxian_0609_invasive_procedure_test_client import FrozenInvasiveProcedureClient
+from app.services.luxian_0609.continuity_result_mapping import safe_continuity_customer_display_facts
 from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
 from app.services.luxian_0609.postoperative_result_mapping import safe_postoperative_customer_display_facts
 
@@ -78,6 +81,7 @@ def _session(
         "death_record": "snapshot-provider-death_record-v1",
         "death_discussion": "snapshot-provider-death_discussion-v1",
         "discharge_record": "snapshot-provider-discharge_record-v1",
+        "first_course_record": "snapshot-provider-first_course_record-v1",
         "daily_course_record": "snapshot-provider-daily_course_record-v1",
         "senior_course_record": "snapshot-provider-senior_course_record-v1",
         "postsurg_firstcourse_record": "snapshot-provider-postsurg_firstcourse_record-v1",
@@ -9785,38 +9789,151 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
     assert "customer_evidence" not in canonical
 
 
+# 院方口径（2026-10-11）：有创操作目录为院方目录中的治疗性操作与介入治疗共 92 项；
+# 医嘱名称由模型归入目录，操作当日起 3 天内的病程或手术记录须写明已实施该操作。
+_075_ORDER = {
+    "order_name": "经胃镜特殊治疗(息肉肿物切除)",
+    "order_type": "治疗",
+    "prescribed_datetime": "2026-06-01 08:00:00",
+}
+
+
 @pytest.mark.asyncio
-async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-10-03-01",
-        {
-            "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 10:00:00",
-                "document_title": "中心静脉置管操作记录",
-                "record_content": "在无菌操作下完成右颈内静脉中心静脉置管。",
-            },),
-        },
+async def test_075_nonstandard_order_name_with_record_is_compliant() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+        records={"内镜下胃息肉切除术": ("documented", "胃镜下行胃窦息肉圈套切除")},
     )
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-
-
-@pytest.mark.asyncio
-async def test_075_invasive_order_without_course_record_delivers_defect_facts() -> None:
     result, reduced = await _evaluate(
         "LX0609-10-03-01",
         {
-            "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
-            "daily_course_record": (),
+            "inpat_nondrug_order": (_075_ORDER,),
+            # 0910 源库日常病程为空，病程记于查房记录，操作记录须同时核对。
+            "senior_course_record": ({
+                "record_time": "2026-06-01 15:00:00",
+                "record_content": "今日胃镜下行胃窦息肉圈套切除，创面钛夹夹闭，过程顺利。",
+            },),
         },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-10-03-01"] == {
+        "verification_kind": "invasive_procedure_record_complete",
+        "procedures": ["内镜下胃息肉切除术"],
+        "procedure_count": 1,
+    }
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_075_record_outside_three_day_window_is_defect_without_second_call() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+    )
+    result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": (_075_ORDER,),
+            "daily_course_record": ({
+                "record_time": "2026-06-06 09:00:00",
+                "record_content": "胃镜下胃息肉切除术后第5天，恢复良好。",
+            },),
+        },
+        llm_client=client,
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-10-03-01"] == {
-        "failure_kind": "invasive_procedure_course_record_missing",
-        "ordered_procedures": ["中心静脉置管"],
-        "course_documented": False,
+    facts = dict(result.customer_display_facts)["LX0609-10-03-01"]
+    assert facts == {
+        "failure_kind": "invasive_procedure_record_missing",
+        "procedures": ["内镜下胃息肉切除术"],
+        "procedure_count": 1,
+        "missing_procedures": ["内镜下胃息肉切除术"],
     }
+    assert safe_continuity_customer_display_facts(rule_id="LX0609-10-03-01", raw=facts) == facts
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-10-03-01", facts=facts) == (
+        "共核对 1 项有创操作，以下操作在操作当日起 3 天内的病程或手术记录中未找到对应操作记录："
+        "内镜下胃息肉切除术。"
+    )
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_075_front_page_code_triggers_without_orders() -> None:
+    client = FrozenInvasiveProcedureClient(records={"经皮肝穿刺引流术": "not_documented"})
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": (),
+            "mr_surgery": ({
+                "surgery_code": "50.9101",
+                "surgery_name": "经皮肝穿刺引流术",
+                "surgery_begin_datetime": "2026-06-02 00:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-02 10:00:00",
+                "record_content": "患者腹胀较前缓解。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_075_orders_outside_catalog_are_not_applicable() -> None:
+    client = FrozenInvasiveProcedureClient(mapping={"电子结肠镜检查": None})
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": ({**_075_ORDER, "order_name": "电子结肠镜检查", "order_type": "检查"},),
+            "daily_course_record": (),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_075_ungrounded_quote_fails_closed() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+        records={"内镜下胃息肉切除术": ("documented", "并不存在的原文")},
+    )
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": (_075_ORDER,),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 15:00:00",
+                "record_content": "今日完成胃镜治疗。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+
+
+@pytest.mark.asyncio
+async def test_075_triggered_order_without_time_is_data_gap() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+    )
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": ({**_075_ORDER, "prescribed_datetime": None},),
+            "daily_course_record": (),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
 
 
 @pytest.mark.asyncio

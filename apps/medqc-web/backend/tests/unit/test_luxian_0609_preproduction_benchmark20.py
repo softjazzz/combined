@@ -35,7 +35,7 @@ _WITHHELD_RULE_IDS = frozenset(
         "LX0609-07-04-02",
         "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
+        # 075 已按院方 92 项有创操作目录恢复执行（2026-10-11）。
     }
 )
 _CUSTOMER_EXCLUDED_RULE_IDS = frozenset(

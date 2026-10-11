@@ -325,7 +325,9 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
     assert "不得因收费资料缺失" in entries["LX0609-07-04-02"].policy_summary
     assert "暂不执行" in entries["LX0609-05-01-04"].policy_summary
     assert "不得因目录或病原学资料缺失" in entries["LX0609-05-01-04"].policy_summary
-    assert "暂不执行" in entries["LX0609-10-03-01"].policy_summary
-    assert "不得因目录或操作记录缺失" in entries["LX0609-10-03-01"].policy_summary
+    # 院方口径（2026-10-11）：075 按院方 92 项有创操作目录恢复执行。
+    assert "共92项" in entries["LX0609-10-03-01"].policy_summary
+    assert "首页手术操作编码" in entries["LX0609-10-03-01"].policy_summary
+    assert entries["LX0609-10-03-01"].phase_status == "phase_1_target"
     assert "乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶" in entries["LX0609-07-01-03"].policy_summary
     assert "急诊补检" in entries["LX0609-07-01-03"].pending_definition_note

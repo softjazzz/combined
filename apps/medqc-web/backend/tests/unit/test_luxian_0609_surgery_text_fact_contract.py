@@ -207,6 +207,8 @@ def _session(
                 "2026-01-01 08:00:00+08" if exact_performed_time else ""
             ),
             "surgery_name": "本次手术",
+            # 024 院方目录（2026-10-11）按 ICD 编码确认“肺癌+肺叶切除”组合。
+            "surgery_code": "32.4100",
             "surgery_process": (
                 "正文标记-A；术中置入人工硬脑膜；"
                 "2026-01-01 08:00实际给予预防抗菌药，"
@@ -215,7 +217,7 @@ def _session(
         },),
         "mr_surgery": ({"surgery_name": "本次手术"},),
         "pathology_exam_report": ({"diagnosis": "本次病理关联"},),
-        "diagnosis": ({"diagnosis_name": "本次诊断"},),
+        "diagnosis": ({"diagnosis_name": "本次诊断", "diagnosis_code": "C34.100"},),
         "inpat_drug_order": ({"record_content": "治疗性抗菌药"},),
         "daily_course_record": ({"record_content": "用药过程"},),
         "surgery_inform_consent": ({

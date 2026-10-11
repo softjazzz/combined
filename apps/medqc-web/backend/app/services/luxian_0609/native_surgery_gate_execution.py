@@ -37,6 +37,12 @@ from .source_evidence_reader import (
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
+from .surgery_lymph_node_catalog import (
+    LymphNodeCatalogGate,
+    colon_pathology_missing_items,
+    evaluate_lymph_node_catalog_gate,
+    procedures_outside_catalog,
+)
 from .surgery_text_fact_contract import (
     LX0609_025_REQUIRED_FIELDS,
     SurgeryEventFact,
@@ -2013,6 +2019,48 @@ def _surgery_text_outcome(
     raise ValueError("unsupported surgery text outcome")
 
 
+def _colon_pathology_outcome(
+    *,
+    pathology_state: str,
+    pathology_rows: Sequence[Mapping[str, Any]],
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> _SurgeryTextOutcome:
+    """结肠癌目标手术（CoC-7）：病理报告须有淋巴结清扫个数及 pTNM 分期。"""
+
+    rule_id = "LX0609-04-02-03"
+    if pathology_state == "error":
+        return _SurgeryTextOutcome(rule_id, "technical_error", "source_query_error")
+    if pathology_state != "available" or not pathology_rows:
+        return _SurgeryTextOutcome(rule_id, "data_gap", "colon_pathology_report_unavailable")
+    missing = colon_pathology_missing_items(pathology_rows)
+    if not missing:
+        return _SurgeryTextOutcome(rule_id, "compliant", "requirement_satisfied")
+    return _SurgeryTextOutcome(
+        rule_id,
+        "non_compliant",
+        "colon_pathology_lymph_node_items_missing",
+        {
+            "failure_kind": "colon_pathology_lymph_node_items_missing",
+            "performed_surgery_confirmed": True,
+            "malignant_surgery_confirmed": True,
+            "missing_items": list(missing),
+        },
+        tuple(dict.fromkeys(
+            ref
+            for row in pathology_rows
+            if (
+                ref := _material_document_ref_for_row(
+                    materials=materials,
+                    snapshot=snapshot,
+                    source_key="pathology_exam_report",
+                    selected_row=row,
+                )
+            )
+        )),
+    )
+
+
 def _decision_from_surgery_outcome(
     *,
     outcome: _SurgeryTextOutcome,
@@ -2049,6 +2097,9 @@ def _decision_from_surgery_outcome(
         ),
     }
     applicability, evidence_state, qc_direction, reason_code = mapping[outcome.status]
+    if outcome.reason_code == "catalog_combination_absent":
+        # 恶性肿瘤手术不在院方“病种—术式”目录内：适用条件不满足。
+        reason_code = "eligibility_not_met"
     source_keys = _TYPED_TEXT_SOURCES[outcome.rule_id]
     # 逐行文书引用是客户坐标的唯一输入；来源 snapshot ref 仅保留给 Binding
     # 验证无正文/空来源的合法结论，公共 projector 不会把它投影成文书。
@@ -2328,6 +2379,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         else:
             decisions.append(provisional)
 
+    lymph_node_gate: LymphNodeCatalogGate | None = None
     if typed_text_rule_ids:
         source_keys = tuple(dict.fromkeys(
             source_key
@@ -2353,6 +2405,20 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 key: source_states[key] for key in _TYPED_TEXT_SOURCES[rule_id]
             }
             states = set(states_by_source.values())
+            if (
+                rule_id == "LX0609-04-02-03"
+                and states_by_source.get("surgery_record") in {"available", "empty"}
+                and states_by_source.get("mr_surgery") in {"available", "empty"}
+                and procedures_outside_catalog(
+                    surgery_rows=rows_by_source["surgery_record"],
+                    mr_surgery_rows=rows_by_source["mr_surgery"],
+                )
+            ):
+                # 院方目录（2026-10-11）外的术式无论是否恶性均不适用，无需恶性判定。
+                pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                    rule_id, "not_applicable", "catalog_combination_absent"
+                )
+                continue
             if rule_id == "LX0609-04-02-03" and malignancy_resolver is not None:
                 visit_stage = resolve_malignancy_visit_stage(
                     horizon_state=states_by_source[
@@ -2460,6 +2526,40 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     )
                 )
             )
+            if (
+                rule_id == "LX0609-04-02-03"
+                and "error" not in states
+                and not structured_not_applicable
+                and (
+                    deterministic_outcome is None
+                    or deterministic_outcome.status != "not_applicable"
+                )
+            ):
+                # 院方口径（2026-10-11）：只有“病种—术式”目录内的恶性肿瘤手术
+                # 要求核对淋巴结处理记录，其余恶性肿瘤手术不适用本条。
+                _mr_diagnosis_state, mr_diagnosis_rows = _typed_source_rows(
+                    source_key="mr_diagnosis",
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+                lymph_node_gate = evaluate_lymph_node_catalog_gate(
+                    surgery_rows=rows_by_source["surgery_record"],
+                    mr_surgery_rows=rows_by_source["mr_surgery"],
+                    diagnosis_rows=(
+                        *rows_by_source["admission_record_diagnosis"],
+                        *rows_by_source["diagnosis"],
+                        *rows_by_source["discharge_record_diagnosis"],
+                        *rows_by_source["pathology_exam_report"],
+                        *mr_diagnosis_rows,
+                    ),
+                    pathology_rows=rows_by_source["pathology_exam_report"],
+                    discharge_rows=rows_by_source["discharge_record"],
+                )
+                if lymph_node_gate.state != "applicable":
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, lymph_node_gate.state, lymph_node_gate.reason_code
+                    )
+                    continue
             if rule_id == "LX0609-04-02-04":
                 # 025 的五项必填字段只能由正式手术记录核对。病程可辅助证明
                 # 实际使用永久植入物，但手术记录不可读时不能替代其字段。
@@ -2757,6 +2857,19 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                         rule_id, "data_gap", "surgery_projection_partial"
                                     )
                                 pending_outcomes[rule_id] = outcome
+        lymph_node_outcome = pending_outcomes.get("LX0609-04-02-03")
+        if (
+            lymph_node_gate is not None
+            and lymph_node_gate.colon_pathology_required
+            and lymph_node_outcome is not None
+            and lymph_node_outcome.status == "compliant"
+        ):
+            pending_outcomes["LX0609-04-02-03"] = _colon_pathology_outcome(
+                pathology_state=source_states.get("pathology_exam_report", "missing"),
+                pathology_rows=rows_by_source.get("pathology_exam_report", ()),
+                materials=evidence_materials,
+                snapshot=evidence_snapshot,
+            )
         customer_display_facts.extend(
             (rule_id, outcome.customer_display_facts)
             for rule_id, outcome in pending_outcomes.items()

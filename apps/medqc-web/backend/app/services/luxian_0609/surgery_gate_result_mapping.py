@@ -150,6 +150,22 @@ def surgery_timeliness_gap_display(facts: Any) -> tuple[list[str], str] | None:
 
 
 def _safe_024(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "colon_pathology_lymph_node_items_missing":
+        missing = raw.get("missing_items")
+        if (
+            raw.get("performed_surgery_confirmed") is not True
+            or raw.get("malignant_surgery_confirmed") is not True
+            or not isinstance(missing, list)
+            or not missing
+            or any(item not in {"lymph_node_count", "pathologic_stage"} for item in missing)
+        ):
+            return None
+        return {
+            "failure_kind": "colon_pathology_lymph_node_items_missing",
+            "performed_surgery_confirmed": True,
+            "malignant_surgery_confirmed": True,
+            "missing_items": list(dict.fromkeys(missing)),
+        }
     checked = raw.get("checked_sources")
     if (
         raw.get("failure_kind") != "lymph_node_dissection_not_documented"

@@ -267,7 +267,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-05-01-05",
         "LX0609-05-01-06",
         "LX0609-08-01-03",
-        "LX0609-10-03-01",
         "LX0609-04-02-08",
         "LX0609-04-01-01",
         "LX0609-04-02-02",
@@ -394,7 +393,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         contract.max_llm_calls_per_rule == 0
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
-        == (2 if contract.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03"} else 1)
+        == (2 if contract.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01"} else 1)
         and bool(contract.prompt_version)
         for contract in contracts
     )

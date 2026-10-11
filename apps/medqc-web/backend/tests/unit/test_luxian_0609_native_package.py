@@ -557,7 +557,6 @@ def test_mdt_and_extended_document_gates_are_independent(
         "LX0609-03-02-01",
         "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
     )
 
     plan = build_luxian_0609_package_plan_from_settings(
@@ -576,7 +575,6 @@ def test_mdt_and_extended_document_gates_are_independent(
     assert plan.not_executed_rule_ids == (
         "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
     )
     assert plan.compatibility_rule_ids == tuple(
         rule_id
@@ -856,7 +854,6 @@ def test_public_package_entry_expands_only_inside_the_package():
         "LX0609-07-04-02",
         "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
     ),
 )
 def test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids(
