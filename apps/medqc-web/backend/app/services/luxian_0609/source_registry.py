@@ -432,7 +432,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 018 仅接受受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
     "LX0609-01-01-02": ("diagnosis", "admission_record_diagnosis"),
     "LX0609-01-02-02": ("first_course_record_diagnosis",),
-    "LX0609-04-01-04": ("presurg_summary", "surgery_record"),
+    "LX0609-04-01-04": ("presurg_summary", "surgery_record", "senior_course_record"),
     "LX0609-04-01-05": ("presurg_discussion",),
     # 027 需要同一快照内的病历阶段、恶性事实与正式出院记录。
     "LX0609-08-01-04": (

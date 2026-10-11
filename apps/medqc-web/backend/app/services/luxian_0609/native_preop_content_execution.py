@@ -27,7 +27,9 @@ from .surgery_event_association import (
     associate_preop_document_to_surgery_event,
     build_performed_surgery_events,
     summary_planned_surgery_time_from_row,
+    surgery_event_begin_time,
 )
+from .source_evidence_reader import authoritative_document_time_value
 
 
 RULE_FIELDS = {
@@ -435,6 +437,42 @@ def _field_quote(value: Any) -> Any:
     return value.get("quote") if isinstance(value, Mapping) else value
 
 
+# 用户口径（2026-10-11）：078“术者术前查看患者”一项，认可同一台手术、手术开始前完成的
+# 《术前主刀医师查房记录》；其余六项仍只看术前小结。查房时限由 064 单独核对，此处不卡24小时。
+PREOP_SURGEON_ROUND_SOURCE = "senior_course_record"
+_PREOP_SURGEON_ROUND_TITLE = re.compile(r"术前.{0,4}(?:主刀|术者).{0,16}查房|(?:主刀|术者).{0,16}术前.{0,4}查房")
+
+
+def _preop_surgeon_round_events(
+    events: Sequence[SurgeryEvent], round_rows: Sequence[Mapping[str, Any]],
+) -> frozenset[int]:
+    """返回有术前主刀查房记录覆盖的手术事件序号。
+
+    查房完成时间须早于该台手术开始，且晚于上一台手术开始（否则属于上一台）；
+    任一相关手术缺可靠开始时间时不作归属，保持原判定。
+    """
+
+    ordered = [(event, surgery_event_begin_time(event)) for event in events]
+    covered: set[int] = set()
+    for row in round_rows:
+        if not _PREOP_SURGEON_ROUND_TITLE.search(clean_text(row.get("document_title"))):
+            continue
+        if not clean_text(row.get("record_content")):
+            continue
+        done = _document_record_time({"record_time": authoritative_document_time_value(row)})
+        if done is None:
+            continue
+        previous: datetime | None = None
+        for event, begin in sorted(ordered, key=lambda item: item[1] or datetime.max):
+            if begin is None:
+                break
+            if done < begin and (previous is None or done > previous):
+                covered.add(event.event_index)
+                break
+            previous = begin
+    return frozenset(covered)
+
+
 def _field_is_present(rule_id: str, row: Mapping[str, Any], values: Mapping[str, Any], field: str) -> bool:
     return _has_structured_field(rule_id, row, field) or _field_state(values[field]) == "present"
 
@@ -501,6 +539,7 @@ def _association_state_for_rule(
     records: Sequence[tuple[str, Mapping[str, Any], str]],
     parsed: Mapping[tuple[str, str], Mapping[str, Any]],
     events: Sequence[SurgeryEvent],
+    preop_round_events: frozenset[int] = frozenset(),
 ) -> tuple[set[str], bool, list[Mapping[str, Any]], set[str], set[str]]:
     """078按手术事件聚合；079逐份核对，返回确认缺项、歧义、安全展示和待确认字段。
 
@@ -570,9 +609,11 @@ def _association_state_for_rule(
     content_uncertain: set[str] = set()
     if rule_id == "LX0609-04-01-04":
         # 保留原同事件合并：只有明确present可覆盖同事件的另一份文书，unknown不能补齐。
-        for documents in grouped.values():
+        for group_key, documents in grouped.items():
             for field in RULE_FIELDS[rule_id]:
                 if any(_field_is_present(rule_id, row, values, field) for row, values in documents):
+                    continue
+                if field == "surgeon_preop_visit" and group_key in preop_round_events:
                     continue
                 unknown = any(_field_state(values[field]) == "unknown" for _row, values in documents)
                 if unknown:
@@ -754,6 +795,18 @@ async def evaluate_preop_content_rules(
         for source_key in ("surgery_record",)
         for ref in _observation_refs(snapshot, source_key)
     )
+    preop_round_events: frozenset[int] = frozenset()
+    if "LX0609-04-01-04" in active and events:
+        try:
+            round_rows = tuple(
+                row for _ref, row in materials.document_rows(PREOP_SURGEON_ROUND_SOURCE, snapshot=snapshot)
+            )
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            # 查房来源不可用只是少一条补证途径，不改变术前小结本身的判定。
+            round_rows = ()
+        preop_round_events = _preop_surgeon_round_events(events, round_rows)
+    if preop_round_events:
+        event_refs = (*event_refs, *_observation_refs(snapshot, PREOP_SURGEON_ROUND_SOURCE))
     decisions: list[RuleDecision] = []
     display: list[tuple[str, Mapping[str, Any]]] = []
     for rule in selected:
@@ -808,6 +861,7 @@ async def evaluate_preop_content_rules(
             records=records[rule],
             parsed=parsed,
             events=events or (),
+            preop_round_events=preop_round_events if rule == "LX0609-04-01-04" else frozenset(),
         )
         if (has_ambiguous or summary_uncertain) and not missing:
             status, reason = "data_gap", (

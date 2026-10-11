@@ -654,7 +654,7 @@
       "qc_point": "术前小结内容不完整",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-04-01-01单独交付。"
+      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-04-01-01单独交付。用户口径（2026-10-11）：术者术前查看患者一项认可同一台手术、手术开始前完成的术前主刀医师查房记录，时限由LX0609-04-05-01核对。"
     },
     {
       "rule_id": "LX0609-04-01-05",

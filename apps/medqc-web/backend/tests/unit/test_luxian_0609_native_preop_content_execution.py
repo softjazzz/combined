@@ -31,6 +31,7 @@ def _session(
     mr_surgeries=(),
     truncated=False,
     error_sources=(),
+    senior_rounds=(),
 ):
     def reader(**kwargs):
         key = kwargs["source_key"]
@@ -45,6 +46,8 @@ def _session(
             if key == "surgery_record"
             else mr_surgeries
             if key == "mr_surgery"
+            else senior_rounds
+            if key == "senior_course_record"
             else ()
         )
         return SnapshotSourceRows.create(
@@ -145,7 +148,7 @@ def test_running_preop_rules_do_not_request_mr_surgery():
         row_reader=reader,
     )
     assert "mr_surgery" not in calls
-    assert set(calls) == {"presurg_summary", "presurg_discussion", "surgery_record"}
+    assert set(calls) == {"presurg_summary", "presurg_discussion", "surgery_record", "senior_course_record"}
 
 
 def test_079_only_reads_its_own_discussion_source():
@@ -1767,3 +1770,74 @@ async def test_invalid_summary_quote_fails_summary_rule_but_keeps_discussion():
     assert result.decisions[0].reason_code == "required_field_missing"
     assert dict(result.customer_display_facts)["LX0609-04-01-04"]["invalid_fields"] == ["surgical_indication"]
     assert result.decisions[1].qc_direction.value == "satisfied"
+
+
+def _surgeon_round(*, document_id, submitted, title="术前主刀医师查房记录"):
+    return {
+        "document_id": document_id,
+        "document_title": title,
+        "record_time": None,
+        "submit_datetime": submitted,
+        "record_content": "今日术者查看患者，交代手术方案及风险。",
+    }
+
+
+async def _summary_missing_surgeon_visit(*, rounds, surgeries):
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=({"document_id": "summary", "record_content": text},),
+        surgery_records=surgeries,
+        senior_rounds=rounds,
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-04-01-04",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(_payload({
+            "document_id": "summary",
+            "source_type": "presurg_summary",
+            "items": _summary_items(text=text, procedure=name, missing=("surgeon_preop_visit",)),
+        })),
+    )
+    return result.decisions[0], dict(result.customer_display_facts)["LX0609-04-01-04"]
+
+
+_ONE_SURGERY = (
+    _surgery_record(document_id="surgery-1", name="腹腔镜胆囊切除术", begin="2026-01-02 08:00:00+08:00"),
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("rounds", "expected_missing"), [
+    # 用户口径（2026-10-11）：手术开始前完成的术前主刀医师查房记录可证明术者术前查看患者。
+    ((_surgeon_round(document_id="r1", submitted="2026-01-01 17:00:00"),), []),
+    ((_surgeon_round(document_id="r1", submitted="2026-01-01 17:00:00", title="术前主刀医生查房记录"),), []),
+    # 不卡24小时：时限由064核对。
+    ((_surgeon_round(document_id="r1", submitted="2025-12-28 17:00:00"),), []),
+    # 手术开始后才完成的不算。
+    ((_surgeon_round(document_id="r1", submitted="2026-01-02 08:03:00"),), ["surgeon_preop_visit"]),
+    # 普通查房记录不是术前主刀查房记录。
+    ((_surgeon_round(document_id="r1", submitted="2026-01-01 17:00:00", title="主治医师查房记录"),),
+     ["surgeon_preop_visit"]),
+])
+async def test_078_preop_surgeon_round_document_satisfies_surgeon_visit(rounds, expected_missing):
+    decision, facts = await _summary_missing_surgeon_visit(rounds=rounds, surgeries=_ONE_SURGERY)
+    assert facts["missing_fields"] == expected_missing
+    assert decision.reason_code == ("requirement_violated" if expected_missing else "requirement_satisfied")
+
+
+def test_078_preop_surgeon_round_belongs_only_to_the_next_surgery():
+    from app.services.luxian_0609.native_preop_content_execution import _preop_surgeon_round_events
+    from app.services.luxian_0609.surgery_event_association import SurgeryEvent
+
+    events = (
+        SurgeryEvent(event_index=1, source_key="surgery_record",
+                     row=_surgery_record(document_id="s1", name="甲", begin="2026-01-02 08:00:00+08:00")),
+        SurgeryEvent(event_index=2, source_key="surgery_record",
+                     row=_surgery_record(document_id="s2", name="乙", begin="2026-01-05 08:00:00+08:00")),
+    )
+    between = (_surgeon_round(document_id="r", submitted="2026-01-04 17:00:00"),)
+    before_first = (_surgeon_round(document_id="r", submitted="2026-01-01 17:00:00"),)
+    assert _preop_surgeon_round_events(events, between) == frozenset({2})
+    assert _preop_surgeon_round_events(events, before_first) == frozenset({1})

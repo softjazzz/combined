@@ -450,6 +450,12 @@ def _unique_event_for_planned_surgery_time(
     return same_day_matches[0] if len(same_day_matches) == 1 else None
 
 
+def surgery_event_begin_time(event: SurgeryEvent) -> datetime | None:
+    """事件可靠开始时间；来源冲突或缺失时为 None。"""
+
+    return _event_boundary(event, "begin")
+
+
 def _event_boundary(event: SurgeryEvent, boundary: str) -> datetime | None:
     value, conflict = _boundary_time(event.source_key, event.row, boundary)
     return None if conflict else value
