@@ -297,7 +297,45 @@ def _safe_039(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+_PREOP_SIDES = frozenset({"左", "右", "双侧"})
+
+
 def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """078 可附带侧别冲突提示（仅侧别标签与手术序号），其余字段按原合同校验。"""
+
+    if "laterality_conflicts" not in raw:
+        return _safe_preop_content_core(rule_id, raw)
+    conflicts = raw.get("laterality_conflicts")
+    if (
+        rule_id != "LX0609-04-01-04"
+        or not isinstance(conflicts, list)
+        or not conflicts
+        or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"event_index", "planned_side", "performed_side"}
+            or type(item["event_index"]) is not int
+            or item["event_index"] < 1
+            or item["planned_side"] not in _PREOP_SIDES
+            or item["performed_side"] not in _PREOP_SIDES
+            or item["planned_side"] == item["performed_side"]
+            for item in conflicts
+        )
+    ):
+        return None
+    safe = _safe_preop_content_core(
+        rule_id, {key: value for key, value in raw.items() if key != "laterality_conflicts"}
+    )
+    if safe is None or safe["verification_kind"] == "preop_fact_extraction_invalid":
+        return None
+    matched_events = {
+        item["event_index"] for item in safe["documents"] if item["association_state"] == "matched"
+    }
+    if any(item["event_index"] not in matched_events for item in conflicts):
+        return None
+    return {**safe, "laterality_conflicts": [dict(item) for item in conflicts]}
+
+
+def _safe_preop_content_core(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
     target = {"LX0609-04-01-04": "presurg_summary", "LX0609-04-01-05": "presurg_discussion"}[rule_id]
     allowed = {
         "LX0609-04-01-04": (

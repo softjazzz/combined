@@ -360,3 +360,57 @@ def sqlite_store(tmp_path):
     metadata.create_all(engine)
     store = CanonicalResultStore(table)
     return store, engine
+
+
+def test_078_laterality_conflict_is_flagged_without_changing_status():
+    """用户口径（2026-10-11）：时间优先归属后，拟施与实际手术侧别不一致另行标出供核实。"""
+    rule = "LX0609-04-01-04"
+    procedure = "右侧腹股沟疝修补术"
+    rows = {
+        "presurg_summary": [{
+            "document_id": "D1", "record_time": "2026-10-06 10:00:00",
+            "record_content": f"术前准备已完成。拟行{procedure}，拟全麻，术者已查看患者。",
+        }],
+        "surgery_record": [{
+            "document_id": "SURG",
+            "surgery_name": "左侧腹股沟疝修补术",
+            "surgery_begin_time": "2026-10-07 09:00:00+08:00",
+            "surgery_end_time": "2026-10-07 10:00:00+08:00",
+            "surgery_process": "实际手术已完成。",
+        }],
+    }
+    items = {field: "术前准备已完成" for field in RULE_FIELDS[rule]}
+    items["planned_procedure"] = procedure
+    final, _ = publish(items, rule=rule, source_rows=rows)
+    assert final["status"] == "compliant"
+    facts = final["customer_display_facts"]
+    assert facts["laterality_conflicts"] == [{"event_index": 1, "planned_side": "右", "performed_side": "左"}]
+    assert "术前小结与手术记录的手术侧别不一致（拟施手术为右侧、手术记录为左侧），请核实。" in final["findings"]
+
+    from copy import deepcopy
+    from app.services.luxian_0609.surgery_document_result_mapping import (
+        safe_surgery_document_customer_display_facts,
+    )
+    for mutation in (
+        lambda f: f["laterality_conflicts"][0].update(planned_side="左"),
+        lambda f: f["laterality_conflicts"][0].update(event_index=2),
+        lambda f: f["laterality_conflicts"][0].update(quote="右侧腹股沟疝"),
+        lambda f: f.update(laterality_conflicts=[]),
+    ):
+        forged = deepcopy(facts)
+        mutation(forged)
+        assert safe_surgery_document_customer_display_facts(rule_id=rule, raw=forged) is None
+
+
+@pytest.mark.parametrize(("name", "side"), [
+    ("右侧腹股沟疝修补术", "右"),
+    ("胸腔镜下右肺上叶切除术+纵隔淋巴结清扫术", "右"),
+    ("双侧腹股沟疝修补术", "双侧"),
+    ("左膝关节镜下半月板成形术", "左"),
+    ("显微镜下精索静脉低位结扎术", None),
+    ("左右侧对比探查术", None),
+])
+def test_078_procedure_side_tokens(name, side):
+    from app.services.luxian_0609.native_preop_content_execution import procedure_side
+
+    assert procedure_side(name) == side

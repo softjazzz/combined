@@ -437,6 +437,43 @@ def _field_quote(value: Any) -> Any:
     return value.get("quote") if isinstance(value, Mapping) else value
 
 
+# 用户口径（2026-10-11）：时间优先关联后，拟施术式与实际术式侧别不一致不再阻断归属，
+# 另行标出供核实，不改变 078 判定。只认“双侧/左/右”，同一名称内左右并存时不判。
+_SIDE_TOKEN = re.compile(r"双侧|左|右")
+
+
+def procedure_side(name: Any) -> str | None:
+    tokens = set(_SIDE_TOKEN.findall(clean_text(name)))
+    if "双侧" in tokens:
+        return "双侧" if tokens == {"双侧"} else None
+    return next(iter(tokens)) if len(tokens) == 1 else None
+
+
+def _laterality_conflicts(
+    *,
+    records: Sequence[tuple[str, Mapping[str, Any], str]],
+    parsed: Mapping[tuple[str, str], Mapping[str, Any]],
+    documents: Sequence[Mapping[str, Any]],
+    events: Sequence[SurgeryEvent],
+) -> list[dict[str, Any]]:
+    by_index = {event.event_index: event for event in events}
+    conflicts: dict[tuple[int, str, str], dict[str, Any]] = {}
+    for (_ref, row, text), document in zip(records, documents):
+        event = by_index.get(document.get("event_index"))
+        if document.get("association_state") != "matched" or event is None:
+            continue
+        values = parsed[(RULE_SOURCES["LX0609-04-01-04"], _document_id(row))]
+        if _field_state(values.get("planned_procedure")) != "present":
+            continue
+        planned = procedure_side(_procedure_name_for_association(_field_quote(values["planned_procedure"]), text))
+        performed = procedure_side(event.surgery_name)
+        if planned and performed and planned != performed:
+            conflicts[(event.event_index, planned, performed)] = {
+                "event_index": event.event_index, "planned_side": planned, "performed_side": performed,
+            }
+    return [conflicts[key] for key in sorted(conflicts)]
+
+
 # 用户口径（2026-10-11）：078“术者术前查看患者”一项，认可同一台手术、手术开始前完成的
 # 《术前主刀医师查房记录》；其余六项仍只看术前小结。查房时限由 064 单独核对，此处不卡24小时。
 PREOP_SURGEON_ROUND_SOURCE = "senior_course_record"
@@ -909,6 +946,14 @@ async def evaluate_preop_content_rules(
                     "documents": documents,
                     **({"uncertain_fields": uncertain_fields} if uncertain_fields else {}),
                     **({"pending_fields": sorted(pending)} if pending else {}),
+                    **(
+                        {"laterality_conflicts": conflicts}
+                        if rule == "LX0609-04-01-04"
+                        and (conflicts := _laterality_conflicts(
+                            records=records[rule], parsed=parsed, documents=documents, events=events or (),
+                        ))
+                        else {}
+                    ),
                 },
             )
         )

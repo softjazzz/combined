@@ -3933,6 +3933,23 @@ _PREOP_FIELD_LABELS = {
 }
 
 
+def preop_laterality_conflict_note(
+    *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
+) -> str:
+    """078 侧别冲突只作核实提示，不改变判定。"""
+    if rule_id != "LX0609-04-01-04" or status == "technical_error" or not isinstance(facts, Mapping):
+        return ""
+    conflicts = facts.get("laterality_conflicts")
+    if not isinstance(conflicts, list) or not conflicts:
+        return ""
+    parts = [
+        f"拟施手术为{item.get('planned_side')}侧、手术记录为{item.get('performed_side')}侧".replace("双侧侧", "双侧")
+        for item in conflicts
+        if isinstance(item, Mapping)
+    ]
+    return ("另：术前小结与手术记录的手术侧别不一致（" + "；".join(parts) + "），请核实。") if parts else ""
+
+
 def preop_summary_customer_message(
     *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
 ) -> tuple[str, str, str] | None:
@@ -4440,6 +4457,11 @@ def render_luxian_0609_customer_result(
     )
     if handbook_message is not None:
         findings, evidence, suggestion = handbook_message
+    laterality_note = preop_laterality_conflict_note(
+        rule_id=decision.rule_id, status=decision.final_state.value, facts=safe_customer_display_facts,
+    )
+    if laterality_note:
+        findings = f"{findings}{laterality_note}"
 
     structured_suggestion = build_customer_remediation_suggestion(
         rule_id=decision.rule_id,
