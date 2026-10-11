@@ -10846,3 +10846,58 @@ def test_062_oral_dosage_form_route_uncertainty_does_not_block_decision(items, e
     assert resolved.state == expected
     if expected == "ready":
         assert _discharge_medications_complete(_with_dosage_form_oral_route(resolved.medications))
+
+
+@pytest.mark.parametrize(("order", "expected"), [
+    ({"generic_name": "(4+7)(凯伦)注射用哌拉西林钠他唑巴坦钠"}, ("哌拉西林他唑巴坦",)),
+    ({"generic_name": "注射用头孢哌酮钠舒巴坦钠"}, ("头孢哌酮舒巴坦",)),
+    ({"generic_name": "注射用头孢他啶阿维巴坦钠"}, ("头孢他啶阿维巴坦",)),
+    ({"generic_name": "注射用头孢他啶"}, ()),
+    ({"generic_name": "注射用亚胺培南西司他丁钠"}, ("亚胺培南",)),
+    ({"generic_name": "注射用盐酸去甲万古霉素"}, ()),
+    ({"generic_name": "注射用硫酸多粘菌素B"}, ("多黏菌素B",)),
+    ({"generic_name": "注射用多黏菌素E甲磺酸钠"}, ("多黏菌素E甲磺酸盐",)),
+    ({"generic_name": "注射用硫酸黏菌素"}, ("硫酸黏菌素",)),
+    ({"generic_name": "注射用两性霉素B脂质体"}, ("两性霉素B",)),
+    ({"generic_name": "注射用硫酸艾沙康唑鎓"}, ("艾莎康唑",)),
+    ({"generic_name": "利奈唑胺葡萄糖注射液"}, ("利奈唑胺",)),
+    ({"generic_name": "注射用头孢吡肟"}, ()),
+    ({"generic_name": "注射用美罗培南", "order_status": "作废"}, ()),
+])
+def test_056_key_antimicrobial_catalog_matches_hospital_list(order, expected) -> None:
+    from app.services.luxian_0609.key_antimicrobial_catalog import key_antimicrobials_in_order
+
+    assert key_antimicrobials_in_order(order) == expected
+
+
+def _056_rows(*orders, culture_time=None):
+    return {
+        "inpat_drug_order": tuple(
+            {"generic_name": name, "prescribed_datetime": time, "planned_start_datetime": time}
+            for name, time in orders
+        ),
+        "labtest_master": (
+            ({"labtest_subject": "痰培养及药敏", "specimen": "痰", "request_datetime": culture_time},)
+            if culture_time else ()
+        ),
+        "daily_course_record": ({"record_time": "2026-06-01 12:00:00", "record_content": "病情记录。"},),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("orders", "culture_time", "expected"), [
+    # 院方口径（2026-10-11）：两种及以上重点抗菌药物、使用前须完成病原学送检。
+    ((("注射用哌拉西林钠他唑巴坦钠", "2026-06-01 10:00:00"), ("利奈唑胺注射液", "2026-06-02 10:00:00")),
+     "2026-06-01 09:00:00", CustomerFinalState.COMPLIANT),
+    ((("注射用哌拉西林钠他唑巴坦钠", "2026-06-01 10:00:00"), ("利奈唑胺注射液", "2026-06-02 10:00:00")),
+     None, CustomerFinalState.NON_COMPLIANT),
+    # 同一药多条医嘱只算一种。
+    ((("注射用美罗培南", "2026-06-01 10:00:00"), ("注射用美罗培南", "2026-06-02 10:00:00")),
+     None, CustomerFinalState.NOT_APPLICABLE),
+    # 头孢吡肟不在院方重点药物清单内。
+    ((("注射用美罗培南", "2026-06-01 10:00:00"), ("注射用头孢吡肟", "2026-06-02 10:00:00")),
+     None, CustomerFinalState.NOT_APPLICABLE),
+])
+async def test_056_counts_distinct_key_antimicrobials_from_hospital_list(orders, culture_time, expected) -> None:
+    _result, reduced = await _evaluate("LX0609-05-01-04", _056_rows(*orders, culture_time=culture_time))
+    assert reduced.final_state is expected

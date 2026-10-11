@@ -65,6 +65,7 @@ from .course_body_fact_extraction import (
     CourseBodyExtraction,
     extract_course_body_facts,
 )
+from .key_antimicrobial_catalog import key_antimicrobials_in_order
 from .extended_document.diagnosis_change_extraction import (
     DiagnosisChangeDocumentInput,
     extract_diagnosis_change_documentation,
@@ -3050,11 +3051,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     display_facts["window_state"] = reason_code
                 display.append((rule_id, display_facts))
             elif rule_id == "LX0609-05-01-04":
+                # 院方口径（2026-10-11）：重点抗菌药物按院方七类清单识别；“两种及以上”
+                # 按药品种数计，同一药多条医嘱只算一种。
                 special_orders = tuple(
-                    row for row in antimicrobial_orders
-                    if _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
+                    row for row in drug_order_rows if key_antimicrobials_in_order(row)
                 )
-                if len(special_orders) < 2:
+                key_drugs = {
+                    name for row in special_orders for name in key_antimicrobials_in_order(row)
+                }
+                if len(key_drugs) < 2:
                     final_state, reason_code = "not_applicable", "trigger_absent_complete"
                 elif lab_master_error or lab_item_error:
                     final_state, reason_code = "data_gap", lab_master_error or lab_item_error

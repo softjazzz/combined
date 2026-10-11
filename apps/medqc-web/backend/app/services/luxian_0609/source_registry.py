@@ -451,6 +451,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-04-02-04": ("surgery_record", "mr_surgery", "daily_course_record"),
     "LX0609-05-01-01": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+        "senior_course_record", "postsurg_firstcourse_record",
     ),
     "LX0609-11-01-01": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
     # 029 的新增适用触发仅为结构化手术医嘱；严格已实施手术仍由执行器

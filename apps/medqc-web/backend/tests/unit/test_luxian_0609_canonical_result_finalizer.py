@@ -769,13 +769,13 @@ def test_rule_028_required_field_gap_names_the_actual_prophylaxis_inputs() -> No
     assert result["missing_sources"] == []
     assert result["missing_fields"] == [
         "手术切口等级",
-        "预防性用药属性",
-        "抗菌药物实际给药时间",
-        "抗菌药物实际停用时间",
+        "手术开始/结束时间",
+        "抗菌药物医嘱停止时间",
+        "超时后病程中的感染证据",
     ]
     assert result["data_gap_details"]["reason_label"] == "预防性抗菌药物时长字段不完整"
-    assert "实际停用时间" in result["customer_message"]
-    assert "医嘱更新时间不能替代实际停用时间" in result["customer_message"]
+    assert "医嘱停止时间" in result["customer_message"]
+    assert "医嘱更新时间不能替代停止时间" in result["customer_message"]
 
 
 @pytest.mark.parametrize(

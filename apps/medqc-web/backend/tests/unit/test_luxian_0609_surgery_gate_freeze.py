@@ -101,14 +101,7 @@ def _success_output() -> dict[str, object]:
                 "implant_specification": "present",
                 "implant_material": "present",
                 "implant_quantity": "present",
-                "incision_class": "unknown",
-                "antimicrobial_intent": "unknown",
-                "start_time_ref": None,
-                "start_time_role": "unknown",
-                "end_time_ref": None,
-                "end_time_role": "unknown",
-                "interval_scope": "unknown",
-                "special_extension_reason": "unknown",
+                # 028 已改为程序判定（2026-10-11），联合提取不再包含切口/用药字段。
                 "consent_role": "surgery_informed_consent",
                 "consent_linkage": "current_surgery",
                 "patient_signature": "present",
@@ -247,6 +240,7 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
     assert execution.results == ()
     assert [item.rule_id for item in execution.decisions] == list(RULE_IDS)
     assert all(item.snapshot_hash == session.snapshot.snapshot_hash for item in execution.decisions)
+    # 028（2026-10-11 程序判定）：抗菌药物医嘱无开始时间 → 资料不足。
     assert [item.final_state.value for item in reduced] == [
         "compliant", "compliant", "compliant", "data_gap", "compliant", "compliant"
     ]
@@ -260,7 +254,13 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
     assert execution.prompt_tokens == 101
     assert execution.total_tokens == 112
     assert len(client.prompts) == 1
-    assert all(rule_id in client.prompts[0] for rule_id in RULE_IDS if rule_id not in {"LX0609-04-02-01", "LX0609-04-02-05"})
+    assert all(
+        rule_id in client.prompts[0]
+        for rule_id in RULE_IDS
+        if rule_id not in {"LX0609-04-02-01", "LX0609-04-02-05", "LX0609-05-01-01"}
+    )
+    # 028 已改为程序判定（2026-10-11），不进入联合提取。
+    assert "LX0609-05-01-01" not in client.prompts[0]
 
     facts = dict(execution.customer_display_facts)
     assert facts["LX0609-04-02-01"] == {
@@ -294,6 +294,7 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
     assert "24 小时内" in by_rule_id["LX0609-04-02-01"]["findings"]
     assert "植入物" in by_rule_id["LX0609-04-02-04"]["findings"]
     assert "术者" in by_rule_id["LX0609-04-02-05"]["findings"]
+    assert "缺少开始时间" in by_rule_id["LX0609-05-01-01"]["findings"]
     assert {
         (item["source_type"], item["source_document_id"])
         for item in by_rule_id["LX0609-11-01-01"]["customer_evidence"]

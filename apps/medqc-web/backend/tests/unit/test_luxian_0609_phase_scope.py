@@ -121,12 +121,11 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-03-01-02",
         "LX0609-03-01-03",
         "LX0609-04-02-04",
-        "LX0609-05-01-01",
         "LX0609-04-04-01",
         # 访视来源缺失，与 04-04-01 同口径暂停（2026-10-10）。
         "LX0609-04-04-02",
         "LX0609-07-04-02",
-        "LX0609-05-01-04",
+        # 056 已按院方重点抗菌药物七类清单恢复执行（2026-10-11）。
         "LX0609-05-03-01",
         "LX0609-06-03-01",
     }
@@ -136,7 +135,6 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
     ("rule_id", "pending_reason_code"),
     (
         ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
-        ("LX0609-05-01-04", "key_antimicrobial_catalog_missing"),
         ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
     ),
 )

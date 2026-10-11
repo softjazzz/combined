@@ -1045,7 +1045,7 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
         ("019-source-absent", "LX0609-06-02-02", "tumor_pathology"),
         ("024-current-malignancy", "LX0609-04-02-03", "surgery_gate"),
         ("025-required-facts", "LX0609-04-02-04", "not_executed"),
-        ("028-antibiotic-time", "LX0609-05-01-01", "not_executed"),
+        ("028-antibiotic-time", "LX0609-05-01-01", "surgery_gate"),
         ("033-source-gap-1", "LX0609-11-01-01", "surgery_gate"),
         ("033-source-gap-2", "LX0609-11-01-01", "surgery_gate"),
         ("033-source-gap-3", "LX0609-11-01-01", "surgery_gate"),
@@ -3796,19 +3796,19 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
     )
 
     # 暂停规则（含来源缺失而暂停的麻醉访视 04-04-01/04-04-02）不得进入任何执行批次。
-    paused = {"LX0609-04-02-04", "LX0609-05-01-01", "LX0609-04-04-01", "LX0609-04-04-02"}
+    paused = {"LX0609-04-02-04", "LX0609-04-04-01", "LX0609-04-04-02"}
     assert paused.isdisjoint(rule_id for _key, batch in calls for rule_id in batch)
     assert dispatched == []
     assert calls == [
         ("course_quality", ("LX0609-02-01-03", "LX0609-02-01-04", "LX0609-02-01-05", "LX0609-12-01-01", "LX0609-12-01-02", "LX0609-01-01-02")),
-        ("surgery_gate", ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-04-02-05", "LX0609-11-01-01")),
+        ("surgery_gate", ("LX0609-04-02-01", "LX0609-04-02-03", "LX0609-05-01-01", "LX0609-04-02-05", "LX0609-11-01-01")),
         ("surgery_document", ("LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-03", "LX0609-04-01-02")),
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [
         item["status"] for item in result["evaluation_results"]
         if item["rule_id"] in paused
-    ] == ["not_executed"] * 4
+    ] == ["not_executed"] * 3
     anesthesia = next(
         item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-04-04-01"
     )
@@ -3818,7 +3818,7 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
     assert [
         item["status"] for item in result["evaluation_results"]
         if item["rule_id"] not in paused
-    ] == ["data_gap"] * 14
+    ] == ["data_gap"] * 15
     assert result["token_usage"]["total_tokens"] == 0
     legacy_ids = {
         raw_id
@@ -6696,9 +6696,8 @@ async def _assert_pending_rule_uses_public_not_executed(rule_id: str) -> None:
     assert context.native_llm_call_count == 0
 
 
-@pytest.mark.asyncio
-async def test_lx0609_028_uncertain_should_be_not_applicable_without_class_i_ii_incision():
-    await _assert_pending_rule_uses_public_not_executed("LX0609-05-01-01")
+# 028 已按院方口径恢复执行（2026-10-11）；切口等级外不适用等判定见
+# test_luxian_0609_prophylactic_antimicrobial_duration.py。
 
 
 

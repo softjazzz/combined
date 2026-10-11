@@ -884,14 +884,16 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
     elif source_mode == "available":
         # 同一快照已完整读取手术知情同意书来源且为空，可确定为缺少文书。
         expected_states[-1] = "non_compliant"
+        # 028 程序判定（2026-10-11）：有手术、围术期无全身抗菌药物医嘱 → 不适用，无需模型。
+        expected_states[2] = "not_applicable"
     assert [item.final_state.value for item in reduced] == expected_states
     if expected_reason is not None:
         expected_reasons = {expected_reason}
         assert {item.reason_code for item in result.decisions} == expected_reasons
     elif source_mode == "available":
         assert [item.reason_code for item in result.decisions[:-1]] == [
-            "required_field_missing",
-        ] * 4
+            "required_field_missing", "required_field_missing", "trigger_absent_complete", "required_field_missing",
+        ]
         assert result.decisions[-1].reason_code == "requirement_violated"
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1083,7 +1085,9 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
     prompt = client.prompts[0]
-    assert all(rule_id in prompt for rule_id in selected)
+    # 028 已改为程序判定（2026-10-11），不再进入联合提取。
+    assert all(rule_id in prompt for rule_id in selected if rule_id != "LX0609-05-01-01")
+    assert "LX0609-05-01-01" not in prompt
     assert "SAFE_SURGERY_MARKER" in prompt
     assert "SAFE_CONSENT_MARKER" in prompt
     assert "current_surgery|other_or_unclear|unknown" in prompt
@@ -1095,7 +1099,7 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
         evidence_materials=session.materials,
     )
     assert [item.final_state.value for item in reduced] == [
-        "compliant", "compliant", "data_gap", "compliant",
+        "compliant", "compliant", "not_applicable", "compliant",
     ]
 
 

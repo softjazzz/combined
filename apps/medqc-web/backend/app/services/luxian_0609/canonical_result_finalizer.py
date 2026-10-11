@@ -153,9 +153,9 @@ _RULE_DATA_GAP_EXPLANATIONS = {
         "missing_sources": [],
         "missing_fields": [
             "手术切口等级",
-            "预防性用药属性",
-            "抗菌药物实际给药时间",
-            "抗菌药物实际停用时间",
+            "手术开始/结束时间",
+            "抗菌药物医嘱停止时间",
+            "超时后病程中的感染证据",
         ],
     },
     ("LX0609-04-02-05", "association_failed"): {

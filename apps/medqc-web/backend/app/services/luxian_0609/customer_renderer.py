@@ -154,7 +154,7 @@ _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     (
         "LX0609-05-01-01",
         "required_field_missing",
-    ): "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。",
+    ): "已读取手术及用药资料，但尚缺切口等级、手术时间或抗菌药物医嘱停止时间中的至少一项，或超时后的感染证据暂无法确认；医嘱更新时间不能替代停止时间。",
     (
         "LX0609-04-02-05",
         "association_failed",
@@ -241,6 +241,12 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-06-04-02": ("PL/PH危急值标志、报告时间或危急值处置记录",),
     "LX0609-05-01-02": ("每条抗菌药物医嘱与使用/调整动作、理由及关联时间",),
     "LX0609-05-01-03": ("每条抗菌药物的计划开始/启用时间及48～72小时效果评价关联",),
+    "LX0609-05-01-04": ("重点抗菌药物医嘱开立时间或病原学送检申请时间",),
+    "LX0609-05-01-04": (
+        "暂无法核对重点抗菌药物使用前病原学送检",
+        "当前缺少重点抗菌药物医嘱开立时间，或检验申请资料不可读取。",
+        "请确认药品医嘱与检验申请已完整同步后重新评估。",
+    ),
     "LX0609-05-01-05": ("经验用药事实、用药理由或无样可采原因",),
     "LX0609-05-01-06": ("特殊级抗菌药物计划开始/启用时间与专家支持记录的关联",),
     "LX0609-04-02-06": ("住院结局、死亡时间或死亡记录",),
@@ -383,8 +389,8 @@ _RULE_DATA_GAP_MESSAGES = {
     ),
     "LX0609-05-01-01": (
         "暂无法核对预防性抗菌药物使用时长",
-        "当前缺少切口等级、预防用药属性或抗菌药物使用起止时间。",
-        "请补充手术切口等级和预防用药明细后重新评估。",
+        "当前缺少手术切口等级、手术时间或抗菌药物医嘱停止时间，或超时后的感染证据暂无法确认。",
+        "请确认切口等级、手术时间及抗菌药物医嘱停止时间已完整同步后重新评估。",
     ),
     "LX0609-04-02-05": (
         "暂无法核对手术记录是否由术者签名",
@@ -938,6 +944,16 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "检验结果带 PL/PH 危急值标志，未检出对应危急值处置记录。",
         "请补充危急值处置过程及结果。",
     ),
+    "LX0609-05-01-01": (
+        "Ⅰ、Ⅱ类切口手术预防用抗菌药物超过时限",
+        "已核对手术切口等级、手术时间及围术期抗菌药物医嘱；超过时限后病程未记录感染证据。",
+        "Ⅰ、Ⅱ类切口预防用药一般不超过24小时（Ⅰ类心脏手术不超过48小时），请及时停药；如确有感染，请在病程中记录感染证据并按治疗用药管理。",
+    ),
+    "LX0609-05-01-04": (
+        "使用两种及以上重点抗菌药物前未见病原学送检",
+        "已按院方重点抗菌药物清单核对医嘱，首次使用重点抗菌药物前未找到培养、药敏等病原学送检申请。",
+        "请在联合使用重点抗菌药物前完成病原学送检，并在病程中记录送检情况。",
+    ),
     "LX0609-05-01-06": (
         "已开立特殊级抗菌药物计划，但未找到专家支持记录",
         "已核对特殊级抗菌药物医嘱及专家查房、会诊资料。",
@@ -1344,6 +1360,16 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "抗菌药物48～72小时效果评价窗口尚未结束",
         "截至本次冻结评价时点，尚未满72小时，本次暂不判定为质控问题。",
         "待评价窗口结束后，按同一资料范围重新质控。",
+    ),
+    ("LX0609-05-01-01", "trigger_absent_complete"): (
+        "本次手术围术期未使用全身抗菌药物，不启动预防用药时长核对",
+        "已核对手术及药品医嘱，手术前后24小时内未见全身用抗菌药物医嘱。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-05-01-04", "trigger_absent_complete"): (
+        "本次未使用两种及以上重点抗菌药物，不启动病原学送检核对",
+        "已按院方重点抗菌药物清单核对药品医嘱，重点抗菌药物不足两种。",
+        "无需按本质控点处理。",
     ),
     ("LX0609-05-01-05", "trigger_absent_complete"): (
         "本次未发现经验性抗菌药物使用",
@@ -1951,6 +1977,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-10-03-01",
         "LX0609-07-01-03",
         "LX0609-04-02-03",
+        "LX0609-05-01-01",
     }:
         return ""
     if not isinstance(facts, Mapping):
@@ -1979,6 +2006,37 @@ def customer_finding_from_controlled_facts(
         display = transfer_event_association_gap_display(facts)
         return display[1] if display is not None else ""
 
+    if rule_id == "LX0609-05-01-01" and kind == "prophylaxis_duration_check":
+        incision = "Ⅰ" if facts.get("incision_class") == "I" else "Ⅱ"
+        surgery = f"{incision}类切口{'心脏' if facts.get('cardiac_surgery') else ''}手术"
+        anchor = "手术结束" if facts.get("anchor") == "surgery_end" else "手术开始（源库无手术结束时间）"
+        base = (
+            f"{surgery}，自{anchor} {facts.get('anchor_time')} 至抗菌药物最后停用 "
+            f"{facts.get('last_antibacterial_time')}，共 {facts.get('duration_hours')} 小时"
+            f"（时限 {facts.get('threshold_hours')} 小时）"
+        )
+        evidence = facts.get("infection_evidence")
+        if evidence == "not_required" and str(facts.get("last_antibacterial_time")) <= str(facts.get("anchor_time")):
+            return (
+                f"{surgery}，围术期抗菌药物仅在{anchor.split('（')[0]}前使用（最后一次 "
+                f"{facts.get('last_antibacterial_time')}），未超过预防用药时限。"
+            )
+        if evidence == "not_required":
+            return base + "，未超过预防用药时限。"
+        if evidence == "recorded":
+            return base + "，已超过预防用药时限，但病程记录了感染证据，按转为治疗用药处理。"
+        return base + "，已超过预防用药时限，病程未记录感染证据，不能作为延长用药理由。"
+    if rule_id == "LX0609-05-01-01" and kind in {
+        "incision_class_unavailable", "order_stop_time_unavailable", "order_start_time_unavailable",
+        "surgery_time_unavailable", "infection_evidence_unresolved",
+    }:
+        return {
+            "incision_class_unavailable": "已读取手术及抗菌药物医嘱，但取不到手术切口等级，暂无法确定是否适用。",
+            "order_stop_time_unavailable": "已读取围术期抗菌药物医嘱，但长期医嘱缺少停止时间，无法计算预防用药时长。",
+            "order_start_time_unavailable": "已读取抗菌药物医嘱，但医嘱缺少开始时间，无法确定是否为围术期用药。",
+            "surgery_time_unavailable": "已读取手术资料，但缺少手术开始和结束时间，无法计算预防用药时长。",
+            "infection_evidence_unresolved": "预防用药已超过时限，但术后病程是否记录感染证据暂无法确认。",
+        }[kind]
     if rule_id == "LX0609-04-02-03" and kind == "colon_pathology_lymph_node_items_missing":
         labels = {"lymph_node_count": "淋巴结清扫个数", "pathologic_stage": "pTNM/ypTNM 分期"}
         missing = facts.get("missing_items")

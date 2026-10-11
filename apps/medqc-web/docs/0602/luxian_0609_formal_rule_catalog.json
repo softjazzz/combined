@@ -1859,8 +1859,7 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review",
-      "not_executed"
+      "needs_manual_review"
     ],
     "golden_cases": {
       "positive": [],

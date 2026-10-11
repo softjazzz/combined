@@ -239,10 +239,8 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "antimicrobial_dictionary_missing",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "院方口径（2026-10-11，依据《抗菌药物临床应用指导原则（2015年版）》）：Ⅰ类切口心脏手术预防用药不超过48小时，其余Ⅰ、Ⅱ类切口不超过24小时；超过时限仍用药且病程记录感染证据的视为转为治疗用药，未记录的不合规。时长自手术结束至围术期连续用药最后停用，长期医嘱须有停止时间。"
     },
     {
       "rule_id": "LX0609-04-01-01",
@@ -471,10 +469,8 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "key_antimicrobial_catalog_missing",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "重点抗菌药物目录尚未冻结，本质控点暂不执行；不得因目录或病原学资料缺失生成数据不足或不合规结论。"
+      "policy_summary": "院方口径（2026-10-11）：重点抗菌药物为碳青霉烯类、糖肽类、新型四环素类、噁唑烷酮类、黏菌素类、β-内酰胺类/β-内酰胺酶抑制剂（头孢哌酮舒巴坦、头孢他啶阿维巴坦、哌拉西林他唑巴坦）、深部抗真菌药七类共25个药品；使用两种及以上（按药品种数计）时，首次使用前须完成病原学送检。"
     },
     {
       "rule_id": "LX0609-05-01-05",

@@ -555,7 +555,6 @@ def test_mdt_and_extended_document_gates_are_independent(
     selected = (
         "LX0609-04-01-03",
         "LX0609-03-02-01",
-        "LX0609-05-01-04",
         "LX0609-05-03-01",
     )
 
@@ -572,10 +571,7 @@ def test_mdt_and_extended_document_gates_are_independent(
     )
 
     assert plan.native_async_rule_ids == expected_native
-    assert plan.not_executed_rule_ids == (
-        "LX0609-05-01-04",
-        "LX0609-05-03-01",
-    )
+    assert plan.not_executed_rule_ids == ("LX0609-05-03-01",)
     assert plan.compatibility_rule_ids == tuple(
         rule_id
         for rule_id in ("LX0609-04-01-03", "LX0609-03-02-01")
@@ -850,9 +846,7 @@ def test_public_package_entry_expands_only_inside_the_package():
     "rule_id",
     (
         "LX0609-04-02-04",
-        "LX0609-05-01-01",
         "LX0609-07-04-02",
-        "LX0609-05-01-04",
         "LX0609-05-03-01",
     ),
 )

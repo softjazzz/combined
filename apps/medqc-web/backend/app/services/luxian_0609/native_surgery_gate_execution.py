@@ -37,6 +37,14 @@ from .source_evidence_reader import (
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
+from .prophylactic_antimicrobial_duration import (
+    SurgeryEventInput as _ProphylaxisSurgeryEvent,
+    evaluate_prophylactic_antimicrobial_duration,
+    incision_class_from_text,
+    incision_class_value,
+    is_cardiac_surgery,
+    parse_time as _prophylaxis_time,
+)
 from .surgery_lymph_node_catalog import (
     LymphNodeCatalogGate,
     colon_pathology_missing_items,
@@ -85,8 +93,11 @@ _TYPED_TEXT_SOURCES = {
     # 025 的永久性植入事实可由正式手术记录或病程记录确认；mr_surgery 仅是
     # 操作清单，既不能补充字段事实，也不能因行数多而截断本规则的一次受控抽取。
     "LX0609-04-02-04": ("surgery_record", "daily_course_record"),
+    # 028（2026-10-11 院方口径）：程序判定时长，超时后核对术后病程感染证据；
+    # 0910 源库病程多记在上级医师查房记录，一并读取。
     "LX0609-05-01-01": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+        "senior_course_record", "postsurg_firstcourse_record",
     ),
     # 033 只需要“已实施手术锚点 + 本次手术同意书”；mr_surgery 既不提供
     # 同意书角色也不提供签署事实，纳入只会挤占 2 份文书的安全上下文预算。
@@ -2061,6 +2072,116 @@ def _colon_pathology_outcome(
     )
 
 
+_028_COURSE_SOURCES = ("daily_course_record", "senior_course_record", "postsurg_firstcourse_record")
+
+
+def _028_surgery_events(
+    surgery_rows: Sequence[Mapping[str, Any]], mr_rows: Sequence[Mapping[str, Any]],
+) -> tuple[_ProphylaxisSurgeryEvent, ...]:
+    """手术记录优先形成事件，无手术记录时用病案首页；切口等级优先取同日首页。"""
+
+    def mr_date(row: Mapping[str, Any]) -> Any:
+        value = _prophylaxis_time(row.get("surgery_begin_datetime")) or _prophylaxis_time(
+            row.get("surgery_end_datetime")
+        )
+        return value.date() if value is not None else None
+
+    def incision_for(day: Any, text: Any) -> str:
+        values = {
+            incision_class_value(row.get("surgial_incision_level") or row.get("surgical_incision_level"))
+            for row in mr_rows
+            if day is not None and mr_date(row) == day
+        } - {"unknown"}
+        if len(values) == 1:
+            return next(iter(values))
+        return incision_class_from_text(text) if not values else "unknown"
+
+    events: list[_ProphylaxisSurgeryEvent] = []
+    for row in surgery_rows:
+        begin = _authoritative_surgery_begin_time(row)
+        end = _authoritative_surgery_end_time(source_key="surgery_record", row=row)
+        anchor = begin or end
+        day = anchor.date() if anchor is not None else None
+        same_day_mr = [item for item in mr_rows if day is not None and mr_date(item) == day]
+        events.append(_ProphylaxisSurgeryEvent(
+            begin=begin,
+            end=end,
+            incision_class=incision_for(
+                day, " ".join(str(row.get(key) or "") for key in ("record_content", "surgery_process"))
+            ),
+            cardiac=is_cardiac_surgery(
+                (row.get("surgery_code"), *(item.get("surgery_code") for item in same_day_mr)),
+                (row.get("surgery_name"), *(item.get("surgery_name") for item in same_day_mr)),
+            ),
+        ))
+    if not events:
+        for row in mr_rows:
+            events.append(_ProphylaxisSurgeryEvent(
+                begin=_prophylaxis_time(row.get("surgery_begin_datetime")),
+                end=_prophylaxis_time(row.get("surgery_end_datetime")),
+                incision_class=incision_class_value(
+                    row.get("surgial_incision_level") or row.get("surgical_incision_level")
+                ),
+                cardiac=is_cardiac_surgery((row.get("surgery_code"),), (row.get("surgery_name"),)),
+            ))
+    return tuple(events)
+
+
+async def _typed_028_outcome(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    llm_client: Any,
+) -> tuple[_SurgeryTextOutcome, tuple[int, int, int, int, float]]:
+    rule_id = "LX0609-05-01-01"
+    states: dict[str, str] = {}
+    rows: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    for source_key in _TYPED_TEXT_SOURCES[rule_id]:
+        states[source_key], rows[source_key] = _typed_source_rows(
+            source_key=source_key, snapshot=snapshot, materials=materials,
+        )
+    zero = (0, 0, 0, 0, 0.0)
+    for source_key in ("surgery_record", "mr_surgery", "inpat_drug_order"):
+        if states[source_key] == "error":
+            return _SurgeryTextOutcome(rule_id, "technical_error", "source_query_error"), zero
+        if states[source_key] not in {"available", "empty"}:
+            return _SurgeryTextOutcome(rule_id, "data_gap", "required_field_missing"), zero
+    events = _028_surgery_events(rows["surgery_record"], rows["mr_surgery"])
+    course_ok = all(states[key] in {"available", "empty"} for key in _028_COURSE_SOURCES)
+    course_rows = tuple(
+        (f"{key}:{index}", row)
+        for key in _028_COURSE_SOURCES
+        for index, row in enumerate(rows[key])
+    )
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=events,
+        drug_order_rows=rows["inpat_drug_order"],
+        course_rows=course_rows if course_ok else (),
+        llm_client=llm_client,
+    )
+    usage = (
+        outcome.llm_call_count, outcome.prompt_tokens, outcome.completion_tokens,
+        outcome.total_tokens, outcome.api_time,
+    )
+    status, reason, facts = outcome.status, outcome.reason_code, outcome.display_facts
+    if status == "non_compliant" and not course_ok:
+        # 病程来源不可用时不能断言“未记录感染证据”。
+        status, reason, facts = "data_gap", "required_field_missing", {"failure_kind": "infection_evidence_unresolved"}
+    selected = [
+        ref
+        for source_key, row in (
+            *(("inpat_drug_order", row) for row in outcome.order_rows),
+            *((key.split(":", 1)[0], row) for key, row in outcome.course_rows),
+        )
+        if (ref := _material_document_ref_for_row(
+            materials=materials, snapshot=snapshot, source_key=source_key, selected_row=row,
+        ))
+    ]
+    return _SurgeryTextOutcome(
+        rule_id, status, reason, facts, tuple(dict.fromkeys(selected)),
+    ), usage
+
+
 def _decision_from_surgery_outcome(
     *,
     outcome: _SurgeryTextOutcome,
@@ -2333,6 +2454,36 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     typed_text_rule_ids: list[str] = []
     for rule_id in selected:
         if rule_id not in typed_requested:
+            continue
+        if rule_id == "LX0609-05-01-01" and _snapshot_performed_surgery_state(
+            evidence_snapshot
+        ) in {"present", "unknown"} and any(
+            item.source_key == "surgery_record"
+            and item.query_state.value == "available"
+            and item.completeness.value != "truncated"
+            for item in evidence_snapshot.observations
+        ):
+            # 无已实施手术、手术来源不可用等仍沿用手术族保守判定（含原因码）。
+            outcome_028, usage_028 = await _typed_028_outcome(
+                snapshot=evidence_snapshot, materials=evidence_materials, llm_client=llm_client,
+            )
+            decisions.append(_decision_from_surgery_outcome(outcome=outcome_028, snapshot=evidence_snapshot))
+            if outcome_028.customer_display_facts:
+                customer_display_facts.append((rule_id, outcome_028.customer_display_facts))
+            llm_call_count += usage_028[0]
+            prompt_tokens += usage_028[1]
+            completion_tokens += usage_028[2]
+            total_tokens += usage_028[3]
+            api_time += usage_028[4]
+            continue
+        if rule_id == "LX0609-05-01-01":
+            # 028 已改为程序判定（2026-10-11），不再进入手术事实联合抽取。
+            decisions.append(_typed_conservative_surgery_gate_decision(
+                rule_id=rule_id,
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                customer_display_facts=customer_display_facts,
+            ))
             continue
         if rule_id == "LX0609-04-02-01":
             decisions.append(

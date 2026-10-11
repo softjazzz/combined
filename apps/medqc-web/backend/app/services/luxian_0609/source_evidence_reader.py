@@ -384,6 +384,11 @@ _NATIVE_SOURCE_FIELDS = {
         "order_time",
         "prescribed_datetime",
         "planned_start_datetime",
+        # 028：医嘱停止时间（源库同步后启用；列不存在时不选取）。
+        "stop_datetime",
+        "order_stop_datetime",
+        "stop_time",
+        "end_datetime",
         "update_time",
         "order_status",
         "last_modified_datetime",
