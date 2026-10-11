@@ -378,7 +378,7 @@ async def test_same_name_surgeries_without_time_narrowing_are_data_gap():
     text = f"术前小结：拟行{name}，其余字段完整。"
     session = _session(
         summary=(
-            {"document_id": "summary", "record_time": "2026-01-01 07:00:00", "record_content": text},
+            {"document_id": "summary", "record_content": text},
         ),
         surgery_records=(
             _surgery_record(document_id="surgery-first", name=name, begin="2026-01-01 08:00:00+08:00"),
@@ -664,7 +664,7 @@ async def test_named_surgery_with_conflicting_planned_clock_time_is_data_gap():
             {
                 "document_id": "summary",
                 "record_content": text,
-                "planned_surgery_time": "2026-01-01 14:00:00",
+                "planned_surgery_time": "2026-01-03 14:00:00",
             },
         ),
         surgery_records=(
@@ -1589,7 +1589,10 @@ async def test_side_difference_is_not_hidden_by_residue_normalization():
         _template_core_items("右侧腹股沟疝修补术"),
         [("左侧腹股沟疝修补术", "2026-01-01 09:00:00+08:00")],
     )
-    assert _facts_for_summary(result)["documents"][0]["association_state"] == "ambiguous"
+    # 用户口径（2026-10-11）：时间优先关联，单台手术且拟手术日期一致时，拟施术式与实际
+    # 术式写法不同（侧别、部位、术中改术式）不再阻断归属；内容仍逐项核对。
+    assert _facts_for_summary(result)["documents"][0]["association_state"] == "matched"
+    assert _facts_for_summary(result)["documents"][0]["event_index"] == 1
 
 
 @pytest.mark.asyncio
@@ -1599,7 +1602,10 @@ async def test_procedure_scope_difference_is_not_hidden_by_residue_normalization
         _template_core(_C04_PLAN), _template_core_items(_C04_PLAN),
         [(_C04_PERFORMED, "2026-01-01 09:00:00+08:00")],
     )
-    assert _facts_for_summary(result)["documents"][0]["association_state"] == "ambiguous"
+    # 用户口径（2026-10-11）：时间优先关联，单台手术且拟手术日期一致时，拟施术式与实际
+    # 术式写法不同（侧别、部位、术中改术式）不再阻断归属；内容仍逐项核对。
+    assert _facts_for_summary(result)["documents"][0]["association_state"] == "matched"
+    assert _facts_for_summary(result)["documents"][0]["event_index"] == 1
 
 
 @pytest.mark.asyncio
@@ -1609,14 +1615,18 @@ async def test_site_difference_is_not_hidden_by_residue_normalization():
         _template_core_items("T11椎体骨折球囊扩张成形术", "局麻"),
         [("T12椎体骨折球囊扩张成形术", "2026-01-01 09:00:00+08:00")],
     )
-    assert _facts_for_summary(result)["documents"][0]["association_state"] == "ambiguous"
+    # 用户口径（2026-10-11）：时间优先关联，单台手术且拟手术日期一致时，拟施术式与实际
+    # 术式写法不同（侧别、部位、术中改术式）不再阻断归属；内容仍逐项核对。
+    assert _facts_for_summary(result)["documents"][0]["association_state"] == "matched"
+    assert _facts_for_summary(result)["documents"][0]["event_index"] == 1
 
 
 @pytest.mark.asyncio
 async def test_same_name_two_surgeries_stay_unassociated_after_normalization():
     name = "腹腔镜下胆囊切除术"
+    # 去掉模板里的拟手术日期：没有任何时间信息时，同名两台手术仍不能归属。
     result = await _run_template_case(
-        _template_core(name), _template_core_items(name),
+        _template_core(name).replace("拟诊手术日期：:2026年01月01日", ""), _template_core_items(name),
         [(name, "2026-01-01 08:00:00+08:00"), (name, "2026-01-02 08:00:00+08:00")],
         narrative_time=None,
     )

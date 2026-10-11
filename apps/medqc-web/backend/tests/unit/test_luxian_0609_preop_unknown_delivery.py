@@ -133,7 +133,8 @@ def test_actual_surgery_association_ambiguity_keeps_strict_existing_contract():
     procedure = "右侧腹股沟疝修补术"
     rows = {
         "presurg_summary": [{
-            "document_id": "D1", "record_time": "2026-10-06 10:00:00",
+            # 时间优先关联（2026-10-11）：手术开始后才完成的术前小结属补写，不归属。
+            "document_id": "D1", "record_time": "2026-10-07 09:30:00",
             "record_content": f"术前准备已完成。拟行{procedure}，拟全麻，术者已查看患者。",
         }],
         "surgery_record": [{

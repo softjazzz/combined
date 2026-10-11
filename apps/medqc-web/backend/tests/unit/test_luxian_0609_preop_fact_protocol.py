@@ -235,7 +235,8 @@ def event_case(first_state, second_state, *, same_event=False, ambiguous_second=
     rows = {"presurg_summary": [
         {"document_id": "D1", "record_content": TEXT, "record_time": "2026-01-01 07:00:00"},
         {"document_id": "D2", "record_content": TEXT.replace("甲手术", f"{second_name}"),
-         "record_time": "2026-01-01 07:10:00" if same_event or ambiguous_second else "2026-01-01 10:00:00"},
+         "record_time": "2026-01-01 07:10:00" if same_event else "2026-01-01 08:30:00" if ambiguous_second
+         else "2026-01-01 10:00:00"},
     ], "surgery_record": [{
         "document_id": "S1", "surgery_name": "甲手术", "surgery_begin_time": "2026-01-01 08:00:00+08:00",
         "surgery_end_time": "2026-01-01 09:00:00+08:00", "surgery_process": "手术已完成。",
