@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -416,6 +417,18 @@ def assert_no_known_identity_in_model_request(
         ) from None
 
 
+# 用户口径（2026-10-11）：0609 只做受控事实抽取，固定温度 0，减少同一输入的随机漂移。
+EXTRACTION_TEMPERATURE = 0.0
+
+
+def _accepts_temperature(delegate: Any) -> bool:
+    """只在下游 generate 显式声明 temperature 参数时传入，不向未知客户端塞参数。"""
+    try:
+        return "temperature" in inspect.signature(delegate.generate).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 # 用户口径（2026-10-11）：网络/上游临时错误重试 1 次，间隔片刻；其余错误不重试。
 TRANSPORT_RETRY_DELAY_SECONDS = 2.0
 _RETRYABLE_UPSTREAM_STATUS = re.compile(r"upstream_http_status=(?:429|5\d\d|unknown)(?!\w)")
@@ -452,6 +465,8 @@ class _Luxian0609PrivacyRedactingLLMClient:
         redacted = redact_luxian_0609_patient_privacy(prompt)
         assert_no_known_identity(redacted, identities)
         assert_no_known_identity_in_model_request(kwargs, identities)
+        if "temperature" not in kwargs and _accepts_temperature(self.delegate):
+            kwargs = {**kwargs, "temperature": EXTRACTION_TEMPERATURE}
         try:
             return await self.delegate.generate(redacted, **kwargs)
         except Exception as error:

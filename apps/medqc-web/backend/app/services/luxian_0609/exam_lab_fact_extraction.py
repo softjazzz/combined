@@ -1378,7 +1378,7 @@ def build_exam_lab_fact_prompt(
                 "target_confirmed": event.target_confirmed,
                 **(
                     {"guidance_only": True}
-                    if event.guidance_only and rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
+                    if event.guidance_only and rule_id in {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"}
                     else {}
                 ),
             }
@@ -1480,8 +1480,8 @@ def build_exam_lab_fact_prompt(
     )
     guidance_instruction = (
         "目录中guidance_only=true表示原资料明确仅为CT引导操作标签，不是诊断结果。"
-        "对此事件的LX0609-06-01-04/LX0609-06-01-05输出not_applicable+absent、空病程引用；"
-        "LX0609-06-01-04的positive_state为not_relevant，LX0609-06-01-05为unknown（不是阴性）。其他事件仍按通常规则判定。\n"
+        "对此事件的LX0609-06-01-02/LX0609-06-01-04/LX0609-06-01-05输出not_applicable+absent、空病程引用；"
+        "LX0609-06-01-02/LX0609-06-01-04的positive_state为not_relevant，LX0609-06-01-05为unknown（不是阴性）。其他事件仍按通常规则判定。\n"
         if any(item.get("guidance_only") for items in rule_event_catalog.values() for item in items)
         else ""
     )
@@ -1489,7 +1489,7 @@ def build_exam_lab_fact_prompt(
 本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：{json.dumps(selected, ensure_ascii=False)}。
 LX0609-06-01-02=CT/MRI检查前原因；LX0609-06-01-04=CT/MRI报告后记录结果；LX0609-06-01-05=检出异常病灶或异常征象的CT/MRI结果分析；LX0609-06-03-03=培养报告后记录结果；LX0609-06-03-04=阳性菌/药敏分析处置。
 CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性。LX0609-06-03-04依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在LX0609-06-03-04判定范围内。
-Python已按业务键拆分事件。逐规则事件目录={json.dumps(rule_event_catalog, ensure_ascii=False, separators=(',', ':'))}。LX0609-06-01-02目录中的病程已由Python严格裁剪为对应检查前48小时；你只判断该次检查的原因或目的是否被实质记录。用户口径（2026-10-11）：写明检查部位并说明要了解或观察的具体情况（如“完善胸部CT了解肺部情况”“复查胸部CT观察患肺复张情况”）即为present；只写“完善相关检查”“完善CT”而无部位或目的、单纯提及检查或复述既往结果，不等于写明原因。病程文书按COURSE_DOC字典序固定编号，全局位置为COURSE_DOC_POSITION={json.dumps(list(range(1, len(course_refs_in_position_order) + 1)), ensure_ascii=False)}。每条事实只能使用对应规则、对应事件course_doc_positions列出的病程；判断该规则时必须忽略目录外正文，即使它因同批其他规则而出现在材料中，也不得据此改变semantic_state或作为间接依据。
+Python已按业务键拆分事件。逐规则事件目录={json.dumps(rule_event_catalog, ensure_ascii=False, separators=(',', ':'))}。LX0609-06-01-02目录中的病程已由Python严格裁剪为对应检查前48小时；你只判断该次检查的原因或目的是否被实质记录。用户口径（2026-10-11）：写明检查部位并说明要了解或观察的具体情况（如“完善胸部CT了解肺部情况”“复查胸部CT观察患肺复张情况”）即为present；只写“完善相关检查”“完善CT”“复查MRI”而无部位或目的、单纯提及检查或复述既往结果，不等于写明原因。病程文书按COURSE_DOC字典序固定编号，全局位置为COURSE_DOC_POSITION={json.dumps(list(range(1, len(course_refs_in_position_order) + 1)), ensure_ascii=False)}。每条事实只能使用对应规则、对应事件course_doc_positions列出的病程；判断该规则时必须忽略目录外正文，即使它因同批其他规则而出现在材料中，也不得据此改变semantic_state或作为间接依据。
 模型只能输出 {"event_position 和 " if multi_event_schema else ""}course_doc_positions（均为1开始的整数位置），不能输出 EVENT_DOC/COURSE_DOC ID、course_doc_refs、evidence_refs 或任何其他引用字段。EVENT_DOC由Python按事件目录自动绑定。
 semantic_state=present时，course_doc_positions必须非空；semantic_state=absent或unknown时course_doc_positions必须为空。
 若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，LX0609-06-01-02/LX0609-06-01-04/LX0609-06-03-03以及阳性的LX0609-06-01-05/LX0609-06-03-04应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
@@ -1673,7 +1673,14 @@ def parse_exam_lab_fact_response(
             event_position=event_position,
         ))
         event_refs = set(event.document_refs) if event is not None else set()
-        if (
+        if rule_id == "LX0609-06-01-02" and event is not None and event.guidance_only:
+            # 用户口径（2026-10-11）：CT引导下操作是手术的引导手段，不纳入检查原因核查，
+            # 由程序判不适用，与011/012一致；不采用模型输出。
+            applicability, semantic, positive, normalized_course = (
+                "not_applicable", "absent", "not_relevant", (),
+            )
+            reference_invalid = False
+        elif (
             rule_id == "LX0609-06-01-02"
             and event is not None
             and event.target_confirmed
@@ -1703,7 +1710,10 @@ def parse_exam_lab_fact_response(
         elif rule_id not in {"LX0609-06-01-05", "LX0609-06-03-04"}:
             # 已确认事件由 Python 锁定适用性；泛候选则保留模型的
             # not_applicable/unknown，避免把“未标明类型”伪造成阳性事件。
-            if event is not None and event.target_confirmed:
+            # 010 的CT引导操作已由上方按院方口径判不适用，不再锁回适用。
+            if event is not None and event.target_confirmed and not (
+                rule_id == "LX0609-06-01-02" and event.guidance_only
+            ):
                 applicability = "applicable"
             positive = "not_relevant"
         elif (

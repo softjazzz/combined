@@ -190,3 +190,36 @@ async def test_deterministic_errors_are_not_retried(monkeypatch, error):
     with pytest.raises(type(error)):
         await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
     assert len(delegate.prompts) == 1
+
+
+class _TemperatureAwareDelegate:
+    def __init__(self):
+        self.kwargs = []
+
+    async def generate(self, prompt, *, max_completion_tokens=None, temperature=None):
+        self.kwargs.append({"max_completion_tokens": max_completion_tokens, "temperature": temperature})
+        return {"content": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_0609_extraction_uses_temperature_zero_when_client_supports_it():
+    """用户口径（2026-10-11）：0609 抽取固定温度 0。"""
+    delegate = _TemperatureAwareDelegate()
+    await wrap_luxian_0609_llm_client(delegate).generate("提示", max_completion_tokens=10)
+    assert delegate.kwargs == [{"max_completion_tokens": 10, "temperature": 0.0}]
+
+
+@pytest.mark.asyncio
+async def test_0609_temperature_is_not_forced_into_unknown_clients():
+    client = _CaptureClient()
+    result = await wrap_luxian_0609_llm_client(client).generate("提示", max_completion_tokens=10)
+    assert result["kwargs"] == {"max_completion_tokens": 10}
+
+
+def test_shared_client_temperature_override_is_validated_and_optional():
+    import inspect
+
+    from app.services.qc_llm_client import SichuanQCLLMClient
+
+    parameter = inspect.signature(SichuanQCLLMClient.generate).parameters["temperature"]
+    assert parameter.default is None

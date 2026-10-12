@@ -195,7 +195,14 @@ class SichuanQCLLMClient:
         response_format: Mapping[str, Any] | None = None,
         enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
+        temperature: float | None = None,
     ) -> Dict[str, Any]:
+        if temperature is not None and (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0 <= temperature <= 2
+        ):
+            raise ValueError("temperature must be a number between 0 and 2")
         if max_completion_tokens is not None and (
             isinstance(max_completion_tokens, bool)
             or not isinstance(max_completion_tokens, int)
@@ -251,7 +258,8 @@ class SichuanQCLLMClient:
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": self.temperature,
+            # 调用方可按场景覆盖（如 0609 抽取固定为 0）；未指定时沿用客户端配置。
+            "temperature": self.temperature if temperature is None else float(temperature),
             "top_p": self.top_p,
             "max_tokens": max_tokens,
             "stream": False,

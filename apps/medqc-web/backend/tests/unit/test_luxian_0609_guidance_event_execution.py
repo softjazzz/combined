@@ -1,4 +1,4 @@
-"""纯 CT 引导操作不构成诊断结果事件，且不得波及其他检查或010。"""
+"""纯 CT 引导操作不构成诊断结果事件，且不得波及其他检查；010 按院方口径（2026-10-11）判不适用。"""
 
 from dataclasses import replace
 import json
@@ -134,27 +134,28 @@ def test_unknown_model_answer_does_not_turn_known_non_result_event_into_failure(
         )
 
 
-def test_guidance_flag_never_changes_010_or_its_prompt():
+@pytest.mark.parametrize("semantic_state", ["present", "absent", "unknown"])
+def test_010_guidance_event_is_program_not_applicable(semantic_state):
+    """用户口径（2026-10-11）：CT引导下操作不纳入010检查原因核查，由程序判不适用。"""
     projection = _projection()
-    event = projection.imaging_events[0]
-    ordinary = replace(
-        projection,
-        imaging_event=replace(event, guidance_only=False),
-        imaging_events=(replace(event, guidance_only=False),),
+    prompt = build_exam_lab_fact_prompt(selected_rule_ids=("LX0609-06-01-02",), projection=projection)
+    assert '"guidance_only":true' in prompt
+    assert "LX0609-06-01-02/LX0609-06-01-04/LX0609-06-01-05输出not_applicable+absent" in prompt
+    from app.services.luxian_0609.exam_lab_fact_extraction import parse_exam_lab_fact_response
+
+    # 以提示词末尾给出的骨架构造响应，避免测试自行假设 schema 版本与字段。
+    payload = json.loads(prompt.rstrip().splitlines()[-1])
+    payload["facts"][0].update(
+        applicability="applicable", semantic_state=semantic_state,
+        course_doc_positions=[1] if semantic_state == "present" else [],
     )
-    fact = ExamLabEventFact(
-        "LX0609-06-01-02", "applicable", "absent", "not_relevant", (), event.document_refs
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(payload)}, selected_rule_ids=("LX0609-06-01-02",), projection=projection,
     )
+    assert (facts[0].applicability, facts[0].semantic_state, facts[0].course_doc_refs) == ("not_applicable", "absent", ())
     assert native._single_text_fact_outcome(
-        rule_id=fact.rule_id, fact=fact, projection=projection
-    ) == native._single_text_fact_outcome(
-        rule_id=fact.rule_id, fact=fact, projection=ordinary
-    )
-    assert build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-06-01-02",), projection=projection
-    ) == build_exam_lab_fact_prompt(
-        selected_rule_ids=("LX0609-06-01-02",), projection=ordinary
-    )
+        rule_id=facts[0].rule_id, fact=facts[0], projection=projection
+    ).status == "not_applicable"
 
 
 def _mixed_projection_and_payload():
