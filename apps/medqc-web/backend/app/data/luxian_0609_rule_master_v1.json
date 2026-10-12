@@ -83,7 +83,7 @@
       "qc_point": "CT/MRI检查前无说明检查原因的病程记录",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "每次CT/MRI检查按医嘱order_id关联检查主记录，再按exam_id关联报告；检查前病程须说明本次检查原因。关联不唯一或资料不完整时返回数据不足，不按相邻时间强行串联。"
+      "policy_summary": "每次CT/MRI检查按医嘱order_id关联检查主记录，再按exam_id关联报告；检查前病程须说明本次检查原因。关联不唯一或资料不完整时返回数据不足，不按相邻时间强行串联。院方口径（2026-10-11）：写明检查部位及要了解或观察的具体情况即算写明原因，只写“完善相关检查”不算；检查前48小时窗口内没有任何病程时，由程序直接判为未写明原因。"
     },
     {
       "rule_id": "LX0609-06-01-04",
@@ -99,7 +99,7 @@
       "qc_point": "CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "本院保留影像报告出具后24小时内分析阳性结果的时限；CT/MRI报告检出任一明确异常病灶或异常征象即视为阳性，包括炎症、结节、退变和陈旧灶等，不要求原文出现“阳性”，也不等同于癌症或确诊某病；报告整体明确未检出异常征象时为阴性，仅有待排或不除外等不确定描述时保持待判断。省手册不定义该24小时。"
+      "policy_summary": "影像报告出具后24小时内应分析阳性结果；CT/MRI检出任一明确异常病灶或异常征象即为阳性，不要求原文出现“阳性”。院方口径（2026-10-11）：与本次主诉、诊断及检查目的无关的附带发现（钙化、退变、建议随诊的微小结节等）不要求分析，需处置的异常仍须分析；只罗列或罗列后直接下诊断不算分析，模板式鉴别不算。省手册不定义该24小时。"
     },
     {
       "rule_id": "LX0609-06-02-03",

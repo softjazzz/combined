@@ -1913,14 +1913,16 @@ def test_non_010_keeps_nearest_pre_exam_course_outside_010_48h_window():
     assert catalog["LX0609-06-01-04"][0]["course_doc_positions"] == [1, 2]
     assert "检查前72小时的最近病程" in prompt
 
+    # 用户口径（2026-10-11）：010窗口内无病程时程序直接判为未写原因，
+    # 模型越窗引用不再导致整批拒收，也不会被采信。
     payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["course_doc_positions"] = [1]
-    with pytest.raises(ValueError, match="evidence ref mismatch"):
-        parse_exam_lab_fact_response(
-            response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-06-01-02",),
-            projection=projection,
-        )
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(payload)},
+        selected_rule_ids=("LX0609-06-01-02",),
+        projection=projection,
+    )
+    assert facts[0].semantic_state == "absent" and facts[0].course_doc_refs == ()
 
 
 def test_010_parser_rejects_post_exam_course_reference():
@@ -4679,7 +4681,7 @@ async def test_typed_controlled_triggers_call_each_selected_rule_once_with_cropp
     )
     response = _fact_response(exam_lab.EXAM_LAB_RULE_IDS)
     # 无关联医嘱时 010 以报告时间为锚点进入同一次调用；报告前 48 小时内没有
-    # 病程候选，模型只能返回未知且不引用病程。
+    # 病程候选，按用户口径（2026-10-11）由程序判为未写明原因。
     for fact in response["facts"]:
         if fact["rule_id"] == "LX0609-06-01-02":
             fact.update(semantic_state="unknown", course_doc_positions=[])
@@ -4698,7 +4700,7 @@ async def test_typed_controlled_triggers_call_each_selected_rule_once_with_cropp
     assert result.results == ()
     assert [item.rule_id for item in result.decisions] == list(exam_lab.EXAM_LAB_RULE_IDS)
     assert [item.qc_direction.value for item in result.decisions] == [
-        "unknown",
+        "defect",
         "satisfied",
         "satisfied",
         "satisfied",
@@ -6663,3 +6665,61 @@ async def test_prompt_requires_result_content_for_recorded_result_not_just_repor
     prompt = client.prompts[0]
     assert "必须在病程中写出本次报告的结果内容" in prompt
     assert "只写“结果已回报”“详见报告”“已查看报告”而没有任何结果内容的，为absent" in prompt
+
+
+@pytest.mark.parametrize("semantic_state", ["present", "unknown", "absent"])
+def test_010_empty_reason_window_is_program_absent_regardless_of_model(semantic_state):
+    """用户口径（2026-10-11）：检查前48小时窗口内没有病程时，程序直接判为未写明原因。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "order_id": "ORD-1",
+                    "exam_name": "胸部CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-18 15:00:00",
+                    "record_content": "检查后病程：完善胸部CT了解肺部情况。",
+                },
+            ),
+        }
+    )
+    payload = _fact_response(("LX0609-06-01-02",), semantic_state=semantic_state)
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(payload)},
+        selected_rule_ids=("LX0609-06-01-02",),
+        projection=projection,
+    )
+
+    assert facts[0].applicability == "applicable"
+    assert facts[0].semantic_state == "absent"
+    assert facts[0].course_doc_refs == ()
+
+
+def test_exam_prompt_carries_2026_10_11_reason_incidental_and_differential_policy():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "exam_name": "胸部CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+        }
+    )
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-05"),
+        projection=projection,
+    )
+    assert "完善胸部CT了解肺部情况" in prompt
+    assert "与本次主诉、入院诊断及检查目的无关的附带发现" in prompt
+    assert "模板式鉴别诊断不算" in prompt
