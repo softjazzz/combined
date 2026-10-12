@@ -19,6 +19,7 @@ import traceback
 import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
+from .consultation_measure_check import apply_measure_check, check_consultation_measures
 from .consultation_decision_evidence import (
     bind_document_material_rows,
     is_material_binding_error,
@@ -4768,6 +4769,44 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     source_technical=execution_source_technical,
                     source_incomplete_keys=execution_source_incomplete_keys,
                     context_only_candidate_present=context_only_candidate_present,
+                )
+            if (
+                "LX0609-03-01-04" in stage_two_rule_ids
+                and statuses.get("LX0609-03-01-04", ("",))[0] == "compliant"
+                and execution_candidate_projection is not None
+                and llm_client is not None
+            ):
+                # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
+                # 只对原判合规者逐项核对；核对失败不改变原判定。
+                measure_candidates = execution_candidate_projection.candidates
+                _, measure_allowed_refs = _execution_prompt(
+                    completed=completed_recommendations,
+                    candidates=measure_candidates,
+                )
+                measure_outcome = await check_consultation_measures(
+                    completed=completed_recommendations,
+                    candidates=measure_candidates,
+                    allowed_refs=measure_allowed_refs,
+                    alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
+                    llm_client=llm_client,
+                )
+                calls += measure_outcome.llm_call_count
+                prompt_tokens += measure_outcome.prompt_tokens
+                completion_tokens += measure_outcome.completion_tokens
+                total_tokens += measure_outcome.total_tokens
+                api_time += measure_outcome.api_time
+                action_types = {
+                    item.recommendation.recommendation_ref: item.recommendation.action_type
+                    for item in completed_recommendations
+                }
+                statuses["LX0609-03-01-04"] = apply_measure_check(
+                    statuses["LX0609-03-01-04"],
+                    measure_outcome,
+                    relevant_source_incomplete=lambda ref: bool(
+                        _ACTION_TYPE_SOURCE_KEYS.get(
+                            action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
+                        ).intersection(execution_source_incomplete_keys)
+                    ),
                 )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,

@@ -271,7 +271,7 @@ async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_us
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
     assert projection_calls == [RULE_023]
-    assert native.llm_call_count == 2 and native.total_tokens == 32
+    assert native.llm_call_count == 3 and native.total_tokens == 32  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert (reduced[0].final_state.value, reduced[0].reason_code) == ("compliant", "requirement_satisfied")
     assert (canonical["status"], canonical["reason_code"]) == ("compliant", "requirement_satisfied")
     assert canonical["customer_display_facts"] == consultation_projection.safe_consultation_customer_display_facts(
