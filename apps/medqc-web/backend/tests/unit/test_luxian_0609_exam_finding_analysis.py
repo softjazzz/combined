@@ -1,4 +1,4 @@
-"""012 分析要素核对（用户口径 2026-10-12）：罗列后下诊断不算分析，要素成立须有可核实的原文引文。"""
+"""012 分析要素核对（用户口径 2026-10-12）：单句归类，罗列后下诊断不算分析，照抄报告的引文不算分析。"""
 
 import json
 
@@ -48,10 +48,9 @@ class _Client:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
-def _answer(ref, *, linked=False, management=False, quote=""):
+def _answer(ref, kind="none", quote=""):
     return {"schema_version": SCHEMA_VERSION, "docs": [{
-        "event_position": 1, "course_doc_ref": ref, "finding_linked": linked, "management_linked": management,
-        "prior_comparison": False, "targeted_differential": False, "quote": quote}]}
+        "event_position": 1, "course_doc_ref": ref, "quote_type": kind, "quote": quote}]}
 
 
 def _report_ref(projection):
@@ -64,13 +63,13 @@ def _report_ref(projection):
 async def test_listing_then_diagnosis_is_not_analysis_and_pre_report_note_is_excluded():
     projection = _projection(LISTING)
     ref = _report_ref(projection)
-    client = _Client([_answer(ref)])
+    client = _Client([_answer(ref, "diagnosis_only", "目前考虑诊断：腰椎间盘突出症")])
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
     assert outcome.llm_call_count == 1
     sent = json.loads(client.prompts[0].split("EVENTS_JSON=", 1)[1])
     assert [doc["course_doc_ref"] for doc in sent[0]["course_docs"]] == [ref]
-    assert "罗列后直接列出诊断" in client.prompts[0]
+    assert "罗列后直接列出诊断" in client.prompts[0] and "diagnosis_only" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -78,8 +77,18 @@ async def test_linked_finding_with_verbatim_quote_counts_as_analysis():
     projection = _projection(LINKED)
     ref = _report_ref(projection)
     outcome = await check_exam_finding_analysis(
-        projection, _Client([_answer(ref, linked=True, management=True, quote="与右下肢放射痛相符，拟行手术")]))
+        projection, _Client([_answer(ref, "finding_linked", "与右下肢放射痛相符，拟行手术")]))
     assert outcome.state == "ready" and outcome.analysed_refs == {1: (ref,)}
+
+
+@pytest.mark.asyncio
+async def test_quote_copied_from_report_never_counts_as_analysis():
+    """真实样本：引用“L3椎体压缩性骨折伴骨髓水肿”这类报告原句却归为分析，Python 不采信。"""
+    projection = _projection("腰椎MRI：L4/5椎间盘突出，椎管狭窄。继续当前治疗。")
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(
+        projection, _Client([_answer(ref, "finding_linked", "L4/5椎间盘突出，椎管狭窄")]))
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
 
 
 @pytest.mark.asyncio
@@ -88,12 +97,12 @@ async def test_protocol_violation_retries_once_then_fails_open_to_main_extractio
     projection = _projection(LINKED)
     ref = _report_ref(projection)
     if bad == "quote_not_in_course":
-        first = _answer(ref, linked=True, quote="病程里没有这句话")
+        first = _answer(ref, "finding_linked", "病程里没有这句话")
     elif bad == "quote_without_element":
-        first = _answer(ref, quote="与右下肢放射痛相符")
+        first = _answer(ref, "none", "与右下肢放射痛相符")
     else:
         first = {"schema_version": SCHEMA_VERSION, "docs": []}
-    client = _Client([first, _answer(ref, linked=True, quote="与右下肢放射痛相符")])
+    client = _Client([first, _answer(ref, "finding_linked", "与右下肢放射痛相符")])
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.llm_call_count == 2
     assert client.prompts[1].index("上一次输出未通过校验") < client.prompts[1].index("EVENTS_JSON=")
