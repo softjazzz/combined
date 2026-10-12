@@ -3216,15 +3216,25 @@ def _parse_executions(
             # 但保留已经逐字落地的病程trace，不让模型的冗余枚举作废主事实。
             state = "absent"
         all_refs = [*trace_refs, *structured_refs]
-        reference_scope_invalid = any(
-            ref not in allowed_refs[recommendation_ref]
-            for ref in all_refs
-        )
         if any(ref not in candidate_by_ref for ref in all_refs):
             raise _SemanticInvalid(_SemanticInvalidKind.REFERENCE_NOT_CANDIDATE)
-        if reference_scope_invalid:
-            parsed.append(_unknown_execution_assessment(recommendation_ref))
-            continue
+        out_of_scope_refs = {
+            ref for ref in all_refs if ref not in allowed_refs[recommendation_ref]
+        }
+        if out_of_scope_refs:
+            # 用户口径（2026-10-12，与 06-01-02 方案 A 同一原则）：本条建议允许范围外
+            # （如会诊意见之前）的候选不能作为执行证据。只剔除越界引用后按剩余引用
+            # 判断，不再把整条降为未知；真实样本中整条降级使结论在资料不足与
+            # 不合规之间多轮翻转。
+            trace_refs = [ref for ref in trace_refs if ref not in out_of_scope_refs]
+            structured_refs = [ref for ref in structured_refs if ref not in out_of_scope_refs]
+            if not trace_refs and execution_record_state in _RECORDED_TRACE_LEVELS:
+                execution_record_state = "no_trace"
+            if not structured_refs and state in {"linked_specific", "linked_vague"}:
+                state = "absent"
+            if not trace_refs and not structured_refs:
+                raw_quotes = []
+            all_refs = [*trace_refs, *structured_refs]
         if (
             len(trace_refs) != len(set(trace_refs))
             or len(structured_refs) != len(set(structured_refs))
@@ -3360,9 +3370,14 @@ def _parse_executions(
             candidates,
             source_quote=recommendation_by_ref[recommendation_ref].source_quote,
         ):
+            # 只否定病程执行痕迹；已关联的结构化医嘱独立证明执行，不随之清除。
+            # 此前一并改为 absent 却保留医嘱引用，形成“未执行但有医嘱”的矛盾事实，
+            # 023 因此落为资料不足（真实样本多轮翻转）。
             assessment = replace(
                 assessment,
-                execution_state="absent",
+                execution_state=(
+                    assessment.execution_state if assessment.execution_refs else "absent"
+                ),
                 confidence="high",
                 execution_quotes=(),
                 execution_record_state="no_trace",

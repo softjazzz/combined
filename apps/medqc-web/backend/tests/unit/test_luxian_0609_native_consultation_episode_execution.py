@@ -2651,7 +2651,9 @@ def test_course_only_execution_prompt_and_parser_use_compact_trace_contract():
     )
 
 
-def test_one_out_of_window_trace_only_downgrades_that_recommendation():
+def test_one_out_of_window_trace_only_affects_that_recommendation():
+    """用户口径（2026-10-12）：会诊意见之前的病程不能证明该建议已执行，越界引用剔除后按无痕迹判断，
+    不再把整条降为未知（真实样本中整条降级使 023 在资料不足与不合规之间翻转）。"""
     completed = (
         episode._CompletedRecommendation(
             "consultation_record-1",
@@ -2705,9 +2707,9 @@ def test_one_out_of_window_trace_only_downgrades_that_recommendation():
 
     assert parsed[0].execution_record_state == "no_trace"
     assert parsed[0].confidence == "high"
-    assert parsed[1].execution_record_state == "unknown"
+    assert parsed[1].execution_record_state == "no_trace"
     assert parsed[1].trace_refs == ()
-    assert parsed[1].confidence == "low"
+    assert parsed[1].execution_state == "absent"
 
 
 def test_low_confidence_structured_link_keeps_unknown_execution_record_state():
@@ -9186,3 +9188,57 @@ def test_textless_exam_master_header_linked_to_known_order_does_not_mark_scope_i
 
     assert ("exam_master" in projection.source_incomplete_keys) is expected_incomplete
     assert not [item for item in projection.candidates if item.source_key == "exam_master"]
+
+
+def test_planned_only_course_trace_keeps_independent_structured_execution():
+    """真实样本：病程只写“建议行神经阻滞治疗，配合针灸理疗，续观”，针灸等医嘱已执行。
+    只否定病程痕迹，结构化医嘱的落实判断保留，不能形成“未执行但有医嘱”的矛盾事实。"""
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r1", "procedure", "针灸、中频、磁疗、穴位贴敷康复治疗",
+                "针灸、中频、磁疗、穴位贴敷康复治疗", "consultation_record-1"
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        ),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "senior_course_record-1",
+            "senior_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+            "建议行神经阻滞治疗，配合针灸理疗，余治疗同前，续观。",
+        ),
+        episode._CandidateDocument(
+            "inpat_nondrug_order-1",
+            "inpat_nondrug_order",
+            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            "电针；治疗",
+        ),
+    )
+    _, allowed_refs = episode._execution_prompt(completed=completed, candidates=candidates)
+    alias = episode._prompt_alias_by_ref(candidates, allowed_refs)
+    parsed = episode._parse_executions(
+        {"executions": [{
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "generic_trace",
+            "trace_refs": [alias["senior_course_record-1"]],
+            "execution_state": "linked_specific",
+            "structured_action_refs": [alias["inpat_nondrug_order-1"]],
+            "execution_quotes": ["配合针灸理疗，余治疗同前"],
+            "confidence": "high",
+        }]},
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+    assert parsed[0].execution_record_state == "no_trace" and parsed[0].trace_refs == ()
+    assert parsed[0].execution_state == "linked_specific"
+    assert parsed[0].execution_refs == ("inpat_nondrug_order-1",)
+    assert episode._execution_quality_outcome(
+        assessments=parsed,
+        completed_recommendations=completed,
+        source_incomplete_keys=frozenset(),
+    ) == ("compliant", "requirement_satisfied")
+
