@@ -9,6 +9,7 @@ from typing import Any, Mapping
 import jsonschema
 
 from . import discharge_course_stages as stages
+from .transfer_documentation import select_transfer_order_rows
 from ..course_quality.shared import response_json_payload
 from ..evidence_material import EvidenceMaterialTruncated, EvidenceMaterialUnavailable
 from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
@@ -26,7 +27,11 @@ EVENT_SOURCES = {
     "transfer_out_record": ("change", "major_change", "转科"),
     "transfer_in_record": ("change", "major_change", "转科"),
     "crisis_value_record": ("change", "major_change", "危急值"),
+    # 转科优先按正式转科医嘱逐次确定：医嘱写明转入科室，转入/转出文书常只有标题和时间，
+    # 且同一次转科会拆成转出、转入两份文书；读不到转科医嘱时才退回文书事件。
+    "inpat_nondrug_order": ("change", "major_change", "转科"),
 }
+TRANSFER_DOCUMENT_SOURCES = ("transfer_out_record", "transfer_in_record")
 SOURCES = ("discharge_record", *EVENT_SOURCES, "discharge_record_diagnosis")
 # 历史已发布事实曾含病程来源（旧阶段 B），交付校验仍须可读。
 PUBLISHED_SOURCES = (*SOURCES, "daily_course_record", "senior_course_record")
@@ -64,8 +69,11 @@ def _text(row: Mapping[str, Any], source: str) -> str:
         "surgery_record": ("surgery_name", "surgery_process", "record_content", "surgery_begin_time", "surgery_end_time"),
         "pathology_exam_report": ("specimen_name", "diagnosis", "microscope_findings", "record_content", "report_datetime"),
         "mr_bloodtrans": ("transfuse_variety", "blood_transfusion_volume", "blood_transfusion_unit", "transfution_datetime"),
-        "transfer_out_record": ("document_title", "transfer_date", "submit_datetime", "record_content"),
-        "transfer_in_record": ("document_title", "transfer_date", "submit_datetime", "record_content"),
+        "transfer_out_record": ("document_title", "transferout_department", "transferin_department",
+                                "transfer_purpose", "transfer_date", "submit_datetime", "record_content"),
+        "transfer_in_record": ("document_title", "transferout_department", "transferin_department",
+                               "transfer_purpose", "transfer_date", "submit_datetime", "record_content"),
+        "inpat_nondrug_order": ("order_name", "prescribed_datetime"),
         "crisis_value_record": ("document_title", "record_datetime", "dept_name", "record_content"),
     }.get(source, ("document_title", "record_time", "record_content"))
     return "\n".join(f"{key}：{row[key]}" for key in fields if str(row.get(key) or "").strip())
@@ -79,6 +87,16 @@ def _event_row(row: Mapping[str, Any], source: str) -> bool:
     if source == "pathology_exam_report":
         return any(str(row.get(key) or "").strip() for key in ("diagnosis", "microscope_findings", "record_content"))
     return True
+
+
+def _transfer_order_rows(materials: Any, snapshot: Any) -> list[tuple[Any, Mapping[str, Any]]]:
+    """正式转科医嘱（复用 10-02 转科判定的筛选口径）；医嘱不可读时返回空，退回文书事件。"""
+    try:
+        rows = materials.document_rows("inpat_nondrug_order", snapshot=snapshot)
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, ValueError):
+        return []
+    selected = {id(row) for row in select_transfer_order_rows([row for _, row in rows])}
+    return [(ref, row) for ref, row in rows if id(row) in selected]
 
 
 def _objective_events(docs: list[dict]) -> list[dict]:
@@ -110,8 +128,14 @@ async def evaluate_discharge_course_content(*, snapshot: Any, materials: Any, ll
         discharge_rows = materials.document_rows("discharge_record", snapshot=snapshot)
         if not discharge_rows:
             return CourseOutcome("not_applicable", "eligibility_not_met")
+        transfer_orders = _transfer_order_rows(materials, snapshot)
         for source in SOURCES:
-            rows = discharge_rows if source == "discharge_record" else materials.document_rows(source, snapshot=snapshot)
+            if source == "inpat_nondrug_order":
+                rows = transfer_orders
+            elif source in TRANSFER_DOCUMENT_SOURCES and transfer_orders:
+                continue
+            else:
+                rows = discharge_rows if source == "discharge_record" else materials.document_rows(source, snapshot=snapshot)
             for ref, row in rows:
                 if not _event_row(row, source):
                     continue

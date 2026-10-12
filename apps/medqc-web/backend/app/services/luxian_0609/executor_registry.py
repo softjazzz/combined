@@ -246,7 +246,7 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
     "LX0609-01-02-02": ("first_course_record_diagnosis",),
     "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
                         "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",
-                        "crisis_value_record"),
+                        "crisis_value_record", "inpat_nondrug_order"),
     "LX0609-04-01-04": ("presurg_summary", "surgery_record", "senior_course_record"),
     "LX0609-04-01-05": ("presurg_discussion", "surgery_record"),
 }

@@ -615,7 +615,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 用户口径（2026-10-11）：重要住院事件按结构化来源由程序确定，不再读病程。
     "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
                         "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",
-                        "crisis_value_record", "discharge_record_diagnosis"),
+                        "crisis_value_record", "inpat_nondrug_order", "discharge_record_diagnosis"),
     "LX0609-04-05-01": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-04-05-02": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-04-05-03": ("mr_surgery",),

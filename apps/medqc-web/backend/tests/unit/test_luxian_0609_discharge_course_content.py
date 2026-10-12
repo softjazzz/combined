@@ -204,6 +204,66 @@ async def test_structured_events_shared_summary_and_input_isolation():
     assert inputs["A"]["documents"][1]["parent_document_index"] == 1
 
 
+TRANSFER_DOCS = {
+    "transfer_out_record": [{"document_id": "o", "document_title": "转出记录", "submit_datetime": "2026-01-02 10:00:00"}],
+    "transfer_in_record": [{"document_id": "i", "document_title": "转入记录", "submit_datetime": "2026-01-02 11:00:00"}],
+}
+
+
+def _fixed_events(client):
+    prompt = next(p for p, _ in client.calls if p.startswith("阶段C"))
+    return json.loads(prompt.split("以下为受控资料：\n")[1])["fixed_events"]
+
+
+@pytest.mark.asyncio
+async def test_transfer_events_follow_formal_transfer_orders():
+    # 真实样本形态：转入/转出文书只有标题和时间；转科医嘱写明转入科室，且转 ICU 无对应文书。
+    rows = {"discharge_record": [{"document_id": "d", "treatment_course": TEXT + "转入胸外科手术，术后转ICU，后转回胸外科。"}],
+            **TRANSFER_DOCS,
+            "inpat_nondrug_order": [
+                {"order_id": "1", "order_name": "转入胸外科", "order_status": "新开", "prescribed_datetime": "2026-01-02 08:34:00"},
+                {"order_id": "2", "order_name": "转入ICU", "order_status": "新开", "prescribed_datetime": "2026-01-04 12:15:00"},
+                {"order_id": "3", "order_name": "转入胸外科", "order_status": "作废", "prescribed_datetime": "2026-01-05 08:00:00"},
+                {"order_id": "4", "order_name": "外科护理常规", "order_status": "新开", "prescribed_datetime": "2026-01-02 08:40:00"}]}
+    response = payload()
+    response["C"]["events"] = [{"event_id": i, "matches": [{"document_index": 1, **atom(span=4)}]} for i in (1, 2)]
+    snapshot, materials = _session(rows)
+    client = Client(response)
+    result = await evaluate_discharge_course_content(snapshot=snapshot, materials=materials, llm_client=client)
+    assert result.state == "compliant"
+    events = _fixed_events(client)
+    # 作废医嘱与护理常规不构成事件；同一次转科不再按转出、转入文书拆成两个事件。
+    assert [e["event_label"] for e in events] == ["转科", "转科"]
+    assert "转入胸外科" in events[0]["event_text"] and "转入ICU" in events[1]["event_text"]
+    assert not any("转出记录" in e["event_text"] or "转入记录" in e["event_text"] for e in events)
+    assert {d["source"] for d in result.facts["documents"]} == {"discharge_record", "inpat_nondrug_order"}
+    assert validate_published_discharge_facts(rule_id=RULE_ID, raw=result.facts) == result.facts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("orders", ["none", "unavailable"])
+async def test_transfer_documents_remain_events_without_transfer_orders(orders):
+    rows = {"discharge_record": [{"document_id": "d", "treatment_course": TEXT + "住院期间转科治疗。"}],
+            "transfer_out_record": [{**TRANSFER_DOCS["transfer_out_record"][0],
+                                     "transferout_department": "普通外科", "transferin_department": "呼吸内科"}],
+            "transfer_in_record": TRANSFER_DOCS["transfer_in_record"]}
+    unavailable = frozenset()
+    if orders == "none":
+        rows["inpat_nondrug_order"] = [{"order_id": "1", "order_name": "内科护理常规", "order_status": "新开"}]
+    else:
+        unavailable = frozenset({"inpat_nondrug_order"})
+    response = payload()
+    response["C"]["events"] = [{"event_id": i, "matches": [{"document_index": 1, **atom(span=4)}]} for i in (1, 2)]
+    snapshot, materials = _session(rows, unavailable_sources=unavailable)
+    client = Client(response)
+    result = await evaluate_discharge_course_content(snapshot=snapshot, materials=materials, llm_client=client)
+    assert result.state == "compliant"
+    events = _fixed_events(client)
+    assert len(events) == 2 and "转出记录" in events[0]["event_text"]
+    # 文书填了科室时一并提供给模型，用于对应出院记录中的转科表述。
+    assert "普通外科" in events[0]["event_text"] and "呼吸内科" in events[0]["event_text"]
+
+
 @pytest.mark.asyncio
 async def test_pathology_without_returned_result_is_not_an_event():
     rows = {"discharge_record": [{"document_id": "d", "treatment_course": TEXT}],
