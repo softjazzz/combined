@@ -7,6 +7,7 @@ from scripts.run_luxian_0609_quality_gate import (
     GateSpec,
     _PR_NO_MODEL_GATES,
     _parse_args,
+    gate_environment,
     run_gate_subprocess,
     run_luxian_0609_quality_gate,
 )
@@ -74,11 +75,12 @@ def test_pr_no_model_profile_runs_all_fast_gates_and_aggregates_safe_metrics() -
         "rule_contract",
         "native_executors",
         "mainline_aggregation",
+        "extended_regression",
     ]
     assert summary["passed"] is True
-    assert summary["duration_ms"] == 300
+    assert summary["duration_ms"] == 400
     assert summary["metrics"] == {
-        "passed_tests": 30,
+        "passed_tests": 40,
         "failed_tests": 0,
         "timeout_count": 0,
     }
@@ -112,7 +114,7 @@ def test_quality_failure_uses_controlled_reason_without_raw_process_output() -> 
         {"gate": "rule_contract", "failure_kind": "test_failure"}
     ]
     assert summary["metrics"] == {
-        "passed_tests": 4,
+        "passed_tests": 6,
         "failed_tests": 1,
         "timeout_count": 0,
     }
@@ -146,6 +148,20 @@ def test_subprocess_gate_extracts_only_safe_pytest_counts() -> None:
     assert captured["command"][1:] == ["-m", "pytest", "example.py"]
     assert captured["kwargs"]["cwd"].name == "backend"
     assert captured["kwargs"]["timeout"] == 600
+    assert captured["kwargs"]["env"]["DATABASE_URL"].startswith("sqlite:///")
+    assert captured["kwargs"]["env"]["PYTHONHASHSEED"] == "0"
+
+
+@pytest.mark.unit
+def test_gate_environment_never_points_at_a_real_database() -> None:
+    env = gate_environment(
+        {"DATABASE_URL": "postgresql://real-host/db", "JWT_SECRET": "configured"},
+        database_dir="/tmp/gate",
+    )
+
+    assert env["DATABASE_URL"] == "sqlite:////tmp/gate/lx0609-gate.db"
+    assert env["JWT_SECRET"] == "configured"
+    assert gate_environment({}, database_dir="/tmp/gate")["JWT_SECRET"]
 
 
 @pytest.mark.unit
@@ -162,6 +178,21 @@ def test_subprocess_gate_does_not_join_test_name_suffix_with_next_line_summary()
 
     assert result.passed_tests == 2
     assert result.failed_tests == 1
+
+
+@pytest.mark.unit
+def test_pr_no_model_gates_cover_every_luxian_0609_unit_test_file_exactly_once() -> None:
+    from pathlib import Path
+
+    unit_dir = Path(__file__).resolve().parent
+    expected = {f"tests/unit/{path.name}" for path in unit_dir.glob("test_luxian_0609*.py")}
+    gated = [arg for gate in _PR_NO_MODEL_GATES for arg in gate.args if arg.endswith(".py")]
+
+    assert expected <= set(gated)
+    assert len(gated) == len(set(gated))
+    extended = next(gate for gate in _PR_NO_MODEL_GATES if gate.name == "extended_regression")
+    assert "tests/unit/test_verify_consultation_family_acceptance.py" in extended.args
+    assert extended.args[-2:] == ("-k", "not endpoint")
 
 
 @pytest.mark.unit
