@@ -19,6 +19,52 @@ _PHASE1_EXTENSION_PATH = (
 )
 
 
+_ENGINE_JUDGMENT_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "luxian_0609_engine_judgment_v1.json"
+)
+# 判定方式按规则合同 decision_authority 生成，避免说明文字与执行合同脱节。
+_ENGINE_METHOD_LABELS = {
+    "program_only": "程序判定：按结构化数据、时间和文书存在性直接计算，不调用模型。",
+    "program_then_optional_llm": (
+        "程序为主、模型辅助：模型只从病历正文抽取事实并给出原文引文，"
+        "程序逐字核验引文后按规则下结论；模型不直接给出合规或不合规。"
+    ),
+}
+
+
+@lru_cache(maxsize=1)
+def load_luxian_0609_engine_judgment() -> dict[str, Any]:
+    """加载质控规则页展示用的引擎判定说明（每条客户交付规则一项）。"""
+    with _ENGINE_JUDGMENT_PATH.open("r", encoding="utf-8") as file:
+        payload = json.load(file)
+    if payload.get("schema_version") != "lx0609-engine-judgment-v1":
+        raise ValueError("unsupported LX0609 engine judgment schema")
+    return payload
+
+
+def build_luxian_0609_engine_judgment(
+    rule_id: str, *, decision_authority: str, pending_note: str = "",
+) -> dict[str, Any] | None:
+    payload = load_luxian_0609_engine_judgment()
+    entry = (payload.get("rules") or {}).get(rule_id)
+    if not isinstance(entry, dict):
+        return None
+    if entry.get("excluded"):
+        return {"withheld": True, "withheld_reason": "本质控点不在本次客户交付范围，不参与正式判定。"}
+    if entry.get("withheld"):
+        return {"withheld": True, "withheld_reason": pending_note or "本质控点暂不执行。"}
+    common = payload.get("common") or {}
+    return {
+        "withheld": False,
+        "method": _ENGINE_METHOD_LABELS.get(decision_authority, ""),
+        "trigger": str(entry.get("trigger") or ""),
+        "steps": [str(item) for item in entry.get("steps") or []],
+        "outcomes": {str(key): str(value) for key, value in (entry.get("outcomes") or {}).items()},
+        "extra_notes": [str(item) for item in entry.get("extra_notes") or []],
+        "data_gap_note": str(common.get("data_gap") or ""),
+    }
+
+
 @lru_cache(maxsize=1)
 def load_luxian_0609_rules() -> list[dict[str, Any]]:
     """Load the customer-facing Luxian 0609 rule wrappers.
@@ -84,6 +130,12 @@ def attach_luxian_0609_customer_policy(
         entry.rule_id: entry
         for entry in load_luxian_0609_rule_master()
     }
+    from .luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
+
+    authority_by_id = {
+        contract.rule_id: contract.decision_authority
+        for contract in load_luxian_0609_rule_contracts()
+    }
     projected: list[dict[str, Any]] = []
     for wrapper in wrappers:
         copied_wrapper = dict(wrapper)
@@ -103,6 +155,13 @@ def attach_luxian_0609_customer_policy(
             "summary": master_entry.policy_summary,
             "sources": list(master_entry.policy_sources),
         }
+        engine_judgment = build_luxian_0609_engine_judgment(
+            rule_id,
+            decision_authority=authority_by_id.get(rule_id, ""),
+            pending_note=master_entry.pending_definition_note,
+        )
+        if engine_judgment is not None:
+            copied_wrapper["engine_judgment"] = engine_judgment
         projected.append(copied_wrapper)
     return projected
 

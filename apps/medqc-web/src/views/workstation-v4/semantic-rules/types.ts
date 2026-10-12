@@ -5,6 +5,32 @@ export interface SemanticRuleCustomerPolicy {
   sources: string[]
 }
 
+export type SemanticRuleEngineOutcomeKey =
+  | 'compliant'
+  | 'non_compliant'
+  | 'data_gap'
+  | 'not_applicable'
+
+export interface SemanticRuleEngineJudgmentDetail {
+  withheld: false
+  method: string
+  trigger: string
+  steps: string[]
+  outcomes: Partial<Record<SemanticRuleEngineOutcomeKey, string>>
+  extra_notes: string[]
+  data_gap_note: string
+}
+
+export interface SemanticRuleEngineJudgmentWithheld {
+  withheld: true
+  withheld_reason: string
+}
+
+/** LX0609 规则详情的引擎判定说明：由后端说明文件与规则合同生成。 */
+export type SemanticRuleEngineJudgment =
+  | SemanticRuleEngineJudgmentWithheld
+  | SemanticRuleEngineJudgmentDetail
+
 export interface SemanticRuleItem {
   rule_id: string
   rule_code?: string
@@ -44,6 +70,8 @@ export interface SemanticRuleItem {
   customer_text?: string
   /** 仅 LX0609 规则详情使用的总表客户口径，不从包装器字段回退生成。 */
   customer_policy?: SemanticRuleCustomerPolicy
+  /** 仅 LX0609 规则详情使用：引擎如何判定该质控点。 */
+  engine_judgment?: SemanticRuleEngineJudgment
   standardized_rule?: string
   required_documents_label?: string
   data_dependencies?: string[]

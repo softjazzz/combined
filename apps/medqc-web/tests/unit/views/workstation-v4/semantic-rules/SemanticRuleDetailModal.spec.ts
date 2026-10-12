@@ -133,4 +133,46 @@ describe('SemanticRuleDetailModal', () => {
     expect(text).toContain('旧只读模板，不得展示。')
     expect(text).not.toContain('客户规则口径')
   })
+
+  it('LX详情展示引擎判定说明：判定方式、何时判定、步骤与结论含义', () => {
+    const wrapper = mountDetail(
+      makeRule({
+        rule_id: 'LX0609-06-01-04',
+        rule_code: 'LX0609-06-01-04',
+        engine_judgment: {
+          withheld: false,
+          method: '程序为主、模型辅助：模型只抽取事实。',
+          trigger: '有已出报告的 CT/MRI 检查时判定。',
+          steps: ['取报告出具时间。', '逐份病程摘句并核验。'],
+          outcomes: { compliant: '24 小时内写出本次结果。', non_compliant: '24 小时内未写出。' },
+          extra_notes: ['病程与报告矛盾时另作核实提示。'],
+          data_gap_note: '资料不足表示源数据缺失。',
+        },
+      }),
+    )
+    const text = wrapper.text()
+
+    expect(text).toContain('引擎判定说明')
+    expect(text).toContain('程序为主、模型辅助：模型只抽取事实。')
+    expect(text).toContain('何时判定')
+    expect(text).toContain('有已出报告的 CT/MRI 检查时判定。')
+    expect(wrapper.findAll('.engine-steps li').map((item) => item.text())).toEqual([
+      '取报告出具时间。',
+      '逐份病程摘句并核验。',
+    ])
+    expect(wrapper.findAll('.engine-outcome-tag').map((item) => item.text())).toEqual(['合规', '不合规'])
+    expect(text).toContain('病程与报告矛盾时另作核实提示。')
+    expect(text).toContain('资料不足表示源数据缺失。')
+  })
+
+  it('暂停规则只展示暂停原因，不展示判定步骤', () => {
+    const wrapper = mountDetail(
+      makeRule({ engine_judgment: { withheld: true, withheld_reason: '源库未同步会诊记录单，暂不执行。' } }),
+    )
+    const text = wrapper.text()
+
+    expect(text).toContain('引擎判定说明')
+    expect(text).toContain('源库未同步会诊记录单，暂不执行。')
+    expect(wrapper.find('.engine-steps').exists()).toBe(false)
+  })
 })

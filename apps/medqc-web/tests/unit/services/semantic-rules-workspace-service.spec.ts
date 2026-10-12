@@ -257,6 +257,45 @@ describe('semantic rules workspace service', () => {
     expect(incompletePolicy.customer_policy).toBeUndefined()
   })
 
+  it('LX规则引擎判定说明只保留合法字段，暂停规则只保留原因', () => {
+    const judged = normalizeSemanticRule({
+      rule_id: 'LX0609-06-01-04',
+      name: 'CT/MRI报告后记录',
+      engine_judgment: {
+        withheld: false,
+        method: '程序为主、模型辅助',
+        trigger: '有已出报告的检查时判定。',
+        steps: ['取报告时间。', '', 3, '逐份病程核验。'],
+        outcomes: { compliant: '已记录。', non_compliant: '未记录。', unknown_key: '忽略' },
+        extra_notes: ['矛盾时提示核实。'],
+        data_gap_note: '资料不足说明。',
+      },
+    })
+    expect(judged.engine_judgment).toEqual({
+      withheld: false,
+      method: '程序为主、模型辅助',
+      trigger: '有已出报告的检查时判定。',
+      steps: ['取报告时间。', '逐份病程核验。'],
+      outcomes: { compliant: '已记录。', non_compliant: '未记录。' },
+      extra_notes: ['矛盾时提示核实。'],
+      data_gap_note: '资料不足说明。',
+    })
+
+    const paused = normalizeSemanticRule({
+      rule_id: 'LX0609-03-01-01',
+      name: '会诊执行记录',
+      engine_judgment: { withheld: true, withheld_reason: '暂不执行。', steps: ['不应保留'] },
+    })
+    expect(paused.engine_judgment).toEqual({ withheld: true, withheld_reason: '暂不执行。' })
+
+    const broken = normalizeSemanticRule({
+      rule_id: 'LX0609-06-01-04',
+      name: 'CT/MRI报告后记录',
+      engine_judgment: { withheld: false, trigger: '', steps: [] },
+    })
+    expect(broken.engine_judgment).toBeUndefined()
+  })
+
   it('应生成固定四卡 KPI 展示模型', () => {
     const cards = buildSemanticKpiCards({
       stats: {

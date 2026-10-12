@@ -275,6 +275,7 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     rule_basis: raw.rule_basis ? String(raw.rule_basis) : undefined,
     customer_text: raw.customer_text ? String(raw.customer_text) : undefined,
     customer_policy: normalizeCustomerPolicy(raw.customer_policy),
+    engine_judgment: normalizeEngineJudgment(raw.engine_judgment),
     standardized_rule: raw.standardized_rule ? String(raw.standardized_rule) : undefined,
     required_documents_label: raw.required_documents_label
       ? String(raw.required_documents_label)
@@ -306,6 +307,45 @@ function normalizeCustomerPolicy(value: unknown): SemanticRuleItem['customer_pol
     qc_point: qcPoint,
     summary,
     sources: sources as string[],
+  }
+}
+
+const ENGINE_OUTCOME_KEYS = ['compliant', 'non_compliant', 'data_gap', 'not_applicable'] as const
+
+function normalizeTextList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map(normalizeNonEmptyText).filter((item): item is string => Boolean(item))
+}
+
+function normalizeEngineJudgment(value: unknown): SemanticRuleItem['engine_judgment'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+
+  const raw = value as Record<string, unknown>
+  if (raw.withheld === true) {
+    const reason = normalizeNonEmptyText(raw.withheld_reason)
+    return reason ? { withheld: true, withheld_reason: reason } : undefined
+  }
+  const trigger = normalizeNonEmptyText(raw.trigger)
+  const steps = normalizeTextList(raw.steps)
+  if (raw.withheld !== false || !trigger || !steps.length) return undefined
+
+  const rawOutcomes =
+    raw.outcomes && typeof raw.outcomes === 'object' && !Array.isArray(raw.outcomes)
+      ? (raw.outcomes as Record<string, unknown>)
+      : {}
+  const outcomes: Partial<Record<(typeof ENGINE_OUTCOME_KEYS)[number], string>> = {}
+  for (const key of ENGINE_OUTCOME_KEYS) {
+    const text = normalizeNonEmptyText(rawOutcomes[key])
+    if (text) outcomes[key] = text
+  }
+  return {
+    withheld: false,
+    method: normalizeNonEmptyText(raw.method) || '',
+    trigger,
+    steps,
+    outcomes,
+    extra_notes: normalizeTextList(raw.extra_notes),
+    data_gap_note: normalizeNonEmptyText(raw.data_gap_note) || '',
   }
 }
 
