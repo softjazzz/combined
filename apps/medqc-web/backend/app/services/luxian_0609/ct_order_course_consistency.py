@@ -301,7 +301,14 @@ _MODALITY_TOKENS = {
     "ct": ("ct",),
     "mr": ("磁共振", "核磁", "mri", "mr"),
 }
-_METHOD_TOKENS = ("核磁共振", "磁共振", "核磁", "mri", "mr", "ct", "平扫", "增强", "检查", "扫描", "成像")
+_METHOD_TOKENS = ("核磁共振", "磁共振", "核磁", "mri", "mr", "ct", "平扫", "增强", "检查", "扫描", "成像",
+                  "螺旋", "造影", "薄层")
+# 医嘱名称括号内是范围或计费说明（如“(含膈上肋骨)”“(T1-T12)”），不属于部位。
+_PARENTHETICAL = re.compile(r"[（(][^（）()]*[)）]")
+# 病程常把多个部位并列后共用一个模态：“MRI胸椎、腰椎平扫”“上腹/下腹/盆腔腹部螺旋CT”。
+_SITE_SEPARATOR = r"[、/+＋]"
+_OTHER_SITE = r"[\u4e00-\u9fffa-z0-9\-]{1,10}?"
+_SCAN_WORDS = r"(?:螺旋|平扫|增强|薄层|造影|扫描)*"
 
 
 def _order_modality(name: str) -> str:
@@ -317,7 +324,7 @@ def _order_site(name: str) -> str:
 
 
 def _exam_key(order: Mapping[str, Any]) -> tuple[str, str] | None:
-    name = _normalized_name(order.get("order_name"))
+    name = _normalized_name(_PARENTHETICAL.sub("", unicodedata.normalize("NFKC", str(order.get("order_name") or ""))))
     modality, site = _order_modality(name), _order_site(name)
     return (modality, site) if modality and site else None
 
@@ -342,12 +349,22 @@ def _has_explicit_order_description(
     if key is None:
         return False
     modality, site = key
-    # 部位须紧接模态（可夹平扫/增强），“左膝CT：胸部另见…”不能证明胸部CT。
+    # 部位须紧接模态（可夹扫描方式词，或以顿号、斜杠等并列其他部位），模态在前在后均可；
+    # 标点（冒号、句号等）隔开时不成立，“左膝CT：胸部另见…”不能证明胸部CT。
+    # “上腹部”在病程中常写作“上腹”，并列时也会共用“腹部”后缀（“盆腔腹部”）。
+    base = site[:-1] if site.endswith("部") and len(site) > 1 else site
+    site_pattern = re.escape(base) + "(?:腹?部)?"
+    modality_pattern = "(?:" + "|".join(re.escape(token) for token in _MODALITY_TOKENS[modality]) + ")"
     pattern = re.compile(
-        re.escape(site) + r"(?:平扫|增强)*(?:"
-        + "|".join(re.escape(token) for token in _MODALITY_TOKENS[modality]) + ")"
+        site_pattern + "(?:" + _SITE_SEPARATOR + _OTHER_SITE + ")*" + _SCAN_WORDS + modality_pattern
+        + "|" + modality_pattern + _SCAN_WORDS + "(?:" + _OTHER_SITE + _SITE_SEPARATOR + ")*" + site_pattern
     )
-    return any(pattern.search(_normalized_name(clause.text)) for clause in clauses)
+    return any(pattern.search(_compact_text(clause.text)) for clause in clauses)
+
+
+def _compact_text(value: Any) -> str:
+    """保留标点的归一化文本：标点用于判断部位与模态是否属于同一检查表述。"""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value or "")).casefold())
 
 
 def _aggregate_status(findings: tuple[HandbookFinding, ...], complete: bool) -> str:

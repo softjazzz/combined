@@ -695,6 +695,15 @@ def _named_event(name, key="EXAM-001", order_id="ORDER-001"):
     ("胸部CT平扫", "今日胸部CT示右肺上叶结节。"),
     ("头颅MRI平扫+增强", "头颅磁共振增强示左侧基底节梗死。"),
     ("上腹部CT增强", "上腹部增强CT示肝内低密度灶。"),
+    # 真实样本写法：医嘱名含括号范围说明与“螺旋/造影”，病程模态在前或多部位并列共用模态。
+    ("胸部螺旋CT平扫(含膈上肋骨)", "2025-07-06 胸部螺旋CT平扫：双肺下叶少许渗出；"),
+    ("颅脑螺旋CT平扫", "院内辅助检查：2025-07-28颅脑CT+胸部螺旋CT平扫(含膈上肋骨) 双侧"),
+    ("胸椎螺旋CT平扫(T1-T12)", "辅助检查：2025-7-10 胸椎螺旋CT：T11椎体压缩性骨折成形术后改变。"),
+    ("MRI腰椎平扫", "辅助检查：2025-07-06 MRI胸椎、腰椎平扫：T11椎体压缩性骨折。"),
+    ("MRI胸椎平扫", "辅助检查：2025-07-06 MRI胸椎、腰椎平扫：T11椎体压缩性骨折。"),
+    ("上腹部螺旋CT平扫(肝胆胰脾、膈下肋骨)", "2025-07-29 上腹/下腹/盆腔腹部螺旋CT平扫:前列腺钙化灶。"),
+    ("盆腔螺旋CT平扫", "2025-07-29 上腹/下腹/盆腔腹部螺旋CT平扫:前列腺钙化灶。"),
+    ("颈动脉CT造影成像", "2025-07-09 颅内动脉、颈动脉CT造影成像 前交通动脉显示。"),
 ])
 def test_course_need_not_copy_full_order_name_when_modality_and_site_match(order_name, text):
     result = evaluate_ct_review(_review(text, events=(_named_event(order_name),)), _payload())
@@ -705,6 +714,12 @@ def test_course_need_not_copy_full_order_name_when_modality_and_site_match(order
     ("胸部CT平扫", "今日头颅CT未见异常。"),
     ("胸部CT平扫", "胸部MRI示纵隔占位。"),
     ("头颅MRI平扫", "头颅CT未见出血。"),
+    # 部位与模态被冒号、逗号或连词隔开时不属于同一检查表述；相近部位不能互相代替。
+    ("胸部CT平扫", "左膝CT：胸部另见结节。"),
+    ("胸部CT平扫", "胸椎CT示压缩骨折。"),
+    ("头颅MRI平扫", "左膝MRI，头颅未查。"),
+    ("头颅MRI平扫", "左膝MRI及头颅CT。"),
+    ("腰椎MRI平扫", "胸椎MRI示骨折。"),
 ])
 def test_modality_and_site_must_both_match_the_order(order_name, text):
     result = evaluate_ct_review(_review(text, events=(_named_event(order_name),)), _payload())

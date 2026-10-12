@@ -2781,6 +2781,24 @@ def test_010_composite_exam_id_links_one_master_to_explicit_component_orders():
     }
 
 
+def test_composite_exam_id_ignores_same_visit_non_exam_component():
+    """真实样本：合并检查夹带同次住院的“薄层扫描(加收)”计费项，它不在 CT/MRI 医嘱集合内。"""
+    from app.services.luxian_0609.exam_order_linkage import resolve_exam_master_order_ids
+
+    row = {"exam_id": "VISIT||44^VISIT||43", "order_id": "VISIT||43+VISIT||43"}
+    assert resolve_exam_master_order_ids(row, known_order_ids=("VISIT||43",)) == ("VISIT||43",)
+    merged = {"exam_id": "VISIT||48^VISIT||45^VISIT||47", "order_id": "VISIT||47+VISIT||47+VISIT||47"}
+    assert resolve_exam_master_order_ids(merged, known_order_ids=("VISIT||45", "VISIT||47")) == (
+        "VISIT||45", "VISIT||47")
+    # 其他住院号前缀、无住院号前缀，或 order_id 本身不在检查医嘱集合内，均保持失败关闭。
+    assert resolve_exam_master_order_ids(
+        {"exam_id": "VISIT||43^OTHER||44", "order_id": "VISIT||43+VISIT||43"}, known_order_ids=("VISIT||43",)) == ()
+    assert resolve_exam_master_order_ids(
+        {"exam_id": "A^B", "order_id": "A+A"}, known_order_ids=("A",)) == ()
+    assert resolve_exam_master_order_ids(
+        {"exam_id": "VISIT||44^VISIT||43", "order_id": "VISIT||44+VISIT||44"}, known_order_ids=("VISIT||43",)) == ()
+
+
 def test_010_composite_exam_id_with_unknown_component_stays_data_gap():
     """复合检查只要有一个组件不属于本次就诊医嘱，就不能猜测关联。"""
 
