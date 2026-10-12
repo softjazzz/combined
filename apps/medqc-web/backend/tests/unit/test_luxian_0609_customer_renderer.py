@@ -3237,3 +3237,39 @@ def test_008_severity_course_gap_renders_specific_finding() -> None:
 ])
 def test_039_defects_render_specific_findings(facts, expected) -> None:
     assert customer_finding_from_controlled_facts(rule_id="LX0609-04-01-02", facts=facts) == expected
+
+
+def test_011_result_recorded_after_24_hours_is_described_as_late_not_missing() -> None:
+    """用户口径（2026-10-12）：有相关病程只是超过 24 小时，写“已记录但超过 24 小时”，不说成未记录。"""
+    single = customer_finding_from_controlled_facts(
+        rule_id="LX0609-06-01-04",
+        facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "report_time": "2026-08-04 10:41:43",
+            "response_record_count": 1,
+            "response_record_time": "2026-08-05 11:27:44",
+            "interval_hours": 24.77,
+        },
+    )
+    assert single == (
+        "CT/MRI 报告于 2026-08-04 10:41:43 出具。已核对首次病程记录及后续病程记录，"
+        "报告结果已记录但超过 24 小时：最早相关病程时间 2026-08-05 11:27:44，间隔 24.77 小时。"
+    )
+    multi = customer_finding_from_controlled_facts(
+        rule_id="LX0609-06-01-04",
+        facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "event_results": [
+                {"report_time": "2026-08-04 10:41:43", "event_status": "non_compliant",
+                 "response_record_count": 1, "response_record_time": "2026-08-05 11:27:44",
+                 "interval_hours": 24.77},
+                {"report_time": "2026-08-08 23:53:48", "event_status": "non_compliant",
+                 "response_record_count": 0},
+            ],
+        },
+    )
+    assert multi == (
+        "共核对2次CT/MRI检查：1）报告时间 2026-08-04 10:41:43：报告结果已记录但超过 24 小时"
+        "（最早相关病程 2026-08-05 11:27:44，间隔 24.77 小时）；"
+        "2）报告时间 2026-08-08 23:53:48：未找到报告后24小时内的报告结果记录。"
+    )

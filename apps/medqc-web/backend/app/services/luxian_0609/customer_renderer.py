@@ -2648,6 +2648,7 @@ def customer_finding_from_controlled_facts(
         event_results = facts.get("event_results")
         if isinstance(event_results, list) and len(event_results) > 1:
             requirement_label = "阳性结果分析或处置" if analysis_rule else "报告结果记录"
+            late_label = "阳性结果已分析或处置" if analysis_rule else "报告结果已记录"
             details: list[str] = []
             for index, item in enumerate(event_results, start=1):
                 if not isinstance(item, Mapping):
@@ -2668,8 +2669,16 @@ def customer_finding_from_controlled_facts(
                         timing += "（相关病程仅有提交时间，未取得记录时间）"
                     conclusion = f"已完成{requirement_label}{timing}"
                 elif event_status == "non_compliant":
+                    # 用户口径（2026-10-12）：已有相关病程、只是晚于 24 小时时，写明“已记录但超时”，
+                    # 不能说成未记录。
+                    late = (
+                        isinstance(response_count, int) and response_count > 0
+                        and isinstance(interval, (int, float)) and interval > 24 and bool(response_time)
+                    )
                     conclusion = (
-                        f"找到 {response_count} 份报告后相关病程，"
+                        f"{late_label}但超过 24 小时（最早相关病程 {response_time}，间隔 {interval:g} 小时）"
+                        if late
+                        else f"找到 {response_count} 份报告后相关病程，"
                         f"但未完成{requirement_label}"
                         if isinstance(response_count, int) and response_count > 0
                         else f"未找到报告后24小时内的{requirement_label}"
@@ -2718,6 +2727,15 @@ def customer_finding_from_controlled_facts(
             facts.get("reviewed_record_scope") or "首次病程记录及后续病程记录"
         )
         if kind == "exam_lab_requirement_not_documented":
+            if (
+                isinstance(response_count, int) and response_count > 0
+                and isinstance(interval, (int, float)) and interval > 24 and response_time
+            ):
+                late_label = "阳性结果已分析或处置" if analysis_rule else "报告结果已记录"
+                return (
+                    f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
+                    f"{late_label}但超过 24 小时：最早相关病程时间 {response_time}，间隔 {interval:g} 小时。"
+                )
             if isinstance(response_count, int) and response_count > 0:
                 timing = (
                     f"，最早相关病程时间 {response_time}，间隔 {interval:g} 小时"
