@@ -17,7 +17,7 @@ from .extended_document.discharge_diagnosis_equivalence import (
     map_equivalent_diagnoses,
     valid_equivalent_pairs,
 )
-from .extended_document.discharge_course_content import FIELDS, SOURCES, content_state
+from .extended_document.discharge_course_content import FIELDS, PUBLISHED_SOURCES, content_state
 from .extended_document.discharge_course_stages import valid_review
 
 
@@ -45,7 +45,7 @@ def _safe_course_content(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 return None
         if (not isinstance(doc, dict) or set(doc) != expected
                 or type(doc["document_index"]) is not int or doc["document_index"] != index
-                or doc["source"] not in SOURCES or type(doc["text_length"]) is not int
+                or doc["source"] not in PUBLISHED_SOURCES or type(doc["text_length"]) is not int
                 or not 0 < doc["text_length"] <= 60000 or not isinstance(doc["document_ref"], str)
                 or re.fullmatch(r"[0-9a-f]{64}", doc["document_ref"]) is None):
             return None

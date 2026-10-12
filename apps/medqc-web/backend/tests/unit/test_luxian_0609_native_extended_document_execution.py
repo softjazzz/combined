@@ -111,6 +111,9 @@ def _session(
         "mr_bloodtrans": bloodtrans_query_version,
         "bloodtrans_record": bloodtrans_query_version,
         "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
+        # 08-01-05 结构化住院事件来源（病理结果、抢救）；夹具默认可读且为空。
+        "pathology_exam_report": resolve_luxian_0609_physical_source_entry("pathology_exam_report").query_version,
+        "rescue_record": resolve_luxian_0609_physical_source_entry("rescue_record").query_version,
         # 074 的结构化变更声明来源是同一 Evidence Session 的决策支撑来源；
         # 夹具默认保持可读且为空，只有显式列入 unavailable_sources 才不可用。
         "admission_record_diagnosis": (

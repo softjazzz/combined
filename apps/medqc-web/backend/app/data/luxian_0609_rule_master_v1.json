@@ -724,7 +724,7 @@
       "qc_point": "诊疗经过不全面或不详细",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "逐份核对诊疗措施、病情演变、疗效与转归，并对照同次住院病程及手术记录核对重要事件遗漏；来源缺口不判临床缺陷。"
+      "policy_summary": "逐份核对诊疗措施、病情演变、疗效及转归；重要住院事件按院方口径（2026-10-11）由程序从结构化来源（实际手术、已回报病理、输血、抢救、转科、危急值）确定，模型只核对出院记录是否提及；源缺口不报临床缺陷。"
     }
   ]
 }

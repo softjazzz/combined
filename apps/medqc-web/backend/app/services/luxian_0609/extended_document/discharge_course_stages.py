@@ -1,6 +1,7 @@
-"""出院内容的三个有限语义步骤：自身内容、事件识别、固定事件概述匹配。
+"""出院内容的有限语义步骤：A 出院记录自身内容、C 固定事件概述匹配。
 
-只拥有本规则的模型合同和引用转换，不调度任务、不形成医学交付状态。
+用户口径（2026-10-11）：重要住院事件由程序按结构化来源确定（原阶段 B），
+模型只核对出院记录是否提到。本模块只拥有模型合同和引用转换，不调度任务、不形成医学交付状态。
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from typing import Any
 
 import jsonschema
 
-VERSION = "lx0609-discharge-course-v4"
+VERSION = "lx0609-discharge-course-v5"
 FIELDS = ("treatment", "evolution", "outcome")
 KINDS = ("surgery", "test", "treatment", "change")
 IMPORTANCE = ("actual_procedure", "diagnostic_basis", "key_differential", "severity_outcome",
@@ -49,27 +50,12 @@ def atom_schema(doc: dict) -> dict:
                 "conflict_span_id": enum([*span_ids, None]), "conflict_kind": enum(CONFLICTS)})
 
 
-def reference_schema(docs: list[dict]) -> dict:
-    # 跨文书引用不重复嵌入每份文书的全部片段枚举；具体归属仍由anchor严格校验。
-    return obj({"document_index": enum([d["document_index"] for d in docs]),
-                "span_id": {"type": "integer", "minimum": 1,
-                            "maximum": max((len(segments(d["text"])) for d in docs), default=1)}})
-
-
 def schema(stage: str, docs: list[dict], events: list[dict]) -> dict:
     discharge = [d for d in docs if d["source"] == "discharge_record"]
-    references = [d for d in docs if d["source"] not in {"discharge_record", "discharge_record_diagnosis"}]
     if stage == "A":
         fields = {"discharges": array(choice([obj({"document_index": enum([d["document_index"]]),
                   "fields": obj({f: atom_schema(d) for f in FIELDS})}) for d in discharge]),
                   len(discharge), len(discharge))}
-    elif stage == "B":
-        fields = {"references": array(choice([obj({"document_index": enum([d["document_index"]]),
-            "events": array(obj({"kind": enum(KINDS),
-                "span_id": enum([s["span_id"] for s in segments(d["text"]) if s["text"].strip()]),
-                "importance_kind": enum(IMPORTANCE),
-                "importance_refs": array(reference_schema(references), 1, 8)}), 0, 20)}) for d in references]),
-            len(references), len(references))}
     else:
         matches = choice([obj({"document_index": enum([d["document_index"]]), **atom_schema(d)["properties"]})
                           for d in discharge])
@@ -79,8 +65,7 @@ def schema(stage: str, docs: list[dict], events: list[dict]) -> dict:
 
 
 def prompt(stage: str, docs: list[dict], events: list[dict]) -> str:
-    selected = [d for d in docs if (d["source"] not in {"discharge_record", "discharge_record_diagnosis"}
-                                   if stage == "B" else d["source"] in {"discharge_record", "discharge_record_diagnosis"})]
+    selected = [d for d in docs if d["source"] in {"discharge_record", "discharge_record_diagnosis"}]
     inputs = [{"document_index": d["document_index"], "source": d["source"],
                **({"parent_document_index": d["parent_document_index"]} if "parent_document_index" in d else {}),
                "spans": [{"span_id": s["span_id"], "text": s["text"]} for s in segments(d["text"])]}
@@ -99,41 +84,22 @@ def prompt(stage: str, docs: list[dict], events: list[dict]) -> str:
         "A": "A仅检查出院记录自身，不生成跨文书遗漏事件。每份返回treatment具体诊疗思路及措施、"
              "evolution病情演变（包括明确平稳）、outcome疗效及转归。仅完善辅查、对症治疗不能证明具体措施。"
              "疗效可在出院情况等相关栏目取证，阅读所有栏目。",
-        "B": "B仅识别本次住院已发生的主要事件，不判断出院记录、不返回matches。"
-             "逐份参考文书返回events，无纳入事件返回空数组。每份实际手术记录必须提取surgery。"
-             "kind为surgery实际手术、test主要检查发现、treatment主要治疗、change重要变化。"
-             "importance_kind必须有importance_refs原文支持：actual_procedure实际手术，diagnostic_basis主要诊断依据，"
-             "key_differential关键鉴别，severity_outcome严重程度及转归，treatment_decision诊疗决定，"
-             "major_treatment主要或特殊治疗，major_change重要变化。改变治疗不是唯一门槛。"
-             "单纯异常数值不能自证重要；没有重要性依据的普通异常不纳入。排除未执行计划、既往史及常规随访。"
-             "change/major_change要求实际新发、加重或临床重要的病情变化；复查印证既有诊断、"
-             "未发生新变化和治疗方案未改变都不是变化事件。复查同一发现仍可支持原诊断，不另制造变化事项。"
-             "有具体依据但临床重要性存在真实歧义时用uncertain并引用歧义依据，不能任意升级为重要。"
-             "事件片段应涵盖实际关键内容；重要性可引用其他同次住院参考文书。",
-        "C": "C只匹配输入中固定event_id，不新增或删除事件，不再判断重要性。每个事件逐份核对出院记录。"
-             "匹配重要发现和诊疗过程，不机械匹配报告名称：同一骨折的CT/MRI可共用一段同义概述；"
-             "不得仅因未出现MRI或CT名称报missing，但不同部位/时间/独立重要发现不能强行合并。"
-             "只有完善辅查不等于记录发现。手术须关注已知日期、全名称、术中特殊情况、已回报病理、术后恢复及并发症；"
-             "没有发生的并发症或尚未回报病理不作为缺项。特殊药物及放化疗核对已知药名剂量疗程等关键内容。"
-             "候选有明确冲突时引用该候选及冲突依据；不能为了消除漂移直接报缺。",
+        "C": "C只匹配输入中固定event_id，不新增或删除事件，不判断事件是否重要：事件已由程序从手术、病理、输血、"
+             "抢救、转科、危急值等结构化记录确定。每个事件逐份核对出院记录是否提到该事件。"
+             "只要出院记录以名称、同义简称或概括性表述提到该次手术、该病理结果、输血、抢救、转科或危急值及其处理，即为present；"
+             "不要求逐项复述日期、报告名称、手术细节或剂量，同类事件可共用同一段概述。"
+             "整份出院记录确无提及时为missing；候选与事件存在明确冲突（如部位侧别、时间、不同事件）时为uncertain并引用冲突依据，"
+             "不能为了消除漂移直接报缺。",
     }[stage]
     fixed = []
     if stage == "C":
         lookup = {d["document_index"]: d for d in docs}
         for e in events:
             d = lookup[e["document_index"]]
-            fixed.append({"event_id": e["event_id"], "kind": e["kind"],
-                          "document_index": e["document_index"], "importance_kind": e["importance_kind"],
-                          "event_text": d["text"][e["start"]:e["end"]],
-                          "importance_evidence": [{**r, "text": lookup[r["document_index"]]["text"][r["start"]:r["end"]]}
-                                                  for r in e["importance_refs"]]})
-    context_ids = {e["document_index"] for e in events}
-    context_ids.update(r["document_index"] for e in events for r in e["importance_refs"])
-    context = [{"document_index": d["document_index"], "source": d["source"],
-                "spans": [{"span_id": s["span_id"], "text": s["text"]} for s in segments(d["text"])]}
-               for d in docs if stage == "C" and d["document_index"] in context_ids]
+            fixed.append({"event_id": e["event_id"], "kind": e["kind"], "event_label": e["label"],
+                          "event_text": d["text"][e["start"]:e["end"]]})
     return f"阶段{stage}\n" + common + task + "\n严格遵循以下JSON合同：" + json.dumps(schema(stage, docs, events), ensure_ascii=False) + \
-        "\n以下为受控资料：\n" + json.dumps({"documents": inputs, "fixed_events": fixed, "event_sources": context}, ensure_ascii=False)
+        "\n以下为受控资料：\n" + json.dumps({"documents": inputs, "fixed_events": fixed}, ensure_ascii=False)
 
 
 def anchor(doc: dict, span_id: Any) -> dict:
@@ -183,30 +149,6 @@ def validate_response(stage: str, payload: Any, docs: list[dict], events: list[d
                     conflicts.append({"check_index": len(checks) - 1, "event_index": None,
                                       "document_index": d["document_index"], **conflict})
         return checks, conflicts
-    if stage == "B":
-        ref_ids = {i for i, d in lookup.items() if d["source"] not in {"discharge_record", "discharge_record_diagnosis"}}
-        coverage(payload["references"], "document_index", ref_ids)
-        included, unresolved = [], []
-        for row in payload["references"]:
-            doc = lookup[row["document_index"]]
-            if doc["source"] == "surgery_record" and not any(
-                e["kind"] == "surgery" and e["importance_kind"] == "actual_procedure" for e in row["events"]
-            ):
-                raise ValueError("actual surgery omitted")
-            seen = set()
-            for e in row["events"]:
-                key = (e["kind"], e["span_id"])
-                if key in seen:
-                    raise ValueError("duplicate event")
-                seen.add(key)
-                refs = [anchor(lookup[r["document_index"]], r["span_id"]) for r in e["importance_refs"]]
-                item = {"kind": e["kind"], **anchor(doc, e["span_id"]),
-                        "importance_kind": e["importance_kind"], "importance_refs": refs}
-                if e["importance_kind"] == "uncertain":
-                    unresolved.append(item)
-                else:
-                    included.append({"event_id": len(included) + 1, **item})
-        return included, unresolved
     coverage(payload["events"], "event_id", {e["event_id"] for e in events})
     by_id = {e["event_id"]: e for e in payload["events"]}
     matches, conflicts = [], []

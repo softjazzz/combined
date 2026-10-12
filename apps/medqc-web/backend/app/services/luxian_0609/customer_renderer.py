@@ -270,6 +270,17 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-04-01-04": ("术前小结正文",),
     "LX0609-04-01-05": ("术前讨论结构字段与正文/可核验内容",),
 }
+# 08-01-05 结构化事件来源的客户可读名称（与 discharge_course_content.EVENT_SOURCES 一致）。
+_DISCHARGE_EVENT_LABELS = {
+    "surgery_record": "实际手术",
+    "pathology_exam_report": "病理结果",
+    "mr_bloodtrans": "输血",
+    "bloodtrans_record": "输血",
+    "rescue_record": "抢救",
+    "transfer_out_record": "转科",
+    "transfer_in_record": "转科",
+    "crisis_value_record": "危急值",
+}
 _RULE_DATA_GAP_MESSAGES = {
     "LX0609-08-01-05": (
         "暂无法完成出院诊疗经过与主要住院事件的内容核对",
@@ -1893,14 +1904,17 @@ def customer_finding_from_controlled_facts(
             labels = {"treatment": "具体诊疗措施", "evolution": "病情演变", "outcome": "疗效及转归"}
             missing = [f"第{c['document_index']}份出院记录的{labels[c['field']]}"
                        for c in facts["checks"] if c["state"] == "missing"]
-            omitted = sum(m["state"] == "missing" for e in facts["events"] for m in e["matches"])
+            sources = {d["document_index"]: d["source"] for d in facts.get("documents", ())}
+            omitted_labels = list(dict.fromkeys(
+                _DISCHARGE_EVENT_LABELS.get(sources.get(e["document_index"]), "重要住院事件")
+                for e in facts["events"] if any(m["state"] == "missing" for m in e["matches"])))
             uncertain = any(c["state"] == "uncertain" for c in facts["checks"]) or any(
                 m["state"] == "uncertain" for e in facts["events"] for m in e["matches"])
             parts = []
             if missing:
                 parts.append("未明确记录：" + "、".join(missing))
-            if omitted:
-                parts.append(f"有{omitted}项重要事件与出院记录核对时未找到对应记载")
+            if omitted_labels:
+                parts.append("出院记录未提及住院期间的" + "、".join(omitted_labels))
             if uncertain:
                 parts.append("另有内容关联尚不能可靠确认，需人工复核")
             review = facts.get("review", {})
