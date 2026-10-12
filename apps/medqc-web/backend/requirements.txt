@@ -27,6 +27,23 @@ python-multipart==0.0.6
 PyMuPDF==1.23.8
 pdfplumber==0.10.3
 
+# 导出与报表（app 内模块级或功能内导入，缺失时对应导出接口不可用）
+# openpyxl：首页/0609 结果导出模块级导入；python-docx、reportlab：DRG Word/PDF 导出
+openpyxl==3.1.5
+python-docx==1.2.0
+reportlab==4.4.7
+
+# 业务库驱动（case_scope / case_set_sync / sample_pool 模块级 import psycopg2）
+psycopg2-binary==2.9.11
+
+# 智能上传字段映射（field_mapper 模块级导入 yaml、openai）
+PyYAML==6.0.2
+openai==1.76.0
+
+# ICD 语义检索（默认 tfidf 后端依赖 sklearn；服务模块级 import requests）
+scikit-learn==1.7.0
+requests==2.34.2
+
 # 认证和安全
 python-jose[cryptography]==3.3.0
 cryptography==45.0.4

@@ -1,0 +1,10 @@
+# 可选依赖：运行时主链不需要，不随客户发布包分发
+# 安装：pip install -r requirements.txt -r requirements-optional.txt
+
+# MongoDB 同步：app/services/mongo_sync.py 延迟导入，尚未接入任何 API；
+# 仅 scripts/run_case_e2e.py、run_mongo_pg_v4_e2e.py、seed_mongo_mock_case.py 使用
+pymongo==4.16.0
+
+# ICD 语义检索 hnsw 后端：app/services/icd_semantic_retrieval_service.py 中 try 导入，
+# 仅 ICD_SEMANTIC_BACKEND=hnsw/auto 且无 faiss 时启用（默认 tfidf，faiss-cpu 已在主清单）。
+# Windows 需本地 C++ 编译环境，按需手动安装：pip install hnswlib
