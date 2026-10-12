@@ -5,7 +5,7 @@
 ## 1. 位置与状态
 
 - 分支：`codex/qc-integration-20261008`（已推送 github `softjazzz/combined`），最新提交 `badf58bb9`。
-- 原工作树：`F:/MedQC-worktrees/qc-integration-20261008`（F 盘移动硬盘）。D 盘主仓库 `D:/LLM/LX888` 当前在别的分支，见第 7 节迁回步骤。
+- 工作树：`D:/MedQC-worktrees/qc-integration-20261008`（2026-10-12 由 F 盘移动硬盘迁回；未跟踪文件与私有跑批目录已复制过来，备份在 `D:/MedQC-worktrees-staging/`）。旧的 F 盘工作树尚未删除（删除需用户本人执行 `git -C D:/LLM/LX888 worktree remove --force F:/MedQC-worktrees/qc-integration-20261008`），在此之前不要在 F 盘提交。D 盘主仓库 `D:/LLM/LX888` 在另一分支且有未提交改动，不要动。
 - 规则集：`luxian_0609_qc_v1`；代码在 `apps/medqc-web/backend/app/services/luxian_0609/`。
 - 模型：默认 `qwen3.8-flash`（DashScope）；0609 抽取在隐私网关处固定温度 0。
 - 不要暂存的未跟踪文件：`backend/data/luxian_0609_opinion_freeze/`、`backend/tests/unit/phase5_transfusion_reproduction_cases.json`、`docs/acceptance/engine-audit-20261008/*.md`。
@@ -50,7 +50,7 @@
 - 目的（用户想法）：不必全部质控点用同一模型；不稳定的抽取组试用其他模型，若更稳可按“抽取组→模型”混用。
 - 院方已允许数据外发给 DeepSeek。候选：`deepseek-flash`（用户称 Flash V4.1；接口 `/models` 列出 `deepseek-flash`、`deepseek-v4-pro`）、`qwen3.6-35b-a3b`（须用 `DASHSCOPE_API_KEY` + `DASHSCOPE_BASE_URL`，`LLM_API_KEY` 返回 401）。
 - 私有跑批脚本已支持 `LX0910_MODEL=deepseek-flash|qwen3.6-35b-a3b`（不设即默认 qwen3.8-flash）；`api.deepseek.com` 已在出网白名单；本机到 DeepSeek 偶有连接超时，网络重试可兜住。
-- 已在后台启动三模型并行、各 3 轮（规则 `LX0609-06-01,LX0609-03-01,LX0609-08-01-05,LX0609-04-05`，约 1,600 次调用）。日志：`.tmp/0910-full-audit/b-recheck-20261010-private/mc-<模型>-private.log`，每份末尾 `ALLDONE` 表示完成。若中断未完成，重跑即可。
+- 三模型各 3 轮已全部跑完（规则 `LX0609-06-01,LX0609-03-01,LX0609-08-01-05,LX0609-04-05`）。日志：`.tmp/0910-full-audit/b-recheck-20261010-private/mc-<模型>-private.log`。初步：qwen3.8-flash 3 轮几乎一致、无技术错误；qwen3.6-35b-a3b 每轮 1–6 个技术错误；deepseek-flash 第 1 轮 6 个、第 2/3 轮约 100 个技术错误（多半限流或连接失败，先查原因再比判定质量）。
 - 汇总：把三份日志合并后执行 `python model-compare-private.py <合并日志>`，输出各模型多轮不一致数及模型间分歧。下一步：逐例人工核对分歧，给出“哪组用哪个模型”的建议；用户同意后再在 0609 网关加“抽取组→模型”路由配置（每次调用记录实际模型）。
 - 注意粒度：06-01-02/04/05 共用一次调用，只能按抽取组选模型。
 
@@ -60,7 +60,7 @@
   `PYTHONHASHSEED=0 DATABASE_URL=sqlite:///<临时目录>/x.db JWT_SECRET=local-test-only-secret-0123456789abcdef python -m pytest tests/unit/test_luxian_0609*.py tests/unit/test_n10_*.py tests/unit/test_qc_llm_client*.py -n 8 -q -o addopts="" -p no:cacheprovider --timeout=120 -W ignore`，约 7–8 分钟。
   必须固定 `PYTHONHASHSEED`，否则 xdist 收集不一致。
 - 当前并行结果：102 个失败，均为历史遗留（含 `test_luxian_0609_canonical_result_delivery.py` 一组依赖执行顺序的用例，单独跑也失败）；最近几次改动均无新增失败。
-- 私有跑批：`.tmp/0910-full-audit/b-recheck-20261010-private/run-private.py dry|live [别名...]`，环境变量 `LX0910_RULES`（逗号分隔前缀）、`LX0910_SKIP`、`LX0910_CASES`、`LX0910_MODEL`。数据库连接强制只读。脚本内写死了 F 盘路径 `APP = F:/MedQC-worktrees/...`，迁回 D 盘需改。
+- 私有跑批：`.tmp/0910-full-audit/b-recheck-20261010-private/run-private.py dry|live [别名...]`，环境变量 `LX0910_RULES`（逗号分隔前缀）、`LX0910_SKIP`、`LX0910_CASES`、`LX0910_MODEL`。数据库连接强制只读。脚本内路径已改为 D 盘工作树。
 - 辅助脚本（同目录）：`compare-private.py <旧> <新>`、`detail-private.py <run> <规则后缀> [状态]`（输出为 GBK，需 `iconv -f gbk -t utf-8`）、`events-by-run-private.py`、`reason-snippets-private.py`、`consult-dump-private.py`、`events0805-private.py`、`model-compare-private.py`。
 - Bash heredoc 里含 `\n` 的 Python 容易被改坏，复杂补丁先用 Write 写脚本文件再执行。
 
