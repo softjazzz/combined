@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
@@ -25,6 +27,7 @@ from .exam_lab_course_time import (
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import apply_finding_analysis, check_exam_finding_analysis
+from .exam_reason_check import apply_exam_reason, check_exam_reason
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -2616,20 +2619,26 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         except Exception:  # noqa: BLE001
                             logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
-                    if (
-                        text_facts is not None
-                        and "LX0609-06-01-05" in eligible_rule_ids
-                        and "LX0609-06-01-05" not in isolated_rule_failures
-                    ):
-                        # 用户口径（2026-10-12）：06-01-05 是否已分析改由逐份病程的分析要素核对
-                        # 固定；核对失败时沿用主抽取原判断。
-                        analysis = await check_exam_finding_analysis(projection, llm_client)
-                        llm_call_count += analysis.llm_call_count
-                        prompt_tokens += analysis.prompt_tokens
-                        completion_tokens += analysis.completion_tokens
-                        total_tokens += analysis.total_tokens
-                        api_time += analysis.api_time
-                        text_facts = apply_finding_analysis(text_facts, analysis)
+                    if text_facts is not None:
+                        # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
+                        # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）。两步互不依赖，
+                        # 并发调用；任一失败时该规则沿用主抽取原判断。
+                        checks = []
+                        if ("LX0609-06-01-05" in eligible_rule_ids
+                                and "LX0609-06-01-05" not in isolated_rule_failures):
+                            checks.append((check_exam_finding_analysis(projection, llm_client), apply_finding_analysis))
+                        if ("LX0609-06-01-02" in eligible_rule_ids
+                                and "LX0609-06-01-02" not in isolated_rule_failures):
+                            checks.append((check_exam_reason(projection, llm_client), apply_exam_reason))
+                        if checks:
+                            check_outcomes = await asyncio.gather(*(check for check, _ in checks))
+                            for (_, apply), check_outcome in zip(checks, check_outcomes):
+                                llm_call_count += check_outcome.llm_call_count
+                                prompt_tokens += check_outcome.prompt_tokens
+                                completion_tokens += check_outcome.completion_tokens
+                                total_tokens += check_outcome.total_tokens
+                                api_time += check_outcome.api_time
+                                text_facts = apply(text_facts, check_outcome)
                     for rule_id in eligible_rule_ids:
                         outcome = (
                             _ExamLabOutcome(rule_id, "technical_error", "exam_lab_llm_invalid_output")

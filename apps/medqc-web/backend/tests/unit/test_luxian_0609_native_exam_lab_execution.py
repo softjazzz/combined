@@ -2120,7 +2120,7 @@ async def test_010_course_between_order_and_report_counts_as_pre_exam(monkeypatc
         llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert decision.final_state.value == "compliant"
     assert canonical["status"] == "compliant"
 
@@ -2164,7 +2164,7 @@ async def test_010_exam_ordered_after_admission_window_is_still_checked(monkeypa
         llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert decision.final_state.value == "compliant"
 
 
@@ -2301,11 +2301,11 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
         ),
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert decision.final_state.value == "compliant"
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -2460,7 +2460,7 @@ async def test_010_public_native_uses_order_exam_report_contract(
     elif expected_state in {"non_compliant", "data_gap"}:
         facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
         assert facts["failure_kind"] == expected_failure_kind
-    assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
+    assert result.llm_call_count == (2 if expected_state == "compliant" else 0)  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == (110 if expected_state == "compliant" else 0)
     assert len(client.prompts) == result.llm_call_count
 
@@ -2618,9 +2618,9 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -2972,7 +2972,7 @@ async def test_010_composite_exam_without_exam_time_anchors_on_order_time(monkey
         llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert decision.final_state.value == "compliant"
     assert canonical["status"] == "compliant"
 
@@ -3017,9 +3017,9 @@ async def test_010_pending_order_does_not_poison_executed_exam(monkeypatch):
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -3074,9 +3074,9 @@ async def test_010_multiple_pending_orders_do_not_poison_one_executed_exam(monke
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -4793,7 +4793,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     assert [item.final_state.value for item in reduced] == ["compliant"] * 5
     assert all(item.reason_code != "snapshot_mismatch" for item in reduced)
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert all("SHOULD_NOT_REACH_PROMPT" not in prompt for prompt in client.prompts)
     assert all("FULL_CHART" not in prompt for prompt in client.prompts)
     assert all("主执行规则" not in prompt for prompt in client.prompts)
@@ -5829,7 +5829,7 @@ async def test_text_first_synthetic_missing_ct_reason_is_non_compliant_after_one
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -6345,7 +6345,7 @@ async def test_typed_and_legacy_rules_are_isolated_in_mixed_rollback_mode(monkey
     assert result.decisions[0].reason_code == "semantic_output_unknown"
     assert [item["rule_id"] for item in result.results] == ["LX0609-06-03-03"]
     assert result.results[0]["status"] == "data_gap"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
