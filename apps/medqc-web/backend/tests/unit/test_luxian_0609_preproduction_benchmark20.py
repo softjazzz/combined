@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import pytest
-from tests.luxian_0609_identity_test_support import published_rule_ids
 
 from scripts import run_luxian_0609_preproduction_benchmark20 as benchmark20
 from scripts.build_luxian_0609_golden_ledger import build_candidate_ledger
@@ -31,6 +30,7 @@ _WITHHELD_RULE_IDS = frozenset(
         "LX0609-03-01-03",
         "LX0609-04-02-04",
         "LX0609-04-04-01",
+        "LX0609-04-04-02",
         "LX0609-07-04-02",
         "LX0609-05-03-01",
         # 075 已按院方 92 项有创操作目录恢复执行（2026-10-11）。
@@ -54,19 +54,20 @@ _CATALOG_RULE_IDS = tuple(
 def test_rule_attestations_use_authoritative_executable_phase_scope():
     rule_ids, executor_types = benchmark20._rule_attestations()
 
+    # 以当前规则合同目录为准（2026-10-12：目录 85 条，可执行 72 条）。
     assert rule_ids == tuple(
         rule_id
-        for rule_id in published_rule_ids(1, 77)
+        for rule_id in _CATALOG_RULE_IDS
         if rule_id not in _WITHHELD_RULE_IDS
         and rule_id not in _CUSTOMER_EXCLUDED_RULE_IDS
     )
-    assert len(rule_ids) == 62
+    assert len(rule_ids) == 72
     assert not set(rule_ids).intersection(
         _WITHHELD_RULE_IDS | _CUSTOMER_EXCLUDED_RULE_IDS
     )
     assert set(executor_types) == set(rule_ids)
-    assert sum(item == "program" for item in executor_types.values()) == 42
-    assert sum(item == "llm" for item in executor_types.values()) == 20
+    assert sum(item == "program" for item in executor_types.values()) == 39
+    assert sum(item == "llm" for item in executor_types.values()) == 33
 
 
 @pytest.mark.parametrize(
@@ -150,10 +151,10 @@ def test_default_benchmark_output_exposes_full_customer_rule_scope() -> None:
     # The benchmark builder is exercised through its normal default scope helper;
     # 输出必须区分当前完整目录、客户交付、可执行与冻结范围。
     assert benchmark20._rule_scope_summary() == {
-        "catalog_count": 77,
-        "customer_delivery_count": 72,
-        "executable_count": 62,
-        "withheld_count": 10,
+        "catalog_count": 85,
+        "customer_delivery_count": 80,
+        "executable_count": 72,
+        "withheld_count": 8,
     }
 
 
@@ -276,8 +277,8 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
     """锁定当前可执行规则的权威契约分类。"""
 
     rows = candidate["rows"]
-    assert len(_DETERMINISTIC_RULE_IDS) == 42
-    assert len(_SEMANTIC_RULE_IDS) == 20
+    assert len(_DETERMINISTIC_RULE_IDS) == 39
+    assert len(_SEMANTIC_RULE_IDS) == 33
     assert len(rows) == 20 * len(_RULE_IDS)
     decision_kinds = [row["decision_kind"] for row in rows]
     assert decision_kinds.count("deterministic") == (
@@ -358,8 +359,8 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         f"case-{index:02d}" for index in range(1, 21)
     ]
     assert batch["summary"]["case_count"] == 20
-    assert batch["summary"]["judgment_count"] == 1240
-    assert batch["summary"]["status_counts"] == {"compliant": 1240}
+    assert batch["summary"]["judgment_count"] == 20 * len(_RULE_IDS)
+    assert batch["summary"]["status_counts"] == {"compliant": 20 * len(_RULE_IDS)}
     assert batch["summary"]["llm_call_count"] == 20
     assert batch["summary"]["input_tokens"] == 200
     assert batch["summary"]["completion_tokens"] == 40
@@ -373,16 +374,16 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert batch["summary"]["latency_ms"]["p50"] == 10.5
     assert batch["summary"]["latency_ms"]["p95"] == 19.05
     assert batch["summary"]["rule_maturity"] == {
-        "rule_decision_count": 62,
+        "rule_decision_count": 72,
         "typed_shadow_adapter_count": 0,
         "legacy_projection_count": 0,
     }
     assert batch["summary"]["rule_scope"] == {
         "mode": "full_customer",
-        "catalog_count": 77,
-        "customer_delivery_count": 72,
-        "executable_count": 62,
-        "withheld_count": 10,
+        "catalog_count": 85,
+        "customer_delivery_count": 80,
+        "executable_count": 72,
+        "withheld_count": 8,
     }
     assert len(batch["selector_digest"]) == 64
     assert len(batch["rule_set_digest"]) == 64
@@ -392,14 +393,14 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         candidate_version="benchmark-test-v1",
         generated_at="2026-07-17T00:00:00Z",
     )
-    assert candidate["candidate_count"] == 1240
+    assert candidate["candidate_count"] == 20 * len(_RULE_IDS)
     _assert_candidate_decision_kind_contract(candidate)
     attestation_hashes = [
         evidence_hash
         for case in batch["cases"]
         for evidence_hash in case["evidence_attestations"].values()
     ]
-    assert len(attestation_hashes) == len(set(attestation_hashes)) == 1240
+    assert len(attestation_hashes) == len(set(attestation_hashes)) == 20 * len(_RULE_IDS)
     assert [row["evidence_ref_hashes"][0] for row in candidate["rows"]] == (
         attestation_hashes
     )
@@ -793,7 +794,7 @@ async def test_benchmark20_can_emit_diagnostic_batch_when_technical_error_is_all
 
     assert batch["summary"]["technical_error_count"] == 20
     assert batch["summary"]["status_counts"] == {
-        "compliant": 1220,
+        "compliant": 20 * len(_RULE_IDS) - 20,
         "technical_error": 20,
     }
 
@@ -860,7 +861,7 @@ async def test_benchmark20_fails_before_read_when_rule_authority_is_missing_or_u
         SimpleNamespace(
             rule_id=rule_id,
             decision_authority=(
-                authority if index == 74 else "program_only"
+                authority if rule_id == _RULE_IDS[-1] else "program_only"
             ),
             phase_status=(
                 "pending_definition"
@@ -868,7 +869,7 @@ async def test_benchmark20_fails_before_read_when_rule_authority_is_missing_or_u
                 else "phase_1_target"
             ),
         )
-        for index, rule_id in enumerate(published_rule_ids(1, 77), start=1)
+        for rule_id in _CATALOG_RULE_IDS
     ]
     monkeypatch.setattr(
         benchmark20,

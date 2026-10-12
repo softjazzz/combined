@@ -478,22 +478,31 @@ async def test_v3_020_mdt_executes_programmatically_as_compliant() -> None:
         ),
     )
 
-    class FailIfCalled:
-        async def generate(self, _prompt: str) -> dict:
-            raise AssertionError("明确的多学科参与事实不得调用 LLM")
+    # 2026-09-08 起 04-01-03 按术前讨论参加人员字段由模型抽取参与事实、程序裁定；
+    # 受控替身只回答参与事实，并核对提示中带有合成参加人员字段。
+    prompts: list[str] = []
+
+    class PresentFactClient:
+        async def generate(self, prompt: str, **_kwargs: object) -> dict:
+            prompts.append(prompt)
+            return {
+                "content": '{"state":"present","confidence":0.9}',
+                "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+            }
 
     execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
         institute_id="I",
         patient_id="P",
         visit_id=visit_id,
         source_schema=None,
-        llm_client=FailIfCalled(),
+        llm_client=PresentFactClient(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=("LX0609-04-01-03",),
     )
 
-    assert execution.llm_call_count == 0
+    assert execution.llm_call_count == 1
+    assert len(prompts) == 1 and "discuss_staff" in prompts[0]
     assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
     assert dict(execution.customer_display_facts)["LX0609-04-01-03"][
         "mdt_discussion_state"
@@ -923,7 +932,8 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
     assert assessment_status[:2] == (
         "non_compliant", "pretransfusion_assessment_missing"
     )
-    assert assessment_status[2]["missing_fields"] == ["indication"]
+    # 2026-10-09 起评估记录缺失按文书缺失交付，不借过程信号生成字段缺项。
+    assert "missing_fields" not in assessment_status[2]
     missing_item_status = transfusion.evaluate_pretransfusion_nine_items(
         {
             "mr_bloodtrans": [
@@ -979,8 +989,9 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
         for row in rows_by_table["bloodtrans_record"]
         if row.get("visit_id") == visit_ids[27]
     )
+    # 2026-10-09 起短正文须由执行器先确认输血病程存在（__course_presence_verified__）。
     assert transfusion._programmatic_046_status(
-        {"bloodtrans_record": [incomplete_course]}
+        {"bloodtrans_record": [incomplete_course], "__course_presence_verified__": True}
     ) == ("non_compliant", "transfusion_course_record_incomplete")
     inconsistent_contents = {
         table_name: next(

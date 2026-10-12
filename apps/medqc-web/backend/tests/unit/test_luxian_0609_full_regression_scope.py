@@ -286,7 +286,7 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
 
 
 def test_full_regression_scope_rejects_empty_rule_ids() -> None:
-    with pytest.raises(RuntimeError, match="必须显式包含49个客户规则ID"):
+    with pytest.raises(RuntimeError, match="冻结首49条客户规则ID"):
         resolve_full_luxian_0609_rule_ids([])
 
 
@@ -294,7 +294,7 @@ def test_full_regression_scope_requires_exact_customer_rule_order() -> None:
     inventory = [type("Dependency", (), {"rule_id": rule_id})() for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS]
     assert resolve_full_luxian_0609_rule_ids(inventory) == list(EXPECTED_LUXIAN_0609_RULE_IDS)
 
-    with pytest.raises(RuntimeError, match="必须显式包含49个客户规则ID"):
+    with pytest.raises(RuntimeError, match="冻结首49条客户规则ID"):
         resolve_full_luxian_0609_rule_ids(list(reversed(inventory)))
 
 

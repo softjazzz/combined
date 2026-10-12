@@ -16,7 +16,7 @@ import socket
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 from types import SimpleNamespace
 
 
@@ -143,6 +143,9 @@ def _minimal_child_environment(*, session_hmac_key: bytes) -> dict[str, str]:
     }
     environment["PYTHONIOENCODING"] = "utf-8"
     environment[_PROMPT_HMAC_ENV] = session_hmac_key.hex()
+    # 导入应用配置要求 JWT_SECRET；离线回放不读真实配置，用占位值，
+    # 同时优先于本地 .env，避免子进程读到真实密钥。
+    environment["JWT_SECRET"] = "offline-consultation-replay-placeholder"
     return environment
 
 
@@ -435,6 +438,26 @@ async def _run_replay_unchecked(
     }
 
 
+
+@contextmanager
+def _isolated_opinion_freeze() -> Iterator[None]:
+    """会诊事实冻结会落盘；每次回放使用自己的临时目录，结束后恢复原环境。
+
+    否则同一 synthetic visit 的上轮事实会跳过本轮受控模型响应，破坏等价比较。
+    """
+
+    freeze_env = "LUXIAN_0609_OPINION_FREEZE_DIR"
+    previous_freeze_dir = os.environ.get(freeze_env)
+    with TemporaryDirectory(prefix="lx0609-consultation-replay-") as freeze_dir:
+        os.environ[freeze_env] = freeze_dir
+        try:
+            yield
+        finally:
+            if previous_freeze_dir is None:
+                os.environ.pop(freeze_env, None)
+            else:
+                os.environ[freeze_env] = previous_freeze_dir
+
 async def run_replay(
     fixture_path: Path,
     *,
@@ -444,24 +467,13 @@ async def run_replay(
     """在离线哨兵内运行，不读取真实配置、数据库或网络。"""
 
     key = session_hmac_key or secrets.token_bytes(32)
-    freeze_env = "LUXIAN_0609_OPINION_FREEZE_DIR"
-    previous_freeze_dir = os.environ.get(freeze_env)
-    # 会诊事实冻结会落盘；每次离线回放必须使用自己的临时目录，否则同一
-    # synthetic visit 的上轮事实会跳过本轮受控模型响应，破坏等价比较。
-    with TemporaryDirectory(prefix="lx0609-consultation-replay-") as freeze_dir:
-        os.environ[freeze_env] = freeze_dir
-        try:
-            with _offline_execution_guards() as activity:
-                replay = await _run_replay_unchecked(
-                    fixture_path,
-                    variant_root=variant_root,
-                    activity=activity,
-                )
-        finally:
-            if previous_freeze_dir is None:
-                os.environ.pop(freeze_env, None)
-            else:
-                os.environ[freeze_env] = previous_freeze_dir
+    with _isolated_opinion_freeze():
+        with _offline_execution_guards() as activity:
+            replay = await _run_replay_unchecked(
+                fixture_path,
+                variant_root=variant_root,
+                activity=activity,
+            )
     replay["_prompt_session_marker"] = _prompt_marker(
         prompts=tuple(replay.get("_prompt_bytes") or ()),
         session_hmac_key=key,
@@ -476,13 +488,16 @@ async def run_formal_synthetic_chain(
 ) -> dict[str, Any]:
     """以合成资料走正式会诊主链，供显式授权的真实模型手工基准使用。"""
 
-    return await _run_replay_unchecked(
-        fixture_path,
-        # 直接链本身不暴露 HTTP attempt；调用方只能如实报告网络观测未知，
-        # 不能将“允许真实模型”误写成“已观察到网络请求”。
-        activity=lambda: {"network_used": "unknown", "database_used": False},
-        llm_client=llm_client,
-    )
+    # 基准逐轮调用：每轮独立冻结目录，否则预热轮的会诊事实会被后续轮复用，
+    # 提示词随之偏离参考，且未配置目录时会写入 data/。
+    with _isolated_opinion_freeze():
+        return await _run_replay_unchecked(
+            fixture_path,
+            # 直接链本身不暴露 HTTP attempt；调用方只能如实报告网络观测未知，
+            # 不能将“允许真实模型”误写成“已观察到网络请求”。
+            activity=lambda: {"network_used": "unknown", "database_used": False},
+            llm_client=llm_client,
+        )
 
 
 def _public_replay(replay: Mapping[str, Any]) -> dict[str, Any]:

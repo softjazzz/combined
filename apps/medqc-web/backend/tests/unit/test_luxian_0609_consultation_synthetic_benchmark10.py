@@ -53,19 +53,20 @@ def test_synthetic_benchmark_runs_one_warmup_and_ten_formal_rounds() -> None:
         item["http_attempt_count_state"] == "unavailable_without_public_execution_trace"
         for item in report["runs"]
     )
-    assert all(item["logical_llm_call_count"] == 2 for item in report["runs"])
-    assert all(item["delegate_generate_count"] == 2 for item in report["runs"])
+    # 第一阶段、执行判断与会诊措施逐项核对（2026-10-12）各 1 次。
+    assert all(item["logical_llm_call_count"] == 3 for item in report["runs"])
+    assert all(item["delegate_generate_count"] == 3 for item in report["runs"])
     assert all(
         item["usage_conservation"] == {
             "execution": {
-                "prompt_tokens": 24,
-                "completion_tokens": 8,
-                "total_tokens": 32,
+                "prompt_tokens": 39,
+                "completion_tokens": 12,
+                "total_tokens": 51,
             },
             "delegate_responses": {
-                "prompt_tokens": 24,
-                "completion_tokens": 8,
-                "total_tokens": 32,
+                "prompt_tokens": 39,
+                "completion_tokens": 12,
+                "total_tokens": 51,
             },
             "conserved": True,
         }
@@ -77,7 +78,8 @@ def test_synthetic_benchmark_runs_one_warmup_and_ten_formal_rounds() -> None:
         item["status_by_rule"]
         == {
             "LX0609-03-01-01": "compliant",
-            "LX0609-03-01-02": "compliant",
+            # 合成病例只有会诊意见、没有会诊申请内容，021 按现行口径不适用。
+            "LX0609-03-01-02": "not_applicable",
             "LX0609-03-01-03": "compliant",
             "LX0609-03-01-04": "compliant",
         }
@@ -87,7 +89,7 @@ def test_synthetic_benchmark_runs_one_warmup_and_ten_formal_rounds() -> None:
         item["reason_code_by_rule"]
         == {
             "LX0609-03-01-01": "requirement_satisfied",
-            "LX0609-03-01-02": "requirement_satisfied",
+            "LX0609-03-01-02": "trigger_absent_complete",
             "LX0609-03-01-03": "requirement_satisfied",
             "LX0609-03-01-04": "requirement_satisfied",
         }

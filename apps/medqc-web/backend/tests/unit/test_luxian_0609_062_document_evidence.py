@@ -227,11 +227,19 @@ async def test_062_equal_or_repeated_rows_select_one_occurrence_without_guessing
     }
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    expected_bound_occurrences = 0 if repeat_same_object else 1
+    # 2026-10-07 审计合同：所有出院记录中的带药均并入核对，内容相同的两份独立
+    # 记录各绑定一次；同一对象重复出现时无法区分出现位置，仍不绑定。
+    expected_bound_occurrences = 0 if repeat_same_object else 2
     assert len(occurrence_refs.intersection(execution.decisions[0].fact_refs)) == (
         expected_bound_occurrences
     )
-    assert "customer_evidence" not in canonical
+    if repeat_same_object:
+        assert "customer_evidence" not in canonical
+    else:
+        assert canonical["customer_evidence"] == [{
+            "source_type": "discharge_record",
+            "source_document_id": "duplicate-document-062",
+        }]
 
 
 @pytest.mark.asyncio

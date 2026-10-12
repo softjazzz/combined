@@ -85,7 +85,7 @@ def restore_execution_session(inputs: object, *, coordinates: tuple[str, str, st
             build_material_document_refs, build_material_snapshot_ref,
         )
         from ..luxian_0609.evidence_snapshot import Luxian0609EvidenceSnapshot, SourceObservation
-        from ..luxian_0609.source_evidence_reader import SnapshotSourceRows, EVALUATION_HORIZON_SOURCE_KEY
+        from ..luxian_0609.source_evidence_reader import SnapshotSourceRows
         from ..luxian_0609.source_registry import resolve_luxian_0609_controlled_fact_source_keys
 
         if type(data["selected_rule_ids"]) is not tuple:
@@ -122,8 +122,8 @@ def restore_execution_session(inputs: object, *, coordinates: tuple[str, str, st
             if not controlled and available != (material is not None):
                 raise ValueError()
             refs = build_material_document_refs(observation.source_key, material.rows) if material else ()
-            if observation.source_key != EVALUATION_HORIZON_SOURCE_KEY:
-                all_refs.update(refs)
+            # 与快照构建一致（2026-10-10 起）：派生时间界限行同样登记进快照文书引用。
+            all_refs.update(refs)
             expected = build_material_snapshot_ref(
                 source_key=observation.source_key, query_version=observation.query_version,
                 query_state=observation.query_state, completeness=observation.completeness, document_refs=refs,
@@ -131,7 +131,7 @@ def restore_execution_session(inputs: object, *, coordinates: tuple[str, str, st
             if observation.snapshot_ref != expected:
                 raise ValueError()
             observations.append(observation)
-        # 评价 horizon 不是临床文书；临床引用既不能悬空，也不能遗漏材料行。
+        # 文书引用既不能悬空，也不能遗漏材料行。
         if set(snapshot_data["document_refs"]) != all_refs:
             raise ValueError()
         snapshot = Luxian0609EvidenceSnapshot.create(
