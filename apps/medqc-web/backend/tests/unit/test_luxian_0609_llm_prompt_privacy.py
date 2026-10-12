@@ -154,25 +154,25 @@ class _FlakyDelegate:
     RuntimeError("upstream_http_error upstream_http_status=503 upstream_error_summary=upstream_response_error"),
     RuntimeError("upstream_http_error upstream_http_status=429 upstream_error_summary=rate_limit"),
 ])
-async def test_transient_transport_error_is_retried_once(monkeypatch, error):
-    """用户口径（2026-10-11）：网络/上游临时错误重试 1 次。"""
+async def test_transient_transport_error_is_retried(monkeypatch, error):
+    """用户口径（2026-10-12）：网络/上游临时错误最多重试 2 次；连续失败 2 次后第 3 次成功。"""
     from app.services.luxian_0609 import llm_prompt_privacy as module
 
     monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
-    delegate = _FlakyDelegate([error])
+    delegate = _FlakyDelegate([error, error])
     result = await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
-    assert result == {"content": "ok"} and len(delegate.prompts) == 2
+    assert result == {"content": "ok"} and len(delegate.prompts) == 3
 
 
 @pytest.mark.asyncio
-async def test_transient_transport_error_fails_after_single_retry(monkeypatch):
+async def test_transient_transport_error_fails_after_two_retries(monkeypatch):
     from app.services.luxian_0609 import llm_prompt_privacy as module
 
     monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
-    delegate = _FlakyDelegate([TimeoutError(), TimeoutError(), TimeoutError()])
+    delegate = _FlakyDelegate([TimeoutError(), TimeoutError(), TimeoutError(), TimeoutError()])
     with pytest.raises(TimeoutError):
         await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
-    assert len(delegate.prompts) == 2
+    assert len(delegate.prompts) == 3
 
 
 @pytest.mark.asyncio
@@ -190,6 +190,17 @@ async def test_deterministic_errors_are_not_retried(monkeypatch, error):
     with pytest.raises(type(error)):
         await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
     assert len(delegate.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_deterministic_error_during_retry_stops_immediately(monkeypatch):
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([TimeoutError(), ValueError("bad argument")])
+    with pytest.raises(ValueError):
+        await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert len(delegate.prompts) == 2
 
 
 class _TemperatureAwareDelegate:

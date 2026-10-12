@@ -429,8 +429,10 @@ def _accepts_temperature(delegate: Any) -> bool:
         return False
 
 
-# 用户口径（2026-10-11）：网络/上游临时错误重试 1 次，间隔片刻；其余错误不重试。
+# 用户口径（2026-10-11）：网络/上游临时错误重试，间隔片刻；其余错误不重试。
+# 用户口径（2026-10-12）：重试次数由 1 次增至 2 次（真实跑批中 SSL 断连重试 1 次仍偶发失败）。
 TRANSPORT_RETRY_DELAY_SECONDS = 2.0
+TRANSPORT_RETRY_ATTEMPTS = 2
 _RETRYABLE_UPSTREAM_STATUS = re.compile(r"upstream_http_status=(?:429|5\d\d|unknown)(?!\w)")
 
 
@@ -467,12 +469,13 @@ class _Luxian0609PrivacyRedactingLLMClient:
         assert_no_known_identity_in_model_request(kwargs, identities)
         if "temperature" not in kwargs and _accepts_temperature(self.delegate):
             kwargs = {**kwargs, "temperature": EXTRACTION_TEMPERATURE}
-        try:
-            return await self.delegate.generate(redacted, **kwargs)
-        except Exception as error:
-            if not _is_transient_transport_error(error):
-                raise
-        await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
+        for _ in range(TRANSPORT_RETRY_ATTEMPTS):
+            try:
+                return await self.delegate.generate(redacted, **kwargs)
+            except Exception as error:
+                if not _is_transient_transport_error(error):
+                    raise
+            await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
         return await self.delegate.generate(redacted, **kwargs)
 
     def supports_strict_json_schema(self) -> bool:
