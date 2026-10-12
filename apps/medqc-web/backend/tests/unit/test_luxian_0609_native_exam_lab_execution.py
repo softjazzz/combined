@@ -69,6 +69,20 @@ _TYPED_SOURCE_KEYS = (
 )
 
 
+
+@pytest.fixture(autouse=True)
+def _skip_012_relevance_pre_step(request, monkeypatch):
+    """本文件用例验证主抽取；012 前置相关性判定由专门测试覆盖，这里固定为跳过。"""
+    if request.node.get_closest_marker("relevance_pre_step"):
+        return
+    from app.services.luxian_0609 import native_exam_lab_execution as _native
+    from app.services.luxian_0609.exam_finding_relevance import FindingRelevanceOutcome
+
+    async def _skipped(projection, llm_client):
+        return FindingRelevanceOutcome("skipped", {})
+
+    monkeypatch.setattr(_native, "classify_exam_finding_relevance", _skipped)
+
 def _typed_session(
     monkeypatch,
     *,

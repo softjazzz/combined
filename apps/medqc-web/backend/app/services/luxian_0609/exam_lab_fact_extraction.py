@@ -109,6 +109,8 @@ class ExamLabSingleEvent:
     order_time: datetime | None = None
     # 关联医嘱在入院 24 小时内开立（010 豁免：首次病程往往尚未书写）。
     within_admission_window: bool = False
+    # 012 前置相关性判定已固定 positive_hint（用户口径 2026-10-11）。
+    relevance_fixed: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -1381,6 +1383,12 @@ def build_exam_lab_fact_prompt(
                     if event.guidance_only and rule_id in {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"}
                     else {}
                 ),
+                **(
+                    {"positive_state_fixed": event.positive_hint}
+                    if rule_id == "LX0609-06-01-05" and event.relevance_fixed
+                    and event.positive_hint in {"positive", "negative"}
+                    else {}
+                ),
             }
             for position, event in enumerate(events, start=1)
         ]
@@ -1485,7 +1493,14 @@ def build_exam_lab_fact_prompt(
         if any(item.get("guidance_only") for items in rule_event_catalog.values() for item in items)
         else ""
     )
-    return f"""{guidance_instruction}你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
+    fixed_instruction = (
+        "目录中positive_state_fixed表示该事件报告异常是否需要分析已由前置判定固定（用户口径2026-10-11）："
+        "LX0609-06-01-05的positive_state必须照抄该值；为positive时applicability=applicable，只判断病程是否有分析；"
+        "为negative时输出not_applicable+absent、空病程引用。不得重新判断异常是否为附带发现。\n"
+        if any("positive_state_fixed" in item for items in rule_event_catalog.values() for item in items)
+        else ""
+    )
+    return f"""{guidance_instruction}{fixed_instruction}你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
 本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：{json.dumps(selected, ensure_ascii=False)}。
 LX0609-06-01-02=CT/MRI检查前原因；LX0609-06-01-04=CT/MRI报告后记录结果；LX0609-06-01-05=检出异常病灶或异常征象的CT/MRI结果分析；LX0609-06-03-03=培养报告后记录结果；LX0609-06-03-04=阳性菌/药敏分析处置。
 CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性。LX0609-06-03-04依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在LX0609-06-03-04判定范围内。

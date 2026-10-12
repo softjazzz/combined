@@ -23,6 +23,7 @@ from .exam_lab_course_time import (
     scan_unplaced_time_state,
 )
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
+from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -2302,6 +2303,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     else:
                         semantic_rule_ids.append(rule_id)
                 eligible_rule_ids = semantic_rule_ids
+            if (
+                "LX0609-06-01-05" in eligible_rule_ids
+                and projection is not None
+                and llm_client is not None
+            ):
+                # 用户口径（2026-10-11）：先单独判定报告异常是否与本次就诊相关（附带发现
+                # 不要求分析），固定为事件阳性提示，再判断有没有分析；失败时沿用原判断。
+                relevance = await classify_exam_finding_relevance(projection, llm_client)
+                llm_call_count += relevance.llm_call_count
+                prompt_tokens += relevance.prompt_tokens
+                completion_tokens += relevance.completion_tokens
+                total_tokens += relevance.total_tokens
+                api_time += relevance.api_time
+                if relevance.state == "ready":
+                    projection = apply_relevance_hints(projection, relevance.hints)
             if eligible_rule_ids and projection is not None:
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
