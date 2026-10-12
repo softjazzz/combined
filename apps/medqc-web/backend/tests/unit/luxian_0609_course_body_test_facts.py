@@ -8,7 +8,7 @@ def read_course_body_documents(prompt):
 
 
 class FrozenCourseBodyClient:
-    def __init__(self, facts, *, mode="valid", max_calls=1):
+    def __init__(self, facts, *, mode="valid", max_calls=2):
         # 每个body的state/quote由测试显式人工给定，不读取生产结论。
         self.facts, self.mode, self.max_calls = dict(facts), mode, max_calls
         self.calls, self.payloads = [], []

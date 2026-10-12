@@ -62,7 +62,9 @@ async def test_same_window_valid_present_and_unknown_reduction(rule, mode, statu
     final, execution = await _run(rule, rows, client)
     assert (final["status"], final["reason_code"]) == (status, reason)
     assert client.fixture_error is None
-    assert execution.llm_call_count == len(client.calls) == len(client.payloads) == 1
+    # 用户口径（2026-10-11）：协议违规批次重试 1 次，仍违规才判资料不足。
+    expected_calls = 2 if mode == "invalid_batch" else 1
+    assert execution.llm_call_count == len(client.calls) == len(client.payloads) == expected_calls
     if status == "data_gap":
         assert final["missing_fields"] == final["missing_sources"] == []
         assert "补写" not in final["suggestion"] or "不要" in final["suggestion"]

@@ -64,7 +64,12 @@ async def test_invalid_receipt_or_failure_is_unresolved_not_physician_missing(mo
     result = await extract_course_body_facts((CourseBodyDocument("ref1", "daily_course_record", "病情稳定。"),), client)
     assert (result.state, result.reason_code) == ("data_gap", "semantic_extraction_unresolved")
     assert result.states == {}
-    assert result.llm_call_count == len(client.calls) == 1
+    # 用户口径（2026-10-11）：协议违规重试 1 次（附违反项）；客户端/传输异常不在此重试。
+    # bad_quote_coordinate 夹具在客户端内抛出异常，等同调用异常，不重试。
+    expected_calls = 1 if mode in {"client_error", "bad_quote_coordinate"} else 2
+    assert result.llm_call_count == len(client.calls) == expected_calls
+    if expected_calls == 2:
+        assert "上一次输出未通过校验" in client.calls[1][0]
     assert client.fixture_error is None
 
 
@@ -242,3 +247,27 @@ async def test_065_original_multievent_fixture_without_timezone_keeps_zero_call_
     assert (decision.final_state.value, decision.reason_code) == ("data_gap", "authoritative_time_missing")
     assert execution.llm_call_count == execution.total_tokens == 0 and client.calls == []
     assert client.fixture_error is None
+
+
+@pytest.mark.asyncio
+async def test_drifted_long_quote_is_retried_with_hint_then_accepted():
+    """真实样本：长引文抄写走样→整份资料不足。现重试 1 次并提示只抄一句原文。"""
+
+    class DriftOnceClient:
+        def __init__(self):
+            self.calls = []
+
+        async def generate(self, prompt, **kwargs):
+            self.calls.append(prompt)
+            quote = "病情稳定，较前好转" if len(self.calls) == 1 else "病情稳定"
+            content = json.dumps({"schema_version": "lx0609-course-body-facts-v2", "documents": [
+                {"document_ref": "c1", "clinical_body": {"state": "present", "quote": quote}}]}, ensure_ascii=False)
+            return {"choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+
+    client = DriftOnceClient()
+    result = await extract_course_body_facts((CourseBodyDocument("ref1", "daily_course_record", "病情稳定。"),), client)
+    assert result.state == "ready" and result.states == {"ref1": "present"}
+    assert result.llm_call_count == 2 and result.total_tokens == 30
+    assert "quote必须是该份材料中逐字存在的一句原文" in client.calls[1]
+    assert client.calls[1].index("上一次输出未通过校验") < client.calls[1].index("INPUT_JSON=")
