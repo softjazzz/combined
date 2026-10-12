@@ -138,6 +138,8 @@ async def test_protocol_violation_retries_once(stage):
     assert final["status"] == "compliant"
     assert result.llm_call_count == len(client.calls) == 3
     assert result.total_tokens == 90
+    retried = [p for p, _ in client.calls if p.startswith("阶段" + stage)]
+    assert len(retried) == 2 and "上一次输出未通过校验" in retried[1]
 
 
 @pytest.mark.asyncio
@@ -153,10 +155,14 @@ async def test_invalid_response_fails_closed_after_one_retry(mode):
     elif mode == "new_c_event":
         response["C"]["events"][0]["event_id"] = 2
     else:
-        response["C"]["events"][0]["matches"][0].update(state="uncertain", span_id=None)
+        # 真实样本：给了候选片段和冲突类型，却没有冲突依据片段。
+        response["C"]["events"][0]["matches"][0].update(state="uncertain", conflict_span_id=None, conflict_kind="time")
     _, final, client = await run(response, text=TEXT + SURGERY, surgery=True)
     assert final["status"] == "data_gap"
     assert len(client.calls) == 3
+    if mode == "uncertain_without_evidence":
+        # 重试附上违反的合同条款，而不是原样重发。
+        assert "找不到具体冲突依据" in client.calls[-1][0]
 
 
 @pytest.mark.asyncio

@@ -102,6 +102,22 @@ def prompt(stage: str, docs: list[dict], events: list[dict]) -> str:
         "\n以下为受控资料：\n" + json.dumps({"documents": inputs, "fixed_events": fixed}, ensure_ascii=False)
 
 
+# 协议违规重试时告知模型具体违反的合同；不含任何病历原文。
+RETRY_HINTS = {
+    "invalid source span": "span_id必须是所属出院记录中非空片段的编号",
+    "missing cannot carry positive evidence": "missing时span_id与conflict_span_id必须为null且conflict_kind=none",
+    "present cannot carry conflict": "present时conflict_span_id必须为null且conflict_kind=none",
+    "uncertain needs concrete conflict": ("uncertain必须同时给出候选span_id、冲突依据conflict_span_id和具体conflict_kind；"
+                                          "找不到具体冲突依据时，应按原文判为present或missing"),
+    "incomplete or duplicate coverage": "每份出院记录、每个固定事件必须且只能输出一次",
+}
+
+
+def retry_prompt(stage_prompt: str, error: Exception) -> str:
+    hint = RETRY_HINTS.get(str(error), "输出必须完全符合上述JSON合同")
+    return stage_prompt + "\n上一次输出未通过校验：" + hint + "。请修正后重新输出完整JSON。"
+
+
 def anchor(doc: dict, span_id: Any) -> dict:
     spans = segments(doc["text"])
     if type(span_id) is not int or not 1 <= span_id <= len(spans) or not spans[span_id - 1]["text"].strip():
@@ -121,7 +137,7 @@ def atom(raw: dict, doc: dict) -> tuple[dict, dict | None]:
         if raw["conflict_span_id"] is not None or raw["conflict_kind"] != "none":
             raise ValueError("present cannot carry conflict")
         return {"state": state, "start": cited["start"], "end": cited["end"]}, None
-    if raw["conflict_kind"] == "none":
+    if raw["conflict_kind"] == "none" or raw["conflict_span_id"] is None:
         raise ValueError("uncertain needs concrete conflict")
     conflict = anchor(doc, raw["conflict_span_id"])
     return {"state": state, "start": None, "end": None}, {

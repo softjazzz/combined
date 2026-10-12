@@ -154,10 +154,12 @@ async def evaluate_discharge_course_content(*, snapshot: Any, materials: Any, ll
         except (ValueError, TypeError, KeyError, jsonschema.ValidationError):
             return None, "failed"
         # 用户口径（2026-10-11）：协议违规可确定识别时重试 1 次，仍违规才拒收；传输错误不重试。
+        # 原样重发常得到相同输出，重试时附上违反的合同条款。
+        attempt_prompt = stage_prompt
         for attempt in range(PROTOCOL_ATTEMPTS):
             metrics["llm_call_count"] += 1
             try:
-                response = await llm_client.generate(stage_prompt,
+                response = await llm_client.generate(attempt_prompt,
                     max_completion_tokens=8192, allow_length_retry=False, enable_thinking=False, **options)
             except Exception:
                 # 其他阶段已完成事实仍然保留。
@@ -169,9 +171,10 @@ async def evaluate_discharge_course_content(*, snapshot: Any, materials: Any, ll
                 metrics["api_time"] += float(response.get("_api_time") or 0)
                 payload = response_json_payload(response)
                 return stages.validate_response(stage, payload, docs, events), "complete"
-            except (ValueError, TypeError, KeyError, AttributeError, jsonschema.ValidationError):
+            except (ValueError, TypeError, KeyError, AttributeError, jsonschema.ValidationError) as error:
                 if attempt + 1 == PROTOCOL_ATTEMPTS:
                     return None, "failed"
+                attempt_prompt = stages.retry_prompt(stage_prompt, error)
         return None, "failed"
 
     events = _objective_events(docs)
