@@ -28,7 +28,7 @@ from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
-from .exam_result_record_check import apply_result_record, check_exam_result_record
+from .exam_result_record_check import ResultRecordOutcome, apply_result_record, check_exam_result_record
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -1621,6 +1621,46 @@ def _fact_for_outcome_display(
     return rule_facts[0]
 
 
+def _with_result_conflicts(
+    display_facts: Mapping[str, Any] | None,
+    *,
+    conflicts: Mapping[int, tuple[str, ...]],
+    projection: ExamLabTextProjection,
+) -> Mapping[str, Any] | None:
+    """06-01-04 检查结果与病程一致性提示（用户口径 2026-10-12）：只写矛盾病程的记录时间，不改判定。
+
+    多事件时写入对应事件明细，单事件时写入顶层；病历原文不进入客户事实。
+    """
+
+    if not isinstance(display_facts, Mapping) or not conflicts:
+        return display_facts
+
+    def times(position: int) -> list[str]:
+        values = sorted(
+            value for ref in conflicts.get(position, ())
+            if (value := projection.course_times.get(ref)) is not None
+        )
+        return [value.strftime("%Y-%m-%d %H:%M:%S") for value in values][:8]
+
+    facts = dict(display_facts)
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        updated = []
+        for item in event_results:
+            item = dict(item)
+            position = item.get("event_position")
+            if type(position) is int and (conflict_times := times(position)):
+                item["result_conflict_record_times"] = conflict_times
+            updated.append(item)
+        facts["event_results"] = updated
+        return facts
+    position = facts.get("event_position")
+    conflict_times = times(position if type(position) is int else 1)
+    if conflict_times:
+        facts["result_conflict_record_times"] = conflict_times
+    return facts
+
+
 def _display_facts_for_text_outcome(
     *,
     rule_id: str,
@@ -2620,6 +2660,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         except Exception:  # noqa: BLE001
                             logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
+                    result_conflicts: Mapping[int, tuple[str, ...]] = {}
                     if text_facts is not None:
                         # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
                         # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
@@ -2637,6 +2678,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         if checks:
                             check_outcomes = await asyncio.gather(*(check for check, _ in checks))
                             for (_, apply), check_outcome in zip(checks, check_outcomes):
+                                if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
+                                    result_conflicts = check_outcome.conflict_refs
                                 llm_call_count += check_outcome.llm_call_count
                                 prompt_tokens += check_outcome.prompt_tokens
                                 completion_tokens += check_outcome.completion_tokens
@@ -2659,11 +2702,15 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             outcome.reason_code,
                             outcome.fact_refs,
                             display_facts=(
-                                _display_facts_for_text_outcome(
-                                    rule_id=rule_id,
-                                    facts=text_facts,
+                                _with_result_conflicts(
+                                    _display_facts_for_text_outcome(
+                                        rule_id=rule_id,
+                                        facts=text_facts,
+                                        projection=projection,
+                                        outcome=outcome,
+                                    ),
+                                    conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
                                     projection=projection,
-                                    outcome=outcome,
                                 )
                                 if text_facts is not None
                                 and rule_id not in isolated_rule_failures

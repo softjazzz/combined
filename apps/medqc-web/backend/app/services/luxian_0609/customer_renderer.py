@@ -1882,6 +1882,23 @@ def customer_finding_from_controlled_facts(
 ) -> str:
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
+    conflict_key = "result_conflict_record_times"
+    if rule_id == "LX0609-06-01-04" and isinstance(facts, Mapping) and (
+        conflict_key in facts
+        or any(isinstance(item, Mapping) and conflict_key in item for item in facts.get("event_results") or ())
+    ):
+        # 检查结果与病程一致性提示附在结论末尾；finalizer 会按本函数重算结论，故在此追加。
+        stripped = {key: value for key, value in facts.items() if key != conflict_key}
+        if isinstance(facts.get("event_results"), list):
+            stripped["event_results"] = [
+                {key: value for key, value in item.items() if key != conflict_key}
+                if isinstance(item, Mapping) else item
+                for item in facts["event_results"]
+            ]
+        base = customer_finding_from_controlled_facts(rule_id=rule_id, facts=stripped, status=status)
+        note = exam_result_conflict_note(rule_id=rule_id, status=str(status or ""), facts=facts)
+        return f"{base}{note}" if base else ""
+
     if (
         rule_id in {"LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"}
         and isinstance(facts, Mapping)
@@ -4023,6 +4040,39 @@ _PREOP_FIELD_LABELS = {
 }
 
 
+def exam_result_conflict_note(
+    *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
+) -> str:
+    """06-01-04 检查结果与病程一致性提示（用户口径 2026-10-12）：只作核实提示，不改变判定。"""
+    if rule_id != "LX0609-06-01-04" or status == "technical_error" or not isinstance(facts, Mapping):
+        return ""
+
+    def described(times: Any) -> str:
+        if not isinstance(times, list) or not times:
+            return ""
+        return "、".join(str(item) for item in times)
+
+    parts: list[str] = []
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        for item in event_results:
+            if not isinstance(item, Mapping):
+                continue
+            times = described(item.get("result_conflict_record_times"))
+            if times:
+                parts.append(
+                    f"第{item.get('event_position')}次检查（报告时间 {item.get('report_time') or '待核实'}）"
+                    f"记录时间 {times} 的病程"
+                )
+    else:
+        times = described(facts.get("result_conflict_record_times"))
+        if times:
+            parts.append(f"记录时间 {times} 的病程")
+    if not parts:
+        return ""
+    return "另：" + "；".join(parts) + "对检查结果的描述与报告内容不一致，请核实。"
+
+
 def preop_laterality_conflict_note(
     *, rule_id: str, status: str, facts: Mapping[str, Any] | None,
 ) -> str:
@@ -4552,6 +4602,11 @@ def render_luxian_0609_customer_result(
     )
     if laterality_note:
         findings = f"{findings}{laterality_note}"
+    result_conflict_note = exam_result_conflict_note(
+        rule_id=decision.rule_id, status=decision.final_state.value, facts=safe_customer_display_facts,
+    )
+    if result_conflict_note:
+        findings = f"{findings}{result_conflict_note}"
 
     structured_suggestion = build_customer_remediation_suggestion(
         rule_id=decision.rule_id,

@@ -12,11 +12,17 @@
 none。Python 另核验：引文须逐字见于病程；report_span 须逐字见于本次报告，且与引文至少有
 2 个连续相同字，避免把其他检查的结果挂到本事件。末次输出仍漏核时按事件处理，未定事件沿用
 主抽取判断；调用失败时整体沿用主抽取判断。
+
+用户口径（2026-10-12）：病程在描述本次检查结果、但与报告有实质矛盾（真实样本：术后复查 MRI
+报告仍写半月板撕裂，出院当天查房写“复查MRI可见半月板已修整”）时，该病程不算记录了本次结果，
+另作“检查结果与病程一致性”核实提示，不改变判定。归类为 result_conflicting，同样须核验引文出自
+病程、report_span 出自本次报告且两者有连续相同字。如实写出报告结果后提出不同临床判断的，
+仍算记录（result_recorded），不提示。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 import re
 from time import perf_counter
@@ -35,7 +41,9 @@ from .transfusion_order_trigger import _json_response_object, _usage
 RULE_ID = "LX0609-06-01-04"
 SCHEMA_VERSION = "lx0609-exam-result-record-v1"
 RECORDED_TYPES = ("result_recorded",)
-QUOTE_TYPES = ("result_recorded", "mention_only", "plan_only", "other_exam", "none")
+CONFLICT_TYPES = ("result_conflicting",)
+SPAN_TYPES = (*RECORDED_TYPES, *CONFLICT_TYPES)
+QUOTE_TYPES = ("result_recorded", "result_conflicting", "mention_only", "plan_only", "other_exam", "none")
 # 病程常整段转抄报告结果（真实样本引文最长 159 字），上限按“摘一段”放宽，仍须逐字核验。
 MAX_SPAN_CHARS = 200
 PROTOCOL_ATTEMPTS = 2
@@ -56,6 +64,8 @@ class ResultRecordOutcome:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    # 事件位置 -> 描述本次结果但与报告实质矛盾的病程引用（只作核实提示）。
+    conflict_refs: Mapping[int, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _normalize(text: str) -> str:
@@ -105,13 +115,15 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "原文，不超过200字，不得改写或用省略号拼接），并归为一类（quote_type）：\n"
         "result_recorded：写出了本次报告的所见或结论，可概括或摘抄（如“胸部CT提示右肺下叶占位”“腰椎MRI示"
         "L4/5椎间盘突出”）；病程写“今于我院急诊完善胸部CT提示……”且所写结果与本次报告内容一致时，就是本次检查，"
-        "也归此类；\n"
+        "也归此类；如实写出报告结果后再提出不同的临床判断或解释，仍归此类；\n"
+        "result_conflicting：明确在描述本次检查的结果，但与report的所见或结论有实质矛盾（如报告写半月板撕裂、"
+        "病程写“复查MRI可见半月板已修整”；报告写有占位、病程写“复查CT未见异常”）；只概括或省略部分所见不算矛盾；\n"
         "mention_only：只写“结果已回报”“详见报告”“已查看报告”而没有任何结果内容；\n"
         "plan_only：只写拟行、完善、复查某检查，没有结果；\n"
         "other_exam：写的是另一部位、另一模态、既往或院外检查的结果，与本次报告内容对不上；\n"
         "none：该病程没有涉及本次检查，quote为空字符串。\n"
         "同一份病程有多句时优先选result_recorded的那一句。"
-        "quote_type为result_recorded时，report_span必须是该事件report中与这句话对应的结果片段（逐字摘录，"
+        "quote_type为result_recorded或result_conflicting时，report_span必须是该事件report中与这句话对应的结果片段（逐字摘录，"
         "不超过200字）；其他类别report_span为空字符串。"
         f"严格JSON根对象只含schema_version和docs，schema_version={SCHEMA_VERSION}；"
         "docs每项只含event_position、course_doc_ref、quote_type、quote、report_span；每个事件的每份病程必须且仅输出一次。\n"
@@ -140,6 +152,7 @@ def _parse(
         raise ValueError("invalid response schema")
     seen: set[tuple[int, str]] = set()
     recorded: dict[int, list[str]] = {position: [] for position in expected}
+    conflicting: dict[int, list[str]] = {position: [] for position in expected}
     for item in payload["docs"]:
         if not isinstance(item, dict) or set(item) != {
             "event_position", "course_doc_ref", "quote_type", "quote", "report_span",
@@ -162,29 +175,32 @@ def _parse(
             raise ValueError("missing quote")
         if normalized_quote not in _normalize(_course_text(projection, ref)):
             raise ValueError("quote not in course")
-        if kind in RECORDED_TYPES:
+        if kind in SPAN_TYPES:
             normalized_span = _normalize(span)
             if not normalized_span or len(span) > MAX_SPAN_CHARS:
                 raise ValueError("missing report span")
             if normalized_span not in _normalize(reports[position]):
                 raise ValueError("span not in report")
-            # 所记结果须与本次报告片段对得上，否则不能证明记录的是本次检查。
+            # 所记结果须与本次报告片段对得上，否则不能证明记录（或矛盾地描述）的是本次检查。
             if _shares_finding(span, quote):
-                recorded[position].append(ref)
+                (recorded if kind in RECORDED_TYPES else conflicting)[position].append(ref)
     if not seen:
         raise ValueError("invalid doc coverage")
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
     if not allow_partial and len(complete) != len(expected):
         raise ValueError("invalid doc coverage")
     # 末次仍漏核时按事件处理：已核到一份记录即已记录；全部核到且均不算才判未记录；
-    # 其余事件不固定，沿用主抽取判断。
-    return {position: tuple(refs) for position, refs in recorded.items() if refs or position in complete}
+    # 其余事件不固定，沿用主抽取判断。矛盾提示只列已核验的病程。
+    return (
+        {position: tuple(refs) for position, refs in recorded.items() if refs or position in complete},
+        {position: tuple(refs) for position, refs in conflicting.items() if refs},
+    )
 
 
 _RETRY_HINTS = {
     "quote not in course": "quote必须逐字摘自该病程原文",
     "quote without element": "quote_type为none时quote与report_span必须为空字符串",
-    "missing report span": "result_recorded必须给出不超过200字的本次报告结果片段report_span",
+    "missing report span": "result_recorded与result_conflicting必须给出不超过200字的本次报告结果片段report_span",
     "span not in report": "report_span必须逐字摘自该事件的report",
     "missing quote": "quote_type不为none时必须给出不超过200字的连续原文quote",
 }
@@ -226,8 +242,8 @@ async def check_exam_result_record(projection: ExamLabTextProjection, llm_client
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
-            recorded = _parse(response, projection, expected, reports,
-                              allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
+            recorded, conflicts = _parse(response, projection, expected, reports,
+                                         allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
@@ -238,7 +254,7 @@ async def check_exam_result_record(projection: ExamLabTextProjection, llm_client
                 "\nEVENTS_JSON=", f"\n上一次输出未通过校验：{hint}。请修正后重新输出完整JSON。\nEVENTS_JSON=", 1)
     recorded_refs.update(recorded)
     return ResultRecordOutcome("ready", recorded_refs, calls, prompt_tokens, completion_tokens, total_tokens,
-                               api_time or perf_counter() - started)
+                               api_time or perf_counter() - started, conflict_refs=conflicts)
 
 
 def apply_result_record(

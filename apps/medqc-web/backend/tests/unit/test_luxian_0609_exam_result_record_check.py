@@ -143,3 +143,29 @@ async def test_long_verbatim_restatement_of_report_is_accepted():
     outcome = await check_exam_result_record(projection, _Client([_answer(
         _doc(ref, "result_recorded", quote, "右肺下叶占位，考虑恶性可能；主动脉壁钙化。"))]))
     assert outcome.state == "ready" and outcome.llm_call_count == 1 and outcome.recorded_refs == {1: (ref,)}
+
+
+@pytest.mark.asyncio
+async def test_conflicting_description_is_not_recorded_but_flagged_for_review():
+    """真实样本：术后复查 MRI 报告写撕裂，出院当天查房写“复查MRI可见半月板已修整”。"""
+    projection = _projection("复查CT可见右肺下叶未见异常，病情好转，予以出院。")
+    [ref] = _post_report_refs(projection)
+    outcome = await check_exam_result_record(projection, _Client([_answer(
+        _doc(ref, "result_conflicting", "复查CT可见右肺下叶未见异常", "右肺下叶占位"))]))
+    assert outcome.state == "ready" and outcome.recorded_refs == {1: ()}
+    assert outcome.conflict_refs == {1: (ref,)}
+    # 矛盾描述也须能对应到本次报告，否则不提示。
+    unattributed = _doc(ref, "result_conflicting", "病情好转，予以出院", "主动脉壁钙化")
+    outcome = await check_exam_result_record(projection, _Client([_answer(unattributed)]))
+    assert outcome.recorded_refs == {1: ()} and outcome.conflict_refs == {}
+
+
+@pytest.mark.asyncio
+async def test_discharge_day_round_recording_result_within_window_still_counts():
+    """口径（2026-10-12，依据病历书写规范日常病程记录⑨）：出院当天病程属于病程记录，不按“出院”字样排除。"""
+    projection = _projection("胸部CT提示右肺下叶占位，考虑恶性可能，已告知家属，同意今日出院，门诊随访。")
+    [ref] = _post_report_refs(projection)
+    outcome = await check_exam_result_record(projection, _Client([_answer(
+        _doc(ref, "result_recorded", "胸部CT提示右肺下叶占位，考虑恶性可能", "右肺下叶占位，考虑恶性可能"))]))
+    assert outcome.recorded_refs == {1: (ref,)} and outcome.conflict_refs == {}
+    assert "出院" not in check_exam_result_record.__code__.co_consts

@@ -100,6 +100,25 @@ def _controlled_trigger_orders(value: Any) -> list[dict[str, str]] | None:
     return orders
 
 
+_CONFLICT_TIMES_KEY = "result_conflict_record_times"
+
+
+def _safe_conflict_times(value: Any) -> list[str] | None:
+    """06-01-04 检查结果与病程一致性提示：只允许最多 8 个固定格式的病程记录时间。"""
+
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= 8
+        or any(
+            not isinstance(item, str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", item)
+            for item in value
+        )
+    ):
+        return None
+    return list(value)
+
+
 def safe_exam_lab_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -308,6 +327,8 @@ def safe_exam_lab_customer_display_facts(
         "source_document_ids",
         "source_document_refs",
     }
+    if normalized_rule_id == "LX0609-06-01-04":
+        allowed_event_keys.add(_CONFLICT_TIMES_KEY)
     if not set(raw).issubset(allowed_event_keys):
         return None
     source_document_ids = raw.get("source_document_ids")
@@ -425,6 +446,11 @@ def safe_exam_lab_customer_display_facts(
         if reviewed_record_scope != "首次病程记录及后续病程记录":
             return None
         facts["reviewed_record_scope"] = reviewed_record_scope
+    if _CONFLICT_TIMES_KEY in raw:
+        conflict_times = _safe_conflict_times(raw[_CONFLICT_TIMES_KEY])
+        if conflict_times is None:
+            return None
+        facts[_CONFLICT_TIMES_KEY] = conflict_times
     event_count = raw.get("event_count")
     event_position = raw.get("event_position")
     if event_count is not None or event_position is not None:
@@ -456,6 +482,8 @@ def safe_exam_lab_customer_display_facts(
             "applicable",
             "requirement_met",
         }
+        if normalized_rule_id == "LX0609-06-01-04":
+            allowed_event_keys.add(_CONFLICT_TIMES_KEY)
         safe_event_results: list[dict[str, Any]] = []
         # 顺序合同（2026-09-12 收口）：事实的**语义**由 event_position 决定，物理顺序
         # 不是合同的一部分。此前用 enumerate 下标与 event_position 做相等比对，会把
@@ -537,6 +565,11 @@ def safe_exam_lab_customer_display_facts(
                     if not isinstance(value, bool):
                         return None
                     safe_item[key] = value
+            if _CONFLICT_TIMES_KEY in item:
+                conflict_times = _safe_conflict_times(item[_CONFLICT_TIMES_KEY])
+                if conflict_times is None:
+                    return None
+                safe_item[_CONFLICT_TIMES_KEY] = conflict_times
             safe_event_results.append(safe_item)
         if (
             verification_kind == "exam_lab_event_review_incomplete"
