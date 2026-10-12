@@ -21,6 +21,9 @@ MIGRATION_PATH = (
 )
 
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
+
 class _Rows:
     def __init__(self, row: dict[str, Any]) -> None:
         self._row = row

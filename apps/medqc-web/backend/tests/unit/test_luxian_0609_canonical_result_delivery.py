@@ -64,6 +64,9 @@ from app.services.luxian_0609.basic_timeliness_customer_projection import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
+
 class _Rows:
     def __init__(self, rows: list[dict[str, Any]]):
         self._rows = rows
@@ -3116,7 +3119,7 @@ def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text()
         ("admission_time", "患者张三，身份证 510000199001011234"),
         ("admission_time", "2026-02-30 08:00:00"),
         ("uncertain_record_times", ["病历正文：患者李四住院于2026年08月01日"]),
-        ("uncertain_record_times", ["2026-08-09 09:00:00"] * 101),
+        ("uncertain_record_times", ["2026-08-09 09:00:00"] * 201),  # 上限 2026-10-09 由 100 调至 200
     ],
 )
 def test_typed_050_customer_projection_rejects_non_datetime_controlled_facts(

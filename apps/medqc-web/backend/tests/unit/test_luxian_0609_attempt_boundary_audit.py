@@ -33,6 +33,9 @@ from app.services.qc_workspace.canonical_result_store import CanonicalResultStor
 from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _WorkspaceStub
 
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
+
 @pytest.fixture
 def storage(monkeypatch):
     engine = sa.create_engine("sqlite://")

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.services.workstation.worklist_service import WorkstationAggregationService
 
 
@@ -11,6 +13,7 @@ class _FakeSession:
         return None
 
 
+@pytest.mark.usefixtures("workspace_tables_without_database")
 def test_analytics_real_event_loader_handles_empty_database():
     """保留真实读取函数及依赖导入，防止模块迁移后被聚合 Mock 掩盖。"""
     session = MagicMock()
