@@ -24,6 +24,7 @@ from .exam_lab_course_time import (
 )
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
+from .exam_finding_analysis import apply_finding_analysis, check_exam_finding_analysis
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -2615,6 +2616,20 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         except Exception:  # noqa: BLE001
                             logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
+                    if (
+                        text_facts is not None
+                        and "LX0609-06-01-05" in eligible_rule_ids
+                        and "LX0609-06-01-05" not in isolated_rule_failures
+                    ):
+                        # 用户口径（2026-10-12）：06-01-05 是否已分析改由逐份病程的分析要素核对
+                        # 固定；核对失败时沿用主抽取原判断。
+                        analysis = await check_exam_finding_analysis(projection, llm_client)
+                        llm_call_count += analysis.llm_call_count
+                        prompt_tokens += analysis.prompt_tokens
+                        completion_tokens += analysis.completion_tokens
+                        total_tokens += analysis.total_tokens
+                        api_time += analysis.api_time
+                        text_facts = apply_finding_analysis(text_facts, analysis)
                     for rule_id in eligible_rule_ids:
                         outcome = (
                             _ExamLabOutcome(rule_id, "technical_error", "exam_lab_llm_invalid_output")
