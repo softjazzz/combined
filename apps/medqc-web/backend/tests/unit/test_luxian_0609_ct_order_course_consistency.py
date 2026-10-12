@@ -10,7 +10,7 @@ from app.services.luxian_0609 import native_exam_lab_execution as native
 from app.services.luxian_0609.ct_order_course_consistency import (
     RULE_ID, REPORT_RULE_ID, COURSE_SOURCES, SCHEMA_VERSION,
     CourseClause, CtReviewInput, build_ct_review_input, build_ct_fact_prompt,
-    ct_display_status_matches, evaluate_ct_review, validate_ct_display_facts,
+    ct_display_status_matches, ct_fact_response_format, evaluate_ct_review, validate_ct_display_facts,
     CtEvidenceBudgetExceeded,
 )
 from app.services.luxian_0609.evidence_material import (
@@ -230,10 +230,15 @@ def test_formal_report_proves_execution_despite_new_order_status_and_unnamed_mas
     assert evaluate_ct_review(review, _payload()).status == "compliant"
 
 
+def _unmatched_only(*clause_ids):
+    return {"schema_version": SCHEMA_VERSION, "events": [], "unmatched_current_clause_ids": list(clause_ids)}
+
+
 def test_pending_order_without_execution_never_calls_model_or_becomes_a_defect():
     rows = _rows()
     rows["exam_item_report"] = []
     review = _project(rows)
+    # 执行未确认已是资料缺口，不再调用模型。
     assert not review.needs_model
     assert evaluate_ct_review(review).status == "data_gap"
 
@@ -249,16 +254,27 @@ def test_gaps_stop_model_and_prevent_false_compliance(change):
         rows[ORDER_SOURCE] = []
         rows["exam_master"][0]["exam_name"] = "左膝CT"
     review = _project(rows, ("daily_course_record",) if change == "unproven_course" else ())
-    assert not review.needs_model
     # 病程来源完整但没有任何病程：已执行检查未被记载，按院方口径判不合规。
     expected = "non_compliant" if change == "empty_course" else "data_gap"
+    assert not review.needs_model
     assert evaluate_ct_review(review).status == expected
 
 
 def test_empty_sources_and_course_only_trigger_have_different_results():
     assert evaluate_ct_review(_project()).status == "not_applicable"
     review = _project({"daily_course_record": [{"document_id": "D1", "record_content": "本次已行左膝CT。"}]})
-    assert evaluate_ct_review(review).status == "data_gap"
+    assert review.needs_model
+    assert evaluate_ct_review(review, _unmatched_only("C1")).status == "data_gap"
+
+
+def test_outside_hospital_or_pre_admission_exam_is_not_reviewed():
+    """用户口径（2026-10-12）：写明院外医院名称或入院前门急诊的检查不纳入本条核对。"""
+    review = _project({"daily_course_record": [
+        {"document_id": "D1", "record_content": "院外辅助检查：2025年08月06日某市人民医院腹部CT提示右肾积水。"}]})
+    assert review.needs_model
+    assert "院外检查" in build_ct_fact_prompt(review) and "门急诊检查" in build_ct_fact_prompt(review)
+    assert evaluate_ct_review(review, _unmatched_only()).status == "not_applicable"
+    assert ct_fact_response_format(review)["json_schema"]["schema"]["properties"]["events"]["maxItems"] == 0
 
 
 @pytest.mark.parametrize("order_count", [1, 3])
@@ -266,7 +282,7 @@ def test_unrelated_canceled_orders_do_not_hide_current_course_event(order_count)
     rows = {ORDER_SOURCE: [{"order_id": f"O{i}", "order_name": "左膝CT", "order_status": "取消"}
                           for i in range(order_count)],
             "daily_course_record": [{"document_id": "D1", "record_content": "本次已完成胸部CT，提示炎症。"}]}
-    assert evaluate_ct_review(_project(rows)).status == "data_gap"
+    assert evaluate_ct_review(_project(rows), _unmatched_only("C1")).status == "data_gap"
     rows["daily_course_record"][0]["record_content"] = "患者病情平稳。"
     assert evaluate_ct_review(_project(rows)).status == "not_applicable"
 
