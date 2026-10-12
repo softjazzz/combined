@@ -1064,16 +1064,16 @@ def test_023_missing_evidence_with_incomplete_source_is_data_gap():
     (
         ("linked_specific", "high", ("compliant", "requirement_satisfied")),
         ("linked_vague", "high", ("non_compliant", "requirement_violated")),
-        # 中/低置信关联不能证明建议已有执行证据。
+        # 用户口径（2026-10-11）：明确的执行事实不再因模型自评置信度降为资料不足。
         (
             "linked_specific",
             "low",
-            ("data_gap", "linkage_unresolved"),
+            ("compliant", "requirement_satisfied"),
         ),
         (
             "linked_specific",
             "medium",
-            ("data_gap", "linkage_unresolved"),
+            ("compliant", "requirement_satisfied"),
         ),
     ),
 )
@@ -1082,7 +1082,7 @@ def test_023_structured_order_match_respects_specificity_and_confidence(
     confidence,
     expected,
 ):
-    """医嘱匹配只在具体且高置信度时形成023合规结论。"""
+    """医嘱匹配按具体/笼统形成023结论，不看模型自评置信度（用户口径 2026-10-11）。"""
 
     completed = (_coverage_completed_recommendation(),)
     assessment = episode._ExecutionAssessment(
@@ -1104,24 +1104,24 @@ def test_023_structured_order_match_respects_specificity_and_confidence(
 @pytest.mark.parametrize(
     ("structured_rows", "expected"),
     (
-        # C29 形态：只有中置信结构化关联时，尚未确认存在执行证据。
+        # 用户口径（2026-10-11）：不看模型自评置信度，按明确的执行事实判定。
         (
             (("medium", "linked_specific"),),
-            ("data_gap", "linkage_unresolved"),
+            ("compliant", "requirement_satisfied"),
         ),
-        # 低置信 absent 与中置信 linked_specific 混合，同样没有高置信痕迹。
+        # 明确无任何执行痕迹的建议即缺执行证据。
         (
             (("low", "absent"), ("medium", "linked_specific")),
-            ("data_gap", "linkage_unresolved"),
+            ("non_compliant", "requirement_violated"),
         ),
-        # 仍有建议处于中/低置信状态时，不能宣称全部建议均有具体证据。
+        # 任一建议只有笼统执行即不具体。
         (
             (
                 ("high", "linked_specific"),
                 ("medium", "linked_vague"),
                 ("low", "linked_specific"),
             ),
-            ("data_gap", "linkage_unresolved"),
+            ("non_compliant", "requirement_violated"),
         ),
         # 高置信笼统痕迹不因同时存在中置信具体项而降级。
         (
@@ -1143,7 +1143,7 @@ def test_023_structured_execution_uses_high_confidence_links_only(
     structured_rows,
     expected,
 ):
-    """只有高置信结构化医嘱关联参与023判罚；中/低置信项等价于没有痕迹。"""
+    """结构化医嘱关联按具体/笼统/无痕迹参与023判罚，不看模型自评置信度。"""
 
     assessments = tuple(
         episode._ExecutionAssessment(
@@ -7185,10 +7185,11 @@ async def test_stage_two_shape_retry_skips_low_confidence_recheck():
 
     assert result.llm_call_count == 3
     assert len(client.prompts) == 3
-    # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定。
+    # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定
+    # （用户口径 2026-10-11：不看模型自评置信度）。
     assert [item["status"] for item in result.results] == [
         "compliant",
-        "data_gap",
+        "compliant",
     ]
 
 

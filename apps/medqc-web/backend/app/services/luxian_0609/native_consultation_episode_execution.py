@@ -3406,7 +3406,7 @@ def _execution_quality_outcome(
     """023 逐条核对会诊建议是否有具体执行证据。
 
     任一建议明确缺少执行证据，或只找到笼统执行记录，即不合规；只有全部
-    建议都找到具体病程记录或高置信结构化医嘱时才合规。来源不完整或模型
+    建议都找到具体病程记录或结构化医嘱时才合规（不看模型自评置信度）。来源不完整或模型
     未形成可靠逐条事实时返回资料不足，不能把未知当成“未执行”。
     """
 
@@ -3438,9 +3438,9 @@ def _execution_quality_outcome(
             # copied_opinion 仅作为旧响应的兼容值，按“不具体”处理。
             has_confirmed_defect = True
             continue
-        if item.confidence != "high":
-            has_unknown = True
-            continue
+        # 用户口径（2026-10-11）：模型已给出明确执行事实时按事实判定，不再以模型
+        # 自评置信度降为资料不足（真实样本中同一事实的置信度在多轮间随机波动）；
+        # unknown 状态及引用不全仍按无法确认处理。
         if item.execution_record_state == "specific_trace" and item.trace_refs:
             continue
         if item.execution_record_state == "no_trace" and order_refs:
