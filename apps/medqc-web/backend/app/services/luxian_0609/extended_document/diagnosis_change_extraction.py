@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 import math
 import re
@@ -217,6 +217,25 @@ async def extract_diagnosis_change_documentation(
         return DiagnosisChangeExtraction("data_gap", "source_truncated")
     if llm_client is None:
         return DiagnosisChangeExtraction("technical_error", "model_transport_error")
+    # 用户口径（2026-10-11）：协议违规（如拼接引文）可确定识别，重试 1 次；仍违规才拒收。
+    first = await _extract_once(safe_documents, llm_client)
+    if first.state != "technical_error" or first.reason_code != "model_invalid_output":
+        return first
+    second = await _extract_once(safe_documents, llm_client)
+    return replace(
+        second,
+        llm_call_count=first.llm_call_count + second.llm_call_count,
+        prompt_tokens=first.prompt_tokens + second.prompt_tokens,
+        completion_tokens=first.completion_tokens + second.completion_tokens,
+        total_tokens=first.total_tokens + second.total_tokens,
+        api_time=first.api_time + second.api_time,
+    )
+
+
+async def _extract_once(
+    safe_documents: Sequence[DiagnosisChangeDocumentInput],
+    llm_client: DiagnosisChangeLLMClient,
+) -> DiagnosisChangeExtraction:
     started = perf_counter()
     try:
         response = await llm_client.generate(

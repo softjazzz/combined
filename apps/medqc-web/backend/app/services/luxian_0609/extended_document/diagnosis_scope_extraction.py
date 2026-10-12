@@ -117,6 +117,9 @@ def _prompt(bodies: Sequence[str]) -> str:
     )
 
 
+PROTOCOL_ATTEMPTS = 2
+
+
 def _unique_position(text: str, quote: str) -> int:
     if not quote or not quote.strip():
         raise ValueError("missing quote")
@@ -209,24 +212,33 @@ async def extract_diagnosis_scope(
         return DiagnosisScopeResult("ready")
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
         return DiagnosisScopeResult("technical_error", reason_code="model_transport_error")
-    started = perf_counter()
-    try:
-        response = await llm_client.generate(prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False,
-                                             **structured_output_kwargs(llm_client))
-    except Exception:
-        return DiagnosisScopeResult("technical_error", llm_call_count=1, api_time=perf_counter() - started,
-                                    reason_code="model_transport_error")
-    usage = (0, 0, 0, perf_counter() - started)
-    try:
-        if not isinstance(response, Mapping) or not isinstance(response.get("usage"), Mapping):
-            raise ValueError("missing usage")
-        if any(key not in response["usage"] for key in ("prompt_tokens", "completion_tokens", "total_tokens")):
-            raise ValueError("incomplete usage")
-        parsed = _usage(response)
-        usage = (*parsed[:3], parsed[3] or usage[3])
-        if parsed[2] != parsed[0] + parsed[1] or parsed[1] > max_completion_tokens:
-            raise ValueError("invalid usage total or budget")
-        facts = _parse(response, originals, bodies)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
-        return DiagnosisScopeResult("technical_error", (), 1, *usage, reason_code="model_invalid_output")
-    return DiagnosisScopeResult("ready", facts, 1, *usage)
+    # 用户口径（2026-10-11）：协议违规可确定识别，重试 1 次；仍违规才拒收。
+    calls = 0
+    totals = [0, 0, 0, 0.0]
+    for attempt in range(PROTOCOL_ATTEMPTS):
+        started = perf_counter()
+        calls += 1
+        try:
+            response = await llm_client.generate(prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False,
+                                                 **structured_output_kwargs(llm_client))
+        except Exception:
+            return DiagnosisScopeResult("technical_error", (), calls, *totals[:3], totals[3] + perf_counter() - started,
+                                        reason_code="model_transport_error")
+        elapsed = perf_counter() - started
+        try:
+            if not isinstance(response, Mapping) or not isinstance(response.get("usage"), Mapping):
+                raise ValueError("missing usage")
+            if any(key not in response["usage"] for key in ("prompt_tokens", "completion_tokens", "total_tokens")):
+                raise ValueError("incomplete usage")
+            parsed = _usage(response)
+            totals = [totals[0] + parsed[0], totals[1] + parsed[1], totals[2] + parsed[2],
+                      totals[3] + (parsed[3] or elapsed)]
+            if parsed[2] != parsed[0] + parsed[1] or parsed[1] > max_completion_tokens:
+                raise ValueError("invalid usage total or budget")
+            facts = _parse(response, originals, bodies)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+            if attempt + 1 == PROTOCOL_ATTEMPTS:
+                return DiagnosisScopeResult("technical_error", (), calls, *totals, reason_code="model_invalid_output")
+            continue
+        return DiagnosisScopeResult("ready", facts, calls, *totals)
+    raise AssertionError("unreachable")

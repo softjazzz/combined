@@ -204,8 +204,9 @@ async def test_invalid_mapping_enum_or_ungrounded_quote_is_technical_without_ret
 
     assert result.state == "technical_error"
     assert result.reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
+    # 协议违规重试 1 次后仍违规才拒收（用户口径 2026-10-11）。
+    assert result.llm_call_count == 2
+    assert len(client.calls) == 2
 
 
 @pytest.mark.asyncio
@@ -267,3 +268,30 @@ async def test_changed_diagnosis_context_is_sent_with_redacted_text():
     assert result.state == "ready"
     sent = json.loads(client.calls[0][0][client.calls[0][0].rindex("\n") + 1:])
     assert sent[0]["changed_diagnosis"] == "细菌性肺炎"
+
+
+class _FlakyClient(_Client):
+    def __init__(self, first, second):
+        super().__init__(first)
+        self.second = second
+
+    async def generate(self, prompt, **kwargs):
+        response = await super().generate(prompt, **kwargs)
+        self.payload = self.second
+        return response
+
+
+@pytest.mark.asyncio
+async def test_spliced_quote_is_retried_once_and_second_valid_answer_is_used():
+    """0910 真实形态：把两段不相邻原文拼成一句引用；重试 1 次后合规即采用（用户口径 2026-10-11）。"""
+    client = _FlakyClient(
+        _payload(_item(reason_quote="综上所述，今日修正诊断为症状性癫痫")),
+        _payload(_item()),
+    )
+
+    result = await extract_diagnosis_change_documentation((_document(),), client)
+
+    assert result.state == "ready"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 180
+    assert len(client.calls) == 2

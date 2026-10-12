@@ -154,8 +154,9 @@ def test_valid_semantic_enums_are_preserved(scope, state, polarity, temporal, as
 ])
 def test_bad_schema_binding_or_quotes_return_no_partial_facts(mutation):
     result = run(Client(mutate=mutation))
+    # 协议违规重试 1 次后仍违规才拒收（用户口径 2026-10-11）。
     assert (result.state, result.reason_code, result.documents, result.llm_call_count) == (
-        "technical_error", "model_invalid_output", (), 1)
+        "technical_error", "model_invalid_output", (), 2)
 
 
 def test_repeated_quote_cannot_manufacture_original_coordinate():
@@ -224,3 +225,18 @@ def test_empty_input_does_not_invent_document_coverage():
     result = run(client, [])
     assert result.state == "ready" and result.documents == () and result.llm_call_count == 0
     assert client.calls == []
+
+
+def test_protocol_violation_is_retried_once_and_second_valid_answer_is_used():
+    """用户口径（2026-10-11）：协议违规可确定识别，重试 1 次；第二次合规即采用。"""
+    calls = []
+
+    def mutate_first(payload):
+        calls.append(1)
+        if len(calls) == 1:
+            payload["documents"][0]["assertions"][0].update(problem_quote="另一问题")
+
+    result = run(Client(mutate=mutate_first))
+    assert result.state == "ready"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 48

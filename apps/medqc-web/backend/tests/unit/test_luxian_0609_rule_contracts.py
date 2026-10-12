@@ -292,7 +292,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         semantic_contract = next(contract for contract in contracts if contract.rule_id == rule)
         assert (semantic_contract.contract_version, semantic_contract.decision_authority,
                 semantic_contract.max_llm_calls_per_rule, semantic_contract.prompt_version) == (
-                    version, "program_then_optional_llm", 1, prompt)
+                    version, "program_then_optional_llm", 2, prompt)
     effect_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-05-01-03")
     assert (effect_contract.contract_version, effect_contract.decision_authority,
             effect_contract.max_llm_calls_per_rule, effect_contract.prompt_version) == (
@@ -393,7 +393,9 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         contract.max_llm_calls_per_rule == 0
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
-        == (2 if contract.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01"} else 1)
+        == (2 if contract.rule_id in {
+            "LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01",
+        } else 1)
         and bool(contract.prompt_version)
         for contract in contracts
     )

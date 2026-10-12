@@ -10721,7 +10721,7 @@ async def test_074_unknown_without_missing_is_uncertain():
                 basis_quote="MRI提示异常",
             )),
             "model_invalid_output",
-            100,
+            200,
         ),
         (_DiagnosisChangeClient(error=RuntimeError("network")), "model_transport_error", 0),
     ),
@@ -10741,9 +10741,11 @@ async def test_074_model_failure_is_technical_and_never_retries(
 
     assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced.reason_code == expected_reason
-    assert execution.llm_call_count == 1
+    # 协议违规重试 1 次后仍违规才拒收；传输失败不重试（用户口径 2026-10-11）。
+    expected_calls = 2 if expected_reason == "model_invalid_output" else 1
+    assert execution.llm_call_count == expected_calls
     assert execution.total_tokens == expected_tokens
-    assert len(client.calls) == 1
+    assert len(client.calls) == expected_calls
 
 
 def _064_rows(*, begin="2026-07-07 16:30:00+08", rounds=()):

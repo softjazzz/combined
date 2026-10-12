@@ -30,8 +30,9 @@ class InvalidOutputClient:
      "data_gap", "required_field_missing", 0, "unavailable"),
     ("transport", "目前诊断仍不明确。", BrokenTransportClient,
      "technical_error", "model_transport_error", 1, "invalid"),
+    # 协议违规重试 1 次后仍违规才拒收（用户口径 2026-10-11）。
     ("invalid_output", "目前诊断仍不明确。", InvalidOutputClient,
-     "technical_error", "model_invalid_output", 1, "invalid"),
+     "technical_error", "model_invalid_output", 2, "invalid"),
 ], ids=["capacity", "missing-body", "transport", "invalid-output"])
 async def test_scope_failure_preserves_native_and_canonical_nonclinical_state(
     case, body, client_factory, status, reason, calls, resolution,
@@ -48,7 +49,7 @@ async def test_scope_failure_preserves_native_and_canonical_nonclinical_state(
     if case in {"capacity", "missing_body"}:
         assert execution.total_tokens == 0
     if case == "invalid_output":
-        assert execution.total_tokens == 15
+        assert execution.total_tokens == 30
     result = _canonical_extended_result(rule_id=RULE, snapshot=snapshot,
         materials=materials, result=execution, reduced=reduced)
     assert result["status"] == status

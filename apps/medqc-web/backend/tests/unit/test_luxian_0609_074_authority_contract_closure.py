@@ -83,7 +83,8 @@ async def execute(rows, client, *, unavailable_sources=frozenset()):
 def test_074_loaded_authority_allows_the_existing_optional_single_extraction():
     value = contract()
     assert value.decision_authority == "program_then_optional_llm"
-    assert value.max_llm_calls_per_rule == 1
+    # 协议违规重试 1 次（用户口径 2026-10-11）。
+    assert value.max_llm_calls_per_rule == 2
     assert value.executor_key == "extended_document"
     assert value.execution_mode == "native_async"
     assert value.source_contract_state == "typed_shadow_v1"
@@ -132,15 +133,16 @@ async def test_074_multiple_documents_use_one_batch_request_with_the_same_budget
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure,reason,tokens", [
     ("transport", "model_transport_error", 0),
-    ("quote", "model_invalid_output", 100),
-    ("length", "model_invalid_output", 100),
+    ("quote", "model_invalid_output", 200),
+    ("length", "model_invalid_output", 200),
     ("usage", "model_invalid_output", 0),
 ])
 async def test_074_failed_requests_are_counted_once_without_retry_or_determined_clinical_result(failure, reason, tokens):
     client = SyntheticClient(failure=failure)
     _, _, execution, reduced = await execute({"senior_course_record": courses()}, client)
     assert (reduced.final_state.value, reduced.reason_code) == ("technical_error", reason)
-    assert len(client.calls) == execution.llm_call_count == 1
+    # 协议违规重试 1 次后仍违规才拒收；传输失败不重试（用户口径 2026-10-11）。
+    assert len(client.calls) == execution.llm_call_count == (2 if reason == "model_invalid_output" else 1)
     assert execution.total_tokens == tokens
     assert not execution.customer_display_facts
     assert client.calls[0][1]["allow_length_retry"] is False

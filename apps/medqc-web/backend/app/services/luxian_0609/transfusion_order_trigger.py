@@ -20,6 +20,7 @@ MAX_BATCH_CHARS = 8000
 MAX_NAME_CHARS = 4096
 MAX_METADATA_CHARS = 1024
 SCHEMA_VERSION = "lx0609-transfusion-order-trigger-v1"
+PROTOCOL_ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
@@ -199,23 +200,27 @@ async def classify_transfusion_orders(
     selected: set[int] = set()
     unresolved = False
     for batch in _batches(inputs):
-        started = perf_counter()
-        calls += 1
-        try:
-            # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
-            response = await llm_client.generate(_prompt(batch), **structured_output_kwargs(llm_client))
-        except Exception:
-            api_time += perf_counter() - started
-            return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_transport_error")
-        try:
-            usage = _usage(response)
-            prompt_tokens += usage[0]
-            completion_tokens += usage[1]
-            total_tokens += usage[2]
-            api_time += usage[3] or perf_counter() - started
-            resolved = _classifications(response, batch)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
-            return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
+        # 用户口径（2026-10-11）：协议违规（漏行、引用不符等）可确定识别，重试 1 次；仍违规才拒收。
+        for attempt in range(PROTOCOL_ATTEMPTS):
+            started = perf_counter()
+            calls += 1
+            try:
+                # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
+                response = await llm_client.generate(_prompt(batch), **structured_output_kwargs(llm_client))
+            except Exception:
+                api_time += perf_counter() - started
+                return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_transport_error")
+            try:
+                usage = _usage(response)
+                prompt_tokens += usage[0]
+                completion_tokens += usage[1]
+                total_tokens += usage[2]
+                api_time += usage[3] or perf_counter() - started
+                resolved = _classifications(response, batch)
+                break
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+                if attempt + 1 == PROTOCOL_ATTEMPTS:
+                    return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
         for index, classification, cancelled in resolved:
             if cancelled is True:
                 continue

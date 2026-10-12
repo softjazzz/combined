@@ -153,8 +153,9 @@ def test_malformed_model_protocol_is_technical_error(mutation):
     result = _run([_row()], FakeClient(mutate=mutation))
     assert result.state == "technical_error"
     assert result.selected_identities == ()
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 30
+    # 协议违规重试 1 次后仍违规才拒收（用户口径 2026-10-11）。
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 60
 
 
 def test_transport_error_is_not_absence():
@@ -224,3 +225,18 @@ def test_capable_client_classifies_with_thinking_disabled():
     client = _StructuredClient({0: ("transfusion", False)})
     assert _run([_row()], client).state == "present"
     assert client.kwargs == {"enable_thinking": False}
+
+
+def test_dropped_row_is_retried_once_and_second_valid_batch_is_used():
+    """0910 真实形态：一批 15 条漏返 1 条；重试 1 次后完整即采用（用户口径 2026-10-11）。"""
+    calls = []
+
+    def mutate_first(payload):
+        calls.append(1)
+        if len(calls) == 1:
+            payload["orders"].pop()
+
+    result = _run([_row(0), _row(1)], FakeClient(mutate=mutate_first))
+    assert result.state == "absent"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 60

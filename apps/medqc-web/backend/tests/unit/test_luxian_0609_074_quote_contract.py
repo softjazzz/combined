@@ -72,7 +72,9 @@ async def run(items, texts=(TEXT,)):
         raw_customer_display_facts=dict(execution.customer_display_facts).get(RULE),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
-    assert len(client.calls) == execution.llm_call_count == 1
+    # 协议违规重试 1 次后仍违规才拒收（用户口径 2026-10-11）。
+    assert len(client.calls) == execution.llm_call_count
+    assert execution.llm_call_count == (2 if final["status"] == "technical_error" else 1)
     assert client.calls[0][1]["allow_length_retry"] is False
     return final, client
 
