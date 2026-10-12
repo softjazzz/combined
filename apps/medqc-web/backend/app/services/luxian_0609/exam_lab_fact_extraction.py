@@ -111,6 +111,8 @@ class ExamLabSingleEvent:
     within_admission_window: bool = False
     # 012 前置相关性判定已固定 positive_hint（用户口径 2026-10-11）。
     relevance_fixed: bool = False
+    # 经 order_id/exam_id 显式关联的 CT/MRI 医嘱名称（客户检查主记录常不带名称；仅供 012 引文归属核验）。
+    order_names: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
         return (
@@ -544,6 +546,22 @@ def exam_reason_window(event: "ExamLabSingleEvent") -> tuple[datetime, datetime]
     return anchor - timedelta(hours=48), end
 
 
+def _linked_exam_order_names(
+    rows: Sequence[Mapping[str, Any]],
+    order_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    known = tuple(_clean(row.get("order_id")) for row in order_rows if _clean(row.get("order_id")))
+    linked = {
+        order_id
+        for row in rows
+        for order_id in resolve_exam_master_order_ids(row, known_order_ids=known)
+    }
+    return tuple(dict.fromkeys(
+        name for row in order_rows
+        if _clean(row.get("order_id")) in linked and (name := _clean(row.get("order_name")))
+    ))
+
+
 def _linked_exam_order_time(
     rows: Sequence[Mapping[str, Any]],
     order_rows: Sequence[Mapping[str, Any]],
@@ -739,17 +757,12 @@ def build_exam_lab_text_projection(
         )
         if conflict:
             conflicts.add("report_time")
-        order_time = (
-            _linked_exam_order_time(
-                rows,
-                tuple(
-                    row for row in rows_by_source.get(_EXAM_ORDER_SOURCE_KEY, ())
-                    if isinstance(row, Mapping)
-                ),
-            )
-            if family == "exam"
-            else None
+        exam_order_rows = tuple(
+            row for row in rows_by_source.get(_EXAM_ORDER_SOURCE_KEY, ())
+            if isinstance(row, Mapping)
         )
+        order_time = _linked_exam_order_time(rows, exam_order_rows) if family == "exam" else None
+        order_names = _linked_exam_order_names(rows, exam_order_rows) if family == "exam" else ()
         material = " ".join(_row_text(row) for row in rows)
         identity_text = " ".join(
             dict.fromkeys(
@@ -907,6 +920,7 @@ def build_exam_lab_text_projection(
             exam_time=exam_time,
             report_time=report_time,
             order_time=order_time,
+            order_names=order_names,
             # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免。
             within_admission_window=(
                 admission_time is not None

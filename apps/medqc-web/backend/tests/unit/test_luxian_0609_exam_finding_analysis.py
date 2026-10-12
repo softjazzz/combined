@@ -48,9 +48,11 @@ class _Client:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
-def _answer(ref, kind="none", quote=""):
+def _answer(ref, kind="none", quote="", span=None):
+    if span is None:
+        span = "" if kind == "none" else "L4/5椎间盘突出"
     return {"schema_version": SCHEMA_VERSION, "docs": [{
-        "event_position": 1, "course_doc_ref": ref, "quote_type": kind, "quote": quote}]}
+        "event_position": 1, "course_doc_ref": ref, "quote_type": kind, "quote": quote, "report_span": span}]}
 
 
 def _report_ref(projection):
@@ -77,8 +79,49 @@ async def test_linked_finding_with_verbatim_quote_counts_as_analysis():
     projection = _projection(LINKED)
     ref = _report_ref(projection)
     outcome = await check_exam_finding_analysis(
-        projection, _Client([_answer(ref, "finding_linked", "与右下肢放射痛相符，拟行手术")]))
+        projection, _Client([_answer(ref, "finding_linked", "L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符")]))
     assert outcome.state == "ready" and outcome.analysed_refs == {1: (ref,)}
+
+
+@pytest.mark.asyncio
+async def test_differential_naming_this_exam_site_is_attributed_by_linked_order():
+    """真实样本：“结合颈椎MRI故不考虑该诊断”只指向检查本身；检查名称仅在关联医嘱上。"""
+    from dataclasses import replace
+
+    from app.services.luxian_0609.exam_lab_fact_extraction import events_for_family as _events
+
+    projection = _projection(LINKED + "鉴别诊断：椎体结核，结合腰椎MRI故不考虑该诊断。")
+    event = replace(_events(projection, "exam")[0], order_names=("MRI腰椎平扫",))
+    projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
+    ref = _report_ref(projection)
+    answer = _answer(ref, "targeted_differential", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.analysed_refs == {1: (ref,)}
+    # 非鉴别类（如把“结合腰椎MRI可诊断”误归为异常联系）不能靠部位对应放行。
+    misfiled = _answer(ref, "finding_linked", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
+    assert (await check_exam_finding_analysis(projection, _Client([misfiled]))).analysed_refs == {1: ()}
+    event = replace(event, order_names=("MRI左膝关节平扫",))
+    projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_quote_about_another_exam_does_not_count_for_this_event():
+    """真实样本：共用病程里“胸部CT提示右肺小结节，请胸外科会诊”被挂到膝关节MRI名下。"""
+    projection = _projection(LINKED + "胸部CT提示右肺小结节，请胸外科会诊评估。")
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(projection, _Client([
+        _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="椎管狭窄")]))
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
+
+    client = _Client([
+        _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="右肺小结节"),
+        _answer(ref, "none"),
+    ])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.llm_call_count == 2 and "report_span必须逐字摘自" in client.prompts[1]
+    assert outcome.analysed_refs == {1: ()}
 
 
 @pytest.mark.asyncio
@@ -102,7 +145,7 @@ async def test_protocol_violation_retries_once_then_fails_open_to_main_extractio
         first = _answer(ref, "none", "与右下肢放射痛相符")
     else:
         first = {"schema_version": SCHEMA_VERSION, "docs": []}
-    client = _Client([first, _answer(ref, "finding_linked", "与右下肢放射痛相符")])
+    client = _Client([first, _answer(ref, "finding_linked", "L4/5椎间盘突出压迫右侧神经根")])
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.llm_call_count == 2
     assert client.prompts[1].index("上一次输出未通过校验") < client.prompts[1].index("EVENTS_JSON=")
@@ -132,3 +175,30 @@ def test_apply_overrides_only_positive_012_facts_and_keeps_report_evidence():
     assert fixed[1] == facts[1] and fixed[2] == facts[2]
     assert apply_finding_analysis(facts, FindingAnalysisOutcome("failed", {})) == facts
     assert len(events_for_family(_projection(LINKED), "exam")) == 1
+
+
+@pytest.mark.asyncio
+async def test_final_partial_coverage_decides_per_event_instead_of_failing_whole_check():
+    """真实样本：模型两次都漏核某事件的一份病程，整体回退主抽取导致多轮翻转。"""
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": ({"exam_id": "EX-1", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-18 12:30:00",
+                         "report_time": "2026-08-18 13:30:00", "exam_conclusion": "L4/5椎间盘突出，椎管狭窄。"},),
+        "daily_course_record": (
+            {"record_time": "2026-08-18 15:00:00", "record_content": LINKED},
+            {"record_time": "2026-08-18 20:00:00", "record_content": LISTING},
+        ),
+    }), {1: "positive"})
+    first, second = sorted(projection.course_times, key=lambda ref: projection.course_times[ref])
+
+    def only(ref, kind, quote="", span=""):
+        return {"schema_version": SCHEMA_VERSION, "docs": [{
+            "event_position": 1, "course_doc_ref": ref, "quote_type": kind, "quote": quote, "report_span": span}]}
+
+    # 末次仍漏核：已核到的一份算分析 → 已分析。
+    analysed = only(first, "finding_linked", "L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符", "L4/5椎间盘突出")
+    client = _Client([analysed, analysed])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,)} and len(client.prompts) == 2
+    # 末次仍漏核且已核到的不算分析 → 该事件不固定，沿用主抽取。
+    outcome = await check_exam_finding_analysis(projection, _Client([only(second, "none")] * 2))
+    assert outcome.state == "ready" and outcome.analysed_refs == {}

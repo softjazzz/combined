@@ -14,7 +14,12 @@
 用户口径（2026-10-12）补充：以诊断名指代报告异常并据此定方案、解读复查结果并给出
 处置、用本次报告排除或确认具体诊断，均算分析；只按诊断列常规治疗而未提及该异常不算。
 Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段后须仍有实质内容，照抄
-报告结论的引文一律不算分析。失败时不固定，沿用主抽取原有判断。
+报告结论的引文一律不算分析。
+同一份病程常被多次检查共用，真实样本出现把胸部CT的“右肺小结节，请胸外科会诊”挂到
+膝关节MRI名下。故要求同时摘出所针对的本次报告异常片段（report_span），须逐字见于
+该次报告，且与引文至少有 2 个连续相同字；引文直接指向本次检查（如鉴别诊断写“结合颈椎MRI
+故不考虑该诊断”）时，仅鉴别诊断类可改按关联医嘱名称中的部位（去掉模态与平扫等方式词）对应，否则
+该引文不算分析。失败时不固定，沿用主抽取原有判断。
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from .ct_order_course_consistency import _exam_key
 from .exam_lab_fact_extraction import (
     ExamLabEventFact,
     ExamLabTextProjection,
@@ -35,13 +41,15 @@ from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-06-01-05"
-SCHEMA_VERSION = "lx0609-exam-finding-analysis-v2"
+SCHEMA_VERSION = "lx0609-exam-finding-analysis-v3"
 ANALYSIS_TYPES = ("finding_linked", "management_linked", "prior_comparison", "targeted_differential")
 NON_ANALYSIS_TYPES = ("listing_only", "diagnosis_only", "generic_plan", "none")
 QUOTE_TYPES = (*ANALYSIS_TYPES, *NON_ANALYSIS_TYPES)
 # 去掉与报告原文重合（≥6 字连续片段）后，引文须仍有至少这么多字的自有内容。
 MIN_REPORT_OVERLAP = 6
 MIN_OWN_CHARS = 6
+MAX_SPAN_CHARS = 40
+MIN_SPAN_SHARED = 2
 PROTOCOL_ATTEMPTS = 2
 MAX_REPORT_CHARS = 2000
 MAX_COURSE_CHARS = 6000
@@ -64,6 +72,16 @@ class FindingAnalysisOutcome:
 
 def _normalize(text: str) -> str:
     return re.sub(r"\s+", "", str(text or ""))
+
+
+def _exam_sites(projection: ExamLabTextProjection) -> dict[int, tuple[str, ...]]:
+    """事件关联医嘱名称中的部位（如“MRI颈椎平扫”→“颈椎”）。"""
+    sites: dict[int, tuple[str, ...]] = {}
+    for position, event in enumerate(events_for_family(projection, "exam"), start=1):
+        sites[position] = tuple(dict.fromkeys(
+            key[1] for name in event.order_names if (key := _exam_key({"order_name": name})) is not None
+        ))
+    return sites
 
 
 def _targets(projection: ExamLabTextProjection) -> dict[int, tuple[str, tuple[str, ...]]]:
@@ -118,8 +136,11 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "（如“复查CT提示骨水泥弥散良好，指导功能锻炼”），归finding_linked；“结合颈椎MRI故不考虑该诊断”归"
         "targeted_differential；与本次报告异常无关的模板式鉴别诊断归none。"
         "同一份病程有多句时优先选算分析的那一句；确无时选最接近的一句并归入不算分析的类别，none时quote为空字符串。"
+        "quote_type不为none时，report_span必须是该事件report中被这句话针对的异常片段（逐字摘录，不超过40字）；"
+        "病程中针对的是其他检查（另一部位或另一份报告）的异常时，不能归入本事件的算分析类别，应归none。"
+        "none时report_span为空字符串。"
         f"严格JSON根对象只含schema_version和docs，schema_version={SCHEMA_VERSION}；"
-        "docs每项只含event_position、course_doc_ref、quote_type、quote；每个事件的每份病程必须且仅输出一次。\n"
+        "docs每项只含event_position、course_doc_ref、quote_type、quote、report_span；每个事件的每份病程必须且仅输出一次。\n"
         "EVENTS_JSON=" + json.dumps(events, ensure_ascii=False, separators=(",", ":"))
     )
 
@@ -142,11 +163,22 @@ def _own_chars(quote: str, report: str) -> int:
     return sum(1 for flag, char in zip(covered, text) if not flag and char.isalnum())
 
 
+def _shares_finding(span: str, quote: str) -> bool:
+    """报告片段与病程引文须有 MIN_SPAN_SHARED 个连续相同的字（仅计汉字与字母数字）。"""
+    left = "".join(char for char in _normalize(span).casefold() if char.isalnum())
+    right = "".join(char for char in _normalize(quote).casefold() if char.isalnum())
+    return any(left[index:index + MIN_SPAN_SHARED] in right
+               for index in range(len(left) - MIN_SPAN_SHARED + 1))
+
+
 def _parse(
     response: Mapping[str, Any],
     projection: ExamLabTextProjection,
     expected: Mapping[int, tuple[str, ...]],
     reports: Mapping[int, str],
+    sites: Mapping[int, tuple[str, ...]] | None = None,
+    *,
+    allow_partial: bool = False,
 ) -> dict[int, tuple[str, ...]]:
     choices = response.get("choices")
     if choices is not None:
@@ -162,18 +194,20 @@ def _parse(
     seen: set[tuple[int, str]] = set()
     analysed: dict[int, list[str]] = {position: [] for position in expected}
     for item in payload["docs"]:
-        if not isinstance(item, dict) or set(item) != {"event_position", "course_doc_ref", "quote_type", "quote"}:
+        if not isinstance(item, dict) or set(item) != {
+            "event_position", "course_doc_ref", "quote_type", "quote", "report_span",
+        }:
             raise ValueError("invalid doc schema")
         position, ref = item["event_position"], item["course_doc_ref"]
-        kind, quote = item["quote_type"], item["quote"]
+        kind, quote, span = item["quote_type"], item["quote"], item["report_span"]
         key = (position, ref)
         if type(position) is not int or position not in expected or ref not in expected[position] or key in seen:
             raise ValueError("invalid doc coverage")
-        if kind not in QUOTE_TYPES or type(quote) is not str:
+        if kind not in QUOTE_TYPES or type(quote) is not str or type(span) is not str:
             raise ValueError("invalid quote type")
         seen.add(key)
         if kind == "none":
-            if quote.strip():
+            if quote.strip() or span.strip():
                 raise ValueError("quote without element")
             continue
         normalized_quote = _normalize(quote)
@@ -181,17 +215,39 @@ def _parse(
             raise ValueError("missing quote")
         if normalized_quote not in _normalize(_course_text(projection, ref)):
             raise ValueError("quote not in course")
-        # 照抄报告结论的引文不能证明分析，不论模型如何归类。
-        if kind in ANALYSIS_TYPES and _own_chars(quote, reports[position]) >= MIN_OWN_CHARS:
-            analysed[position].append(ref)
-    if seen != {(position, ref) for position, refs in expected.items() for ref in refs}:
+        if kind in ANALYSIS_TYPES:
+            normalized_span = _normalize(span)
+            if not normalized_span or len(span) > MAX_SPAN_CHARS:
+                raise ValueError("missing report span")
+            if normalized_span not in _normalize(reports[position]):
+                raise ValueError("span not in report")
+            # 照抄报告结论的引文不能证明分析；针对的异常须与本次报告片段对得上。
+            # 按检查部位对应只用于鉴别诊断：其引文常只写“结合颈椎MRI”而不复述异常。其余类别仍须
+            # 与报告异常片段对得上（真实样本把“结合MRI左膝……可诊断”误归为异常联系）。
+            attributed = _shares_finding(span, quote) or (
+                kind == "targeted_differential"
+                and any(_shares_finding(site, quote) for site in (sites or {}).get(position, ()))
+            )
+            if _own_chars(quote, reports[position]) >= MIN_OWN_CHARS and attributed:
+                analysed[position].append(ref)
+    if not seen:
         raise ValueError("invalid doc coverage")
-    return {position: tuple(refs) for position, refs in analysed.items()}
+    complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
+    if not allow_partial and len(complete) != len(expected):
+        raise ValueError("invalid doc coverage")
+    # 末次仍漏核时按事件处理：已核到一份算分析即已分析；全部核到且均不算才判未分析；
+    # 其余事件不固定，单独沿用主抽取判断，不连累同批其他事件。
+    return {
+        position: tuple(refs) for position, refs in analysed.items()
+        if refs or position in complete
+    }
 
 
 _RETRY_HINTS = {
     "quote not in course": "quote必须逐字摘自该病程原文",
-    "quote without element": "quote_type为none时quote必须为空字符串",
+    "quote without element": "quote_type为none时quote与report_span必须为空字符串",
+    "missing report span": "算分析的类别必须给出不超过40字的本次报告异常片段report_span",
+    "span not in report": "report_span必须逐字摘自该事件的report",
     "missing quote": "quote_type不为none时必须给出不超过80字的连续原文quote",
 }
 
@@ -236,7 +292,9 @@ async def check_exam_finding_analysis(
             api_time += usage[3]
             analysed = _parse(
                 response, projection, model_expected,
-                {position: model_targets[position][0] for position in model_expected})
+                allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS,
+                reports={position: model_targets[position][0] for position in model_expected},
+                sites=_exam_sites(projection))
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
@@ -245,7 +303,8 @@ async def check_exam_finding_analysis(
             hint = _RETRY_HINTS.get(str(error), "每个事件的每份病程必须且仅输出一次，字段取规定值")
             attempt_prompt = prompt.replace(
                 "\nEVENTS_JSON=", f"\n上一次输出未通过校验：{hint}。请修正后重新输出完整JSON。\nEVENTS_JSON=", 1)
-    analysed_refs = {position: () for position in expected}
+    # 无可读病程的事件已核对、未见分析；有病程的事件以解析结果为准（漏核未定的事件不在其中）。
+    analysed_refs = {position: () for position in expected if position not in model_expected}
     analysed_refs.update(analysed)
     return FindingAnalysisOutcome("ready", analysed_refs, calls, prompt_tokens, completion_tokens, total_tokens,
                                   api_time or perf_counter() - started)
