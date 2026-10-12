@@ -132,3 +132,61 @@ def test_known_ascii_identity_after_json_escape_is_still_rejected():
     with pytest.raises(PatientPrivacyViolation):
         assert_no_known_identity(prompt, ["SYNTHETIC_ID_901"])
     assert_no_known_identity("130mg 1.5 Patient", ["1", "P"])
+
+
+class _FlakyDelegate:
+    def __init__(self, errors):
+        self.errors = list(errors)
+        self.prompts = []
+
+    async def generate(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        if self.errors:
+            raise self.errors.pop(0)
+        return {"content": "ok"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    __import__("httpx").ReadTimeout("timed out"),
+    __import__("httpx").ConnectError("refused"),
+    TimeoutError(),
+    RuntimeError("upstream_http_error upstream_http_status=503 upstream_error_summary=upstream_response_error"),
+    RuntimeError("upstream_http_error upstream_http_status=429 upstream_error_summary=rate_limit"),
+])
+async def test_transient_transport_error_is_retried_once(monkeypatch, error):
+    """用户口径（2026-10-11）：网络/上游临时错误重试 1 次。"""
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([error])
+    result = await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert result == {"content": "ok"} and len(delegate.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_transient_transport_error_fails_after_single_retry(monkeypatch):
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([TimeoutError(), TimeoutError(), TimeoutError()])
+    with pytest.raises(TimeoutError):
+        await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert len(delegate.prompts) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    ValueError("bad argument"),
+    RuntimeError("upstream_http_error upstream_http_status=400 upstream_error_summary=invalid_request"),
+    RuntimeError("upstream_http_error upstream_http_status=4290 upstream_error_summary=x"),
+    RuntimeError("dry run: outbound request intercepted after privacy gate"),
+])
+async def test_deterministic_errors_are_not_retried(monkeypatch, error):
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([error])
+    with pytest.raises(type(error)):
+        await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert len(delegate.prompts) == 1

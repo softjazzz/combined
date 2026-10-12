@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+
+import httpx
 
 
 _PERSON_NAME = r"(?:[\u4e00-\u9fff·]{2,12}|[A-Za-z][A-Za-z .'-]{1,48})"
@@ -413,6 +416,22 @@ def assert_no_known_identity_in_model_request(
         ) from None
 
 
+# 用户口径（2026-10-11）：网络/上游临时错误重试 1 次，间隔片刻；其余错误不重试。
+TRANSPORT_RETRY_DELAY_SECONDS = 2.0
+_RETRYABLE_UPSTREAM_STATUS = re.compile(r"upstream_http_status=(?:429|5\d\d|unknown)(?!\w)")
+
+
+def _is_transient_transport_error(error: BaseException) -> bool:
+    """只认定超时、连接失败和上游 429/5xx；参数、隐私、4xx 等确定性错误不重试。"""
+    if isinstance(error, (httpx.TransportError, TimeoutError, asyncio.TimeoutError, ConnectionError)):
+        return True
+    return (
+        isinstance(error, RuntimeError)
+        and str(error).startswith("upstream_http_error")
+        and _RETRYABLE_UPSTREAM_STATUS.search(str(error)) is not None
+    )
+
+
 @dataclass(frozen=True)
 class _Luxian0609PrivacyRedactingLLMClient:
     delegate: Any = field(repr=False)
@@ -433,6 +452,12 @@ class _Luxian0609PrivacyRedactingLLMClient:
         redacted = redact_luxian_0609_patient_privacy(prompt)
         assert_no_known_identity(redacted, identities)
         assert_no_known_identity_in_model_request(kwargs, identities)
+        try:
+            return await self.delegate.generate(redacted, **kwargs)
+        except Exception as error:
+            if not _is_transient_transport_error(error):
+                raise
+        await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
         return await self.delegate.generate(redacted, **kwargs)
 
     def supports_strict_json_schema(self) -> bool:
