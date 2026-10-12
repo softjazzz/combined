@@ -28,6 +28,7 @@ from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
+from .exam_result_record_check import apply_result_record, check_exam_result_record
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -2621,8 +2622,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             text_facts = None
                     if text_facts is not None:
                         # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
-                        # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）。两步互不依赖，
-                        # 并发调用；任一失败时该规则沿用主抽取原判断。
+                        # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
+                        # 是否记录由逐份病程核对固定。各步互不依赖，并发调用；任一失败时该规则沿用主抽取原判断。
                         checks = []
                         if ("LX0609-06-01-05" in eligible_rule_ids
                                 and "LX0609-06-01-05" not in isolated_rule_failures):
@@ -2630,6 +2631,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         if ("LX0609-06-01-02" in eligible_rule_ids
                                 and "LX0609-06-01-02" not in isolated_rule_failures):
                             checks.append((check_exam_reason(projection, llm_client), apply_exam_reason))
+                        if ("LX0609-06-01-04" in eligible_rule_ids
+                                and "LX0609-06-01-04" not in isolated_rule_failures):
+                            checks.append((check_exam_result_record(projection, llm_client), apply_result_record))
                         if checks:
                             check_outcomes = await asyncio.gather(*(check for check, _ in checks))
                             for (_, apply), check_outcome in zip(checks, check_outcomes):

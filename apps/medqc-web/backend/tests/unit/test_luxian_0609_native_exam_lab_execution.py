@@ -498,7 +498,7 @@ async def test_typed_strict_schema_client_receives_dynamic_schema_on_first_and_i
         decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
     assert len(client.response_formats) == 2
     first_schema = client.response_formats[0]["json_schema"]
     retry_schema = client.response_formats[1]["json_schema"]
@@ -4738,7 +4738,7 @@ async def test_typed_controlled_triggers_call_each_selected_rule_once_with_cropp
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -4793,7 +4793,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     assert [item.final_state.value for item in reduced] == ["compliant"] * 5
     assert all(item.reason_code != "snapshot_mismatch" for item in reduced)
     assert result.total_tokens == 110
-    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
+    assert len(client.prompts) == 3  # 含 010 检查前原因、06-01-04 结果记录核对各 1 次（替身未作答，回退主抽取）
     assert all("SHOULD_NOT_REACH_PROMPT" not in prompt for prompt in client.prompts)
     assert all("FULL_CHART" not in prompt for prompt in client.prompts)
     assert all("主执行规则" not in prompt for prompt in client.prompts)
@@ -4895,9 +4895,9 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 第 2 次为 06-01-04 结果记录核对
     assert "event_position" in client.prompts[0]
     assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]
@@ -6467,7 +6467,7 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
         },
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
     assert not result.parse_failure_kinds
     display_facts = dict(result.customer_display_facts)
     for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05"):
