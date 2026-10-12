@@ -9142,3 +9142,47 @@ async def test_no_usable_candidate_with_technical_source_is_technical_without_se
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert result.llm_call_count == 1
+
+
+@pytest.mark.parametrize("order_id,expected_incomplete", [
+    ("V||43+V||43", False),
+    ("V||44^V||43", False),
+    ("V||99", True),
+    ("", True),
+])
+def test_textless_exam_master_header_linked_to_known_order_does_not_mark_scope_incomplete(
+    order_id, expected_incomplete,
+):
+    """真实样本：检查主记录常只有检查号、医嘱号、科室和时间，名称与结果在医嘱和明细报告中。
+
+    该表头行无法单独承载执行事实；医嘱号均能在本次医嘱中找到时，不应据此把检查来源降为不完整，
+    否则会诊检验建议明确未执行时会被错退为资料不足。医嘱号缺失或找不到时仍保守处理。
+    """
+
+    source_rows = {
+        "inpat_nondrug_order": tuple(
+            {"order_id": f"V||{seq}", "order_name": name, "start_time": "2026-07-20 08:00:00"}
+            for seq, name in ((43, "胸部CT平扫"), (44, "薄层扫描(加收)"))
+        ),
+        "exam_master": ({
+            "exam_id": "V||44^V||43", "order_id": order_id,
+            "performed_dept": "放射科", "report_time": "2026-07-20 10:00:00",
+        },),
+    }
+    session = _window_session(rows_by_source=source_rows)
+
+    projection = episode._candidate_documents(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        stay_window=episode._resolve_execution_stay_window(
+            evidence_materials=session.materials,
+            evidence_snapshot=session.snapshot,
+        ),
+    )
+
+    assert ("exam_master" in projection.source_incomplete_keys) is expected_incomplete
+    assert not [item for item in projection.candidates if item.source_key == "exam_master"]

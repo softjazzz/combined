@@ -110,6 +110,9 @@ _COURSE_EXECUTION_SOURCE_KEYS = frozenset((
     "daily_course_record",
     "senior_course_record",
 ))
+# 检查/检验主记录是表头行；客户源表常只有检查号、医嘱号、科室和时间，名称与结果分别在
+# 医嘱和明细报告中。无文字但医嘱号均能在本次医嘱中找到的表头行，其内容已由医嘱候选代表。
+_MASTER_HEADER_SOURCE_KEYS = frozenset(("exam_master", "labtest_master"))
 _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
     *_COURSE_EXECUTION_SOURCE_KEYS,
     "consultation_record",
@@ -1253,6 +1256,8 @@ def _candidate_documents(
     source_complete_keys: set[str] = set()
     source_incomplete_keys: set[str] = set()
     source_technical = False
+    # 已读取医嘱的医嘱号（截断前）；_EXECUTION_SOURCE_KEYS 中医嘱来源排在主记录之前。
+    observed_order_ids: set[str] = set()
     source_keys = (
         _SNAPSHOT_EXECUTION_SOURCE_KEYS
         if evidence_materials is not None and evidence_snapshot is not None
@@ -1325,6 +1330,10 @@ def _candidate_documents(
             except _SourceTechnical:
                 source_technical = True
                 continue
+        if is_order_source:
+            observed_order_ids.update(
+                order_id for row in rows if (order_id := _clean(row.get("order_id")))
+            )
         source_is_complete = True
         if evidence_snapshot is not None:
             observation = next(
@@ -1369,6 +1378,12 @@ def _candidate_documents(
                 # 无标题、无正文的病程占位行不可能承载会诊执行事实；忽略该
                 # 空工件，不能仅因它同时缺时间就把完整病程来源降为不完整。
                 continue
+            if not text and source_key in _MASTER_HEADER_SOURCE_KEYS:
+                linked_order_ids = {
+                    part for part in re.split(r"[+^]", _clean(row.get("order_id"))) if part
+                }
+                if linked_order_ids and linked_order_ids <= observed_order_ids:
+                    continue
             if observed_time is None or not text or len(text) > text_limit:
                 source_is_complete = False
                 continue
