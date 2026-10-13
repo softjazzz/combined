@@ -36,6 +36,24 @@ from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
+@pytest.fixture(autouse=True)
+def _measure_check_all_evidenced(monkeypatch):
+    """本模块验证会诊一、二阶段合同；措施逐项核对由 test_luxian_0609_consultation_measure_check 覆盖。
+    脚本化客户端未准备措施核对的回答：仍照常发出该次调用（调用数、用量与提示词记录不变），
+    结果固定为“每项措施均有执行证据”，避免核对失败改判资料不足。"""
+    real_check = episode.check_consultation_measures
+
+    async def _all_evidenced(*, completed, **kwargs):
+        outcome = await real_check(completed=completed, **kwargs)
+        return replace(
+            outcome,
+            state="ready",
+            missing_measures={item.recommendation.recommendation_ref: () for item in completed},
+        )
+
+    monkeypatch.setattr(episode, "check_consultation_measures", _all_evidenced)
+
+
 
 class _Client:
     def __init__(self, payload):

@@ -1,5 +1,6 @@
 """023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施既无医嘱也无病程记录即不合规。"""
 
+import asyncio
 import json
 from datetime import datetime
 
@@ -16,7 +17,12 @@ from app.services.luxian_0609.consultation_measure_check import (
 RECOMMENDATION = "电针、头皮针、低频、关节松动术、偏瘫肢体综合训练"
 
 
-def _setup():
+BASE_ORDERS = ("电针；治疗", "头皮针；治疗", "低频脉冲治疗(功能性电刺激治疗)；治疗")
+# 后两项措施各自的执行医嘱：正常合规用例不能共用电刺激治疗的引文。
+FULL_ORDERS = (*BASE_ORDERS, "关节松动术；治疗", "偏瘫肢体综合训练；治疗")
+
+
+def _setup(orders=BASE_ORDERS):
     completed = (
         episode._CompletedRecommendation(
             "consultation_record-1",
@@ -33,7 +39,7 @@ def _setup():
             episode._ObservedTime(datetime(2026, 7, 20, 9), True),
             text,
         )
-        for index, text in enumerate(("电针；治疗", "头皮针；治疗", "低频脉冲治疗(功能性电刺激治疗)；治疗"), start=1)
+        for index, text in enumerate(orders, start=1)
     )
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
     alias = episode._prompt_alias_by_ref(candidates, allowed)
@@ -77,8 +83,8 @@ def _measures(alias, *, include_missing=True, bad=None, generic=()):
             "generic": [{"recommendation_ref": "consultation_record-1#r1", "text": text} for text in generic]}
 
 
-async def _check(client):
-    completed, candidates, allowed, alias = _setup()
+async def _check(client, orders=BASE_ORDERS):
+    completed, candidates, allowed, alias = _setup(orders)
     return await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias, llm_client=client,
     )
@@ -99,23 +105,43 @@ async def test_unexecuted_measure_turns_compliant_into_non_compliant():
     assert gap == ("data_gap", "candidate_scope_incomplete")
 
 
+def _fully_evidenced(alias):
+    answer = _measures(alias, include_missing=False)
+    answer["measures"] += [
+        {"recommendation_ref": "consultation_record-1#r1", "measure": measure,
+         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure}
+        for index, measure in enumerate(UNEXECUTED, start=4)
+    ]
+    return answer
+
+
+def _final(outcome):
+    return apply_measure_check(("compliant", "requirement_satisfied"), outcome,
+                               relevant_source_incomplete=lambda ref: False)
+
+
+class _TimeoutClient:
+    def __init__(self):
+        self.calls = 0
+
+    async def generate(self, prompt):
+        self.calls += 1
+        raise asyncio.TimeoutError("model timeout")
+
+
 @pytest.mark.asyncio
 async def test_all_measures_evidenced_keeps_compliant():
-    completed, candidates, allowed, alias = _setup()
-    evidenced = _measures(alias, include_missing=False)
-    evidenced["measures"] += [
-        {"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "功能性电刺激治疗"}
-        for measure in UNEXECUTED
-    ]
-    outcome = await _check(_Client([evidenced]))
+    _, _, _, alias = _setup(FULL_ORDERS)
+    answer = _fully_evidenced(alias)
+    # 五项措施各有一条不同的执行医嘱。
+    assert len({item["evidence_ref"] for item in answer["measures"]}) == 5
+    outcome = await _check(_Client([answer]), FULL_ORDERS)
     assert outcome.state == "ready" and not outcome.has_missing and outcome.llm_call_count == 1
-    assert apply_measure_check(("compliant", "requirement_satisfied"), outcome,
-                               relevant_source_incomplete=lambda ref: False) == ("compliant", "requirement_satisfied")
+    assert _final(outcome) == ("compliant", "requirement_satisfied")
 
 
 @pytest.mark.asyncio
-async def test_omitted_measures_retry_with_uncovered_text_then_count_as_missing():
+async def test_omitted_measures_retry_with_uncovered_text_then_resolve_or_become_data_gap():
     """复核反例（2026-10-12）：5 项措施只拆出有证据的前 3 项时，原实现判合规。"""
     _, _, _, alias = _setup()
     omitted = _measures(alias, include_missing=False)
@@ -123,11 +149,38 @@ async def test_omitted_measures_retry_with_uncovered_text_then_count_as_missing(
     outcome = await _check(client)
     assert outcome.llm_call_count == 2 and outcome.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
     assert "关节松动术" in client.prompts[1].split("RECOMMENDATIONS_JSON=")[0]
-    # 两次都漏拆：漏拆段落未经证据核对，按缺项计，不再放行为合规。
+    # 两次都漏拆：漏拆段落未经证据核对，既不算未执行，也不沿用合规。
     twice = await _check(_Client([omitted, omitted]))
-    assert twice.state == "ready" and twice.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
-    assert apply_measure_check(("compliant", "requirement_satisfied"), twice,
-                               relevant_source_incomplete=lambda ref: False) == ("non_compliant", "requirement_violated")
+    assert twice.state == "unresolved" and twice.llm_call_count == 2 and not twice.has_missing
+    assert _final(twice) == ("data_gap", "semantic_extraction_unresolved")
+
+
+@pytest.mark.asyncio
+async def test_model_timeout_does_not_keep_compliant():
+    client = _TimeoutClient()
+    outcome = await _check(client)
+    assert outcome.state == "failed" and client.calls == 1 and outcome.llm_call_count == 1
+    assert _final(outcome) == ("data_gap", "semantic_extraction_unresolved")
+
+
+@pytest.mark.asyncio
+async def test_outcome_matrix_evidenced_explicit_none_omitted_and_timeout():
+    """同一建议：全部有证据→合规；明确无证据→不合规；漏拆或超时→资料不足。"""
+    _, _, _, full_alias = _setup(FULL_ORDERS)
+    _, _, _, alias = _setup()
+    omitted = _measures(alias, include_missing=False)
+    results = {
+        "evidenced": _final(await _check(_Client([_fully_evidenced(full_alias)]), FULL_ORDERS)),
+        "explicit_none": _final(await _check(_Client([_measures(alias)]))),
+        "omitted": _final(await _check(_Client([omitted, omitted]))),
+        "timeout": _final(await _check(_TimeoutClient())),
+    }
+    assert results == {
+        "evidenced": ("compliant", "requirement_satisfied"),
+        "explicit_none": ("non_compliant", "requirement_violated"),
+        "omitted": ("data_gap", "semantic_extraction_unresolved"),
+        "timeout": ("data_gap", "semantic_extraction_unresolved"),
+    }
 
 
 @pytest.mark.asyncio
@@ -159,18 +212,20 @@ async def test_generic_instructions_listed_verbatim_do_not_count_as_omission():
     ("scope", "evidence_ref只能取"),
     ("quote", "quote必须逐字摘自"),
 ])
-async def test_unverifiable_output_retries_once_then_keeps_original_status(bad, hint):
+async def test_unverifiable_output_retries_once_then_becomes_data_gap(bad, hint):
     _, _, _, alias = _setup()
     client = _Client([_measures(alias, bad=bad), _measures(alias)])
     outcome = await _check(client)
     assert outcome.state == "ready" and outcome.llm_call_count == 2 and hint in client.prompts[1]
     failed = await _check(_Client([_measures(alias, bad=bad), _measures(alias, bad=bad)]))
     assert failed.state == "failed"
-    assert apply_measure_check(("compliant", "requirement_satisfied"), failed,
-                               relevant_source_incomplete=lambda ref: False) == ("compliant", "requirement_satisfied")
+    assert _final(failed) == ("data_gap", "semantic_extraction_unresolved")
 
 
 def test_non_compliant_or_gap_status_is_never_changed():
-    outcome = MeasureCheckOutcome("ready", {"r": ("关节松动术",)})
-    for status in (("non_compliant", "requirement_violated"), ("data_gap", "linkage_unresolved")):
-        assert apply_measure_check(status, outcome, relevant_source_incomplete=lambda ref: False) == status
+    for outcome in (MeasureCheckOutcome("ready", {"r": ("关节松动术",)}), MeasureCheckOutcome("failed", {}),
+                    MeasureCheckOutcome("unresolved", {})):
+        for status in (("non_compliant", "requirement_violated"), ("data_gap", "linkage_unresolved")):
+            assert apply_measure_check(status, outcome, relevant_source_incomplete=lambda ref: False) == status
+    # 未调用（无会诊建议或无模型客户端）不改变原判定。
+    assert _final(MeasureCheckOutcome("skipped", {})) == ("compliant", "requirement_satisfied")

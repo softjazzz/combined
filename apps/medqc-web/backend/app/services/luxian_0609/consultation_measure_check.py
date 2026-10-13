@@ -10,12 +10,15 @@
 none。Python 核验：措施须逐字见于建议原文；证据须在允许范围内且引文逐字见于该候选。
 任一措施无证据即缺项。拆分规则：一个检查、治疗、操作、会诊、转科各算一项；一张中药方
 （含加减）算一项，药材与剂量不单列；“注意休息”“密切观察”“必要时…”等笼统嘱咐不算措施。
-模型只给拆分与证据，不下质控结论；失败时不改变原判定。
+模型只给拆分与证据，不下质控结论。
 
 复核反例（2026-10-12）：建议列 5 项措施、证据只有前 3 项，模型只拆出前 3 项时程序仍判合规。
 故模型须把建议中的笼统嘱咐另列在 generic，程序核验覆盖：从建议原文中去掉全部措施与笼统嘱咐、
 再去掉“建议”“给予”“治疗”等引导字词后，按标点切开，剩余任一段仍有 2 个以上字即为漏拆，
-带上漏拆原文重试一次；末次仍漏拆的段落按无执行证据的措施计入缺项。
+带上漏拆原文重试一次。
+复核意见（2026-10-12 第二轮）：漏拆或核对失败只说明模型没给出可靠拆分，不能等同于“措施未执行”，
+也不能沿用原合规结论。故末次仍漏拆为 unresolved、调用失败或协议违规为 failed，原判合规时
+二者都改判资料不足（semantic_extraction_unresolved）。
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ _SEGMENT_SPLIT = re.compile(r"[、，,；;。.：:\n（）()\[\]【】/|]+")
 
 @dataclass(frozen=True)
 class MeasureCheckOutcome:
-    state: str  # ready / skipped / failed
+    state: str  # ready / skipped / failed / unresolved（末次仍漏拆）
     # 建议 ref -> 无执行证据的措施原文。
     missing_measures: Mapping[str, tuple[str, ...]]
     llm_call_count: int = 0
@@ -263,14 +266,9 @@ async def check_consultation_measures(
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
-                if isinstance(error, _CoverageGap):
-                    # 末次仍漏拆：漏拆段落未经执行证据核对，按无证据措施计入缺项。
-                    missing = {
-                        ref: tuple(dict.fromkeys((*values, *error.uncovered.get(ref, ()))))
-                        for ref, values in error.missing.items()
-                    }
-                    break
-                return MeasureCheckOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
+                # 末次仍漏拆：漏拆段落未经执行证据核对，既不算未执行也不算已执行。
+                state = "unresolved" if isinstance(error, _CoverageGap) else "failed"
+                return MeasureCheckOutcome(state, {}, calls, prompt_tokens, completion_tokens,
                                            total_tokens, api_time or perf_counter() - started)
             if isinstance(error, _CoverageGap):
                 segments = "；".join(dict.fromkeys(
@@ -291,8 +289,12 @@ def apply_measure_check(
     *,
     relevant_source_incomplete: Callable[[str], bool],
 ) -> tuple[str, str]:
-    """原判定合规而存在无证据措施时改判：来源完整为不合规，来源不全为资料不足。"""
-    if status[0] != "compliant" or outcome.state != "ready" or not outcome.has_missing:
+    """原判定合规时：存在无证据措施改判不合规（来源不全为资料不足）；核对失败或漏拆改判资料不足。"""
+    if status[0] != "compliant" or outcome.state == "skipped":
+        return status
+    if outcome.state in {"failed", "unresolved"}:
+        return ("data_gap", "semantic_extraction_unresolved")
+    if not outcome.has_missing:
         return status
     if any(relevant_source_incomplete(ref) for ref, values in outcome.missing_measures.items() if values):
         return ("data_gap", "candidate_scope_incomplete")

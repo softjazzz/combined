@@ -4777,7 +4777,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 and llm_client is not None
             ):
                 # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
-                # 只对原判合规者逐项核对；核对失败不改变原判定。
+                # 只对原判合规者逐项核对；核对失败或漏拆改判资料不足，不沿用合规。
                 measure_candidates = execution_candidate_projection.candidates
                 _, measure_allowed_refs = _execution_prompt(
                     completed=completed_recommendations,
