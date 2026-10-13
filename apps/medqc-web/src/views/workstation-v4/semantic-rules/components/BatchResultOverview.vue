@@ -112,9 +112,10 @@ defineProps<{
   backdrop-filter: blur(18px);
 }
 
+/* 三栏只在宽屏使用；列宽可收缩，避免窄窗口下网格溢出被裁切 */
 .result-overview-card-main {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) auto minmax(430px, 0.92fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.92fr);
   gap: 20px;
   align-items: center;
 }
@@ -287,5 +288,41 @@ defineProps<{
   border-color: rgba(239, 68, 68, 0.2);
   background: rgba(239, 68, 68, 0.055);
   color: #b42318;
+}
+
+/* 常用笔记本/窄桌面：任务信息与指标同排，状态分布另起一行 */
+@media (max-width: 1439px) {
+  .result-overview-card-main {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .result-overview-status-block {
+    grid-column: 1 / -1;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    border-left: none;
+    padding-top: 14px;
+    padding-left: 0;
+  }
+}
+
+/* 窄窗口：单列堆叠，指标三等分 */
+@media (max-width: 767px) {
+  .result-overview-card-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .result-review-overview-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .result-review-overview-stats div {
+    min-width: 0;
+    padding: 0 12px;
+  }
+
+  .result-review-overview-stats div:first-child {
+    border-left: none;
+    padding-left: 0;
+  }
 }
 </style>

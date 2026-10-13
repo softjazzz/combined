@@ -10,6 +10,7 @@
 .drawer-head {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -24,8 +25,10 @@
   padding-left: 24px;
 }
 
+/* 标题区不参与挤压：按钮放不下时整行换到下一行，避免标题被挤成竖排 */
 .drawer-title-group {
   display: flex;
+  flex: 1 0 auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -57,12 +60,31 @@
   font-size: 20px;
   font-weight: 700;
   color: #0f172a;
+  white-space: nowrap;
+}
+
+.drawer-eyebrow,
+.drawer-back-button {
+  white-space: nowrap;
 }
 
 .drawer-actions {
-  display: inline-flex;
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+}
+
+.drawer-actions > :deep(.ant-btn),
+.drawer-actions > :deep(.ant-dropdown-trigger) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .drawer-body {
@@ -1935,9 +1957,10 @@
   font-size: 11px;
 }
 
+/* 修改建议块按需出现：用 auto-fit 让现有区块铺满整行，避免缺块时右侧留空；窄时自动换行 */
 .issue-at-a-glance {
   display: grid;
-  grid-template-columns: 1.1fr 1.4fr 1.1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
   margin: 12px 0;
 }
@@ -3421,6 +3444,14 @@
 .copy-evidence-column blockquote,
 .evidence-chain-quote {
   color: rgba(29, 29, 31, 0.82);
+}
+
+/* 非宽屏时证据来源与原文上下排列，避免来源在窄列中逐字换行 */
+@media (max-width: 1439px) {
+  .issue-evidence-fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
 }
 
 @media (max-width: 767px) {
