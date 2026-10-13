@@ -202,3 +202,22 @@ async def test_final_partial_coverage_decides_per_event_instead_of_failing_whole
     # 末次仍漏核且已核到的不算分析 → 该事件不固定，沿用主抽取。
     outcome = await check_exam_finding_analysis(projection, _Client([only(second, "none")] * 2))
     assert outcome.state == "ready" and outcome.analysed_refs == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", ["L4/5椎间盘突出，拟行手术。", "L4/5椎间盘突出，拟行手术治疗。"])
+async def test_short_explicit_management_after_restated_finding_counts(quote):
+    """复核反例（2026-10-12）：原 6 字门槛把“拟行手术”判为照抄，多写“治疗”两字才算分析。"""
+    projection = _projection(quote)
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "management_linked", quote)]))
+    assert outcome.analysed_refs == {1: (ref,)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", ["腰椎MRI示L4/5椎间盘突出，椎管狭窄", "复查MRI提示L4/5椎间盘突出，椎管狭窄"])
+async def test_report_lead_words_do_not_make_copied_conclusion_count(quote):
+    projection = _projection(quote + "。继续当前治疗。")
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "finding_linked", quote)]))
+    assert outcome.analysed_refs == {1: ()}

@@ -13,8 +13,10 @@
 
 用户口径（2026-10-12）补充：以诊断名指代报告异常并据此定方案、解读复查结果并给出
 处置、用本次报告排除或确认具体诊断，均算分析；只按诊断列常规治疗而未提及该异常不算。
-Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段后须仍有实质内容，照抄
-报告结论的引文一律不算分析。
+Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段、以及“CT示”“提示”“结合”
+这类只用来引出报告的字词后，须仍有至少 3 个字的自有内容，照抄报告结论的引文一律不算分析。
+原门槛为 6 字，复核反例“L4/5椎间盘突出，拟行手术。”只剩“拟行手术”4 字被误拒，多写“治疗”两字
+即通过；门槛只用于识别照抄，类别是否成立仍由归类决定。
 同一份病程常被多次检查共用，真实样本出现把胸部CT的“右肺小结节，请胸外科会诊”挂到
 膝关节MRI名下。故要求同时摘出所针对的本次报告异常片段（report_span），须逐字见于
 该次报告，且与引文至少有 2 个连续相同字；引文直接指向本次检查（如鉴别诊断写“结合颈椎MRI
@@ -45,9 +47,14 @@ SCHEMA_VERSION = "lx0609-exam-finding-analysis-v3"
 ANALYSIS_TYPES = ("finding_linked", "management_linked", "prior_comparison", "targeted_differential")
 NON_ANALYSIS_TYPES = ("listing_only", "diagnosis_only", "generic_plan", "none")
 QUOTE_TYPES = (*ANALYSIS_TYPES, *NON_ANALYSIS_TYPES)
-# 去掉与报告原文重合（≥6 字连续片段）后，引文须仍有至少这么多字的自有内容。
+# 去掉与报告原文重合（≥6 字连续片段）及引出报告的字词后，引文须仍有至少这么多字的自有内容。
 MIN_REPORT_OVERLAP = 6
-MIN_OWN_CHARS = 6
+MIN_OWN_CHARS = 3
+# 只用来引出或复述报告的字词：照抄报告时常见的前后缀，不构成分析内容。按长度从长到短去除。
+_REPORT_LEAD_WORDS = (
+    "辅助检查", "检查结果", "我院", "本院", "外院", "平扫", "增强", "复查", "提示", "显示", "可见",
+    "报告", "结果", "检查", "结合", "考虑", "MRI", "CT", "示", "见",
+)
 MAX_SPAN_CHARS = 40
 MIN_SPAN_SHARED = 2
 PROTOCOL_ATTEMPTS = 2
@@ -146,7 +153,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
 
 
 def _own_chars(quote: str, report: str) -> int:
-    """引文中不属于报告原文（≥MIN_REPORT_OVERLAP 字连续重合片段）的字数。"""
+    """引文中不属于报告原文（≥MIN_REPORT_OVERLAP 字连续重合片段）、也不是引出报告字词的字数。"""
     text, source = _normalize(quote), _normalize(report)
     covered = [False] * len(text)
     index = 0
@@ -160,7 +167,10 @@ def _own_chars(quote: str, report: str) -> int:
             index += length
         else:
             index += 1
-    return sum(1 for flag, char in zip(covered, text) if not flag and char.isalnum())
+    own = "".join(char if not flag else "|" for flag, char in zip(covered, text))
+    for word in _REPORT_LEAD_WORDS:
+        own = re.sub(re.escape(word), "|", own, flags=re.IGNORECASE)
+    return sum(1 for char in own if char.isalnum())
 
 
 def _shares_finding(span: str, quote: str) -> bool:
