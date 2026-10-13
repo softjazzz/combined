@@ -730,29 +730,26 @@ async function handleStageRecordAction(record: PatientRecord) {
     detailMainTab.value = 'records'
     return
   }
+  // 进入质控页只定位到对应面板并展示已有结果；新质控由用户点击“开始分析”触发。
   if (action === 'qc_coding') {
     detailMainTab.value = 'frontpage'
     assistPanelVisible.value = true
     assistTab.value = 'coding'
-    assistViewRef.value?.runCodingQC()
     return
   }
   if (action === 'qc_frontpage') {
     detailMainTab.value = 'frontpage'
     assistPanelVisible.value = true
     assistTab.value = 'form'
-    assistViewRef.value?.runFormQC()
     return
   }
   if (action === 'qc_settlement') {
     detailMainTab.value = 'settlement'
-    if (!isDischarged.value) {
-      message.warning('当前病历未出院，暂不可执行结算质控')
-      return
-    }
-    await runSettlementQc()
     assistPanelVisible.value = true
     assistTab.value = 'cost'
+    if (!isDischarged.value) {
+      message.warning('当前病历未出院，暂不可执行结算质控')
+    }
     return
   }
 }
@@ -2134,15 +2131,6 @@ useWorkstationRouteEffects({
   handleGenerateFrontpage: async () => {
     await Promise.resolve(handleGenerateFrontpage())
   },
-  runCodingQc: () => {
-    assistViewRef.value?.runCodingQC()
-  },
-  runFormQc: () => {
-    assistViewRef.value?.runFormQC()
-  },
-  isDischarged: isDischarged.value,
-  runSettlementQc,
-  getSettlementLoading: () => settlementLoading.value,
   showWarning: (msg) => {
     message.warning(msg)
   },
