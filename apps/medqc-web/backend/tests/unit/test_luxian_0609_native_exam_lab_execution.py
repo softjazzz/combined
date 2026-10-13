@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -67,6 +68,18 @@ _TYPED_SOURCE_KEYS = (
     "inpat_registration",
     "admission_record",
 )
+
+
+class _TwoWayBarrier:
+    def __init__(self) -> None:
+        self.arrivals = 0
+        self._released = asyncio.Event()
+
+    async def arrive(self) -> None:
+        self.arrivals += 1
+        if self.arrivals == 2:
+            self._released.set()
+        await asyncio.wait_for(self._released.wait(), timeout=0.5)
 
 
 
@@ -6755,3 +6768,124 @@ def test_exam_prompt_carries_2026_10_11_reason_incidental_and_differential_polic
     assert "完善胸部CT了解肺部情况" in prompt
     assert "与本次主诉、入院诊断及检查目的无关的附带发现" in prompt
     assert "模板式鉴别诊断不算" in prompt
+
+
+@pytest.mark.asyncio
+async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch):
+    """06-01-01 与 06-01-05 的前置语义读取互不依赖，不能串成关键路径。"""
+
+    from app.services.luxian_0609.exam_finding_relevance import (
+        FindingRelevanceOutcome,
+    )
+
+    barrier = _TwoWayBarrier()
+
+    async def classify_relevance(*_args, **_kwargs):
+        await barrier.arrive()
+        return FindingRelevanceOutcome(
+            "ready",
+            {1: "positive"},
+            llm_call_count=1,
+            prompt_tokens=10,
+            completion_tokens=2,
+            total_tokens=12,
+            api_time=1.0,
+        )
+
+    monkeypatch.setattr(
+        exam_lab,
+        "classify_exam_finding_relevance",
+        classify_relevance,
+    )
+
+    class CtClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, prompt, **_kwargs):
+            self.calls += 1
+            assert "unmatched_current_clause_ids" in prompt
+            await barrier.arrive()
+            return {
+                "content": json.dumps(
+                    {
+                        "schema_version": "ct-order-course-facts-v3",
+                        "events": [
+                            {
+                                "event_position": 1,
+                                "order_position": 1,
+                                "record_state": "consistent_description",
+                                "clause_ids": ["C1"],
+                            }
+                        ],
+                        "unmatched_current_clause_ids": [],
+                    }
+                ),
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                },
+                "_api_time": 1.0,
+            }
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        nondrug_order_rows=(
+            {
+                "order_id": "ORDER-1",
+                "order_name": "胸部CT",
+                "order_status": "新开",
+            },
+        ),
+        exam_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "order_id": "ORDER-1",
+                "exam_name": "胸部CT",
+                "exam_time": "2026-04-26 08:00:00",
+            },
+        ),
+        exam_report_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "右肺上叶结节。",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "COURSE-1",
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": (
+                    "胸部CT提示右肺上叶结节，结合持续咳嗽考虑感染，"
+                    "予抗感染治疗。"
+                ),
+            },
+        ),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-30"},),
+    )
+    client = CtClient()
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-06-01-01", "LX0609-06-01-05"),
+        wrapper_rules=(),
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-06-01-01", "LX0609-06-01-05"),
+    )
+
+    assert barrier.arrivals == 2
+    assert client.calls == 1
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 132
+    assert [item.rule_id for item in result.decisions] == [
+        "LX0609-06-01-01",
+        "LX0609-06-01-05",
+    ]
+    assert [rule_id for rule_id, _ in result.customer_display_facts] == [
+        "LX0609-06-01-01",
+        "LX0609-06-01-05",
+    ]

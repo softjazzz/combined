@@ -1987,6 +1987,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
     api_time = 0.0
     parse_failure_kinds: list[str] = []
     model_rule_count = first_success_count = retried_rule_count = recovered_rule_count = 0
+    ct_review: Any | None = None
+    ct_response_task: asyncio.Task[Mapping[str, Any]] | None = None
+    ct_model_failure: str | None = None
+    ct_display_insert_index = 0
     # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
     display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
 
@@ -2067,57 +2071,37 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 )
                 typed_processed.add(rule_id)
             if CT_CONSISTENCY_RULE in typed_requested:
-                review = build_ct_review_input(
+                ct_review = build_ct_review_input(
                     ledger=handbook_ledger, snapshot=evidence_snapshot,
                     materials=evidence_materials,
                     horizon_basis=horizon_basis, horizon=horizon_moment,
                 )
-                payload = None
-                model_failure = None
-                if review.needs_model:
+                ct_display_insert_index = len(customer_display_facts)
+                typed_processed.add(CT_CONSISTENCY_RULE)
+                if ct_review.needs_model:
                     model_rule_count += 1
                     if llm_client is None:
-                        model_failure = "exam_lab_llm_failure"
+                        ct_model_failure = "exam_lab_llm_failure"
                     else:
                         llm_call_count += 1
-                        try:
+
+                        async def generate_ct_response() -> Mapping[str, Any]:
                             if _supports_strict_json_schema(llm_client):
-                                response = await cast(_SinglePassCtClient, llm_client).generate(
-                                    build_ct_fact_prompt(review),
-                                    response_format=ct_fact_response_format(review),
+                                return await cast(_SinglePassCtClient, llm_client).generate(
+                                    build_ct_fact_prompt(ct_review),
+                                    response_format=ct_fact_response_format(ct_review),
                                     allow_length_retry=False,
                                     **structured_output_kwargs(llm_client),
                                 )
-                            else:
-                                response = await cast(_SinglePassCtClient, llm_client).generate(
-                                    build_ct_fact_prompt(review), allow_length_retry=False,
-                                )
-                            used_prompt, used_completion, used_total, used_time = _usage(response)
-                            prompt_tokens += used_prompt
-                            completion_tokens += used_completion
-                            total_tokens += used_total
-                            api_time += used_time
-                        except Exception:  # noqa: BLE001
-                            model_failure = "exam_lab_llm_failure"
-                        if model_failure is None:
-                            try:
-                                payload = json.loads(_response_text(response))
-                            except (TypeError, ValueError):
-                                model_failure = "exam_lab_llm_invalid_output"
-                if model_failure is None:
-                    try:
-                        evaluation = evaluate_ct_review(review, payload)
-                    except CtEvidenceBudgetExceeded:
-                        model_failure = "ct_evidence_budget_exceeded"
-                    except (TypeError, ValueError):
-                        model_failure = "exam_lab_llm_invalid_output"
-                if model_failure:
-                    emit_typed(CT_CONSISTENCY_RULE, "technical_error", model_failure)
-                else:
-                    first_success_count += int(review.needs_model)
-                    emit_typed(CT_CONSISTENCY_RULE, evaluation.status, evaluation.reason_code,
-                               evaluation.refs, display_facts=evaluation.display_facts)
-                typed_processed.add(CT_CONSISTENCY_RULE)
+                            return await cast(_SinglePassCtClient, llm_client).generate(
+                                build_ct_fact_prompt(ct_review),
+                                allow_length_retry=False,
+                            )
+
+                        # 06-01-01 的 CT/医嘱一致性与其余检查检验规则不共享
+                        # 模型输出，先发起调用，使它与 06-01-05 的异常相关性
+                        # 前置判断及后续独立语义链重叠。
+                        ct_response_task = asyncio.create_task(generate_ct_response())
         for rule_id in selected:
             if rule_id not in typed_requested or rule_id in typed_processed:
                 continue
@@ -2776,6 +2760,57 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             ),
                         )
                         typed_processed.add(rule_id)
+
+    if ct_review is not None:
+        ct_payload = None
+        if ct_response_task is not None:
+            try:
+                ct_response = await ct_response_task
+                used_prompt, used_completion, used_total, used_time = _usage(
+                    ct_response
+                )
+                prompt_tokens += used_prompt
+                completion_tokens += used_completion
+                total_tokens += used_total
+                api_time += used_time
+            except Exception:  # noqa: BLE001
+                ct_model_failure = "exam_lab_llm_failure"
+            if ct_model_failure is None:
+                try:
+                    ct_payload = json.loads(_response_text(ct_response))
+                except (TypeError, ValueError):
+                    ct_model_failure = "exam_lab_llm_invalid_output"
+        if ct_model_failure is None:
+            try:
+                ct_evaluation = evaluate_ct_review(ct_review, ct_payload)
+            except CtEvidenceBudgetExceeded:
+                ct_model_failure = "ct_evidence_budget_exceeded"
+            except (TypeError, ValueError):
+                ct_model_failure = "exam_lab_llm_invalid_output"
+
+        display_count_before_ct = len(customer_display_facts)
+        if ct_model_failure:
+            emit_typed(
+                CT_CONSISTENCY_RULE,
+                "technical_error",
+                ct_model_failure,
+            )
+        else:
+            first_success_count += int(ct_review.needs_model)
+            emit_typed(
+                CT_CONSISTENCY_RULE,
+                ct_evaluation.status,
+                ct_evaluation.reason_code,
+                ct_evaluation.refs,
+                display_facts=ct_evaluation.display_facts,
+            )
+        # 模型调用可以延后等待，但客户事实仍维持原执行顺序。
+        if len(customer_display_facts) > display_count_before_ct:
+            ct_display_item = customer_display_facts.pop()
+            customer_display_facts.insert(
+                min(ct_display_insert_index, len(customer_display_facts)),
+                ct_display_item,
+            )
 
     for rule_id in selected:
         fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
