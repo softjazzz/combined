@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
@@ -3058,8 +3059,22 @@ async def execute_luxian_0609_native_transfusion_rules(
     course_cache: dict[
         tuple[tuple[str, str], ...], TransfusionCoursePresenceResult
     ] = {}
+    course_tasks: dict[
+        tuple[tuple[str, str], ...], asyncio.Task[TransfusionCoursePresenceResult]
+    ] = {}
     performed_cache: dict[bool, tuple[str, str]] = {}
+    performed_tasks: dict[object, asyncio.Task[tuple[str, str]]] = {}
+    order_trigger_tasks: dict[
+        bool, asyncio.Task[TransfusionOrderTriggerResult]
+    ] = {}
+    intraoperative_task: asyncio.Task[_Intraoperative048Assessment] | None = None
     order_identities: tuple[tuple[str, str], ...] = ()
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        parallel_prefetch_enabled = False
+    else:
+        parallel_prefetch_enabled = True
 
     async def classify_course_records(
         rows: Sequence[Mapping[str, Any]],
@@ -3069,26 +3084,165 @@ async def execute_luxian_0609_native_transfusion_rules(
         key = tuple(
             (str(row.get("document_id", row.get("id"))), _row_text(row)) for row in rows
         )
-        if key not in course_cache:
-            presence = await classify_transfusion_course_records(rows, llm_client)
-            course_cache[key] = presence
-            llm_call_count += presence.llm_call_count
-            prompt_tokens += presence.prompt_tokens
-            completion_tokens += presence.completion_tokens
-            total_tokens += presence.total_tokens
-            api_time += presence.api_time
-        return course_cache[key]
-    for rule_id in selected:
-        order_identities = ()
+        if not parallel_prefetch_enabled:
+            if key not in course_cache:
+                presence = await classify_transfusion_course_records(rows, llm_client)
+                course_cache[key] = presence
+                llm_call_count += presence.llm_call_count
+                prompt_tokens += presence.prompt_tokens
+                completion_tokens += presence.completion_tokens
+                total_tokens += presence.total_tokens
+                api_time += presence.api_time
+            return course_cache[key]
+        if key not in course_tasks:
+            async def load_course_presence() -> TransfusionCoursePresenceResult:
+                nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
+                presence = await classify_transfusion_course_records(rows, llm_client)
+                course_cache[key] = presence
+                llm_call_count += presence.llm_call_count
+                prompt_tokens += presence.prompt_tokens
+                completion_tokens += presence.completion_tokens
+                total_tokens += presence.total_tokens
+                api_time += presence.api_time
+                return presence
+
+            course_tasks[key] = asyncio.create_task(load_course_presence())
+        return await course_tasks[key]
+
+    def material_for_rule(
+        rule_id: str,
+    ) -> tuple[bool, Mapping[str, Any] | None, str, str]:
         typed_rule = rule_id in typed_requested
         if typed_rule:
-            documents, typed_material_status, typed_material_reason = (
-                typed_material_by_rule[rule_id]
+            documents, material_status, material_reason = typed_material_by_rule[rule_id]
+            return typed_rule, documents, material_status, material_reason
+        documents = legacy_documents
+        return typed_rule, documents, "", ""
+
+    def performed_task_key(*, rule_id: str, typed_rule: bool) -> object:
+        # 旧入口所有规则共用一份 documents；typed 入口按规则保留既有隔离语义。
+        return rule_id if typed_rule else False
+
+    def get_performed_task(
+        *,
+        rule_id: str,
+        typed_rule: bool,
+        documents: Mapping[str, Any] | None,
+    ) -> asyncio.Task[tuple[str, str]]:
+        key = performed_task_key(rule_id=rule_id, typed_rule=typed_rule)
+        if key not in performed_tasks:
+            performed_tasks[key] = asyncio.create_task(
+                _performed_source_state(
+                    documents=documents,
+                    institute_id=str(institute_id or ""),
+                    patient_id=str(patient_id or ""),
+                    visit_id=str(visit_id or ""),
+                    source_schema=source_schema,
+                    classify_course_records=classify_course_records,
+                    evidence_materials=evidence_materials,
+                )
             )
-        else:
-            documents = legacy_documents
-            typed_material_status = ""
-            typed_material_reason = ""
+        return performed_tasks[key]
+
+    def get_order_trigger_task(
+        *,
+        typed_rule: bool,
+        documents: Mapping[str, Any],
+    ) -> asyncio.Task[TransfusionOrderTriggerResult]:
+        if typed_rule not in order_trigger_tasks:
+            async def load_order_trigger() -> TransfusionOrderTriggerResult:
+                nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
+                result = await classify_transfusion_orders(
+                    [
+                        (source_key, row)
+                        for source_key in _ORDER_TRIGGER_SOURCES
+                        for row in _source_document_rows(documents, source_key)
+                    ],
+                    llm_client,
+                )
+                order_trigger_cache[typed_rule] = result
+                llm_call_count += result.llm_call_count
+                prompt_tokens += result.prompt_tokens
+                completion_tokens += result.completion_tokens
+                total_tokens += result.total_tokens
+                api_time += result.api_time
+                return result
+
+            order_trigger_tasks[typed_rule] = asyncio.create_task(
+                load_order_trigger()
+            )
+        return order_trigger_tasks[typed_rule]
+
+    def get_intraoperative_task(
+        documents: Mapping[str, Any],
+    ) -> asyncio.Task[_Intraoperative048Assessment]:
+        nonlocal intraoperative_task
+        if intraoperative_task is None:
+            async def load_intraoperative() -> _Intraoperative048Assessment:
+                nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
+                assessment = await _intraoperative_048_assessment(
+                    documents,
+                    llm_client,
+                )
+                llm_call_count += assessment.llm_call_count
+                prompt_tokens += assessment.prompt_tokens
+                completion_tokens += assessment.completion_tokens
+                total_tokens += assessment.total_tokens
+                api_time += assessment.api_time
+                return assessment
+
+            intraoperative_task = asyncio.create_task(load_intraoperative())
+        return intraoperative_task
+
+    # 三类门控读取相互独立。先启动并共同等待，避免病程、医嘱和术中文书的
+    # 模型耗时在单病历内串成关键路径；底层 HTTP 仍受全局并发门控约束。
+    prefetch_tasks: set[asyncio.Task[Any]] = set()
+    if parallel_prefetch_enabled:
+        for prefetch_rule_id in selected:
+            typed_rule, documents, material_status, _ = material_for_rule(
+                prefetch_rule_id
+            )
+            if material_status:
+                continue
+            if prefetch_rule_id == "LX0609-07-04-01":
+                if isinstance(documents, Mapping):
+                    prefetch_tasks.add(get_intraoperative_task(documents))
+                continue
+            if prefetch_rule_id in _ORDER_TRIGGER_RULES:
+                if isinstance(documents, Mapping) and all(
+                    isinstance(documents.get(key), list)
+                    for key in _ORDER_TRIGGER_SOURCES
+                ):
+                    prefetch_tasks.add(
+                        get_order_trigger_task(
+                            typed_rule=typed_rule,
+                            documents=documents,
+                        )
+                    )
+                continue
+            prefetch_tasks.add(
+                get_performed_task(
+                    rule_id=prefetch_rule_id,
+                    typed_rule=typed_rule,
+                    documents=documents,
+                )
+            )
+
+    if prefetch_tasks:
+        try:
+            await asyncio.gather(*prefetch_tasks)
+        except BaseException:
+            for task in prefetch_tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*prefetch_tasks, return_exceptions=True)
+            raise
+
+    for rule_id in selected:
+        order_identities = ()
+        typed_rule, documents, typed_material_status, typed_material_reason = (
+            material_for_rule(rule_id)
+        )
         if typed_material_status:
             emit_outcome(
                 rule_id,
@@ -3103,12 +3257,18 @@ async def execute_luxian_0609_native_transfusion_rules(
                 emit_outcome(rule_id, "data_gap", "transfusion_projection_unavailable",
                              executor_type="program")
                 continue
-            assessment_048 = await _intraoperative_048_assessment(documents, llm_client)
-            llm_call_count += assessment_048.llm_call_count
-            prompt_tokens += assessment_048.prompt_tokens
-            completion_tokens += assessment_048.completion_tokens
-            total_tokens += assessment_048.total_tokens
-            api_time += assessment_048.api_time
+            if parallel_prefetch_enabled:
+                assessment_048 = await get_intraoperative_task(documents)
+            else:
+                assessment_048 = await _intraoperative_048_assessment(
+                    documents,
+                    llm_client,
+                )
+                llm_call_count += assessment_048.llm_call_count
+                prompt_tokens += assessment_048.prompt_tokens
+                completion_tokens += assessment_048.completion_tokens
+                total_tokens += assessment_048.total_tokens
+                api_time += assessment_048.api_time
             emit_outcome(
                 rule_id,
                 assessment_048.status,
@@ -3119,32 +3279,48 @@ async def execute_luxian_0609_native_transfusion_rules(
             )
             continue
         if rule_id in _ORDER_TRIGGER_RULES:
-            if typed_rule not in order_trigger_cache:
-                if not isinstance(documents, Mapping):
-                    emit_outcome(rule_id, "data_gap", "transfusion_source_unavailable", executor_type="program")
-                    continue
-                # 旧入口也必须明确提供医嘱来源，不能将漏传解释成无医嘱。
-                if any(not isinstance(documents.get(key), list) for key in _ORDER_TRIGGER_SOURCES):
-                    emit_outcome(rule_id, "data_gap", "transfusion_source_unavailable", executor_type="program")
-                    continue
-                order_result = await classify_transfusion_orders(
-                    [(key, row) for key in _ORDER_TRIGGER_SOURCES
-                     for row in _source_document_rows(documents, key)], llm_client,
+            if not isinstance(documents, Mapping):
+                emit_outcome(rule_id, "data_gap", "transfusion_source_unavailable", executor_type="program")
+                continue
+            # 旧入口也必须明确提供医嘱来源，不能将漏传解释成无医嘱。
+            if any(not isinstance(documents.get(key), list) for key in _ORDER_TRIGGER_SOURCES):
+                emit_outcome(rule_id, "data_gap", "transfusion_source_unavailable", executor_type="program")
+                continue
+            if parallel_prefetch_enabled:
+                order_result = await get_order_trigger_task(
+                    typed_rule=typed_rule,
+                    documents=documents,
                 )
-                order_trigger_cache[typed_rule] = order_result
-                llm_call_count += order_result.llm_call_count
-                prompt_tokens += order_result.prompt_tokens
-                completion_tokens += order_result.completion_tokens
-                total_tokens += order_result.total_tokens
-                api_time += order_result.api_time
-            order_result = order_trigger_cache[typed_rule]
+            else:
+                if typed_rule not in order_trigger_cache:
+                    order_result = await classify_transfusion_orders(
+                        [
+                            (source_key, row)
+                            for source_key in _ORDER_TRIGGER_SOURCES
+                            for row in _source_document_rows(documents, source_key)
+                        ],
+                        llm_client,
+                    )
+                    order_trigger_cache[typed_rule] = order_result
+                    llm_call_count += order_result.llm_call_count
+                    prompt_tokens += order_result.prompt_tokens
+                    completion_tokens += order_result.completion_tokens
+                    total_tokens += order_result.total_tokens
+                    api_time += order_result.api_time
+                order_result = order_trigger_cache[typed_rule]
             source_state = order_result.state
             order_identities = order_result.selected_identities
             if source_state == "technical_error":
                 emit_outcome(rule_id, "technical_error", order_result.reason_code or "model_invalid_output", executor_type="llm")
                 continue
         else:
-            if typed_rule:
+            if parallel_prefetch_enabled:
+                performed_state = await get_performed_task(
+                    rule_id=rule_id,
+                    typed_rule=typed_rule,
+                    documents=documents,
+                )
+            elif typed_rule:
                 performed_state = await _performed_source_state(
                     documents=documents,
                     institute_id=str(institute_id or ""),
