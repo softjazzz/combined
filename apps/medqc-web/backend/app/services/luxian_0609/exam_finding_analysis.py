@@ -14,9 +14,11 @@
 用户口径（2026-10-12）补充：以诊断名指代报告异常并据此定方案、解读复查结果并给出
 处置、用本次报告排除或确认具体诊断，均算分析；只按诊断列常规治疗而未提及该异常不算。
 Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段、以及“CT示”“提示”“结合”
-这类只用来引出报告的字词后，须仍有至少 3 个字的自有内容，照抄报告结论的引文一律不算分析。
-原门槛为 6 字，复核反例“L4/5椎间盘突出，拟行手术。”只剩“拟行手术”4 字被误拒，多写“治疗”两字
-即通过；门槛只用于识别照抄，类别是否成立仍由归类决定。
+这类只用来引出报告的字词后，须仍有至少 2 个字的自有内容，照抄报告结论的引文一律不算分析。
+原门槛为 6 字，复核反例“L4/5椎间盘突出，拟行手术。”只剩“拟行手术”4 字被误拒；改 3 字后第二轮复核
+指出“排除L1椎体压缩性骨折”这类用报告原词作鉴别的短句只剩“排除”2 字仍被误拒。门槛只用于识别
+纯照抄，是否构成分析由单句归类与报告片段关联核验决定，不按字数衡量。本次检查的部位（取自检查名称
+与关联医嘱名称，如“腰椎MRI示……”的“腰椎”）同样只是引出报告，不计入自有内容。
 同一份病程常被多次检查共用，真实样本出现把胸部CT的“右肺小结节，请胸外科会诊”挂到
 膝关节MRI名下。故要求同时摘出所针对的本次报告异常片段（report_span），须逐字见于
 该次报告，且与引文至少有 2 个连续相同字；引文直接指向本次检查（如鉴别诊断写“结合颈椎MRI
@@ -49,7 +51,7 @@ NON_ANALYSIS_TYPES = ("listing_only", "diagnosis_only", "generic_plan", "none")
 QUOTE_TYPES = (*ANALYSIS_TYPES, *NON_ANALYSIS_TYPES)
 # 去掉与报告原文重合（≥6 字连续片段）及引出报告的字词后，引文须仍有至少这么多字的自有内容。
 MIN_REPORT_OVERLAP = 6
-MIN_OWN_CHARS = 3
+MIN_OWN_CHARS = 2
 # 只用来引出或复述报告的字词：照抄报告时常见的前后缀，不构成分析内容。按长度从长到短去除。
 _REPORT_LEAD_WORDS = (
     "辅助检查", "检查结果", "我院", "本院", "外院", "平扫", "增强", "复查", "提示", "显示", "可见",
@@ -87,6 +89,17 @@ def _exam_sites(projection: ExamLabTextProjection) -> dict[int, tuple[str, ...]]
     for position, event in enumerate(events_for_family(projection, "exam"), start=1):
         sites[position] = tuple(dict.fromkeys(
             key[1] for name in event.order_names if (key := _exam_key({"order_name": name})) is not None
+        ))
+    return sites
+
+
+def _report_lead_sites(projection: ExamLabTextProjection) -> dict[int, tuple[str, ...]]:
+    """引出报告时常带的本次检查部位：检查名称与关联医嘱名称中的部位，仅用于照抄识别。"""
+    sites: dict[int, tuple[str, ...]] = {}
+    for position, event in enumerate(events_for_family(projection, "exam"), start=1):
+        names = (event.identity_text, *event.order_names)
+        sites[position] = tuple(dict.fromkeys(
+            key[1] for name in names if name and (key := _exam_key({"order_name": name})) is not None and key[1]
         ))
     return sites
 
@@ -152,7 +165,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
     )
 
 
-def _own_chars(quote: str, report: str) -> int:
+def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
     """引文中不属于报告原文（≥MIN_REPORT_OVERLAP 字连续重合片段）、也不是引出报告字词的字数。"""
     text, source = _normalize(quote), _normalize(report)
     covered = [False] * len(text)
@@ -168,7 +181,8 @@ def _own_chars(quote: str, report: str) -> int:
         else:
             index += 1
     own = "".join(char if not flag else "|" for flag, char in zip(covered, text))
-    for word in _REPORT_LEAD_WORDS:
+    for word in sorted({*_REPORT_LEAD_WORDS, *(_normalize(site) for site in lead_sites if _normalize(site))},
+                       key=len, reverse=True):
         own = re.sub(re.escape(word), "|", own, flags=re.IGNORECASE)
     return sum(1 for char in own if char.isalnum())
 
@@ -189,6 +203,7 @@ def _parse(
     sites: Mapping[int, tuple[str, ...]] | None = None,
     *,
     allow_partial: bool = False,
+    lead_sites: Mapping[int, tuple[str, ...]] | None = None,
 ) -> dict[int, tuple[str, ...]]:
     choices = response.get("choices")
     if choices is not None:
@@ -238,7 +253,8 @@ def _parse(
                 kind == "targeted_differential"
                 and any(_shares_finding(site, quote) for site in (sites or {}).get(position, ()))
             )
-            if _own_chars(quote, reports[position]) >= MIN_OWN_CHARS and attributed:
+            own = _own_chars(quote, reports[position], (lead_sites or {}).get(position, ()))
+            if own >= MIN_OWN_CHARS and attributed:
                 analysed[position].append(ref)
     if not seen:
         raise ValueError("invalid doc coverage")
@@ -304,7 +320,7 @@ async def check_exam_finding_analysis(
                 response, projection, model_expected,
                 allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS,
                 reports={position: model_targets[position][0] for position in model_expected},
-                sites=_exam_sites(projection))
+                sites=_exam_sites(projection), lead_sites=_report_lead_sites(projection))
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:

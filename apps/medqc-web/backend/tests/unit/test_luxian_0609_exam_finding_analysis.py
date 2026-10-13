@@ -221,3 +221,25 @@ async def test_report_lead_words_do_not_make_copied_conclusion_count(quote):
     ref = _report_ref(projection)
     outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "finding_linked", quote)]))
     assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_short_differential_reusing_report_wording_counts():
+    """第二轮复核：报告写“待排”、病程用报告原词“排除……”作鉴别，去掉重合部分只剩“排除”2 字。"""
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": ({"exam_id": "EX-1", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-18 12:30:00",
+                         "report_time": "2026-08-18 13:30:00",
+                         "exam_conclusion": "腰椎退行性变；L1椎体压缩性骨折待排。"},),
+        "daily_course_record": (
+            {"record_time": "2026-08-18 15:00:00",
+             "record_content": "结合症状体征，排除L1椎体压缩性骨折，继续保守治疗。"},
+        ),
+    }), {1: "positive"})
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(projection, _Client([_answer(
+        ref, "targeted_differential", "排除L1椎体压缩性骨折", "L1椎体压缩性骨折待排")]))
+    assert outcome.analysed_refs == {1: (ref,)}
+    # 同一句若只照抄报告原文（无“排除”），仍不算分析。
+    copied = await check_exam_finding_analysis(projection, _Client([_answer(
+        ref, "targeted_differential", "L1椎体压缩性骨折", "L1椎体压缩性骨折待排")]))
+    assert copied.analysed_refs == {1: ()}
