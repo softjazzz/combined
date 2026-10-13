@@ -241,3 +241,37 @@ async def test_exam_site_lead_does_not_make_copied_conclusion_count(quote):
     ref = _report_ref(projection)
     outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "finding_linked", quote)]))
     assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_long_quote_up_to_200_chars_is_accepted():
+    """真实验证：病程整段罗列症状体征后作结论，引文 110 余字超出原 80 字上限，整步失败退回主抽取。"""
+    linked = "腰椎MRI示L4/5椎间盘突出压迫右侧神经根，" + "右下肢放射痛明显，直腿抬高试验阳性，" * 4 + "与本次报告所见相符，拟行手术。"
+    assert 80 < len(linked) <= 200
+    projection = _projection(linked)
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "finding_linked", linked)]))
+    assert outcome.state == "ready" and outcome.llm_call_count == 1 and outcome.analysed_refs == {1: (ref,)}
+
+
+@pytest.mark.asyncio
+async def test_final_attempt_unverifiable_quote_skips_only_that_course():
+    """真实验证：末次仍用省略号拼接引文时，原实现整步失败；现只把该份病程视为未核到。"""
+    rows = (
+        {"record_time": "2026-08-18 15:00:00", "record_content": LINKED},
+        {"record_time": "2026-08-18 16:00:00", "record_content": "继续当前治疗。"},
+    )
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": ({"exam_id": "EX-1", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-18 12:30:00",
+                         "report_time": "2026-08-18 13:30:00", "exam_conclusion": "L4/5椎间盘突出，椎管狭窄。"},),
+        "daily_course_record": rows,
+    }), {1: "positive"})
+    first, second = sorted(projection.course_times, key=lambda ref: projection.course_times[ref])
+    answer = {"schema_version": SCHEMA_VERSION, "docs": [
+        {"event_position": 1, "course_doc_ref": first, "quote_type": "finding_linked",
+         "quote": "腰椎MRI示L4/5椎间盘突出……拟行手术", "report_span": "L4/5椎间盘突出"},
+        {"event_position": 1, "course_doc_ref": second, "quote_type": "none", "quote": "", "report_span": ""},
+    ]}
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
+    # 该事件有一份病程未核到：不固定为“未分析”，沿用主抽取；整步不再失败。
+    assert outcome.state == "ready" and outcome.llm_call_count == 2 and outcome.analysed_refs == {}

@@ -229,3 +229,27 @@ def test_non_compliant_or_gap_status_is_never_changed():
             assert apply_measure_check(status, outcome, relevant_source_incomplete=lambda ref: False) == status
     # 未调用（无会诊建议或无模型客户端）不改变原判定。
     assert _final(MeasureCheckOutcome("skipped", {})) == ("compliant", "requirement_satisfied")
+
+
+@pytest.mark.asyncio
+async def test_purpose_clause_in_recommendation_is_not_an_omission():
+    """真实验证：建议写“给予红光照射以促进伤口愈合等康复治疗”，目的说明被误判为漏拆，判资料不足。"""
+    text = "给予红光照射以促进伤口愈合等康复治疗"
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("consultation_record-1#r1", "procedure", text, text, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+    ),)
+    candidates = (episode._CandidateDocument(
+        "inpat_nondrug_order-1", "inpat_nondrug_order", episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+        "红光治疗；治疗"),)
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    alias = episode._prompt_alias_by_ref(candidates, allowed)
+    answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [
+        {"recommendation_ref": "consultation_record-1#r1", "measure": "红光照射",
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗"}]}
+    client = _Client([answer])
+    outcome = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias, llm_client=client)
+    assert outcome.state == "ready" and outcome.llm_call_count == 1 and not outcome.has_missing
+    assert "以促进伤口愈合" in client.prompts[0]

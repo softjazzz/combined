@@ -23,7 +23,11 @@ Python 另核验：引文须逐字见于病程；去掉与报告原文重合的�
 未写为何需会诊）与“结合颈椎MRI故不考虑该诊断”（未写 MRI 所见）均改为不算，提示词改列为反例并附正确写法。
 修改建议（客户需求 2026-10-12）：事件未见分析时，记下最接近的那份病程属于哪种不足（只罗列结果、
 只写结论无依据、只写处置无依据），供客户结果按病程记录时间给出修改建议；只记类别，不带病历原文。
-不足类别须与本次报告异常对得上（报告片段核验同算分析类别），对不上的不记。
+不足类别须与本次报告异常对得上（报告片段核验同算分析类别），对不上的不记；真实验证中模型对不算分析的
+类别常不填报告片段，此时若该病程只对应这一次检查，也按本次检查记。
+真实验证（2026-10-12）：模型摘录超过 80 字或用省略号拼接时整步失败、退回主抽取，导致轮次间翻转。
+引文上限提到 200 字；末次尝试中个别病程引文核验不过时只把该病程视为未核到（该事件沿用主抽取），
+不再让整步失败。
 同一份病程常被多次检查共用，真实样本出现把胸部CT的“右肺小结节，请胸外科会诊”挂到
 膝关节MRI名下。故要求同时摘出所针对的本次报告异常片段（report_span），须逐字见于
 该次报告，且与引文至少有 2 个连续相同字；引文直接指向本次检查（如鉴别诊断写“结合颈椎MRI
@@ -63,7 +67,7 @@ PROTOCOL_ATTEMPTS = 2
 MAX_REPORT_CHARS = 2000
 MAX_COURSE_CHARS = 6000
 MAX_PROMPT_CHARS = 60000
-MAX_QUOTE_CHARS = 80
+MAX_QUOTE_CHARS = 200
 MAX_COMPLETION_TOKENS = 2048
 # 未见分析时最接近的一句属于哪种不足：用于客户修改建议，不参与判定。
 GAP_KINDS = {
@@ -239,6 +243,11 @@ def _parse(
     seen: set[tuple[int, str]] = set()
     analysed: dict[int, list[str]] = {position: [] for position in expected}
     gaps: dict[int, list[tuple[str, str]]] = {position: [] for position in expected}
+    # 只对应一次检查的病程：不算分析的引文未填报告片段时，仍可按该次检查给修改建议。
+    event_count_by_ref: dict[str, int] = {}
+    for refs in expected.values():
+        for candidate in refs:
+            event_count_by_ref[candidate] = event_count_by_ref.get(candidate, 0) + 1
     for item in payload["docs"]:
         if not isinstance(item, dict) or set(item) != {
             "event_position", "course_doc_ref", "quote_type", "quote", "report_span",
@@ -252,40 +261,48 @@ def _parse(
         if kind not in QUOTE_TYPES or type(quote) is not str or type(span) is not str:
             raise ValueError("invalid quote type")
         seen.add(key)
-        if kind == "none":
-            if quote.strip() or span.strip():
-                raise ValueError("quote without element")
-            continue
-        normalized_quote = _normalize(quote)
-        if not normalized_quote or len(quote) > MAX_QUOTE_CHARS:
-            raise ValueError("missing quote")
-        if normalized_quote not in _normalize(_course_text(projection, ref)):
-            raise ValueError("quote not in course")
-        if kind in GAP_KINDS:
-            # 修改建议只记与本次报告异常对得上的不足；对不上（如只列常规治疗）的不记，也不算协议违规。
-            normalized_span = _normalize(span)
-            if (normalized_span and len(span) <= MAX_SPAN_CHARS
-                    and normalized_span in _normalize(reports[position]) and _shares_finding(span, quote)):
-                gaps[position].append((ref, GAP_KINDS[kind]))
-        if kind in ANALYSIS_TYPES:
-            normalized_span = _normalize(span)
-            if not normalized_span or len(span) > MAX_SPAN_CHARS:
-                raise ValueError("missing report span")
-            if normalized_span not in _normalize(reports[position]):
-                raise ValueError("span not in report")
-            # 照抄报告结论的引文不能证明分析；针对的异常须与本次报告片段对得上。
-            # 按检查部位对应只用于鉴别诊断：其引文常只写“结合颈椎MRI”而不复述异常。其余类别仍须
-            # 与报告异常片段对得上（真实样本把“结合MRI左膝……可诊断”误归为异常联系）。
-            attributed = _shares_finding(span, quote) or (
-                kind == "targeted_differential"
-                and any(_shares_finding(site, quote) for site in (sites or {}).get(position, ()))
-            )
-            own = _own_chars(quote, reports[position], (lead_sites or {}).get(position, ()))
-            if own >= MIN_OWN_CHARS and attributed:
-                analysed[position].append(ref)
-            elif attributed:
-                # 归为分析但去掉照抄部分后不剩实质内容：按其所属类别给修改建议。
-                gaps[position].append((ref, _REJECTED_ANALYSIS_GAPS[kind]))
+        try:
+            if kind == "none":
+                if quote.strip() or span.strip():
+                    raise ValueError("quote without element")
+                continue
+            normalized_quote = _normalize(quote)
+            if not normalized_quote or len(quote) > MAX_QUOTE_CHARS:
+                raise ValueError("missing quote")
+            if normalized_quote not in _normalize(_course_text(projection, ref)):
+                raise ValueError("quote not in course")
+            if kind in GAP_KINDS:
+                # 修改建议只记与本次报告异常对得上的不足；对不上（如只列常规治疗）的不记，也不算协议违规。
+                normalized_span = _normalize(span)
+                span_attributed = (normalized_span and len(span) <= MAX_SPAN_CHARS
+                                   and normalized_span in _normalize(reports[position]) and _shares_finding(span, quote))
+                if span_attributed or (not normalized_span and event_count_by_ref.get(ref) == 1):
+                    gaps[position].append((ref, GAP_KINDS[kind]))
+            if kind in ANALYSIS_TYPES:
+                normalized_span = _normalize(span)
+                if not normalized_span or len(span) > MAX_SPAN_CHARS:
+                    raise ValueError("missing report span")
+                if normalized_span not in _normalize(reports[position]):
+                    raise ValueError("span not in report")
+                # 照抄报告结论的引文不能证明分析；针对的异常须与本次报告片段对得上。
+                # 按检查部位对应只用于鉴别诊断：其引文常只写“结合颈椎MRI”而不复述异常。其余类别仍须
+                # 与报告异常片段对得上（真实样本把“结合MRI左膝……可诊断”误归为异常联系）。
+                attributed = _shares_finding(span, quote) or (
+                    kind == "targeted_differential"
+                    and any(_shares_finding(site, quote) for site in (sites or {}).get(position, ()))
+                )
+                own = _own_chars(quote, reports[position], (lead_sites or {}).get(position, ()))
+                if own >= MIN_OWN_CHARS and attributed:
+                    analysed[position].append(ref)
+                elif attributed:
+                    # 归为分析但去掉照抄部分后不剩实质内容：按其所属类别给修改建议。
+                    gaps[position].append((ref, _REJECTED_ANALYSIS_GAPS[kind]))
+        except ValueError:
+            # 末次尝试：单份病程引文核验不过只视为未核到，该事件按部分覆盖处理，不连累整步。
+            if not allow_partial:
+                raise
+            seen.discard(key)
+
     if not seen:
         raise ValueError("invalid doc coverage")
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
@@ -305,11 +322,11 @@ def _parse(
 
 
 _RETRY_HINTS = {
-    "quote not in course": "quote必须逐字摘自该病程原文",
+    "quote not in course": "quote必须逐字摘自该病程原文，不得改写或用省略号拼接",
     "quote without element": "quote_type为none时quote与report_span必须为空字符串",
     "missing report span": "算分析的类别必须给出不超过40字的本次报告异常片段report_span",
     "span not in report": "report_span必须逐字摘自该事件的report",
-    "missing quote": "quote_type不为none时必须给出不超过80字的连续原文quote",
+    "missing quote": "quote_type不为none时必须给出不超过200字的连续原文quote",
 }
 
 

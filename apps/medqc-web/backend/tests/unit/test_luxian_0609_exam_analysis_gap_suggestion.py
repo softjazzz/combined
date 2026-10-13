@@ -61,9 +61,28 @@ async def test_not_analysed_event_records_gap_kind_per_course(kind, quote, expec
 
 
 @pytest.mark.asyncio
-async def test_gap_unrelated_to_this_report_or_analysed_event_records_nothing():
-    unrelated, _ = await _gaps("继续当前治疗，密切观察。", "generic_plan", "继续当前治疗", span="")
-    assert unrelated.analysed_refs == {1: ()} and unrelated.gap_refs == {}
+async def test_empty_span_gap_is_attributed_only_when_course_belongs_to_one_exam():
+    """真实验证：模型对不算分析的类别常不填报告片段；病程只对应这一次检查时仍按该次给建议。"""
+    single, ref = await _gaps("继续当前治疗，密切观察。", "generic_plan", "继续当前治疗", span="")
+    assert single.analysed_refs == {1: ()} and single.gap_refs == {1: ((ref, "plan_without_basis"),)}
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": (
+            {"exam_id": "EX-1", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-18 12:30:00",
+             "report_time": "2026-08-18 13:30:00", "exam_conclusion": REPORT},
+            {"exam_id": "EX-2", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:40:00",
+             "report_time": "2026-08-18 13:40:00", "exam_conclusion": "右肺下叶渗出。"},
+        ),
+        "daily_course_record": ({"record_time": "2026-08-18 15:00:00", "record_content": "继续当前治疗，密切观察。"},),
+    }), {1: "positive", 2: "positive"})
+    [ref] = projection.course_times
+    doc = {"course_doc_ref": ref, "quote_type": "generic_plan", "quote": "继续当前治疗", "report_span": ""}
+    answer = {"schema_version": SCHEMA_VERSION, "docs": [{"event_position": 1, **doc}, {"event_position": 2, **doc}]}
+    shared = await check_exam_finding_analysis(projection, _Client(answer))
+    assert shared.analysed_refs == {1: (), 2: ()} and shared.gap_refs == {}
+
+
+@pytest.mark.asyncio
+async def test_analysed_event_records_no_gap():
     linked = "腰椎MRI示L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符，保守治疗无效，拟行手术。"
     analysed, ref = await _gaps(linked, "management_linked", linked)
     assert analysed.analysed_refs == {1: (ref,)} and analysed.gap_refs == {}
