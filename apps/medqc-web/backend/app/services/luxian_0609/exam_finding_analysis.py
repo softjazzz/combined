@@ -13,12 +13,12 @@
 
 用户口径（2026-10-12）补充：以诊断名指代报告异常并据此定方案、解读复查结果并给出
 处置、用本次报告排除或确认具体诊断，均算分析；只按诊断列常规治疗而未提及该异常不算。
-Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段、以及“CT示”“提示”“结合”
-这类只用来引出报告的字词后，须仍有至少 2 个字的自有内容，照抄报告结论的引文一律不算分析。
-原门槛为 6 字，复核反例“L4/5椎间盘突出，拟行手术。”只剩“拟行手术”4 字被误拒；改 3 字后第二轮复核
-指出“排除L1椎体压缩性骨折”这类用报告原词作鉴别的短句只剩“排除”2 字仍被误拒。门槛只用于识别
-纯照抄，是否构成分析由单句归类与报告片段关联核验决定，不按字数衡量。本次检查的部位（取自检查名称
-与关联医嘱名称，如“腰椎MRI示……”的“腰椎”）同样只是引出报告，不计入自有内容。
+用户口径（2026-10-12，PR 复审后确认）：病程写了针对异常的处置或鉴别结论，只有同时写出依据
+（症状、体征、严重程度、手术指征、所见特征等），把异常和处置/结论联系起来，才算分析；只写
+“异常 + 拟行某处置”（如“L4/5椎间盘突出，拟行手术。”）或只写“排除某诊断”而无依据的不算。
+Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段及本次检查部位（取自检查名称与
+关联医嘱名称，如“腰椎MRI示……”的“腰椎”）后须仍有实质内容，照抄报告结论的引文一律不算分析。
+该字数门槛只用于识别照抄，是否写出依据由单句归类判断。
 同一份病程常被多次检查共用，真实样本出现把胸部CT的“右肺小结节，请胸外科会诊”挂到
 膝关节MRI名下。故要求同时摘出所针对的本次报告异常片段（report_span），须逐字见于
 该次报告，且与引文至少有 2 个连续相同字；引文直接指向本次检查（如鉴别诊断写“结合颈椎MRI
@@ -49,14 +49,9 @@ SCHEMA_VERSION = "lx0609-exam-finding-analysis-v3"
 ANALYSIS_TYPES = ("finding_linked", "management_linked", "prior_comparison", "targeted_differential")
 NON_ANALYSIS_TYPES = ("listing_only", "diagnosis_only", "generic_plan", "none")
 QUOTE_TYPES = (*ANALYSIS_TYPES, *NON_ANALYSIS_TYPES)
-# 去掉与报告原文重合（≥6 字连续片段）及引出报告的字词后，引文须仍有至少这么多字的自有内容。
+# 去掉与报告原文重合（≥6 字连续片段）后，引文须仍有至少这么多字的自有内容。
 MIN_REPORT_OVERLAP = 6
-MIN_OWN_CHARS = 2
-# 只用来引出或复述报告的字词：照抄报告时常见的前后缀，不构成分析内容。按长度从长到短去除。
-_REPORT_LEAD_WORDS = (
-    "辅助检查", "检查结果", "我院", "本院", "外院", "平扫", "增强", "复查", "提示", "显示", "可见",
-    "报告", "结果", "检查", "结合", "考虑", "MRI", "CT", "示", "见",
-)
+MIN_OWN_CHARS = 6
 MAX_SPAN_CHARS = 40
 MIN_SPAN_SHARED = 2
 PROTOCOL_ATTEMPTS = 2
@@ -146,11 +141,15 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "连续原文，不超过80字，不得改写或用省略号拼接），并给这句话归为一类（quote_type）：\n"
         "算分析的类别——finding_linked：把本次报告的具体异常与症状、体征或病情变化联系起来作出判断"
         "（如“MRI示内侧半月板撕裂，与膝痛、旋转碾压试验阳性相符”）；management_linked：因该异常制定或调整处置"
-        "（手术、会诊、复查、针对性用药等）并写明两者关系（如“胸部CT提示右肺小结节，请胸外科会诊评估结节性质”）；"
-        "prior_comparison：与既往影像对比该异常的变化；targeted_differential：用本次报告所见排除或确认某个具体诊断。\n"
+        "（手术、会诊、复查、针对性用药等），并写出依据（症状、体征、严重程度、手术指征等）把异常和处置联系起来"
+        "（如“胸部CT提示右肺小结节，请胸外科会诊评估结节性质”）；"
+        "prior_comparison：与既往影像对比该异常的变化；targeted_differential：用本次报告所见排除或确认某个具体诊断，"
+        "并写出依据。\n"
         "不算分析的类别——listing_only：只罗列或摘抄报告结果；diagnosis_only：罗列后直接列出诊断，或只写"
         "“结合病史及辅助检查结果分析，目前考虑诊断：……”“结合MRI可诊断”“见辅助检查”；generic_plan：只按诊断列出"
-        "常规治疗或写“继续当前治疗”“密切观察”而未提及该异常；none：该病程没有涉及本次报告异常。\n"
+        "常规治疗或写“继续当前治疗”“密切观察”而未提及该异常；只写“异常+拟行某处置”而没有依据"
+        "（如“L4/5椎间盘突出，拟行手术。”）归generic_plan；只写“排除某诊断”而没有依据（如“排除L1椎体压缩性骨折”）"
+        "归diagnosis_only；none：该病程没有涉及本次报告异常。\n"
         "用户口径（2026-10-12）补充：病程用诊断名指代本次报告异常（如“腰椎间盘突出伴神经根病诊断明确，疼痛明显，"
         "拟行椎间盘化学溶解术”）并据此给出手术等方案，归management_linked；对复查影像结果作出解读并据此给出处置"
         "（如“复查CT提示骨水泥弥散良好，指导功能锻炼”），归finding_linked；“结合颈椎MRI故不考虑该诊断”归"
@@ -166,7 +165,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
 
 
 def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
-    """引文中不属于报告原文（≥MIN_REPORT_OVERLAP 字连续重合片段）、也不是引出报告字词的字数。"""
+    """引文中不属于报告原文（≥MIN_REPORT_OVERLAP 字连续重合片段）、也不是本次检查部位的字数。"""
     text, source = _normalize(quote), _normalize(report)
     covered = [False] * len(text)
     index = 0
@@ -181,9 +180,8 @@ def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
         else:
             index += 1
     own = "".join(char if not flag else "|" for flag, char in zip(covered, text))
-    for word in sorted({*_REPORT_LEAD_WORDS, *(_normalize(site) for site in lead_sites if _normalize(site))},
-                       key=len, reverse=True):
-        own = re.sub(re.escape(word), "|", own, flags=re.IGNORECASE)
+    for site in sorted({_normalize(site) for site in lead_sites if _normalize(site)}, key=len, reverse=True):
+        own = own.replace(site, "|")
     return sum(1 for char in own if char.isalnum())
 
 

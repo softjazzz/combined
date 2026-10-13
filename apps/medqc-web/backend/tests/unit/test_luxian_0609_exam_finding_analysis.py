@@ -205,41 +205,39 @@ async def test_final_partial_coverage_decides_per_event_instead_of_failing_whole
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("quote", ["L4/5椎间盘突出，拟行手术。", "L4/5椎间盘突出，拟行手术治疗。"])
-async def test_short_explicit_management_after_restated_finding_counts(quote):
-    """复核反例（2026-10-12）：原 6 字门槛把“拟行手术”判为照抄，多写“治疗”两字才算分析。"""
+async def test_finding_plus_plan_without_basis_is_not_analysis_even_if_misfiled():
+    """用户口径（2026-10-12）：只写“异常 + 拟行某处置”没有依据，不算分析；模型误归为处置也不采信。"""
+    quote = "L4/5椎间盘突出，拟行手术。"
     projection = _projection(quote)
     ref = _report_ref(projection)
-    outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "management_linked", quote)]))
-    assert outcome.analysed_refs == {1: (ref,)}
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("quote", ["腰椎MRI示L4/5椎间盘突出，椎管狭窄", "复查MRI提示L4/5椎间盘突出，椎管狭窄"])
-async def test_report_lead_words_do_not_make_copied_conclusion_count(quote):
-    projection = _projection(quote + "。继续当前治疗。")
-    ref = _report_ref(projection)
-    outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "finding_linked", quote)]))
+    client = _Client([_answer(ref, "management_linked", quote)])
+    outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.analysed_refs == {1: ()}
+    assert "L4/5椎间盘突出，拟行手术。”）归generic_plan" in client.prompts[0]
 
 
 @pytest.mark.asyncio
-async def test_short_differential_reusing_report_wording_counts():
-    """第二轮复核：报告写“待排”、病程用报告原词“排除……”作鉴别，去掉重合部分只剩“排除”2 字。"""
+async def test_bare_exclusion_reusing_report_wording_is_not_analysis():
+    """用户口径（2026-10-12）：报告写“待排”，病程只写“排除L1椎体压缩性骨折”而无依据，不算分析。"""
     projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
         "exam_master": ({"exam_id": "EX-1", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-18 12:30:00",
                          "report_time": "2026-08-18 13:30:00",
                          "exam_conclusion": "腰椎退行性变；L1椎体压缩性骨折待排。"},),
         "daily_course_record": (
-            {"record_time": "2026-08-18 15:00:00",
-             "record_content": "结合症状体征，排除L1椎体压缩性骨折，继续保守治疗。"},
+            {"record_time": "2026-08-18 15:00:00", "record_content": "排除L1椎体压缩性骨折，继续保守治疗。"},
         ),
     }), {1: "positive"})
     ref = _report_ref(projection)
-    outcome = await check_exam_finding_analysis(projection, _Client([_answer(
-        ref, "targeted_differential", "排除L1椎体压缩性骨折", "L1椎体压缩性骨折待排")]))
-    assert outcome.analysed_refs == {1: (ref,)}
-    # 同一句若只照抄报告原文（无“排除”），仍不算分析。
-    copied = await check_exam_finding_analysis(projection, _Client([_answer(
-        ref, "targeted_differential", "L1椎体压缩性骨折", "L1椎体压缩性骨折待排")]))
-    assert copied.analysed_refs == {1: ()}
+    client = _Client([_answer(ref, "targeted_differential", "排除L1椎体压缩性骨折", "L1椎体压缩性骨折待排")])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.analysed_refs == {1: ()}
+    assert "（如“排除L1椎体压缩性骨折”）归diagnosis_only" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", ["腰椎MRI示L4/5椎间盘突出，椎管狭窄", "腰椎MRI：L4/5椎间盘突出，椎管狭窄"])
+async def test_exam_site_lead_does_not_make_copied_conclusion_count(quote):
+    projection = _projection(quote + "。继续当前治疗。")
+    ref = _report_ref(projection)
+    outcome = await check_exam_finding_analysis(projection, _Client([_answer(ref, "finding_linked", quote)]))
+    assert outcome.analysed_refs == {1: ()}
