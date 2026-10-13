@@ -51,7 +51,11 @@ class _Client:
         return {"content": content, "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
-def _measures(alias, *, include_missing=True, bad=None):
+EVIDENCED = ("电针", "头皮针", "低频")
+UNEXECUTED = ("关节松动术", "偏瘫肢体综合训练")
+
+
+def _measures(alias, *, include_missing=True, bad=None, generic=()):
     items = [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "电针",
          "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针"},
@@ -61,15 +65,16 @@ def _measures(alias, *, include_missing=True, bad=None):
          "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗"},
     ]
     if include_missing:
-        items.append({"recommendation_ref": "consultation_record-1#r1", "measure": "关节松动术",
-                      "evidence_ref": "", "quote": ""})
+        items += [{"recommendation_ref": "consultation_record-1#r1", "measure": measure,
+                   "evidence_ref": "", "quote": ""} for measure in UNEXECUTED]
     if bad == "measure":
         items[0]["measure"] = "针刺疗法"
     elif bad == "scope":
         items[0]["evidence_ref"] = "c99"
     elif bad == "quote":
         items[0]["quote"] = "电针治疗已完成"
-    return {"schema_version": SCHEMA_VERSION, "measures": items}
+    return {"schema_version": SCHEMA_VERSION, "measures": items,
+            "generic": [{"recommendation_ref": "consultation_record-1#r1", "text": text} for text in generic]}
 
 
 async def _check(client):
@@ -84,7 +89,7 @@ async def test_unexecuted_measure_turns_compliant_into_non_compliant():
     _, _, _, alias = _setup()
     client = _Client([_measures(alias)])
     outcome = await _check(client)
-    assert outcome.state == "ready" and outcome.missing_measures == {"consultation_record-1#r1": ("关节松动术",)}
+    assert outcome.state == "ready" and outcome.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
     assert RECOMMENDATION in client.prompts[0] and "一张中药方（含加减）算一项" in client.prompts[0]
     no_gap = apply_measure_check(("compliant", "requirement_satisfied"), outcome,
                                  relevant_source_incomplete=lambda ref: False)
@@ -96,11 +101,56 @@ async def test_unexecuted_measure_turns_compliant_into_non_compliant():
 
 @pytest.mark.asyncio
 async def test_all_measures_evidenced_keeps_compliant():
-    _, _, _, alias = _setup()
-    outcome = await _check(_Client([_measures(alias, include_missing=False)]))
-    assert outcome.state == "ready" and not outcome.has_missing
+    completed, candidates, allowed, alias = _setup()
+    evidenced = _measures(alias, include_missing=False)
+    evidenced["measures"] += [
+        {"recommendation_ref": "consultation_record-1#r1", "measure": measure,
+         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "功能性电刺激治疗"}
+        for measure in UNEXECUTED
+    ]
+    outcome = await _check(_Client([evidenced]))
+    assert outcome.state == "ready" and not outcome.has_missing and outcome.llm_call_count == 1
     assert apply_measure_check(("compliant", "requirement_satisfied"), outcome,
                                relevant_source_incomplete=lambda ref: False) == ("compliant", "requirement_satisfied")
+
+
+@pytest.mark.asyncio
+async def test_omitted_measures_retry_with_uncovered_text_then_count_as_missing():
+    """复核反例（2026-10-12）：5 项措施只拆出有证据的前 3 项时，原实现判合规。"""
+    _, _, _, alias = _setup()
+    omitted = _measures(alias, include_missing=False)
+    client = _Client([omitted, _measures(alias)])
+    outcome = await _check(client)
+    assert outcome.llm_call_count == 2 and outcome.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
+    assert "关节松动术" in client.prompts[1].split("RECOMMENDATIONS_JSON=")[0]
+    # 两次都漏拆：漏拆段落未经证据核对，按缺项计，不再放行为合规。
+    twice = await _check(_Client([omitted, omitted]))
+    assert twice.state == "ready" and twice.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
+    assert apply_measure_check(("compliant", "requirement_satisfied"), twice,
+                               relevant_source_incomplete=lambda ref: False) == ("non_compliant", "requirement_violated")
+
+
+@pytest.mark.asyncio
+async def test_generic_instructions_listed_verbatim_do_not_count_as_omission():
+    completed, candidates, allowed, _ = _setup()
+    text = "电针、头皮针、低频，注意休息，必要时复查头颅CT"
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("consultation_record-1#r1", "procedure", text, text, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+    ),)
+    alias = episode._prompt_alias_by_ref(candidates, allowed)
+    answer = _measures(alias, include_missing=False, generic=("注意休息", "必要时复查头颅CT"))
+    outcome = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias,
+        llm_client=_Client([answer]))
+    assert outcome.state == "ready" and outcome.llm_call_count == 1 and not outcome.has_missing
+    # generic 须逐字摘自建议，否则按协议违规重试。
+    bad = _measures(alias, include_missing=False, generic=("注意卧床休息", "必要时复查头颅CT"))
+    client = _Client([bad, answer])
+    retried = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias, llm_client=client)
+    assert retried.llm_call_count == 2 and "generic的text必须逐字摘自" in client.prompts[1]
 
 
 @pytest.mark.asyncio

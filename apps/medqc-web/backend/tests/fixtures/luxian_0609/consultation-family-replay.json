@@ -83,6 +83,6 @@
       "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
       "api_time": 0.01
     },
-    {"payload": {"schema_version": "lx0609-consultation-measure-check-v1", "measures": [{"recommendation_ref": "consultation_record-1#r1", "measure": "复查血常规", "evidence_ref": "daily_course_record-1", "quote": "已复查血常规"}]}, "usage": {"prompt_tokens": 10, "completion_tokens": 3, "total_tokens": 13}, "api_time": 0.01}
+    {"payload": {"schema_version": "lx0609-consultation-measure-check-v2", "measures": [{"recommendation_ref": "consultation_record-1#r1", "measure": "复查血常规", "evidence_ref": "daily_course_record-1", "quote": "已复查血常规"}], "generic": []}, "usage": {"prompt_tokens": 10, "completion_tokens": 3, "total_tokens": 13}, "api_time": 0.01}
   ]
 }
