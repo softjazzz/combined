@@ -1,7 +1,8 @@
 """EMR 文书渲染 API（BundleOnly 结构化展示）"""
 
+import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, Request, Query, HTTPException
 from starlette.concurrency import run_in_threadpool
@@ -277,32 +278,7 @@ async def render_document(
     layout_version = str(view_payload.get("layout_version") or "bundle_struct_v1")
     empty_reason = str(view_payload.get("empty_reason") or documents_payload.get("empty_reason") or "")
 
-    annotations: List[Dict[str, Any]] = []
-    sb = get_supabase()
-    if sb is not None:
-        try:
-            qc_resp = await async_execute(
-                sb.table("qc_results")
-                .select("issues,evaluation_results")
-                .eq("record_id", record_id)
-                .order("created_at", desc=True)
-                .limit(1)
-            )
-            qc_data = list(getattr(qc_resp, "data", None) or [])
-            if qc_data:
-                issues = qc_data[0].get("issues", []) or []
-                eval_results = qc_data[0].get("evaluation_results", []) or []
-                for i, issue in enumerate(issues):
-                    annotation = _build_annotation_from_issue(content, issue, i)
-                    if annotation:
-                        annotations.append(annotation)
-                for result in eval_results:
-                    if result.get("status") == "non_compliant" or not result.get("is_compliant", True):
-                        annotation = _build_annotation_from_result(content, result, len(annotations))
-                        if annotation:
-                            annotations.append(annotation)
-        except Exception as exc:
-            logger.warning("获取缺陷标注失败: %s", exc)
+    annotations, annotation_status = await _load_defect_annotations(record_id, content)
 
     return success_response(
         data={
@@ -316,10 +292,84 @@ async def render_document(
             "highlight_anchors": highlight_anchors,
             "empty_reason": empty_reason,
             "total_annotations": len(annotations),
+            # loaded / no_result / unavailable：unavailable 表示读取失败，前端需提示而不是当作“无缺陷”
+            "annotation_status": annotation_status,
         },
         message="获取文书渲染数据成功",
         trace_id=get_trace_id(request),
     )
+
+
+def _decode_json_list(value: Any) -> List[Dict[str, Any]]:
+    if isinstance(value, str) and value.strip():
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return []
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _extract_qc_findings(row: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """从 qc_results 行取出 issues / evaluation_results。
+
+    当前 alembic 表结构只有 raw_output（完整结果 JSON 文本），没有 issues、
+    evaluation_results 列；旧库可能另有 issues 列。优先用独立列，缺失时回退 raw_output。
+    """
+    raw_output: Dict[str, Any] = {}
+    raw_value = row.get("raw_output")
+    if isinstance(raw_value, dict):
+        raw_output = raw_value
+    elif isinstance(raw_value, str) and raw_value.strip():
+        try:
+            parsed = json.loads(raw_value)
+        except ValueError:
+            logger.warning("qc_results.raw_output 不是合法 JSON，无法还原缺陷标注")
+        else:
+            if isinstance(parsed, dict):
+                raw_output = parsed
+    issues = _decode_json_list(row.get("issues")) if "issues" in row else []
+    if not issues:
+        issues = _decode_json_list(raw_output.get("issues"))
+    eval_results = _decode_json_list(row.get("evaluation_results")) if "evaluation_results" in row else []
+    if not eval_results:
+        eval_results = _decode_json_list(raw_output.get("evaluation_results"))
+    return issues, eval_results
+
+
+async def _load_defect_annotations(record_id: str, content: str) -> Tuple[List[Dict[str, Any]], str]:
+    """读取最近一次质控结果的缺陷标注，返回 (标注列表, 状态)。"""
+    sb = get_supabase()
+    if sb is None:
+        return [], "unavailable"
+    try:
+        # 用 * 而不是点名列：qc_results 在新旧库中的列不一致，点名不存在的列会直接 UndefinedColumn
+        qc_resp = await async_execute(
+            sb.table("qc_results")
+            .select("*")
+            .eq("record_id", record_id)
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+    except Exception as exc:
+        logger.error("获取缺陷标注失败: record_id=%s error_type=%s", record_id, type(exc).__name__)
+        return [], "unavailable"
+    qc_data = list(getattr(qc_resp, "data", None) or [])
+    if not qc_data:
+        return [], "no_result"
+    issues, eval_results = _extract_qc_findings(qc_data[0])
+    annotations: List[Dict[str, Any]] = []
+    for i, issue in enumerate(issues):
+        annotation = _build_annotation_from_issue(content, issue, i)
+        if annotation:
+            annotations.append(annotation)
+    for result in eval_results:
+        if result.get("status") == "non_compliant" or not result.get("is_compliant", True):
+            annotation = _build_annotation_from_result(content, result, len(annotations))
+            if annotation:
+                annotations.append(annotation)
+    return annotations, "loaded"
 
 
 def _build_annotation_from_issue(
