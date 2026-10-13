@@ -26,7 +26,7 @@ from .exam_lab_course_time import (
 )
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
-from .exam_finding_analysis import apply_finding_analysis, check_exam_finding_analysis
+from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
 from .exam_result_record_check import ResultRecordOutcome, apply_result_record, check_exam_result_record
 from .exam_lab_fact_extraction import (
@@ -1661,6 +1661,53 @@ def _with_result_conflicts(
     return facts
 
 
+def _with_analysis_gaps(
+    display_facts: Mapping[str, Any] | None,
+    *,
+    gaps: Mapping[int, tuple[tuple[str, str], ...]],
+    projection: ExamLabTextProjection,
+) -> Mapping[str, Any] | None:
+    """06-01-05 修改建议（客户需求 2026-10-12）：写入未见分析事件中最接近病程的记录时间与不足类别。
+
+    只写记录时间与类别，病历原文不进入客户事实；多事件写入对应事件明细，单事件写入顶层。
+    """
+
+    if not isinstance(display_facts, Mapping) or not gaps:
+        return display_facts
+
+    def notes(position: int) -> list[dict[str, str]]:
+        rows = sorted(
+            (value, kind) for ref, kind in gaps.get(position, ())
+            if (value := projection.course_times.get(ref)) is not None
+        )
+        seen: set[tuple[str, str]] = set()
+        result = []
+        for value, kind in rows:
+            item = (value.strftime("%Y-%m-%d %H:%M:%S"), kind)
+            if item not in seen:
+                seen.add(item)
+                result.append({"record_time": item[0], "gap": kind})
+        return result[:8]
+
+    facts = dict(display_facts)
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        updated = []
+        for item in event_results:
+            item = dict(item)
+            position = item.get("event_position")
+            if type(position) is int and item.get("requirement_met") is not True and (rows := notes(position)):
+                item["analysis_gap_notes"] = rows
+            updated.append(item)
+        facts["event_results"] = updated
+        return facts
+    position = facts.get("event_position")
+    rows = notes(position if type(position) is int else 1)
+    if rows:
+        facts["analysis_gap_notes"] = rows
+    return facts
+
+
 def _display_facts_for_text_outcome(
     *,
     rule_id: str,
@@ -2661,6 +2708,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
                     result_conflicts: Mapping[int, tuple[str, ...]] = {}
+                    analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
                     if text_facts is not None:
                         # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
                         # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
@@ -2680,6 +2728,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             for (_, apply), check_outcome in zip(checks, check_outcomes):
                                 if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
                                     result_conflicts = check_outcome.conflict_refs
+                                if isinstance(check_outcome, FindingAnalysisOutcome) and check_outcome.state == "ready":
+                                    analysis_gaps = check_outcome.gap_refs
                                 llm_call_count += check_outcome.llm_call_count
                                 prompt_tokens += check_outcome.prompt_tokens
                                 completion_tokens += check_outcome.completion_tokens
@@ -2702,14 +2752,22 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             outcome.reason_code,
                             outcome.fact_refs,
                             display_facts=(
-                                _with_result_conflicts(
-                                    _display_facts_for_text_outcome(
-                                        rule_id=rule_id,
-                                        facts=text_facts,
+                                _with_analysis_gaps(
+                                    _with_result_conflicts(
+                                        _display_facts_for_text_outcome(
+                                            rule_id=rule_id,
+                                            facts=text_facts,
+                                            projection=projection,
+                                            outcome=outcome,
+                                        ),
+                                        conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
                                         projection=projection,
-                                        outcome=outcome,
                                     ),
-                                    conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
+                                    gaps=(
+                                        analysis_gaps
+                                        if rule_id == "LX0609-06-01-05" and outcome.status == "non_compliant"
+                                        else {}
+                                    ),
                                     projection=projection,
                                 )
                                 if text_facts is not None

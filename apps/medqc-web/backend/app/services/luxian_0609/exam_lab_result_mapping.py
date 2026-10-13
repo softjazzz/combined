@@ -119,6 +119,29 @@ def _safe_conflict_times(value: Any) -> list[str] | None:
     return list(value)
 
 
+_ANALYSIS_GAP_KEY = "analysis_gap_notes"
+ANALYSIS_GAP_KINDS = frozenset({"listing_only", "conclusion_without_basis", "plan_without_basis"})
+
+
+def _safe_analysis_gap_notes(value: Any) -> list[dict[str, str]] | None:
+    """06-01-05 修改建议：最多 8 条，只含固定格式的病程记录时间与受控不足类别。"""
+
+    if not isinstance(value, list) or not 1 <= len(value) <= 8:
+        return None
+    notes = []
+    for item in value:
+        if (
+            not isinstance(item, Mapping)
+            or set(item) != {"record_time", "gap"}
+            or not isinstance(item["record_time"], str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", item["record_time"])
+            or item["gap"] not in ANALYSIS_GAP_KINDS
+        ):
+            return None
+        notes.append({"record_time": item["record_time"], "gap": item["gap"]})
+    return notes
+
+
 def safe_exam_lab_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -329,6 +352,8 @@ def safe_exam_lab_customer_display_facts(
     }
     if normalized_rule_id == "LX0609-06-01-04":
         allowed_event_keys.add(_CONFLICT_TIMES_KEY)
+    if normalized_rule_id == "LX0609-06-01-05":
+        allowed_event_keys.add(_ANALYSIS_GAP_KEY)
     if not set(raw).issubset(allowed_event_keys):
         return None
     source_document_ids = raw.get("source_document_ids")
@@ -451,6 +476,11 @@ def safe_exam_lab_customer_display_facts(
         if conflict_times is None:
             return None
         facts[_CONFLICT_TIMES_KEY] = conflict_times
+    if _ANALYSIS_GAP_KEY in raw:
+        gap_notes = _safe_analysis_gap_notes(raw[_ANALYSIS_GAP_KEY])
+        if gap_notes is None:
+            return None
+        facts[_ANALYSIS_GAP_KEY] = gap_notes
     event_count = raw.get("event_count")
     event_position = raw.get("event_position")
     if event_count is not None or event_position is not None:
@@ -484,6 +514,8 @@ def safe_exam_lab_customer_display_facts(
         }
         if normalized_rule_id == "LX0609-06-01-04":
             allowed_event_keys.add(_CONFLICT_TIMES_KEY)
+        if normalized_rule_id == "LX0609-06-01-05":
+            allowed_event_keys.add(_ANALYSIS_GAP_KEY)
         safe_event_results: list[dict[str, Any]] = []
         # 顺序合同（2026-09-12 收口）：事实的**语义**由 event_position 决定，物理顺序
         # 不是合同的一部分。此前用 enumerate 下标与 event_position 做相等比对，会把
@@ -570,6 +602,11 @@ def safe_exam_lab_customer_display_facts(
                 if conflict_times is None:
                     return None
                 safe_item[_CONFLICT_TIMES_KEY] = conflict_times
+            if _ANALYSIS_GAP_KEY in item:
+                gap_notes = _safe_analysis_gap_notes(item[_ANALYSIS_GAP_KEY])
+                if gap_notes is None:
+                    return None
+                safe_item[_ANALYSIS_GAP_KEY] = gap_notes
             safe_event_results.append(safe_item)
         if (
             verification_kind == "exam_lab_event_review_incomplete"

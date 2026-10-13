@@ -19,6 +19,11 @@
 Python 另核验：引文须逐字见于病程；去掉与报告原文重合的片段及本次检查部位（取自检查名称与
 关联医嘱名称，如“腰椎MRI示……”的“腰椎”）后须仍有实质内容，照抄报告结论的引文一律不算分析。
 该字数门槛只用于识别照抄，是否写出依据由单句归类判断。
+同日确认：早期作为“算分析”示范的“胸部CT提示右肺小结节，请胸外科会诊评估结节性质”（只写会诊目的、
+未写为何需会诊）与“结合颈椎MRI故不考虑该诊断”（未写 MRI 所见）均改为不算，提示词改列为反例并附正确写法。
+修改建议（客户需求 2026-10-12）：事件未见分析时，记下最接近的那份病程属于哪种不足（只罗列结果、
+只写结论无依据、只写处置无依据），供客户结果按病程记录时间给出修改建议；只记类别，不带病历原文。
+不足类别须与本次报告异常对得上（报告片段核验同算分析类别），对不上的不记。
 同一份病程常被多次检查共用，真实样本出现把胸部CT的“右肺小结节，请胸外科会诊”挂到
 膝关节MRI名下。故要求同时摘出所针对的本次报告异常片段（report_span），须逐字见于
 该次报告，且与引文至少有 2 个连续相同字；引文直接指向本次检查（如鉴别诊断写“结合颈椎MRI
@@ -28,7 +33,7 @@ Python 另核验：引文须逐字见于病程；去掉与报告原文重合的�
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 import re
 from time import perf_counter
@@ -60,6 +65,19 @@ MAX_COURSE_CHARS = 6000
 MAX_PROMPT_CHARS = 60000
 MAX_QUOTE_CHARS = 80
 MAX_COMPLETION_TOKENS = 2048
+# 未见分析时最接近的一句属于哪种不足：用于客户修改建议，不参与判定。
+GAP_KINDS = {
+    "listing_only": "listing_only",
+    "diagnosis_only": "conclusion_without_basis",
+    "generic_plan": "plan_without_basis",
+}
+MAX_GAP_NOTES_PER_EVENT = 8
+_REJECTED_ANALYSIS_GAPS = {
+    "finding_linked": "listing_only",
+    "prior_comparison": "listing_only",
+    "management_linked": "plan_without_basis",
+    "targeted_differential": "conclusion_without_basis",
+}
 
 
 @dataclass(frozen=True)
@@ -72,6 +90,8 @@ class FindingAnalysisOutcome:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    # 事件位置 -> ((病程引用, 不足类别), ...)：仅含与本次报告异常对得上的不算分析引文。
+    gap_refs: Mapping[int, tuple[tuple[str, str], ...]] = field(default_factory=dict)
 
 
 def _normalize(text: str) -> str:
@@ -142,18 +162,20 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "算分析的类别——finding_linked：把本次报告的具体异常与症状、体征或病情变化联系起来作出判断"
         "（如“MRI示内侧半月板撕裂，与膝痛、旋转碾压试验阳性相符”）；management_linked：因该异常制定或调整处置"
         "（手术、会诊、复查、针对性用药等），并写出依据（症状、体征、严重程度、手术指征等）把异常和处置联系起来"
-        "（如“胸部CT提示右肺小结节，请胸外科会诊评估结节性质”）；"
+        "（如“胸部CT示右肺上叶结节约12mm、边缘毛糙，恶性不能除外，请胸外科会诊评估结节性质”）；"
         "prior_comparison：与既往影像对比该异常的变化；targeted_differential：用本次报告所见排除或确认某个具体诊断，"
         "并写出依据。\n"
         "不算分析的类别——listing_only：只罗列或摘抄报告结果；diagnosis_only：罗列后直接列出诊断，或只写"
         "“结合病史及辅助检查结果分析，目前考虑诊断：……”“结合MRI可诊断”“见辅助检查”；generic_plan：只按诊断列出"
         "常规治疗或写“继续当前治疗”“密切观察”而未提及该异常；只写“异常+拟行某处置”而没有依据"
         "（如“L4/5椎间盘突出，拟行手术。”）归generic_plan；只写“排除某诊断”而没有依据（如“排除L1椎体压缩性骨折”）"
-        "归diagnosis_only；none：该病程没有涉及本次报告异常。\n"
+        "归diagnosis_only；只写会诊或检查目的而没有依据（如“胸部CT提示右肺小结节，请胸外科会诊评估结节性质”）"
+        "归generic_plan；只写“结合某检查不考虑某诊断”而未写检查所见（如“结合颈椎MRI故不考虑该诊断”）归diagnosis_only，"
+        "写出所见才算（如“颈椎MRI未见脊髓受压，故不考虑脊髓型颈椎病”归targeted_differential）；"
+        "none：该病程没有涉及本次报告异常。\n"
         "用户口径（2026-10-12）补充：病程用诊断名指代本次报告异常（如“腰椎间盘突出伴神经根病诊断明确，疼痛明显，"
         "拟行椎间盘化学溶解术”）并据此给出手术等方案，归management_linked；对复查影像结果作出解读并据此给出处置"
-        "（如“复查CT提示骨水泥弥散良好，指导功能锻炼”），归finding_linked；“结合颈椎MRI故不考虑该诊断”归"
-        "targeted_differential；与本次报告异常无关的模板式鉴别诊断归none。"
+        "（如“复查CT提示骨水泥弥散良好，指导功能锻炼”），归finding_linked；与本次报告异常无关的模板式鉴别诊断归none。"
         "同一份病程有多句时优先选算分析的那一句；确无时选最接近的一句并归入不算分析的类别，none时quote为空字符串。"
         "quote_type不为none时，report_span必须是该事件report中被这句话针对的异常片段（逐字摘录，不超过40字）；"
         "病程中针对的是其他检查（另一部位或另一份报告）的异常时，不能归入本事件的算分析类别，应归none。"
@@ -216,6 +238,7 @@ def _parse(
         raise ValueError("invalid response schema")
     seen: set[tuple[int, str]] = set()
     analysed: dict[int, list[str]] = {position: [] for position in expected}
+    gaps: dict[int, list[tuple[str, str]]] = {position: [] for position in expected}
     for item in payload["docs"]:
         if not isinstance(item, dict) or set(item) != {
             "event_position", "course_doc_ref", "quote_type", "quote", "report_span",
@@ -238,6 +261,12 @@ def _parse(
             raise ValueError("missing quote")
         if normalized_quote not in _normalize(_course_text(projection, ref)):
             raise ValueError("quote not in course")
+        if kind in GAP_KINDS:
+            # 修改建议只记与本次报告异常对得上的不足；对不上（如只列常规治疗）的不记，也不算协议违规。
+            normalized_span = _normalize(span)
+            if (normalized_span and len(span) <= MAX_SPAN_CHARS
+                    and normalized_span in _normalize(reports[position]) and _shares_finding(span, quote)):
+                gaps[position].append((ref, GAP_KINDS[kind]))
         if kind in ANALYSIS_TYPES:
             normalized_span = _normalize(span)
             if not normalized_span or len(span) > MAX_SPAN_CHARS:
@@ -254,6 +283,9 @@ def _parse(
             own = _own_chars(quote, reports[position], (lead_sites or {}).get(position, ()))
             if own >= MIN_OWN_CHARS and attributed:
                 analysed[position].append(ref)
+            elif attributed:
+                # 归为分析但去掉照抄部分后不剩实质内容：按其所属类别给修改建议。
+                gaps[position].append((ref, _REJECTED_ANALYSIS_GAPS[kind]))
     if not seen:
         raise ValueError("invalid doc coverage")
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
@@ -261,10 +293,15 @@ def _parse(
         raise ValueError("invalid doc coverage")
     # 末次仍漏核时按事件处理：已核到一份算分析即已分析；全部核到且均不算才判未分析；
     # 其余事件不固定，单独沿用主抽取判断，不连累同批其他事件。
-    return {
+    decided = {
         position: tuple(refs) for position, refs in analysed.items()
         if refs or position in complete
     }
+    gap_refs = {
+        position: tuple(gaps[position][:MAX_GAP_NOTES_PER_EVENT])
+        for position, refs in decided.items() if not refs and gaps[position]
+    }
+    return decided, gap_refs
 
 
 _RETRY_HINTS = {
@@ -314,7 +351,7 @@ async def check_exam_finding_analysis(
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
-            analysed = _parse(
+            analysed, gap_refs = _parse(
                 response, projection, model_expected,
                 allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS,
                 reports={position: model_targets[position][0] for position in model_expected},
@@ -331,7 +368,7 @@ async def check_exam_finding_analysis(
     analysed_refs = {position: () for position in expected if position not in model_expected}
     analysed_refs.update(analysed)
     return FindingAnalysisOutcome("ready", analysed_refs, calls, prompt_tokens, completion_tokens, total_tokens,
-                                  api_time or perf_counter() - started)
+                                  api_time or perf_counter() - started, gap_refs=gap_refs)
 
 
 def apply_finding_analysis(

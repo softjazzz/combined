@@ -257,6 +257,60 @@ def _consultation_targets(facts: Mapping[str, Any] | None) -> tuple[str, str]:
     return target, "；".join(needs)
 
 
+# 06-01-05 修改建议（客户需求 2026-10-12）：按未计入病程的不足类别说明“错在哪、怎么改”。
+# 示范句为通用写法，不来自任何病历原文。
+_ANALYSIS_GAP_GUIDANCE: dict[str, tuple[str, str]] = {
+    "listing_only": (
+        "只罗列了报告结果，未写出该异常的临床意义及处置",
+        "在罗列结果后写明异常与病情的联系及处置，例如：“胸部CT示右肺下叶渗出，结合发热、咳嗽及白细胞升高，"
+        "考虑社区获得性肺炎，予抗感染治疗，3日后复查胸部CT。”",
+    ),
+    "conclusion_without_basis": (
+        "只写了诊断或排除结论，未写出得出结论的依据（影像所见、症状体征）",
+        "写明影像所见与症状体征如何支持或排除该诊断，例如：“颈椎MRI未见脊髓受压及髓内信号改变，且无四肢麻木无力，"
+        "故不考虑脊髓型颈椎病。”",
+    ),
+    "plan_without_basis": (
+        "只写了处置、会诊或检查计划，未写出依据（症状、体征、严重程度或手术指征）",
+        "写明异常与处置之间的依据，例如：“腰椎MRI示L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符，"
+        "保守治疗2周无效，具备手术指征，拟行手术。”",
+    ),
+}
+
+
+def _analysis_gap_action(facts: Mapping[str, Any] | None) -> tuple[str, str, str] | None:
+    """06-01-05：有未计入病程的不足类别时，给出具体病程、不足说明与示范写法。"""
+    if not isinstance(facts, Mapping):
+        return None
+    located: list[tuple[str, list[Mapping[str, Any]]]] = []
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        for item in event_results:
+            if isinstance(item, Mapping) and isinstance(item.get("analysis_gap_notes"), list):
+                report_time = item.get("report_time") or "待核实"
+                located.append((f"第{item.get('event_position')}次检查（报告时间 {report_time}）",
+                                item["analysis_gap_notes"]))
+    elif isinstance(facts.get("analysis_gap_notes"), list):
+        located.append(("", facts["analysis_gap_notes"]))
+    targets: list[str] = []
+    kinds: list[str] = []
+    for prefix, notes in located:
+        rows = [note for note in notes if isinstance(note, Mapping) and note.get("gap") in _ANALYSIS_GAP_GUIDANCE]
+        if not rows:
+            continue
+        times = "、".join(dict.fromkeys(str(note.get("record_time")) for note in rows))
+        targets.append(f"{prefix}记录时间 {times} 的病程")
+        kinds.extend(note["gap"] for note in rows)
+    kinds = list(dict.fromkeys(kinds))
+    if not targets or not kinds:
+        return None
+    return (
+        "；".join(targets),
+        "该病程" + "；".join(_ANALYSIS_GAP_GUIDANCE[kind][0] for kind in kinds) + "，因此未计为对阳性结果的分析",
+        "请在报告出具后24小时内的病程中补充分析。" + "".join(_ANALYSIS_GAP_GUIDANCE[kind][1] for kind in kinds),
+    )
+
+
 def _personalized_action(
     *,
     rule_id: str,
@@ -323,6 +377,10 @@ def build_customer_remediation_suggestion(
         )
         if personalized is not None:
             target, required = personalized
+        if normalized_rule_id == "LX0609-06-01-05":
+            gap_action = _analysis_gap_action(facts)
+            if gap_action is not None:
+                target, required, recommendation = gap_action
         return _structured_action(
             target=target,
             required=required,
