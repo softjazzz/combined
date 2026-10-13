@@ -114,25 +114,51 @@ def _severity_active_date_intervals(
 ) -> tuple[tuple[date, date | None], ...] | None:
     """按权威时间顺序配对病重/病危开始与解除事件，保留再次下达区间。"""
 
-    events: list[tuple[date, int, int, str]] = []
+    def local_datetime(value: Any) -> datetime | None:
+        # 保留既有自然日口径的本地时钟；先按时分秒配对，再投影日期。
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None)
+        if isinstance(value, date):
+            return datetime.combine(value, datetime.min.time())
+        if isinstance(value, str) and value.strip():
+            try:
+                return datetime.fromisoformat(value.strip()).replace(tzinfo=None)
+            except ValueError:
+                pass
+        return None
+
+    events: list[tuple[datetime, int, int, str]] = []
     for index, row in enumerate(rows):
         if row.get("status_state") not in {None, "effective"}:
             continue
         event_kind = row.get("event_kind") or "start"
-        event_date = _authoritative_natural_date(
+        event_time = local_datetime(
             row.get("planned_start_datetime") or row.get("prescribed_datetime")
         )
-        if event_date is None:
+        if event_time is None:
             return None
-        events.append((event_date, 0 if event_kind == "start" else 1, index, event_kind))
+        events.append((event_time, 0 if event_kind == "start" else 1, index, event_kind))
         if event_kind == "start" and row.get("lifecycle_state") == "stopped":
-            end_date = _authoritative_natural_date(row.get("planned_end_datetime"))
-            if end_date is None or end_date < event_date:
+            end_time = local_datetime(row.get("planned_end_datetime"))
+            if end_time is None or end_time < event_time:
                 return None
-            events.append((end_date, 1, index, "end"))
+            events.append((end_time, 1, index, "end"))
+    # 不同医嘱行在同一权威时刻解除和重开时，无法证明先后；不能让
+    # start/end 类型排序把重开静默丢弃。复用既有时间资料不足合同。
+    # 同一 stopped 行自身的开始/结束则有明确生命周期关系，仍可配对。
+    simultaneous: dict[datetime, tuple[set[int], set[int]]] = {}
+    for event_time, _kind_order, index, event_kind in events:
+        if horizon_date is not None and event_time.date() > horizon_date:
+            continue
+        starts, ends = simultaneous.setdefault(event_time, (set(), set()))
+        (starts if event_kind == "start" else ends).add(index)
+        if starts and ends and len(starts | ends) > 1:
+            return None
+
     active_start: date | None = None
     intervals: list[tuple[date, date | None]] = []
-    for event_date, _kind_order, _index, event_kind in sorted(events):
+    for event_time, _kind_order, _index, event_kind in sorted(events):
+        event_date = event_time.date()
         if horizon_date is not None and event_date > horizon_date:
             continue
         if event_kind == "start":
@@ -562,9 +588,9 @@ def _rule_008_009_decision(
                     refs=refs,
                     confidence=None,
                 )
+            # 008与009都必须有实际正文，时间戳/模板壳不能证明已写病程。
             if _date_in_active_intervals(parsed_date, active_intervals) and (
-                rule_id != "LX0609-02-01-05"
-                or bool(_rule_009_substantive_text(row))
+                bool(_rule_009_substantive_text(row))
             ):
                 if document_ref:
                     timed_record_points.append((parsed_date, document_ref))

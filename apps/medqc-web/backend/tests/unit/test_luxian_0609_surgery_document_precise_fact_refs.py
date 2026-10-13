@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 import pytest
+from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
 
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -39,7 +40,8 @@ def _rows_for(rule_id: str) -> dict[str, tuple[Mapping[str, Any], ...]]:
         "anesthesia_method": "全身麻醉",
         "record_content": "麻醉诱导和复苏记录完整",
     }
-    surgery = _surgery("mr-surgery-1")
+    surgery = {**_surgery("mr-surgery-1"), "surgery_begin_datetime": "2026-09-01 16:00:00",
+               "surgery_end_datetime": "2026-09-01 17:00:00"}
     pre = {
         "document_id": "pre-1",
         "document_title": "麻醉术前访视记录",
@@ -138,7 +140,7 @@ async def test_typed_surgery_document_rules_bind_only_actual_document_refs(
         rule_ids=(rule_id,),
         wrapper_rules=({"rule_id": rule_id},),
         evidence_payload=None,
-        llm_client=_NoLlm(),
+        llm_client=ExplicitAnesthesiaFactClient("precise_complete") if rule_id == "LX0609-04-04-02" else _NoLlm(),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=(rule_id,),
@@ -153,4 +155,8 @@ async def test_typed_surgery_document_rules_bind_only_actual_document_refs(
         coordinate_by_ref[ref] for ref in decision.fact_refs if ref in coordinate_by_ref
     }
     assert actual_materials == expected_materials
-    assert execution.llm_call_count == execution.total_tokens == 0
+    if rule_id == "LX0609-04-04-02":
+        assert execution.llm_call_count == 1
+        assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (10, 5, 15)
+    else:
+        assert execution.llm_call_count == execution.total_tokens == 0

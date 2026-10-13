@@ -1,0 +1,693 @@
+{
+  "schema_version": "iml-current-synthetic-replay-plan-v1",
+  "historical_report_sha": "c3a87a4f820259bca37a01764522ea1f3f485a3c",
+  "target_sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "historical_report_path": "apps/medqc-web/docs/acceptance/2026-10-07-round2-pathology-micro-audit.md",
+  "phase": "prepared_not_run",
+  "source_bindings": {
+    "native_exam_lab_execution.py": {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py",
+      "historical_blob": "f5d54399fbc603b235e609cd7932270f135fc4a7",
+      "current_blob": "f5d54399fbc603b235e609cd7932270f135fc4a7",
+      "source_changed": false,
+      "changed_symbols": [],
+      "added_symbols": []
+    },
+    "exam_lab_fact_extraction.py": {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+      "historical_blob": "c14d8be7fce2a999d662025410d60e6e9a65801a",
+      "current_blob": "c14d8be7fce2a999d662025410d60e6e9a65801a",
+      "source_changed": false,
+      "changed_symbols": [],
+      "added_symbols": []
+    }
+  },
+  "test_bindings": [
+    {
+      "name": "test_luxian_0609_culture_source_gap.py",
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_culture_source_gap.py",
+      "historical_blob": "37a1954066d2fae3a105e423e1a5c4a0ecee9e13",
+      "current_blob": "37a1954066d2fae3a105e423e1a5c4a0ecee9e13",
+      "sha256": "557b59358d3d551b50c7eb6dc9dcf141610c3eefe20fc381511a0159788f9a77",
+      "raw_input_oracle_unchanged": true
+    },
+    {
+      "name": "test_luxian_0609_culture_identified_organism.py",
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_culture_identified_organism.py",
+      "historical_blob": "e5d7b4a82a8b74e6ec8882eaf1dc810bffaf1274",
+      "current_blob": "e5d7b4a82a8b74e6ec8882eaf1dc810bffaf1274",
+      "sha256": "98aa9bc0e95e17b00b7fb497ce6b452b180c3e9aee9cfbd1d685cfa8e7779c12",
+      "raw_input_oracle_unchanged": true
+    }
+  ],
+  "helper_binding": {
+    "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_exam_lab_execution.py",
+    "historical_blob": "85d4ec2fa8c679dde48d592b60c05ded2d03d9e2",
+    "current_blob": "85d4ec2fa8c679dde48d592b60c05ded2d03d9e2",
+    "symbols": {
+      "_typed_session": true,
+      "_wrapper": true,
+      "_Client": true
+    },
+    "note": "dependency provenance only; do not select or execute this helper file tests"
+  },
+  "case_count": 45,
+  "coverage_counts": {
+    "shared_seam_only": 33,
+    "rule_fact_parser_only": 1,
+    "legacy_prompt_oracle": 1,
+    "direct_rule_synthetic": 10
+  },
+  "cases": [
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#0",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "parameters": {
+        "source": "course_rows",
+        "has_generic_lab": false
+      },
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#1",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "parameters": {
+        "source": "course_rows",
+        "has_generic_lab": true
+      },
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#2",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "parameters": {
+        "source": "consultation_rows",
+        "has_generic_lab": false
+      },
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#3",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "parameters": {
+        "source": "consultation_rows",
+        "has_generic_lab": true
+      },
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "parameters": {
+        "text": "患者一般情况平稳。",
+        "state": "available",
+        "expected": "not_applicable",
+        "reason": "trigger_absent_complete"
+      },
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "parameters": {
+        "text": "拟完善培养，结果回报后再评估。",
+        "state": "available",
+        "expected": "data_gap",
+        "reason": "association_failed"
+      },
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "parameters": {
+        "text": "既往培养阴性，本次未送培养。",
+        "state": "available",
+        "expected": "data_gap",
+        "reason": "association_failed"
+      },
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "parameters": {
+        "text": "",
+        "state": "unavailable",
+        "expected": "data_gap",
+        "reason": "source_unavailable"
+      },
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "parameters": {
+        "text": "患者一般情况平稳。",
+        "state": "truncated",
+        "expected": "data_gap",
+        "reason": "source_unavailable"
+      },
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5",
+      "pytest_function_selector": "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "parameters": {
+        "text": "",
+        "state": "error",
+        "expected": "technical_error",
+        "reason": "source_query_error"
+      },
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "direct_rule_synthetic",
+      "expected_basis": "original literal status/reason/ref/zero-call assertions",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_identified_organism_promotes_projection_and_parser_to_positive#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_identified_organism_promotes_projection_and_parser_to_positive",
+      "parameters": {},
+      "layer": "shared culture projection -> parse_exam_lab_fact_response",
+      "actual_rule_ids": [
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "rule_fact_parser_only",
+      "expected_basis": "positive/applicable/absent fact; not full rule outcome",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_pending_sensitivity_and_empty_alternate_slots_do_not_downgrade_identified_organism#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_pending_sensitivity_and_empty_alternate_slots_do_not_downgrade_identified_organism",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "parameters": {
+        "item_name": "细菌结果"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#1",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "parameters": {
+        "item_name": "细菌结果1"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#2",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "parameters": {
+        "item_name": "细菌结果 (质谱法) 1:"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#3",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "parameters": {
+        "item_name": "细菌结果（质谱法）2"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "parameters": {
+        "result": "待定"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#1",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "parameters": {
+        "result": "考虑污染"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#2",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "parameters": {
+        "result": "正常菌群"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#3",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "parameters": {
+        "result": "混合菌群"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "暂无结果"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "报告未出"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "培养中"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "未完成"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "详见报告"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "未知细菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "疑似某菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "可能为某菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "待鉴定菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "无细菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape",
+      "parameters": {
+        "result": "混合菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_identified_organism_conflicting_with_no_growth_stays_unknown#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_identified_organism_conflicting_with_no_growth_stays_unknown",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "parameters": {
+        "result": "未培养出细菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#1",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "parameters": {
+        "result": "未分离出细菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#2",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "parameters": {
+        "result": "未鉴定菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#3",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "parameters": {
+        "result": "未确定菌"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown",
+      "parameters": {
+        "result": "阴性"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#1",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown",
+      "parameters": {
+        "result": "培养两日无细菌生长"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#2",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown",
+      "parameters": {
+        "result": "考虑污染"
+      },
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_named_organism_starting_with_wu_is_not_treated_as_no_bacteria#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_named_organism_starting_with_wu_is_not_treated_as_no_bacteria",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_negative_master_indicator_conflicts_even_without_item_name#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_negative_master_indicator_conflicts_even_without_item_name",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_only_result_field_on_exact_item_name_counts_and_unrelated_item_does_not#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_only_result_field_on_exact_item_name_counts_and_unrelated_item_does_not",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_organism_name_in_course_text_or_record_content_is_not_structured_evidence#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_organism_name_in_course_text_or_record_content_is_not_structured_evidence",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_identified_organism_isolated_to_its_bound_culture_event#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_identified_organism_isolated_to_its_bound_culture_event",
+      "parameters": {},
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "coverage_kind": "shared_seam_only",
+      "expected_basis": "original positive_hint/target/event isolation assertions; no rule delivery claim",
+      "historical_known_failure": false,
+      "current_result": "not_run"
+    },
+    {
+      "case_key": "test_luxian_0609_culture_identified_organism.py::test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite#0",
+      "pytest_function_selector": "test_luxian_0609_culture_identified_organism.py::test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite",
+      "parameters": {},
+      "layer": "build_exam_lab_fact_prompt",
+      "actual_rule_ids": [
+        "LX0609-06-03-04"
+      ],
+      "coverage_kind": "legacy_prompt_oracle",
+      "expected_basis": "keep old 015 full text in original assertions; statically differs from current four-part identity text",
+      "historical_known_failure": true,
+      "current_result": "not_run"
+    }
+  ],
+  "no_historical_manifest_rewrite": true,
+  "no_current_real_model_or_clinical_claim": true,
+  "historical_test_claim_only": {
+    "passed": 44,
+    "failed": 1
+  },
+  "next_gate": "request exclusive test slot; replay only two frozen original synthetic unit files with unchanged assertions and target source bindings; record current evidence separately"
+}

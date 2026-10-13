@@ -5,10 +5,7 @@
       <strong>{{ model.conclusion || '未返回结论' }}</strong>
     </div>
     <dl class="customer-qc-result-detail-card__facts">
-      <template
-        v-for="row in visibleRows"
-        :key="row.key"
-      >
+      <template v-for="row in visibleRows" :key="row.key">
         <dt>{{ row.label }}</dt>
         <dd>{{ row.value }}</dd>
       </template>
@@ -30,7 +27,6 @@ const visibleRows = computed(() =>
     { key: 'requirement', label: '规则要求', value: props.model.requirement },
     { key: 'actual-value', label: '实际值', value: props.model.actualValue },
     { key: 'source', label: '证据来源', value: props.model.evidenceSource },
-    { key: 'suggestion', label: '处理建议', value: props.model.suggestion },
   ].filter((row) => Boolean(row.value)),
 )
 </script>

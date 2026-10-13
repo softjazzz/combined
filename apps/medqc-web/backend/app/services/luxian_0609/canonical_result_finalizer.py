@@ -95,10 +95,54 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-04-05-02", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-04-05-02", "candidate_scope_incomplete"): {"reason_label": "病程正文核对范围不足", "missing_sources": [], "missing_fields": []},
+    ("LX0609-08-02-01", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-08-02-01", "candidate_scope_incomplete"): {"reason_label": "病程正文核对范围不足", "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "semantic_extraction_unresolved"): {"reason_label": '实施事实抽取待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "positive_assertion_not_explicit"): {"reason_label": '输血实施事实待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "source_readiness_unproven"): {"reason_label": '输血正文读取待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-07-01-03", "candidate_scope_incomplete"): {"reason_label": '实施事实核对范围不足', "missing_sources": [], "missing_fields": []},
+    ("LX0609-03-01-04", "semantic_extraction_unresolved"): {"reason_label": "会诊措施逐项核对待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-04-04-02", "semantic_extraction_unresolved"): {
+        "reason_label": "内容抽取待确认",
+        "missing_sources": [],
+        "missing_fields": [],
+    },
     ("LX0609-04-02-07", "source_unavailable"): {
         "reason_label": "机构数据源未接入",
         "missing_sources": ["会诊申请时间"],
         "missing_fields": [],
+    },
+    ("LX0609-06-01-04", "document_completion_time_missing"): {
+        "reason_label": "病程记录时间缺失",
+        "missing_sources": [],
+        "missing_fields": ["报告后相关病程的记录时间（仅有提交时间）"],
+    },
+    ("LX0609-06-01-04", "association_failed"): {
+        "reason_label": "资料关联或时间冲突",
+        "missing_sources": ["需要相互核对的报告与病程"],
+        "missing_fields": ["相互一致的报告时间与病程记录时间"],
+    },
+    ("LX0609-06-01-05", "document_completion_time_missing"): {
+        "reason_label": "病程记录时间缺失",
+        "missing_sources": [],
+        "missing_fields": ["报告后相关病程的记录时间（仅有提交时间）"],
+    },
+    ("LX0609-06-01-05", "association_failed"): {
+        "reason_label": "资料关联或时间冲突",
+        "missing_sources": ["需要相互核对的报告与病程"],
+        "missing_fields": ["相互一致的报告时间与病程记录时间"],
+    },
+    ("LX0609-04-01-04", "required_field_missing"): {
+        "reason_label": "自动抽取未通过原文核验",
+        "missing_sources": [],
+        "missing_fields": ["可与原文逐字核对的术前小结内容"],
+    },
+    ("LX0609-04-01-05", "required_field_missing"): {
+        "reason_label": "自动抽取未通过原文核验",
+        "missing_sources": [],
+        "missing_fields": ["可与原文逐字核对的术前讨论记录内容"],
     },
     ("LX0609-02-01-05", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
@@ -110,9 +154,9 @@ _RULE_DATA_GAP_EXPLANATIONS = {
         "missing_sources": [],
         "missing_fields": [
             "手术切口等级",
-            "预防性用药属性",
-            "抗菌药物实际给药时间",
-            "抗菌药物实际停用时间",
+            "手术开始/结束时间",
+            "抗菌药物医嘱停止时间",
+            "超时后病程中的感染证据",
         ],
     },
     ("LX0609-04-02-05", "association_failed"): {
@@ -532,7 +576,12 @@ def validate_luxian_0609_published_customer_display_facts(
         valid, validated = validate_published_critical_value_facts(rule_id=normalized_rule_id, raw=raw)
         if not valid or (
             validated is not None
-            and status
+            and (
+                status or validated.get("failure_kind") in {
+                    "critical_value_source_unavailable", "critical_value_report_time_missing",
+                    "critical_value_report_time_conflict",
+                } or "report_time_gaps" in validated
+            )
             and not critical_value_customer_fact_status_is_valid(
                 rule_id=normalized_rule_id, status=status, safe_facts=validated,
             )
@@ -544,7 +593,9 @@ def validate_luxian_0609_published_customer_display_facts(
         validate_published_continuity_facts,
     )
     if is_continuity_customer_rule(normalized_rule_id):
-        valid, validated = validate_published_continuity_facts(rule_id=normalized_rule_id, raw=raw)
+        valid, validated = validate_published_continuity_facts(
+            rule_id=normalized_rule_id, raw=raw, status=status,
+        )
         if not valid:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
@@ -569,15 +620,71 @@ def validate_luxian_0609_published_customer_display_facts(
         validated = validate_published_discharge_facts(rule_id=normalized_rule_id, raw=raw)
         if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        if (normalized_rule_id == "LX0609-08-01-03"
+                and validated.get("authoritative_gap") in {"scope_conflict", "scope_unknown"}):
+            from .discharge_result_mapping import discharge_customer_fact_status_is_valid
+
+            if not discharge_customer_fact_status_is_valid(
+                rule_id=normalized_rule_id, status=status, safe_facts=validated,
+            ):
+                raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if normalized_rule_id == "LX0609-07-01-02" and raw:
+        from .transfusion_result_mapping import transfusion_customer_fact_status_is_valid
+
+        validated = validate_luxian_0609_executor_customer_display_facts(
+            rule_id=normalized_rule_id, raw=raw,
+        )
+        if validated is None or not transfusion_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+        ):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if (normalized_rule_id == "LX0609-07-01-03" and isinstance(raw, Mapping)
+            and "unconfirmed_record_count" in raw):
+        from .transfusion_result_mapping import transfusion_customer_fact_status_is_valid
+
+        validated = validate_luxian_0609_executor_customer_display_facts(rule_id=normalized_rule_id, raw=raw)
+        if (validated is None or status != "non_compliant"
+                or "unconfirmed_record_count" not in validated
+                or not transfusion_customer_fact_status_is_valid(
+                    rule_id=normalized_rule_id, status=status, safe_facts=validated,
+                )):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     if raw is None or not isinstance(raw, dict):
         return None
     validated = validate_luxian_0609_executor_customer_display_facts(
         rule_id=normalized_rule_id, raw=raw,
     )
+    if validated is NotImplemented:
+        return NotImplemented
     if validated is None:
         # 非空的已发布事实未通过其规则族合同，不能在读取时静默丢成空事实。
         raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+    if normalized_rule_id == "LX0609-03-02-01" and (
+        validated.get("verification_kind") in {
+            "uncertain_diagnosis_course_time_gap", "uncertain_diagnosis_discussion_body_gap",
+        }
+        or "candidate_course_time_gap_count" in validated
+        or "discussion_body_gap_count" in validated
+    ):
+        from .difficult_case_result_mapping import difficult_case_customer_fact_status_is_valid
+
+        if not difficult_case_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+        ):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+    if validated.get("verification_kind") in {"preop_discussion_content_uncertain", "preop_summary_content_uncertain"} or (
+        normalized_rule_id == "LX0609-04-01-04" and validated.get("verification_kind") == "preop_content_incomplete"
+        and ("uncertain_fields" in validated or any("uncertain_fields" in doc for doc in validated.get("documents", [])))
+    ):
+        from .surgery_document_result_mapping import surgery_document_customer_fact_status_is_valid
+
+        if not surgery_document_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+        ):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
     from .antimicrobial_result_mapping import (
         antimicrobial_customer_fact_status_is_valid,
         is_antimicrobial_customer_rule,
@@ -852,6 +959,13 @@ def finalize_luxian_0609_executor_customer_display_facts(
     )
     if is_surgery_mdt_customer_rule(rule_id) and not surgery_mdt_status_valid:
         safe_facts = None
+    from .continuity_result_mapping import continuity_customer_fact_status_is_valid
+
+    if not continuity_customer_fact_status_is_valid(
+        rule_id=rule_id, status=str(finalized.get("status") or "").strip().lower(),
+        safe_facts=safe_facts,
+    ):
+        safe_facts = None
     course_quality_status_valid = (
         is_course_quality_customer_rule(rule_id)
         and course_quality_customer_fact_status_is_valid(
@@ -957,6 +1071,23 @@ def finalize_luxian_0609_executor_customer_display_facts(
         surgery_gate_status_valid
         or postoperative_status_valid
         or (
+            rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
+            and (
+                (
+                    finalized.get("status") == "not_applicable"
+                    and finalized.get("reason_code") == "transfusion_order_absent"
+                )
+                or (
+                    finalized.get("status") == "data_gap"
+                    and finalized.get("reason_code") in {
+                        "transfusion_source_unavailable",
+                        "transfusion_projection_unavailable",
+                        "transfusion_rule_projection_incomplete",
+                    }
+                )
+            )
+        )
+        or (
             is_transfusion_public_fact_ref_evidence_rule(rule_id)
             and transfusion_status_valid
         )
@@ -1049,6 +1180,7 @@ def finalize_luxian_0609_reduced_customer_result(
         precise_findings = customer_finding_from_controlled_facts(
             rule_id=rule_id,
             facts=safe_facts,
+            status=result.get("status"),
         )
         if precise_findings:
             result["findings"] = precise_findings
@@ -1096,6 +1228,7 @@ def finalize_luxian_0609_reduced_customer_result(
     customer_evidence = enrich_customer_evidence(
         customer_evidence,
         evidence_materials=evidence_materials,
+        strict_course_record_time=rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"},
         preferred_source_fields=(
             {"surgery_record": "surgery_name"}
             if rule_id == "LX0609-04-02-03"

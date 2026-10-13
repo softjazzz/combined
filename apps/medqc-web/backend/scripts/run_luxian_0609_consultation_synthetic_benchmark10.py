@@ -19,8 +19,15 @@ from typing import Any, Callable, Mapping, Sequence
 
 _RULE_IDS = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
 _FORMAL_ROUNDS = 10
-_EXPECTED_STATUS_BY_RULE = {rule_id: "compliant" for rule_id in _RULE_IDS}
-_EXPECTED_REASON_BY_RULE = {rule_id: "requirement_satisfied" for rule_id in _RULE_IDS}
+# 合成病例只有会诊意见、没有会诊申请内容：021 会诊申请单按现行口径为不适用。
+_EXPECTED_STATUS_BY_RULE = {
+    rule_id: "not_applicable" if rule_id == "LX0609-03-01-02" else "compliant"
+    for rule_id in _RULE_IDS
+}
+_EXPECTED_REASON_BY_RULE = {
+    rule_id: "trigger_absent_complete" if rule_id == "LX0609-03-01-02" else "requirement_satisfied"
+    for rule_id in _RULE_IDS
+}
 
 
 class _BenchmarkClient:
@@ -140,9 +147,10 @@ def _round_gate(run: Mapping[str, Any]) -> dict[str, bool]:
         isinstance(statuses, Mapping)
         and all(status != "technical_error" for status in statuses.values())
     )
+    # 第一阶段、执行判断，以及 023 原判合规时的会诊措施逐项核对（2026-10-12）。
     expected_calls = (
-        int(run.get("logical_llm_call_count") or 0) == 2
-        and int(run.get("delegate_generate_count") or 0) == 2
+        int(run.get("logical_llm_call_count") or 0) == 3
+        and int(run.get("delegate_generate_count") or 0) == 3
     )
     prompt_equal = run.get("prompt_equal_to_reference") is True
     usage = run.get("usage_conservation")

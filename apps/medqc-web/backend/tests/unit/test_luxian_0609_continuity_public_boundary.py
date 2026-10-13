@@ -56,7 +56,7 @@ GAP_SHAPES = (
 def test_all_existing_publisher_shapes_are_value_identical_and_reject_internal_field(rule_id, raw):
     published = mapping.safe_continuity_customer_display_facts(rule_id=rule_id, raw=raw)
     assert published is not None
-    assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published) == published
+    assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published, status="data_gap" if rule_id == "LX0609-10-01-01" else "") == published
     with pytest.raises(ValueError, match="解释合同不完整"):
         validate_luxian_0609_published_customer_display_facts(
             rule_id=rule_id, raw={**published, "source_document_refs": []},
@@ -73,9 +73,9 @@ def test_no_facts_preserves_none_semantics(rule_id):
 def test_internal_gap_references_are_removed_once_then_public_read_preserves_facts(rule_id, raw):
     published = mapping.safe_continuity_customer_display_facts(rule_id=rule_id, raw=raw)
     assert published is not None and "source_document_refs" not in published
-    assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published) == published
+    assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published, status="data_gap" if rule_id == "LX0609-10-01-01" else "") == published
     with pytest.raises(ValueError, match="解释合同不完整"):
-        validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=raw)
+        validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=raw, status="data_gap" if rule_id == "LX0609-10-01-01" else "")
 
 
 @pytest.mark.parametrize("rule_id,raw", GAP_SHAPES)
@@ -110,7 +110,7 @@ def test_public_read_does_not_call_internal_projection(monkeypatch):
             raise AssertionError("published read called internal projection")
         with monkeypatch.context() as patcher:
             patcher.setattr(mapping, "safe_continuity_customer_display_facts", forbidden)
-            assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published) == published
+            assert validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=published, status="data_gap" if rule_id == "LX0609-10-01-01" else "") == published
 
 
 @pytest.mark.parametrize("rule_id,raw,change", [
@@ -125,7 +125,7 @@ def test_existing_pure_consistency_constraints_remain_rejections(rule_id, raw, c
     damaged = {**published, **change}
     assert mapping.safe_continuity_customer_display_facts(rule_id=rule_id, raw={**raw, **change}) is None
     with pytest.raises(ValueError, match="解释合同不完整"):
-        validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=damaged)
+        validate_luxian_0609_published_customer_display_facts(rule_id=rule_id, raw=damaged, status="data_gap" if rule_id == "LX0609-10-01-01" else "")
 
 
 def test_nested_events_and_non_json_numbers_fail_closed():

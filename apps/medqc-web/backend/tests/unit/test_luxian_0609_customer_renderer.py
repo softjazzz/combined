@@ -128,7 +128,7 @@ FACT_REF = "b" * 64
             "LX0609-05-01-01",
             "required_field_missing",
             [],
-            "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。",
+            "已读取手术及用药资料，但尚缺切口等级、手术时间或抗菌药物医嘱停止时间中的至少一项，或超时后的感染证据暂无法确认；医嘱更新时间不能替代停止时间。",
         ),
         (
             "LX0609-04-02-05",
@@ -199,7 +199,7 @@ def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> Non
             rule_id="LX0609-03-02-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
-            evidence_state=EvidenceState.CONFLICT,
+            evidence_state=EvidenceState.DATA_GAP,
             qc_direction=QcDirection.UNKNOWN,
             reason_code="diagnosis_scope_uncertain",
             fact_refs=(FACT_REF,),
@@ -209,7 +209,7 @@ def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> Non
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["status"] == "uncertain"
+    assert result["status"] == "data_gap"
     assert result["reason_code"] == "diagnosis_scope_uncertain"
     assert result["is_compliant"] is None
 
@@ -387,6 +387,47 @@ def test_001_blank_or_placeholder_admission_record_renders_specific_customer_cop
     )
 
     assert finding == "已检到入院记录，但未发现可核验的有效文书内容。"
+
+
+def _merged_exam_association_facts() -> dict:
+    # 0910 真实样本形态：合并检查一条主记录覆盖多条医嘱，7 条医嘱全部唯一关联到
+    # 5 条主记录，另有主记录找不到对应医嘱。
+    return {
+        "failure_kind": "exam_order_exam_association_failed",
+        "subject": "ct_mri",
+        "checked_sources": ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"],
+        "requirement": "order_course_report_consistency",
+        "requirement_met": False,
+        "order_count": 7,
+        "exam_master_count": 5,
+        "uniquely_linked_order_count": 7,
+        "unmatched_or_ambiguous_order_count": 0,
+        "association_issue_kind": "exam_master_without_order",
+    }
+
+
+def test_010_merged_exam_association_facts_pass_contract_and_render() -> None:
+    from app.services.luxian_0609.exam_lab_result_mapping import (
+        safe_exam_lab_customer_display_facts,
+    )
+
+    facts = _merged_exam_association_facts()
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-02", raw=facts) is not None
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-06-01-02", facts=facts)
+    assert finding == (
+        "已核对7条CT/MRI医嘱与5条检查主记录；医嘱均已唯一关联，但有检查主记录未找到唯一对应医嘱，"
+        "暂无法确认属于同一次诊疗事件。"
+    )
+
+
+def test_010_association_facts_still_reject_linked_count_above_orders() -> None:
+    from app.services.luxian_0609.exam_lab_result_mapping import (
+        safe_exam_lab_customer_display_facts,
+    )
+
+    facts = {**_merged_exam_association_facts(), "uniquely_linked_order_count": 8,
+             "unmatched_or_ambiguous_order_count": -1}
+    assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-02", raw=facts) is None
 
 
 def test_010_association_facts_render_exact_customer_counts() -> None:
@@ -1305,7 +1346,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "verification_kind": "pretransfusion_assessment_complete",
                 "missing_fields": [],
             },
-            "输血申请单已记录申请理由及输血前客观指标，且在实际输血前完成。",
+            "输血申请单已记录申请理由及输血前客观指标。",
         ),
         (
             "LX0609-07-01-02",
@@ -1323,7 +1364,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "failure_kind": "pretransfusion_assessment_missing",
                 "missing_fields": ["indication", "laboratory_indicator"],
             },
-            "已确认实施输血，但未找到可核对的输血前评估记录。",
+            "已开立输血医嘱，但未找到可核对的输血前评估记录。",
         ),
         (
             "LX0609-07-02-02",
@@ -1363,7 +1404,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "discharge_time": "2026-06-09 10:00:00",
                 "actual_interval_hours": -1.0,
             },
-            "出院记录时间早于权威出院时间 1小时（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。",
+            "出院记录于出院前 1小时完成（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），满足出院后 24 小时内完成的要求。",
         ),
         (
             "LX0609-04-05-03",
@@ -1411,7 +1452,7 @@ def test_061_boundary_overdue_duration_does_not_round_to_threshold() -> None:
     )
 
 
-def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
+def test_061_one_second_negative_interval_renders_completed_before_discharge() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-08-01-01",
         facts={
@@ -1424,9 +1465,9 @@ def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
     )
 
     assert finding == (
-        "出院记录时间早于权威出院时间 1秒"
+        "出院记录于出院前 1秒完成"
         "（记录时间 2026-06-09 09:59:59；出院时间 2026-06-09 10:00:00），"
-        "时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。"
+        "满足出院后 24 小时内完成的要求。"
     )
 
 
@@ -1650,18 +1691,18 @@ def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
         facts={
             "failure_kind": "anesthesia_visit_incomplete",
             "missing_fields_by_visit": {
-                "preanesthesia_visit": ["airway_assessment", "risk_discussion"],
+                "preanesthesia_visit": ["relevant_examinations", "preoperative_orders"],
                 "postanesthesia_visit": [
-                    "respiratory_status",
-                    "complication_assessment",
+                    "postop_visit_within_24h",
+                    "special_situations",
                 ],
             },
         },
     )
 
     assert finding == (
-        "麻醉术前访视缺少气道评估、麻醉风险告知；"
-        "麻醉术后访视缺少呼吸情况、麻醉并发症评估。"
+        "麻醉术前访视缺少相关检查、术前医嘱；"
+        "麻醉术后访视缺少术后24小时内访视、特殊情况。"
     )
 
 
@@ -1677,28 +1718,33 @@ def test_anesthesia_visit_complete_facts_render_compliance_reason():
             ],
             "checked_fields_by_visit": {
                 "preanesthesia_visit": [
-                    "asa_level",
-                    "airway_assessment",
-                    "fasting_status",
-                    "anesthesia_history",
-                    "risk_discussion",
+                    "preop_visit_within_24h",
+                    "general_condition",
+                    "brief_history",
+                    "relevant_examinations",
+                    "planned_procedure_and_anesthesia",
+                    "anesthesia_indication",
+                    "precautions",
+                    "preoperative_orders",
                     "anesthetist_signature",
                     "record_time",
                 ],
                 "postanesthesia_visit": [
+                    "postop_visit_within_24h",
+                    "recovery_status",
                     "consciousness_status",
-                    "respiratory_status",
-                    "circulatory_status",
-                    "complication_assessment",
+                    "extubation_status",
+                    "postoperative_orders",
+                    "special_situations",
                     "anesthetist_signature",
                     "record_time",
                 ],
             },
         },
     ) == (
-        "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、"
-        "麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、"
-        "呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。"
+        "麻醉术前访视已核对：术前24小时内访视、一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
+        "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后24小时内访视、恢复情况、"
+        "清醒情况、拔管情况、术后医嘱、特殊情况、麻醉医师签名、记录时间。"
     )
 
 
@@ -2989,3 +3035,241 @@ def test_transfer_multi_event_gap_does_not_invent_zero_count_record_evidence() -
         "已定位本次纳入核对的转科资料，当前缺口为逐次事件对应关系。"
     )
     assert "候选转出记录" not in rendered["evidence"]
+
+
+def test_preop_content_association_gap_does_not_claim_body_missing():
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id="LX0609-04-01-04", snapshot_hash=SNAPSHOT_HASH,
+        applicability=ApplicabilityState.APPLICABLE, evidence_state=EvidenceState.DATA_GAP,
+        qc_direction=QcDirection.UNKNOWN, reason_code="association_failed", fact_refs=(FACT_REF,),
+        evaluator_version="native-preop-content-v1"))
+    result = render_luxian_0609_customer_result(decision=decision)
+    assert result["status"] == "data_gap"
+    assert "已读取术前小结" in result["findings"]
+    assert "具体手术" in result["findings"]
+    assert "缺少术前小结正文" not in result["findings"]
+
+
+@pytest.mark.parametrize("missing", [["planned_anesthesia"], ["precautions", "surgeon_preop_visit"]])
+def test_preop_summary_explains_only_confirmed_missing_items(missing):
+    decision = reduce_luxian_0609_rule_decision(RuleDecision(
+        rule_id="LX0609-04-01-04", snapshot_hash=SNAPSHOT_HASH,
+        applicability=ApplicabilityState.APPLICABLE, evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.DEFECT, reason_code="requirement_violated",
+        fact_refs=(FACT_REF,), evaluator_version="preop-content-v1"))
+    facts = {"verification_kind": "preop_content_incomplete", "missing_fields": missing,
+             "documents": [{"missing_fields": ["brief_condition"]}]}
+    result = render_luxian_0609_customer_result(decision=decision, safe_customer_display_facts=facts)
+    assert result["status"] == "non_compliant"
+    assert "确认缺少" in result["findings"]
+    assert "简要病情" not in result["findings"]
+    assert "同一份" not in result["suggestion"]
+    if missing == ["planned_anesthesia"]:
+        assert "拟施麻醉方式" in result["findings"]
+        assert "拟施麻醉方式" in result["suggestion"]
+        assert "术者术前查看" not in result["suggestion"]
+
+
+def test_preop_summary_without_missing_facts_does_not_invent_items():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+    message = preop_summary_customer_message(rule_id="LX0609-04-01-04", status="non_compliant", facts={})
+    assert "未提供可核验的具体缺项" in message[0]
+    assert "先确认" in message[2]
+    assert preop_summary_customer_message(rule_id="LX0609-04-01-04", status="data_gap", facts={}) is None
+
+
+# ---- 第三轮：待确认字段与病程时间来源的客户文案 ----
+
+
+def test_preop_summary_message_lists_pending_fields_without_counting_them_missing():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+
+    facts = {
+        "verification_kind": "preop_content_incomplete",
+        "missing_fields": ["preop_diagnosis", "surgeon_preop_visit"],
+        "pending_fields": ["surgical_indication", "planned_procedure"],
+    }
+    findings, evidence, suggestion = preop_summary_customer_message(
+        rule_id="LX0609-04-01-04", status="non_compliant", facts=facts
+    )
+    assert "确认缺少：术前诊断、术者术前查看患者情况" in findings
+    assert "手术指征、拟施手术名称和方式待确认" in findings
+    assert "不计入确认缺项" in evidence
+    # 整改建议只针对确认缺项，不要求补写待确认项。
+    assert "手术指征" not in suggestion and "拟施手术名称和方式" not in suggestion
+
+
+def test_preop_summary_data_gap_message_only_for_pending_association_facts():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+
+    facts = {
+        "verification_kind": "preop_surgery_association_ambiguous",
+        "missing_fields": [],
+        "pending_fields": ["planned_anesthesia"],
+    }
+    findings, _evidence, _suggestion = preop_summary_customer_message(
+        rule_id="LX0609-04-01-04", status="data_gap", facts=facts
+    )
+    assert "拟施麻醉方式待确认" in findings
+    assert preop_summary_customer_message(
+        rule_id="LX0609-04-01-04", status="data_gap", facts={}
+    ) is None
+
+
+def test_exam_lab_gap_messages_distinguish_submit_only_and_time_conflict():
+    from app.services.luxian_0609.customer_renderer import exam_lab_data_gap_customer_message
+
+    submit_only = exam_lab_data_gap_customer_message(
+        rule_id="LX0609-06-01-04", reason_code="document_completion_time_missing"
+    )
+    assert "没有记录时间" in submit_only[0] and "提交时间不等同于临床记录时间" in submit_only[1]
+    conflict = exam_lab_data_gap_customer_message(
+        rule_id="LX0609-06-01-04",
+        reason_code="association_failed",
+        facts={"event_results": [{"response_time_state": "record_time_conflict"}]},
+    )
+    assert "时间冲突" in conflict[0]
+    generic = exam_lab_data_gap_customer_message(
+        rule_id="LX0609-06-01-04", reason_code="association_failed", facts={}
+    )
+    assert "时间冲突" not in generic[0]
+
+
+def test_preop_extraction_invalid_message_is_explicit_and_not_a_verdict():
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+
+    findings, evidence, suggestion = preop_summary_customer_message(
+        rule_id="LX0609-04-01-05",
+        status="data_gap",
+        facts={"verification_kind": "preop_fact_extraction_invalid", "invalid_fields": ["preop_preparation"]},
+    )
+    assert "术前讨论记录的自动抽取结果未通过原文核验（术前准备）" in findings
+    assert "未据此判定合规或不合规" in evidence
+    assert "人工核对" in suggestion
+
+
+@pytest.mark.parametrize(("kind", "hours", "expected_tail"), [
+    ("surgery_record_late", 39.03, "超过 24 小时要求 15.03 小时。"),
+    ("surgery_record_within_threshold", 19.51, "在 24 小时内。"),
+])
+def test_003_surgery_record_timeliness_renders_specific_finding(kind, hours, expected_tail) -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-04-02-01",
+        facts={
+            "failure_kind": kind,
+            "performed_surgery_confirmed": True,
+            "surgery_end_time": "2026-07-07 10:00:00",
+            "record_time": "2026-07-09 01:01:48",
+            "elapsed_hours": hours,
+            "elapsed_seconds": hours * 3600,
+            "threshold_hours": 24,
+            "source_label": "手术记录",
+        },
+    )
+    assert finding.startswith(f"手术记录于手术结束后 {hours:g} 小时完成")
+    assert finding.endswith(expected_tail)
+
+
+
+def test_068_missing_approval_with_window_courses_renders_defect_finding() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-08-02-02",
+        facts={
+            "failure_kind": "senior_discharge_approval_missing",
+            "discharge_date": "2026-07-03",
+            "checked_dates": ["2026-07-02", "2026-07-03"],
+            "checked_source": "daily_course_record,senior_course_record",
+            "approval_present": False,
+            "window_course_count": 2,
+        },
+    )
+    assert finding == "出院日期 2026-07-03；2026-07-02、2026-07-03 共有 2 份病程记录，均未记录上级医师同意出院的意见。"
+
+
+def test_006_missing_first_senior_round_renders_specific_finding() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-02-01-02",
+        facts={
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "senior_course_record",
+            "timeliness_state": "missing",
+            "threshold_hours": 72,
+            "source_label": "副主任医师或主任医师首次查房记录",
+            "anchor_time": "2025-08-26 09:14:42",
+        },
+    )
+    assert finding == "未找到副主任医师或主任医师首次查房记录（入院时间 2025-08-26 09:14:42；要求入院后 72 小时内完成）。"
+
+
+def test_008_severity_course_gap_renders_specific_finding() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-02-01-04",
+        facts={
+            "failure_kind": "severity_course_gap_exceeded",
+            "severity": "serious",
+            "threshold_days": 2,
+            "anchor_date": "2025-07-09",
+            "horizon_date": "2025-07-16",
+            "gap_start_date": "2025-07-11",
+            "gap_end_date": "2025-07-15",
+            "gap_days": 4,
+            "recorded_dates": ["2025-07-10", "2025-07-11", "2025-07-15"],
+        },
+    )
+    assert finding == (
+        "病重期间（2025-07-09 起）2025-07-11 至 2025-07-15 连续 4 天无病程记录，"
+        "超过病重患者每 2 天至少记录一次的要求。"
+    )
+
+
+@pytest.mark.parametrize(("facts", "expected"), [
+    (
+        {"failure_kind": "preop_discussion_missing", "performed_surgery_confirmed": True,
+         "emergency_rescue_exception_absent": True, "checked_sources": ["presurg_discussion"]},
+        "已确认实施手术，文书未记载为紧急抢救手术，但未找到术前讨论记录。",
+    ),
+    (
+        {"failure_kind": "surgeon_not_in_preop_discussion", "performed_surgery_confirmed": True,
+         "emergency_rescue_exception_absent": True, "discussion_state": "present",
+         "surgeon_participation_state": "absent"},
+        "已确认实施手术并找到术前讨论记录，文书未记载为紧急抢救手术，但术者未在讨论参加人员中。",
+    ),
+])
+def test_039_defects_render_specific_findings(facts, expected) -> None:
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-04-01-02", facts=facts) == expected
+
+
+def test_011_result_recorded_after_24_hours_is_described_as_late_not_missing() -> None:
+    """用户口径（2026-10-12）：有相关病程只是超过 24 小时，写“已记录但超过 24 小时”，不说成未记录。"""
+    single = customer_finding_from_controlled_facts(
+        rule_id="LX0609-06-01-04",
+        facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "report_time": "2026-08-04 10:41:43",
+            "response_record_count": 1,
+            "response_record_time": "2026-08-05 11:27:44",
+            "interval_hours": 24.77,
+        },
+    )
+    assert single == (
+        "CT/MRI 报告于 2026-08-04 10:41:43 出具。已核对首次病程记录及后续病程记录，"
+        "报告结果已记录但超过 24 小时：最早相关病程时间 2026-08-05 11:27:44，间隔 24.77 小时。"
+    )
+    multi = customer_finding_from_controlled_facts(
+        rule_id="LX0609-06-01-04",
+        facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "event_results": [
+                {"report_time": "2026-08-04 10:41:43", "event_status": "non_compliant",
+                 "response_record_count": 1, "response_record_time": "2026-08-05 11:27:44",
+                 "interval_hours": 24.77},
+                {"report_time": "2026-08-08 23:53:48", "event_status": "non_compliant",
+                 "response_record_count": 0},
+            ],
+        },
+    )
+    assert multi == (
+        "共核对2次CT/MRI检查：1）报告时间 2026-08-04 10:41:43：报告结果已记录但超过 24 小时"
+        "（最早相关病程 2026-08-05 11:27:44，间隔 24.77 小时）；"
+        "2）报告时间 2026-08-08 23:53:48：未找到报告后24小时内的报告结果记录。"
+    )

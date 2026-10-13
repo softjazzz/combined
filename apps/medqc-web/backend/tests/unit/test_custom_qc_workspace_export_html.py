@@ -869,6 +869,50 @@ def test_non_luxian_export_keeps_legacy_business_columns() -> None:
     assert "技术信息" in workbook.sheetnames
 
 
+@pytest.mark.parametrize("status", ["non_compliant", "compliant"])
+def test_0916_workbook_preserves_structured_text_without_mutating_result(status):
+    """0916列表结论和结构化证据在单元格中完整保存，不重判或改写结果。"""
+    job = {
+        "id": "SYN-0916-export",
+        "status": "completed",
+        "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+        "summary": {"total_records": 1},
+        "items": [{
+            "record_id": "SYN-visit",
+            "rule_code": "LX0916-012",
+            "status": status,
+            "findings": ["第一项\n第二行", "第二项"],
+            "suggestion": ["补齐项目一", "核对项目二"],
+            "evidence": [{"quote": "原文摘录", "position": 1}],
+        }],
+    }
+    original = deepcopy(job)
+    workbook = load_workbook(_service().export_batch_job_workbook(job=job))
+    all_values = list(workbook["全部明细"].iter_rows(min_row=2, values_only=True))[0]
+    for index, key in [(9, "findings"), (10, "suggestion"), (11, "evidence")]:
+        assert json.loads(all_values[index]) == original["items"][0][key]
+    issue_rows = list(workbook["问题明细"].iter_rows(min_row=2, values_only=True))
+    if status == "non_compliant":
+        for index, key in [(8, "findings"), (9, "suggestion"), (10, "evidence")]:
+            assert json.loads(issue_rows[0][index]) == original["items"][0][key]
+    else:
+        assert issue_rows == []
+    assert job == original
+
+
+def test_0916_workbook_retains_complete_long_structured_conclusion():
+    long_text = "合成检查描述\n" * 6000
+    job = {
+        "id": "SYN-0916-long-export",
+        "filters": {"rule_set_key": "luxian_0916_qc_v1"},
+        "items": [{"rule_code": "LX0916-012", "status": "non_compliant", "findings": [long_text]}],
+    }
+    workbook = load_workbook(_service().export_batch_job_workbook(job=job))
+    for sheet in ("问题明细", "全部明细"):
+        parts = [row[4] for row in workbook["长文本"].iter_rows(min_row=2, values_only=True) if row[0] == sheet]
+        assert json.loads("".join(parts)) == [long_text]
+
+
 def _lx0609_export_job(*items: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": "job-lx-rule-isolation",

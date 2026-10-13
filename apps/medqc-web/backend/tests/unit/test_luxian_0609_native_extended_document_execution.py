@@ -5,6 +5,17 @@ import json
 
 import pytest
 
+from luxian_0609_invasive_procedure_test_client import FrozenInvasiveProcedureClient
+from app.services.luxian_0609.continuity_result_mapping import safe_continuity_customer_display_facts
+from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
+from app.services.luxian_0609.postoperative_result_mapping import safe_postoperative_customer_display_facts
+
+from luxian_0609_diagnosis_equivalence_test_client import DiagnosisEquivalenceClient
+from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
+from antimicrobial_effect_test_support import FrozenAntimicrobialEffectClient
+from diagnosis_scope_test_support import FrozenDiagnosisScopeClient
+from diagnosis_scope_test_support import _fact as _manual_scope_fact
+
 from app.services.luxian_0609 import native_extended_document_execution as module
 from app.services.luxian_0609.continuity_evidence_selection import (
     ContinuityEvidenceBinding,
@@ -70,6 +81,7 @@ def _session(
         "death_record": "snapshot-provider-death_record-v1",
         "death_discussion": "snapshot-provider-death_discussion-v1",
         "discharge_record": "snapshot-provider-discharge_record-v1",
+        "first_course_record": "snapshot-provider-first_course_record-v1",
         "daily_course_record": "snapshot-provider-daily_course_record-v1",
         "senior_course_record": "snapshot-provider-senior_course_record-v1",
         "postsurg_firstcourse_record": "snapshot-provider-postsurg_firstcourse_record-v1",
@@ -99,6 +111,9 @@ def _session(
         "mr_bloodtrans": bloodtrans_query_version,
         "bloodtrans_record": bloodtrans_query_version,
         "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
+        # 08-01-05 结构化住院事件来源（病理结果、抢救）；夹具默认可读且为空。
+        "pathology_exam_report": resolve_luxian_0609_physical_source_entry("pathology_exam_report").query_version,
+        "rescue_record": resolve_luxian_0609_physical_source_entry("rescue_record").query_version,
         # 074 的结构化变更声明来源是同一 Evidence Session 的决策支撑来源；
         # 夹具默认保持可读且为空，只有显式列入 unavailable_sources 才不可用。
         "admission_record_diagnosis": (
@@ -228,6 +243,10 @@ async def _evaluate(
             "horizon_date": "2099-01-01",
             "basis": "evaluation_as_of",
         },)
+    if rule_id == "LX0609-05-01-03" and llm_client is None:
+        llm_client = FrozenAntimicrobialEffectClient()
+    if rule_id == "LX0609-03-02-01" and llm_client is None:
+        llm_client = FrozenDiagnosisScopeClient()
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -238,6 +257,12 @@ async def _evaluate(
         decision_rule_ids=(rule_id,),
         llm_client=llm_client,
     )
+    if isinstance(llm_client, (FrozenAntimicrobialEffectClient, FrozenDiagnosisScopeClient)):
+        assert llm_client.fixture_error is None, llm_client.fixture_error
+        assert result.llm_call_count == len(llm_client.calls)
+        assert result.prompt_tokens == len(llm_client.calls) * 10
+        assert result.completion_tokens == len(llm_client.calls) * 5
+        assert result.total_tokens == len(llm_client.calls) * 15
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=(rule_id,),
@@ -272,6 +297,10 @@ async def _evaluate_selected(
             "horizon_date": "2099-01-01",
             "basis": "evaluation_as_of",
         },)
+    if "LX0609-05-01-03" in rule_ids and llm_client is None:
+        llm_client = FrozenAntimicrobialEffectClient()
+    if "LX0609-03-02-01" in rule_ids and llm_client is None:
+        llm_client = FrozenDiagnosisScopeClient()
     snapshot, materials = _session(
         rows_by_source,
         unavailable_sources=unavailable_sources,
@@ -284,6 +313,12 @@ async def _evaluate_selected(
         decision_rule_ids=rule_ids,
         llm_client=llm_client,
     )
+    if isinstance(llm_client, (FrozenAntimicrobialEffectClient, FrozenDiagnosisScopeClient)):
+        assert llm_client.fixture_error is None, llm_client.fixture_error
+        assert result.llm_call_count == len(llm_client.calls)
+        assert result.prompt_tokens == len(llm_client.calls) * 10
+        assert result.completion_tokens == len(llm_client.calls) * 5
+        assert result.total_tokens == len(llm_client.calls) * 15
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=rule_ids,
@@ -333,6 +368,55 @@ def _approval_item(
     }
 
 
+def _with_064_surgeon_rounds(rows, *, skip_documents=(), post=True):
+    """院方口径：术者须在术前24小时内、术后24小时内亲自查房。
+
+    为既有 064 夹具的每台手术补齐开始时间（缺失时取结束前2小时），并在日常病程中
+    补术前1小时、术后1小时的术者查房；两条均在手术当天，不改变“术后次日起连续
+    3天”的覆盖。skip_documents 中的手术不补；post=False 只补术前，用于测术后术者
+    查房识别分支。
+    """
+    from datetime import datetime as _datetime, timedelta as _timedelta
+
+    from app.services.luxian_0609.native_extended_document_execution import parse_strict_performed_time
+
+    rows = dict(rows)
+    extra = []
+
+    def add_rounds(document_id, surgeon, begin, end):
+        if not surgeon or begin is None or end is None or document_id in skip_documents:
+            return
+        moments = [("pre", begin - _timedelta(hours=1))]
+        if post:
+            moments.append(("post", end + _timedelta(hours=1)))
+        for label, moment in moments:
+            extra.append({
+                "document_id": f"ROUND-{label}-{document_id}",
+                "record_time": moment.strftime("%Y-%m-%d %H:%M:%S"),
+                "author_name": surgeon,
+                "record_content": "术者查房，评估病情并交代注意事项。",
+            })
+
+    if rows.get("surgery_record"):
+        surgeries = []
+        for surgery in rows["surgery_record"]:
+            surgery = dict(surgery)
+            end = parse_strict_performed_time(surgery.get("surgery_end_time"))
+            if end is not None and not surgery.get("surgery_begin_time"):
+                surgery["surgery_begin_time"] = (end - _timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S+08")
+            surgeries.append(surgery)
+            add_rounds(surgery.get("document_id"), surgery.get("surgeon") or surgery.get("surgeon_sign"),
+                       parse_strict_performed_time(surgery.get("surgery_begin_time")), end)
+        rows["surgery_record"] = tuple(surgeries)
+    else:
+        for index, surgery in enumerate(rows.get("mr_surgery", ()), start=1):
+            begin, end = surgery.get("surgery_begin_datetime"), surgery.get("surgery_end_datetime")
+            if isinstance(begin, _datetime) and isinstance(end, _datetime):
+                add_rounds(surgery.get("document_id") or f"mr-{index}", surgery.get("surgeon"), begin, end)
+    rows["daily_course_record"] = (*rows.get("daily_course_record", ()), *extra)
+    return rows
+
+
 class _DiagnosisChangeClient:
     def __init__(self, *items, error=None):
         self.items = list(items)
@@ -356,6 +440,39 @@ class _DiagnosisChangeClient:
                 "completion_tokens": 20,
                 "total_tokens": 100,
             },
+            "_api_time": 0.1,
+        }
+
+
+class _DiagnosisChangeStateClient:
+    """按送检顺序返回给定的理由/依据状态；present 时引用整段送检正文。"""
+
+    def __init__(self, *states):
+        self.states = list(states)
+        self.calls = []
+
+    async def generate(self, prompt, **kwargs):
+        self.calls.append((prompt, kwargs))
+        documents = json.loads(prompt[prompt.rindex("\n") + 1:])
+        items = []
+        for index, document in enumerate(documents):
+            reason, basis = self.states[min(index, len(self.states) - 1)]
+            items.append({
+                "local_doc_id": document["local_doc_id"],
+                "reason_state": reason,
+                "reason_quote": document["text"] if reason == "present" else "",
+                "basis_state": basis,
+                "basis_quote": document["text"] if basis == "present" else "",
+            })
+        return {
+            "choices": [{
+                "message": {"content": json.dumps({
+                    "schema_version": DIAGNOSIS_CHANGE_SCHEMA_VERSION,
+                    "items": items,
+                }, ensure_ascii=False)},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100},
             "_api_time": 0.1,
         }
 
@@ -1210,7 +1327,8 @@ async def test_061_exposes_the_authoritative_discharge_time_source() -> None:
 
 
 @pytest.mark.asyncio
-async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() -> None:
+async def test_061_discharge_record_completed_before_discharge_is_compliant() -> None:
+    # 院方口径（2026-10-10）：出院前已完成同样满足出院后 24 小时内完成。
     result, reduced = await _evaluate(
         "LX0609-08-01-01",
         {
@@ -1224,8 +1342,8 @@ async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_conflict"
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
     assert result.customer_display_facts == (
         (
             "LX0609-08-01-01",
@@ -1256,7 +1374,7 @@ async def test_061_preserves_a_one_second_negative_interval_for_customer_display
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
     facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["actual_interval_hours"] == pytest.approx(-1 / 3600)
 
@@ -1436,18 +1554,20 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
                 "record_content": "上级医师查房后同意患者出院。",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房后同意患者出院。': ('present', '同意患者出院')}),
     )
 
     decisions = {item.rule_id: item for item in reduced}
-    assert decisions["LX0609-08-01-01"].final_state is CustomerFinalState.DATA_GAP
-    assert decisions["LX0609-08-01-01"].reason_code == "authoritative_time_conflict"
+    assert decisions["LX0609-08-01-01"].final_state is CustomerFinalState.COMPLIANT
+    assert decisions["LX0609-08-01-01"].reason_code == "requirement_within_threshold"
     assert decisions["LX0609-08-02-01"].final_state is CustomerFinalState.COMPLIANT
     assert decisions["LX0609-08-02-02"].final_state is CustomerFinalState.COMPLIANT
     facts = dict(result.customer_display_facts)
     assert facts["LX0609-08-01-01"]["discharge_time_source"] == "evaluation_context.horizon"
     assert facts["LX0609-08-02-01"]["checked_dates"] == ["2026-07-02", "2026-07-03"]
     assert facts["LX0609-08-02-02"]["checked_dates"] == ("2026-07-02", "2026-07-03")
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -1503,8 +1623,8 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_conflict"
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
     facts = dict(result.customer_display_facts)["LX0609-08-01-01"]
     assert facts["discharge_time"] == "2026-07-03 12:00:00"
     assert facts["discharge_time_source"] == "discharge_record.discharge_time"
@@ -1514,7 +1634,7 @@ async def test_061_preserves_same_day_discharge_time_precision() -> None:
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "mr_surgery": (
                 {
                     "surgery_code": "01.2400X013",
@@ -1529,7 +1649,7 @@ async def test_064_requires_three_dates_and_surgeon_round() -> None:
                 {"record_time": "2026-07-03 08:00:00", "author_name": "张医生"},
                 {"record_time": "2026-07-04 08:00:00", "author_name": "李医生"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
@@ -1593,7 +1713,7 @@ async def test_064_fails_closed_when_surgeon_identity_is_anonymized() -> None:
 async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present() -> None:
     _result, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E-mixed-identity",
@@ -1608,7 +1728,7 @@ async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present
                 {"record_time": "2026-07-03 08:00:00", "author_name": "李医生"},
                 {"record_time": "2026-07-04 08:00:00", "author_name": "王医生"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -1618,7 +1738,7 @@ async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present
 async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None:
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "mr_surgery": (
                 {
                     "surgery_code": "01.2400X013",
@@ -1633,7 +1753,7 @@ async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None
                 {"record_time": "2026-07-03 20:00:00", "author_name": "张医生"},
                 {"record_time": "2026-07-04 20:00:00", "author_name": "李医生"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
@@ -1755,12 +1875,13 @@ async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-02 08:00:00", "author_name": "李主任"},
+                {"record_time": "2026-07-02 08:00:00", "author_name": "李主任", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
             "daily_course_record": (
                 {"record_time": "2026-07-02 09:00:00", "author_name": "王医生"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
@@ -1877,8 +1998,8 @@ async def test_068_does_not_match_nonapproval_yuyi_discharge(
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert result.llm_call_count == 1
     assert len(client.calls) == 1
 
@@ -1904,14 +2025,15 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-08-02-02"] == {
         "failure_kind": "senior_discharge_approval_missing",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
         "checked_source": "daily_course_record,senior_course_record",
         "approval_present": False,
+        "window_course_count": 1,
     }
     assert result.llm_call_count == 1
     assert len(client.calls) == 1
@@ -2100,8 +2222,8 @@ async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
 
 
 @pytest.mark.asyncio
@@ -2128,8 +2250,8 @@ async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> No
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
 
 
 @pytest.mark.asyncio
@@ -2202,8 +2324,8 @@ async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_empty"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
     assert result.llm_call_count == 1
 
@@ -3359,6 +3481,7 @@ async def test_074_changed_diagnosis_requires_reason_and_basis() -> None:
                 },
             ),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3424,6 +3547,7 @@ async def test_074_single_change_with_changed_diagnosis_reference_is_compliant()
                 ),
             },),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3488,6 +3612,7 @@ async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
                 "record_content": "补充诊断为细菌性肺炎。",
             },),
         },
+        llm_client=_DiagnosisChangeStateClient(("missing", "missing")),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -3610,7 +3735,14 @@ async def test_074_reason_and_basis_without_authoritative_course_time_are_data_g
 
 
 @pytest.mark.asyncio
-async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_change() -> None:
+@pytest.mark.parametrize(("second_states", "expected_state", "recorded"), [
+    (("present", "present"), CustomerFinalState.COMPLIANT, True),
+    (("missing", "present"), CustomerFinalState.NON_COMPLIANT, False),
+])
+async def test_074_multiple_changes_are_assessed_per_changed_diagnosis(
+    second_states, expected_state, recorded
+) -> None:
+    client = _DiagnosisChangeStateClient(("present", "present"), second_states)
     execution, reduced = await _evaluate(
         "LX0609-12-02-01",
         {
@@ -3642,21 +3774,20 @@ async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_cha
                 ),
             },),
         },
+        llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
-    assert execution.customer_display_facts == ((
-        "LX0609-12-02-01",
-        {
-            "failure_kind": "diagnosis_change_association_failed",
-            "diagnosis_record_count": 3,
-            "diagnosis_change_count": 2,
-            "association_issue": "multiple_changes_unresolved",
-        },
-    ),)
-    assert execution.llm_call_count == 0
-    assert execution.total_tokens == 0
+    # 同一病程提及两个变更诊断：按诊断分别送检，一次调用内各占一项。
+    assert reduced.final_state is expected_state
+    assert execution.llm_call_count == len(client.calls) == 1
+    sent = json.loads(client.calls[0][0][client.calls[0][0].rindex("\n") + 1:])
+    assert [item["changed_diagnosis"] for item in sent] == ["细菌性肺炎", "重症肺炎"]
+    assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
+        "verification_kind": "diagnosis_change_documentation_check",
+        "diagnosis_change_count": 2,
+        "reason_recorded": recorded,
+        "basis_recorded": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -3692,7 +3823,7 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
     """正式手术记录是一台手术的唯一事件基准，操作目录不能增加台次。"""
     snapshot, _materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01", "LX0609-04-05-02"),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -3732,10 +3863,11 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
                 {"record_time": "2026-07-11 08:00:00", "document_title": "曾亚丽主治医师查房记录"},
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-08 20:00:00", "document_title": "上级医师查房记录"},
-                {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录"},
+                {"record_time": "2026-07-08 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
-        },
+        }),
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
     assert [item.final_state for item in reduced] == [
@@ -3746,7 +3878,8 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
     assert facts_by_rule["LX0609-04-05-01"]["performed_surgery_count"] == 2
     assert [item["document_id"] for item in facts_by_rule["LX0609-04-05-01"]["surgery_events"]] == ["E1", "E2"]
     assert [item["document_id"] for item in facts_by_rule["LX0609-04-05-02"]["surgery_events"]] == ["E1", "E2"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
     assert snapshot.snapshot_hash
 
 
@@ -3755,7 +3888,7 @@ async def test_064_requires_surgeon_title_before_round_marker_not_later_mention(
     """术者姓名出现在“查房记录”之后或普通叙述中，不能算术者查房。"""
     _snapshot, _materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E1",
                 "surgery_code": "01.2400X013",
@@ -3776,7 +3909,7 @@ async def test_064_requires_surgeon_title_before_round_marker_not_later_mention(
                     "document_title": "手术由韩平副主任医师完成，李四主任医师查房记录",
                 },
             ),
-        },
+        }, post=False),
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -3790,7 +3923,7 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
     """手术事件仅采纳术者专属字段，病程作者字段仍可作为查房医师。"""
     signed_result, signed_reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E-signed",
                 "surgery_code": "01.2400X013",
@@ -3802,11 +3935,11 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
             ),
-        },
+        }, post=False),
     )
     generic_result, generic_reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E-generic",
                 "surgery_code": "01.2400X013",
@@ -3819,7 +3952,7 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
             ),
-        },
+        }),
     )
 
     assert signed_reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3834,7 +3967,7 @@ async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
     """“术后查房”是查房标题，不应被误认为术者说明。"""
     result, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E-postop-round",
                 "surgery_code": "01.2400X013",
@@ -3852,7 +3985,7 @@ async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
                     "2026-07-10 08:00:00",
                 )
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -3865,7 +3998,7 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
     """多台手术的汇总事实必须穿过 Reducer、Aggregator 和 Renderer。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -3886,7 +4019,7 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
                 {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-11 08:00:00", "author_name": "曾亚丽"},
             ),
-        },
+        }),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-01",
@@ -3912,7 +4045,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
     """相邻两台手术必须逐台展示术后3天与术者，不能合并成4天窗口。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -3934,7 +4067,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
                 }
                 for day in range(8, 12)
             ),
-        },
+        }, post=False),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-01",
@@ -3952,6 +4085,7 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
             "required_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
             "covered_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
             "surgeon_round_present": False,
+            "preop_surgeon_round_present": True,
         },
         {
             "surgery_time": "2026-07-08 17:15:00",
@@ -3959,16 +4093,17 @@ async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_
             "required_postop_dates": ["2026-07-09", "2026-07-10", "2026-07-11"],
             "covered_postop_dates": ["2026-07-09", "2026-07-10", "2026-07-11"],
             "surgeon_round_present": False,
+            "preop_surgeon_round_present": True,
         },
     ]
     assert "共核对 2 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）" in canonical["findings"]
     assert (
         "手术 1：2026-07-07 18:30:00，术者 韩平；应记录日期 2026-07-08、2026-07-09、2026-07-10，"
-        "实际均已覆盖；未查到韩平术者查房记录。"
+        "实际均已覆盖；术后24小时内未查到韩平术者查房记录，术前24小时内已查到术者查房记录。"
     ) in canonical["findings"]
     assert (
         "手术 2：2026-07-08 17:15:00，术者 曾亚丽；应记录日期 2026-07-09、2026-07-10、2026-07-11，"
-        "实际均已覆盖；未查到曾亚丽术者查房记录。"
+        "实际均已覆盖；术后24小时内未查到曾亚丽术者查房记录，术前24小时内已查到术者查房记录。"
     ) in canonical["findings"]
     assert "术后应记录日期为 2026-07-08、2026-07-09、2026-07-10、2026-07-11" not in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
@@ -3992,10 +4127,11 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-08 10:01:55"},
-                {"record_time": "2026-07-11 10:03:29"},
+                {"record_time": "2026-07-08 10:01:55", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-11 10:03:29", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-02",
@@ -4020,7 +4156,8 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
     )
     assert horizon_fact_ref not in result.decisions[0].fact_refs
     assert "术后 72 小时内上级医师查房时间" in canonical["findings"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -4042,16 +4179,17 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-02 08:00:00"},
-                {"record_time": "2026-07-02 09:00:00"},
-                {"record_time": "2026-07-02 10:00:00"},
-                {"record_time": "2026-07-02 11:00:00"},
-                {"record_time": "2026-07-02 12:00:00"},
-                {"record_time": "2026-07-02 13:00:00"},
-                {"record_time": "2026-07-02 14:00:00"},
-                {"record_time": "2026-07-02 15:00:00"},
+                {"record_time": "2026-07-02 08:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 09:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 10:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 11:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 12:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 13:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 14:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
+                {"record_time": "2026-07-02 15:00:00", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-04-05-02",
@@ -4083,14 +4221,15 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
         "2026-07-02 15:00:00",
     ]
     assert "共2台手术中，1台手术结束后72小时内未查到上级医师查房" in canonical["findings"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
 async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "E1",
                 "surgery_code": "01.2400X013",
@@ -4101,7 +4240,7 @@ async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary()
                 {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
             ),
-        },
+        }),
     )
 
     canonical = _canonical_extended_result(
@@ -4152,7 +4291,7 @@ async def test_064_data_gap_delivery_keeps_missing_surgery_time_explanation() ->
 async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_day() -> None:
     result, reduced = await _evaluate(
         "LX0609-04-05-01",
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": (
                 {
                     "document_id": "E1",
@@ -4172,7 +4311,7 @@ async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_d
                 {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
                 {"record_time": "2026-07-10 08:00:00", "document_title": "曾亚丽主治医师查房记录"},
             ),
-        },
+        }),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -4182,6 +4321,7 @@ async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_d
             "document_id": "E2",
             "missing_postop_dates": ["2026-07-11"],
             "surgeon_round_present": True,
+            "preop_surgeon_round_present": True,
         }
     ]
     assert result.llm_call_count == result.total_tokens == 0
@@ -4205,9 +4345,10 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
                 },
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录"},
+                {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录", "record_content": "上级医师查房，病情稳定，继续观察。"},
             ),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ('present', '病情稳定')}),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -4215,12 +4356,14 @@ async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() ->
     assert facts["unmet_surgery_events"] == [
         {"document_id": "E2", "senior_round_times": []}
     ]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
-async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_missing() -> None:
-    _snapshot, _materials, _result, reduced = await _evaluate_selected(
+async def test_064_065_use_begin_time_not_record_time_when_surgery_end_time_is_missing() -> None:
+    """院方口径（2026-10-10）：缺结束时间按同行实际开始时间推算，仍不得用文书时间。"""
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
         ("LX0609-04-05-01", "LX0609-04-05-02"),
         {
             "surgery_record": ({
@@ -4241,14 +4384,73 @@ async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_mi
         },
     )
 
-    assert [item.final_state for item in reduced] == [
-        CustomerFinalState.DATA_GAP,
-        CustomerFinalState.DATA_GAP,
-    ]
-    assert [item.reason_code for item in reduced] == [
-        "authoritative_time_missing",
-        "authoritative_time_missing",
-    ]
+    assert all(item.reason_code != "authoritative_time_missing" for item in reduced)
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert facts["surgery_time"] == "2026-07-07 16:30:00"
+    assert facts["surgery_time_basis"] == "begin_time"
+    safe = safe_postoperative_customer_display_facts(rule_id="LX0609-04-05-01", raw=facts)
+    assert safe is not None and safe["surgery_time_basis"] == "begin_time"
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-04-05-01", facts=safe)
+    assert finding.endswith("术后时间按手术开始时间推算。")
+
+
+def _064_begin_time_rows(*, mr_rows, course_dates):
+    return {
+        "surgery_record": ({
+            "document_id": "E1",
+            "surgery_code": "01.2400X013",
+            "surgery_begin_time": "2026-07-07 16:30:00+08",
+            "record_time": "2026-07-07 21:00:00+08",
+        },),
+        "mr_surgery": mr_rows,
+        "daily_course_record": tuple(
+            {"record_time": f"{value} 08:00:00", "author_name": "韩平", "record_content": "术后查看患者。"}
+            for value in course_dates
+        ),
+    }
+
+
+@pytest.mark.asyncio
+async def test_064_surgeon_falls_back_to_unique_mr_surgery_with_same_begin_time() -> None:
+    """运行文书优先、病案首页回退：手术记录无术者时取同一开始时间首页手术的术者。"""
+    _s, _m, result, _reduced = await _evaluate_selected(
+        ("LX0609-04-05-01",),
+        _064_begin_time_rows(
+            # 首页手术时间只到日、同台手术拆两行术式且术者一致。
+            mr_rows=(
+                {"surgery_code": "01.2400X013", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "韩平"},
+                {"surgery_code": "01.2400X014", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "韩平"},
+            ),
+            course_dates=("2026-07-08", "2026-07-09", "2026-07-10"),
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert facts["surgery_events"][0]["surgeon_names"] == ["韩平"]
+
+
+@pytest.mark.asyncio
+async def test_064_surgeon_fallback_refuses_conflicting_same_day_mr_surgeons() -> None:
+    _s, _m, result, _reduced = await _evaluate_selected(
+        ("LX0609-04-05-01",),
+        _064_begin_time_rows(
+            mr_rows=(
+                {"surgery_code": "01.2400X013", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "韩平"},
+                {"surgery_code": "01.2400X014", "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "李明"},
+            ),
+            course_dates=("2026-07-08", "2026-07-09", "2026-07-10"),
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert facts["surgery_events"][0]["surgeon_names"] == []
+
+
+@pytest.mark.asyncio
+async def test_064_definite_missing_postop_day_is_defect_even_without_surgeon() -> None:
+    _s, _m, _result, reduced = await _evaluate_selected(
+        ("LX0609-04-05-01",),
+        _064_begin_time_rows(mr_rows=(), course_dates=("2026-07-08", "2026-07-10")),
+    )
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
 
 
 @pytest.mark.asyncio
@@ -4265,6 +4467,61 @@ async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() ->
     )
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unknown_field", ["polarity", "temporal_scope", "scope"])
+async def test_050_explicit_fact_with_unknown_dimension_cannot_prove_no_trigger(unknown_field) -> None:
+    # 人工协议事实单独冻结未知维度；即使state=explicit，也不能据此确认完整未触发。
+    body = "该问题的诊断状态描述尚待核实。"
+    fact = _manual_scope_fact(body, "诊断", state="explicit")
+    fact[unknown_field] = "unknown"
+    client = FrozenDiagnosisScopeClient({body: (fact,)})
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-03-02-01",),
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+         "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
+        llm_client=client,
+    )
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "diagnosis_scope_uncertain"
+    canonical = _canonical_extended_result(rule_id="LX0609-03-02-01", snapshot=snapshot,
+        materials=materials, result=result, reduced=reduced)
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "diagnosis_scope_uncertain"
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"]["diagnosis_scope_resolution"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_050_negated_explicit_state_is_current_unresolved_trigger() -> None:
+    body = "目前不能认为该诊断已经明确。"
+    client = FrozenDiagnosisScopeClient({body: (
+        _manual_scope_fact(body, "诊断", state="explicit", polarity="negated"),)})
+    result, reduced = await _evaluate("LX0609-03-02-01",
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+         "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
+        llm_client=client)
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"]["uncertain_record_times"] == ["2026-06-08 09:00:00"]
+
+
+@pytest.mark.asyncio
+async def test_050_confirmed_diagnosis_does_not_cancel_undetermined_treatment_plan() -> None:
+    # 与phase3冻结正文/临床预期一致；不是按产品关键词生成事实。
+    body = "目前肺炎诊断明确，但该患者诊疗方案难以确定。"
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-03-02-01",),
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+         "daily_course_record": ({"record_time": "2026-06-08 09:00:00", "record_content": body},)},
+    )
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+    canonical = _canonical_extended_result(rule_id="LX0609-03-02-01", snapshot=snapshot,
+        materials=materials, result=result, reduced=reduced)
+    assert canonical["status"] == "non_compliant"
+    assert "方案" in canonical["findings"]
+    assert dict(result.customer_display_facts)["LX0609-03-02-01"]["uncertain_record_times"] == ["2026-06-08 09:00:00"]
 
 
 @pytest.mark.asyncio
@@ -4289,9 +4546,9 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         reduced=reduced_items,
     )
 
-    assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "diagnosis_scope_uncertain"
-    assert canonical["status"] == "uncertain"
+    assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "diagnosis_scope_uncertain"
     assert "不能据此认定缺少疑难病例讨论" in canonical["findings"]
     assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
@@ -4300,8 +4557,8 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         "uncertain_record_times": ["2026-06-09 09:00:00"],
         "discussion_count": 0,
     }
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -5690,7 +5947,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         llm_client=client,
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    expected_calls = 1 if rule_id == "LX0609-05-01-02" else 0
+    expected_calls = 1 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-03"} else 0
     assert result.llm_call_count == expected_calls
     assert result.prompt_tokens == expected_calls * 10
     assert result.completion_tokens == expected_calls * 5
@@ -6888,10 +7145,10 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
     assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == []
-    assert result.llm_call_count == 0
-    assert result.prompt_tokens == 0
-    assert result.completion_tokens == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.prompt_tokens == 10
+    assert result.completion_tokens == 5
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7421,6 +7678,8 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
 
 @pytest.mark.asyncio
 async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty() -> None:
+    from test_luxian_0609_tc02_performed_event_contract import PerformanceFake
+
     names = (
         ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
         ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
@@ -7450,6 +7709,7 @@ async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty(
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -8121,6 +8381,8 @@ def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-08-01-03",))) == {
         "discharge_record",
         "mr_diagnosis",
+        "inpat_registration",
+        "death_record",
     }
 
 
@@ -8260,6 +8522,7 @@ async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_ord
                 },
             ),
         },
+        llm_client=DiagnosisEquivalenceClient(),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -8883,7 +9146,7 @@ async def test_066_requires_authoritative_postoperative_course_time_for_per_even
 async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_round() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
-        {
+        _with_064_surgeon_rounds({
             "surgery_record": ({
                 "document_id": "SURGERY-064",
                 "surgery_code": "01.2400X013",
@@ -8918,7 +9181,7 @@ async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_rou
                 "horizon_date": "2026-07-05",
                 "basis": "evaluation_as_of",
             },),
-        },
+        }),
     )
 
     refs_by_document_id = {
@@ -8939,6 +9202,9 @@ async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_rou
         refs_by_document_id["COURSE-064-DAY-1"],
         refs_by_document_id["COURSE-064-DAY-2"],
         refs_by_document_id["COURSE-064-DAY-3"],
+        # 术前、术后24小时内的术者查房同为支撑结论的证据。
+        refs_by_document_id["ROUND-pre-SURGERY-064"],
+        refs_by_document_id["ROUND-post-SURGERY-064"],
     )))
     assert refs_by_document_id["COURSE-064-OTHER"] not in execution.decisions[0].fact_refs
     assert horizon_ref not in execution.decisions[0].fact_refs
@@ -8960,7 +9226,7 @@ async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round
                 {
                     "document_id": "SENIOR-065-MATCH",
                     "record_time": "2026-07-02 10:00:00",
-                    "record_content": "上级医师术后查房。",
+                    "record_content": "上级医师查房，病情稳定，继续观察。",
                 },
                 {
                     "document_id": "SENIOR-065-LATE",
@@ -8974,6 +9240,7 @@ async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round
                 "basis": "evaluation_as_of",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ("present", "病情稳定")}),
     )
 
     refs_by_document_id = {
@@ -9124,12 +9391,12 @@ async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -
                 {
                     "document_id": "SENIOR-065-A",
                     "record_time": "2026-07-02 10:00:00",
-                    "record_content": "术后上级查房。",
+                    "record_content": "上级医师查房，病情稳定，继续观察。",
                 },
                 {
                     "document_id": "SENIOR-065-B",
                     "record_time": "2026-07-09 10:00:00",
-                    "record_content": "术后上级查房。",
+                    "record_content": "上级医师查房，病情稳定，继续观察。",
                 },
                 {
                     "document_id": "SENIOR-065-OTHER",
@@ -9143,6 +9410,7 @@ async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -
                 "basis": "evaluation_as_of",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'上级医师查房，病情稳定，继续观察。': ("present", "病情稳定")}),
     )
 
     refs_by_document_id = {
@@ -9291,6 +9559,7 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
                 },
             ),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定'), '缺少权威记录时间': ('unknown', None)}),
     )
 
     canonical = _canonical_extended_result(
@@ -9309,7 +9578,8 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
         "field_path": "record_content",
         "excerpt_kind": "文书级依据",
     }]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -9327,6 +9597,7 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
                 "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定')}),
     )
 
     canonical = _canonical_extended_result(
@@ -9345,7 +9616,8 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
         "field_path": "record_content",
         "excerpt_kind": "文书级依据",
     }]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -9360,14 +9632,15 @@ async def test_067_multiple_selected_courses_project_each_exact_coordinate() -> 
             "daily_course_record": ({
                 "document_id": "DAILY-WINDOW-067",
                 "record_time": "2026-07-02 09:00:00",
-                "record_content": "出院前日常病程记录",
+                "record_content": "病情稳定",
             },),
             "senior_course_record": ({
                 "document_id": "SENIOR-WINDOW-067",
                 "record_time": "2026-07-03 08:00:00",
-                "record_content": "上级医师出院前查房记录",
+                "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ("present", "病情稳定")}),
     )
 
     canonical = _canonical_extended_result(
@@ -9410,15 +9683,16 @@ async def test_067_duplicate_selected_document_id_never_guesses_customer_evidenc
                 {
                     "document_id": "DAILY-DUPLICATE",
                     "record_time": "2026-07-02 08:00:00",
-                    "record_content": "出院前病程记录 A",
+                    "record_content": "病情稳定",
                 },
                 {
                     "document_id": "DAILY-DUPLICATE",
                     "record_time": "2026-07-02 09:00:00",
-                    "record_content": "出院前病程记录 B",
+                    "record_content": "病情稳定",
                 },
             ),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ("present", "病情稳定")}),
     )
 
     canonical = _canonical_extended_result(
@@ -9440,7 +9714,8 @@ async def test_067_duplicate_selected_document_id_never_guesses_customer_evidenc
     assert set(execution.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
     assert not (selected_material_refs & set(execution.decisions[0].fact_refs))
     assert "customer_evidence" not in canonical
-    assert execution.llm_call_count == execution.total_tokens == 0
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -9462,6 +9737,7 @@ async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> 
                 "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定')}),
     )
 
     canonical = _canonical_extended_result(
@@ -9500,6 +9776,7 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
                 "record_content": "病情稳定",
             },),
         },
+        llm_client=FrozenCourseBodyClient({'病情稳定': ('present', '病情稳定')}),
     )
 
     canonical = _canonical_extended_result(
@@ -9515,38 +9792,151 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
     assert "customer_evidence" not in canonical
 
 
+# 院方口径（2026-10-11）：有创操作目录为院方目录中的治疗性操作与介入治疗共 92 项；
+# 医嘱名称由模型归入目录，操作当日起 3 天内的病程或手术记录须写明已实施该操作。
+_075_ORDER = {
+    "order_name": "经胃镜特殊治疗(息肉肿物切除)",
+    "order_type": "治疗",
+    "prescribed_datetime": "2026-06-01 08:00:00",
+}
+
+
 @pytest.mark.asyncio
-async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-10-03-01",
-        {
-            "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 10:00:00",
-                "document_title": "中心静脉置管操作记录",
-                "record_content": "在无菌操作下完成右颈内静脉中心静脉置管。",
-            },),
-        },
+async def test_075_nonstandard_order_name_with_record_is_compliant() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+        records={"内镜下胃息肉切除术": ("documented", "胃镜下行胃窦息肉圈套切除")},
     )
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-
-
-@pytest.mark.asyncio
-async def test_075_invasive_order_without_course_record_delivers_defect_facts() -> None:
     result, reduced = await _evaluate(
         "LX0609-10-03-01",
         {
-            "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
-            "daily_course_record": (),
+            "inpat_nondrug_order": (_075_ORDER,),
+            # 0910 源库日常病程为空，病程记于查房记录，操作记录须同时核对。
+            "senior_course_record": ({
+                "record_time": "2026-06-01 15:00:00",
+                "record_content": "今日胃镜下行胃窦息肉圈套切除，创面钛夹夹闭，过程顺利。",
+            },),
         },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-10-03-01"] == {
+        "verification_kind": "invasive_procedure_record_complete",
+        "procedures": ["内镜下胃息肉切除术"],
+        "procedure_count": 1,
+    }
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_075_record_outside_three_day_window_is_defect_without_second_call() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+    )
+    result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": (_075_ORDER,),
+            "daily_course_record": ({
+                "record_time": "2026-06-06 09:00:00",
+                "record_content": "胃镜下胃息肉切除术后第5天，恢复良好。",
+            },),
+        },
+        llm_client=client,
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-10-03-01"] == {
-        "failure_kind": "invasive_procedure_course_record_missing",
-        "ordered_procedures": ["中心静脉置管"],
-        "course_documented": False,
+    facts = dict(result.customer_display_facts)["LX0609-10-03-01"]
+    assert facts == {
+        "failure_kind": "invasive_procedure_record_missing",
+        "procedures": ["内镜下胃息肉切除术"],
+        "procedure_count": 1,
+        "missing_procedures": ["内镜下胃息肉切除术"],
     }
+    assert safe_continuity_customer_display_facts(rule_id="LX0609-10-03-01", raw=facts) == facts
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-10-03-01", facts=facts) == (
+        "共核对 1 项有创操作，以下操作在操作当日起 3 天内的病程或手术记录中未找到对应操作记录："
+        "内镜下胃息肉切除术。"
+    )
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_075_front_page_code_triggers_without_orders() -> None:
+    client = FrozenInvasiveProcedureClient(records={"经皮肝穿刺引流术": "not_documented"})
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": (),
+            "mr_surgery": ({
+                "surgery_code": "50.9101",
+                "surgery_name": "经皮肝穿刺引流术",
+                "surgery_begin_datetime": "2026-06-02 00:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-02 10:00:00",
+                "record_content": "患者腹胀较前缓解。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_075_orders_outside_catalog_are_not_applicable() -> None:
+    client = FrozenInvasiveProcedureClient(mapping={"电子结肠镜检查": None})
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": ({**_075_ORDER, "order_name": "电子结肠镜检查", "order_type": "检查"},),
+            "daily_course_record": (),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_075_ungrounded_quote_fails_closed() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+        records={"内镜下胃息肉切除术": ("documented", "并不存在的原文")},
+    )
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": (_075_ORDER,),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 15:00:00",
+                "record_content": "今日完成胃镜治疗。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+
+
+@pytest.mark.asyncio
+async def test_075_triggered_order_without_time_is_data_gap() -> None:
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+    )
+    _result, reduced = await _evaluate(
+        "LX0609-10-03-01",
+        {
+            "inpat_nondrug_order": ({**_075_ORDER, "prescribed_datetime": None},),
+            "daily_course_record": (),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
 
 
 @pytest.mark.asyncio
@@ -9693,6 +10083,7 @@ async def test_074_fact_refs_only_include_changed_diagnosis_and_matching_course(
                 },
             ),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
     refs = {
         row["document_id"]: ref
@@ -9801,6 +10192,7 @@ async def test_074_diagnosis_reference_and_time_must_belong_to_same_course(
                 },
             ),
         },
+        llm_client=_DiagnosisChangeStateClient(("present", "present")),
     )
     assert reduced.final_state is expected_state
 
@@ -9924,11 +10316,12 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
     assert reduced[0].reason_code == "requirement_violated"
     assert dict(execution.customer_display_facts)["LX0609-12-02-01"] == {
         "verification_kind": "diagnosis_change_documentation_check",
-        "diagnosis_change_count": 1,
+        # 一栏“1.甲；2.乙”是两项变更诊断。
+        "diagnosis_change_count": 2,
         "reason_recorded": False,
         "basis_recorded": False,
     }
-    # 结构化声明本身没有理由/依据标记的病程候选，不得触发受控抽取。
+    # 声明的诊断在病程中从未提及：确定未记录，不触发受控抽取。
     assert execution.llm_call_count == 0
     assert client.calls == []
     declaration_ref = next(
@@ -9939,6 +10332,47 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
         if row["document_id"] == "ADMISSION-DIAG-CHANGE-074"
     )
     assert execution.decisions[0].fact_refs == (declaration_ref,)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("states", "expected_state"), [
+    ((("present", "present"),), CustomerFinalState.COMPLIANT),
+    ((("missing", "present"),), CustomerFinalState.NON_COMPLIANT),
+    ((("unknown", "present"),), CustomerFinalState.EVALUATION_UNKNOWN),
+])
+async def test_074_structured_declaration_is_judged_semantically_from_course_mentions(states, expected_state):
+    """诊断栏声明变更、病程未写“修正诊断为”字样时，由受控抽取判断是否记录理由与依据。"""
+
+    client = _DiagnosisChangeStateClient(*states)
+    _snapshot, _materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-12-02-01",),
+        {
+            "admission_record_diagnosis": ({
+                "document_id": "ADMISSION-DIAG-CHANGE-074-SEMANTIC",
+                "diagnosis_type": "补充诊断",
+                "diagnosis_name": "细菌性肺炎",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-074-MENTION",
+                    "record_time": "2025-08-20 10:00:00",
+                    "record_content": "结合痰培养结果考虑细菌性肺炎。诊断依据：痰培养提示肺炎克雷伯菌。",
+                },
+                {
+                    "document_id": "COURSE-074-OTHER",
+                    "record_time": "2025-08-21 10:00:00",
+                    "record_content": "今日查房，患者一般情况可。",
+                },
+            ),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is expected_state
+    assert execution.llm_call_count == len(client.calls) == 1
+    sent = json.loads(client.calls[0][0][client.calls[0][0].rindex("\n") + 1:])
+    # 只送检提及声明诊断的病程，并携带该声明诊断名。
+    assert [(item["changed_diagnosis"], item["text"][:6]) for item in sent] == [("细菌性肺炎", "结合痰培养结")]
 
 
 @pytest.mark.asyncio
@@ -10013,7 +10447,7 @@ async def test_074_no_declaration_produces_no_display_facts_or_evidence():
 
 
 def test_074_structured_declaration_strips_signature_and_record_time() -> None:
-    """入院记录诊断名尾部的签名与记录时间必须剥离，不能进入变更后诊断名。"""
+    """入院记录诊断名尾部的签名与记录时间必须剥离；列表中的每项是独立的变更诊断。"""
 
     assert module._diagnosis_change_declarations((
         {
@@ -10023,7 +10457,7 @@ def test_074_structured_declaration_strips_signature_and_record_time() -> None:
                 "医师签名：郭映江                               记录时间：2025-8-23"
             ),
         },
-    )) == ("1.左膝半月板损伤；2.肺结节",)
+    )) == ("左膝半月板损伤", "肺结节")
 
 
 @pytest.mark.asyncio
@@ -10290,7 +10724,7 @@ async def test_074_unknown_without_missing_is_uncertain():
                 basis_quote="MRI提示异常",
             )),
             "model_invalid_output",
-            100,
+            200,
         ),
         (_DiagnosisChangeClient(error=RuntimeError("network")), "model_transport_error", 0),
     ),
@@ -10310,6 +10744,165 @@ async def test_074_model_failure_is_technical_and_never_retries(
 
     assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced.reason_code == expected_reason
-    assert execution.llm_call_count == 1
+    # 协议违规重试 1 次后仍违规才拒收；传输失败不重试（用户口径 2026-10-11）。
+    expected_calls = 2 if expected_reason == "model_invalid_output" else 1
+    assert execution.llm_call_count == expected_calls
     assert execution.total_tokens == expected_tokens
-    assert len(client.calls) == 1
+    assert len(client.calls) == expected_calls
+
+
+def _064_rows(*, begin="2026-07-07 16:30:00+08", rounds=()):
+    surgery = {"document_id": "E-24H", "surgery_code": "01.2400X013", "surgery_end_time": "2026-07-07 18:30:00+08", "surgeon": "韩平"}
+    if begin is not None:
+        surgery["surgery_begin_time"] = begin
+    return {
+        "surgery_record": (surgery,),
+        "daily_course_record": (
+            *({"record_time": f"2026-07-{day:02d} 08:00:00", "author_name": "其他医师", "record_content": "术后恢复中。"} for day in (8, 9, 10)),
+            *({"record_time": moment, "author_name": "韩平", "record_content": "术者查房，评估病情。"} for moment in rounds),
+        ),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rounds,expected,post,pre", [
+    # 术前1小时、术后1小时均有术者查房。
+    (("2026-07-07 15:30:00", "2026-07-07 19:30:00"), CustomerFinalState.COMPLIANT, True, True),
+    # 术者术后查房在术后第2天（超过24小时）。
+    (("2026-07-07 15:30:00", "2026-07-09 09:00:00"), CustomerFinalState.NON_COMPLIANT, False, True),
+    # 术者术前查房早于术前24小时。
+    (("2026-07-06 09:00:00", "2026-07-07 19:30:00"), CustomerFinalState.NON_COMPLIANT, True, False),
+])
+async def test_064_surgeon_must_round_within_24_hours_before_and_after_surgery(rounds, expected, post, pre):
+    result, reduced = await _evaluate("LX0609-04-05-01", _064_rows(rounds=rounds))
+    facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
+    assert reduced.final_state is expected
+    assert facts["surgeon_round_present"] is post
+    assert facts["preop_surgeon_round_present"] is pre
+
+
+@pytest.mark.asyncio
+async def test_064_missing_surgery_begin_time_cannot_verify_preoperative_round():
+    _result, reduced = await _evaluate("LX0609-04-05-01", _064_rows(begin=None, rounds=("2026-07-07 19:30:00",)))
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "required_field_missing"
+
+
+@pytest.mark.parametrize(("drug_name", "inferred"), [
+    ("阿司匹林肠溶片", True),
+    ("大活络胶囊", True),
+    ("复方福尔可定糖浆", True),
+    ("依达拉奉舌下片", False),
+    ("西地碘含片", False),
+    ("注射用头孢曲松钠", False),
+])
+def test_062_route_inferred_as_oral_only_for_oral_dosage_forms(drug_name, inferred) -> None:
+    """院方口径（2026-10-10）：片剂、胶囊、糖浆未写途径按剂型默认口服。"""
+    from app.services.luxian_0609.native_extended_document_execution import (
+        _discharge_medications_complete,
+        _with_dosage_form_oral_route,
+    )
+
+    medications = _with_dosage_form_oral_route(
+        [{"drug_name": drug_name, "dose": "每次1片", "duration": "每日1次"}]
+    )
+    assert _discharge_medications_complete(medications) is inferred
+
+
+def test_062_written_route_is_never_overridden_by_dosage_form() -> None:
+    from app.services.luxian_0609.native_extended_document_execution import _with_dosage_form_oral_route
+
+    medications = _with_dosage_form_oral_route(
+        [{"drug_name": "依达拉奉舌下片", "dose": "每次1片", "route": "舌下含服", "duration": "每日2次"}]
+    )
+    assert medications[0]["route"] == "舌下含服"
+
+
+def _medication_extraction(*items):
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import Extraction
+
+    return Extraction(
+        "unknown", "semantic_low_confidence",
+        medications=tuple({"drug_name": name, "dose": "每次10ml", "route": None, "duration": "每天3次"}
+                          for name, _assertions in items),
+        llm_call_count=1,
+        field_assertions=tuple(
+            {"drug_name": "present", "dose": "present", "route": "present", "duration": "present", **assertions}
+            for _name, assertions in items
+        ),
+    )
+
+
+@pytest.mark.parametrize(("items", "expected"), [
+    # 0910 真实样本：两种糖浆边界清楚，模型仍把途径报为不确定 → 按剂型推定口服。
+    ((("合成糖浆甲", {"route": "uncertain"}), ("合成片乙", {"route": "uncertain"})), "ready"),
+    ((("合成糖浆甲", {"route": "uncertain"}), ("注射用合成丙", {"route": "uncertain"})), "unknown"),
+    ((("合成舌下片丁", {"route": "uncertain"}),), "unknown"),
+    ((("合成糖浆甲", {"route": "uncertain", "dose": "uncertain"}),), "unknown"),
+])
+def test_062_oral_dosage_form_route_uncertainty_does_not_block_decision(items, expected) -> None:
+    from app.services.luxian_0609.native_extended_document_execution import (
+        _discharge_medications_complete,
+        _with_dosage_form_oral_route,
+        _with_oral_route_uncertainty_resolved,
+    )
+
+    resolved = _with_oral_route_uncertainty_resolved(_medication_extraction(*items))
+    assert resolved.state == expected
+    if expected == "ready":
+        assert _discharge_medications_complete(_with_dosage_form_oral_route(resolved.medications))
+
+
+@pytest.mark.parametrize(("order", "expected"), [
+    ({"generic_name": "(4+7)(凯伦)注射用哌拉西林钠他唑巴坦钠"}, ("哌拉西林他唑巴坦",)),
+    ({"generic_name": "注射用头孢哌酮钠舒巴坦钠"}, ("头孢哌酮舒巴坦",)),
+    ({"generic_name": "注射用头孢他啶阿维巴坦钠"}, ("头孢他啶阿维巴坦",)),
+    ({"generic_name": "注射用头孢他啶"}, ()),
+    ({"generic_name": "注射用亚胺培南西司他丁钠"}, ("亚胺培南",)),
+    ({"generic_name": "注射用盐酸去甲万古霉素"}, ()),
+    ({"generic_name": "注射用硫酸多粘菌素B"}, ("多黏菌素B",)),
+    ({"generic_name": "注射用多黏菌素E甲磺酸钠"}, ("多黏菌素E甲磺酸盐",)),
+    ({"generic_name": "注射用硫酸黏菌素"}, ("硫酸黏菌素",)),
+    ({"generic_name": "注射用两性霉素B脂质体"}, ("两性霉素B",)),
+    ({"generic_name": "注射用硫酸艾沙康唑鎓"}, ("艾莎康唑",)),
+    ({"generic_name": "利奈唑胺葡萄糖注射液"}, ("利奈唑胺",)),
+    ({"generic_name": "注射用头孢吡肟"}, ()),
+    ({"generic_name": "注射用美罗培南", "order_status": "作废"}, ()),
+])
+def test_056_key_antimicrobial_catalog_matches_hospital_list(order, expected) -> None:
+    from app.services.luxian_0609.key_antimicrobial_catalog import key_antimicrobials_in_order
+
+    assert key_antimicrobials_in_order(order) == expected
+
+
+def _056_rows(*orders, culture_time=None):
+    return {
+        "inpat_drug_order": tuple(
+            {"generic_name": name, "prescribed_datetime": time, "planned_start_datetime": time}
+            for name, time in orders
+        ),
+        "labtest_master": (
+            ({"labtest_subject": "痰培养及药敏", "specimen": "痰", "request_datetime": culture_time},)
+            if culture_time else ()
+        ),
+        "daily_course_record": ({"record_time": "2026-06-01 12:00:00", "record_content": "病情记录。"},),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("orders", "culture_time", "expected"), [
+    # 院方口径（2026-10-11）：两种及以上重点抗菌药物、使用前须完成病原学送检。
+    ((("注射用哌拉西林钠他唑巴坦钠", "2026-06-01 10:00:00"), ("利奈唑胺注射液", "2026-06-02 10:00:00")),
+     "2026-06-01 09:00:00", CustomerFinalState.COMPLIANT),
+    ((("注射用哌拉西林钠他唑巴坦钠", "2026-06-01 10:00:00"), ("利奈唑胺注射液", "2026-06-02 10:00:00")),
+     None, CustomerFinalState.NON_COMPLIANT),
+    # 同一药多条医嘱只算一种。
+    ((("注射用美罗培南", "2026-06-01 10:00:00"), ("注射用美罗培南", "2026-06-02 10:00:00")),
+     None, CustomerFinalState.NOT_APPLICABLE),
+    # 头孢吡肟不在院方重点药物清单内。
+    ((("注射用美罗培南", "2026-06-01 10:00:00"), ("注射用头孢吡肟", "2026-06-02 10:00:00")),
+     None, CustomerFinalState.NOT_APPLICABLE),
+])
+async def test_056_counts_distinct_key_antimicrobials_from_hospital_list(orders, culture_time, expected) -> None:
+    _result, reduced = await _evaluate("LX0609-05-01-04", _056_rows(*orders, culture_time=culture_time))
+    assert reduced.final_state is expected

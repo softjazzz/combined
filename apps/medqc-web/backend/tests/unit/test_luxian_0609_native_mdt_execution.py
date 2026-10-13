@@ -281,20 +281,6 @@ async def test_typed_mdt_replaces_midnight_placeholder_with_strict_formal_time()
         ),
         (
             {
-                "document_id": "formal-ambiguous-a",
-                "surgery_code": None,
-                "surgery_name": "椎间盘化学溶解术+周围神经松解术",
-                "surgery_begin_time": "2025-08-22 08:00:00+00",
-            },
-            {
-                "document_id": "formal-ambiguous-b",
-                "surgery_code": None,
-                "surgery_name": "椎间盘化学溶解术+周围神经松解术",
-                "surgery_begin_time": "2025-08-22 08:30:00+00",
-            },
-        ),
-        (
-            {
                 "document_id": "formal-no-timezone",
                 "surgery_code": None,
                 "surgery_name": "椎间盘化学溶解术+周围神经松解术",
@@ -352,6 +338,131 @@ async def test_typed_mdt_does_not_replace_midnight_for_unreliable_formal_associa
     assert execution.decisions[0].reason_code == "requirement_violated"
     assert execution.decisions[0].qc_direction is QcDirection.DEFECT
     assert llm.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_two_formal_level4_records_at_different_times_is_data_gap():
+    session = _session(
+        {
+            "surgery_record": [
+                {
+                    "document_id": f"formal-ambiguous-{suffix}",
+                    "surgery_code": None,
+                    "surgery_name": "椎间盘化学溶解术+周围神经松解术",
+                    "surgery_begin_time": begin,
+                }
+                for suffix, begin in (
+                    ("a", "2025-08-22 08:00:00+00"),
+                    ("b", "2025-08-22 08:30:00+00"),
+                )
+            ],
+            "presurg_discussion": [
+                {
+                    "document_id": "discussion-c05",
+                    "record_time": "2025-08-22 15:27:29",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
+                }
+            ],
+        }
+    )
+    llm = _LLM()
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-04-01-03",),
+    )
+
+    assert execution.decisions[0].evidence_state is EvidenceState.DATA_GAP
+    assert llm.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("discussion_time", "expected_reason", "expected_calls"),
+    (
+        ("2026-01-01 09:00:00", "requirement_satisfied", 1),
+        ("2026-01-03 09:00:00", "requirement_violated", 0),
+    ),
+)
+async def test_typed_mdt_running_record_uses_formal_surgery_record_without_front_page(
+    discussion_time, expected_reason, expected_calls
+):
+    """运行病历质控时首页未生成：四级手术时间与等级取正式手术记录。"""
+
+    session = _session(
+        {
+            "surgery_record": [
+                {
+                    "document_id": "formal-running",
+                    "surgery_code": "81.5100",
+                    "surgery_name": "全髋关节置换术",
+                    "surgery_begin_time": "2026-01-02 09:00:00+08",
+                    "surgery_process": "常规消毒铺巾，行全髋关节置换。",
+                }
+            ],
+            "presurg_discussion": [
+                {
+                    "document_id": "discussion-running",
+                    "record_time": discussion_time,
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
+                }
+            ],
+        }
+    )
+    llm = _LLM()
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-04-01-03",),
+    )
+
+    assert execution.decisions[0].reason_code == expected_reason
+    assert llm.calls == expected_calls
+    assert _material_document_refs(session, "surgery_record") <= set(
+        execution.decisions[0].fact_refs
+    )
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_formal_level4_without_begin_time_is_data_gap():
+    session = _session(
+        {
+            "surgery_record": [
+                {
+                    "document_id": "formal-untimed",
+                    "surgery_code": "81.5100",
+                    "surgery_name": "全髋关节置换术",
+                    "surgery_end_time": "2026-01-02 11:00:00+08",
+                    "surgery_process": "常规消毒铺巾，行全髋关节置换。",
+                }
+            ],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-04-01-03",),
+    )
+
+    assert execution.decisions[0].evidence_state is EvidenceState.DATA_GAP
 
 
 @pytest.mark.asyncio
@@ -1524,3 +1635,60 @@ async def test_total_staff_context_overflow_does_not_classify_truncated_rosters(
     assert execution.result["status"] == "data_gap"
     assert execution.result["metadata"]["reason_code"] == "source_truncated"
     assert llm.calls == 0
+
+
+class _StructuredLLM(_LLM):
+    def supports_strict_json_schema(self) -> bool:
+        return True
+
+    async def generate(self, prompt: str, **kwargs) -> dict:
+        self.kwargs = kwargs
+        return await super().generate(prompt)
+
+
+@pytest.mark.asyncio
+async def test_capable_client_extracts_participants_with_thinking_disabled():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "document_id": "mr-c05",
+                    "surgery_id": "mr-c05-event",
+                    "surgery_code": "80.5200",
+                    "surgery_name": "椎间盘化学溶解术",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2025-08-22 00:00:00",
+                }
+            ],
+            "surgery_record": [
+                {
+                    "document_id": "formal-c05",
+                    "surgery_code": None,
+                    "surgery_name": "椎间盘化学溶解术+周围神经松解术",
+                    "surgery_begin_time": "2025-08-22 08:00:00+00",
+                }
+            ],
+            "presurg_discussion": [
+                {
+                    "document_id": "discussion-c05",
+                    "record_time": "2025-08-22 15:27:29",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
+                }
+            ],
+        }
+    )
+    llm = _StructuredLLM()
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-04-01-03",),
+    )
+
+    assert execution.decisions[0].reason_code == "requirement_satisfied"
+    assert llm.kwargs == {"enable_thinking": False}

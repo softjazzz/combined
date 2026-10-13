@@ -1,0 +1,112 @@
+/* v7.1：页面布局保留，视觉值引用公共 Token。 */
+.icd-recent-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  box-shadow: 0 -8px 20px var(--mq-border);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.recent-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 116px;
+  color: var(--mq-text-primary);
+}
+
+.recent-label :deep(svg) {
+  width: 18px;
+  height: 18px;
+  color: var(--mq-brand-600);
+}
+
+.recent-label__title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recent-label__sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--mq-text-tertiary);
+}
+
+.recent-tags {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.recent-tags::-webkit-scrollbar {
+  height: 0;
+}
+
+.recent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  max-width: 300px;
+  cursor: pointer;
+  border-radius: var(--mq-radius-tag);
+  border: 1px solid var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  padding: 8px 14px;
+  color: var(--mq-text-primary);
+  box-shadow: 0 1px 3px var(--mq-border);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.recent-tag:hover {
+  transform: none;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 18%, transparent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--mq-brand-600) 8%, transparent);
+}
+
+.recent-tag__code {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mq-brand-600);
+  font-family: var(--mq-font-family);
+}
+
+.recent-tag__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--mq-text-primary) 72%, transparent);
+}
+
+.recent-clear {
+  flex-shrink: 0;
+  border-radius: var(--mq-radius-tag);
+  border: 1px solid color-mix(in srgb, var(--mq-bg-subtle) 92%, transparent);
+  background: var(--mq-glass-bg-strong);
+  padding: 8px 12px;
+  color: var(--mq-brand-600);
+  font-size: 12px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.recent-clear:hover {
+  border-color: color-mix(in srgb, var(--mq-brand-600) 18%, transparent);
+  color: var(--mq-brand-600);
+}

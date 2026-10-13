@@ -1,0 +1,574 @@
+{
+  "audit_date": "2026-10-08",
+  "baseline_commit": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": {
+    "0609_count": 20,
+    "0916_count": 5,
+    "total": 25
+  },
+  "safety": {
+    "synthetic_only": true,
+    "new_real_model_calls": 0,
+    "provider_http_attempts": 0,
+    "pg_access": 0,
+    "manual_env_reads": 0,
+    "raw_patient_material_reads": 0,
+    "production_edits": 0,
+    "shared_test_edits": 0,
+    "commits": 0
+  },
+  "overall_verdict": "not_accepted; two offline blockers and seven freeze-test differences remain",
+  "clinical_acceptance_new": 0,
+  "formal_release_acceptance_new": 0,
+  "blockers": [
+    {
+      "id": "SA-01",
+      "rules": [
+        "LX0916-024"
+      ],
+      "classification": "confirmed_offline_source_gate_defect",
+      "summary": "麻醉来源unavailable/partial且空数组时，record_formed=False导致不适用，不能区分形成事件未知。",
+      "source_locations": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py:130",
+        "apps/medqc-web/backend/app/services/luxian_0916/surgery_consent_rules.py:223"
+      ],
+      "probe": "probe-results.json",
+      "cases": [
+        "LX0916-024-empty-unavailable",
+        "LX0916-024-empty-partial"
+      ],
+      "historical_scope": "已知且明确保留的未修缺口，本轮重新确认；不计新增临床错误"
+    },
+    {
+      "id": "SA-02",
+      "rules": [
+        "LX0916-024",
+        "LX0916-025",
+        "LX0916-026"
+      ],
+      "classification": "confirmed_offline_multi_document_contract_gap",
+      "summary": "单份事实槽位及单份引用校验未要求同来源全部受检文书覆盖；A完整+B缺项，正常受控A合同导致病例合规，未披露B未核查。",
+      "source_locations": [
+        "apps/medqc-web/backend/app/services/luxian_0916/semantic_extractor.py:1013",
+        "apps/medqc-web/backend/app/services/luxian_0916/surgery_consent_rules.py:324"
+      ],
+      "probe": "probe-results.json",
+      "cases": [
+        "LX0916-024-documents-2",
+        "LX0916-025-documents-2",
+        "LX0916-026-documents-2"
+      ],
+      "boundary": "注入合成合同响应，非真实模型误判或患者发生率；单文书A对照全部合规"
+    }
+  ],
+  "freeze_differences": [
+    {
+      "rules": [
+        "LX0609-04-02-02",
+        "LX0609-04-03-01"
+      ],
+      "test_file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_presence_freeze.py",
+      "failed_count": 6,
+      "classification": "confirmed_freeze_contract_differences",
+      "summary": "surgery_trigger_kind新增facts、032无触发文案、关联失败精确坐标与冻结预期不同；已到达并通过状态/原因断言，不直接认定临床判定错误。"
+    },
+    {
+      "rules": [
+        "LX0609-04-01-03"
+      ],
+      "test_file": "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_mdt_freeze.py",
+      "failed_count": 1,
+      "classification": "confirmed_technical_error_facts_freeze_difference",
+      "summary": "来源查询错误仍发布performed_surgery_confirmed=false、procedure_kind=unknown；旧冻结期待无客户事实。",
+      "probe": "mdt-source-error-result.json",
+      "source_locations": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_mdt_execution.py:858"
+      ],
+      "clinical_error_proven": false
+    }
+  ],
+  "test_runs": [
+    {
+      "run_id": "SA-R1",
+      "passed": 525,
+      "failed": 0,
+      "warning_count": 1,
+      "seconds": 19.63,
+      "method": "pytest --noconftest -p no:cacheprovider；11聚焦文件，语义生成器均测试替身"
+    },
+    {
+      "run_id": "SA-R2",
+      "passed": 468,
+      "failed": 7,
+      "deselected": 4,
+      "warning_count": 1,
+      "seconds": 10.03,
+      "method": "pytest --noconftest -p no:cacheprovider；9扩展/冻结/mapping文件；-k not preop"
+    }
+  ],
+  "new_probes": {
+    "0916_cases": 12,
+    "0609_mdt_cases": 1,
+    "fake_generate_calls_0916": 6,
+    "real_model_calls": 0,
+    "paths": [
+      ".tmp/engine-audit-20261008/surgery-anesthesia/probe.py",
+      ".tmp/engine-audit-20261008/surgery-anesthesia/probe-results.json",
+      ".tmp/engine-audit-20261008/surgery-anesthesia/probe-mdt-source-error.py",
+      ".tmp/engine-audit-20261008/surgery-anesthesia/mdt-source-error-result.json"
+    ]
+  },
+  "rules": [
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-01-01",
+      "legacy_rule_id": "LX0609-029",
+      "name": "有手术医嘱但无术前小结",
+      "executor": "surgery_document",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-13-r02-029-surgery-event-association.md",
+          "summary": "历史R02双轮30例存在性/关联验证；13例关联更正、17例保护不变。"
+        }
+      ],
+      "current_gap": "单份实质文书/同台拆行有保护；同日源端漏第二台仍无法证明，本轮未复核历史原始病例。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-01-02",
+      "legacy_rule_id": "LX0609-039",
+      "name": "除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
+      "executor": "surgery_document",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-surgery-document-freeze.md",
+          "summary": "正式typed术前讨论存在性、术者参与与紧急抢救例外已冻结。"
+        }
+      ],
+      "current_gap": "多事件、源失败与空讨论离线保护存在；语义参与者/急诊豁免及临床来源覆盖仍缺独立当前金标。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-01-03",
+      "legacy_rule_id": "LX0609-040",
+      "name": "四级手术术前讨论未开展多学科讨论",
+      "executor": "surgery_mdt",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-surgery-mdt-freeze.md",
+          "summary": "四级手术MDT有正式确定性冻结及事实/证据迁移记录。"
+        }
+      ],
+      "current_gap": "当前source_query_error分支保留performed_surgery_confirmed=false，与冻结无facts不同；该分支测试失败且独立复现，尚不能批准冻结验收。",
+      "verdict": "freeze_contract_difference",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-01-04",
+      "legacy_rule_id": "LX0609-078",
+      "name": "术前小结内容不完整",
+      "executor": "preop_content",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-08-preop-bounded-real-validation.md",
+          "summary": "三例、四次既有已授权真实调用；92字段引用及限定语义复核、8/8状态及保存回读一致；337项已有保护。"
+        }
+      ],
+      "current_gap": "C04/C12诊断充分性/术式归属争议、规则级自然unknown真实样例、泛化、客户PG及浏览器继续缺；本轮不重做专项探针、不新增真实调用。",
+      "verdict": "bounded_validation_clinical_pending",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-01-05",
+      "legacy_rule_id": "LX0609-079",
+      "name": "术前讨论记录内容不完整",
+      "executor": "preop_content",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-08-preop-bounded-real-validation.md",
+          "summary": "同批既有有限术前讨论验证；文书内容按单份核对，独立语义复核未发现新增确认缺陷。"
+        }
+      ],
+      "current_gap": "医学争议和泛化仍保留；状态一致不是全量医学充分性证明。本轮只继承历史结论，不重做已完成专项验证。",
+      "verdict": "bounded_validation_clinical_pending",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-01",
+      "legacy_rule_id": "LX0609-003",
+      "name": "手术后24小时内是否完成",
+      "executor": "surgery_gate",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-07-surgery-record-event-coverage-fix.md",
+          "summary": "两台一份手术记录错误合规已有修复；20专属正式session→执行→归约→Finalizer例及134聚焦回归。"
+        }
+      ],
+      "current_gap": "本轮104 gate及20逐台覆盖保护通过；独立当前真实多台手术记录时限、客户保存/API页面仍缺。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-02",
+      "legacy_rule_id": "LX0609-030",
+      "name": "有手术医嘱但无手术记录",
+      "executor": "surgery_presence",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-surgery-presence-finalizer-ownership.md",
+          "summary": "存在性facts所有权及目标surgery_record冻结，执行器拥有已实施手术触发。"
+        }
+      ],
+      "current_gap": "本轮存在性旧冻结与surgery_trigger_kind新增facts不同；6个presence失败含本规则/032共享场景，不能写全绿或自动修改预期。",
+      "verdict": "freeze_contract_difference",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-03",
+      "legacy_rule_id": "LX0609-024",
+      "name": "恶性肿瘤手术记录未书写淋巴结清扫情况",
+      "executor": "surgery_gate",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-06-lx0609-surgery-family-ownership-baseline.md",
+          "summary": "恶性肿瘤触发、淋巴结处理/未处理原因，由受控事实抽取后Python判定。"
+        }
+      ],
+      "current_gap": "本轮gate套件含恶性/非恶性、否定及计划语气保护；抽取语义正确性、多台手术及真实充分性无新增独立金标，不以通用回归代替。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-04",
+      "legacy_rule_id": "LX0609-025",
+      "name": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
+      "executor": "phase_gate / surgery_gate shadow",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "implant_five_field_real_gold_pending",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-025-pending-legacy-evidence-audit.md",
+          "summary": "当前主表pending_definition，原因implant_five_field_real_gold_pending；正式结果not_executed、空事实/空证据。"
+        }
+      ],
+      "current_gap": "五字段口径已冻结，欠多台、文书缺失、字段冲突真实金标；直接执行器或shadow成功不代表正式发布通过。",
+      "verdict": "withheld_pending_validation",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-05",
+      "legacy_rule_id": "LX0609-031",
+      "name": "手术记录非手术者签字（核对术者及签名医生）",
+      "executor": "surgery_gate",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-07-surgery-record-event-coverage-fix.md",
+          "summary": "术者/签名资格不取提交人；2026-10-07补逐台覆盖、拒绝不同事件共用签名。"
+        }
+      ],
+      "current_gap": "本轮20事件覆盖及gate保护通过；同台辨识依赖已有结构化身份，未补真实临床关联和正式保存/页面证据。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-06",
+      "legacy_rule_id": "LX0609-060",
+      "name": "死亡患者无死亡记录",
+      "executor": "extended_document death",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-07-round2-surgery-documents-audit.md",
+          "summary": "历史六例均无死亡触发；另有死亡文书迁移和合成触发/缺文书保护。"
+        }
+      ],
+      "current_gap": "当前扩展执行与死亡mapping通过；历史无死亡阳性不能证明死亡缺记录的真实准确性。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-07",
+      "legacy_rule_id": "LX0609-069",
+      "name": "会诊记录单未在会诊申请发出后24小时内完成",
+      "executor": "consultation",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-09-pending-069-empty-time.md",
+          "summary": "069历史已修正空申请时间缺口归因，既有Provider→native→binding→Finalizer真实回放保持data_gap且原因改为authoritative_time_missing；24小时时限未改。"
+        }
+      ],
+      "current_gap": "本轮069关联缺口与客户时间缺项文案8项通过；不能因物理位于手术目录而当手术证据，真实多申请/签名完成时间和保存链仍需专属验收。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-02-08",
+      "legacy_rule_id": "LX0609-076",
+      "name": "死亡时间缺失",
+      "executor": "extended_document death",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-07-round2-surgery-documents-audit.md",
+          "summary": "历史六例无死亡触发；2026-09-08另有076空正文source_empty及保存completeness解释修复、8例576项正式交付记录（整任务完成不等于全规则成功）。"
+        }
+      ],
+      "current_gap": "本轮round2及extended通过；当前真实死亡阳性缺失、时间合法性和源覆盖仍未补，完成时间不能代替死亡时间。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-03-01",
+      "legacy_rule_id": "LX0609-032",
+      "name": "有手术记录但无手术安全核查表",
+      "executor": "surgery_presence",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-07-round2-surgery-documents-audit.md",
+          "summary": "历史六例5合规、1关联失败，双手术单核查不反改冻结预期；按每台手术核对。"
+        }
+      ],
+      "current_gap": "当前presence冻结在032无触发文案及association_failed公开坐标不同；状态未因此翻转，属于待核冻结差异，未重判真实C01。",
+      "verdict": "freeze_contract_difference",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-04-01",
+      "legacy_rule_id": "LX0609-036",
+      "name": "无麻醉术前或麻醉术后访视记录（局麻除外）",
+      "executor": "phase_gate / surgery_document direct",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "anesthesia_visit_sources_unavailable_customer_scope",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-surgery-document-freeze.md",
+          "summary": "当前主表pending_definition，原因anesthesia_visit_sources_unavailable_customer_scope，客户源不提供访视故暂停。"
+        }
+      ],
+      "current_gap": "直接执行器存在性测试不表示正式规则通过；需要真实源覆盖和客户重新确认供数范围，不能自动放开。",
+      "verdict": "withheld_pending_validation",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-04-02",
+      "legacy_rule_id": "LX0609-037",
+      "name": "麻醉术前和术后访视记录填写不规范（局麻除外）",
+      "executor": "surgery_document",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-10-07-n08-anesthesia-label-fix.md",
+          "summary": "第二轮空模板/非法时间/跨事件访视缺陷已有保护；N04/N08补前缀、相邻标签及空标签归属。"
+        }
+      ],
+      "current_gap": "本轮相关124+27+17+8测试通过；无业务键的单事件既有兼容仍允许，无多事件完整自然真实阳性金标及源覆盖证明，不外推全局关联正确。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-04-03",
+      "legacy_rule_id": "LX0609-038",
+      "name": "无麻醉记录单（局麻除外）",
+      "executor": "surgery_document",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-13-r02-038-anesthesia-record.md",
+          "summary": "非局麻实施麻醉触发；历史R02两轮30例、五例独立预期相符，记录存在性不混入完整性。"
+        }
+      ],
+      "current_gap": "本轮方法标签、计划/未实施、局麻、来源失败保护通过；多麻醉/跨手术独立缺记录当前真实覆盖仍缺。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-05-01",
+      "legacy_rule_id": "LX0609-064",
+      "name": "术后三天无连续病程记录（包含术后术者查房记录）",
+      "executor": "extended_document postoperative",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-postoperative-fact-refs.md",
+          "summary": "逐台手术的术后第1–3日病程、术者查房与精确引用冻结；观察窗口策略既有保护。"
+        }
+      ],
+      "current_gap": "本轮extended及postoperative mapping通过；病程可供哪些手术复用、同日多台和角色语义的独立临床金标未新增。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-05-02",
+      "legacy_rule_id": "LX0609-065",
+      "name": "无术后三天内上级医师查看病人记录",
+      "executor": "extended_document postoperative",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-065-postoperative-window.md",
+          "summary": "权威手术结束+72小时与评价终点逐台判断；窗口未成熟不提前报缺，缺终点保持资料不足。"
+        }
+      ],
+      "current_gap": "本轮extended与round2时间边界保护通过；源端完整观察窗口和真实多台上级医师身份/查看记录仍缺当前独立验证。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0609",
+      "rule_id": "LX0609-04-05-03",
+      "legacy_rule_id": "LX0609-066",
+      "name": "无术后首次病程记录",
+      "executor": "extended_document postoperative",
+      "phase_status": "active",
+      "pending_reason_code": null,
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/acceptance/2026-09-07-lx0609-postoperative-fact-refs.md",
+          "summary": "每台手术关联首次术后病程，缺失证据仅引用未满足事件，既有最近已结束手术关联。"
+        }
+      ],
+      "current_gap": "本轮extended及postoperative mapping通过；最近已结束策略在同日多台/时间模糊的真实可靠性未新增验证。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0916",
+      "rule_id": "LX0916-023",
+      "name": "无麻醉记录",
+      "executor": "surgery_consent_rules",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md",
+          "summary": "H33正式任务请求在INSERT前MemoryError/HTTP500停止，无新规则结果；H30来源阴性门控局部修复及两冻结正例。"
+        }
+      ],
+      "current_gap": "本轮26门控保护和空源公开链保护通过；真缺记录、独立麻醉触发、局麻、多麻醉/多手术关联及当前正式保存/页面仍缺。",
+      "verdict": "partial_engineering_evidence",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0916",
+      "rule_id": "LX0916-024",
+      "name": "麻醉记录缺项或描述不清",
+      "executor": "surgery_consent_rules",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md",
+          "summary": "H11两轮30例含16触发，整族9例变化、passed=false；无独立预冻结临床gold。"
+        }
+      ],
+      "current_gap": "本轮确认未完整读取空源仍record_formed=False→not_applicable；另确认双文书仅A事实可返回病例合规。",
+      "verdict": "blocked_confirmed_offline_counterexample",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0916",
+      "rule_id": "LX0916-025",
+      "name": "手术记录缺项或描述不清",
+      "executor": "surgery_consent_rules",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md",
+          "summary": "H11两轮各14资料不足+2不合规+14不适用，状态计数相同不能证明整族稳定；无独立预冻结gold。"
+        }
+      ],
+      "current_gap": "本轮确认双文书A完整+B空标题，受控单A事实可返回合规，B未核查；缺多事件覆盖合同、独立gold与正式回读。",
+      "verdict": "blocked_confirmed_offline_counterexample",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0916",
+      "rule_id": "LX0916-026",
+      "name": "手术安全核查记录缺项或描述不清",
+      "executor": "surgery_consent_rules",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md",
+          "summary": "H11资料不足6→2、不合规10→14，整族9例漂移；无真实输血阳性，条件仅合成保护。"
+        }
+      ],
+      "current_gap": "本轮确认双文书仅A事实可返回合规；逐阶段三方签字与真实输血/标本适用性、跨手术关联仍缺专项独立验证。",
+      "verdict": "blocked_confirmed_offline_counterexample",
+      "clinical_acceptance": "not_granted"
+    },
+    {
+      "engine": "0916",
+      "rule_id": "LX0916-027",
+      "name": "急诊手术缺主治及以上医师指示记录",
+      "executor": "surgery_consent_rules",
+      "historical_evidence": [
+        {
+          "path": "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md",
+          "summary": "H0/H1/H8整包/事后审计；run5的30条均无法复核，无独立急诊触发专项预期。"
+        }
+      ],
+      "current_gap": "本轮60手术规则套件的泛化事件/未知保护不证明急诊真实性、医师职称和有效指示语义；需独立急诊阳性与事件关联专项。",
+      "verdict": "insufficient_rule_specific_evidence",
+      "clinical_acceptance": "not_granted"
+    }
+  ],
+  "source_sha256": {
+    "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93",
+    "apps/medqc-web/backend/app/services/luxian_0916/input_context.py": "b85ba458b134d01076b53a8674d7bedc660d0273299b400d0c23a4556a0752fb",
+    "apps/medqc-web/backend/app/services/luxian_0916/semantic_extractor.py": "60ada6e10f06e55b955c1c6d63259c4799f45b3d5531c58195ef0dc60bcba319",
+    "apps/medqc-web/backend/app/services/luxian_0916/surgery_consent_rules.py": "8c871790b7d74526ae73c3c8909dbd9b754df82bf6583382d9b9ef8726bc9a7c",
+    "apps/medqc-web/backend/app/services/luxian_0916/surgical_document_completeness.py": "c9a8fb1dffd537000219eca4854363c893e4810c70a760ae4c0198b115d57954",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py": "63a10b9f21b0b0291449038f4623cfbb62390a7cb3a3284df4872120fa8083d3",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_gate_execution.py": "f7ff9644a3c9509970efaa2dac42138a27d32ed628f04fddedbfaa488da301f6",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_mdt_execution.py": "42cff55f0c600808fb5173dce8af55fb51f78ea87a7b2bd74b72d60276bb93f7"
+  },
+  "limits": [
+    "本轮未重新读取任何历史私有材料或重放真实批次，历史证据只由公开工程记录继承。",
+    "没有正式PG保存/API请求/浏览器、新版本真实模型或临床gold验证。",
+    "04-01-04/05既有有限术前验证、诊断及术式争议继续保留，不重做专项探针，不扩大为临床验收。",
+    "植入物04-02-04、访视存在性04-04-01仍正式pending；直接执行能力不可计入发布通过。"
+  ]
+}

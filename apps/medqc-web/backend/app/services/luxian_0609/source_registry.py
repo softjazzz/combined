@@ -346,6 +346,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-09-01-02": ("rescue_record", "inpat_nondrug_order.rescue_order"),
     "LX0609-06-02-01": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-06-01-01": (
+        # 时限未到（在院运行中）与出院终末须区分评价。
+        "evaluation_context.horizon", "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
         "first_course_record", "daily_course_record", "senior_course_record", "rescue_record",
     ),
@@ -353,6 +355,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order.exam_lab_order", "exam_master", "exam_item_report",
     ),
     "LX0609-06-03-02": (
+        # 时限未到（在院运行中）与出院终末须区分评价。
+        "evaluation_context.horizon", "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.exam_lab_order", "labtest_master", "labtest_item_report",
     ),
     "LX0609-06-01-02": (
@@ -363,6 +367,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "first_course_record",
         "rescue_record",
         "senior_course_record",
+        # 入院 24 小时内开立的检查豁免需要入院锚点。
+        "inpat_registration",
+        "admission_record",
     ),
     "LX0609-06-01-04": (
         "evaluation_context.horizon",
@@ -415,7 +422,6 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-06-02-02": (
         "pathology_exam_master",
         "pathology_exam_report",
-        "senior_course_record",
     ),
     # 026 绑定同一请求内的恶性事实、化疗医嘱和对应病程，禁止跨快照补证。
     "LX0609-05-02-01": (
@@ -426,7 +432,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 018 仅接受受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
     "LX0609-01-01-02": ("diagnosis", "admission_record_diagnosis"),
     "LX0609-01-02-02": ("first_course_record_diagnosis",),
-    "LX0609-04-01-04": ("presurg_summary", "surgery_record"),
+    "LX0609-04-01-04": ("presurg_summary", "surgery_record", "senior_course_record"),
     "LX0609-04-01-05": ("presurg_discussion",),
     # 027 需要同一快照内的病历阶段、恶性事实与正式出院记录。
     "LX0609-08-01-04": (
@@ -435,15 +441,17 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
+    # mr_diagnosis 仅供院方“病种—术式”目录按 ICD 编码确认癌种，不送入模型。
     "LX0609-04-02-03": (
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
         "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
-        "discharge_record",
+        "discharge_record", "mr_diagnosis",
     ),
     "LX0609-04-02-04": ("surgery_record", "mr_surgery", "daily_course_record"),
     "LX0609-05-01-01": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+        "senior_course_record", "postsurg_firstcourse_record",
     ),
     "LX0609-11-01-01": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
     # 029 的新增适用触发仅为结构化手术医嘱；严格已实施手术仍由执行器
@@ -456,13 +464,19 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 本次住院是否实施麻醉以及麻醉方式，才能正确处理局麻例外。
     "LX0609-11-02-01": ("mr_surgery",),
     "LX0609-11-02-02": ("mr_surgery",),
+    # 036/037 术后访视时限按手术结束后24小时（院方口径）与评价截止时间核对；
+    # 运行病历优先手术记录，病案首页（mr_surgery）往往出院归档后才有，只作回退。
     "LX0609-04-04-01": (
         "mr_surgery",
+        "surgery_record",
+        "evaluation_context.horizon",
         "preane_surveil_record",
         "postane_surveil_record",
     ),
     "LX0609-04-04-02": (
         "mr_surgery",
+        "surgery_record",
+        "evaluation_context.horizon",
         "preane_surveil_record",
         "postane_surveil_record",
     ),
@@ -511,9 +525,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "presurg_discussion",
         "consultation_record",
     ),
-    # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定
-    # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。申请、同意书、检验和
-    # 围术期文书均保持独立来源，禁止再借用输血记录或收费行伪装。
+    # 输血族逐规则绑定来源；044/045/046按开立且未取消的医嘱触发，
+    # 专用病程与首页输血信息仅供记录/字段/时序核验，不代替医嘱。
+    # 其他规则保留现有事件合同，各文书与收费仍保持独立来源。
     "LX0609-11-03-01": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
     "LX0609-11-03-02": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
     "LX0609-07-01-01": (
@@ -524,9 +538,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_master",
         "labtest_item_report",
     ),
-    "LX0609-07-01-02": ("bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
-    "LX0609-07-02-01": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
-    "LX0609-07-02-02": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-07-01-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
+    "LX0609-07-02-01": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-07-02-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
     "LX0609-07-03-01": (
         "evaluation_context.horizon",
         "bloodtrans_record",
@@ -597,7 +611,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 063 比较病案首页与出院记录的出院/死亡诊断；mr_diagnosis 仅作为
     # 规则内部决策支持来源，不改变客户适用文书范围。
-    "LX0609-08-01-03": ("discharge_record", "mr_diagnosis"),
+    "LX0609-08-01-03": ("discharge_record", "mr_diagnosis", "inpat_registration", "death_record"),
+    # 用户口径（2026-10-11）：重要住院事件按结构化来源由程序确定，不再读病程。
+    "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
+                        "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",
+                        "crisis_value_record", "inpat_nondrug_order", "discharge_record_diagnosis"),
     "LX0609-04-05-01": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-04-05-02": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-04-05-03": ("mr_surgery",),
@@ -640,6 +658,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-10-02-01": ("evaluation_context.horizon", "inpat_nondrug_order"),
     "LX0609-10-02-02": ("inpat_nondrug_order",),
     "LX0609-12-02-01": ("diagnosis", "admission_record_diagnosis"),
+    # 075：医嘱触发（运行病历）＋病案首页编码触发（终末），操作记录核对病程与手术记录。
+    "LX0609-10-03-01": (
+        "inpat_nondrug_order", "first_course_record", "daily_course_record",
+        "senior_course_record", "postsurg_firstcourse_record", "surgery_record", "mr_surgery",
+    ),
 })
 
 

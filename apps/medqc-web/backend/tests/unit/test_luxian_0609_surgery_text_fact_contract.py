@@ -207,6 +207,8 @@ def _session(
                 "2026-01-01 08:00:00+08" if exact_performed_time else ""
             ),
             "surgery_name": "本次手术",
+            # 024 院方目录（2026-10-11）按 ICD 编码确认“肺癌+肺叶切除”组合。
+            "surgery_code": "32.4100",
             "surgery_process": (
                 "正文标记-A；术中置入人工硬脑膜；"
                 "2026-01-01 08:00实际给予预防抗菌药，"
@@ -215,7 +217,7 @@ def _session(
         },),
         "mr_surgery": ({"surgery_name": "本次手术"},),
         "pathology_exam_report": ({"diagnosis": "本次病理关联"},),
-        "diagnosis": ({"diagnosis_name": "本次诊断"},),
+        "diagnosis": ({"diagnosis_name": "本次诊断", "diagnosis_code": "C34.100"},),
         "inpat_drug_order": ({"record_content": "治疗性抗菌药"},),
         "daily_course_record": ({"record_content": "用药过程"},),
         "surgery_inform_consent": ({
@@ -1345,143 +1347,8 @@ def test_025_prompt_includes_its_implant_specific_instruction(
     assert "不能作为永久植入物" in prompt
 
 
-@pytest.mark.asyncio
-async def test_028_truncated_drug_source_still_extracts_text_but_cannot_claim_compliant() -> None:
-    session = _session(exact_performed_time=False, drug_source_truncated=True)
-    response = {
-        "schema_version": SCHEMA_VERSION,
-        "events": [_event(
-            evidence_refs=["S01-01"],
-            incision_class="I",
-            antimicrobial_intent="prophylactic",
-            start_time_ref="T001",
-            start_time_role="actual_administration",
-            end_time_ref="T002",
-            end_time_role="actual_stop",
-            interval_scope="prophylactic_segment",
-        )],
-    }
-    client = _Client(response)
-
-    result = await execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-05-01-01",),
-        decision_rule_ids=("LX0609-05-01-01",),
-        wrapper_rules=[],
-        evidence_payload={},
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        source_schema=None,
-        llm_client=client,
-        evidence_snapshot=session.snapshot,
-        evidence_materials=session.materials,
-    )
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=result.decisions,
-        expected_rule_ids=("LX0609-05-01-01",),
-        snapshot=session.snapshot,
-    )
-
-    assert [item.final_state.value for item in reduced] == ["data_gap"]
-    assert result.llm_call_count == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("actual_stop_text", "special_reason", "expected"),
-    (
-        ("2026-01-02 09:00", "not_documented", "data_gap"),
-        ("2026-01-03 09:00", "documented", "non_compliant"),
-    ),
-)
-async def test_028_partial_drug_source_only_keeps_positive_over_48h_defect(
-    actual_stop_text: str,
-    special_reason: str,
-    expected: str,
-) -> None:
-    session = _session(
-        exact_performed_time=False,
-        drug_source_truncated=True,
-        actual_stop_text=actual_stop_text,
-    )
-    response = {
-        "schema_version": SCHEMA_VERSION,
-        "events": [_event(
-            evidence_refs=["S01-01"],
-            incision_class="I",
-            antimicrobial_intent="prophylactic",
-            start_time_ref="T001",
-            start_time_role="actual_administration",
-            end_time_ref="T002",
-            end_time_role="actual_stop",
-            interval_scope="prophylactic_segment",
-            special_extension_reason=special_reason,
-        )],
-    }
-
-    result = await execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-05-01-01",),
-        decision_rule_ids=("LX0609-05-01-01",),
-        wrapper_rules=[],
-        evidence_payload={},
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        source_schema=None,
-        llm_client=_Client(response),
-        evidence_snapshot=session.snapshot,
-        evidence_materials=session.materials,
-    )
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=result.decisions,
-        expected_rule_ids=("LX0609-05-01-01",),
-        snapshot=session.snapshot,
-    )
-
-    assert [item.final_state.value for item in reduced] == [expected]
-    assert result.llm_call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_028_uses_one_cropped_llm_call_when_structured_trigger_is_unknown() -> None:
-    session = _session(exact_performed_time=False)
-    response = {
-        "schema_version": SCHEMA_VERSION,
-        "events": [_event(
-            evidence_refs=["S01-01"],
-            incision_class="I",
-            antimicrobial_intent="prophylactic",
-            start_time_ref="T001",
-            start_time_role="actual_administration",
-            end_time_ref="T002",
-            end_time_role="actual_stop",
-            interval_scope="prophylactic_segment",
-        )],
-    }
-    client = _Client(response)
-
-    result = await execute_luxian_0609_native_surgery_gate_rules(
-        rule_ids=("LX0609-05-01-01",),
-        decision_rule_ids=("LX0609-05-01-01",),
-        wrapper_rules=[],
-        evidence_payload={},
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        source_schema=None,
-        llm_client=client,
-        evidence_snapshot=session.snapshot,
-        evidence_materials=session.materials,
-    )
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=result.decisions,
-        expected_rule_ids=("LX0609-05-01-01",),
-        snapshot=session.snapshot,
-    )
-
-    assert [item.final_state.value for item in reduced] == ["compliant"]
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 100
+# 028 已改为程序判定（2026-10-11），旧联合抽取的截断/超48小时/裁剪调用用例由
+# test_luxian_0609_prophylactic_antimicrobial_duration.py 按新口径覆盖。
 
 
 @pytest.mark.asyncio
@@ -1508,7 +1375,12 @@ async def test_invalid_surgery_fact_response_is_bounded_calls_technical_error() 
         expected_rule_ids=RULE_IDS,
         snapshot=session.snapshot,
     )
-    assert [item.final_state.value for item in reduced] == ["technical_error"] * 4
+    states = {item.rule_id: item.final_state.value for item in reduced}
+    # 028 程序判定不受联合提取失败影响（2026-10-11）。
+    assert {rule_id: state for rule_id, state in states.items() if rule_id != "LX0609-05-01-01"} == {
+        rule_id: "technical_error" for rule_id in RULE_IDS if rule_id != "LX0609-05-01-01"
+    }
+    assert states["LX0609-05-01-01"] != "technical_error"
     assert result.llm_call_count == 1
 
 

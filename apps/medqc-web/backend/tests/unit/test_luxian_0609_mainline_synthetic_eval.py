@@ -82,15 +82,18 @@ def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> N
         rule_id for visit_rules in grouped.values() for rule_id in visit_rules
     }
 
-    assert len(selected_rule_ids) == 69
+    # 截至 2026-10-12 合同文件，前 75 条中仍为 pending_definition 的 8 条。
+    assert len(selected_rule_ids) == 67
     assert selected_rule_ids.isdisjoint(
         {
+            "LX0609-03-01-01",
+            "LX0609-03-01-02",
+            "LX0609-03-01-03",
             "LX0609-04-02-04",
-            "LX0609-05-01-01",
-            "LX0609-07-04-02",
-            "LX0609-05-01-04",
+            "LX0609-04-04-01",
+            "LX0609-04-04-02",
             "LX0609-05-03-01",
-            "LX0609-10-03-01",
+            "LX0609-07-04-02",
         }
     )
 

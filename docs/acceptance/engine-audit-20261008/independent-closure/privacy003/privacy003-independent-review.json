@@ -1,0 +1,351 @@
+{
+  "full_commit": "511bd12dbd96d3f65927963c956bc8a132444c0f",
+  "scope": "0609 PRIV003 three auxiliary script send boundaries and trusted collector, pinned independent review",
+  "decision": "supports_limited_send_boundary_integration",
+  "full_priv003_closed": false,
+  "blocking_defects_in_reviewed_boundary": [],
+  "standards": {
+    "hard_violations": [],
+    "judgment_findings": [
+      {
+        "priority": "P3",
+        "id": "duplicated_script_identity_helpers",
+        "blocking": false,
+        "description": "Identical source/bind helpers across three scripts may drift; no public-module refactor requested."
+      }
+    ]
+  },
+  "spec": {
+    "actionable_findings": [],
+    "probe": {
+      "commit": "511bd12dbd96d3f65927963c956bc8a132444c0f",
+      "method": "independently authored assertions; owner AST helper reused; actual current attempt method AST with in-memory capture/observation/transport; business/config/material parsing replaced; no true script import/config/CLI/network/PG",
+      "results": [
+        {
+          "id": "F01",
+          "status": "passed"
+        },
+        {
+          "id": "F03_F04",
+          "status": "passed"
+        },
+        {
+          "id": "F02_F06_PHONE_raw",
+          "status": "passed"
+        },
+        {
+          "id": "F06_residual",
+          "status": "passed"
+        },
+        {
+          "id": "F05_existing_wrapper_closed",
+          "status": "passed"
+        },
+        {
+          "id": "F07_original_objects",
+          "status": "passed"
+        },
+        {
+          "id": "F08_scope_lifecycle",
+          "status": "passed"
+        }
+      ],
+      "passed": 7,
+      "failed": 0,
+      "network_calls": 0,
+      "pg_calls": 0,
+      "env_files_read": 0,
+      "source_or_patient_files_read": "only pinned code/helper source; synthetic source rows",
+      "frozen_expectations_changed": false
+    },
+    "frozen_counterexamples": {
+      "commit": "511bd12dbd96d3f65927963c956bc8a132444c0f",
+      "frozen_before_test_execution": true,
+      "cases": [
+        {
+          "id": "F01",
+          "invariant": "ordinary/semantic absent source: no source reader/client construction/model attempt; fixed refusal"
+        },
+        {
+          "id": "F02",
+          "invariant": "raw-name active exact CaseRef permits redacted normal text and preserves 130mg/1.5h/cefuroxime markers"
+        },
+        {
+          "id": "F03",
+          "invariant": "closed collector refuses; 3-coordinate-only/masked-only/dict/callable collector refused"
+        },
+        {
+          "id": "F04",
+          "invariant": "same patient/visit but different institute and wrong row CaseRef refuse before observation/capture/transport"
+        },
+        {
+          "id": "F05",
+          "invariant": "provider alive at precheck but closed before second actual attempt: attempt1 allowed, attempt2 refused"
+        },
+        {
+          "id": "F06",
+          "invariant": "unlabelled known raw-name and PHONE_13800138000_BEARER_SECRET counterexample retained; no identity reaches attempt counters"
+        },
+        {
+          "id": "F07",
+          "invariant": "028 exact original fixed object accepted; same-label equal dataclass clone and replaced tuple refused"
+        },
+        {
+          "id": "F08",
+          "invariant": "out-of-scope delayed child refuses; exception/cancellation restore outer context"
+        },
+        {
+          "id": "F09",
+          "invariant": "ordinary/semantic main AST refusal is not proof of actual CLI import/config behavior; static actual imports reach dotenv/settings"
+        },
+        {
+          "id": "F10",
+          "invariant": "PRIV002 public modules have byte-identical git blobs vs parent; change remains three script boundaries/tests/docs"
+        }
+      ],
+      "phone_counterexample": "PHONE_13800138000_BEARER_SECRET",
+      "clinical_protection": [
+        "130mg",
+        "1.5h",
+        "头孢呋辛"
+      ]
+    }
+  },
+  "open_prerequisites": [
+    {
+      "id": "PRIV003_REAL_CLI_IDENTITY_SOURCE",
+      "status": "open_refusal_not_restored",
+      "blocks": "ordinary/semantic real CLI functional restoration and real sending",
+      "reason": "CLI has no legal request-scoped original-identity collector integration"
+    }
+  ],
+  "evidence_corrections": [
+    {
+      "id": "AST_NOT_REAL_IMPORT_CONFIG",
+      "status": "static_only",
+      "reason": "Actual ordinary import reaches load_dotenv, semantic transitively database/settings; AST refusal cannot certify config-free actual startup. No actual CLI import executed."
+    }
+  ],
+  "limitations": [
+    "AST helper reused, independently authored assertions",
+    "Current final attempt AST executed with memory observation/capture/transport",
+    "Business/config/material parsers stubbed",
+    "No actual script import/config/CLI, patient, PG or model",
+    "028 ten results are business doubles, not clinical Golden approval",
+    "Unreviewed outlets and persistent logging backends not deemed safe"
+  ],
+  "initial_infrastructure_failure": {
+    "status": "probe_initialization_failed_before_test_execution",
+    "reason": "network guard blocked Windows asyncio internal socketpair/self-pipe",
+    "frozen_counterexamples_executed": 0,
+    "production_verdict": "none",
+    "network_service_calls": 0,
+    "pg_calls": 0,
+    "env_reads": 0,
+    "probe_only_fix": "move socket guard into async main after event loop setup; expectations unchanged"
+  },
+  "source_manifest": {
+    "full_commit": "511bd12dbd96d3f65927963c956bc8a132444c0f",
+    "source_manifest": {
+      "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py": {
+        "sha256_git_blob": "b108029029b0703b09965d42a0d5abe9e69a7c2b46058870c9f1e5f0e4ac9a77",
+        "sha256_worktree_bytes": "b108029029b0703b09965d42a0d5abe9e69a7c2b46058870c9f1e5f0e4ac9a77",
+        "source_bytes": 13480
+      },
+      "apps/medqc-web/backend/scripts/review_luxian_0609_semantic20.py": {
+        "sha256_git_blob": "f6407187f7a9e6e2fda14b0562a241aa5daa0605b886196914cef54cade3ae06",
+        "sha256_worktree_bytes": "f6407187f7a9e6e2fda14b0562a241aa5daa0605b886196914cef54cade3ae06",
+        "source_bytes": 34242
+      },
+      "apps/medqc-web/backend/scripts/run_luxian_0609_028_synthetic_golden.py": {
+        "sha256_git_blob": "1151bd69ab6afebb60de53e876c17936528e62bd78dcb0c16cfb6692f7bfea87",
+        "sha256_worktree_bytes": "1151bd69ab6afebb60de53e876c17936528e62bd78dcb0c16cfb6692f7bfea87",
+        "source_bytes": 10279
+      },
+      "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py": {
+        "sha256_git_blob": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+        "sha256_worktree_bytes": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+        "source_bytes": 9849
+      },
+      "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py": {
+        "sha256_git_blob": "ae01b8abadb2281fffa8e21c663afcd544c17c3eb86cb1f5e9a7c47f4f59a207",
+        "sha256_worktree_bytes": "ae01b8abadb2281fffa8e21c663afcd544c17c3eb86cb1f5e9a7c47f4f59a207",
+        "source_bytes": 7693
+      },
+      "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py": {
+        "sha256_git_blob": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+        "sha256_worktree_bytes": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+        "source_bytes": 16914
+      },
+      "apps/medqc-web/backend/app/services/qc_llm_client.py": {
+        "sha256_git_blob": "d2a2f1e08f0000ddb8517578f61b291bc778f5bbb9afd1617b3e58d04ad59041",
+        "sha256_worktree_bytes": "d2a2f1e08f0000ddb8517578f61b291bc778f5bbb9afd1617b3e58d04ad59041",
+        "source_bytes": 27791
+      },
+      "apps/medqc-web/backend/tests/privacy_closure_20261008/offline_support.py": {
+        "sha256_git_blob": "bf12ea2928f34fa7406069fccc821330dddcc16f1c5d7aa9d7da4f2b33d29f10",
+        "sha256_worktree_bytes": "bf12ea2928f34fa7406069fccc821330dddcc16f1c5d7aa9d7da4f2b33d29f10",
+        "source_bytes": 18450
+      },
+      "apps/medqc-web/backend/tests/privacy_closure_20261008/test_script_boundaries.py": {
+        "sha256_git_blob": "c614612a4fa3b6ecd1b4f0f12f0c0890902bc8aa0d578b12b6365b9597b5c8aa",
+        "sha256_worktree_bytes": "c614612a4fa3b6ecd1b4f0f12f0c0890902bc8aa0d578b12b6365b9597b5c8aa",
+        "source_bytes": 20431
+      },
+      "apps/medqc-web/backend/app/database/connection.py": {
+        "sha256_git_blob": "b0a84f204ba13df4e469cd55df32925e5e7c5304a9c7acd7f77526cfb90563b3",
+        "sha256_worktree_bytes": "b0a84f204ba13df4e469cd55df32925e5e7c5304a9c7acd7f77526cfb90563b3",
+        "source_bytes": 8654
+      },
+      "apps/medqc-web/backend/app/core/settings.py": {
+        "sha256_git_blob": "b37ba5fe698382e9ae3b43bfb18b349280d33aea3abc5475bc4c5d40dcba3c86",
+        "sha256_worktree_bytes": "b37ba5fe698382e9ae3b43bfb18b349280d33aea3abc5475bc4c5d40dcba3c86",
+        "source_bytes": 17968
+      }
+    },
+    "freeze_before_execution": true,
+    "priv002_public_modules_vs_parent": [
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py",
+        "parent_git_blob": "a72b53914a48b5debb23170c6102ceaf110188f5",
+        "commit_git_blob": "a72b53914a48b5debb23170c6102ceaf110188f5",
+        "unchanged": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
+        "parent_git_blob": "09ff7b014fcd74efa0495015ddd46e3a5e2d2dc8",
+        "commit_git_blob": "09ff7b014fcd74efa0495015ddd46e3a5e2d2dc8",
+        "unchanged": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+        "parent_git_blob": "50968e90d7e8060df0166214ca4d021437f63045",
+        "commit_git_blob": "50968e90d7e8060df0166214ca4d021437f63045",
+        "unchanged": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+        "parent_git_blob": "f1badd4545ee85111b906aad49ff4dc6137d9cc4",
+        "commit_git_blob": "f1badd4545ee85111b906aad49ff4dc6137d9cc4",
+        "unchanged": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/qc_llm_client.py",
+        "parent_git_blob": "832cc533ffdf6c3187fa2ac37299c655dc64f28b",
+        "commit_git_blob": "832cc533ffdf6c3187fa2ac37299c655dc64f28b",
+        "unchanged": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+        "parent_git_blob": "6dcfb579d872b134a93ca601c1d05925cdd08cc1",
+        "commit_git_blob": "6dcfb579d872b134a93ca601c1d05925cdd08cc1",
+        "unchanged": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/qc_workspace/record_repository.py",
+        "parent_git_blob": "b6d4cc738f176a4dbeb33becbde5e006556d9e0e",
+        "commit_git_blob": "b6d4cc738f176a4dbeb33becbde5e006556d9e0e",
+        "unchanged": true
+      }
+    ],
+    "priv002_public_modules_unchanged": true,
+    "supplemental_source_hashes_after_execution": {
+      "apps/medqc-web/backend/app/services/case_identity.py": {
+        "sha256_git_blob": "32a7c37820cf6f08e9218ee4348e40be78b6235822ed263ffad36ab3a0191181",
+        "sha256_worktree_bytes": "32a7c37820cf6f08e9218ee4348e40be78b6235822ed263ffad36ab3a0191181",
+        "source_bytes": 3582,
+        "matches_pinned_git_blob": true,
+        "freeze_before_execution": false,
+        "reason": "CaseRef helper loaded by AST harness; supplement measured after probe, not claimed as pre-test freeze."
+      }
+    },
+    "post_execution_source_matches_frozen": [
+      {
+        "path": "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py",
+        "sha256_after_execution": "b108029029b0703b09965d42a0d5abe9e69a7c2b46058870c9f1e5f0e4ac9a77",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/scripts/review_luxian_0609_semantic20.py",
+        "sha256_after_execution": "f6407187f7a9e6e2fda14b0562a241aa5daa0605b886196914cef54cade3ae06",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/scripts/run_luxian_0609_028_synthetic_golden.py",
+        "sha256_after_execution": "1151bd69ab6afebb60de53e876c17936528e62bd78dcb0c16cfb6692f7bfea87",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py",
+        "sha256_after_execution": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
+        "sha256_after_execution": "ae01b8abadb2281fffa8e21c663afcd544c17c3eb86cb1f5e9a7c47f4f59a207",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+        "sha256_after_execution": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/services/qc_llm_client.py",
+        "sha256_after_execution": "d2a2f1e08f0000ddb8517578f61b291bc778f5bbb9afd1617b3e58d04ad59041",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/tests/privacy_closure_20261008/offline_support.py",
+        "sha256_after_execution": "bf12ea2928f34fa7406069fccc821330dddcc16f1c5d7aa9d7da4f2b33d29f10",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/tests/privacy_closure_20261008/test_script_boundaries.py",
+        "sha256_after_execution": "c614612a4fa3b6ecd1b4f0f12f0c0890902bc8aa0d578b12b6365b9597b5c8aa",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/database/connection.py",
+        "sha256_after_execution": "b0a84f204ba13df4e469cd55df32925e5e7c5304a9c7acd7f77526cfb90563b3",
+        "matches_frozen": true
+      },
+      {
+        "path": "apps/medqc-web/backend/app/core/settings.py",
+        "sha256_after_execution": "b37ba5fe698382e9ae3b43bfb18b349280d33aea3abc5475bc4c5d40dcba3c86",
+        "matches_frozen": true
+      }
+    ],
+    "all_frozen_sources_unchanged_after_execution": true
+  },
+  "artifacts": {
+    "source-manifest.json": {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\privacy003-closure\\source-manifest.json",
+      "sha256": "9f45dd504e2967deebbe833b4d05bc34ec22646b63defa91487e469669528a7c"
+    },
+    "frozen-counterexamples.json": {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\privacy003-closure\\frozen-counterexamples.json",
+      "sha256": "432da1cebf988573b20b9659e8175fdb66f191e6f8402dd423453655f7aadb0b"
+    },
+    "first-attempt-infrastructure.json": {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\privacy003-closure\\first-attempt-infrastructure.json",
+      "sha256": "2653bc405643460165f1ebe6559ac89404a5b1726bc6512a85dc98efffe9abda"
+    },
+    "independent_probe.py": {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\privacy003-closure\\independent_probe.py",
+      "sha256": "543e77c01a84974b91f5c2c61809cdf2997801b60c315e8d24f03cb4fc71b005"
+    },
+    "independent-probe-result.json": {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\privacy003-closure\\independent-probe-result.json",
+      "sha256": "80ffe292f50a0a2cd545098abf276c99c9666095dc58aa3741ac33bcc9b6e3d2"
+    },
+    "privacy003-independent-review.md": {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\privacy003-closure\\privacy003-independent-review.md",
+      "sha256": "5f19439d26cd4866f7a98b0fb604cdac277a00fa15a49955f8b691d73f7a6dd0"
+    }
+  },
+  "production_edited": false,
+  "shared_tests_edited": false,
+  "committed": false,
+  "test_slot_released": true
+}

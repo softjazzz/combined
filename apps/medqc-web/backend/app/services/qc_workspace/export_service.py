@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import html
+import json
 from io import BytesIO, StringIO
 from typing import Any, Dict, List, Sequence
 
@@ -77,7 +78,12 @@ def append_complete_workbook_row(worksheet: Any, values: Sequence[Any]) -> None:
     两条正式 XLSX 导出链共用此格式边界；不裁剪证据、不改变业务结果。
     每片最多16000码点，即使全为非BMP字符也小于32767个UTF-16单元。
     """
-    row = list(values)
+    # 旧规则可保存列表结论或结构化证据；仅转换单元格表示，保留完整结构。
+    row = [
+        json.dumps(value, ensure_ascii=False, default=str)
+        if isinstance(value, (list, tuple, dict)) else value
+        for value in values
+    ]
     for column, value in enumerate(row, 1):
         if not isinstance(value, str) or len(value.encode("utf-16-le")) // 2 <= 32767:
             continue

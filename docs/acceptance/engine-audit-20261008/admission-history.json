@@ -1,0 +1,692 @@
+{
+  "audit_date": "2026-10-08",
+  "worktree": "F:\\MedQC-worktrees\\qc-integration-20261008",
+  "head": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": "9条0609+7条0916，共16条",
+  "safety": {
+    "real_llm_calls": 0,
+    "pg_queries": 0,
+    "raw_real_case_files_read": 0,
+    "env_files_read": 0,
+    "production_changes": 0
+  },
+  "methodology": "纯源码审查+固定预期合成探针。native探针用注入row_reader；仅隔离未使用数据库bundle I/O边界及AST静态family常量，不替换执行/归约/Finalizer；禁止socket及.env读取。未运行pytest，因为共享conftest会加载app/database。首次native导入未配置数据库的模块输出提示，无连接；最终合成调用仍无PG。首次asyncio自管道被socket护栏拒绝，改以无挂起协程同步推进，不放开网络。",
+  "counts": {
+    "reviewed": 16,
+    "primary_confirmed_defect": 7,
+    "primary_reviewed": 6,
+    "primary_pending_real_model": 3,
+    "unreviewed": 0
+  },
+  "defects": [
+    {
+      "id": "AH-001",
+      "priority": "P1",
+      "title": "语义抽取选中文书与入院执行文书错绑定",
+      "affected_rules": [
+        "LX0916-001",
+        "LX0916-002",
+        "LX0916-003",
+        "LX0916-004",
+        "LX0916-005",
+        "LX0916-006",
+        "LX0916-007"
+      ],
+      "clinical_false_verdict_rules": [
+        "LX0916-001",
+        "LX0916-002",
+        "LX0916-003",
+        "LX0916-004",
+        "LX0916-007"
+      ],
+      "source": [
+        "input_context.py:108-110",
+        "semantic_extractor.py:487-547",
+        "semantic_extractor.py:941-974",
+        "admission_rules.py:242-286",
+        "admission_rules.py:354-373"
+      ],
+      "reproduction": "空SYN-A排首位、可定位正文SYN-B排第二位；selector/gate保留SYN-B的语义事实；context却取A，五标量规则只消费state后把compliant/non_compliant、decision_facts和证据写在A；005/006二次引用校验返回缺口但元数据仍称A可用。",
+      "expected": "结果必须绑定实际选中同一文书，无法一致时留缺口；禁止将B的状态认作A证据。",
+      "suggested_fix_scope": "选择/投影共享实际admission文书，或在执行边界核对semantic_fact.source_type/document_id与目标文书；保留005/006引用保护。未修改生产。"
+    }
+  ],
+  "disputes": [
+    {
+      "id": "AH-002",
+      "rules": [
+        "LX0916-001"
+      ],
+      "source": "admission_rules.py:140",
+      "title": "prior_admission_count含不含当前次住院未有明确源字段合同",
+      "observed": "字段=1时直接not_applicable并覆盖incomplete事实。若字面既往次数，则一次既往住院已是再次入院。当前测试=1不适用、=2适用，可能实际定义为累计住院次数。",
+      "classification": "争议",
+      "required": "确认权威字段的次数含义和生产来源，不改阈值、不凭字段名冒称确定缺陷。"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "LX0609-01-01-01",
+      "legacy_rule_id": "LX0609-001",
+      "name": "入院记录24小时时限",
+      "reviewed": true,
+      "classification": "已审",
+      "tags": [
+        "已审",
+        "样本不足"
+      ],
+      "source_fields": [
+        "inpat_registration.admission_datetime",
+        "evaluation_context.horizon",
+        "admission_record.record_time/record_datetime/submit_time/submit_datetime",
+        "文书正文及角色字段"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+        "decision_binding.py",
+        "basic_timeliness_customer_projection.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "admission_time",
+        "record_time/round_time",
+        "elapsed_seconds",
+        "threshold_hours",
+        "overdue_seconds",
+        "文书/事实引用"
+      ],
+      "decision_semantics": "权威入院锚+正文存在性+24h精确时限；未成熟窗口不误报，缺来源不当作缺文书。",
+      "customer_copy": "Renderer按已经判定的时间、超时时长与缺口写受控文案。",
+      "offline_checks": "24h整点compliant、+1秒non_compliant，原生→归约→Finalizer保持，0模型。",
+      "remaining_evidence": [
+        "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验"
+      ],
+      "historical_evidence": "脱敏基础时限事实所有权文档无SHA；2026-09-24报告a832ebdb、31109f8b，当前native_basic文件有差分，不能移植通过。"
+    },
+    {
+      "rule_id": "LX0609-01-02-01",
+      "legacy_rule_id": "LX0609-002",
+      "name": "首次病程8小时时限",
+      "reviewed": true,
+      "classification": "已审",
+      "tags": [
+        "已审",
+        "样本不足"
+      ],
+      "source_fields": [
+        "inpat_registration.admission_datetime",
+        "evaluation_context.horizon",
+        "first_course_record.record_time/record_datetime/submit_time/submit_datetime",
+        "文书正文及角色字段"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+        "decision_binding.py",
+        "basic_timeliness_customer_projection.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "admission_time",
+        "record_time/round_time",
+        "elapsed_seconds",
+        "threshold_hours",
+        "overdue_seconds",
+        "文书/事实引用"
+      ],
+      "decision_semantics": "权威入院锚+正文存在性+8h精确时限；未成熟窗口不误报，缺来源不当作缺文书。",
+      "customer_copy": "Renderer按已经判定的时间、超时时长与缺口写受控文案。",
+      "offline_checks": "8h整点compliant、+1秒non_compliant，原生→归约→Finalizer保持，0模型。",
+      "remaining_evidence": [
+        "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验"
+      ],
+      "historical_evidence": "脱敏基础时限事实所有权文档无SHA；2026-09-24报告a832ebdb、31109f8b，当前native_basic文件有差分，不能移植通过。"
+    },
+    {
+      "rule_id": "LX0609-02-01-01",
+      "legacy_rule_id": "LX0609-005",
+      "name": "主治48小时首次查房",
+      "reviewed": true,
+      "classification": "已审",
+      "tags": [
+        "已审",
+        "样本不足"
+      ],
+      "source_fields": [
+        "inpat_registration.admission_datetime",
+        "evaluation_context.horizon",
+        "daily_course_record/senior_course_record.record_time/record_datetime/submit_time/submit_datetime",
+        "文书正文及角色字段"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+        "decision_binding.py",
+        "basic_timeliness_customer_projection.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "admission_time",
+        "record_time/round_time",
+        "elapsed_seconds",
+        "threshold_hours",
+        "overdue_seconds",
+        "文书/事实引用"
+      ],
+      "decision_semantics": "权威入院锚+正文存在性+48h精确时限；未成熟窗口不误报，缺来源不当作缺文书。",
+      "customer_copy": "Renderer按已经判定的时间、超时时长与缺口写受控文案。",
+      "offline_checks": "48h整点compliant、+1秒non_compliant，原生→归约→Finalizer保持，0模型。",
+      "remaining_evidence": [
+        "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验"
+      ],
+      "historical_evidence": "脱敏基础时限事实所有权文档无SHA；2026-09-24报告a832ebdb、31109f8b，当前native_basic文件有差分，不能移植通过。"
+    },
+    {
+      "rule_id": "LX0609-02-01-02",
+      "legacy_rule_id": "LX0609-006",
+      "name": "副主任及主任72小时首次查房",
+      "reviewed": true,
+      "classification": "已审",
+      "tags": [
+        "已审",
+        "样本不足"
+      ],
+      "source_fields": [
+        "inpat_registration.admission_datetime",
+        "evaluation_context.horizon",
+        "daily_course_record/senior_course_record.record_time/record_datetime/submit_time/submit_datetime",
+        "文书正文及角色字段"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+        "decision_binding.py",
+        "basic_timeliness_customer_projection.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "admission_time",
+        "record_time/round_time",
+        "elapsed_seconds",
+        "threshold_hours",
+        "overdue_seconds",
+        "文书/事实引用"
+      ],
+      "decision_semantics": "权威入院锚+正文存在性+72h精确时限；未成熟窗口不误报，缺来源不当作缺文书。",
+      "customer_copy": "Renderer按已经判定的时间、超时时长与缺口写受控文案。",
+      "offline_checks": "72h整点compliant、+1秒non_compliant，原生→归约→Finalizer保持，0模型。",
+      "remaining_evidence": [
+        "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验",
+        "最高级别含糊职称抽取需真实模型"
+      ],
+      "historical_evidence": "脱敏基础时限事实所有权文档无SHA；2026-09-24报告a832ebdb、31109f8b，当前native_basic文件有差分，不能移植通过。"
+    },
+    {
+      "rule_id": "LX0609-02-01-03",
+      "legacy_rule_id": "LX0609-007",
+      "name": "稳定患者3天查房病程",
+      "reviewed": true,
+      "classification": "已审",
+      "tags": [
+        "已审",
+        "样本不足"
+      ],
+      "source_fields": [
+        "inpat_registration.admission_datetime",
+        "inpat_nondrug_order.unstable_order",
+        "daily_course_record/senior_course_record时间及正文",
+        "冻结出院/评价终点"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_007.py",
+        "decision_binding.py",
+        "course_quality_result_mapping.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "interval_seconds",
+        "overdue_seconds",
+        "threshold_hours=72",
+        "recorded_dates",
+        "缺时记录容量下界"
+      ],
+      "decision_semantics": "完整无病危病重医嘱才适用；最大间隔72小时；来源/时间未知保留缺口，能以容量下界证明则确认缺陷。",
+      "customer_copy": "仅用归约后的间隔和缺口生成文案。",
+      "offline_checks": "72h整点及+1秒通过原生→Finalizer，0模型。",
+      "remaining_evidence": [
+        "缺时容量下界、多区间真实全源病例与正式保存回读未验"
+      ],
+      "historical_evidence": "2026-09-25接续卡的旧002/004/005/006/007 75次回放没有独立临床金标准；不等于当前单规则验收。"
+    },
+    {
+      "rule_id": "LX0609-02-01-04",
+      "legacy_rule_id": "LX0609-008",
+      "name": "病重患者2天查房病程",
+      "reviewed": true,
+      "classification": "已审",
+      "tags": [
+        "已审",
+        "样本不足"
+      ],
+      "source_fields": [
+        "inpat_nondrug_order.severity_order的start/end及状态",
+        "病程权威时间及正文",
+        "冻结评价终点"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_008_009.py",
+        "course_quality_result_mapping.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "severity=serious",
+        "required_dates/recorded_dates",
+        "maximum_gap_days",
+        "threshold_days=2"
+      ],
+      "decision_semantics": "病重有效医嘱自然日区间；停止/重开/同刻冲突受控处理；完整无触发才不适用。",
+      "customer_copy": "按病重区间和确认缺日期写文案。",
+      "offline_checks": "完整空严重医嘱→not_applicable/trigger_absent_complete，0模型。",
+      "remaining_evidence": [
+        "病重起止重开真实样本不足；本轮未复现全部阳性自然日分支"
+      ],
+      "historical_evidence": "2026-09-24源码基线到当前rules_008_009有差分；旧事实冻结文档不是当前临床证明。"
+    },
+    {
+      "rule_id": "LX0609-02-01-05",
+      "legacy_rule_id": "LX0609-009",
+      "name": "病危每日病程及病情变化记录",
+      "reviewed": true,
+      "classification": "待真实模型",
+      "tags": [
+        "已审",
+        "待真实模型",
+        "样本不足"
+      ],
+      "source_fields": [
+        "病危有效医嘱起止",
+        "病程记录时间与正文",
+        "exam/lab资料与变化事件",
+        "评价终点"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_008_009.py",
+        "course_quality_result_mapping.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "severity=critical",
+        "required/covered/missing_dates",
+        "change_events",
+        "event_ref",
+        "corresponding_course_ref",
+        "threshold_hours=24"
+      ],
+      "decision_semantics": "每日覆盖由Python；变化事件抽取后校验同一文书位置与24h记录关联，不能用每日覆盖代替全部变化要求。",
+      "customer_copy": "确认每日缺陷与待变化核对范围分别保留，未扩大判据。",
+      "offline_checks": "完整空严重医嘱→not_applicable/trigger_absent_complete，0模型。",
+      "remaining_evidence": [
+        "真实变化事件与检验/病程多源对应未验；阳性每日覆盖、变化误抽均需独立样本"
+      ],
+      "historical_evidence": "当前原生文件支持变化事件，不能以旧计划标题称未实现；历史回放不能等价当前。"
+    },
+    {
+      "rule_id": "LX0609-01-01-02",
+      "legacy_rule_id": "LX0609-018",
+      "name": "主诉20字及第一诊断方向",
+      "reviewed": true,
+      "classification": "待真实模型",
+      "tags": [
+        "已审",
+        "待真实模型",
+        "样本不足"
+      ],
+      "source_fields": [
+        "admission_record.chief_complaint/complaint或原文主诉",
+        "diagnosis/admission_record_diagnosis的类型、序号、主诊断标志、诊断名称"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_018.py",
+        "native_course_quality_execution.py",
+        "course_quality_result_mapping.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "chief_complaint_length",
+        "chief_signal_kind",
+        "anatomic/laterality/symptom/course/direction关系",
+        "diagnostic_direction criterion"
+      ],
+      "decision_semantics": "长度≤20由Python，诊断来源受控优先；LLM抽原子关系后Python合成supported/unsupported/mismatch/unknown，失败保留确定长度缺陷。",
+      "customer_copy": "长度与关系两子项的控制原因文案，不能靠关系字符串自行推导其他缺陷。",
+      "offline_checks": "本轮静态已审，未调用该规则真实或替身模型。",
+      "remaining_evidence": [
+        "诊断替代主诉的规范例外与原子事实完整覆盖尚须真实模型和临床签认；当前全链保存回读未验"
+      ],
+      "historical_evidence": "业务标准基线旧018已确定，不当作标准未定；rule_contract v4 golden_gate pending。"
+    },
+    {
+      "rule_id": "LX0609-01-02-02",
+      "legacy_rule_id": "LX0609-077",
+      "name": "首程鉴别诊断与第一诊断关联",
+      "reviewed": true,
+      "classification": "待真实模型",
+      "tags": [
+        "已审",
+        "待真实模型",
+        "样本不足"
+      ],
+      "source_fields": [
+        "first_course_record的初步/第一诊断、differential_diagnosis或鉴别诊断原文",
+        "first_course_record_diagnosis与源文书业务键"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_077.py",
+        "native_course_quality_execution.py",
+        "canonical_result_finalizer.py"
+      ],
+      "decision_facts": [
+        "relation_state",
+        "rationale_code",
+        "criterion",
+        "source/document_refs"
+      ],
+      "decision_semantics": "只判断已写鉴别诊断能否解释同一临床问题；不要求同系统、不推断疾病正确性；unknown/source不足交付data_gap。",
+      "customer_copy": "受控理由映射；不添加病历未有诊断。",
+      "offline_checks": "本轮静态已审，未真实或替身送模。",
+      "remaining_evidence": [
+        "真实跨系统合理关联、明显无关、多文书业务键冲突样本及临床预期不足"
+      ],
+      "historical_evidence": "phase1扩展旧077与001–075标准分开适用；无当前SHA逐规则真实证据。"
+    },
+    {
+      "rule_id": "LX0916-001",
+      "legacy_rule_id": null,
+      "name": "再次入院诊疗总结",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定",
+        "patient.prior_admission_count"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "semantic_state",
+        "prior_admission_count"
+      ],
+      "decision_semantics": "complete/incomplete/not_applicable/unknown映射；001次数门控、002能力陈述者分支另由结构化事实判定。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文，complete→compliant、incomplete→non_compliant均错误锚定A。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失",
+        "AH-002 prior_admission_count=1门控争议"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    },
+    {
+      "rule_id": "LX0916-002",
+      "legacy_rule_id": null,
+      "name": "民事行为能力与陈述者",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定",
+        "patient.civil_capacity/age_years",
+        "history_narrator"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "semantic_state",
+        "civil_capacity/age_years/history_narrator"
+      ],
+      "decision_semantics": "complete/incomplete/not_applicable/unknown映射；001次数门控、002能力陈述者分支另由结构化事实判定。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文，complete→compliant、incomplete→non_compliant均错误锚定A。 17岁能力不详→data_quality_gap，符合预期。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    },
+    {
+      "rule_id": "LX0916-003",
+      "legacy_rule_id": null,
+      "name": "现病史完整清楚",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "semantic_state"
+      ],
+      "decision_semantics": "complete/incomplete/not_applicable/unknown映射；001次数门控、002能力陈述者分支另由结构化事实判定。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文，complete→compliant、incomplete→non_compliant均错误锚定A。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    },
+    {
+      "rule_id": "LX0916-004",
+      "legacy_rule_id": null,
+      "name": "鉴别诊断重要阳阴性症状",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "semantic_state"
+      ],
+      "decision_semantics": "complete/incomplete/not_applicable/unknown映射；001次数门控、002能力陈述者分支另由结构化事实判定。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文，complete→compliant、incomplete→non_compliant均错误锚定A。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    },
+    {
+      "rule_id": "LX0916-005",
+      "legacy_rule_id": null,
+      "name": "院前检查治疗经过效果",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "item_states/missing_items/unknown_items"
+      ],
+      "decision_semantics": "005/006逐项引用绑定完整同一文书，missing优先、unknown不当漏写；005documented_unknown保持资料不足。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文：005/006返回data_quality_gap但锚点与target_document_available仍指向空A。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失",
+        "原文明确不详与笼统治疗详细程度仍需临床签认"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    },
+    {
+      "rule_id": "LX0916-006",
+      "legacy_rule_id": null,
+      "name": "既往史完整性",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "item_states/missing_items/unknown_items"
+      ],
+      "decision_semantics": "005/006逐项引用绑定完整同一文书，missing优先、unknown不当漏写；005documented_unknown保持资料不足。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文：005/006返回data_quality_gap但锚点与target_document_available仍指向空A。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    },
+    {
+      "rule_id": "LX0916-007",
+      "legacy_rule_id": null,
+      "name": "个人婚育月经家族史",
+      "reviewed": true,
+      "classification": "确认缺陷",
+      "tags": [
+        "已审",
+        "确认缺陷",
+        "样本不足"
+      ],
+      "source_fields": [
+        "programmatic_timeline.documents.admission_record",
+        "document_id/content",
+        "selected_documents未截断同源绑定"
+      ],
+      "execution_path": [
+        "apps/medqc-web/backend/app/services/luxian_0916/input_context.py",
+        "semantic_extractor.py",
+        "merge_luxian_0916_semantic_facts",
+        "admission_rules.py",
+        "contracts.to_dict"
+      ],
+      "decision_facts": [
+        "source_type/document_id",
+        "semantic_state"
+      ],
+      "decision_semantics": "complete/incomplete/not_applicable/unknown映射；001次数门控、002能力陈述者分支另由结构化事实判定。",
+      "customer_copy": "执行器直接生成客户结论、建议与锚点；没有后续重新判定。",
+      "offline_checks": "A空正文+B有效正文，complete→compliant、incomplete→non_compliant均错误锚定A。",
+      "remaining_evidence": [
+        "AH-001来源错绑定须修复并重做当前全链验收",
+        "真实当前语义质量及独立临床金标准缺失"
+      ],
+      "historical_evidence": "统一进度H0/H1属历史30例；003旧3真例均正例；005旧3/3、006旧7/7及007旧3/3均受A/D版本边界限制；09bf7a826不是当前HEAD祖先，四个入院/共享模块均有差分。"
+    }
+  ],
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py": "5cc9f4fb5f1adcc603154fe6b9bedbb54d55ebca7d4c8700cc2e3b0fc4e171ec",
+    "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_007.py": "4fc0395fae910f334980b4edb214621c5a0f2341ac688a2586321b727d3e5b23",
+    "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_008_009.py": "2faa3c759e786f86409866f5938f0f543e69ab2c8ec842baf2b87d2024d0d0af",
+    "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_018.py": "5523ffdb69f81e460ec8fe7cb167ebabe7051a563492ad96d388e7396d836293",
+    "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_077.py": "1f849f629c9f454145dc273116c1cb00666e7da04b3b6bd0721e2186c1e5ca2e",
+    "apps/medqc-web/backend/app/services/luxian_0609/course_quality_result_mapping.py": "9e3ba792f6eb37839e3ba73b8f5bda26cba7798b3ae4579f7e025025dafa49c5",
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "127ce14de617347b37bf6f3faed67ebd00d227ebd6087dd2c6ca6f78b19a0ef4",
+    "apps/medqc-web/backend/app/services/luxian_0916/admission_rules.py": "01b8f7f31abb6c3b95ea96c535e6fade48ed0cd3dd8c6e96332e03ff0a82aace",
+    "apps/medqc-web/backend/app/services/luxian_0916/admission_content_items.py": "24e1055a8d37404116e6e75cfae535f82dd88b1e0dc78243ee4c982be253b125",
+    "apps/medqc-web/backend/app/services/luxian_0916/input_context.py": "b85ba458b134d01076b53a8674d7bedc660d0273299b400d0c23a4556a0752fb",
+    "apps/medqc-web/backend/app/services/luxian_0916/semantic_extractor.py": "60ada6e10f06e55b955c1c6d63259c4799f45b3d5531c58195ef0dc60bcba319",
+    "apps/medqc-web/backend/app/services/luxian_0916/contracts.py": "ef62c3345e743dc7d0c02a294c1cf3f65d242c2539eb73427b3796fb78bb6ec0",
+    "apps/medqc-web/backend/app/services/luxian_0916/rule_catalog.py": "6d85a60af64887675721f880cf70ce11911e1e664904f400b949935ee160a24e",
+    "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md": "1f32392f80a7c05454365d62f5e32ad0fb10cfd5b58785b3cbcef0d519db146a",
+    "apps/medqc-web/docs/0602/泸县0609质控点-业务标准基线-v1.md": "0d3918f693a4e06395b620f98f657a2b01246ffaa5f6e422d587b82a94417089",
+    "apps/medqc-web/docs/reports/2026-09-24-engine-phase-a-acceptance.md": "dbc273ecc15a86912b1e230c13341a3ef6faddf4ef95a0d7490bc8016a3398ca",
+    ".tmp/engine-audit-20261008/admission-history/expectations.json": "042830121b99d05ca43c5c362ab21e4306a87324f87ec400415e66e88c09d497",
+    ".tmp/engine-audit-20261008/admission-history/native-expectations.json": "7c4e47bbbe70620b50b35559bf56fcb1ff0d23ebd6f5c8f7a4f6cfbf5edabf7b",
+    ".tmp/engine-audit-20261008/admission-history/native-results.json": "038febdc49e0965130a40d1bcdbd23a37418152e1855672990b89db6aaf482bb",
+    ".tmp/engine-audit-20261008/admission-history/results.json": "35570a451cbdbe2b2bd6d954ec29ac7adf5a0f7c8f56d07c38841dcb8e035a25",
+    ".tmp/engine-audit-20261008/admission-history/source-expectations.json": "151e3e1594345b4402137f48fa24e436ddb4cee4a36de4299a3182af474b9553",
+    ".tmp/engine-audit-20261008/admission-history/source-results.json": "87dcda4b4aa13065fa9adfb7899f07570baa8ff820d17bb2427737c9a312fb1b",
+    ".tmp/engine-audit-20261008/admission-history/verification.json": "cfcaee9cdd2ad39a6f29d28f0d245c9bf6c5a8fbeeb3aeb309b013e4617e0984"
+  },
+  "limitations": [
+    "已审不是临床通过；无正式Worker/PG/API/页面执行。",
+    "仅12个0609边界与受控0916探针，不覆盖每条完整医疗条件。",
+    "旧SHA资料不是当前构建等价证明；未打开-private历史原始证据。"
+  ],
+  "initial_head": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "completion_head": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "baseline_integrity": "并行主协调只提交验收规划文档到6930540f；git diff 7b894dc..6930540f显示本组13个审计生产文件无变化，因此起始源码证据仍有效。"
+}

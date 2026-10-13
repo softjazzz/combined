@@ -1,0 +1,114 @@
+{
+  "source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "original_frozen_sha256": "40fa02375634a4393cadccb439e79c466d114fb2ea7e8156888dcfac1d3a8371",
+  "original_probe_sha256": "fd0220ee5d4f8138c2765bd694573dcf58484747a95a4050a3f05fe0444686da",
+  "original_results_sha256": "a45d582ffb72337c872811b36b0bb4ba2b3b2637a3292f0da195cbe5cb640528",
+  "checks": [
+    {
+      "id": "TF_PLAN",
+      "kind": "performance",
+      "text": "患者拟于明日输注去白悬浮红细胞2U，今日继续观察并等待家属确认。",
+      "expected": "data_gap"
+    },
+    {
+      "id": "TF_REFUSED",
+      "kind": "performance",
+      "text": "患者拒绝红细胞输注治疗，家属亦拒绝签署知情同意书，继续观察血常规。",
+      "expected": "data_gap"
+    },
+    {
+      "id": "TF_POSTPONED",
+      "kind": "performance",
+      "text": "拟输注红细胞2U，因血源不足暂缓输注，待血液到位后再行评估。",
+      "expected": "data_gap"
+    },
+    {
+      "id": "TF_CANCELLED",
+      "kind": "performance",
+      "text": "患者原计划输血，经再次评估后取消，本次住院未实施输血。",
+      "expected": "data_gap"
+    },
+    {
+      "id": "TF_ACTUAL_NO_REACTION",
+      "kind": "performance",
+      "text": "患者开始输注去白悬浮红细胞2U，输注过程平稳，无输血反应。",
+      "expected": "present"
+    },
+    {
+      "id": "TF_PLAN_COMPLETE_FIELDS",
+      "kind": "planned_046",
+      "text": "拟于2026-10-09 10:00开始输注红细胞2U，预计于12:00结束输注，目的是纠正贫血，计划输血过程中监测生命体征，无输血反应。",
+      "expected": "data_gap"
+    }
+  ],
+  "original_observations": [
+    {
+      "id": "TF_PLAN",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_REFUSED",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_POSTPONED",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_CANCELLED",
+      "expected": "data_gap",
+      "status_match": true,
+      "anchor_match": true,
+      "output": {
+        "status": "data_gap",
+        "gate": "data_gap"
+      }
+    },
+    {
+      "id": "TF_ACTUAL_NO_REACTION",
+      "expected": "present",
+      "status_match": true,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present"
+      }
+    },
+    {
+      "id": "TF_PLAN_COMPLETE_FIELDS",
+      "expected": "data_gap",
+      "status_match": false,
+      "anchor_match": true,
+      "output": {
+        "status": "present",
+        "gate": "present",
+        "programmatic_046": [
+          "non_compliant",
+          "transfusion_purpose_or_indication_missing"
+        ]
+      }
+    }
+  ],
+  "scope_exclusions": [
+    "0916"
+  ],
+  "input_construction": "original-tc01-probe.py:72-78 (original offline_probe.py copy); bloodtrans_record=[document_id TF1, record_content/check text, record_time 2026-10-08 08:00:00]; planned_046 also passes same text as content to _programmatic_046_status"
+}

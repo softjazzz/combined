@@ -20,6 +20,8 @@ PROVISIONAL_RULE_IDS = frozenset(
 
 # 每条规则只绑定一份权威验收病例。其余同族病例仍可用于人工探索，但不再
 # 自动生成 pending 黄金答案。
+# 病例 23–25 为输血病例：旧编号 41/42 对应输血知情同意书 11-03-01/11-03-02
+# （2026-09-22 身份迁移时误映射为手术/麻醉知情同意，2026-10-12 修正）。
 RULE_IDS_BY_CASE: dict[int, tuple[str, ...]] = {
     1: ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
     2: ("LX0609-01-01-01", "LX0609-01-02-01", "LX0609-09-01-01", "LX0609-02-01-01", "LX0609-02-01-02"),
@@ -39,9 +41,9 @@ RULE_IDS_BY_CASE: dict[int, tuple[str, ...]] = {
     20: ("LX0609-04-01-02", "LX0609-04-01-03"),
     21: ("LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03"),
     22: ("LX0609-10-03-01",),
-    23: ("LX0609-11-01-01", "LX0609-11-02-01", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01", "LX0609-07-04-01", "LX0609-07-04-02", "LX0609-07-01-03"),
-    24: ("LX0609-11-01-01",),
-    25: ("LX0609-11-02-01", "LX0609-07-01-01", "LX0609-07-01-02"),
+    23: ("LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01", "LX0609-07-04-01", "LX0609-07-04-02", "LX0609-07-01-03"),
+    24: ("LX0609-11-03-01",),
+    25: ("LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-01-02"),
     26: ("LX0609-07-02-01", "LX0609-07-03-01"),
     27: ("LX0609-07-02-02", "LX0609-07-04-01"),
     28: ("LX0609-06-02-03", "LX0609-06-02-02", "LX0609-05-02-01", "LX0609-08-01-04"),
@@ -138,7 +140,7 @@ GOLD_ACCEPTANCE_CONTRACTS: tuple[dict[str, Any], ...] = (
     _gold(18, "LX0609-04-02-02", "compliant", "surgery_record_present", ("当前住院存在手术医嘱且存在正式手术记录",), ("surgery_application", "inpat_nondrug_order", "surgery_record"), ("surgery_order", "target_document")),
     _gold(18, "LX0609-04-03-01", "compliant", "surgery_safecheck_present", ("当前住院存在正式手术记录且存在手术安全核查表",), ("surgery_record", "surgery_safecheck_record"), ("formal_surgery_record", "target_document")),
     _gold(18, "LX0609-11-01-01", "compliant", "surgery_consent_present", ("当前住院存在正式手术记录且存在手术知情同意书",), ("surgery_record", "surgery_inform_consent"), ("formal_surgery_record", "target_document")),
-    _gold(25, "LX0609-11-02-01", "non_compliant", "transfusion_consent_incomplete", ("存在输血事实且输血知情同意书签名或签署时间不完整",), ("blood_transfusion_application", "transfusion_consent"), ("transfusion_event", "consent_document")),
+    _gold(25, "LX0609-11-03-02", "non_compliant", "transfusion_consent_incomplete", ("存在输血事实且输血知情同意书签名或签署时间不完整",), ("blood_transfusion_application", "transfusion_consent"), ("transfusion_event", "consent_document")),
     _gold(25, "LX0609-07-01-01", "non_compliant", "pretransfusion_nine_tests_incomplete", ("输血前九项检查不完整",), ("blood_transfusion_application", "labtest_item_report"), ("transfusion_event", "pretransfusion_tests")),
     _gold(25, "LX0609-07-01-02", "non_compliant", "pretransfusion_assessment_missing", ("存在输血事实但未找到输血前评估",), ("blood_transfusion_application", "daily_course_record"), ("transfusion_event", "pretransfusion_assessment")),
     _gold(29, "LX0609-06-02-03", "non_compliant", "pathology_result_not_documented", ("存在病理结果但手术记录或病程未记录",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_report", "clinical_document")),

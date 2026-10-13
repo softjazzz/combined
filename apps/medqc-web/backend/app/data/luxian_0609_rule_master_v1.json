@@ -83,7 +83,7 @@
       "qc_point": "CT/MRI检查前无说明检查原因的病程记录",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "每次CT/MRI检查按医嘱order_id关联检查主记录，再按exam_id关联报告；检查前病程须说明本次检查原因。关联不唯一或资料不完整时返回数据不足，不按相邻时间强行串联。"
+      "policy_summary": "每次CT/MRI检查按医嘱order_id关联检查主记录，再按exam_id关联报告；检查前病程须说明本次检查原因。关联不唯一或资料不完整时返回数据不足，不按相邻时间强行串联。院方口径（2026-10-11）：写明检查部位及要了解或观察的具体情况即算写明原因，只写“完善相关检查”不算；检查前48小时窗口内没有任何病程时，由程序直接判为未写明原因；窗口外病程不作为原因依据（2026-10-12）。CT引导下操作不纳入本条，判不适用。"
     },
     {
       "rule_id": "LX0609-06-01-04",
@@ -91,7 +91,7 @@
       "qc_point": "CT/MRI影像报告结果出具后24小时内未在病程中记录",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "本院保留影像报告出具后24小时内在病程记录结果的时限；省手册用于检查记录要点参考，不将24小时归因于省手册。"
+      "policy_summary": "本院保留影像报告出具后24小时内在病程记录结果的时限；省手册用于检查记录要点参考，不将24小时归因于省手册。病程须写出本次报告的所见或结论（可概括），只写“结果已回报”“详见报告”或拟行检查不算；逐份病程摘句并与本次报告内容对应后认定（2026-10-12）。出院当天病程属于病程记录，不按“出院”字样排除，出院记录不计入；病程描述本次结果但与报告实质矛盾的不算记录，另作“检查结果与病程一致性”核实提示，不改变判定（2026-10-12）。"
     },
     {
       "rule_id": "LX0609-06-01-05",
@@ -99,7 +99,7 @@
       "qc_point": "CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "本院保留影像报告出具后24小时内分析阳性结果的时限；CT/MRI报告检出任一明确异常病灶或异常征象即视为阳性，包括炎症、结节、退变和陈旧灶等，不要求原文出现“阳性”，也不等同于癌症或确诊某病；报告整体明确未检出异常征象时为阴性，仅有待排或不除外等不确定描述时保持待判断。省手册不定义该24小时。"
+      "policy_summary": "影像报告出具后24小时内应分析阳性结果；CT/MRI检出任一明确异常病灶或异常征象即为阳性，不要求原文出现“阳性”。院方口径（2026-10-11）：与本次主诉、诊断及检查目的无关的附带发现（钙化、退变、建议随诊的微小结节等）不要求分析，需处置的异常仍须分析，肺部渗出等感染性改变即使“少许”也须分析（2026-10-12）；只罗列或罗列后直接下诊断不算分析，模板式鉴别不算。省手册不定义该24小时。"
     },
     {
       "rule_id": "LX0609-06-02-03",
@@ -197,7 +197,7 @@
       "qc_point": "会诊建议未找到执行证据，或执行记录未明确具体执行情况",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "会诊建议按会诊执行记录正文语义提取，再逐条与后续医嘱、病程等执行证据比对；任一建议完全未找到执行证据，或执行记录仅作笼统表述、未明确具体措施时判不规范。因缺少上游会诊申请/原始意见，不判断是否照抄。"
+      "policy_summary": "会诊建议按会诊执行记录正文语义提取，再逐条与后续医嘱、病程等执行证据比对；任一建议完全未找到执行证据，或执行记录仅作笼统表述、未明确具体措施时判不规范；建议所列多项措施任一既无医嘱也无病程记录亦判不规范（2026-10-12）。因缺少上游会诊申请/原始意见，不判断是否照抄。"
     },
     {
       "rule_id": "LX0609-04-02-03",
@@ -239,10 +239,8 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "antimicrobial_dictionary_missing",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "院方口径（2026-10-11，依据《抗菌药物临床应用指导原则（2015年版）》）：Ⅰ类切口心脏手术预防用药不超过48小时，其余Ⅰ、Ⅱ类切口不超过24小时；超过时限仍用药且病程记录感染证据的视为转为治疗用药，未记录的不合规。时长自手术结束至围术期连续用药最后停用，长期医嘱须有停止时间。"
     },
     {
       "rule_id": "LX0609-04-01-01",
@@ -316,7 +314,9 @@
       "qc_point": "麻醉术前和术后访视记录填写不规范（局麻除外）",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《麻醉访视》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "客户确认源库暂不提供麻醉术前、术后访视记录，与 LX0609-04-04-01 同口径暂停执行（2026-10-10）。",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "anesthesia_visit_sources_unavailable_customer_scope"
     },
     {
       "rule_id": "LX0609-04-04-03",
@@ -469,10 +469,8 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "key_antimicrobial_catalog_missing",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "重点抗菌药物目录尚未冻结，本质控点暂不执行；不得因目录或病原学资料缺失生成数据不足或不合规结论。"
+      "policy_summary": "院方口径（2026-10-11）：重点抗菌药物为碳青霉烯类、糖肽类、新型四环素类、噁唑烷酮类、黏菌素类、β-内酰胺类/β-内酰胺酶抑制剂（头孢哌酮舒巴坦、头孢他啶阿维巴坦、哌拉西林他唑巴坦）、深部抗真菌药七类共25个药品；使用两种及以上（按药品种数计）时，首次使用前须完成病原学送检。"
     },
     {
       "rule_id": "LX0609-05-01-05",
@@ -627,10 +625,8 @@
       "source_document": "有创操作记录",
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "invasive_procedure_catalog_missing",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "有创操作目录尚未冻结，本质控点暂不执行；不得因目录或操作记录缺失生成数据不足或不合规结论。"
+      "policy_summary": "院方口径（2026-10-11）：有创操作目录为院方《2026年三四级手术及有创操作目录》中的治疗性操作与介入治疗共92项。运行病历只看医嘱，由模型把不规范的医嘱名称归入目录、程序校验目录项；终末质控有病案首页时同时按首页手术操作编码精确匹配。操作当日起3天内的病程或手术记录须明确写明已实施该操作。"
     },
     {
       "rule_id": "LX0609-04-02-08",
@@ -646,7 +642,7 @@
       "qc_point": "鉴别诊断未与初步诊断中第一诊断相关联",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "沿用已确认规则 LX-011：首次病程中已写出的鉴别诊断应围绕第一诊断的临床问题展开。"
+      "policy_summary": "沿用已确认规则 LX-011；用户口径（2026-10-11）：鉴别诊断至少一项围绕第一诊断的临床问题即合规，全部与第一诊断无关才不合规。"
     },
     {
       "rule_id": "LX0609-04-01-04",
@@ -654,7 +650,7 @@
       "qc_point": "术前小结内容不完整",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-04-01-01单独交付。"
+      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-04-01-01单独交付。用户口径（2026-10-11）：术者术前查看患者一项认可同一台手术、手术开始前完成的术前主刀医师查房记录，时限由LX0609-04-05-01核对。"
     },
     {
       "rule_id": "LX0609-04-01-05",
@@ -666,13 +662,11 @@
     },
     {
       "rule_id": "LX0609-06-01-01",
-      "release_scope": "acceptance_only",
+      "release_scope": "default",
       "source_document": "CT/MRI检查记录",
       "qc_point": "医嘱与病程一致性",
       "implementation_status": "active",
-      "policy_sources": [
-        "sichuan_2026_handbook"
-      ],
+      "policy_sources": ["sichuan_2026_handbook"],
       "policy_summary": "按实际检查事件核对医嘱与病程。正式报告可证明执行；缺材料或归属不明为资料不足，只有同一事件的明确矛盾为不合规；不另设24小时窗口。"
     },
     {
@@ -681,9 +675,7 @@
       "source_document": "CT/MRI检查记录",
       "qc_point": "报告单完整性",
       "implementation_status": "active",
-      "policy_sources": [
-        "sichuan_2026_handbook"
-      ],
+      "policy_sources": ["sichuan_2026_handbook"],
       "policy_summary": "按实际检查事件业务键核对影像报告，不以报告明细总行数比较；缺执行证明或上游覆盖未证明时仅提示资料不足。"
     },
     {
@@ -695,9 +687,7 @@
       "definition_note": "培养主记录缺少医嘱关联键，当前不能安全形成逐事件医嘱—病程一致性结论。",
       "phase_status": "pending_definition",
       "pending_reason_code": "culture_order_course_linkage_unavailable",
-      "policy_sources": [
-        "sichuan_2026_handbook"
-      ],
+      "policy_sources": ["sichuan_2026_handbook"],
       "policy_summary": "逐事件核对细菌、真菌及病毒培养的医嘱与病程；普通病毒检测不自动等同微生物培养。"
     },
     {
@@ -706,9 +696,7 @@
       "source_document": "微生物培养检查记录",
       "qc_point": "报告单完整性",
       "implementation_status": "active",
-      "policy_sources": [
-        "sichuan_2026_handbook"
-      ],
+      "policy_sources": ["sichuan_2026_handbook"],
       "policy_summary": "按检验业务键核对已执行培养与报告，一次培养多行结果只计同一报告；关联或执行不明确为资料不足。"
     },
     {
@@ -717,9 +705,7 @@
       "source_document": "病理检查记录",
       "qc_point": "报告单完整性",
       "implementation_status": "active",
-      "policy_sources": [
-        "sichuan_2026_handbook"
-      ],
+      "policy_sources": ["sichuan_2026_handbook"],
       "policy_summary": "按病理检查业务键关联报告；申请不等于已执行，本地未查到报告不直接认定源系统临床漏报告。"
     },
     {
@@ -728,10 +714,17 @@
       "source_document": "抢救记录",
       "qc_point": "内容完整性",
       "implementation_status": "active",
-      "policy_sources": [
-        "sichuan_2026_handbook"
-      ],
+      "policy_sources": ["sichuan_2026_handbook"],
       "policy_summary": "逐份核对病情变化、抢救时间、措施、结果、参加医务人员姓名和专业技术职称；不拼接不同抢救记录补齐内容。"
+    },
+    {
+      "rule_id": "LX0609-08-01-05",
+      "release_scope": "acceptance_only",
+      "source_document": "出院记录",
+      "qc_point": "诊疗经过不全面或不详细",
+      "implementation_status": "active",
+      "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
+      "policy_summary": "逐份核对诊疗措施、病情演变、疗效及转归；重要住院事件按院方口径（2026-10-11）由程序从结构化来源（实际手术、已回报病理、输血、抢救、转科、危急值）确定，转科按正式转科医嘱逐次确定、无转科医嘱时以转入/转出记录为准；模型只核对出院记录是否提及；源缺口不报临床缺陷。"
     }
   ]
 }

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 
 import pytest
+from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
 
 from app.services.luxian_0609 import native_surgery_document_execution as surgery_doc
 from app.services.luxian_0609.decision_binding import (
@@ -963,6 +964,13 @@ def _typed_037_session(
         ),
     }
 
+    if mr_surgery_mode == "with_end":
+        # 术后访视（07-31 08:00）在手术结束后48小时内。
+        rows_by_source["mr_surgery"] = ({
+            "surgery_id": "S-037", "anesthesia_method": anesthesia_method or "全身麻醉",
+            "surgery_begin_datetime": "2026-07-30 09:00:00", "surgery_end_datetime": "2026-07-30 11:00:00",
+        },)
+
     visit_rows = {
         "preane_surveil_record": {
             "record_time": "2026-07-30 08:00:00",
@@ -1065,14 +1073,15 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
         preanesthesia_content=(
             "未见ASA分级；无气道评估（未作气道评估）；已核对禁食禁饮；"
             "否认麻醉史；未见麻醉风险告知。"
-        )
+        ),
+        mr_surgery_mode="with_end",
     )
 
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
         rule_ids=("LX0609-04-04-02",),
         wrapper_rules=[],
         evidence_payload=None,
-        llm_client=_Client([]),
+        llm_client=ExplicitAnesthesiaFactClient("native_negated_assessments"),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=("LX0609-04-04-02",),
@@ -1091,13 +1100,13 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
         "performed_anesthesia_confirmed": True,
         "missing_fields_by_visit": {
             "preanesthesia_visit": [
-                "asa_level",
-                "airway_assessment",
-                "risk_discussion",
+                "anesthesia_indication",
+                "precautions",
             ]
         },
     }
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (10, 5, 15)
 
 
 @pytest.mark.asyncio
@@ -2954,9 +2963,10 @@ async def test_typed_039_ungraded_mr_operation_is_not_a_traditional_surgery_trig
 
 
 @pytest.mark.asyncio
-async def test_typed_039_does_not_call_empty_discussion_defect_without_emergency_contract(
+async def test_typed_039_empty_discussion_without_emergency_mention_is_defect(
     monkeypatch,
 ):
+    """院方口径（2026-10-10）：文书未写急诊即视为非急诊，无术前讨论判不合规。"""
     original = surgery_doc._typed_binding_source_keys
     monkeypatch.setattr(
         surgery_doc,
@@ -2974,9 +2984,8 @@ async def test_typed_039_does_not_call_empty_discussion_defect_without_emergency
         decision_rule_ids=("LX0609-04-01-02",),
     )
 
-    assert result.decisions[0].applicability.value == "unknown"
-    assert result.decisions[0].evidence_state.value == "data_gap"
-    assert result.decisions[0].qc_direction.value == "unknown"
+    assert result.decisions[0].applicability.value == "applicable"
+    assert result.decisions[0].qc_direction.value == "defect"
     assert result.llm_call_count == 0
 
 
@@ -3385,3 +3394,26 @@ async def test_typed_029_surgery_order_does_not_mask_target_source_error() -> No
     assert reduced[0].final_state.value == "technical_error"
     assert reduced[0].reason_code == "source_query_error"
     assert result.llm_call_count == result.total_tokens == 0
+
+
+class _NamedSurgeryMaterials:
+    def __init__(self, record_names=(), mr_names=()):
+        self._rows = {
+            "surgery_record": tuple({"surgery_name": name} for name in record_names),
+            "mr_surgery": tuple({"surgery_name": name} for name in mr_names),
+        }
+
+    def rows(self, source_key):
+        return self._rows[source_key]
+
+
+@pytest.mark.parametrize(("mr_names", "exempt"), [
+    (("纤维支气管镜检查", "支气管镜下肺活检"), True),
+    (("内镜下胃息肉切除术",), True),
+    (("腹腔镜下胆囊切除术",), False),
+    (("内镜下胃息肉切除术", "腹股沟疝修补术"), False),
+    ((), False),
+])
+def test_029_endoscopic_only_procedures_need_no_preop_summary(mr_names, exempt):
+    """院方口径（2026-10-10）：自然腔道内镜操作不需要术前小结，镜下手术仍核对。"""
+    assert surgery_doc._only_endoscopic_procedures(_NamedSurgeryMaterials(mr_names=mr_names)) is exempt

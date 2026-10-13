@@ -79,6 +79,73 @@
         </div>
 
         <div
+          v-if="engineJudgment"
+          class="luxian-section engine-section"
+        >
+          <h4>引擎判定说明</h4>
+          <p
+            v-if="engineWithheldReason"
+            class="engine-withheld"
+          >
+            {{ engineWithheldReason }}
+          </p>
+          <template v-else-if="engineDetail">
+            <p
+              v-if="engineDetail.method"
+              class="engine-method"
+            >
+              {{ engineDetail.method }}
+            </p>
+            <div class="engine-block">
+              <span class="engine-label">何时判定</span>
+              <p>{{ engineDetail.trigger }}</p>
+            </div>
+            <div class="engine-block">
+              <span class="engine-label">判定步骤</span>
+              <ol class="engine-steps">
+                <li
+                  v-for="(step, index) in engineDetail.steps"
+                  :key="index"
+                >
+                  {{ step }}
+                </li>
+              </ol>
+            </div>
+            <div
+              v-if="engineOutcomes.length"
+              class="engine-block"
+            >
+              <span class="engine-label">结论含义</span>
+              <ul class="engine-outcomes">
+                <li
+                  v-for="outcome in engineOutcomes"
+                  :key="outcome.key"
+                >
+                  <span
+                    class="engine-outcome-tag"
+                    :class="outcome.tagClass"
+                  >{{ outcome.label }}</span>
+                  <span class="engine-outcome-text">{{ outcome.text }}</span>
+                </li>
+              </ul>
+            </div>
+            <p
+              v-for="(note, index) in engineDetail.extra_notes"
+              :key="'note-' + index"
+              class="engine-note"
+            >
+              {{ note }}
+            </p>
+            <p
+              v-if="engineDetail.data_gap_note"
+              class="muted"
+            >
+              {{ engineDetail.data_gap_note }}
+            </p>
+          </template>
+        </div>
+
+        <div
           v-if="customerPolicy"
           class="luxian-section"
         >
@@ -188,7 +255,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { SemanticRuleItem } from '../../types'
+import type {
+  SemanticRuleEngineJudgmentDetail,
+  SemanticRuleEngineJudgmentWithheld,
+  SemanticRuleEngineOutcomeKey,
+  SemanticRuleItem,
+} from '../../types'
 import { getCategoryZh, getDocTypeZh, getSeverityZh } from '../../types'
 
 const props = defineProps<{
@@ -215,6 +287,40 @@ const isLuxianRule = computed(() => props.rule?.rule_id.startsWith('LX0609-') ||
 const customerPolicy = computed(() =>
   isLuxianRule.value ? props.rule?.customer_policy : undefined,
 )
+
+const engineJudgment = computed(() =>
+  isLuxianRule.value ? props.rule?.engine_judgment : undefined,
+)
+
+const ENGINE_OUTCOME_LABELS: Array<[SemanticRuleEngineOutcomeKey, string]> = [
+  ['compliant', '合规'],
+  ['non_compliant', '不合规'],
+  ['data_gap', '资料不足'],
+  ['not_applicable', '不适用'],
+]
+
+const engineWithheldReason = computed(() => {
+  const judgment = engineJudgment.value
+  return judgment?.withheld === true
+    ? (judgment as SemanticRuleEngineJudgmentWithheld).withheld_reason
+    : ''
+})
+
+const engineDetail = computed<SemanticRuleEngineJudgmentDetail | null>(() => {
+  const judgment = engineJudgment.value
+  return judgment && judgment.withheld === false
+    ? (judgment as SemanticRuleEngineJudgmentDetail)
+    : null
+})
+
+const engineOutcomes = computed(() => {
+  const judgment = engineDetail.value
+  if (!judgment) return []
+  return ENGINE_OUTCOME_LABELS.flatMap(([key, label]) => {
+    const text = judgment.outcomes[key]
+    return text ? [{ key, label, text, tagClass: 'is-' + key }] : []
+  })
+})
 
 const luxianPolicyTitle = computed(() => {
   const policy = customerPolicy.value
@@ -437,6 +543,108 @@ function formatPolicySource(value: string): string {
   margin-top: 4px;
   color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
+}
+
+.engine-section {
+  display: grid;
+  gap: 10px;
+}
+
+.engine-section h4 {
+  margin-bottom: 0;
+}
+
+.engine-method {
+  border-left: 3px solid rgba(10, 108, 255, 0.35);
+  padding-left: 8px;
+}
+
+.engine-block {
+  display: grid;
+  gap: 4px;
+}
+
+.engine-label {
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.engine-steps,
+.engine-outcomes {
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(29, 29, 31, 0.72);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.engine-steps {
+  list-style: decimal;
+}
+
+.engine-steps li::marker {
+  color: rgba(10, 108, 255, 0.7);
+  font-weight: 600;
+}
+
+.engine-outcomes {
+  display: grid;
+  gap: 4px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.engine-outcomes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.engine-outcome-tag {
+  flex: none;
+  min-width: 56px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.engine-outcome-tag.is-compliant {
+  background: rgba(52, 199, 89, 0.12);
+  color: #1f8a3e;
+}
+
+.engine-outcome-tag.is-non_compliant {
+  background: rgba(255, 59, 48, 0.1);
+  color: #c4291f;
+}
+
+.engine-outcome-tag.is-data_gap {
+  background: rgba(255, 149, 0, 0.12);
+  color: #a35d00;
+}
+
+.engine-outcome-tag.is-not_applicable {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.engine-outcome-text {
+  min-width: 0;
+}
+
+.engine-note {
+  border-radius: 10px;
+  background: rgba(10, 108, 255, 0.05);
+  padding: 6px 10px;
+}
+
+.engine-withheld {
+  color: rgba(29, 29, 31, 0.62);
 }
 
 .policy-source-list {

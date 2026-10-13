@@ -1,0 +1,457 @@
+[
+  {
+    "original_index": 0,
+    "id": "reason_今日启用美罗培南，因为细菌培养证实感染。",
+    "rule": "LX0609-05-01-02",
+    "expected": "compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "今日启用美罗培南，因为细菌培养证实感染。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 1,
+    "id": "reason_今日启用美罗培南，用药理由未记录。",
+    "rule": "LX0609-05-01-02",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "今日启用美罗培南，用药理由未记录。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "non_compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 2,
+    "id": "reason_拟使用美罗培南，后续评估。",
+    "rule": "LX0609-05-01-02",
+    "expected": "not_applicable",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "拟使用美罗培南，后续评估。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "technical_error",
+    "prior_expected_match": false
+  },
+  {
+    "original_index": 3,
+    "id": "reason_今日未使用美罗培南。",
+    "rule": "LX0609-05-01-02",
+    "expected": "not_applicable",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "今日未使用美罗培南。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "technical_error",
+    "prior_expected_match": false
+  },
+  {
+    "original_index": 4,
+    "id": "reason_今日停用美罗培南，理由未记录。",
+    "rule": "LX0609-05-01-02",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "今日停用美罗培南，理由未记录。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "non_compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 5,
+    "id": "reason_unknown_antibiotic",
+    "rule": "LX0609-05-01-02",
+    "expected": "data_gap",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "头孢噻肟",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "今日启用头孢噻肟，因为细菌培养证实感染。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "常用但未在硬编码目录内，至少不应静默不适用；确定性/受控语义皆可但不能称完成",
+    "prior_observed": "not_applicable",
+    "prior_expected_match": false
+  },
+  {
+    "original_index": 13,
+    "id": "cancel_no_actual_05",
+    "rule": "LX0609-05-01-05",
+    "expected": "not_applicable",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已取消",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "拟使用美罗培南，取消医嘱，未实际给药。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "not_applicable",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 16,
+    "id": "empiric_胸部影像证实细菌性肺炎，予以美罗培南经验性抗感染治疗。",
+    "rule": "LX0609-05-01-05",
+    "expected": "compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "胸部影像证实细菌性肺炎，予以美罗培南经验性抗感染治疗。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 17,
+    "id": "empiric_胸部影像尚不能证实细菌性肺炎，予以美罗培南经验性抗感染治疗。",
+    "rule": "LX0609-05-01-05",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "胸部影像尚不能证实细菌性肺炎，予以美罗培南经验性抗感染治疗。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "non_compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 18,
+    "id": "empiric_予以美罗培南经验性抗感染治疗，理由未记录。",
+    "rule": "LX0609-05-01-05",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "予以美罗培南经验性抗感染治疗，理由未记录。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "non_compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 19,
+    "id": "empiric_美罗培南经验性抗感染治疗，无痰标本可采。",
+    "rule": "LX0609-05-01-05",
+    "expected": "compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "美罗培南",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "美罗培南经验性抗感染治疗，无痰标本可采。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "",
+    "prior_observed": "non_compliant",
+    "prior_expected_match": false
+  },
+  {
+    "original_index": 20,
+    "id": "empiric_source_daily_course_record",
+    "rule": "LX0609-05-01-05",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "万古霉素",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "daily_course_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "建议万古霉素经验性抗感染治疗，已遵会诊意见给予万古霉素。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "来源改变不应把相同已实际实施事件降为不适用；会诊请/执行正文口径争议单独列出",
+    "prior_observed": "non_compliant",
+    "prior_expected_match": true
+  },
+  {
+    "original_index": 21,
+    "id": "empiric_source_consultation_record",
+    "rule": "LX0609-05-01-05",
+    "expected": "non_compliant",
+    "rows": {
+      "inpat_drug_order": [
+        {
+          "document_id": "synthetic-order",
+          "order_id": "synthetic-O1",
+          "generic_name": "万古霉素",
+          "drug_apply_method": "静脉滴注",
+          "order_status": "已执行",
+          "planned_start_datetime": "2026-04-01 08:00:00",
+          "prescribed_datetime": "2026-04-01 08:00:00"
+        }
+      ],
+      "consultation_record": [
+        {
+          "document_id": "synthetic-note",
+          "record_time": "2026-04-01 09:00:00",
+          "record_content": "建议万古霉素经验性抗感染治疗，已遵会诊意见给予万古霉素。"
+        }
+      ],
+      "evaluation_context.horizon": [
+        {
+          "horizon_date": "2026-04-08",
+          "basis": "evaluation_as_of"
+        }
+      ]
+    },
+    "rationale": "来源改变不应把相同已实际实施事件降为不适用；会诊请/执行正文口径争议单独列出",
+    "prior_observed": "not_applicable",
+    "prior_expected_match": false
+  }
+]

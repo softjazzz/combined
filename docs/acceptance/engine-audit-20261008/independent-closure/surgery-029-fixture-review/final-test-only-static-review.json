@@ -1,0 +1,87 @@
+{
+  "schema_version": "surgery-029-final-test-only-static-review-v1",
+  "base_commit": "62cbbc240e6a072795220ef3cd91dd49b230eb19",
+  "stage": "WIP_before_owner_submission",
+  "tests_run_by_reviewer": 0,
+  "production_diff_count": 0,
+  "tracked_change_paths": [
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_freeze.py"
+  ],
+  "reviewed_three_file_sha256": {
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_freeze.py": "47e2cce84ca7ad28ec3afae083a5c02142b4e5492e9bf1187a8736598c283922",
+    "apps/medqc-web/backend/tests/unit/test_surgery_029_mr_fixture_contract.py": "ce9ceae1e5a21feb99ed2283e26772203b5cd5fce502dc077b401a03e312cd72",
+    "apps/medqc-web/docs/acceptance/2026-10-08-surgery-freeze-mr-fixture-contract.md": "00a5657c20b6eebb7401ab3e62727a3a2e05e7d8b5cef81cab925b02a12313f7"
+  },
+  "old_freeze_blob_sha256": "ec3531c09732d0bc021b6acc9b757fff680271865379e23ccfa81e6753d7fc00",
+  "final_freeze_working_sha256": "47e2cce84ca7ad28ec3afae083a5c02142b4e5492e9bf1187a8736598c283922",
+  "old_AST_exact_after_only_authorized_normalizations": true,
+  "authorized_normalizations": [
+    "add ZoneInfo import",
+    "add _mr_surgery helper",
+    "rename exactly one MR call in029 normal node",
+    "append exact2 catalogue literals in explicit family tuple"
+  ],
+  "MR_call_replacements": 1,
+  "other_five_MR_calls_and_inputs_restored": true,
+  "old_medical_assertions_and_all_evidence_tuple_comparators_unchanged": true,
+  "old_family_ids": [
+    "LX0609-04-01-01",
+    "LX0609-11-02-01",
+    "LX0609-11-02-02",
+    "LX0609-04-04-01",
+    "LX0609-04-04-02",
+    "LX0609-04-04-03",
+    "LX0609-04-01-02"
+  ],
+  "new_family_ids": [
+    "LX0609-04-01-01",
+    "LX0609-11-02-01",
+    "LX0609-11-02-02",
+    "LX0609-04-04-01",
+    "LX0609-04-04-02",
+    "LX0609-04-04-03",
+    "LX0609-04-01-02",
+    "LX0609-04-01-04",
+    "LX0609-04-01-05"
+  ],
+  "new_guard_cases": {
+    "count": 6,
+    "positive": 1,
+    "negative": 5,
+    "description": [
+      "canonical same absolute instant C",
+      "original wrong-source MR time aliases gap",
+      "qualified missing authoritative time gap",
+      "same-name two actual events one summary gap",
+      "MR unavailable gap",
+      "MR truncated gap"
+    ]
+  },
+  "old_351_3_failure_evidence_preserved": true,
+  "static_submission_recommendation": "静态接受，无阻断；root确认作者严格354全通过，可安排真实hook提交。独审测试仍0。",
+  "not_closed": [
+    "029/030多医嘱事件语义",
+    "真实病例来源覆盖"
+  ],
+  "historical_DD_manifest_limit": {
+    "cases": [
+      "DD001..007",
+      "DD028..031"
+    ],
+    "existing_case_freeze_path": "F:/MedQC-worktrees/qc-integration-20261008/.tmp/engine-audit-20261008/discharge-death/frozen-expectations.json",
+    "existing_result_path": "F:/MedQC-worktrees/qc-integration-20261008/.tmp/engine-audit-20261008/discharge-death/probe-results.json",
+    "freeze_sha256": "8dc0233355036eea8d585d6055572971666fa6f8847bb4b80004494c92e4d289",
+    "precise_execution_source_SHA_manifest_exists": false,
+    "note": "旧运行没有生成逐源执行SHA manifest；初始HEAD核对或后续58e29清单不能倒补。未重新查询患者或补造历史SHA。"
+  },
+  "final_static_acceptance": "accepted_no_blocker_for_three_approved_test_document_paths",
+  "owner_validation_reported_by_root": {
+    "collected": 354,
+    "passed": 354,
+    "warnings": 1,
+    "seconds": 5.31,
+    "original_029_full_facts_refs_evidence_assertions_passed": true,
+    "earlier_351_3_log_preserved": true,
+    "independent_run_by_this_reviewer": false
+  }
+}

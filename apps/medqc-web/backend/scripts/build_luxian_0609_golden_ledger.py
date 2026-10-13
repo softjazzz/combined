@@ -20,6 +20,9 @@ LEDGER_SCHEMA_VERSION_V2 = "lx0609-golden-ledger-v2"
 API_BATCH_SCHEMA_VERSION = "lx0609-golden-api-batch-v1"
 
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+# git 提交号（SHA-1）是随机十六进制，可能偶然含手机号形数字串（如 …14885780875…）；
+# 仅对 git_head 字段的精确提交号豁免内容扫描，其他字段照常扫描。
+_GIT_SHA1_RE = re.compile(r"^[a-f0-9]{40}$")
 _CASE_LABEL_RE = re.compile(r"^case-[0-9]{2,4}$")
 _RULE_ID_RE = re.compile(r"^LX0609-[0-9]{2}-[0-9]{2}-[0-9]{2}$")
 _SAFE_CODE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$")
@@ -110,6 +113,8 @@ def _assert_safe_api_dto(value: Any) -> None:
                 and any(part in normalized for part in _FORBIDDEN_KEY_PARTS)
             ):
                 raise ValueError("unsafe API DTO")
+            if normalized == "githead" and isinstance(child, str) and _GIT_SHA1_RE.fullmatch(child):
+                continue
             _assert_safe_api_dto(child)
         return
     if isinstance(value, (list, tuple)):

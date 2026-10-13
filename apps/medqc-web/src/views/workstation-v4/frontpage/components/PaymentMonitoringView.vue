@@ -1,23 +1,14 @@
 <template>
-  <div class="payment-monitoring-page">
+  <div class="payment-monitoring-page drg-workbench-page">
     <div class="payment-monitoring-shell">
-      <header class="payment-header">
+      <header class="payment-header mq-page-head">
         <div class="payment-title-block">
-          <button
-            type="button"
-            class="back-button"
-            aria-label="返回"
-            @click="$router.back()"
-          >
-            <ArrowLeftOutlined />
+          <button type="button" class="back-button" aria-label="返回" @click="$router.back()">
+            <MqIcon name="back" />
           </button>
           <div>
-            <div class="payment-eyebrow">
-              分析 · DRG/DIP
-            </div>
-            <h2 class="payment-title">
-              付费监测
-            </h2>
+            <div class="payment-eyebrow mq-page-eyebrow">分析 · DRG/DIP</div>
+            <h2 class="payment-title mq-page-title">付费监测</h2>
             <p class="payment-subtitle">
               按分组支付、实际费用、盈亏风险和控费边界复核病例付费表现。
             </p>
@@ -29,12 +20,8 @@
             <span>数据口径</span>
             <strong>{{ dataScopeLabel }}</strong>
           </div>
-          <button
-            type="button"
-            class="standard-config-button"
-            @click="configDrawerOpen = true"
-          >
-            <SettingOutlined />
+          <button type="button" class="standard-config-button" @click="configDrawerOpen = true">
+            <MqIcon name="settings" />
             付费标准配置
           </button>
           <button
@@ -45,11 +32,7 @@
           >
             {{ backendLoading ? '测算中' : '后端测算' }}
           </button>
-          <a-select
-            v-model:value="deptFilter"
-            class="filter-control"
-            size="middle"
-          >
+          <a-select v-model:value="deptFilter" class="filter-control" size="middle">
             <a-select-option
               v-for="option in activeDeptOptions"
               :key="option.value"
@@ -65,37 +48,27 @@
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
-                <a-menu-item key="excel">
-                  <FileExcelOutlined /> 导出 Excel
-                </a-menu-item>
-                <a-menu-item key="pdf">
-                  <FilePdfOutlined /> 导出 PDF
-                </a-menu-item>
-                <a-menu-item key="word">
-                  <FileWordOutlined /> 导出 Word
-                </a-menu-item>
+                <a-menu-item key="excel"> <MqIcon name="data" /> 导出 Excel </a-menu-item>
+                <a-menu-item key="pdf"> <MqIcon name="doc" /> 导出 PDF </a-menu-item>
+                <a-menu-item key="word"> <MqIcon name="doc" /> 导出 Word </a-menu-item>
               </a-menu>
             </template>
-            <button
-              type="button"
-              class="export-button"
-            >
-              <DownloadOutlined />
+            <button type="button" class="export-button">
+              <MqIcon name="download" />
               导出报告
             </button>
           </a-dropdown>
         </div>
       </header>
 
-      <DatasetUploadPanel
-        class="dataset-upload-surface"
-        @data-changed="handleDatasetChanged"
-      />
+      <DatasetUploadPanel class="dataset-upload-surface" @data-changed="handleDatasetChanged" />
 
-      <section class="standard-summary-panel">
+      <section class="standard-summary-panel mq-card">
         <div class="standard-summary-main">
           <span class="standard-status">地方付费标准库</span>
-          <strong>{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong>
+          <strong
+            >{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong
+          >
           <p>
             DIP 点值 {{ paymentStandardForm.dipPointValue }} 元/分，DRG 基准费率
             {{ paymentStandardForm.baseRate }} 元，医院系数
@@ -125,10 +98,7 @@
           <div class="config-form-grid">
             <label class="config-field config-field-wide">
               <span>地区名称</span>
-              <a-input
-                v-model:value="paymentStandardForm.regionName"
-                placeholder="例如：泸州"
-              />
+              <a-input v-model:value="paymentStandardForm.regionName" placeholder="例如：泸州" />
             </label>
 
             <label class="config-field config-field-wide">
@@ -211,11 +181,7 @@
           </div>
 
           <div class="drawer-actions">
-            <button
-              type="button"
-              class="secondary-action"
-              @click="resetPaymentStandardConfig"
-            >
+            <button type="button" class="secondary-action" @click="resetPaymentStandardConfig">
               恢复默认
             </button>
             <button
@@ -230,15 +196,12 @@
         </div>
       </a-drawer>
 
-      <div
-        v-if="!drgMockEnabled && !hasUploadedData"
-        class="data-warning"
-      >
+      <div v-if="!drgMockEnabled && !hasUploadedData" class="data-warning">
         {{ backendStatusText }}
       </div>
 
       <section class="kpi-strip">
-        <article class="kpi-card kpi-card-blue">
+        <article class="kpi-card mq-card kpi-card-blue">
           <div class="kpi-content">
             <span class="kpi-label">总费用</span>
             <div class="kpi-value-row">
@@ -248,11 +211,11 @@
             <p>纳入 {{ overview.caseCount }} 例，支付率 {{ overview.paymentRate.toFixed(1) }}%</p>
           </div>
           <span class="kpi-icon">
-            <DollarOutlined />
+            <MqIcon name="settlement" />
           </span>
         </article>
 
-        <article class="kpi-card kpi-card-green">
+        <article class="kpi-card mq-card kpi-card-green">
           <div class="kpi-content">
             <span class="kpi-label">预计医保支付</span>
             <div class="kpi-value-row">
@@ -262,29 +225,26 @@
             <p>按当前病例费用与分组支付自动汇总</p>
           </div>
           <span class="kpi-icon">
-            <PayCircleOutlined />
+            <MqIcon name="settlement" />
           </span>
         </article>
 
-        <article class="kpi-card kpi-card-red">
+        <article class="kpi-card mq-card kpi-card-red">
           <div class="kpi-content">
             <span class="kpi-label">预计盈亏</span>
-            <div
-              class="kpi-value-row"
-              :class="overview.profit >= 0 ? 'is-profit' : 'is-loss'"
-            >
+            <div class="kpi-value-row" :class="overview.profit >= 0 ? 'is-profit' : 'is-loss'">
               <strong>{{ formatWanSigned(overview.profit) }}</strong>
               <span>万元</span>
             </div>
             <p>差额占总费用 {{ profitGapRate.toFixed(1) }}%</p>
           </div>
           <span class="kpi-icon">
-            <RiseOutlined v-if="overview.profit >= 0" />
-            <FallOutlined v-else />
+            <MqIcon v-if="overview.profit >= 0" name="stats" />
+            <MqIcon v-else name="stats" />
           </span>
         </article>
 
-        <article class="kpi-card kpi-card-amber">
+        <article class="kpi-card mq-card kpi-card-amber">
           <div class="kpi-content">
             <span class="kpi-label">亏损病例</span>
             <div class="kpi-value-row is-loss">
@@ -294,43 +254,30 @@
             <p>占比 {{ lossCaseRate.toFixed(1) }}%，优先复核亏损金额 Top 病例</p>
           </div>
           <span class="kpi-icon">
-            <FallOutlined />
+            <MqIcon name="stats" />
           </span>
         </article>
       </section>
 
       <section class="analysis-grid">
-        <div class="analysis-panel trend-panel">
+        <div class="analysis-panel mq-card trend-panel">
           <div class="panel-heading">
             <div>
               <h3>费用与支付趋势</h3>
               <p>实际费用、预计医保支付与支付率同屏观察</p>
             </div>
-            <a-segmented
-              v-model:value="trendScope"
-              :options="trendScopeOptions"
-              size="small"
-            />
+            <a-segmented v-model:value="trendScope" :options="trendScopeOptions" size="small" />
           </div>
-          <div
-            ref="paymentTrendRef"
-            class="trend-chart"
-          />
+          <div ref="paymentTrendRef" class="trend-chart" />
         </div>
 
-        <div class="analysis-panel risk-panel">
+        <div class="analysis-panel mq-card risk-panel">
           <div class="panel-heading">
             <div>
               <h3>亏损风险洞察</h3>
               <p>按当前科室筛选汇总亏损金额 Top4</p>
             </div>
-            <button
-              type="button"
-              class="text-action"
-              @click="statusFilter = 'loss'"
-            >
-              详情
-            </button>
+            <button type="button" class="text-action" @click="statusFilter = 'loss'">详情</button>
           </div>
 
           <div class="risk-table">
@@ -341,11 +288,7 @@
               <span>亏损金额</span>
               <span>占比</span>
             </div>
-            <div
-              v-for="item in lossRiskInsights"
-              :key="item.caseNo"
-              class="risk-row"
-            >
+            <div v-for="item in lossRiskInsights" :key="item.caseNo" class="risk-row">
               <span class="risk-rank">{{ item.rank }}</span>
               <div class="risk-reason">
                 <strong>{{ item.reason }}</strong>
@@ -357,42 +300,24 @@
               <span class="risk-amount">{{ formatWan(item.lossAmount) }}</span>
               <span class="risk-percent">{{ item.percent.toFixed(1) }}%</span>
             </div>
-            <div
-              v-if="!lossRiskInsights.length"
-              class="risk-empty"
-            >
-              当前筛选下暂无亏损病例。
-            </div>
+            <div v-if="!lossRiskInsights.length" class="risk-empty">当前筛选下暂无亏损病例。</div>
           </div>
         </div>
       </section>
 
       <section class="detail-layout">
-        <div class="detail-panel">
+        <div class="detail-panel mq-card">
           <div class="detail-toolbar">
             <div>
               <h3>病例付费明细</h3>
               <p>{{ tableSummaryLabel }}</p>
             </div>
             <div class="detail-filters">
-              <a-segmented
-                v-model:value="groupFilter"
-                :options="paymentMonitoringGroupOptions"
-              />
-              <a-select
-                v-model:value="statusFilter"
-                class="status-filter"
-                size="small"
-              >
-                <a-select-option value="all">
-                  全部状态
-                </a-select-option>
-                <a-select-option value="profit">
-                  盈余
-                </a-select-option>
-                <a-select-option value="loss">
-                  亏损
-                </a-select-option>
+              <a-segmented v-model:value="groupFilter" :options="paymentMonitoringGroupOptions" />
+              <a-select v-model:value="statusFilter" class="status-filter" size="small">
+                <a-select-option value="all"> 全部状态 </a-select-option>
+                <a-select-option value="profit"> 盈余 </a-select-option>
+                <a-select-option value="loss"> 亏损 </a-select-option>
               </a-select>
             </div>
           </div>
@@ -412,10 +337,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="item in filteredRows"
-                  :key="item.id"
-                >
+                <tr v-for="item in filteredRows" :key="item.id">
                   <td>
                     <div class="case-cell">
                       <span>{{ item.caseNo }}</span>
@@ -450,19 +372,14 @@
                   </td>
                 </tr>
                 <tr v-if="!filteredRows.length">
-                  <td
-                    colspan="8"
-                    class="empty-cell"
-                  >
-                    当前筛选下暂无数据
-                  </td>
+                  <td colspan="8" class="empty-cell">当前筛选下暂无数据</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
 
-        <aside class="advice-panel">
+        <aside class="advice-panel mq-card">
           <div class="panel-heading">
             <div>
               <h3>控费建议</h3>
@@ -485,9 +402,7 @@
               </span>
             </button>
           </div>
-          <div class="advice-footnote">
-            数据截至：{{ trendDateRangeLabel }}
-          </div>
+          <div class="advice-footnote">数据截至：{{ trendDateRangeLabel }}</div>
         </aside>
       </section>
     </div>
@@ -495,21 +410,11 @@
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
-import {
-  ArrowLeftOutlined,
-  DollarOutlined,
-  PayCircleOutlined,
-  RiseOutlined,
-  FallOutlined,
-  DownloadOutlined,
-  FileExcelOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
-  SettingOutlined,
-} from '@ant-design/icons-vue'
+
 import { message } from 'ant-design-vue'
 import {
   simulatePaymentMonitoring,
@@ -1052,1040 +957,5 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
-@import './drg-dip-workbench.css';
-
-.payment-monitoring-page {
-  height: 100%;
-  width: 100%;
-  overflow-y: auto;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  font-feature-settings:
-    'rlig' 1,
-    'calt' 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.payment-monitoring-shell {
-  display: flex;
-  max-width: 1600px;
-  min-height: 100%;
-  flex-direction: column;
-  gap: 16px;
-  margin: 0 auto;
-  padding: 20px 24px 28px;
-}
-
-.payment-header,
-.analysis-panel,
-.detail-panel,
-.advice-panel {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.payment-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  border-radius: 18px;
-  padding: 18px 20px;
-}
-
-.payment-title-block {
-  display: flex;
-  min-width: 280px;
-  align-items: center;
-  gap: 14px;
-}
-
-.back-button {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  background: #ffffff;
-  color: rgba(29, 29, 31, 0.6);
-  cursor: pointer;
-  transition:
-    color 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease;
-}
-
-.back-button:hover {
-  border-color: #bfdbfe;
-  background: rgba(10, 108, 255, 0.06);
-  color: #0a6cff;
-}
-
-.payment-eyebrow {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 16px;
-}
-
-.payment-title {
-  margin: 2px 0 0;
-  color: #1d1d1f;
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 34px;
-}
-
-.payment-subtitle {
-  margin: 2px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.payment-filter-strip {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.backend-sync-button {
-  display: inline-flex;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(10, 108, 255, 0.16);
-  border-radius: 10px;
-  background: rgba(10, 108, 255, 0.06);
-  color: #0a6cff;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 0 14px;
-  transition: all 0.18s ease;
-}
-
-.backend-sync-button:hover:not(:disabled) {
-  border-color: #93c5fd;
-  background: rgba(10, 108, 255, 0.1);
-}
-
-.backend-sync-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
-}
-
-.standard-config-button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  background: #ffffff;
-  color: rgba(29, 29, 31, 0.68);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 0 14px;
-  transition: all 0.18s ease;
-}
-
-.standard-config-button:hover {
-  border-color: #bfdbfe;
-  background: rgba(10, 108, 255, 0.06);
-  color: #0a6cff;
-}
-
-.filter-chip {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #dbe5f0;
-  border-radius: 8px;
-  background: #f8fbff;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.filter-chip span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.filter-chip strong {
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.scope-chip {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-.date-chip {
-  min-width: 220px;
-  justify-content: space-between;
-}
-
-.filter-control {
-  width: 190px;
-}
-
-.export-button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 8px;
-  background: #0a6cff;
-  padding: 0 14px;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
-}
-
-.export-button:hover {
-  background: #0a5fd6;
-}
-
-.dataset-upload-surface {
-  margin: 0;
-}
-
-.standard-summary-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid #dbe5f0;
-  border-radius: 14px;
-  background: #ffffff;
-  padding: 14px 16px;
-  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.1);
-}
-
-.standard-summary-main {
-  min-width: 0;
-}
-
-.standard-status {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: #eaf2ff;
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-  padding: 2px 8px;
-}
-
-.standard-summary-main strong {
-  display: block;
-  margin-top: 8px;
-  color: #1d1d1f;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 22px;
-}
-
-.standard-summary-main p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.standard-summary-meta {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.standard-summary-meta span {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fbff;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-  padding: 5px 8px;
-}
-
-.standard-config-drawer {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.drawer-intro {
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: #eff6ff;
-  padding: 12px 14px;
-}
-
-.drawer-intro strong {
-  color: #1d1d1f;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 22px;
-}
-
-.drawer-intro p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.config-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.config-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.config-field-wide {
-  grid-column: 1 / -1;
-}
-
-.config-field span {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.config-number {
-  width: 100%;
-}
-
-.config-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #f8fbff;
-  padding: 12px 14px;
-}
-
-.config-preview span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.config-preview strong {
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 20px;
-}
-
-.drawer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px solid #e2e8f0;
-  padding-top: 14px;
-}
-
-.primary-action,
-.secondary-action {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 0 14px;
-}
-
-.primary-action {
-  border: 1px solid #0a6cff;
-  background: #0a6cff;
-  color: #ffffff;
-}
-
-.primary-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
-}
-
-.secondary-action {
-  border: 1px solid #dbe5f0;
-  background: #ffffff;
-  color: #334155;
-}
-
-.data-warning {
-  border: 1px solid #fde68a;
-  border-radius: 12px;
-  background: #fffbeb;
-  padding: 10px 14px;
-  color: #92400e;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.kpi-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.kpi-card {
-  display: flex;
-  min-height: 118px;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 14px;
-  background: #ffffff;
-  padding: 18px;
-  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.1);
-}
-
-.kpi-card-blue {
-  border-left: 3px solid #0a6cff;
-}
-
-.kpi-card-green {
-  border-left: 3px solid #10b981;
-}
-
-.kpi-card-red {
-  border-left: 3px solid #ef4444;
-}
-
-.kpi-card-amber {
-  border-left: 3px solid #f59e0b;
-}
-
-.kpi-content {
-  min-width: 0;
-}
-
-.kpi-label {
-  display: block;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.kpi-value-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 8px;
-  color: #1d1d1f;
-}
-
-.kpi-value-row strong {
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 34px;
-}
-
-.kpi-value-row span {
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.kpi-value-row.is-profit strong {
-  color: #10b981;
-}
-
-.kpi-value-row.is-loss strong {
-  color: #ef4444;
-}
-
-.kpi-content p {
-  margin: 6px 0 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.kpi-icon {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #eff6ff;
-  color: #0a6cff;
-  font-size: 18px;
-}
-
-.analysis-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.85fr);
-  gap: 16px;
-}
-
-.analysis-panel,
-.detail-panel,
-.advice-panel {
-  border-radius: 16px;
-}
-
-.analysis-panel {
-  padding: 18px;
-}
-
-.panel-heading,
-.detail-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.panel-heading h3,
-.detail-toolbar h3 {
-  margin: 0;
-  color: #1d1d1f;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 24px;
-}
-
-.panel-heading p,
-.detail-toolbar p {
-  margin: 3px 0 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.trend-chart {
-  height: 292px;
-  margin-top: 14px;
-}
-
-.text-action {
-  border: 0;
-  background: transparent;
-  color: #0a6cff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.risk-table {
-  margin-top: 14px;
-}
-
-.risk-head,
-.risk-row {
-  display: grid;
-  grid-template-columns: 42px minmax(140px, 1fr) 112px 70px 58px;
-  align-items: center;
-  gap: 12px;
-}
-
-.risk-head {
-  border-top: 1px solid #e2e8f0;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 10px 0;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.risk-row {
-  min-height: 56px;
-  border-bottom: 1px solid #eef2f7;
-  padding: 10px 0;
-}
-
-.risk-rank {
-  color: #ef4444;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.risk-reason {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.risk-reason strong {
-  overflow: hidden;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.risk-reason small {
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 12px;
-  line-height: 17px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.risk-bar-cell {
-  position: relative;
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e8eef7;
-}
-
-.risk-bar-cell i {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #ef4444, #f97316);
-}
-
-.risk-amount,
-.risk-percent {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: right;
-}
-
-.risk-empty,
-.empty-cell {
-  padding: 32px 16px;
-  color: #94a3b8;
-  text-align: center;
-}
-
-.detail-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 16px;
-  align-items: start;
-}
-
-.detail-panel {
-  overflow: hidden;
-}
-
-.detail-toolbar {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 16px 18px;
-}
-
-.detail-filters {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.status-filter {
-  width: 118px;
-}
-
-.payment-table-wrap {
-  overflow-x: auto;
-}
-
-.payment-table {
-  width: 100%;
-  min-width: 1080px;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.payment-table th {
-  background: #f8fbff;
-  color: #64748b;
-  font-weight: 700;
-  text-align: left;
-}
-
-.payment-table th,
-.payment-table td {
-  border-bottom: 1px solid #edf2f7;
-  padding: 13px 16px;
-  vertical-align: middle;
-}
-
-.payment-table tbody tr:hover {
-  background: #f8fbff;
-}
-
-.payment-table td {
-  color: #334155;
-}
-
-.case-cell,
-.rate-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.case-cell span,
-.rate-cell span {
-  color: #1d1d1f;
-  font-weight: 700;
-}
-
-.case-cell small,
-.rate-cell small {
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.money-profit {
-  color: #10b981;
-  font-weight: 700;
-}
-
-.money-loss {
-  color: #ef4444;
-  font-weight: 700;
-}
-
-.advice-panel {
-  padding: 18px;
-}
-
-.advice-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.advice-item {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 12px;
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.advice-item:hover,
-.advice-item.active {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-.advice-icon {
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #eaf2ff;
-  color: #0a6cff;
-  font-weight: 700;
-}
-
-.advice-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.advice-copy strong {
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.advice-copy small {
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.advice-footnote {
-  margin-top: 16px;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.payment-monitoring-page {
-  --workstation-canvas: #f5f5f7;
-  --workstation-surface: rgba(255, 255, 255, 0.86);
-  --workstation-surface-strong: rgba(255, 255, 255, 0.94);
-  --workstation-border: rgba(0, 0, 0, 0.08);
-  --workstation-text: #1d1d1f;
-  --workstation-muted: rgba(29, 29, 31, 0.6);
-  --workstation-subtle: rgba(29, 29, 31, 0.38);
-  --workstation-primary: #0a6cff;
-  --workstation-primary-soft: rgba(10, 108, 255, 0.1);
-
-  background: var(--workstation-canvas);
-  color: var(--workstation-text);
-  font-family:
-    'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.payment-header,
-.standard-summary-panel,
-.analysis-panel,
-.detail-panel,
-.advice-panel,
-.kpi-card {
-  border: 1px solid var(--workstation-border);
-  background: var(--workstation-surface);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.payment-header,
-.analysis-panel,
-.detail-panel,
-.advice-panel {
-  border-radius: 20px;
-}
-
-.standard-summary-panel,
-.kpi-card {
-  border-radius: 16px;
-}
-
-.payment-header:hover,
-.standard-summary-panel:hover,
-.analysis-panel:hover,
-.detail-panel:hover,
-.advice-panel:hover,
-.kpi-card:hover {
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-}
-
-.payment-eyebrow,
-.filter-chip span,
-.payment-subtitle,
-.standard-summary-main p,
-.panel-heading p,
-.detail-toolbar p,
-.kpi-content p,
-.advice-footnote,
-.risk-reason small {
-  color: var(--workstation-muted);
-}
-
-.payment-title,
-.filter-chip strong,
-.standard-summary-main strong,
-.config-preview strong,
-.panel-heading h3,
-.detail-toolbar h3,
-.kpi-value-row,
-.risk-reason strong,
-.advice-copy strong {
-  color: var(--workstation-text);
-}
-
-.back-button,
-.standard-config-button,
-.secondary-action,
-.standard-summary-meta span,
-.filter-chip {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface-strong);
-  color: var(--workstation-muted);
-}
-
-.back-button:hover,
-.standard-config-button:hover,
-.secondary-action:hover {
-  border-color: rgba(10, 108, 255, 0.22);
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
-}
-
-.backend-sync-button,
-.scope-chip,
-.standard-status,
-.text-action,
-.case-link,
-.link-button,
-.priority-action {
-  color: var(--workstation-primary);
-}
-
-.backend-sync-button,
-.scope-chip,
-.standard-status {
-  border-color: rgba(10, 108, 255, 0.16);
-  background: var(--workstation-primary-soft);
-}
-
-.export-button,
-.primary-action {
-  border-color: var(--workstation-primary);
-  background: var(--workstation-primary);
-  box-shadow: 0 4px 10px rgba(10, 108, 255, 0.16);
-}
-
-.export-button:hover,
-.primary-action:hover {
-  background: #0a5fd6;
-}
-
-.kpi-card-blue {
-  border-left-color: var(--workstation-primary);
-}
-
-.kpi-icon {
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
-}
-
-.risk-head,
-.risk-row,
-.case-list th,
-.case-list td {
-  border-color: rgba(0, 0, 0, 0.08);
-}
-
-.risk-head,
-.case-list th {
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--workstation-subtle);
-}
-
-.risk-row:hover,
-.case-list tbody tr:hover {
-  background: rgba(0, 0, 0, 0.025);
-}
-
-@media (max-width: 1279px) {
-  .payment-header,
-  .payment-filter-strip {
-    align-items: flex-start;
-    justify-content: flex-start;
-  }
-
-  .kpi-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .analysis-grid,
-  .detail-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .standard-summary-panel {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .standard-summary-meta {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 767px) {
-  .payment-monitoring-shell {
-    padding: 16px;
-  }
-
-  .payment-header {
-    padding: 16px;
-  }
-
-  .payment-title-block {
-    align-items: flex-start;
-  }
-
-  .kpi-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .filter-control,
-  .standard-config-button,
-  .date-chip,
-  .export-button {
-    width: 100%;
-  }
-
-  .config-form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .drawer-actions {
-    flex-direction: column-reverse;
-  }
-
-  .primary-action,
-  .secondary-action {
-    width: 100%;
-  }
-
-  .risk-head,
-  .risk-row {
-    grid-template-columns: 34px minmax(0, 1fr) 72px 64px 46px;
-    gap: 8px;
-  }
-}
-</style>
+<style scoped src="../../styles/drg-payment.css"></style>
+<style scoped src="./drg-dip-workbench.css"></style>

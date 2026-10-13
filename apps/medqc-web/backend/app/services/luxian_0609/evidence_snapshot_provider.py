@@ -347,6 +347,12 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-04-05-02",
             "LX0609-08-02-01",
             "LX0609-08-02-02",
+            # 036/037 术后24小时访视时限未到时暂不判缺失。
+            "LX0609-04-04-01",
+            "LX0609-04-04-02",
+            # 06-01-01/06-03-02 区分出院终末与在院运行中的未到时限。
+            "LX0609-06-01-01",
+            "LX0609-06-03-02",
         }.intersection(selected_rule_ids)
     )
     if (
@@ -881,6 +887,9 @@ def build_luxian_0609_evidence_read_session(
             EVALUATION_HORIZON_SOURCE_KEY,
             horizon_material.rows,
         )
+        # 派生来源同样须登记进快照文书引用，否则按快照读取该来源会判身份不符，
+        # 遍历全部来源的发送前身份核验随之失败，整例模型调用被拒发。
+        all_document_refs.extend(horizon_refs)
         horizon_query_state = (
             QueryStatus.AVAILABLE if horizon_rows else QueryStatus.EMPTY
         )

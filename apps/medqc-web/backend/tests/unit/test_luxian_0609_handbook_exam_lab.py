@@ -48,7 +48,7 @@ from app.services.luxian_0609.source_registry import (
 CT_RULE = "LX0609-06-01-03"
 CULTURE_RULE = "LX0609-06-03-02"
 ORDER = "inpat_nondrug_order.exam_lab_order"
-SOURCES = (ORDER, "exam_master", "exam_item_report", "labtest_master", "labtest_item_report")
+SOURCES = (ORDER, "exam_master", "exam_item_report", "labtest_master", "labtest_item_report", "evaluation_context.horizon")
 
 
 def _session(
@@ -639,3 +639,89 @@ def test_rescue_content_message_names_only_confirmed_missing_fields():
     assert "抢救时间" in message[0]
     assert "专业技术职称" in message[0]
     assert "不得补造" in message[2]
+
+
+def test_culture_identification_and_susceptibility_rows_stay_one_event_beside_routine_lab():
+    """同 test_id 的菌种鉴定/药敏明细名不是检验身份；并行常规检验不进入培养事件。"""
+
+    report_time = "2026-09-04 10:00:00"
+    result, _, _ = _evaluate(
+        CULTURE_RULE,
+        rows={
+            ORDER: (
+                {"order_id": "O1", "order_name": "血培养+药敏", "order_status": "已执行"},
+                {"order_id": "O2", "order_name": "血常规", "order_status": "已执行"},
+            ),
+            "labtest_master": (
+                {"test_id": "T1", "order_id": "O1", "labtest_subject": "血培养+药敏",
+                 "specimen_collection_datetime": "2026-09-01 08:00:00"},
+                {"test_id": "T2", "order_id": "O2", "labtest_subject": "血常规",
+                 "specimen_collection_datetime": "2026-09-01 08:00:00"},
+            ),
+            "labtest_item_report": (
+                {"test_id": "T1", "lab_item_name": "细菌鉴定", "result": "大肠埃希菌", "report_time": report_time},
+                {"test_id": "T1", "lab_item_name": "头孢曲松", "result": "S 敏感", "report_time": report_time},
+                {"test_id": "T1", "lab_item_name": "左氧氟沙星", "result": "R 耐药", "report_time": report_time},
+                {"test_id": "T2", "lab_item_name": "白细胞计数", "result": "12.5", "report_time": "2026-09-01 10:00:00"},
+            ),
+        },
+    )
+    assert (result.status, result.reason_code) == ("compliant", "requirement_satisfied")
+    assert [item["issue_kind"] for item in result.display_facts["event_results"]] == ["report_present"]
+
+
+_CULTURE_ROWS = {
+    ORDER: ({"order_id": "O1", "order_name": "痰培养", "order_status": "已执行"},),
+    "labtest_master": ({"test_id": "T1", "order_id": "O1", "labtest_subject": "痰培养",
+                        "specimen_collection_datetime": "2026-09-01 09:00:00"},),
+}
+_PENDING_REPORT = {"labtest_item_report": (
+    {"test_id": "T1", "labtest_subject": "痰培养", "labtest_result_status": "培养中", "result": "培养中"},
+)}
+
+
+@pytest.mark.parametrize("basis,extra,expected,issue", [
+    ("discharge", {}, ("non_compliant", "requirement_violated"), "report_missing"),
+    ("running", {}, ("not_applicable", "evaluation_window_not_mature"), "report_not_yet_due"),
+    ("running", _PENDING_REPORT, ("not_applicable", "evaluation_window_not_mature"), "report_not_yet_due"),
+    ("discharge", _PENDING_REPORT, ("data_gap", "target_report_missing"), "report_content_unavailable"),
+    ("", {}, ("data_gap", "target_report_missing"), "report_missing"),
+])
+def test_culture_missing_report_depends_on_discharge_or_running_horizon(basis, extra, expected, issue):
+    """院方口径：出院终末缺报告判不合规；在院运行中缺报告或培养中暂不评价。"""
+    snapshot, materials = _session(rows={**_CULTURE_ROWS, **extra})
+    ledger = build_handbook_ledger(rule_ids=(CULTURE_RULE,), snapshot=snapshot, materials=materials)
+    outcome = evaluate_report_completeness(CULTURE_RULE, ledger, horizon_basis=basis)
+    assert (outcome.status, outcome.reason_code) == expected
+    assert outcome.display_facts["event_results"][0]["issue_kind"] == issue
+    safe = safe_exam_lab_customer_display_facts(rule_id=CULTURE_RULE, raw=outcome.display_facts)
+    assert safe is not None
+    assert exam_lab_customer_fact_status_is_valid(rule_id=CULTURE_RULE, status=outcome.status, safe_facts=safe)
+    rendered = render_luxian_0609_customer_result(
+        decision=_reduced(CULTURE_RULE, outcome.status, outcome.reason_code),
+        safe_customer_display_facts=safe,
+    )
+    if outcome.status == "non_compliant":
+        assert rendered["findings"] == "患者已出院，有1次已执行的微生物培养检查未找到对应报告"
+    if outcome.status == "not_applicable":
+        assert rendered["findings"] == "微生物培养检查报告尚未出具，暂不评价。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("basis,expected", [("discharge_date", "non_compliant"), ("evaluation_as_of", "not_applicable")])
+async def test_native_culture_rule_reads_evaluation_horizon_basis(basis, expected):
+    snapshot, materials = _session(rows={
+        **_CULTURE_ROWS,
+        "evaluation_context.horizon": ({"horizon_date": "2026-09-08", "basis": basis, "row_ref": "h1"},),
+    })
+    execution = await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(CULTURE_RULE,),
+        wrapper_rules=[{"rule_id": CULTURE_RULE}],
+        evidence_payload={},
+        llm_client=_ForbiddenClient(),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=(CULTURE_RULE,),
+    )
+    reduced = [reduce_luxian_0609_rule_decision(item) for item in execution.decisions]
+    assert [item.final_state.value for item in reduced] == [expected]

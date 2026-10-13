@@ -1,0 +1,10 @@
+{
+  "probe": "sqlite_followup_probe.py",
+  "sha256": "4ed5d4954484c1d3aef7dc346d6d011bd3d3491d66f1418f3348ba55070cef75",
+  "exit_code": 1,
+  "wall_seconds": 0.3097,
+  "classification": "artifact script assembly SyntaxError before any import/execution",
+  "production_imported": false,
+  "sqlite_written": false,
+  "expectations_unchanged": true
+}

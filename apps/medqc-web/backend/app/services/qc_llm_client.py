@@ -195,7 +195,14 @@ class SichuanQCLLMClient:
         response_format: Mapping[str, Any] | None = None,
         enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
+        temperature: float | None = None,
     ) -> Dict[str, Any]:
+        if temperature is not None and (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0 <= temperature <= 2
+        ):
+            raise ValueError("temperature must be a number between 0 and 2")
         if max_completion_tokens is not None and (
             isinstance(max_completion_tokens, bool)
             or not isinstance(max_completion_tokens, int)
@@ -251,7 +258,8 @@ class SichuanQCLLMClient:
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": self.temperature,
+            # 调用方可按场景覆盖（如 0609 抽取固定为 0）；未指定时沿用客户端配置。
+            "temperature": self.temperature if temperature is None else float(temperature),
             "top_p": self.top_p,
             "max_tokens": max_tokens,
             "stream": False,
@@ -353,6 +361,9 @@ class SichuanQCLLMClient:
         headers: Dict[str, str],
         payload: Dict[str, Any],
     ) -> tuple[Dict[str, Any], Optional[dict[str, int]]]:
+        from .luxian_0609.privacy_request_scope import protect_current_payload
+
+        payload = protect_current_payload(payload)
         event_id, started_timestamp = await self._observability_recorder.start_attempt(
             logical_call_id=logical_call_id,
             attempt_no=attempt_no,
@@ -442,8 +453,30 @@ class SichuanQCLLMClient:
     def _raise_for_upstream_error(self, result: Dict[str, Any]) -> None:
         if not isinstance(result, dict) or result.get("__error__") is not True:
             return
+        from .luxian_0609.privacy_request_scope import is_luxian_0609_privacy_scope_active
+
         status = result.get("__status__")
         body = result.get("body")
+        if is_luxian_0609_privacy_scope_active():
+            # 响应正文不可信；只发布安全枚举，禁止把任意 code/message 当摘要。
+            safe_codes = {
+                "InvalidParameter": "invalid_parameter",
+                "invalid_request_error": "invalid_request",
+                "rate_limit_exceeded": "rate_limit",
+                "insufficient_quota": "quota_exceeded",
+                "model_not_found": "model_unavailable",
+                "authentication_error": "authentication_error",
+            }
+            code = body.get("code") if isinstance(body, dict) else None
+            if isinstance(body, dict) and isinstance(body.get("error"), dict):
+                code = body["error"].get("code") or body["error"].get("type")
+            summary = safe_codes.get(code, "upstream_response_error") if isinstance(code, str) else "upstream_response_error"
+            safe_status = status if type(status) is int and 100 <= status <= 599 else "unknown"
+            raise RuntimeError(
+                "upstream_http_error "
+                f"upstream_http_status={safe_status} "
+                f"upstream_error_summary={summary}"
+            ) from None
         summary = self._summarize_upstream_body(body)
         raise RuntimeError(
             "upstream_http_error "

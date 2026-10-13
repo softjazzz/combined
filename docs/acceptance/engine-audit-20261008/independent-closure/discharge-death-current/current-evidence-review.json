@@ -1,0 +1,149 @@
+{
+  "audit_id": "dd-original-eleven-current-source-binding-v1",
+  "scope": "Only original DD-001..007 and DD-028..031 synthetic cases",
+  "source_commit": "56322bcffa32ac33b5069975f1dbf3af18b597ac",
+  "execution_head": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "execution_head_delta": "21f4 only two acceptance ledger docs; all executed/read source bytes verified against 56322 before/after",
+  "historical_source_execution_manifest_exists": false,
+  "historical_source_sha_not_reconstructed": true,
+  "current_evidence_binding_complete": true,
+  "clinical_acceptance": false,
+  "endpoint_save_or_full_module_import_acceptance": false,
+  "source_manifest_verified_before_and_after": true,
+  "loaded_or_read_repository_source_entries": 142,
+  "module_initialization_substitute": "customer_rule_package: only fixed AST.literal_eval RULE_FAMILY_DEFINITIONS; all other exports/initialization absent",
+  "constant_source_blob": {
+    "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c",
+    "git_blob_oid": "afc5b8329e49c349e3939add2566f93f5d3b1293",
+    "read_mode": "AST_literal_declaration_only; production_module_initialization_not_executed"
+  },
+  "guard_statistics": {
+    "blocked_env_reads": 0,
+    "blocked_network_operations": 0,
+    "blocked_db_operations": 0,
+    "blocked_external_writes": 0,
+    "blocked_non_git_processes": 0,
+    "blocked_non_source_reads": 0,
+    "dotenv_noop_calls": 1
+  },
+  "original_medical_expectations_changed": false,
+  "rules": [
+    {
+      "rule_id": "LX0609-08-01-01",
+      "layer": "pure_timeliness_function",
+      "case_ids": [
+        "DD-001",
+        "DD-002",
+        "DD-003",
+        "DD-004",
+        "DD-005",
+        "DD-006",
+        "DD-007"
+      ],
+      "passed": 7,
+      "total": 7,
+      "current_binding_complete": true,
+      "old_execution_manifest_still_unproven": true
+    },
+    {
+      "rule_id": "LX0609-08-02-02",
+      "layer": "real_native_execution_binding_canonical_with_declarative_package_init_substitute",
+      "case_ids": [
+        "DD-028",
+        "DD-029",
+        "DD-030",
+        "DD-031"
+      ],
+      "passed": 4,
+      "total": 4,
+      "current_binding_complete": true,
+      "old_execution_manifest_still_unproven": true
+    }
+  ],
+  "files": {
+    "frozen-11-original-inputs-expectations.json": "966242f69656a3b37435bcfe2ecaf2be498dacdceaec8ba0431f2591941cedb3",
+    "current-responsibility-source-manifest.json": "f51cbc2edb5ded6315add0db6ac693784073bce21ce37082c4dcce29153b0303",
+    "attempt-3-static-data-source-manifest.json": "f2f8d1e0f49485d68fb7388a4d61af8d6b7088bf452441cc8351c89aa1e03f7a",
+    "attempt-5-declarative-module-source-manifest.json": "412c1f878f9c0f0cd11bd4e859c259223745aa70ed4329ef1f1650cbaf33de36",
+    "independent-current-11-attempt-5-runner.py": "845d4774221fc2cc732a04c0ccf624e512e702dd4be278f3b91405e7808ff60b",
+    "current-fixed-56322-attempt-5-results.json": "b3050a25d13e185a630f080ec037c52583720adecc5c0c0f057d286ac7944f80",
+    "attempt-5-console.txt": "5b0de4df3673c85fc3e8f1aa0dda51cd852c0c3a413a48d2c2b20446922b3da7"
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "result_file": "current-fixed-56322-results.json",
+      "sha256": "4bc3e7dffba32253bce46975c0600f5ae9943eec3e90ee2a6e369499cd8eb848",
+      "nodes_recorded": 0,
+      "passed_status_nodes": 0,
+      "source_binding_complete": false,
+      "infrastructure_error": "Offline guard forbids writes outside artifact directory",
+      "node_probe_errors": [],
+      "product_failure_count": 0,
+      "blocked_repository_paths": []
+    },
+    {
+      "attempt": 2,
+      "result_file": "current-fixed-56322-attempt-2-results.json",
+      "sha256": "aa3784c504fd1dd84720c9d4cd2180e8597292d5949720883c8d989e364530ed",
+      "nodes_recorded": 0,
+      "passed_status_nodes": 0,
+      "source_binding_complete": false,
+      "infrastructure_error": "Offline guard forbids non-source repository file reads",
+      "node_probe_errors": [],
+      "product_failure_count": 0,
+      "blocked_repository_paths": []
+    },
+    {
+      "attempt": 3,
+      "result_file": "current-fixed-56322-attempt-3-results.json",
+      "sha256": "a9453a617d3ea08901fdc5d2be0b763e2ba5f4be7be15480c4691ab5d407c808",
+      "nodes_recorded": 11,
+      "passed_status_nodes": 7,
+      "source_binding_complete": false,
+      "infrastructure_error": "Offline guard permits only fixed-source read-only git commands",
+      "node_probe_errors": [
+        "DD-028",
+        "DD-029",
+        "DD-030",
+        "DD-031"
+      ],
+      "product_failure_count": 0,
+      "blocked_repository_paths": []
+    },
+    {
+      "attempt": 4,
+      "result_file": "current-fixed-56322-attempt-4-results.json",
+      "sha256": "fc1504ef4ebe6dfb68e19a658499b252c22939a13f712ab2c89cbb39be6f2a85",
+      "nodes_recorded": 11,
+      "passed_status_nodes": 7,
+      "source_binding_complete": true,
+      "infrastructure_error": null,
+      "node_probe_errors": [
+        "DD-028",
+        "DD-029",
+        "DD-030",
+        "DD-031"
+      ],
+      "product_failure_count": 0,
+      "blocked_repository_paths": [
+        "apps/medqc-web/backend/app/data/sc146_intrinsic_launch_tiers.json",
+        "apps/medqc-web/backend/app/data/sc146_intrinsic_launch_tiers.json",
+        "apps/medqc-web/backend/app/data/sc146_intrinsic_launch_tiers.json",
+        "apps/medqc-web/backend/app/data/sc146_intrinsic_launch_tiers.json"
+      ]
+    },
+    {
+      "attempt": 5,
+      "result_file": "current-fixed-56322-attempt-5-results.json",
+      "sha256": "b3050a25d13e185a630f080ec037c52583720adecc5c0c0f057d286ac7944f80",
+      "nodes_recorded": 11,
+      "passed_status_nodes": 11,
+      "source_binding_complete": true,
+      "infrastructure_error": null,
+      "node_probe_errors": [],
+      "product_failure_count": 0,
+      "blocked_repository_paths": []
+    }
+  ]
+}

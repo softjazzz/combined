@@ -1,0 +1,24 @@
+{
+  "fixed_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "pending_probe": null,
+  "syntax_compile_only": "passed",
+  "production_imported_by_compile": false,
+  "pending_cases": [
+    "NORMAL",
+    "LABEL-consciousness_status",
+    "UNKNOWN"
+  ],
+  "repeat_43_core_cases": false,
+  "slot": "released",
+  "files": {
+    "fixed-expectations.json": "c3987481a5d0d7a2285999ee77cf6f1470a2b882fc1af89d8af1414901e68ff9",
+    "wrapper-expectations.json": "1515e620e06c6f37c93e4d96b93ececf241fbea4e4553b106b053fb31b05cd7a",
+    "sqlite-contract-supplement.json": "c89b7aa00a00ad95255241b9af96dc6b0100e7c4307c402f21c9f74ce03989c5",
+    "sqlite_followup_probe.py": "4468e732259b70157c21f260c7d4cfc78763af593073e0e12a2dad11380b2eda"
+  },
+  "first_attempt": "43 native/wrapper state/call assertions completed; SQLite evidence comparison used wrong stage; failed exit1 preserved",
+  "second_attempt": "script assembly SyntaxError; zero imports; preserved; exact marked correction plus compile done",
+  "acceptance_complete": "limited offline engineering only",
+  "final_report": "review.md",
+  "sqlite_supplement_passed": true
+}

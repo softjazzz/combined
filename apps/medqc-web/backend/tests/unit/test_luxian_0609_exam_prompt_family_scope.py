@@ -107,3 +107,14 @@ def test_mixed_prompt_keeps_both_requested_material_families():
     headers = _material_headers(prompt)
     assert any("|FAMILY=exam|" in header for header in headers)
     assert any("|FAMILY=culture|" in header for header in headers)
+
+
+def test_06_01_05_listing_then_diagnosis_is_not_analysis_in_prompt():
+    """用户口径（2026-10-11）：只罗列结果或罗列后直接下诊断不算分析（与074一致）。"""
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-06-01-05",),
+        projection=_mixed_projection(),
+    )
+    assert "抄录后直接列出诊断" in prompt
+    assert "LX0609-06-01-05为absent" in prompt
+    assert "结合症状作出诊断" not in prompt

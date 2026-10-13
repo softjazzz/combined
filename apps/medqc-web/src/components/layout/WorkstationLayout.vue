@@ -159,11 +159,12 @@
       </div>
     </div>
     <GlobalAssistantHost />
+    <WorkstationConfirmDialog :controller="workstationConfirmation" />
   </ConfigProvider>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ConfigProvider } from 'ant-design-vue'
 import {
@@ -191,6 +192,13 @@ import {
   type NavRouteLike,
 } from './workstationNav'
 import { WORKSTATION_THEME } from './workstationTheme'
+
+import WorkstationConfirmDialog from './WorkstationConfirmDialog.vue'
+import { createWorkstationConfirmation, WORKSTATION_CONFIRMATION } from './workstationConfirmation'
+
+const workstationConfirmation = createWorkstationConfirmation()
+provide(WORKSTATION_CONFIRMATION, workstationConfirmation)
+onBeforeUnmount(workstationConfirmation.dispose)
 
 const router = useRouter()
 const route = useRoute()

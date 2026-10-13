@@ -44,9 +44,9 @@ def _safe_events(*, value: Any, timing_rule: bool) -> list[dict[str, Any]] | Non
     if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
         return None
     allowed_outcomes = (
-        {"timely", "overdue", "unhandled", "window_not_mature", "association_failed"}
+        {"timely", "overdue", "unhandled", "window_not_mature", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
         if timing_rule
-        else {"handled", "unhandled", "association_failed"}
+        else {"handled", "unhandled", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
     )
     safe_events: list[dict[str, Any]] = []
     for item in value:
@@ -127,6 +127,60 @@ def _safe_result_detail_missing(raw: Mapping[str, Any]) -> dict[str, Any] | None
     return dict(raw)
 
 
+def _safe_report_time_missing(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    names = raw.get("critical_item_names")
+    flags = raw.get("critical_flags")
+    count = raw.get("missing_report_time_count")
+    if (
+        set(raw) != {"failure_kind", "critical_item_names", "critical_flags", "missing_report_time_count"}
+        or raw.get("failure_kind") != "critical_value_report_time_missing"
+        or type(names) is not list
+        or _safe_text_list(names, minimum=1, maximum=100, item_maximum=40) is None
+        or type(flags) is not list
+        or len(flags) != len(names)
+        or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in flags)
+        or type(count) is not int
+        or not 1 <= count <= len(names)
+    ):
+        return None
+    return dict(raw)
+
+
+def _safe_report_time_conflict(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """报告别名冲突只交付项目/标志/数量，不泄漏原始行或任取报告时间。"""
+
+    names = raw.get("critical_item_names")
+    flags = raw.get("critical_flags")
+    count = raw.get("conflicting_report_time_count")
+    if (
+        set(raw) != {"failure_kind", "critical_item_names", "critical_flags", "conflicting_report_time_count"}
+        or raw.get("failure_kind") != "critical_value_report_time_conflict"
+        or type(names) is not list
+        or _safe_text_list(names, minimum=1, maximum=100, item_maximum=40) is None
+        or type(flags) is not list
+        or len(flags) != len(names)
+        or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in flags)
+        or type(count) is not int
+        or not 1 <= count <= len(names)
+    ):
+        return None
+    return dict(raw)
+
+
+def _safe_source_unavailable(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    # 只接受执行器已裁决的两类真实来源缺口，不豁免其它事实校验。
+    if (
+        set(raw) != {"failure_kind", "missing_source", "issue"}
+        or raw.get("failure_kind") != "critical_value_source_unavailable"
+        or type(raw.get("missing_source")) is not str
+        or raw["missing_source"] not in {"labtest_item_report", "crisis_value_record"}
+        or type(raw.get("issue")) is not str
+        or raw["issue"] not in {"source_unavailable", "source_truncated"}
+    ):
+        return None
+    return dict(raw)
+
+
 def _safe_horizon_unavailable(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if (
         set(raw) != {"verification_kind", "issue"}
@@ -140,6 +194,12 @@ def _safe_horizon_unavailable(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_052(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "critical_value_report_time_conflict":
+        return _safe_report_time_conflict(raw)
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw)
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw)
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
         return _safe_result_detail_missing(raw)
     if raw.get("verification_kind") == "critical_value_evaluation_horizon_unavailable":
@@ -260,6 +320,12 @@ def _safe_052(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_053(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "critical_value_report_time_conflict":
+        return _safe_report_time_conflict(raw)
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw)
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw)
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
         return _safe_result_detail_missing(raw)
     expected_keys = {
@@ -302,6 +368,37 @@ def _safe_053(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+
+def _safe_report_time_gaps(raw: Any) -> list[dict[str, Any]] | None:
+    """混合结果只附独立事件的安全缺口摘要，不给缺口事件编造时间。"""
+
+    if type(raw) is not list or not 1 <= len(raw) <= 100:
+        return None
+    for item in raw:
+        if (
+            type(item) is not dict
+            or set(item) != {"critical_item_names", "critical_flags", "issue"}
+            or type(item["critical_item_names"]) is not list
+            or _safe_text_list(item["critical_item_names"], minimum=1, maximum=100, item_maximum=40) is None
+            or type(item["critical_flags"]) is not list
+            or len(item["critical_flags"]) != len(item["critical_item_names"])
+            or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in item["critical_flags"])
+            or type(item["issue"]) is not str
+            or item["issue"] not in {"authoritative_time_missing", "authoritative_time_conflict"}
+        ):
+            return None
+    return [dict(item) for item in raw]
+
+
+def _has_confirmed_critical_violation(*, rule_id: str, facts: Mapping[str, Any]) -> bool:
+    outcomes = [item.get("outcome") for item in facts.get("event_results", ())]
+    if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict",
+                     "window_not_mature"} for value in outcomes):
+        return False
+    return any(value in ({"overdue", "unhandled"} if rule_id == "LX0609-06-04-01"
+                         else {"unhandled"}) for value in outcomes)
+
+
 def safe_critical_value_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -310,6 +407,13 @@ def safe_critical_value_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
+    if "report_time_gaps" in raw:
+        gaps = _safe_report_time_gaps(raw["report_time_gaps"])
+        base = {key: value for key, value in raw.items() if key != "report_time_gaps"}
+        safe = safe_critical_value_customer_display_facts(rule_id=normalized, raw=base)
+        if gaps is None or safe is None or not _has_confirmed_critical_violation(rule_id=normalized, facts=safe):
+            return None
+        return {**safe, "report_time_gaps": gaps}
     if normalized == "LX0609-06-04-01":
         return _safe_052(raw)
     if normalized == "LX0609-06-04-02":
@@ -363,8 +467,8 @@ def _published_window_consistent(raw: dict[str, Any], *, date_only: bool) -> boo
 def _published_events(value: Any, *, timing_rule: bool) -> bool:
     if type(value) is not list or not 0 < len(value) <= 100:
         return False
-    outcomes = ({"timely", "overdue", "unhandled", "window_not_mature", "association_failed"}
-                if timing_rule else {"handled", "unhandled", "association_failed"})
+    outcomes = ({"timely", "overdue", "unhandled", "window_not_mature", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+                if timing_rule else {"handled", "unhandled", "association_failed", "authoritative_time_missing", "authoritative_time_conflict"})
     base = {"critical_item_names", "critical_flags", "report_time", "outcome"}
     for event in value:
         if type(event) is not dict or not base <= set(event):
@@ -396,6 +500,12 @@ def _published_events(value: Any, *, timing_rule: bool) -> bool:
 
 
 def _published_052(raw: dict[str, Any]) -> bool:
+    if raw.get("failure_kind") == "critical_value_report_time_conflict":
+        return _safe_report_time_conflict(raw) is not None
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw) is not None
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw) is not None
     base = {"verification_kind", "critical_item_names", "critical_flags", "report_times",
             "disposition_times", "threshold_hours", "actual_interval_hours", "event_results"}
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
@@ -435,6 +545,12 @@ def _published_052(raw: dict[str, Any]) -> bool:
 
 
 def _published_053(raw: dict[str, Any]) -> bool:
+    if raw.get("failure_kind") == "critical_value_report_time_conflict":
+        return _safe_report_time_conflict(raw) is not None
+    if raw.get("failure_kind") == "critical_value_report_time_missing":
+        return _safe_report_time_missing(raw) is not None
+    if raw.get("failure_kind") == "critical_value_source_unavailable":
+        return _safe_source_unavailable(raw) is not None
     if raw.get("failure_kind") == "critical_value_result_detail_missing":
         return (set(raw) == {"failure_kind", "lab_report_count", "missing_source"}
                 and type(raw["lab_report_count"]) is int and raw["lab_report_count"] > 0
@@ -458,6 +574,12 @@ def validate_published_critical_value_facts(*, rule_id: str, raw: Any) -> tuple[
     if type(raw) is not dict or any(type(key) is not str for key in raw):
         return False, None
     validator = {"LX0609-06-04-01": _published_052, "LX0609-06-04-02": _published_053}.get(normalized)
+    if "report_time_gaps" in raw:
+        base = {key: value for key, value in raw.items() if key != "report_time_gaps"}
+        valid = (validator is not None and validator(base)
+                 and _safe_report_time_gaps(raw["report_time_gaps"]) is not None
+                 and _has_confirmed_critical_violation(rule_id=normalized, facts=base))
+        return (True, dict(raw)) if valid else (False, None)
     return (True, dict(raw)) if validator is not None and validator(raw) else (False, None)
 
 
@@ -469,6 +591,15 @@ def critical_value_customer_fact_status_is_valid(
     if not is_critical_value_customer_rule(rule_id):
         return True
     normalized_status = str(status or "").strip().lower()
+    if isinstance(safe_facts, Mapping) and "report_time_gaps" in safe_facts:
+        return normalized_status == "non_compliant" and _has_confirmed_critical_violation(
+            rule_id=str(rule_id).strip().upper(), facts=safe_facts,
+        )
+    if isinstance(safe_facts, Mapping) and safe_facts.get("failure_kind") in {
+        "critical_value_source_unavailable", "critical_value_report_time_missing",
+        "critical_value_report_time_conflict",
+    }:
+        return normalized_status == "data_gap"
     if normalized_status == "technical_error":
         return True
     if not isinstance(safe_facts, Mapping):
@@ -476,19 +607,24 @@ def critical_value_customer_fact_status_is_valid(
     kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
     if kind in {
         "critical_value_result_detail_missing",
+        "critical_value_source_unavailable",
+        "critical_value_report_time_missing",
+        "critical_value_report_time_conflict",
         "critical_value_evaluation_horizon_unavailable",
     }:
         return normalized_status == "data_gap"
     outcomes = [item.get("outcome") for item in safe_facts.get("event_results", ())]
     if str(rule_id).strip().upper() == "LX0609-06-04-02":
-        if "association_failed" in outcomes:
+        if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+               for value in outcomes):
             return normalized_status == "data_gap"
         return normalized_status == (
             "compliant"
             if outcomes and all(item == "handled" for item in outcomes)
             else "non_compliant"
         )
-    if "association_failed" in outcomes:
+    if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+               for value in outcomes):
         return normalized_status == "data_gap"
     if "window_not_mature" in outcomes:
         return (

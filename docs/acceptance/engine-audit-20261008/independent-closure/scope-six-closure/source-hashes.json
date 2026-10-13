@@ -1,0 +1,90 @@
+{
+  "sha": "b5d0991a22c79aea3821a7819042a66a974c033f",
+  "parent": "f4d32a679ddb6614afbe6bda4fb6e16fc4121dc3",
+  "sources": [
+    {
+      "path": "apps/medqc-web/backend/app/routers/qc_sample_pools.py",
+      "export": "router.fixed.py",
+      "git_blob": "8a915c8e3420aa8a2149551e1d67b0eff1e09346",
+      "sha256": "b305e4defae445ce52f4d9edb5f14cf5bb6de6013b10b564aee1cdfa70e79c96",
+      "byte_equal_parent": false
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/integration/test_luxian_0609_sample_scope_membership.py",
+      "export": "membership-test.fixed.py",
+      "git_blob": "ccc22b4c081e9ac46c0c52ad956ca6a686c2014f",
+      "sha256": "7499cf6b3bec0089d3addf9fead2e35bbd2e009c4950421f5b41f26b80769fdd",
+      "byte_equal_parent": null
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/integration/test_luxian_0609_release_scope.py",
+      "export": "release-scope-test.fixed.py",
+      "git_blob": "a07ebadbbcacfcd2e806e582376a221289c4a77a",
+      "sha256": "2df2de43035f61afe573e2a490864b86de26dcb983fc1cc8846d38ece52a8759",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/integration/test_luxian_0609_all_rules_three_entry_acceptance.py",
+      "export": "chain-fixture.fixed.py",
+      "git_blob": "92585a495adc082e208c308cd9be65fe2526c427",
+      "sha256": "4d43f6d8047ef27fd5dbdb8841bcb06314c63fefc5980f0b4b91b822f0062daf",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sample_validation_rule_sets.py",
+      "export": "rule-sets.fixed.py",
+      "git_blob": "1e799ab0edee66c05b474b6889ffbbbdb7d0ae52",
+      "sha256": "c316eb7f80233f2e2abebe2981d539d826ef2a0bf8f7b3b5d118ab0db720488e",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+      "export": "worker.fixed.py",
+      "git_blob": "6dcfb579d872b134a93ca601c1d05925cdd08cc1",
+      "sha256": "c39f4ac3f2169fe787099dae2989834861f0070bc0be4095af40924efd4c1e77",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+      "export": "phase-scope.fixed.py",
+      "git_blob": "c8d8e55ab3a41fd2e6f5557fb995826d6fe82d80",
+      "sha256": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609_rule_master.py",
+      "export": "rule-master.fixed.py",
+      "git_blob": "1b8b969211dfd0fe2b8479599689049c62e93d04",
+      "sha256": "8d249f3912304877ee0d35b1bbe1495895dea963e85959633bdc95e2562e7d70",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "docs/acceptance/engine-audit-20261008/scope-six-selection-design.md",
+      "export": "design.fixed.md",
+      "git_blob": "a3efa86d080493dc6e1e18f3a448088a2d20e1da",
+      "sha256": "b7619b97a69f785292a9b1f36de50e6fd118b39de2834c6867f5ea03406f4fe4",
+      "byte_equal_parent": null
+    },
+    {
+      "path": "AGENTS.md",
+      "export": "agents.fixed.md",
+      "git_blob": "52e69cca6399e2116d83c2c0d69a2afd9e563002",
+      "sha256": "3c1585da9730a99f6beabc74b836821bcfe38bf8784c6fa3c407a03023c7285b",
+      "byte_equal_parent": true
+    },
+    {
+      "path": "package.json",
+      "export": "package.fixed.json",
+      "git_blob": "24622ef8eb6ba71d68257384dde55c37add8e1f3",
+      "sha256": "c4c7e6ea6579209e4aa6464038ebcc8e0730134dbe00d8b00d34053db9babad3",
+      "byte_equal_parent": true
+    },
+    {
+      "path": ".husky/pre-commit",
+      "export": "precommit.fixed.sh",
+      "git_blob": "bbc096ab0acec827b5c822395efa3bbb83acab13",
+      "sha256": "2adad571e513d1a3194fbf136d7928d8a46f781bad7887ea8e7d907dcc12671e",
+      "byte_equal_parent": true
+    }
+  ]
+}

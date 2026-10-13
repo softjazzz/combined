@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
@@ -17,7 +19,16 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .exam_lab_course_time import (
+    assess_fact_responses,
+    has_time_sources,
+    scan_unplaced_time_state,
+)
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
+from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
+from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
+from .exam_reason_check import apply_exam_reason, check_exam_reason
+from .exam_result_record_check import ResultRecordOutcome, apply_result_record, check_exam_result_record
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -27,7 +38,10 @@ from .exam_lab_fact_extraction import (
     build_exam_lab_fact_response_format,
     build_exam_lab_text_projection,
     event_for_fact,
+    event_result_carried_by_course,
     events_for_family,
+    exam_reason_anchor_time,
+    exam_reason_window,
     parse_exam_lab_fact_response,
     parse_exam_lab_fact_response_isolated,
 )
@@ -47,6 +61,7 @@ from .handbook_exam_lab import (
     REPORT_RULES as HANDBOOK_REPORT_RULES,
     build_handbook_ledger,
     evaluate_report_completeness,
+    evaluation_horizon,
 )
 from .ct_order_course_consistency import (
     RULE_ID as CT_CONSISTENCY_RULE,
@@ -59,6 +74,7 @@ from .ct_order_course_consistency import (
     CtEvidenceBudgetExceeded,
 )
 from .native_execution import build_luxian_0609_native_result
+from .structured_output import structured_output_kwargs
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
@@ -210,6 +226,8 @@ _HORIZON_SOURCE_KEYS = (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
 )
+# 010 入院 24 小时豁免的入院锚点：可选读取，缺失时不豁免（按常规核对，更严格）。
+_ADMISSION_ANCHOR_SOURCE_KEYS = ("inpat_registration", "admission_record")
 _EXAM_CONTROLLED_FIELDS = (
     "exam_type",
     "modality",
@@ -1224,6 +1242,100 @@ async def _generate_exam_lab_fact_response(
     )
 
 
+def _unplaced_record_gap_outcome(
+    *,
+    rule_id: str,
+    projection: ExamLabTextProjection,
+    event: Any,
+    refs: tuple[str, ...],
+) -> _ExamLabOutcome | None:
+    """“未记录/仅报告前病程”之前，核对被时间筛选排除的全部候选病程正文。
+
+    正文含本事件结果、但记录时间冲突或只有提交时间的文书，使“全部病程没有记录”
+    无法成立，只能返回资料不足；仍无此类文书时才允许后续判定。
+    """
+
+    if not has_time_sources(projection):
+        return None
+    state = scan_unplaced_time_state(projection=projection, event=event)
+    if state == "record_time_conflict":
+        return _ExamLabOutcome(rule_id, "data_gap", "multiple_event_or_time_conflict", refs)
+    if state == "submit_only":
+        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_unproven", refs)
+    return None
+
+
+def _post_report_response_outcome(
+    *,
+    rule_id: str,
+    fact: ExamLabEventFact,
+    projection: ExamLabTextProjection,
+    event: Any,
+    event_time: Any,
+    refs: tuple[str, ...],
+) -> _ExamLabOutcome:
+    """按记录时间/提交时间的真实含义判定报告后 24 小时窗口。
+
+    记录时间是书写时间；提交时间只能作书写时间上界，不得直接当作临床记录时间。
+    不设置任何时间容差。
+    """
+
+    responses = assess_fact_responses(
+        projection=projection,
+        event=event,
+        refs=fact.course_doc_refs,
+        carries_result=event_result_carried_by_course,
+    )
+    if any(item.kind == "in_window" for item in responses):
+        return _ExamLabOutcome(rule_id, "compliant", "exam_lab_text_fact", refs)
+    if projection.course_projection_truncated:
+        return _ExamLabOutcome(
+            rule_id, "data_gap", "course_projection_incomplete", refs
+        )
+    if any(item.kind in {"conflict", "unreconciled"} for item in responses):
+        # 记录时间早于报告、提交时间不早于报告：时间无法对账。逐字确认正文含结果的是
+        # “时间冲突”；未能逐字确认的同样不能据此认定未记录，只返回资料不足。
+        return _ExamLabOutcome(rule_id, "data_gap", "multiple_event_or_time_conflict", refs)
+    if any(item.kind == "submit_unconfirmed" for item in responses):
+        # 提交时间在 24 小时内，但正文未确认承载本事件结果：不能自动证明已及时记录。
+        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_unproven", refs)
+    late = tuple(item for item in responses if item.kind == "late")
+
+    def _mentions_event(ref: str) -> bool:
+        return event_result_carried_by_course(
+            event, (projection.course_texts or {}).get(ref, "")
+        )
+
+    if any(item.basis == "submit" and _mentions_event(item.ref) for item in late):
+        # 仅凭提交时间兜底超过 24 小时，不能证明超时，也不能证明已记录。
+        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_unproven", refs)
+    if any(item.basis == "record" for item in late):
+        return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
+    unplaced = _unplaced_record_gap_outcome(
+        rule_id=rule_id, projection=projection, event=event, refs=refs
+    )
+    if unplaced is not None:
+        return unplaced
+    # 只有报告前病程，或模型引用的提交时间文书与本事件无关：24 小时尚未届满时
+    # 不能提前报缺陷。
+    window_state = resolve_evaluation_window_state(
+        projection=projection,
+        event_time=event_time,
+    )
+    return _ExamLabOutcome(
+        rule_id,
+        "non_compliant"
+        if window_state is EvaluationWindowState.MATURE
+        else "not_applicable"
+        if window_state is EvaluationWindowState.NOT_MATURE
+        else "data_gap",
+        "exam_lab_text_fact"
+        if window_state is EvaluationWindowState.MATURE
+        else _evaluation_window_gap_reason(window_state),
+        refs,
+    )
+
+
 def _single_text_fact_outcome(
     *,
     rule_id: str,
@@ -1305,14 +1417,23 @@ def _single_text_fact_outcome(
                 refs,
             )
 
-    role = "exam_time" if rule_id == "LX0609-06-01-02" else "report_time"
     if event is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_event_missing", refs)
-    if role in event.conflict_roles:
-        return _ExamLabOutcome(
-            rule_id, "data_gap", "multiple_event_or_time_conflict", refs
-        )
-    event_time = event.exam_time if role == "exam_time" else event.report_time
+    if rule_id == "LX0609-06-01-02" and event.within_admission_window:
+        return _ExamLabOutcome(rule_id, "not_applicable", "admission_window_exempt", refs)
+    if rule_id == "LX0609-06-01-02":
+        # 院方口径（2026-10-10）：锚点为关联医嘱开立时间，无医嘱时取报告时间。
+        if event.order_time is None and "report_time" in event.conflict_roles:
+            return _ExamLabOutcome(
+                rule_id, "data_gap", "multiple_event_or_time_conflict", refs
+            )
+        event_time = exam_reason_anchor_time(event)
+    else:
+        if "report_time" in event.conflict_roles:
+            return _ExamLabOutcome(
+                rule_id, "data_gap", "multiple_event_or_time_conflict", refs
+            )
+        event_time = event.report_time
     if event_time is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_time_missing", refs)
 
@@ -1326,6 +1447,11 @@ def _single_text_fact_outcome(
             )
         if rule_id == "LX0609-06-01-02":
             return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
+        unplaced = _unplaced_record_gap_outcome(
+            rule_id=rule_id, projection=projection, event=event, refs=refs
+        )
+        if unplaced is not None:
+            return unplaced
         window_state = resolve_evaluation_window_state(
             projection=projection,
             event_time=event_time,
@@ -1363,11 +1489,20 @@ def _single_text_fact_outcome(
     )
     if not course_times or any(item is None for item in course_times):
         return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_missing", refs)
+    if rule_id != "LX0609-06-01-02" and has_time_sources(projection):
+        return _post_report_response_outcome(
+            rule_id=rule_id,
+            fact=fact,
+            projection=projection,
+            event=event,
+            event_time=event_time,
+            refs=refs,
+        )
     intervals = tuple(item - event_time for item in course_times if item is not None)
     if rule_id == "LX0609-06-01-02":
-        compliant = any(
-            -timedelta(hours=48) <= interval <= timedelta(0)
-            for interval in intervals
+        window = exam_reason_window(event)
+        compliant = window is not None and any(
+            window[0] <= item <= window[1] for item in course_times if item is not None
         )
         if not compliant and projection.course_projection_truncated:
             return _ExamLabOutcome(
@@ -1486,6 +1621,93 @@ def _fact_for_outcome_display(
     return rule_facts[0]
 
 
+def _with_result_conflicts(
+    display_facts: Mapping[str, Any] | None,
+    *,
+    conflicts: Mapping[int, tuple[str, ...]],
+    projection: ExamLabTextProjection,
+) -> Mapping[str, Any] | None:
+    """06-01-04 检查结果与病程一致性提示（用户口径 2026-10-12）：只写矛盾病程的记录时间，不改判定。
+
+    多事件时写入对应事件明细，单事件时写入顶层；病历原文不进入客户事实。
+    """
+
+    if not isinstance(display_facts, Mapping) or not conflicts:
+        return display_facts
+
+    def times(position: int) -> list[str]:
+        values = sorted(
+            value for ref in conflicts.get(position, ())
+            if (value := projection.course_times.get(ref)) is not None
+        )
+        return [value.strftime("%Y-%m-%d %H:%M:%S") for value in values][:8]
+
+    facts = dict(display_facts)
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        updated = []
+        for item in event_results:
+            item = dict(item)
+            position = item.get("event_position")
+            if type(position) is int and (conflict_times := times(position)):
+                item["result_conflict_record_times"] = conflict_times
+            updated.append(item)
+        facts["event_results"] = updated
+        return facts
+    position = facts.get("event_position")
+    conflict_times = times(position if type(position) is int else 1)
+    if conflict_times:
+        facts["result_conflict_record_times"] = conflict_times
+    return facts
+
+
+def _with_analysis_gaps(
+    display_facts: Mapping[str, Any] | None,
+    *,
+    gaps: Mapping[int, tuple[tuple[str, str], ...]],
+    projection: ExamLabTextProjection,
+) -> Mapping[str, Any] | None:
+    """06-01-05 修改建议（客户需求 2026-10-12）：写入未见分析事件中最接近病程的记录时间与不足类别。
+
+    只写记录时间与类别，病历原文不进入客户事实；多事件写入对应事件明细，单事件写入顶层。
+    """
+
+    if not isinstance(display_facts, Mapping) or not gaps:
+        return display_facts
+
+    def notes(position: int) -> list[dict[str, str]]:
+        rows = sorted(
+            (value, kind) for ref, kind in gaps.get(position, ())
+            if (value := projection.course_times.get(ref)) is not None
+        )
+        seen: set[tuple[str, str]] = set()
+        result = []
+        for value, kind in rows:
+            item = (value.strftime("%Y-%m-%d %H:%M:%S"), kind)
+            if item not in seen:
+                seen.add(item)
+                result.append({"record_time": item[0], "gap": kind})
+        return result[:8]
+
+    facts = dict(display_facts)
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        updated = []
+        for item in event_results:
+            item = dict(item)
+            position = item.get("event_position")
+            if type(position) is int and item.get("requirement_met") is not True and (rows := notes(position)):
+                item["analysis_gap_notes"] = rows
+            updated.append(item)
+        facts["event_results"] = updated
+        return facts
+    position = facts.get("event_position")
+    rows = notes(position if type(position) is int else 1)
+    if rows:
+        facts["analysis_gap_notes"] = rows
+    return facts
+
+
 def _display_facts_for_text_outcome(
     *,
     rule_id: str,
@@ -1545,6 +1767,7 @@ def _display_facts_for_text_outcome(
             "response_record_count",
             "response_record_time",
             "interval_hours",
+            "response_time_state",
             "applicable",
             "requirement_met",
         ):
@@ -1830,8 +2053,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
+            horizon_basis, horizon_moment = evaluation_horizon(evidence_snapshot, evidence_materials)
             for rule_id in handbook_report_ids:
-                evaluation = evaluate_report_completeness(rule_id, handbook_ledger)
+                evaluation = evaluate_report_completeness(
+                    rule_id, handbook_ledger, horizon_basis=horizon_basis,
+                )
                 emit_typed(
                     rule_id,
                     evaluation.status,
@@ -1844,6 +2070,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 review = build_ct_review_input(
                     ledger=handbook_ledger, snapshot=evidence_snapshot,
                     materials=evidence_materials,
+                    horizon_basis=horizon_basis, horizon=horizon_moment,
                 )
                 payload = None
                 model_failure = None
@@ -1859,6 +2086,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                     build_ct_fact_prompt(review),
                                     response_format=ct_fact_response_format(review),
                                     allow_length_retry=False,
+                                    **structured_output_kwargs(llm_client),
                                 )
                             else:
                                 response = await cast(_SinglePassCtClient, llm_client).generate(
@@ -1969,6 +2197,17 @@ async def execute_luxian_0609_native_exam_lab_rules(
             )
             if material.state in {"present", "empty"}:
                 rows_by_source[source_key] = material.rows
+        if "LX0609-06-01-02" in eligible_rule_ids:
+            for source_key in _ADMISSION_ANCHOR_SOURCE_KEYS:
+                if source_key not in observed_source_keys:
+                    continue
+                material = _typed_source(
+                    source_key=source_key,
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+                if material.state in {"present", "empty"}:
+                    rows_by_source[source_key] = material.rows
         if eligible_rule_ids:
             if "LX0609-06-01-02" in eligible_rule_ids:
                 # 医嘱—检查—报告关联先由结构化键完成；只有结构可靠时，
@@ -2106,15 +2345,30 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             "exam_lab_candidate_text_missing",
                         )
                         typed_processed.add(rule_id)
+                    elif rule_id == "LX0609-06-01-02" and events and all(
+                        event.target_confirmed and event.within_admission_window
+                        for event in events
+                    ):
+                        # 全部检查均在入院 24 小时内开立：豁免，无需模型调用。
+                        safe_refs = projection.safe_refs or {}
+                        emit_typed(
+                            rule_id,
+                            "not_applicable",
+                            "admission_window_exempt",
+                            fact_refs=tuple(dict.fromkeys(
+                                safe_refs[ref]
+                                for event in events
+                                for ref in event.document_refs
+                                if ref in safe_refs
+                            )),
+                        )
+                        typed_processed.add(rule_id)
                     elif any(
                         event.target_confirmed
                         and (
                             (
                                 rule_id == "LX0609-06-01-02"
-                                and (
-                                    "exam_time" in event.conflict_roles
-                                    or event.exam_time is None
-                                )
+                                and exam_reason_anchor_time(event) is None
                             )
                             or (
                                 rule_id != "LX0609-06-01-02"
@@ -2141,6 +2395,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     else:
                         semantic_rule_ids.append(rule_id)
                 eligible_rule_ids = semantic_rule_ids
+            if (
+                "LX0609-06-01-05" in eligible_rule_ids
+                and projection is not None
+                and llm_client is not None
+            ):
+                # 用户口径（2026-10-11）：先单独判定报告异常是否与本次就诊相关（附带发现
+                # 不要求分析），固定为事件阳性提示，再判断有没有分析；失败时沿用原判断。
+                relevance = await classify_exam_finding_relevance(projection, llm_client)
+                llm_call_count += relevance.llm_call_count
+                prompt_tokens += relevance.prompt_tokens
+                completion_tokens += relevance.completion_tokens
+                total_tokens += relevance.total_tokens
+                api_time += relevance.api_time
+                if relevance.state == "ready":
+                    projection = apply_relevance_hints(projection, relevance.hints)
             if eligible_rule_ids and projection is not None:
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
@@ -2438,6 +2707,35 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         except Exception:  # noqa: BLE001
                             logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
+                    result_conflicts: Mapping[int, tuple[str, ...]] = {}
+                    analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
+                    if text_facts is not None:
+                        # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
+                        # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
+                        # 是否记录由逐份病程核对固定。各步互不依赖，并发调用；任一失败时该规则沿用主抽取原判断。
+                        checks = []
+                        if ("LX0609-06-01-05" in eligible_rule_ids
+                                and "LX0609-06-01-05" not in isolated_rule_failures):
+                            checks.append((check_exam_finding_analysis(projection, llm_client), apply_finding_analysis))
+                        if ("LX0609-06-01-02" in eligible_rule_ids
+                                and "LX0609-06-01-02" not in isolated_rule_failures):
+                            checks.append((check_exam_reason(projection, llm_client), apply_exam_reason))
+                        if ("LX0609-06-01-04" in eligible_rule_ids
+                                and "LX0609-06-01-04" not in isolated_rule_failures):
+                            checks.append((check_exam_result_record(projection, llm_client), apply_result_record))
+                        if checks:
+                            check_outcomes = await asyncio.gather(*(check for check, _ in checks))
+                            for (_, apply), check_outcome in zip(checks, check_outcomes):
+                                if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
+                                    result_conflicts = check_outcome.conflict_refs
+                                if isinstance(check_outcome, FindingAnalysisOutcome) and check_outcome.state == "ready":
+                                    analysis_gaps = check_outcome.gap_refs
+                                llm_call_count += check_outcome.llm_call_count
+                                prompt_tokens += check_outcome.prompt_tokens
+                                completion_tokens += check_outcome.completion_tokens
+                                total_tokens += check_outcome.total_tokens
+                                api_time += check_outcome.api_time
+                                text_facts = apply(text_facts, check_outcome)
                     for rule_id in eligible_rule_ids:
                         outcome = (
                             _ExamLabOutcome(rule_id, "technical_error", "exam_lab_llm_invalid_output")
@@ -2454,11 +2752,23 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             outcome.reason_code,
                             outcome.fact_refs,
                             display_facts=(
-                                _display_facts_for_text_outcome(
-                                    rule_id=rule_id,
-                                    facts=text_facts,
+                                _with_analysis_gaps(
+                                    _with_result_conflicts(
+                                        _display_facts_for_text_outcome(
+                                            rule_id=rule_id,
+                                            facts=text_facts,
+                                            projection=projection,
+                                            outcome=outcome,
+                                        ),
+                                        conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
+                                        projection=projection,
+                                    ),
+                                    gaps=(
+                                        analysis_gaps
+                                        if rule_id == "LX0609-06-01-05" and outcome.status == "non_compliant"
+                                        else {}
+                                    ),
                                     projection=projection,
-                                    outcome=outcome,
                                 )
                                 if text_facts is not None
                                 and rule_id not in isolated_rule_failures

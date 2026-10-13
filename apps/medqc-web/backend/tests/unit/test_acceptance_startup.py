@@ -22,6 +22,11 @@ PARENT_COLUMNS = (
     "family_key", "family_name",
 )
 PARENT_INDEX = "idx_custom_qc_batch_jobs_parent_job_id"
+VISIT_COLUMNS = {
+    "institute_id", "patient_id", "visit_id", "scene_current", "policy_version",
+    "latest_mirror_success_time", "mirror_delay_base_minutes",
+    "sync_interval_minutes", "updated_at",
+}
 
 
 class DatabaseRecorder:
@@ -34,6 +39,10 @@ class DatabaseRecorder:
         self.connect_error = None
         self.execute_error = None
         self.reflect_error = None
+        self.visit_table = {"schema_name": "qc", "table_name": "visit_index", "table_oid": 123}
+        self.visit_columns = set(VISIT_COLUMNS)
+        self.visit_pk = ["institute_id", "patient_id", "visit_id"]
+        self.visit_index_valid = True
 
     def connect(self):
         self.events.append("connect")
@@ -47,10 +56,14 @@ class DatabaseRecorder:
     def __exit__(self, *args):
         self.events.append("close")
 
-    def execute(self, statement):
+    def execute(self, statement, parameters=None):
         self.events.append(str(statement))
         if self.execute_error:
             raise self.execute_error
+        if "to_regclass" in str(statement):
+            return SimpleNamespace(mappings=lambda: SimpleNamespace(one_or_none=lambda: self.visit_table))
+        if "pg_index" in str(statement):
+            return SimpleNamespace(scalar=lambda: self.visit_index_valid)
 
     def rollback(self):
         self.events.append("rollback")
@@ -72,7 +85,14 @@ class DatabaseRecorder:
 
     def get_columns(self, table, *, schema):
         self.events.append(("columns", schema, table))
+        if table == "visit_index":
+            assert schema == self.visit_table["schema_name"]
+            return [{"name": column} for column in self.visit_columns]
         return [{"name": column} for column in self.columns]
+
+    def get_pk_constraint(self, table, *, schema):
+        assert table == "visit_index" and schema == self.visit_table["schema_name"]
+        return {"constrained_columns": self.visit_pk}
 
     def get_indexes(self, table, *, schema):
         self.events.append(("indexes", schema, table))
@@ -114,12 +134,21 @@ def test_production_rejects_acceptance(environment):
 
 def test_complete_structure_is_checked_read_only(database):
     validate_acceptance_schema(database, schema_mode="split")
-    assert database.events == [
+    assert database.events[:22] == [
         "connect", "SET TRANSACTION READ ONLY", "inspect",
         *[("table", schema, table) for schema, table in TABLES],
         ("columns", "qc", "custom_qc_batch_jobs"),
-        ("indexes", "qc", "custom_qc_batch_jobs"), "rollback", "close",
+        ("indexes", "qc", "custom_qc_batch_jobs"),
     ]
+    assert "to_regclass('visit_index')" in database.events[22]
+    assert database.events[23] == ("columns", "qc", "visit_index")
+    query = database.events[24]
+    for required in ("i.indisvalid", "i.indisready", "i.indpred IS NULL", "i.indexprs IS NULL",
+                     "i.indnkeyatts=2", "i.indkey[0]=scene.attnum",
+                     "i.indkey[1]=updated.attnum", "(i.indoption[1] & 1)=1",
+                     "ix.relname='idx_visit_index_scene_updated'", "i.indrelid=:table_oid"):
+        assert required in query
+    assert database.events[-2:] == ["rollback", "close"]
 
 
 def test_public_bundle_tables_do_not_require_cdm_caches(database):
@@ -219,3 +248,69 @@ def test_read_only_failure_stops_before_reflection(database):
     assert database.events == [
         "connect", "SET TRANSACTION READ ONLY", "rollback", "close",
     ]
+
+
+@pytest.mark.parametrize("column", sorted(VISIT_COLUMNS))
+def test_visit_index_missing_write_column_fails_and_rolls_back(database, column):
+    database.visit_columns.remove(column)
+    with pytest.raises(RuntimeError, match=column):
+        validate_acceptance_schema(database, schema_mode="split")
+    assert database.events[-2:] == ["rollback", "close"]
+
+
+def test_visit_index_missing_resolution_fails(database):
+    database.visit_table = None
+    with pytest.raises(RuntimeError, match="visit_index"):
+        validate_acceptance_schema(database, schema_mode="split")
+    assert database.events[-2:] == ["rollback", "close"]
+
+
+@pytest.mark.parametrize("pk", [[], ["visit_id"], ["patient_id", "visit_id", "institute_id", "extra"]])
+def test_visit_index_requires_exact_coordinate_pk(database, pk):
+    database.visit_pk = pk
+    with pytest.raises(RuntimeError, match="primary key"):
+        validate_acceptance_schema(database, schema_mode="split")
+
+
+def test_visit_index_requires_valid_named_index(database):
+    database.visit_index_valid = False
+    with pytest.raises(RuntimeError, match="visit_index.*index"):
+        validate_acceptance_schema(database, schema_mode="split")
+
+
+def test_visit_index_uses_resolved_namespace_and_allows_extra_columns(database):
+    database.visit_table["schema_name"] = "tenant_qc"
+    database.visit_columns.add("extra")
+    validate_acceptance_schema(database, schema_mode="split")
+    assert ("columns", "tenant_qc", "visit_index") in database.events
+
+
+def test_visit_index_coordinate_pk_order_does_not_change_conflict_target(database):
+    database.visit_pk.reverse()
+    validate_acceptance_schema(database, schema_mode="split")
+
+
+def test_visit_index_valid_two_key_index_allows_include_columns(database):
+    validate_acceptance_schema(database, schema_mode="split")
+    query = next(sql for sql in database.events if isinstance(sql, str) and "pg_index" in sql)
+    assert "i.indnkeyatts=2" in query
+    assert "i.indnatts" not in query
+    assert "i.indkey[0]=scene.attnum" in query
+    assert "i.indkey[1]=updated.attnum" in query
+    assert database.events[-2:] == ["rollback", "close"]
+
+
+def test_visit_index_reflection_failure_propagates_and_rolls_back(database, monkeypatch):
+    original = database.get_columns
+    error = OSError("visit reflection unavailable")
+
+    def columns(table, *, schema):
+        if table == "visit_index":
+            raise error
+        return original(table, schema=schema)
+
+    monkeypatch.setattr(database, "get_columns", columns)
+    with pytest.raises(OSError) as caught:
+        validate_acceptance_schema(database, schema_mode="split")
+    assert caught.value is error
+    assert database.events[-2:] == ["rollback", "close"]

@@ -22,6 +22,8 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
+from .source_manifest import QueryStatus
+from .surgery_applicability import performed_surgery_rows, resolve_surgery_applicability
 
 
 # 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
@@ -460,6 +462,46 @@ def _selected_surgery_presence_fact_refs(
     return selected
 
 
+def _typed_030_front_page_trigger_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...]:
+    """030 与 029 同一触发口径：首页确认的已实施手术也触发手术记录要求。
+
+    首页“手术及操作”同时含治疗性操作，只采用共用手术适用性解析器按院内
+    目录/手术等级确认为手术的行。仅在手术记录来源完整且为空时补触发；
+    已有手术记录行时沿用既有存在性判定。
+    """
+
+    observation = next(
+        (item for item in snapshot.observations if item.source_key == "surgery_record"),
+        None,
+    )
+    if (
+        observation is None
+        or observation.query_state is not QueryStatus.EMPTY
+        or observation.completeness is not SourceCompleteness.COMPLETE
+    ):
+        return ()
+    applicability = resolve_surgery_applicability(
+        snapshot=snapshot, materials=materials, source_keys=("mr_surgery",)
+    )
+    if not applicability.is_performed_surgery:
+        return ()
+    document_rows = materials.document_rows("mr_surgery", snapshot=snapshot)
+    performed = performed_surgery_rows(
+        source_key="mr_surgery", rows=tuple(row for _, row in document_rows)
+    )
+    return tuple(
+        dict.fromkeys(
+            reference
+            for reference, row in document_rows
+            if any(row is candidate for candidate in performed)
+        )
+    )
+
+
 def _surgery_presence_display_trigger_facts(
     *, rule_id: str, provided: Any
 ) -> dict[str, Any]:
@@ -652,6 +694,22 @@ def execute_luxian_0609_native_rules(
             final_state_by_rule_id["LX0609-04-03-01"], reason_by_rule_id[
                 "LX0609-04-03-01"
             ] = linkage_outcome
+    front_page_trigger_refs: tuple[str, ...] = ()
+    if (
+        "LX0609-04-02-02" in typed_selected
+        and final_state_by_rule_id.get("LX0609-04-02-02") == "not_applicable"
+        and evidence_snapshot is not None
+        and evidence_materials is not None
+    ):
+        try:
+            front_page_trigger_refs = _typed_030_front_page_trigger_refs(
+                snapshot=evidence_snapshot, materials=evidence_materials
+            )
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            front_page_trigger_refs = ()
+        if front_page_trigger_refs:
+            final_state_by_rule_id["LX0609-04-02-02"] = "non_compliant"
+            reason_by_rule_id["LX0609-04-02-02"] = "required_document_missing"
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
@@ -668,7 +726,9 @@ def execute_luxian_0609_native_rules(
     if evidence_snapshot is not None and evidence_materials is not None:
         for rule_id in typed_set:
             try:
-                if (
+                if rule_id == "LX0609-04-02-02" and front_page_trigger_refs:
+                    selected_fact_refs_by_rule[rule_id] = front_page_trigger_refs
+                elif (
                     final_state_by_rule_id[rule_id] == "data_gap"
                     and reason_by_rule_id[rule_id] != "association_failed"
                 ):
@@ -721,9 +781,16 @@ def execute_luxian_0609_native_rules(
         target_document = target_documents.get(rule_id)
         if target_document is None:
             continue
-        trigger_facts = _surgery_presence_display_trigger_facts(
-            rule_id=rule_id,
-            provided=provided,
+        trigger_facts = (
+            {
+                "surgery_trigger_kind": "performed_surgery",
+                "performed_surgery_confirmed": True,
+            }
+            if rule_id == "LX0609-04-02-02" and front_page_trigger_refs
+            else _surgery_presence_display_trigger_facts(
+                rule_id=rule_id,
+                provided=provided,
+            )
         )
         if rule_id == "LX0609-04-02-02" and not trigger_facts:
             # 030 的判定结果没有可观察的已组装触发信号时，不能凭状态猜测

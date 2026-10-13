@@ -198,6 +198,7 @@ def _lx018_primary_diagnosis_resolution(
     ordered_candidates: list[tuple[int, str]] = []
     saw_admission_candidate = False
     saw_unordered_candidate = False
+    unordered_labels_by_source: dict[str, list[str]] = {}
     for source_key in LX018_DIAGNOSIS_SOURCES:
         for row in _source_rows(documents, source_key, limit=None):
             diagnosis_type = _clean(row.get("diagnosis_type"))
@@ -219,8 +220,22 @@ def _lx018_primary_diagnosis_resolution(
             # 候选时才以 unknown 结束，避免重复投影把结论锁死为资料不足。
             if order is None or not label:
                 saw_unordered_candidate = True
+                if label:
+                    unordered_labels_by_source.setdefault(source_key, []).append(label)
                 continue
             ordered_candidates.append((order, label))
+
+    if not ordered_candidates and unordered_labels_by_source:
+        # 单条诊断不存在相对顺序问题：各来源至多一条非空入院/初步诊断且内容一致时，
+        # 即为第一诊断（0910 真实样本客户诊断类别常无 diagnosis_no）。
+        single_labels = {
+            labels[0] for labels in unordered_labels_by_source.values() if len(labels) == 1
+        }
+        if (
+            all(len(labels) == 1 for labels in unordered_labels_by_source.values())
+            and len(single_labels) == 1
+        ):
+            return ("available", next(iter(single_labels)))
 
     if not ordered_candidates:
         return (
@@ -261,7 +276,9 @@ def _lx018_prompt(*, context: str) -> str:
         "单独心悸对冠心病、单独咳嗽对肺占位，均应将chief_signal_kind判为"
         "nonspecific_symptom_or_sign，关系字段不得判supports。"
         "主诉已经直接写出与第一诊断相同"
-        "或明确同义的疾病/检查发现时，应判localized_symptom_or_sign且disease_direction_relation=supports。\n"
+        "或明确同义的疾病/检查发现时，应判localized_symptom_or_sign且disease_direction_relation=supports。"
+        "第一诊断本身是以症状命名的待诊/待查（如抽搐待诊、发热待查）时，主诉写出该症状即属相同表述，"
+        "同样判localized_symptom_or_sign且symptom_relation=supports，不因症状非特异而判不支持。\n"
         "anatomic_relation、laterality_relation、symptom_relation、disease_course_relation、"
         "disease_direction_relation分别只能取supports、conflicts、nonspecific、"
         "not_applicable、unknown。supports表示材料明确支持该关系，conflicts表示明确冲突；"

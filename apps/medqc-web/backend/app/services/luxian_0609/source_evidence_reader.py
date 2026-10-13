@@ -279,6 +279,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "exam_master": (
+        "modality",
         "exam_id",
         "order_id",
         "exam_type",
@@ -300,6 +301,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "exam_item_report": (
+        "modality",
         "document_id",
         "exam_id",
         "description",
@@ -329,6 +331,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "labtest_item_report": (
+        "labtest_subject",
         "document_id",
         "test_id",
         "test_no",
@@ -363,13 +366,6 @@ _NATIVE_SOURCE_FIELDS = {
         "report_status",
         "record_content",
     ),
-    "diagnosis": (
-        "diagnosis_code",
-        "diagnosis_name",
-        "diagnosis_type",
-        "diagnosis_source",
-        "diagnosis_datetime",
-    ),
     "inpat_drug_order": (
         "order_id",
         "drug_code",
@@ -388,20 +384,14 @@ _NATIVE_SOURCE_FIELDS = {
         "order_time",
         "prescribed_datetime",
         "planned_start_datetime",
+        # 028：医嘱停止时间（源库同步后启用；列不存在时不选取）。
+        "stop_datetime",
+        "order_stop_datetime",
+        "stop_time",
+        "end_datetime",
         "update_time",
         "order_status",
         "last_modified_datetime",
-        "record_content",
-    ),
-    "inpat_nondrug_order": (
-        "order_id",
-        "order_name",
-        "order_status",
-        "order_type",
-        "start_time",
-        "order_time",
-        "prescribed_datetime",
-        "update_time",
         "record_content",
     ),
     CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
@@ -425,6 +415,11 @@ _NATIVE_SOURCE_FIELDS = {
         "discharge_order",
         "discharge_medications",
         "treatment_course",
+        "admission_condition",
+        "positive_assist_exam",
+        "discharge_condition",
+        "discharge_sympton_condition",
+        "condition_transform",
         "record_content",
     ),
     "postsurg_firstcourse_record": (
@@ -490,6 +485,9 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "transferout_department",
+        "transferin_department",
+        "transfer_purpose",
         "transfer_date",
         "record_datetime",
         "physician_sign",
@@ -499,6 +497,9 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "transferout_department",
+        "transferin_department",
+        "transfer_purpose",
         "transfer_date",
         "record_datetime",
         "physician_sign",
@@ -1439,7 +1440,7 @@ def read_luxian_0609_discharge_horizon_rows(
     visit_id: str,
     source_schema: str | None,
 ) -> SnapshotSourceRows:
-    """读取本次住院的权威出院时间，登记表缺行时回退病案首页。"""
+    """读取本次住院的权威出院时间，登记表缺行或出院时间为空时回退病案首页。"""
 
     trusted_schema = bundle_assembly._default_source_schema()
     if source_schema not in (None, trusted_schema):
@@ -1490,6 +1491,12 @@ def read_luxian_0609_discharge_horizon_rows(
         except Exception:
             query_failed = True
             continue
+        # 登记表有行但出院时间为空（客户 CDM 常见）与缺行同样回退病案首页；
+        # 否则时间界限会静默落回评价日，已出院病例被按“至今未查房”误判。
+        candidate_rows = [
+            row for row in candidate_rows
+            if str(row.get("discharge_datetime") or "").strip()
+        ]
         if candidate_rows:
             raw_rows = list(candidate_rows)
             selected_table = table_name

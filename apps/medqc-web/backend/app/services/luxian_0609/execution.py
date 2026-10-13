@@ -17,6 +17,8 @@ from .customer_rule_package import (
 )
 from .input_builder import build_luxian_0609_input_profile
 from .llm_prompt_privacy import wrap_luxian_0609_llm_client
+from .privacy_identity_context import build_luxian_0609_identity_provider
+from .privacy_request_scope import bind_luxian_0609_identity_provider
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from .decision_model import RuleDecision
@@ -236,7 +238,6 @@ async def prepare_luxian_0609_execution(
         source_gate_decisions_present=source_gate_decisions is not None,
         source_gate_decisions=source_gate_decisions,
     )
-    llm_client = wrap_luxian_0609_llm_client(llm_client)
 
     prepared_rule_count = len(prepared_rules)
     prepared_rule_ids = {
@@ -358,11 +359,20 @@ async def prepare_luxian_0609_execution(
             )
         except Exception:
             # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
-            logger.exception("LX0609 evidence snapshot 构建失败")
+            logger.error("LX0609 evidence snapshot 构建失败 error_kind=snapshot_build_error")
             evidence_snapshot_build_failed = True
             evidence_snapshot = None
             evidence_materials = None
             evidence_snapshot_rule_refs = ()
+    identity_provider = build_luxian_0609_identity_provider(
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        evidence_payload=evidence_payload, snapshot=evidence_snapshot,
+        materials=evidence_materials, snapshot_build_failed=evidence_snapshot_build_failed,
+    )
+    identity_provider = bind_luxian_0609_identity_provider(
+        identity_provider, case_coordinates=(institute_id, patient_id, visit_id),
+    )
+    llm_client = wrap_luxian_0609_llm_client(llm_client, identity_provider=identity_provider)
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
         wrapper

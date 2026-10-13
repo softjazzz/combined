@@ -5,6 +5,10 @@ from typing import Any
 
 import pytest
 
+from transfusion_order_test_support import (
+    OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient,
+)
+
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609.customer_evidence_enrichment import (
     project_selected_document_evidence,
@@ -27,8 +31,20 @@ async def _execute_typed(
     rule_id: str,
     rows_by_source: dict[str, list[dict[str, Any]]],
     source_limit: int = 50,
+    add_orders: bool = True,
 ) -> tuple[object, object, object]:
     """走输血 native→Binding→公共逐行证据投影所依赖的同一 Evidence Session。"""
+
+    # 医嘱是独立冻结输入；模型替身只证明协议接线，不声称模型语义准确率。
+    rows_by_source = dict(rows_by_source)
+    governed = rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
+    if governed and add_orders:
+        rows_by_source["inpat_nondrug_order"] = [dict(OPEN_TRANSFUSION_ORDER, order_id="EVIDENCE-ORDER-1")]
+        rows_by_source["inpat_drug_order"] = [dict(OPEN_TRANSFUSION_ORDER, order_id="EVIDENCE-ORDER-2")]
+    client = FrozenTransfusionProtocolClient(course_labels={
+        str(row["record_content"]): "record"
+        for row in rows_by_source.get("bloodtrans_record", [])
+    })
 
     def read(**kwargs: object) -> SnapshotSourceRows:
         source_key = str(kwargs["source_key"])
@@ -56,7 +72,7 @@ async def _execute_typed(
         patient_id="selected-evidence-patient",
         visit_id="selected-evidence-visit",
         source_schema=None,
-        llm_client=None,
+        llm_client=client,
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=(rule_id,),
@@ -139,6 +155,8 @@ async def test_045_selects_every_checked_blood_record_not_irrelevant_daily_recor
     assert _coordinates(decision=decision, session=session) == {
         ("bloodtrans_record", "BLOOD-045-1"),
         ("bloodtrans_record", "BLOOD-045-2"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
 
@@ -166,11 +184,13 @@ async def test_046_selects_all_complete_records_or_only_incomplete_records() -> 
             ],
         },
     )
-    assert complete_execution.llm_call_count == 0
+    assert complete_execution.llm_call_count == 2
     assert complete.final_state.value == "compliant"
     assert _coordinates(decision=complete, session=complete_session) == {
         ("bloodtrans_record", "BLOOD-046-OK-1"),
         ("bloodtrans_record", "BLOOD-046-OK-2"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
     incomplete_content = (
@@ -195,6 +215,8 @@ async def test_046_selects_all_complete_records_or_only_incomplete_records() -> 
     assert incomplete.final_state.value == "non_compliant"
     assert _coordinates(decision=incomplete, session=incomplete_session) == {
         ("bloodtrans_record", "BLOOD-046-MISSING-DOSE"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
 
@@ -225,9 +247,15 @@ async def test_045_selects_every_material_row_for_a_duplicated_business_document
         if row.get("document_id") == "BLOOD-045-DUP"
     }
     assert len(expected_refs) == 2
+    for source in ("inpat_nondrug_order", "inpat_drug_order"):
+        expected_refs.update(reference for reference, _row in session.materials.document_rows(
+            source, snapshot=session.snapshot
+        ))
     assert set(decision.fact_refs).intersection(session.snapshot.document_refs) == expected_refs
     assert _coordinates(decision=decision, session=session) == {
         ("bloodtrans_record", "BLOOD-045-DUP"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
 
@@ -264,6 +292,8 @@ async def test_044_structured_application_path_selects_the_actual_application_do
     assert _coordinates(decision=decision, session=session) == {
         ("blood_application", "APPLICATION-044-DOCUMENT"),
         ("bloodtrans_record", "BLOOD-044-EVENT"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
 
@@ -427,6 +457,8 @@ async def test_044_nonstructured_daily_assessment_selects_matched_daily_and_bloo
     assert _coordinates(decision=decision, session=session) == {
         ("bloodtrans_record", "BLOOD-044-ANCHOR"),
         ("daily_course_record", "DAILY-044-MATCHED"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
 
@@ -548,6 +580,8 @@ async def test_044_keeps_two_source_coordinates_when_application_and_blood_share
     assert _coordinates(decision=decision, session=session) == {
         ("blood_application", "SHARED-044-ID"),
         ("bloodtrans_record", "SHARED-044-ID"),
+        ("inpat_nondrug_order", "EVIDENCE-ORDER-1"),
+        ("inpat_drug_order", "EVIDENCE-ORDER-2"),
     }
 
 
@@ -587,3 +621,19 @@ async def test_045_whitespace_normalized_stale_document_id_is_technical_error(
 
     assert decision.final_state.value == "technical_error"
     assert decision.reason_code == "snapshot_mismatch"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ["LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"])
+async def test_order_contract_without_order_does_not_select_performed_record(rule_id: str) -> None:
+    """v2医嘱触发合同：完整输血文书与结构化执行信息也不能代替开立医嘱。"""
+    execution, decision, session = await _execute_typed(
+        rule_id=rule_id,
+        rows_by_source={"mr_bloodtrans": _trigger(), "bloodtrans_record": [
+            _transfusion_record(document_id="NO-ORDER-COMPLETE", content=_complete_course())
+        ]},
+        add_orders=False,
+    )
+    assert decision.final_state.value == "not_applicable"
+    assert execution.llm_call_count == 0
+    assert not _coordinates(decision=decision, session=session)

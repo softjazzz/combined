@@ -1,0 +1,139 @@
+{
+  "audit_id": "ct02-independent-finite-closure-v1",
+  "fixed_commit": "81fe8fed3027ea7f636014fd59237819138f7f9c",
+  "baseline": "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b",
+  "conclusion": "recommend_engineering_close_CT02_only",
+  "confirmed_blocking_defects": [],
+  "independent_review": true,
+  "rules": [
+    {
+      "rule_id": "LX0609-03-02-01",
+      "defect_id": "CT-02",
+      "status": "engineering_verified_for_fixed_commit",
+      "scenario_pass": 30,
+      "scenario_total": 30,
+      "baseline_exact_comparisons": 16,
+      "public_legal_illegal_contract_checks": 25,
+      "public_extra_key_filters": 3,
+      "synthetic_store_source_field_excerpt_time_assertions": 3,
+      "evidence": [
+        "expected-v1.json",
+        "supplemental-expected-v1.json",
+        "observed-v1.json",
+        "projection-review-v1.json",
+        "review-v1.md"
+      ],
+      "key_behaviors": [
+        "untimed_candidate_data_gap_not_na",
+        "mature_strong_nc_and_c_not_overwritten",
+        "seven_day_boundary_and_old_facts_suggestions_unchanged",
+        "legal_time_aliases_timezone_and_priority_unchanged",
+        "structured_suggestion_preserves_time_gap_advice",
+        "actual_source_anchor_when_id_missing_no_fabricated_locator",
+        "public_extra_fields_filtered_private_values_not_leaked",
+        "saved_evidence_source_time_field_excerpt_preserved_under_privacy_projection"
+      ]
+    }
+  ],
+  "contract_differences": [
+    {
+      "case": "published_extra_field",
+      "keys": [
+        "document_id",
+        "raw_payload",
+        "extra"
+      ],
+      "original_freeze": "reject",
+      "approved_contract": "filter_extra_keys_and_reject_illegal_required_fields_kind_counts_status",
+      "classification": "independent_expectation_too_strong",
+      "original_frozen_and_observed_preserved": true,
+      "observed": "all_three_filtered_without_leak"
+    }
+  ],
+  "normalization_differences": [
+    {
+      "cases": [
+        "G01_original_missing_time",
+        "G05_known_nc_plus_missing",
+        "G07_known_c_plus_missing"
+      ],
+      "original_comparison": "raw_generic_evidence_string_and_customer_evidence_list",
+      "saved_format": "safe_evidence_list_with_HMAC_source_ref",
+      "classification": "format_normalization_not_evidence_loss",
+      "independent_assertions": "source_type,field_path,evidence_excerpt,record_time,safe_nonempty_source_ref,no_raw_id",
+      "projector_comparison": "format_explanation_only_not_independent_evidence_location"
+    }
+  ],
+  "root_supplemental_hypothesis": {
+    "status": "not_reproduced",
+    "cases": [
+      "S01_mature_local_plus_missing_strong",
+      "S02_mature_local_plus_missing_local"
+    ],
+    "actual": "data_gap_with_empty_uncertain_record_times",
+    "source_reason": "gap_uses_strong_uncertain_rows_not_local_uncertain_rows"
+  },
+  "freeze_timing": "independent_of_owner_implementation_and_before_independent_execution; owner_changes_already_present_by_freeze_completion",
+  "source_hashes": {
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "9db4c5897b7c6d6269707443cc726ead9c8d5acc7656b1b6ca1f816dd5230a67",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "a3bffc600126ca51833214ff7a85322887ea8ff50d36b9e502c959e71e843504",
+    "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py": "0379130d2b5cc54e47e1b9f9c822a6fa75a01cf5ac53cc0cb5c9e188f91559fd",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "b50271331e5546100cf485bef8a37a9a2f0acd952f9770f43d83b1489af4de46",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_difficult_case_time_gap_closure.py": "9f92b5ab957f7bf5434e02251069dcf31b71598673a0b41c8bdf0a2e28a801e2",
+    "apps/medqc-web/docs/acceptance/2026-10-08-course-timing-minimal-closure-design.md": "5cac29995de7f6164192a126d7e7f59d6dc5be3393476eba6a3f444f4428a2f3"
+  },
+  "source_unchanged": true,
+  "remaining_open": [
+    "CT-01",
+    "CT-03",
+    "CT-R02"
+  ],
+  "scope_excluded_by_user": [
+    "0916"
+  ],
+  "excluded_not_counted": true,
+  "real_validation_gaps": [
+    "no_real_patient_or_desensitized_record_full_chain",
+    "no_PG_or_real_source_adapter",
+    "no_browser",
+    "no_real_model",
+    "no_clinical_semantic_closure"
+  ],
+  "production_modified": false,
+  "owner_tests_run": false,
+  "shared_tests_modified": false,
+  "guards": {
+    "env_reads": 0,
+    "pg_calls": 0,
+    "real_model_calls": 0,
+    "network_calls": 0,
+    "violations": []
+  },
+  "original_probe_preparation_failures": [
+    "missing_lru_cache_in_AST_table_factory_environment",
+    "evidence_format_assumptions_excerpt_kind_and_source_key_calibrated_to_actual_saved_format"
+  ],
+  "artifacts": [
+    "expected-v1.json",
+    "expected-v1.md",
+    "supplemental-expected-v1.json",
+    "probe-v1.py",
+    "observed-v1.json",
+    "scenario-observed-v1.json",
+    "projection-probe-v1.py",
+    "projection-review-v1.json",
+    "G01_original_missing_time.sqlite",
+    "G05_known_nc_plus_missing.sqlite",
+    "G07_known_c_plus_missing.sqlite",
+    "review-v1.md"
+  ],
+  "artifact_hashes": {
+    "expected": "343b6e283e886196d8ecc11078a033a061f226c6a0889c25f18cc4060a14f889",
+    "observed": "425654f65f3e3e1896fadc4333dfd4cfe6ffaf48534940ee43e4e0892c282368",
+    "supplement": "e792579940be942a4557d31a58df7d6913eab98d3784f72135f32213698f902e",
+    "projection": "495dc949c6b613ae67a37b24ebe85adf4fc97ca9b0c0037708251eeb8eaa7e88"
+  },
+  "tests_complete": true,
+  "running_processes": 0,
+  "test_slots_released": true
+}

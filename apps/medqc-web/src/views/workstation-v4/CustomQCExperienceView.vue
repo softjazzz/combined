@@ -1,42 +1,24 @@
 <template>
-  <div class="custom-qc-page">
+  <div class="custom-qc-page mq-page">
     <div class="custom-qc-container">
-      <a-card
-        :bordered="false"
-        class="custom-qc-surface custom-qc-hero"
-      >
-        <div class="custom-qc-hero-inner">
+      <a-card :bordered="false" class="custom-qc-surface mq-card custom-qc-hero">
+        <div class="custom-qc-hero-inner mq-page-head">
           <div>
             <div class="custom-qc-chip-row">
               <a-tag color="processing">
                 {{ sceneLabel }}
               </a-tag>
-              <a-tag color="blue">
-                只读试跑
-              </a-tag>
-              <a-tag color="default">
-                待人工复核后发布
-              </a-tag>
+              <a-tag color="blue"> 只读试跑 </a-tag>
+              <a-tag color="default"> 待人工复核后发布 </a-tag>
             </div>
-            <h1 class="custom-qc-title">
-              自定义质控点工作台
-            </h1>
+            <h1 class="custom-qc-title mq-page-title">自定义质控点工作台</h1>
             <p class="custom-qc-subtitle">
               按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑过程只读病历，不写正式质控结果表。
             </p>
           </div>
-          <div class="custom-qc-actions">
-            <a-button
-              class="custom-qc-secondary-btn"
-              @click="goBack"
-            >
-              返回来源页
-            </a-button>
-            <a-button
-              type="primary"
-              class="custom-qc-primary-btn"
-              @click="jumpToRulesList"
-            >
+          <div class="custom-qc-actions mq-page-head__actions">
+            <a-button class="custom-qc-secondary-btn" @click="goBack"> 返回来源页 </a-button>
+            <a-button type="primary" class="custom-qc-primary-btn" @click="jumpToRulesList">
               查看规则库
             </a-button>
           </div>
@@ -44,29 +26,18 @@
       </a-card>
 
       <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <a-card
-          :bordered="false"
-          class="custom-qc-surface"
-        >
-          <template #title>
-            1. 规则定义
-          </template>
+        <a-card :bordered="false" class="custom-qc-surface mq-card">
+          <template #title> 1. 规则定义 </template>
           <a-form layout="vertical">
             <div class="grid gap-4 md:grid-cols-2">
-              <a-form-item
-                label="质控点名称"
-                required
-              >
+              <a-form-item label="质控点名称" required>
                 <a-input
                   v-model:value="draftRule.name"
                   size="large"
                   placeholder="例如：出院记录未写出院带药用法"
                 />
               </a-form-item>
-              <a-form-item
-                label="适用文书"
-                required
-              >
+              <a-form-item label="适用文书" required>
                 <a-select
                   v-model:value="draftRule.document_type"
                   size="large"
@@ -75,10 +46,7 @@
               </a-form-item>
             </div>
             <div class="grid gap-4 md:grid-cols-2">
-              <a-form-item
-                label="严重程度"
-                required
-              >
+              <a-form-item label="严重程度" required>
                 <a-select
                   v-model:value="draftRule.severity"
                   size="large"
@@ -86,17 +54,10 @@
                 />
               </a-form-item>
               <a-form-item label="运行场景">
-                <a-input
-                  :value="sceneLabel"
-                  size="large"
-                  disabled
-                />
+                <a-input :value="sceneLabel" size="large" disabled />
               </a-form-item>
             </div>
-            <a-form-item
-              label="质控要求"
-              required
-            >
+            <a-form-item label="质控要求" required>
               <a-textarea
                 v-model:value="draftRule.description"
                 :rows="6"
@@ -116,24 +77,13 @@
               >
                 生成检查逻辑
               </a-button>
-              <a-button
-                size="large"
-                class="!rounded-lg"
-                @click="applyExample"
-              >
-                填充示例
-              </a-button>
+              <a-button size="large" class="!rounded-lg" @click="applyExample"> 填充示例 </a-button>
             </div>
           </a-form>
         </a-card>
 
-        <a-card
-          :bordered="false"
-          class="custom-qc-surface"
-        >
-          <template #title>
-            2. 检查逻辑复核
-          </template>
+        <a-card :bordered="false" class="custom-qc-surface mq-card">
+          <template #title> 2. 检查逻辑复核 </template>
           <div class="space-y-4">
             <a-alert
               :type="generationMode === 'llm' ? 'success' : 'warning'"
@@ -145,15 +95,13 @@
             />
             <div
               v-if="generatedCheckPoints.length"
-              class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              class="rounded-2xl border border-[var(--mq-border)] bg-slate-50 p-4"
             >
-              <div class="mb-2 text-sm font-medium text-slate-700">
-                检查要点
-              </div>
+              <div class="mb-2 text-sm font-medium text-[var(--mq-text-primary)]">检查要点</div>
               <div
                 v-for="(point, index) in generatedCheckPoints"
                 :key="`${index}-${point}`"
-                class="text-sm leading-7 text-slate-600"
+                class="text-sm leading-7 text-[var(--mq-text-secondary)]"
               >
                 {{ index + 1 }}. {{ point }}
               </div>
@@ -202,13 +150,8 @@
       </div>
 
       <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <a-card
-          :bordered="false"
-          class="custom-qc-surface"
-        >
-          <template #title>
-            3. 病历试跑
-          </template>
+        <a-card :bordered="false" class="custom-qc-surface mq-card">
+          <template #title> 3. 病历试跑 </template>
           <div class="space-y-4">
             <div class="grid gap-4 lg:grid-cols-[160px_220px_1fr_auto]">
               <a-select
@@ -218,10 +161,7 @@
                 placeholder="科室"
                 :options="departmentOptions"
               />
-              <a-range-picker
-                v-model:value="filters.dateRange"
-                size="large"
-              />
+              <a-range-picker v-model:value="filters.dateRange" size="large" />
               <a-input
                 v-model:value="filters.keyword"
                 size="large"
@@ -238,32 +178,21 @@
               </a-button>
             </div>
             <div
-              class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+              class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--mq-border)] bg-slate-50 px-4 py-3"
             >
-              <div class="text-sm text-slate-600">
+              <div class="text-sm text-[var(--mq-text-secondary)]">
                 已选择
-                <span class="font-semibold text-slate-900">{{ selectedRecordKeys.length }}</span>
+                <span class="font-semibold text-[var(--mq-text-primary)]">{{
+                  selectedRecordKeys.length
+                }}</span>
                 条病历
-                <span
-                  v-if="prefillText"
-                  class="ml-2 text-xs text-slate-500"
-                >{{
+                <span v-if="prefillText" class="ml-2 text-xs text-[var(--mq-text-secondary)]">{{
                   prefillText
                 }}</span>
               </div>
               <div class="flex flex-wrap gap-2">
-                <a-button
-                  class="!rounded-lg"
-                  @click="selectCurrentPage"
-                >
-                  全选当前页
-                </a-button>
-                <a-button
-                  class="!rounded-lg"
-                  @click="selectedRecordKeys = []"
-                >
-                  清空选择
-                </a-button>
+                <a-button class="!rounded-lg" @click="selectCurrentPage"> 全选当前页 </a-button>
+                <a-button class="!rounded-lg" @click="selectedRecordKeys = []"> 清空选择 </a-button>
                 <a-button
                   type="primary"
                   class="!rounded-lg"
@@ -287,7 +216,7 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'record_id'">
-                  <div class="font-mono font-semibold text-slate-800">
+                  <div class="font-mono font-semibold text-[var(--mq-text-primary)]">
                     {{ record.record_id }}
                   </div>
                 </template>
@@ -303,11 +232,7 @@
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'action'">
-                  <a-button
-                    size="small"
-                    class="!rounded-lg"
-                    @click="runDirectSingle(record)"
-                  >
+                  <a-button size="small" class="!rounded-lg" @click="runDirectSingle(record)">
                     单条试跑
                   </a-button>
                 </template>
@@ -316,13 +241,8 @@
           </div>
         </a-card>
 
-        <a-card
-          :bordered="false"
-          class="custom-qc-surface"
-        >
-          <template #title>
-            4. 结果复核
-          </template>
+        <a-card :bordered="false" class="custom-qc-surface mq-card">
+          <template #title> 4. 结果复核 </template>
           <div class="space-y-4">
             <a-empty
               v-if="!singleResult && !batchResult"
@@ -330,31 +250,29 @@
             />
             <div
               v-if="singleResult"
-              class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              class="space-y-3 rounded-2xl border border-[var(--mq-border)] bg-slate-50 p-4"
             >
               <div class="flex items-center justify-between gap-3">
-                <div class="text-sm font-medium text-slate-900">
-                  单病历试跑结果
-                </div>
+                <div class="text-sm font-medium text-[var(--mq-text-primary)]">单病历试跑结果</div>
                 <a-tag :color="singleResult.result.is_compliant ? 'success' : 'error'">
                   {{ singleResult.result.is_compliant ? '合规 / 不适用' : '发现问题' }}
                 </a-tag>
               </div>
-              <div class="text-sm leading-7 text-slate-700">
+              <div class="text-sm leading-7 text-[var(--mq-text-primary)]">
                 {{ singleResult.result.findings || '无补充说明' }}
               </div>
-              <div class="rounded-xl bg-white p-3 text-xs leading-6 text-slate-600">
-                <div class="font-medium text-slate-700">
-                  证据
-                </div>
+              <div
+                class="rounded-xl bg-white p-3 text-xs leading-6 text-[var(--mq-text-secondary)]"
+              >
+                <div class="font-medium text-[var(--mq-text-primary)]">证据</div>
                 <div class="mt-1 whitespace-pre-wrap">
                   {{ singleResult.result.evidence || '未返回证据' }}
                 </div>
               </div>
-              <div class="rounded-xl bg-white p-3 text-xs leading-6 text-slate-600">
-                <div class="font-medium text-slate-700">
-                  建议
-                </div>
+              <div
+                class="rounded-xl bg-white p-3 text-xs leading-6 text-[var(--mq-text-secondary)]"
+              >
+                <div class="font-medium text-[var(--mq-text-primary)]">建议</div>
                 <div class="mt-1 whitespace-pre-wrap">
                   {{ singleResult.result.suggestion || '未返回整改建议' }}
                 </div>
@@ -362,38 +280,30 @@
             </div>
             <div
               v-if="batchResult"
-              class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              class="space-y-3 rounded-2xl border border-[var(--mq-border)] bg-slate-50 p-4"
             >
               <div class="grid grid-cols-2 gap-3">
                 <div class="rounded-xl bg-white p-3">
-                  <div class="text-xs text-slate-400">
-                    成功试跑
-                  </div>
-                  <div class="mt-2 text-xl font-semibold text-slate-900">
+                  <div class="text-xs text-[var(--mq-text-tertiary)]">成功试跑</div>
+                  <div class="mt-2 text-xl font-semibold text-[var(--mq-text-primary)]">
                     {{ batchResult.summary.success_count }}
                   </div>
                 </div>
                 <div class="rounded-xl bg-white p-3">
-                  <div class="text-xs text-slate-400">
-                    发现问题
-                  </div>
+                  <div class="text-xs text-[var(--mq-text-tertiary)]">发现问题</div>
                   <div class="mt-2 text-xl font-semibold text-rose-600">
                     {{ batchResult.summary.issue_records }}
                   </div>
                 </div>
                 <div class="rounded-xl bg-white p-3">
-                  <div class="text-xs text-slate-400">
-                    失败条目
-                  </div>
+                  <div class="text-xs text-[var(--mq-text-tertiary)]">失败条目</div>
                   <div class="mt-2 text-xl font-semibold text-amber-600">
                     {{ batchResult.summary.failed_count }}
                   </div>
                 </div>
                 <div class="rounded-xl bg-white p-3">
-                  <div class="text-xs text-slate-400">
-                    总耗时
-                  </div>
-                  <div class="mt-2 text-xl font-semibold text-slate-900">
+                  <div class="text-xs text-[var(--mq-text-tertiary)]">总耗时</div>
+                  <div class="mt-2 text-xl font-semibold text-[var(--mq-text-primary)]">
                     {{ batchResult.summary.total_processing_time.toFixed(2) }}s
                   </div>
                 </div>
@@ -408,10 +318,8 @@
               />
             </div>
             <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-              <div class="text-sm font-medium text-slate-900">
-                规则发布
-              </div>
-              <div class="mt-2 text-xs leading-6 text-slate-500">
+              <div class="text-sm font-medium text-[var(--mq-text-primary)]">规则发布</div>
+              <div class="mt-2 text-xs leading-6 text-[var(--mq-text-secondary)]">
                 发布后仅写入规则库，不写病历、首页、结算清单或正式质控结果；规则编码使用
                 `LXE-####`。
               </div>
@@ -425,18 +333,11 @@
                 >
                   复核通过并发布
                 </a-button>
-                <a-button
-                  class="!rounded-lg"
-                  :disabled="!publishedRuleId"
-                  @click="jumpToRulesList"
-                >
+                <a-button class="!rounded-lg" :disabled="!publishedRuleId" @click="jumpToRulesList">
                   跳转规则列表
                 </a-button>
               </div>
-              <div
-                v-if="publishedRuleCode"
-                class="mt-3 text-xs text-emerald-700"
-              >
+              <div v-if="publishedRuleCode" class="mt-3 text-xs text-emerald-700">
                 已发布规则：{{ publishedRuleCode }}
               </div>
             </div>
@@ -952,313 +853,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.custom-qc-page {
-  min-height: 100%;
-  padding: 24px;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  font-feature-settings:
-    'rlig' 1,
-    'calt' 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.custom-qc-container {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.custom-qc-surface {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-  overflow: hidden;
-  transition:
-    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.custom-qc-surface:hover {
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-  transform: translateY(-2px);
-}
-
-.custom-qc-hero {
-  background: rgba(255, 255, 255, 0.88);
-}
-
-.custom-qc-hero-inner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.custom-qc-chip-row,
-.custom-qc-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.custom-qc-chip-row {
-  margin-bottom: 12px;
-}
-
-.custom-qc-title {
-  margin: 0;
-  color: #1d1d1f;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 31px;
-  letter-spacing: 0;
-}
-
-.custom-qc-subtitle {
-  max-width: 760px;
-  margin: 9px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-}
-
-.custom-qc-primary-btn,
-.custom-qc-secondary-btn {
-  height: 36px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.custom-qc-primary-btn {
-  background: #0a6cff;
-  border-color: #0a6cff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(10, 108, 255, 0.18);
-}
-
-.custom-qc-secondary-btn {
-  background: rgba(255, 255, 255, 0.94);
-  color: rgba(29, 29, 31, 0.68);
-  border-color: rgba(29, 29, 31, 0.1);
-}
-
-:deep(.custom-qc-surface .ant-card-head) {
-  min-height: 54px;
-  border-bottom-color: rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.74);
-}
-
-:deep(.custom-qc-surface .ant-card-head-title) {
-  color: #1d1d1f;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 22px;
-}
-
-:deep(.custom-qc-surface .ant-card-body) {
-  padding: 20px;
-}
-
-:deep(.custom-qc-surface .ant-form-item-label > label) {
-  color: rgba(29, 29, 31, 0.66);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-:deep(.custom-qc-surface .ant-input),
-:deep(.custom-qc-surface .ant-select),
-:deep(.custom-qc-surface .ant-select-item),
-:deep(.custom-qc-surface .ant-picker),
-:deep(.custom-qc-surface .ant-input-number),
-:deep(.custom-qc-surface .ant-btn),
-:deep(.custom-qc-surface .ant-table),
-:deep(.custom-qc-surface .ant-tag),
-:deep(.custom-qc-surface .ant-alert) {
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-:deep(.custom-qc-surface .ant-input),
-:deep(.custom-qc-surface .ant-select-selector),
-:deep(.custom-qc-surface .ant-picker),
-:deep(.custom-qc-surface .ant-input-number) {
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  border-radius: 10px !important;
-  background: rgba(255, 255, 255, 0.92) !important;
-  box-shadow: none !important;
-}
-
-:deep(.custom-qc-surface .ant-input:hover),
-:deep(.custom-qc-surface .ant-select-selector:hover),
-:deep(.custom-qc-surface .ant-picker:hover),
-:deep(.custom-qc-surface .ant-input-number:hover) {
-  border-color: rgba(10, 108, 255, 0.28) !important;
-}
-
-:deep(.custom-qc-surface .ant-input:focus),
-:deep(.custom-qc-surface .ant-input-focused),
-:deep(.custom-qc-surface .ant-select-focused .ant-select-selector),
-:deep(.custom-qc-surface .ant-picker-focused),
-:deep(.custom-qc-surface .ant-input-number-focused) {
-  border-color: rgba(10, 108, 255, 0.5) !important;
-  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.08) !important;
-}
-
-:deep(.custom-qc-surface .ant-btn-primary) {
-  background: #0a6cff;
-  border-color: #0a6cff;
-  border-radius: 10px;
-  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.16);
-}
-
-:deep(.custom-qc-surface .ant-alert) {
-  border-radius: 14px;
-}
-
-:deep(.custom-qc-surface .ant-table) {
-  color: rgba(29, 29, 31, 0.76);
-}
-
-:deep(.custom-qc-surface .ant-table-thead > tr > th) {
-  background: rgba(255, 255, 255, 0.92);
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-:deep(.custom-qc-surface .ant-table-tbody > tr > td) {
-  border-bottom-color: rgba(0, 0, 0, 0.06);
-}
-
-:deep(.custom-qc-surface .ant-table-tbody > tr:hover > td) {
-  background: rgba(0, 0, 0, 0.025) !important;
-}
-
-.custom-qc-page .rounded-2xl.border,
-.custom-qc-page .rounded-xl.bg-white,
-.custom-qc-page .border-dashed.bg-white {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.72) !important;
-}
-
-.custom-qc-page .rounded-2xl.bg-slate-50,
-.custom-qc-page .rounded-xl.bg-white,
-.custom-qc-page .border-dashed.bg-white {
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.86),
-    0 1px 3px rgba(0, 0, 0, 0.035);
-}
-
-.custom-qc-page .bg-slate-50 {
-  background-color: rgba(255, 255, 255, 0.72) !important;
-}
-
-.custom-qc-page .bg-white {
-  background-color: rgba(255, 255, 255, 0.76) !important;
-}
-
-.custom-qc-page .border-slate-200,
-.custom-qc-page .border-slate-300,
-.custom-qc-page .border-dashed {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.custom-qc-page .text-slate-900,
-.custom-qc-page .text-slate-800 {
-  color: #1d1d1f !important;
-}
-
-.custom-qc-page .text-slate-700,
-.custom-qc-page .text-slate-600 {
-  color: rgba(29, 29, 31, 0.68) !important;
-}
-
-.custom-qc-page .text-slate-500,
-.custom-qc-page .text-slate-400 {
-  color: rgba(29, 29, 31, 0.46) !important;
-}
-
-.custom-qc-page .font-mono {
-  font-family: 'SF Pro Text', 'Cascadia Code', 'Roboto Mono', ui-monospace, monospace !important;
-}
-
-.custom-qc-page .rounded-2xl,
-.custom-qc-page .rounded-xl {
-  transition:
-    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.custom-qc-page .rounded-2xl:hover,
-.custom-qc-page .rounded-xl:hover {
-  border-color: rgba(0, 0, 0, 0.14) !important;
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-  transform: translateY(-2px);
-}
-
-.custom-qc-page :deep(.ant-tag) {
-  border-color: rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.custom-qc-page :deep(.ant-tag-green),
-.custom-qc-page :deep(.ant-tag-success) {
-  border-color: rgba(16, 185, 129, 0.18);
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
-}
-
-.custom-qc-page :deep(.ant-tag-orange),
-.custom-qc-page :deep(.ant-tag-warning) {
-  border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(245, 158, 11, 0.1);
-  color: #b45309;
-}
-
-.custom-qc-page :deep(.ant-tag-red),
-.custom-qc-page :deep(.ant-tag-error) {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.09);
-  color: #be123c;
-}
-
-@media (max-width: 900px) {
-  .custom-qc-page {
-    padding: 16px;
-  }
-
-  .custom-qc-hero-inner {
-    flex-direction: column;
-  }
-}
-</style>
+<style scoped src="./styles/custom-qc-experience.css"></style>

@@ -39,29 +39,30 @@
   "responses": [
     {
       "payload": {
-        "consultation_event_facts": [
+        "episodes": [
           {
-            "ref": "consultation_record-1",
-            "scope": "ordinary",
+            "episode_ref": "consultation_record-1",
+            "member_refs": ["consultation_record-1"],
+            "application_refs": ["consultation_record-1"],
+            "opinion_refs": ["consultation_record-1"],
             "application_state": "clear",
             "opinion_state": "clear",
             "confidence": "high",
             "recommendations": [
               {
-                "action_type": "test",
-                "source_quote": "复查血常规",
+                "recommendation_ref": "consultation_record-1#r1",
+                "opinion_ref": "consultation_record-1",
+                "source_quote": "建议复查血常规",
                 "normalized_action": "复查血常规",
-                "opinion_ref": "consultation_record-1"
+                "action_type": "test"
               }
             ]
           }
-        ]
+        ],
+        "non_target_refs": [],
+        "unresolved_refs": []
       },
-      "usage": {
-        "prompt_tokens": 12,
-        "completion_tokens": 4,
-        "total_tokens": 16
-      },
+      "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22},
       "api_time": 0.01
     },
     {
@@ -79,12 +80,9 @@
           }
         ]
       },
-      "usage": {
-        "prompt_tokens": 12,
-        "completion_tokens": 4,
-        "total_tokens": 16
-      },
+      "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
       "api_time": 0.01
-    }
+    },
+    {"payload": {"schema_version": "lx0609-consultation-measure-check-v2", "measures": [{"recommendation_ref": "consultation_record-1#r1", "measure": "复查血常规", "evidence_ref": "daily_course_record-1", "quote": "已复查血常规"}], "generic": []}, "usage": {"prompt_tokens": 10, "completion_tokens": 3, "total_tokens": 13}, "api_time": 0.01}
   ]
 }

@@ -233,7 +233,6 @@
   background: var(--mq-info-bg);
 }
 
-
 :global(.editable-copy-workstation-modal .editable-copy-document-workbench-section),
 :global(.editable-copy-workstation-modal .editable-copy-section) {
   border: 1px solid var(--mq-glass-border) !important;
@@ -263,4 +262,15 @@
 
 :global(.editable-copy-workstation-modal .ant-btn) {
   border-radius: 999px;
+}
+
+/* 覆盖上方滚动区padding时保留操作坞的安全空间。 */
+.customer-sample-page .customer-sample-scroll.has-work-dock {
+  padding-bottom: 220px;
+}
+
+@media (max-width: 768px) {
+  .customer-sample-page .customer-sample-scroll.has-work-dock {
+    padding-bottom: 306px;
+  }
 }

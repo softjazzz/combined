@@ -29,7 +29,24 @@ _TRANSFER_IN_DESTINATION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _NON_CLINICAL_TRANSFER_MARKERS = ("药品", "病案")
-_PLANNED_TRANSFER_MARKERS = ("拟转",)
+_NON_CURRENT_TRANSFER_PREFIX = re.compile(
+    r"拟|计划|准备|考虑|建议|暂不|暂缓|不予|无需|未予|取消|拒绝|"
+    r"(?:待|等|若|如|如果).*(?:再|后)|(?:稳定|好转)后再"
+)
+
+
+def _has_current_transfer_clause(text: str) -> bool:
+    """逐分句识别正式转科；计划或否定不得遮蔽另一句已发生转科。"""
+    for clause in re.split(r"[，,。；;\n]", text):
+        normalized = re.sub(r"\s+", "", clause).strip("：:")
+        match = re.search(r"转科", normalized)
+        if match is None:
+            match = _TRANSFER_IN_DESTINATION_PATTERN.fullmatch(normalized)
+        if match is not None and not _NON_CURRENT_TRANSFER_PREFIX.search(
+            normalized[:match.start()]
+        ):
+            return True
+    return False
 
 
 def select_transfer_order_rows(
@@ -40,13 +57,7 @@ def select_transfer_order_rows(
     selected = []
     for row in rows:
         text = _clean(row.get("order_name") or row.get("record_content"))
-        normalized_name = re.sub(r"\s+", "", text).strip("：:，,。；;")
-        is_transfer = "转科" in text or (
-            _TRANSFER_IN_DESTINATION_PATTERN.fullmatch(normalized_name) is not None
-        )
-        if not is_transfer:
-            continue
-        if any(marker in text for marker in _PLANNED_TRANSFER_MARKERS):
+        if not _has_current_transfer_clause(text):
             continue
         if any(marker in text for marker in _NON_CLINICAL_TRANSFER_MARKERS):
             continue

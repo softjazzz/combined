@@ -96,6 +96,21 @@ def _canonical_item(
     }
 
 
+def _admission_facts() -> dict[str, Any]:
+    # 与执行器公开合同一致的时限事实，不能只放 compliant 状态壳。
+    return {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "within",
+        "threshold_hours": 24,
+        "anchor_time": "2026-09-01T08:00:00",
+        "observed_time": "2026-09-01T09:00:00",
+        "elapsed_hours": 1.0,
+        "remaining_hours": 23.0,
+    }
+
+
 def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summary_projection() -> None:
     canonical_item = {
         "schema_version": "lx0609-customer-result-v2",
@@ -107,6 +122,7 @@ def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summ
         "display_status": "compliant",
         "is_compliant": True,
         "reason_code": "requirement_satisfied",
+        "customer_display_facts": _admission_facts(),
     }
     raw_job = {
         "id": "job-canonical",
@@ -132,6 +148,7 @@ def test_luxian_0609_batch_detail_ignores_stale_internal_rule_results_after_cano
         rule_id="LX0609-01-01-01",
         status="compliant",
         reason_code="requirement_satisfied",
+        customer_display_facts=_admission_facts(),
     )
     raw_job = {
         "id": "job-canonical",
@@ -197,6 +214,7 @@ def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
                     "rule_id": "LX0609-01-01-01",
                     "status": "compliant",
                     "reason_code": "within_deadline",
+                    "customer_display_facts": _admission_facts(),
                 }
             ],
         }
@@ -329,8 +347,13 @@ async def test_review_luxian_workspace_batch_job_persists_report(monkeypatch: py
         canonical_items=[
             _canonical_item(
                 rule_id="LX0609-03-01-01",
-                status="uncertain",
-                reason_code="semantic_low_confidence",
+                status="data_gap",
+                reason_code="source_unavailable",
+                customer_display_facts={
+                    "consultation_assessment": "不符合要求",
+                    "execution_record_state": "未发现执行记录",
+                    "execution_candidate_count": 0,
+                },
             )
         ],
     )
@@ -484,6 +507,13 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                 rule_id="LX0609-03-01-02",
                 status="ai_suggested_non_compliant",
                 reason_code="semantic_low_confidence",
+                customer_display_facts={
+                    "verification_kind": "consultation_application_quality_check",
+                    "episode_count": 1,
+                    "document_count": 1,
+                    "semantic_state": "unknown",
+                    "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+                },
                 record_ref_suffix="a",
             ),
             _canonical_item(
@@ -643,3 +673,77 @@ def test_debug_snapshot_preserves_luxian_0916_semantic_failure_coordinates() -> 
         "semantic_extraction_invalid_count": 1,
         "semantic_extraction_failures": failures,
     }
+
+
+def test_list_isolates_legacy_result_but_detail_still_rejects():
+    from copy import deepcopy
+    job = {
+        "id": "legacy-list-row", "status": "completed",
+        "rule_set_key": "luxian_0609_qc_v1", "total_records": 1,
+        "summary": {"rule_results": [{"rule_id": "LX0609-010", "items": [
+            {"rule_id": "LX0609-010", "customer_conclusion": "PRIVATE_LEGACY_TEXT"}
+        ]}]},
+        "rule_results": [{"rule_id": "LX0609-010"}],
+    }
+    original = deepcopy(job)
+    result = qc_sichuan._workspace_batch_list_item(job)
+    assert result["id"] == job["id"]
+    assert result["status"] == "completed"
+    assert result["items"] == []
+    assert "无法安全展示" in result["error_message"]
+    assert "PRIVATE_LEGACY_TEXT" not in str(result)
+    assert "issue_records" not in result
+    assert "result_count" not in result["summary"]
+    assert job == original
+    with pytest.raises(HTTPException) as error:
+        qc_sichuan._workspace_batch_response_item(job)
+    assert error.value.status_code == 409
+
+
+def test_list_does_not_swallow_unrelated_errors(monkeypatch):
+    def fail(*args, **kwargs):
+        raise ValueError("unexpected")
+    monkeypatch.setattr(qc_sichuan, "_workspace_batch_response_item", fail)
+    with pytest.raises(ValueError, match="unexpected"):
+        qc_sichuan._workspace_batch_list_item({})
+
+
+@pytest.mark.asyncio
+async def test_list_keeps_other_rows_when_one_historical_result_is_invalid(monkeypatch):
+    jobs = [
+        {"id": "good", "rule_set_key": "luxian_0609_qc_v1", "status": "queued"},
+        {"id": "old", "rule_set_key": "luxian_0609_qc_v1", "status": "completed",
+         "summary": {"rule_results": [{"rule_id": "LX0609-010"}]}},
+    ]
+    monkeypatch.setattr(qc_sichuan, "_is_workspace_batch_job", lambda job: True)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: SimpleNamespace(
+        list_batch_jobs=lambda **kwargs: SimpleNamespace(items=jobs, total=2, page=1, page_size=5)
+    ))
+    result = await qc_sichuan.list_workspace_batch_jobs(
+        _request(), status=None, scope=None, q=None, executor_type=None, cache_hit=None,
+        created_start_date=None, created_end_date=None, record_id=None,
+        page=1, page_size=5, current_user={"id": "u-1"},
+    )
+    assert result["data"]["total"] == 2
+    assert [row["id"] for row in result["data"]["items"]] == ["good", "old"]
+    assert "error_message" in result["data"]["items"][1]
+
+
+@pytest.mark.parametrize("fault", ["missing", "invalid_threshold", "wrong_state"])
+def test_current_canonical_admission_facts_are_not_repaired_on_read(fault: str) -> None:
+    facts = _admission_facts()
+    if fault == "invalid_threshold":
+        facts["threshold_hours"] = 48
+    elif fault == "wrong_state":
+        facts["timeliness_state"] = "late"
+    item = _canonical_item(
+        rule_id="LX0609-01-01-01", status="compliant", reason_code="within_deadline",
+        **({} if fault == "missing" else {"customer_display_facts": facts}),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        qc_sichuan._workspace_batch_response_item({
+            "id": "job-current-invalid-facts", "rule_set_key": "luxian_0609_qc_v1",
+            "status": "completed", "items": [item],
+        })
+    assert exc_info.value.status_code == 409
+    assert item.get("customer_display_facts") == (None if fault == "missing" else facts)

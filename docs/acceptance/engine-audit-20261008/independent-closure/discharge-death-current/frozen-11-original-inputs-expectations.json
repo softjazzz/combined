@@ -1,0 +1,419 @@
+{
+  "schema_version": "dd-current-11-node-freeze-v1",
+  "current_commit": "56322bcffa32ac33b5069975f1dbf3af18b597ac",
+  "current_tree": "79f619388e7c7a9493096bfacfdcf49c86007268",
+  "historical_execution_manifest_exists": false,
+  "historical_not_reconstructed": true,
+  "original_frozen_sha256": "8dc0233355036eea8d585d6055572971666fa6f8847bb4b80004494c92e4d289",
+  "original_probe_sha256": "55e8caa521654b9822b4b1faeadd4333946af1d70c3281cdc2b0721aa7a8ece1",
+  "frozen_before_replay": true,
+  "test_nodes": 11,
+  "entries": [
+    {
+      "original_expectation": {
+        "case_id": "DD-001",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "exact24",
+        "expected_status": "compliant",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "absent",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": [
+            {
+              "record_time": "2026-10-02 08:00:00"
+            }
+          ]
+        }
+      },
+      "input_sha256": "9ccdde5d911b7e8d77e0413b4b0bf0bd991172e688f69f63e784269a845f1edd",
+      "original_expectation_sha256": "5ee9edcd16c93bfa30a8608ebcdd90efebb2f81d7febac76b31d7b7d1263fc49",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-002",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "24plus1sec",
+        "expected_status": "non_compliant",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "absent",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": [
+            {
+              "record_time": "2026-10-02 08:00:01"
+            }
+          ]
+        }
+      },
+      "input_sha256": "7aa50cae0728e2026eed0f41d0cbf59bd33f2822a043fed69174346f22c56eb8",
+      "original_expectation_sha256": "1a2c279d012c15889bf3e5923b1f2f2bda3e08f460a639d9f4ab0e31c0bd7c8c",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-003",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "negative_interval",
+        "expected_status": "data_gap",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "absent",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": [
+            {
+              "record_time": "2026-10-01 07:59:59"
+            }
+          ]
+        }
+      },
+      "input_sha256": "1b58f66458c083553eb4748c0a9909249e560bc2dc1df3c0256796420b7275e1",
+      "original_expectation_sha256": "4007bbf410e298236bca381a29bf7adaaf68b9ea7715078b9b25b944b6d46f26",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-004",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "missing_completion",
+        "expected_status": "data_gap",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "absent",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": [
+            {
+              "create_time": "2026-10-01 08:00:00"
+            }
+          ]
+        }
+      },
+      "input_sha256": "779d2f90a464afcc33ba8d23b30c15c22cfcd51a294e732100bf5186b10151f2",
+      "original_expectation_sha256": "709a351af670a03cd43f7da84ed68be7ec313ed23c9db5e7da10446b55c77ada",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-005",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "empty_source",
+        "expected_status": "data_gap",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "absent",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": []
+        }
+      },
+      "input_sha256": "18a9d4735520d5c689e587fee365f43402f6e9c3ab415d65d808ab29ccce3955",
+      "original_expectation_sha256": "6035a5403bfd2df98ce073fc940aaa8c2006cac5c85b30ea7a011fba384c1164",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-006",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "death_confirmed",
+        "expected_status": "not_applicable",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "present",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": [
+            {
+              "record_time": "2026-10-02 08:00:00"
+            }
+          ]
+        }
+      },
+      "input_sha256": "084a7d60e0a85ca942ea5ed414d31077625dc3dc505007f77fb0b3522bcc1564",
+      "original_expectation_sha256": "4fe502edff575870089fd2be1494a75909fc638751adbaa49a08d7afeebc5b10",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-007",
+        "rule_id": "LX0609-08-01-01",
+        "scenario": "conflicting_discharge",
+        "expected_status": "data_gap",
+        "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限"
+      },
+      "input": {
+        "mode": "pure_timeliness",
+        "kwargs": {
+          "death_state": "absent",
+          "death_error": "",
+          "registration_error": "",
+          "discharge_error": "",
+          "discharge_time": {
+            "__frozen_type__": "datetime",
+            "value": "2026-10-01T08:00:00"
+          },
+          "discharge_rows": [
+            {
+              "record_time": "2026-10-02 08:00:00"
+            }
+          ],
+          "registration_time_conflicts": [
+            {
+              "__frozen_type__": "datetime",
+              "value": "2026-10-01T08:00:00"
+            },
+            {
+              "__frozen_type__": "datetime",
+              "value": "2026-10-01T09:00:00"
+            }
+          ]
+        }
+      },
+      "input_sha256": "2dec535f6950378c436ce71730d741944657554d238c3dc6828ff612408f43d5",
+      "original_expectation_sha256": "37b48e3c4fdcea61bdf82ca3bc0f0172d3bc20be349cbb0eef9c3a5163271cbc",
+      "constructor_sha256": "596a665f0d668a929a1637c35bc2ddde5f6bf1b9936607235803a49bf0326053"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-028",
+        "rule_id": "LX0609-08-02-02",
+        "scenario": "senior_approval",
+        "expected_status": "compliant",
+        "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代"
+      },
+      "input": {
+        "mode": "native_binding_canonical",
+        "rows_by_source": {
+          "discharge_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-D"
+              }
+            ]
+          },
+          "inpat_registration": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "discharge_time": "2026-10-01 08:00:00"
+              }
+            ]
+          },
+          "senior_course_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-C",
+                "record_time": "2026-10-01 08:00:00",
+                "record_content": "主任医师查房同意出院。"
+              }
+            ]
+          }
+        },
+        "unavailable_sources": {
+          "__frozen_type__": "frozenset",
+          "value": []
+        }
+      },
+      "input_sha256": "13fc2771ad237743c5afb80c0b3ca57e27c5f6699986a8430d40b9ba996a50f2",
+      "original_expectation_sha256": "64b64a89281aca5a7e5b05259956b2c33e1c1292cac587919fdf46025c162739",
+      "constructor_sha256": "58ffaca15ebd025310f20286bb62b33f4fb2ebea83f67083cbb2dd5222ae0f78"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-029",
+        "rule_id": "LX0609-08-02-02",
+        "scenario": "ordinary_doctor_only",
+        "expected_status": "data_gap",
+        "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代"
+      },
+      "input": {
+        "mode": "native_binding_canonical",
+        "rows_by_source": {
+          "discharge_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-D"
+              }
+            ]
+          },
+          "inpat_registration": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "discharge_time": "2026-10-01 08:00:00"
+              }
+            ]
+          },
+          "daily_course_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-C",
+                "record_time": "2026-10-01 08:00:00",
+                "record_content": "经治医师同意出院。"
+              }
+            ]
+          }
+        },
+        "unavailable_sources": {
+          "__frozen_type__": "frozenset",
+          "value": []
+        }
+      },
+      "input_sha256": "3e52de1c761392e3a54b680ed0102ff21eaeb4475113f9fc1ad2615bcb58eb9b",
+      "original_expectation_sha256": "828aa83aafc00f95f4da953eb7ccc6d2146cfd1846ebee4e0d63721bc23c23c0",
+      "constructor_sha256": "58ffaca15ebd025310f20286bb62b33f4fb2ebea83f67083cbb2dd5222ae0f78"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-030",
+        "rule_id": "LX0609-08-02-02",
+        "scenario": "undated_approval",
+        "expected_status": "data_gap",
+        "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代"
+      },
+      "input": {
+        "mode": "native_binding_canonical",
+        "rows_by_source": {
+          "discharge_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-D"
+              }
+            ]
+          },
+          "inpat_registration": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "discharge_time": "2026-10-01 08:00:00"
+              }
+            ]
+          },
+          "senior_course_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-C",
+                "record_content": "主任医师查房同意出院。"
+              }
+            ]
+          }
+        },
+        "unavailable_sources": {
+          "__frozen_type__": "frozenset",
+          "value": []
+        }
+      },
+      "input_sha256": "c78beb07e9acef2ef5e28cca67ed5aaf1e2eb2f30b2cf4337c228512d19905b2",
+      "original_expectation_sha256": "2f144a8506454802ddf84f0d00f9935220266198ef580296b899f6e22dcf7a4f",
+      "constructor_sha256": "58ffaca15ebd025310f20286bb62b33f4fb2ebea83f67083cbb2dd5222ae0f78"
+    },
+    {
+      "original_expectation": {
+        "case_id": "DD-031",
+        "rule_id": "LX0609-08-02-02",
+        "scenario": "source_unavailable",
+        "expected_status": "data_gap",
+        "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代"
+      },
+      "input": {
+        "mode": "native_binding_canonical",
+        "rows_by_source": {
+          "discharge_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-D"
+              }
+            ]
+          },
+          "inpat_registration": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "discharge_time": "2026-10-01 08:00:00"
+              }
+            ]
+          },
+          "senior_course_record": {
+            "__frozen_type__": "tuple",
+            "value": [
+              {
+                "document_id": "SYN-C",
+                "record_time": "2026-10-01 08:00:00",
+                "record_content": "主任医师查房同意出院。"
+              }
+            ]
+          }
+        },
+        "unavailable_sources": {
+          "__frozen_type__": "frozenset",
+          "value": [
+            "daily_course_record",
+            "senior_course_record"
+          ]
+        }
+      },
+      "input_sha256": "79b9ff719e4048afeb3303bf9c14d0ff0d1fd4585cec37ce8ca515ebc509553a",
+      "original_expectation_sha256": "295909a1ba48b48e9a6a074ad1ef94612c776226f7de226b10caebcad4123f68",
+      "constructor_sha256": "58ffaca15ebd025310f20286bb62b33f4fb2ebea83f67083cbb2dd5222ae0f78"
+    }
+  ]
+}

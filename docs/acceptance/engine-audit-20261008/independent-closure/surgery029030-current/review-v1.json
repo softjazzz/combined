@@ -1,0 +1,170 @@
+{
+  "audit_id": "SURGERY-029030-original-normal-current-targeted-review-v1",
+  "fixed_target_responsibility_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+  "actual_execution_head": "2f44aa44e86251acda81383e1b2bd84423008451",
+  "shared_070_only_sources_commit": "35909964a36289d64a381301865b0a407e97184d",
+  "scope": "Two unchanged historical normal synthetic rows only; inherit fad649 fixture354 closure",
+  "conclusion": "2/2 original normal C controls pass current native→Binding/Reducer→Finalizer; no current normal-material rollback reproduced; unintegrated candidate failures retained; multi-event negative coverage remains open",
+  "cases": [
+    {
+      "case_id": "029_two_orders_two_summaries",
+      "rule_id": "LX0609-04-01-01",
+      "original_expected_statuses": [
+        "compliant"
+      ],
+      "original_reason_oracle": null,
+      "native_dimensions": {
+        "applicability": "applicable",
+        "evidence_state": "sufficient",
+        "qc_direction": "satisfied",
+        "reason_code": "requirement_satisfied"
+      },
+      "reduced_status": "compliant",
+      "finalizer_status": "compliant",
+      "observed_reason": "requirement_satisfied",
+      "customer_display_facts": {
+        "verification_kind": "surgery_document_present",
+        "target_document": "presurg_summary",
+        "surgery_trigger_kind": "surgery_order",
+        "surgery_order_confirmed": true
+      },
+      "bound_fact_ref_count": 5,
+      "evidence_anchors": [
+        {
+          "source_type": "inpat_nondrug_order",
+          "source_document_id": "A",
+          "field_path": "order_name",
+          "evidence_excerpt": "胆囊切除术",
+          "excerpt_kind": "文书级依据"
+        },
+        {
+          "source_type": "inpat_nondrug_order",
+          "source_document_id": "B",
+          "field_path": "order_name",
+          "evidence_excerpt": "肝切除术",
+          "excerpt_kind": "文书级依据"
+        },
+        {
+          "source_type": "presurg_summary",
+          "source_document_id": "sumB",
+          "record_time": "2026-07-02 16:00:00",
+          "field_path": "record_content",
+          "evidence_excerpt": "本次7月3日肝切除术术前小结。",
+          "excerpt_kind": "文书级依据"
+        },
+        {
+          "source_type": "presurg_summary",
+          "source_document_id": "sumA",
+          "record_time": "2026-06-30 16:00:00",
+          "field_path": "record_content",
+          "evidence_excerpt": "本次7月1日胆囊切除术术前小结。",
+          "excerpt_kind": "文书级依据"
+        }
+      ],
+      "pass": true,
+      "historical_unintegrated_candidate_failure": {
+        "status": "data_gap",
+        "reason": "association_failed",
+        "facts": null,
+        "finding": "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结对应哪一台手术，暂无法逐台完成核对"
+      },
+      "candidate_failure_is_current_root_regression": false
+    },
+    {
+      "case_id": "030_orderB_own_record",
+      "rule_id": "LX0609-04-02-02",
+      "original_expected_statuses": [
+        "compliant"
+      ],
+      "original_reason_oracle": null,
+      "native_dimensions": {
+        "applicability": "applicable",
+        "evidence_state": "sufficient",
+        "qc_direction": "satisfied",
+        "reason_code": "requirement_satisfied"
+      },
+      "reduced_status": "compliant",
+      "finalizer_status": "compliant",
+      "observed_reason": "requirement_satisfied",
+      "customer_display_facts": {
+        "verification_kind": "surgery_document_present",
+        "target_document": "surgery_record",
+        "surgery_trigger_kind": "performed_surgery",
+        "performed_surgery_confirmed": true
+      },
+      "bound_fact_ref_count": 1,
+      "evidence_anchors": [
+        {
+          "source_type": "surgery_record",
+          "source_document_id": "S3",
+          "record_time": "2026-07-03 12:00:00",
+          "field_path": "record_content",
+          "evidence_excerpt": "全麻下实施手术，清除血肿后止血，逐层关闭切口。",
+          "excerpt_kind": "文书级依据"
+        }
+      ],
+      "pass": true,
+      "historical_unintegrated_candidate_failure": {
+        "status": "data_gap",
+        "reason": "association_failed",
+        "facts": null,
+        "finding": "当前缺少已实施手术与手术记录的关联信息，暂时无法完成核对"
+      },
+      "candidate_failure_is_current_root_regression": false
+    }
+  ],
+  "guard_attempts": {
+    "env": 0,
+    "private": 0,
+    "network": 0,
+    "database": 0,
+    "model": 0,
+    "foreign_write": 0
+  },
+  "actual_model_calls": 0,
+  "database_calls": 0,
+  "loaded_app_paths_in_target": true,
+  "sources_unchanged": true,
+  "original_expectation_sha256": "1a4dfef87332d51b2a01dac408fbe39975fca0f465cff2e538d2076584d01332",
+  "manifest_sha256_at_run": "6e0a537b848ee13897d5f45dc89bd674265822d8865dce56a4fad87aa9598ea2",
+  "runner_sha256": "3c55a94766561f55bd89e9159ad70b988d94722511b65d5a391965836249311c",
+  "attempts": [
+    {
+      "run": "run-01",
+      "cases_executed": 0,
+      "category": "support_failure",
+      "reason": "Windows audit argv string vs list whitelist"
+    },
+    {
+      "run": "run-02",
+      "cases_executed": 0,
+      "category": "support_failure",
+      "reason": "Windows audit executable None vs git literal"
+    },
+    {
+      "run": "run-03",
+      "cases_executed": 0,
+      "category": "support_failure",
+      "reason": "SQLAlchemy platform.machine cold metadata fallback opened devnull and strict guard rejected"
+    },
+    {
+      "run": "run-04",
+      "cases_executed": 2,
+      "exit_code": 0,
+      "passed": 2
+    }
+  ],
+  "test_slot_released": true,
+  "candidate_is_integrated": false,
+  "negative_cases_replayed": false,
+  "full354_rerun": false,
+  "clinical_acceptance": false,
+  "limitations": [
+    "three system module substitutes and AST customer_rule_package static family definitions; no HTTP/Store/save projection",
+    "original frozen reason not available: current requirement_satisfied recorded as observation only",
+    "copied public synthetic rows authoritative for this replay; no private historical originals read",
+    "MR synthetic document_id/application_id are outside actual MR query whitelist; injected keys do not prove adapter contract",
+    "two current normal green do not validate per-order/per-event coverage, ambiguous same-name event linkage, or ordinary free-text semantic extraction",
+    "pre-store Finalizer customer_evidence contains original synthetic source IDs; this replay does not claim API/save identity redaction"
+  ]
+}

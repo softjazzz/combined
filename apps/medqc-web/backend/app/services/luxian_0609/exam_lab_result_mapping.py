@@ -19,13 +19,22 @@ from .decision_model import (
     RuleDecision,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .exam_lab_course_time import (
+    assess_fact_responses,
+    has_time_sources,
+    scan_unplaced_time_state,
+)
 from .exam_lab_fact_extraction import (
     ExamLabEventFact,
     ExamLabTextProjection,
     event_for_fact,
+    event_result_carried_by_course,
     events_for_family,
 )
 from .handbook_exam_lab import REPORT_RULES as HANDBOOK_REPORT_RULES, safe_handbook_display_facts
+
+# 报告后病程时间的受控说明：仅有提交时间 / 记录时间与报告时间冲突。
+_RESPONSE_TIME_STATES = frozenset({"submit_only", "record_time_conflict"})
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,48 @@ def _controlled_trigger_orders(value: Any) -> list[dict[str, str]] | None:
             order["order_time"] = order_time.strip()
         orders.append(order)
     return orders
+
+
+_CONFLICT_TIMES_KEY = "result_conflict_record_times"
+
+
+def _safe_conflict_times(value: Any) -> list[str] | None:
+    """06-01-04 检查结果与病程一致性提示：只允许最多 8 个固定格式的病程记录时间。"""
+
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= 8
+        or any(
+            not isinstance(item, str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", item)
+            for item in value
+        )
+    ):
+        return None
+    return list(value)
+
+
+_ANALYSIS_GAP_KEY = "analysis_gap_notes"
+ANALYSIS_GAP_KINDS = frozenset({"listing_only", "conclusion_without_basis", "plan_without_basis"})
+
+
+def _safe_analysis_gap_notes(value: Any) -> list[dict[str, str]] | None:
+    """06-01-05 修改建议：最多 8 条，只含固定格式的病程记录时间与受控不足类别。"""
+
+    if not isinstance(value, list) or not 1 <= len(value) <= 8:
+        return None
+    notes = []
+    for item in value:
+        if (
+            not isinstance(item, Mapping)
+            or set(item) != {"record_time", "gap"}
+            or not isinstance(item["record_time"], str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", item["record_time"])
+            or item["gap"] not in ANALYSIS_GAP_KINDS
+        ):
+            return None
+        notes.append({"record_time": item["record_time"], "gap": item["gap"]})
+    return notes
 
 
 def safe_exam_lab_customer_display_facts(
@@ -215,8 +266,10 @@ def safe_exam_lab_customer_display_facts(
             master_count = counts["exam_master_count"]
             uniquely_linked = counts["uniquely_linked_order_count"]
             unmatched = counts["unmatched_or_ambiguous_order_count"]
+            # 合并检查的一条主记录可显式覆盖多条医嘱，唯一关联医嘱数可以超过
+            # 主记录数；只要求不超过医嘱数。
             if (
-                uniquely_linked > min(order_count, master_count)
+                uniquely_linked > order_count
                 or unmatched != order_count - uniquely_linked
             ):
                 return None
@@ -289,6 +342,7 @@ def safe_exam_lab_customer_display_facts(
         "threshold_hours",
         "response_record_count",
         "interval_hours",
+        "response_time_state",
         "reviewed_record_scope",
         "event_count",
         "event_position",
@@ -296,6 +350,10 @@ def safe_exam_lab_customer_display_facts(
         "source_document_ids",
         "source_document_refs",
     }
+    if normalized_rule_id == "LX0609-06-01-04":
+        allowed_event_keys.add(_CONFLICT_TIMES_KEY)
+    if normalized_rule_id == "LX0609-06-01-05":
+        allowed_event_keys.add(_ANALYSIS_GAP_KEY)
     if not set(raw).issubset(allowed_event_keys):
         return None
     source_document_ids = raw.get("source_document_ids")
@@ -403,11 +461,26 @@ def safe_exam_lab_customer_display_facts(
         if not isinstance(interval_hours, (int, float)) or interval_hours < 0:
             return None
         facts["interval_hours"] = round(float(interval_hours), 2)
+    response_time_state = raw.get("response_time_state")
+    if response_time_state is not None:
+        if response_time_state not in _RESPONSE_TIME_STATES:
+            return None
+        facts["response_time_state"] = response_time_state
     reviewed_record_scope = raw.get("reviewed_record_scope")
     if reviewed_record_scope is not None:
         if reviewed_record_scope != "首次病程记录及后续病程记录":
             return None
         facts["reviewed_record_scope"] = reviewed_record_scope
+    if _CONFLICT_TIMES_KEY in raw:
+        conflict_times = _safe_conflict_times(raw[_CONFLICT_TIMES_KEY])
+        if conflict_times is None:
+            return None
+        facts[_CONFLICT_TIMES_KEY] = conflict_times
+    if _ANALYSIS_GAP_KEY in raw:
+        gap_notes = _safe_analysis_gap_notes(raw[_ANALYSIS_GAP_KEY])
+        if gap_notes is None:
+            return None
+        facts[_ANALYSIS_GAP_KEY] = gap_notes
     event_count = raw.get("event_count")
     event_position = raw.get("event_position")
     if event_count is not None or event_position is not None:
@@ -435,9 +508,14 @@ def safe_exam_lab_customer_display_facts(
             "response_record_count",
             "response_record_time",
             "interval_hours",
+            "response_time_state",
             "applicable",
             "requirement_met",
         }
+        if normalized_rule_id == "LX0609-06-01-04":
+            allowed_event_keys.add(_CONFLICT_TIMES_KEY)
+        if normalized_rule_id == "LX0609-06-01-05":
+            allowed_event_keys.add(_ANALYSIS_GAP_KEY)
         safe_event_results: list[dict[str, Any]] = []
         # 顺序合同（2026-09-12 收口）：事实的**语义**由 event_position 决定，物理顺序
         # 不是合同的一部分。此前用 enumerate 下标与 event_position 做相等比对，会把
@@ -508,12 +586,27 @@ def safe_exam_lab_customer_display_facts(
                 ):
                     return None
                 safe_item["interval_hours"] = round(float(event_interval), 2)
+            item_time_state = item.get("response_time_state")
+            if item_time_state is not None:
+                if item_time_state not in _RESPONSE_TIME_STATES:
+                    return None
+                safe_item["response_time_state"] = item_time_state
             for key in ("applicable", "requirement_met"):
                 value = item.get(key)
                 if value is not None:
                     if not isinstance(value, bool):
                         return None
                     safe_item[key] = value
+            if _CONFLICT_TIMES_KEY in item:
+                conflict_times = _safe_conflict_times(item[_CONFLICT_TIMES_KEY])
+                if conflict_times is None:
+                    return None
+                safe_item[_CONFLICT_TIMES_KEY] = conflict_times
+            if _ANALYSIS_GAP_KEY in item:
+                gap_notes = _safe_analysis_gap_notes(item[_ANALYSIS_GAP_KEY])
+                if gap_notes is None:
+                    return None
+                safe_item[_ANALYSIS_GAP_KEY] = gap_notes
             safe_event_results.append(safe_item)
         if (
             verification_kind == "exam_lab_event_review_incomplete"
@@ -590,6 +683,8 @@ def build_exam_lab_rule_decision(
             QcDirection.UNKNOWN,
             "evaluation_window_not_mature"
             if outcome.reason_code == "evaluation_window_not_mature"
+            else "eligibility_not_met"
+            if outcome.reason_code == "admission_window_exempt"
             else "trigger_absent_complete",
         )
     elif outcome.status == "data_gap":
@@ -600,6 +695,9 @@ def build_exam_lab_rule_decision(
             "authoritative_report_time_missing": "authoritative_report_time_missing",
             "multiple_event_or_time_conflict": "association_failed",
             "course_projection_incomplete": "source_truncated",
+            # 仅有提交时间（无记录时间）的病程不能证明 24 小时内/外：沿用
+            # 已批准的“文书完成时间缺失”原因码，不新增公共原因。
+            "course_record_time_unproven": "document_completion_time_missing",
         }
         preserved_gap_reasons = {
             "target_report_missing",
@@ -611,6 +709,7 @@ def build_exam_lab_rule_decision(
             # 010 已明确要求以业务键唯一关联医嘱、检查和报告。关联不唯一时
             # 必须将真实原因原样交付，不能压缩成笼统字段缺失。
             "association_failed",
+            "document_completion_time_missing",
         }
         dimensions = (
             ApplicabilityState.UNKNOWN,
@@ -769,13 +868,43 @@ def build_text_outcome_display_facts(
         if analysis_rule
         else "result_recording_within_24h"
     )
-    response_times = sorted(
-        value
-        for ref in fact.course_doc_refs
-        if (value := projection.course_times.get(ref)) is not None
-        and event.report_time is not None
-        and value >= event.report_time
-    )
+    time_state: str | None = None
+    if has_time_sources(projection):
+        assessed = assess_fact_responses(
+            projection=projection,
+            event=event,
+            refs=fact.course_doc_refs,
+            carries_result=event_result_carried_by_course,
+        )
+        after_report = tuple(
+            item
+            for item in assessed
+            if item.kind in {"in_window", "late", "submit_unconfirmed"}
+        )
+        # 提交时间不是记录时间：只有记录时间才可作为“最早相关病程”时间和间隔。
+        response_times = sorted(
+            item.effective
+            for item in after_report
+            if item.basis == "record" and item.effective is not None
+        )
+        response_count = len(after_report)
+        if any(item.kind == "conflict" for item in assessed):
+            time_state = "record_time_conflict"
+        elif any(item.basis == "submit" for item in after_report):
+            time_state = "submit_only"
+        elif status == "data_gap":
+            time_state = scan_unplaced_time_state(projection=projection, event=event)
+        if status == "non_compliant":
+            time_state = None
+    else:
+        response_times = sorted(
+            value
+            for ref in fact.course_doc_refs
+            if (value := projection.course_times.get(ref)) is not None
+            and event.report_time is not None
+            and value >= event.report_time
+        )
+        response_count = len(response_times)
     first_response = response_times[0] if response_times else None
     facts: dict[str, Any] = {
         ("failure_kind" if status == "non_compliant" else "verification_kind"): (
@@ -791,7 +920,7 @@ def build_text_outcome_display_facts(
         "checked_sources": ["exam_lab_report", "course_record"],
         "positive_state": fact.positive_state,
         "threshold_hours": 24,
-        "response_record_count": len(response_times),
+        "response_record_count": response_count,
         "event_count": len(events_for_family(
             projection, "exam" if is_exam_rule else "culture"
         )),
@@ -804,6 +933,8 @@ def build_text_outcome_display_facts(
     facts["reviewed_record_scope"] = "首次病程记录及后续病程记录"
     if status in {"compliant", "non_compliant"}:
         facts["requirement_met"] = status == "compliant"
+    if time_state is not None:
+        facts["response_time_state"] = time_state
     if event.report_time is not None:
         facts["report_time"] = event.report_time.strftime("%Y-%m-%d %H:%M:%S")
     if first_response is not None and event.report_time is not None:

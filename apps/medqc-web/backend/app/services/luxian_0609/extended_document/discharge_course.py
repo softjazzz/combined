@@ -4,15 +4,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import re
 from typing import Any, Mapping, Sequence
 
 from .shared import _clean, _row_time
 
 
 def _has_course_body(row: Mapping[str, Any]) -> bool:
-    """只排除空正文与纯签名标签，不评价正文长度或临床质量。"""
-    body = "".join(_clean(row.get("record_content")).split())
-    return bool(body) and body not in {"医生签名:", "医生签名：", "医师签名:", "医师签名："}
+    """只排除空正文、纯文书标题与签名行，不评价临床正文长短。"""
+    body = _clean(row.get("record_content"))
+    signature = re.compile(
+        r"(?:医生|医师)签名\s*[:：]\s*"
+        r"(?:[\u4e00-\u9fff·]{1,6}\s*(?:(?:副主任|主任|主治|住院)?医师)?)?"
+        r"\s*"
+    )
+    title = re.compile(
+        r"(?:(?:首次|日常|日常查房|术后首次|术后|出院前)?病程记录|"
+        r"(?:(?:上级|主治|住院|副主任|主任)(?:医师|医生)?)?查房记录)[:：]?"
+    )
+    title_and_signature = re.compile(f"(?:{title.pattern})(?:{signature.pattern})?")
+    return any(
+        (compact := "".join(line.split()))
+        and not signature.fullmatch(compact)
+        and not title_and_signature.fullmatch(compact)
+        for line in body.splitlines()
+    )
 
 
 @dataclass(frozen=True)
@@ -33,6 +49,7 @@ def evaluate_predischarge_course_presence(
     senior_error: str,
     daily_rows: Sequence[Mapping[str, Any]],
     senior_rows: Sequence[Mapping[str, Any]],
+    clinical_body_states: Mapping[tuple[str, int], str] | None = None,
 ) -> PredischargeCourseOutcome:
     """仅核对出院日及前一日的日常/上级医师病程。"""
 
@@ -79,7 +96,15 @@ def evaluate_predischarge_course_presence(
         for row in rows
         if _row_time(row) is not None and _row_time(row).date() in valid_dates
     )
-    body_rows = tuple((source_key, row) for source_key, row in matched_course_rows if _has_course_body(row))
+    # 原行序号仅用于请求内关联已验证原子事实，不以docID合并正文。
+    states = clinical_body_states or {}
+    indexed_matched = tuple(
+        (source, ordinal, row)
+        for source, rows in (("daily_course_record", daily_rows), ("senior_course_record", senior_rows))
+        for ordinal, row in enumerate(rows)
+        if (value := _row_time(row)) is not None and value.date() in valid_dates
+    )
+    body_rows = tuple((source, row) for source, ordinal, row in indexed_matched if states.get((source, ordinal)) == "present")
     present = bool(body_rows)
     if not present and missing_time_rows:
         return PredischargeCourseOutcome(
@@ -97,6 +122,12 @@ def evaluate_predischarge_course_presence(
                 ],
             },
         )
+
+    if not present and any(
+        states.get((source, ordinal), "unknown" if isinstance(row.get("record_content"), str) and row["record_content"].strip() else "unreadable") == "unknown"
+        for source, ordinal, row in indexed_matched
+    ):
+        return PredischargeCourseOutcome("data_gap", "semantic_extraction_unresolved")
 
     if not present and matched_course_rows:
         return PredischargeCourseOutcome(

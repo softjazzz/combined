@@ -22,9 +22,11 @@ _017_THRESHOLD_EXCEEDED_KIND = "copy_similarity_threshold_exceeded"
 _017_WITHIN_THRESHOLD_KIND = "copy_similarity_within_threshold"
 _017_SEMANTIC_REVIEW_PASSED_KIND = "copy_semantic_review_passed"
 _017_TEMPLATE_SHELL_ONLY_KIND = "copy_template_shell_only"
+_017_DUPLICATE_SAVE_SUSPECTED_KIND = "copy_duplicate_save_suspected"
 _017_HIGH_SIMILARITY_PASS_KINDS = frozenset({
     _017_SEMANTIC_REVIEW_PASSED_KIND,
     _017_TEMPLATE_SHELL_ONLY_KIND,
+    _017_DUPLICATE_SAVE_SUSPECTED_KIND,
 })
 _DATETIME = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -147,11 +149,16 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         facts.update({"interval_end_date": end_date, "interval_end_precision": "date"})
     else:
         interval = raw.get("interval_hours")
+        # 带秒事实以精确秒核对阈值；下方仍验证原始时间、秒与展示小时一致。
+        duration = raw.get("interval_seconds")
+        threshold = 72 * 3600
+        if type(duration) is not int:
+            duration, threshold = interval, 72
         if (raw.get("interval_end_precision") is not None or raw.get("interval_end_date") is not None
                 or not _time(raw.get("interval_end_time")) or isinstance(interval, bool)
                 or not isinstance(interval, (int, float))
-                or (kind == "course_record_interval_over_72h" and float(interval) <= 72)
-                or (kind == "course_record_interval_within_72h" and float(interval) > 72)):
+                or (kind == "course_record_interval_over_72h" and duration <= threshold)
+                or (kind == "course_record_interval_within_72h" and duration > threshold)):
             return None
         facts.update({"interval_end_time": raw["interval_end_time"], "interval_hours": round(float(interval), 2)})
     enhanced = {key: raw.get(key) for key in (
@@ -582,6 +589,24 @@ def validate_published_course_quality_facts(
 ) -> tuple[bool, dict[str, Any] | None]:
     """返回合同是否有效及原值；仅明确的无触发终态可缺少独立 facts。"""
     normalized = str(rule_id or "").strip().upper()
+    # 007 执行器在观察窗尚未成熟时直接短路，尚无病程区间事实可发布。
+    # 仅接受这一明确终态；其他状态和原因仍执行原事实合同。
+    if (
+        normalized == "LX0609-02-01-03"
+        and (raw is None or raw == {})
+        and status == "not_applicable"
+        and reason_code == "evaluation_window_not_mature"
+    ):
+        return True, None
+    # 016 的目标段落不可读时没有可发布的相似度；仅接受已知资料不足终态。
+    # 确定结论及非空残缺 facts 仍须通过原比较事实合同。
+    if (
+        normalized in {"LX0609-12-01-01", "LX0609-12-01-02"}
+        and (raw is None or raw == {})
+        and status == "data_gap"
+        and reason_code == "required_field_missing"
+    ):
+        return True, None
     if normalized == "LX0609-01-01-02" and raw is None:
         return True, None
     if (
@@ -608,7 +633,16 @@ def validate_published_course_quality_facts(
     validators = {"LX0609-02-01-04": _published_008, "LX0609-02-01-05": _published_009,
                   "LX0609-12-01-01": _published_016, "LX0609-12-01-02": _published_017}
     validator = validators.get(normalized)
-    return (True, dict(raw)) if validator is not None and validator(raw) else (False, None)
+    if validator is None or not validator(raw):
+        return False, None
+    if normalized == "LX0609-12-01-02" and (
+        status not in {"compliant", "non_compliant", "data_gap", "not_applicable"}
+        or not course_quality_customer_fact_status_is_valid(
+            rule_id=normalized, status=status, raw_facts=raw, safe_facts=raw,
+        )
+    ):
+        return False, None
+    return True, dict(raw)
 
 
 def safe_course_quality_customer_display_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:
@@ -629,7 +663,7 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
     if not is_course_quality_customer_rule(rule_id):
         return True
     if str(status or "").strip().lower() == "technical_error":
-        return True
+        return rule_id != "LX0609-12-01-02" or safe_facts is None
     if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":
         return safe_facts is not None and status == "data_gap"
     if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_capacity_exceeded":

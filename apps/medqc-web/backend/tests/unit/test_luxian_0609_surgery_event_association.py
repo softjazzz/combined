@@ -212,7 +212,7 @@ def test_single_event_keeps_matching_and_missing_procedure_fallbacks(
     association = associate_preop_document_to_surgery_event(
         events=events or (),
         procedure_name=procedure_name,
-        record_time=datetime(2026, 1, 1, 9, 0),
+        record_time=datetime(2026, 1, 1, 7, 0),
     )
 
     assert reason == ""
@@ -639,3 +639,64 @@ def test_missing_component_time_fails_association() -> None:
         None,
         "association_failed",
     )
+
+
+def _timed_events(*specs):
+    materials = _Materials(surgery_records=tuple(
+        _record(document_id=f"record-{index}", name=name, begin=begin)
+        for index, (name, begin) in enumerate(specs, start=1)
+    ))
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == ""
+    return events or ()
+
+
+@pytest.mark.parametrize(("procedure_name", "record_time", "planned", "expected"), [
+    # 用户口径（2026-10-11）：时间优先，拟施术式写法不同不再阻断。
+    ("拟行显微镜下左侧精索静脉低位结扎术", datetime(2026, 1, 1, 7, 0), None, ("matched", 1)),
+    ("胸腔镜下右肺上叶结节楔形切除术", None, datetime(2026, 1, 1), ("matched", 1)),
+    # 手术开始后才完成的属补写，不归属。
+    ("拟行腹腔镜胆囊切除术", datetime(2026, 1, 1, 9, 0), None, ("ambiguous", None)),
+    # 拟手术日期当天无手术。
+    ("拟行腹腔镜胆囊切除术", None, datetime(2026, 1, 3), ("ambiguous", None)),
+])
+def test_single_surgery_association_is_time_first(procedure_name, record_time, planned, expected) -> None:
+    events = _timed_events(("显微镜下精索静脉低位结扎术", "2026-01-01 08:00:00+08:00"))
+    association = associate_preop_document_to_surgery_event(
+        events=events, procedure_name=procedure_name, record_time=record_time, planned_surgery_time=planned,
+    )
+    assert (association.state, association.event_index) == expected
+
+
+def test_preop_document_belongs_to_next_surgery_by_time_regardless_of_name() -> None:
+    events = _timed_events(("甲手术", "2026-01-01 08:00:00+08:00"), ("乙手术", "2026-01-03 08:00:00+08:00"))
+    association = associate_preop_document_to_surgery_event(
+        events=events, procedure_name="拟行甲手术", record_time=datetime(2026, 1, 2, 10, 0),
+    )
+    assert (association.state, association.event_index) == ("matched", 2)
+
+
+@pytest.mark.parametrize(("procedure_name", "expected"), [
+    ("拟行乙手术", ("matched", 2)),
+    ("拟行丙手术", ("ambiguous", None)),
+])
+def test_same_day_surgeries_are_split_by_name_only_when_time_cannot(procedure_name, expected) -> None:
+    events = _timed_events(("甲手术", "2026-01-01 08:00:00+08:00"), ("乙手术", "2026-01-01 14:00:00+08:00"))
+    association = associate_preop_document_to_surgery_event(
+        events=events, procedure_name=procedure_name, record_time=None, planned_surgery_time=datetime(2026, 1, 1),
+    )
+    assert (association.state, association.event_index) == expected
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("麻醉方式：全麻拟诊手术日期：2025年08月15日手术要点：术中注意。", datetime(2025, 8, 15)),
+    ("拟诊手术日期::2025-08-06手术要点：术中注意。", datetime(2025, 8, 6)),
+    ("拟施手术日期：2025年8月10日", datetime(2025, 8, 10)),
+    ("拟手术日期：2025年1月2日；拟手术日期：2025年1月3日", None),
+    ("拟手术日期：2025年2月30日", None),
+    ("入院日期：2025年1月2日", None),
+])
+def test_summary_planned_date_label_in_body(text, expected) -> None:
+    from app.services.luxian_0609.surgery_event_association import summary_planned_surgery_time_from_row
+
+    assert summary_planned_surgery_time_from_row({"record_content": text}) == expected

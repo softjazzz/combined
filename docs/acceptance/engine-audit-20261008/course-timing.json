@@ -1,0 +1,277 @@
+{
+  "group": "course-timing",
+  "head": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "expected_head": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "actual_rule_count": 5,
+  "rules": [
+    {
+      "rule_id": "LX0609-03-01-01",
+      "evidence_review": "总表162起：源库会诊文书实际是执行记录，缺独立会诊记录单；phase_scope:121生成not_executed/policy_definition_pending，facts为空、不催补文书。",
+      "findings_and_validation_gaps": "正式暂停口径明确，不应启用底层020关联检查。旧9月14日020真实重放不是当前正式执行通过；待独立意见源接入、验收和版本冻结。",
+      "current_verdict": "policy_pending",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "counts_toward_acceptance": true
+    },
+    {
+      "rule_id": "LX0609-03-01-02",
+      "evidence_review": "总表173起：未同步会诊申请单；相同暂停链。",
+      "findings_and_validation_gaps": "无会诊目的权威来源，待接入申请单；不能由请会诊执行记录猜申请目的。未新增真实验证。",
+      "current_verdict": "policy_pending",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "counts_toward_acceptance": true
+    },
+    {
+      "rule_id": "LX0609-03-01-03",
+      "evidence_review": "总表184起：缺独立会诊记录单意见源；相同暂停链。",
+      "findings_and_validation_gaps": "待来源与口径验收；不要沿旧语义执行器以“必要时”等词作当前正式判定。未新增真实验证。",
+      "current_verdict": "policy_pending",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "counts_toward_acceptance": true
+    },
+    {
+      "rule_id": "LX0609-03-01-04",
+      "evidence_review": "总表195起：建议从会诊执行记录正文语义提取，逐条匹配后续病程/医嘱。episode执行器3397：具体痕迹或高置信具体医嘱才合规；确认缺证或笼统记录不合规；相关源缺口和未知安全降级。2913：计划痕迹不等于完成。",
+      "findings_and_validation_gaps": "当前口径已经包括“未找到执行证据”，与9月14旧“无痕迹不适用”口径不同，旧54/54不可移植。9月24公开引用合同有合成链证据，推荐数量、逐条关联/低置信/条件建议仍缺当前独立临床金标与稳定明细。本轮仅源码与脱敏记录复核，未新增04模型探针。",
+      "current_verdict": "not_clinically_accepted",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "counts_toward_acceptance": true
+    },
+    {
+      "rule_id": "LX0609-03-02-01",
+      "evidence_review": "入院registration/admission时间+满7天daily病程当前诊断不明确+讨论表存在性。客户事实显示admission_time、uncertain_record_times、discussion_count；Renderer生成结论文案。",
+      "findings_and_validation_gaps": "CT-01..03确认阻断；CT-R02争议。正例、已明确、否定、条件计划、缺时间、空白/早期讨论均合成链观察。缺当前版本真实独立预期/保存/临床复核。",
+      "current_verdict": "blocked_confirmed_defect",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "counts_toward_acceptance": true
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "CT-01",
+      "priority": "P1",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "classification": "confirmed_defect",
+      "summary": "否定与未来条件中的诊断不明确误触发当前缺陷",
+      "source": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/difficult_case_trigger.py",
+      "line": 31,
+      "probes": [
+        "050_negated_marker",
+        "050_planned_marker"
+      ]
+    },
+    {
+      "finding_id": "CT-02",
+      "priority": "P1",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "classification": "confirmed_defect",
+      "summary": "当前不明确病程缺可信时间时被静默排除并作完整未触发",
+      "source": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "line": 2309,
+      "probes": [
+        "050_missing_course_time"
+      ]
+    },
+    {
+      "finding_id": "CT-03",
+      "priority": "P1",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "classification": "confirmed_defect",
+      "summary": "空白讨论行被当成书写完成并判合规；应缺陷还是数据缺口待口径",
+      "source": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "line": 2327,
+      "probes": [
+        "050_blank_discussion"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "CT-R01",
+      "rule_ids": [
+        "LX0916-015",
+        "LX0916-016"
+      ],
+      "type": "confirmed_function_time_precision_risk_production_reachability_unverified",
+      "probes": [
+        "015_date_only_event",
+        "015_date_only_document"
+      ],
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "id": "CT-R02",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "type": "policy_dispute_discussion_time_and_problem_linkage",
+      "probes": [
+        "050_early_discussion"
+      ]
+    },
+    {
+      "id": "CT-R03",
+      "rule_ids": [
+        "LX0916-008"
+      ],
+      "type": "policy_dispute_child_age_boundary",
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "id": "CT-R04",
+      "rule_ids": [
+        "LX0916-015",
+        "LX0916-016"
+      ],
+      "type": "policy_dispute_authored_at_vs_event_time_and_final_scene",
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "id": "CT-R05",
+      "rule_ids": [
+        "LX0609-03-01-04"
+      ],
+      "type": "conditional_future_recommendation_gate_gap"
+    }
+  ],
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "bd63c9ac5927deb8130d13a480196ab514a4301ee5e1f47abd69df29a0c903d5",
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/difficult_case_trigger.py": "0874fc4865386393fdd5b435e2e343a9cdd73429eeae26f5cb6af1d1f9daba62",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_episode_execution.py": "73a51b5d720e0c89cddbc7dc29b7efa451295b039099594b887b07a478519cdc",
+    "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a",
+    "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93",
+    "apps/medqc-web/backend/app/services/luxian_0916/admission_rules.py": "01b8f7f31abb6c3b95ea96c535e6fade48ed0cd3dd8c6e96332e03ff0a82aace",
+    "apps/medqc-web/backend/app/services/luxian_0916/admission_content_items.py": "24e1055a8d37404116e6e75cfae535f82dd88b1e0dc78243ee4c982be253b125",
+    "apps/medqc-web/backend/app/services/luxian_0916/first_course_rules.py": "cb2feabc608811d5e0c1ad800aebbb4760bd7af41491dc2bf37dde7321269dc6",
+    "apps/medqc-web/backend/app/services/luxian_0916/disease_change_015016.py": "a027b63a1bc23ed45a1788a37c27dee37327744b8cdd2a7c91fae3fc004a1637",
+    "apps/medqc-web/backend/app/services/luxian_0916/disease_change_stage2.py": "9a85e47699d83a5e2365ac526b825d62d5e2321dc2a816eef4e93d92427b65a8",
+    "apps/medqc-web/backend/app/services/luxian_0916/course_event_rules.py": "c3d7741ea694f4f2e58c417fbbb0a6900c7eca8c4fa7875550fc5e16fbac1c4b",
+    "apps/medqc-web/backend/app/services/luxian_0916/input_context.py": "b85ba458b134d01076b53a8674d7bedc660d0273299b400d0c23a4556a0752fb",
+    "apps/medqc-web/backend/app/services/luxian_0916/semantic_extractor.py": "60ada6e10f06e55b955c1c6d63259c4799f45b3d5531c58195ef0dc60bcba319"
+  },
+  "artifacts": {
+    "report": "docs/acceptance/engine-audit-20261008/course-timing.md",
+    "expectations": ".tmp/engine-audit-20261008/course-timing/expected.json",
+    "observations": ".tmp/engine-audit-20261008/course-timing/observed.json",
+    "probe": ".tmp/engine-audit-20261008/course-timing/probe.py"
+  },
+  "synthetic_scenario_count": 24,
+  "real_model_calls": 0,
+  "pg_connections": 0,
+  "raw_patient_material_read": false,
+  "env_access_limit": "Two initial imports indirectly invoked load_dotenv; no env contents read/displayed by audit. Full-session zero-env-load cannot be asserted. Successful probe blocked env file reads and isolated connection/bundles packages.",
+  "production_modified": false,
+  "shared_tests_modified": false,
+  "committed": false,
+  "clinical_approval": false,
+  "excluded_rules": [
+    {
+      "rule_id": "LX0916-008",
+      "evidence_review": "admission_rules:211，入院patient.age_years≥18为不适用；儿童与语义not_applicable冲突→data_quality_gap；其他依受控complete/incomplete/unknown事实。锚指入院文书，不返回逐项直接引文。",
+      "findings_and_validation_gaps": "成人对照、儿童冲突合成正确。当前ITEM_LABELS仅005/006，008仍是整体语义状态；历史A逐项专项不可当当前树通过。抽取稳定性、历史内容角色/来源范围、18岁边界和正式回读待核。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-009",
+      "evidence_review": "admission_rules:242消费权威语义完整性状态；unknown→资料不足，incomplete→缺陷。结果有文书锚与semantic_state，缺具体重要体征/准确性证据。",
+      "findings_and_validation_gaps": "unknown合成安全；仅历史整包/审计，未找到独立专项预期。需要重要体征、阴阳性/否定事实、错记与漏记真例、直接证据及临床签认。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-010",
+      "evidence_review": "first_course_rules:121唯一首程/唯一primary；234结构化字段、structured_sections及受控presence；缺字段→gap，空字段→non_compliant，非空→compliant。",
+      "findings_and_validation_gaps": "六组首程控制正确，字段状态和文书ID可回放；不把“存在”当充分。历史四真正例正式Worker/PG/API/页面工程成果绑定旧工作区，缺真实缺项、当前版本正式冻结、临床确认。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-011",
+      "evidence_review": "319病例特点存在后读取adequate/inadequate，缺质量事实→gap；文书/字段锚与semantic_quality_states，evidence可为空。",
+      "findings_and_validation_gaps": "合成充分/空/不可读边界正确；缺归纳理由/直接引文，C30历史人工争议保留。未取得当前正式保存/回读及真实缺陷临床预期。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-012",
+      "evidence_review": "379诊断依据、鉴别诊断、诊疗计划三字段存在性；任一不可读优先gap，全部可读后空项→缺失，非空→compliant。",
+      "findings_and_validation_gaps": "合成边界正确；计划描述本身可满足存在性，充分性另由014判。历史H21四真正例、125结果+3非目标共享合同失败及成本回读是阶段成果；真实缺项有界扫描0不能当不存在缺陷，当前版本未复验。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-013",
+      "evidence_review": "420两字段存在后分别要求diagnosis_basis_quality/differential_diagnosis_quality；缺任一事实→gap，不充分项明列及字段锚。",
+      "findings_and_validation_gaps": "合成输入可形成充分性结论，但具体理由/evidence不足。旧共享抽取故障样本不等于临床负例；未找到独立充分性专项预期与真实保存验收。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-014",
+      "evidence_review": "488计划存在后要求treatment_plan_quality，adequate才合规；计划词不是已执行事实，本规则评价计划内容。",
+      "findings_and_validation_gaps": "合成六组边界正确；历史两真例均合规但无质量理由/直接evidence。剂量/疗程检查范围、全面具体维度与临床答案待冻结；无当前正式充分性闭环。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-015",
+      "evidence_review": "Stage1只按有效病危/病重医嘱或PL/PH，取消/撤销/作废排除、停止历史事件保留；planned_start不替代prescribed。Stage2五正式病程来源完整，按事件时间选不早于事件的分句，四语义事实受坐标合同约束；Python派生time_recorded，final成熟。course_event_rules:616消费三个记录事实。",
+      "findings_and_validation_gaps": "合成取消/计划时间/停止保护正确；三事实present→合规，absent→缺陷，成熟未知→gap。CT-R01/04保留；历史30例与35草案不等于当前临床gold，六真例/七事件的最早定位和关联异议待冻结，完整Worker正式scene未验收。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    },
+    {
+      "rule_id": "LX0916-016",
+      "evidence_review": "与015共享结构化触发、Stage2分句目录和事件双坐标，Python独立消费analysis_present/management_present，普通好转不能证明分析；诊断修订不单独触发。",
+      "findings_and_validation_gaps": "合成两事实present/absent/成熟未知分支正确；CT-R01/04保留。历史C04 unknown不自动改成absent；事件归属、分析/具体处理真实缺陷、正式保存/回读及临床签认未闭环。",
+      "current_verdict": "scope_excluded_by_user",
+      "real_verification_performed": false,
+      "clinical_signoff": false,
+      "scope_excluded_by_user": true,
+      "counts_toward_acceptance": false
+    }
+  ],
+  "original_reviewed_rule_count": 14,
+  "excluded_rule_count": 9,
+  "scope_note": "用户最新排除0916；仅0609五条属于有效审查范围。已存在0916记录保留，不计验收分母、阻断或完成率。",
+  "synthetic_scenario_count_includes_excluded_0916": true,
+  "active_scope_synthetic_scenario_count": 7
+}

@@ -110,6 +110,10 @@ def _discharge_diagnosis_rows(
     }
 
 
+@pytest.mark.skipif(
+    builder.engine is None or builder.engine.dialect.name != "postgresql",
+    reason="build_rows 读取业务库源表生成派生资料，需 PostgreSQL 源库（CI 与临时 SQLite 不具备）",
+)
 def test_build_rows_assigns_one_stable_application_id_to_each_controlled_consultation_pair() -> None:
     rows_by_table, _ = builder.build_rows()
 

@@ -77,6 +77,8 @@ _EXCERPT_FIELDS = (
     "chief_complaint",
     "diagnosis",
     "order_name",
+    "generic_name",
+    "brand_name",
     "document_title",
 )
 _TIME_PATTERN = re.compile(
@@ -91,7 +93,7 @@ _SHARED_PARENT_DOCUMENT_SOURCES = {
 
 
 def _text(value: Any) -> str:
-    return str(value or "").strip()
+    return str(value if value is not None else "").strip()
 
 
 def _row_has_identity(row: Mapping[str, Any], document_id: str) -> bool:
@@ -430,6 +432,21 @@ def project_selected_document_evidence(
     return []
 
 
+_COURSE_SOURCE_TYPES = frozenset(
+    {"first_course_record", "daily_course_record", "senior_course_record"}
+)
+
+
+def _real_record_time(row: Mapping[str, Any]) -> str:
+    """仅返回文书自身的记录时间；提交时间不是记录时间，缺失时不填。"""
+
+    for field in ("record_time", "record_datetime"):
+        value = _text(row.get(field)).replace("T", " ", 1)
+        if value and _TIME_PATTERN.fullmatch(value):
+            return value
+    return ""
+
+
 def _record_time(row: Mapping[str, Any]) -> str:
     candidate = authoritative_document_time_value(row)
     if candidate is None:
@@ -457,13 +474,43 @@ def _excerpt(row: Mapping[str, Any], *, limit: int = 300) -> tuple[str, str]:
     return field_path, compact[:limit] + ("…" if len(compact) > limit else "")
 
 
+def _discussion_excerpt(
+    row: Mapping[str, Any], *, field_path: str = "", limit: int = 300
+) -> tuple[str, str]:
+    """Locate existing discussion content, never a title or a claim of absence.
+
+    These are the same whitelisted content fields read by the preop executor.
+    A document excerpt is only a navigation aid for reviewing the selected source;
+    it does not establish that another item is missing or that extraction succeeded.
+    """
+    candidates = (
+        ("record_content", row.get("record_content")),
+        ("content", row.get("content")),
+        ("host_summary", row.get("host_summary")),
+        ("discuss_staff", row.get("discuss_staff")),
+    )
+    for path, raw in candidates:
+        if field_path and path != field_path:
+            continue
+        if not isinstance(raw, str):
+            continue
+        compact = re.sub(r"\s+", " ", raw).strip()
+        if compact:
+            return path, compact[:limit] + ("…" if len(compact) > limit else "")
+    return "", ""
+
+
 def enrich_customer_evidence(
     evidence_rows: Sequence[Mapping[str, Any]],
     *,
     evidence_materials: Any,
     preferred_source_fields: Mapping[str, str] | None = None,
+    strict_course_record_time: bool = False,
 ) -> list[dict[str, Any]]:
     """从本次执行的冻结材料中补充精确证据时间和短摘录。
+
+    ``strict_course_record_time`` 为真时，病程证据的时间只取真实记录时间，
+    不把提交时间标成记录时间（CT/MRI 报告后 24 小时类规则使用）。
 
     仅按来源和业务 ID 精确匹配；零条或多条命中均保持原引用，不猜测文书。
     """
@@ -490,10 +537,22 @@ def enrich_customer_evidence(
             enriched_rows.append(evidence)
             continue
         matched = matches[0]
-        record_time = _record_time(matched)
-        field_path, excerpt = _excerpt(matched)
+        record_time = (
+            _real_record_time(matched)
+            if strict_course_record_time and source_type in _COURSE_SOURCE_TYPES
+            else _record_time(matched)
+        )
+        # 显式字段是来源约束；字段缺失时不得用另一字段正文填充旧坐标。
+        explicit_discussion_field = (
+            _text(evidence.get("field_path")) if source_type == "presurg_discussion" else ""
+        )
+        field_path, excerpt = (
+            _discussion_excerpt(matched, field_path=explicit_discussion_field)
+            if source_type == "presurg_discussion"
+            else _excerpt(matched)
+        )
         preferred = (preferred_source_fields or {}).get(source_type)
-        if preferred:
+        if preferred and not explicit_discussion_field:
             value = matched.get(preferred)
             path = preferred
             if preferred not in matched:
@@ -517,6 +576,8 @@ def enrich_customer_evidence(
             if field_path and not _text(evidence.get("field_path")):
                 evidence["field_path"] = field_path
             evidence["evidence_excerpt"] = excerpt
-            evidence["excerpt_kind"] = "文书级依据"
+            evidence["excerpt_kind"] = (
+                "字段级依据" if source_type == "presurg_discussion" else "文书级依据"
+            )
         enriched_rows.append(evidence)
     return enriched_rows

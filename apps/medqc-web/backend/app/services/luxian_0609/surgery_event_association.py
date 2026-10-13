@@ -32,6 +32,10 @@ _PROCEDURE_NARRATIVE_PREFIXES = (
     "拟施",
 )
 _COMPOUND_PROCEDURE_SEPARATOR = re.compile(r"[+＋、，,；;]")
+_PLANNED_SURGERY_DATE_LABEL = re.compile(
+    r"拟[诊施行]?手术(?:日期|时间)\s*[:：]*\s*"
+    r"(?P<year>\d{4})\s*[-年./]\s*(?P<month>\d{1,2})\s*[-月./]\s*(?P<day>\d{1,2})"
+)
 
 
 class SurgeryEvent:
@@ -195,7 +199,17 @@ def summary_planned_surgery_time_from_row(
         r"(?:^|[\r\n])\s*手术时间\s*[:：]\s*(?P<value>[^\r\n]+)",
         text,
     )
-    return _parse_planned_surgery_time(match.group("value")) if match else None
+    if match and (parsed := _parse_planned_surgery_time(match.group("value"))) is not None:
+        return parsed
+    # 泸县模板“……麻醉方式：全麻拟诊手术日期：2025年08月15日手术要点：……”标签前后不换行；
+    # 只认拟手术日期标签，多个不同日期时不取。
+    dates: set[datetime] = set()
+    for item in _PLANNED_SURGERY_DATE_LABEL.finditer(text):
+        try:
+            dates.add(datetime(int(item["year"]), int(item["month"]), int(item["day"])))
+        except ValueError:
+            return None
+    return next(iter(dates)) if len(dates) == 1 else None
 
 
 def _parse_planned_surgery_time(value: Any) -> datetime | None:
@@ -351,7 +365,66 @@ def associate_preop_document_to_surgery_event(
     record_time: datetime | None,
     planned_surgery_time: datetime | None = None,
 ) -> PreopDocumentAssociation:
-    """以术式事实优先、计划手术时间收窄候选的保守关联。
+    """术前文书与已实施手术：时间优先，术式名称只在时间分不开时区分。
+
+    用户口径（2026-10-11）：拟施术式与实际术式写法不同（侧别、前缀、术中改术式）
+    很常见，名称不能作硬门槛。依次：
+    1. 文书完成时间早于某台手术开始、晚于上一台手术开始 → 归属该台；手术开始后才
+       完成的属补写，不归属；
+    2. 无完成时间时按拟手术日期（有时刻精确到分钟）对应当天手术；
+    3. 同一时间段有多台候选时才用术式名称区分，仍分不开为歧义；
+    4. 两种时间都没有，或相关手术缺可靠开始时间时，沿用原名称优先的保守关联。
+    """
+
+    if not events:
+        return PreopDocumentAssociation(state="not_required")
+    timed = [(event, _event_boundary(event, "begin")) for event in events]
+    if all(begin is not None for _event, begin in timed):
+        ordered = sorted(timed, key=lambda item: item[1])
+        if record_time is not None:
+            previous: datetime | None = None
+            for _event, begin in ordered:
+                if record_time < begin and (previous is None or record_time > previous):
+                    return _narrow_by_procedure_name(
+                        [event for event, other in ordered if other == begin], procedure_name
+                    )
+                previous = begin
+            return PreopDocumentAssociation(state="ambiguous")
+        if planned_surgery_time is not None:
+            planned_event = _unique_event_for_planned_surgery_time(events, planned_surgery_time)
+            if planned_event is not None:
+                return PreopDocumentAssociation(state="matched", event_index=planned_event.event_index)
+            same_day = [event for event, begin in ordered if begin.date() == planned_surgery_time.date()]
+            if not same_day:
+                return PreopDocumentAssociation(state="ambiguous")
+            return _narrow_by_procedure_name(same_day, procedure_name)
+    return _name_first_preop_association(
+        events=events,
+        procedure_name=procedure_name,
+        record_time=record_time,
+        planned_surgery_time=planned_surgery_time,
+    )
+
+
+def _narrow_by_procedure_name(
+    candidates: Sequence[SurgeryEvent], procedure_name: Any
+) -> PreopDocumentAssociation:
+    if len(candidates) == 1:
+        return PreopDocumentAssociation(state="matched", event_index=candidates[0].event_index)
+    named = [event for event in candidates if procedure_matches_surgery(procedure_name, event.surgery_name)]
+    if len(named) == 1:
+        return PreopDocumentAssociation(state="matched", event_index=named[0].event_index)
+    return PreopDocumentAssociation(state="ambiguous")
+
+
+def _name_first_preop_association(
+    *,
+    events: Sequence[SurgeryEvent],
+    procedure_name: Any,
+    record_time: datetime | None,
+    planned_surgery_time: datetime | None = None,
+) -> PreopDocumentAssociation:
+    """无可用时间时的兜底：以术式事实优先、计划手术时间收窄候选的保守关联。
 
     计划时间仅在已按名称筛选的候选中精确到分钟或自然日收窄，不能覆盖
     明确术式冲突。文书记录时间保留旧有回退语义，永不按“最近手术”猜测。
@@ -448,6 +521,12 @@ def _unique_event_for_planned_surgery_time(
         and begin.date() == planned_surgery_time.date()
     ]
     return same_day_matches[0] if len(same_day_matches) == 1 else None
+
+
+def surgery_event_begin_time(event: SurgeryEvent) -> datetime | None:
+    """事件可靠开始时间；来源冲突或缺失时为 None。"""
+
+    return _event_boundary(event, "begin")
 
 
 def _event_boundary(event: SurgeryEvent, boundary: str) -> datetime | None:

@@ -19,8 +19,9 @@ def test_synthetic_replay_runs_formal_execution_reducer_and_aggregator() -> None
 
     assert replay["historical_b3_response"] is False
     assert replay["network_used"] is False
-    assert replay["llm_call_count"] == 2
-    assert replay["prompt_count"] == 2
+    # 第一阶段、执行判断与会诊措施逐项核对（2026-10-12）各 1 次。
+    assert replay["llm_call_count"] == 3
+    assert replay["prompt_count"] == 3
     assert [item["status"] for item in replay["results"]] == ["compliant"]
     assert all(item["reason_code"] == "requirement_satisfied" for item in replay["results"])
     assert replay["results"][0]["fact_ref_count"] > 0
@@ -55,7 +56,7 @@ def test_variant_comparison_reports_byte_equal_prompts_without_serializing_them(
     )
 
     assert comparison["prompts_byte_equal"] is True
-    assert comparison["prompt_count_by_variant"] == [2, 2]
+    assert comparison["prompt_count_by_variant"] == [3, 3]
     assert comparison["acceptance_projection_exact_equal"] is True
     assert all(
         result["status_equal"]
@@ -139,5 +140,5 @@ def test_variant_subprocesses_compare_prompt_bytes_with_one_session_key() -> Non
 
     comparison = verify.compare_replays(replays)
     assert comparison["prompts_byte_equal"] is True
-    assert comparison["prompt_count_by_variant"] == [2, 2]
+    assert comparison["prompt_count_by_variant"] == [3, 3]
     assert comparison["acceptance_projection_exact_equal"] is True

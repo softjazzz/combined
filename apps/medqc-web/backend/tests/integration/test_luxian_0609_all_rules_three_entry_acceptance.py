@@ -964,9 +964,187 @@ def test_customer_exits_choose_same_safe_text_across_aliases(
 
 
 @pytest.mark.integration
+def test_preop_extraction_invalid_survives_publish_store_and_api(monkeypatch, _isolated_database):
+    """讨论记录抽取未通过原文校验：资料不足事实经发布→保存→API 不丢失、不改变。"""
+    from app.services.luxian_0609.native_preop_content_execution import RULE_FIELDS
+    from app.services.luxian_0609.surgery_document_result_mapping import (
+        safe_surgery_document_customer_display_facts,
+    )
+
+    rule_id, status, reason = "LX0609-04-01-05", "data_gap", "required_field_missing"
+    engine, workspace = _isolated_database
+    pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
+    _install_evidence_fixture(monkeypatch, consultation_row=False)
+    service = sichuan_qc_service.SichuanQCService({
+        "provider_code": "isolated", "model": "stable-semantic",
+        "allow_mock_when_unconfigured": True, "source": "preop-invalid",
+    })
+    _wire_production_entry(monkeypatch, workspace, pool_service, _settings(), service)
+    facts = {
+        "verification_kind": "preop_fact_extraction_invalid",
+        "target_document": "presurg_discussion",
+        "checked_fields": list(RULE_FIELDS[rule_id]),
+        "missing_fields": [], "documents": [],
+        "failure_scope": "field", "invalid_fields": ["preop_preparation"],
+    }
+    assert safe_surgery_document_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+    original = luxian_execution.aggregate_luxian_0609_results
+    published = {}
+
+    def inject(**kwargs):
+        result = original(**kwargs)
+        result[0].update(
+            status=status, result_status=status, display_status=status, is_compliant=None,
+            reason_code=reason, customer_display_facts=deepcopy(facts), evidence=[],
+            customer_evidence=[],
+            conclusion="术前讨论记录的自动抽取结果未通过原文核验（术前准备），本项暂无法判定。",
+            suggestion="请人工核对术前讨论记录原文，或重新质控。",
+        )
+        published[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", inject)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+    app = _api_app(service)
+
+    def verify(job_id, job, _ids):
+        assert job["status"] == "completed", job.get("error_message")
+        table = workspace._record_result_envelope_table
+        with engine.connect() as connection:
+            rows = connection.execute(sa.select(table).where(table.c.job_id == job_id)).mappings().all()
+        assert rows
+        for row in rows:
+            saved = json.loads(row["envelope_json"])["items"][0]
+            assert _business_content(saved) == _business_content(published[row["visit_id"]])
+            assert saved["customer_display_facts"] == facts
+        with TestClient(app) as client:
+            response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}")
+        assert response.status_code == 200, response.text
+        for item in response.json()["data"]["items"]:
+            assert item["customer_display_facts"] == facts
+            assert item["status"] == status and item["reason_code"] == reason
+        # 失败事实不能以合规交付，也不能夹带引文。
+        from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
+        forged = deepcopy(published[_RECORD_A["visit_id"]])
+        forged["customer_display_facts"]["quote"] = "拼接引文..."
+        with pytest.raises(ValueError):
+            validated_customer_explanation(forged, rule_id=rule_id, status=status)
+
+    pool_id, sample_id = _create_ready_sample_pool(engine, pool_service)
+    jobs = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id,
+                          sample_item_id=sample_id, workspace_rule_ids=[rule_id], on_terminal=verify)
+    assert len(jobs) == 3
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("status,kind,missing,pending,reason,documents", [
+    # C04 形态：确认缺项 + 待确认字段并存，状态仍为不合规。
+    ("non_compliant", "preop_content_incomplete", ["preop_diagnosis", "surgeon_preop_visit"],
+     ["planned_anesthesia", "planned_procedure", "precautions", "surgical_indication"],
+     "requirement_violated",
+     [(1, None, "ambiguous", ["brief_condition", "preop_diagnosis", "surgeon_preop_visit"]),
+      (2, 1, "matched", ["planned_anesthesia", "planned_procedure", "precautions",
+                         "preop_diagnosis", "surgeon_preop_visit", "surgical_indication"])]),
+    # 仅待确认：资料不足，不得变成合规。
+    ("data_gap", "preop_surgery_association_ambiguous", [], ["planned_anesthesia"],
+     "association_failed",
+     [(1, None, "ambiguous", []), (2, 1, "matched", ["planned_anesthesia"])]),
+])
+def test_preop_pending_fields_survive_publish_store_and_api(
+    monkeypatch, _isolated_database, status, kind, missing, pending, reason, documents,
+):
+    """发布→Worker→隔离 SQLite 实际保存→三入口 API 读取：pending_fields 等不丢失、不改变。"""
+    from app.services.luxian_0609.native_preop_content_execution import RULE_FIELDS, RULE_SOURCES
+    from app.services.luxian_0609.surgery_document_result_mapping import (
+        safe_surgery_document_customer_display_facts,
+    )
+
+    rule_id = "LX0609-04-01-04"
+    engine, workspace = _isolated_database
+    pool_service = _install_sample_pool_sqlite(monkeypatch, engine)
+    _install_evidence_fixture(monkeypatch, consultation_row=False)
+    service = sichuan_qc_service.SichuanQCService({
+        "provider_code": "isolated", "model": "stable-semantic",
+        "allow_mock_when_unconfigured": True, "source": "preop-pending",
+    })
+    _wire_production_entry(monkeypatch, workspace, pool_service, _settings(), service)
+    facts = {
+        "verification_kind": kind,
+        "target_document": RULE_SOURCES[rule_id],
+        "checked_fields": list(RULE_FIELDS[rule_id]),
+        "missing_fields": missing,
+        "documents": [
+            {"document_index": index, "event_index": event, "association_state": state,
+             "missing_fields": doc_missing}
+            for index, event, state, doc_missing in documents
+        ],
+        "pending_fields": pending,
+    }
+    assert safe_surgery_document_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+    original = luxian_execution.aggregate_luxian_0609_results
+    published = {}
+
+    def inject(**kwargs):
+        result = original(**kwargs)
+        assert len(result) == 1
+        result[0].update(
+            status=status, result_status=status, display_status=status,
+            is_compliant=False if status == "non_compliant" else None,
+            reason_code=reason, customer_display_facts=deepcopy(facts), evidence=[],
+            customer_evidence=[],
+            conclusion="术前小结内容待核对。",
+            suggestion="请按确认缺项补充，待确认项先核对手术关联。",
+        )
+        published[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
+        return result
+
+    monkeypatch.setattr(luxian_execution, "aggregate_luxian_0609_results", inject)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", CustomQCWorkspaceService)
+    app = _api_app(service)
+
+    def verify(job_id, job, _ids):
+        assert job["status"] == "completed", job.get("error_message")
+        table = workspace._record_result_envelope_table
+        with engine.connect() as connection:
+            rows = connection.execute(sa.select(table).where(table.c.job_id == job_id)).mappings().all()
+        assert rows
+        for row in rows:
+            saved = json.loads(row["envelope_json"])["items"][0]
+            assert _business_content(saved) == _business_content(published[row["visit_id"]])
+            assert saved["customer_display_facts"] == facts
+            assert saved["customer_display_facts"]["pending_fields"] == pending
+            assert saved["status"] == status and saved["reason_code"] == reason
+        latest = _read_canonical(app, job_id, _RECORD_A, [rule_id])[rule_id]
+        assert _business_content(latest) == _business_content(published[_RECORD_A["visit_id"]])
+        with TestClient(app) as client:
+            response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}")
+        assert response.status_code == 200, response.text
+        for item in response.json()["data"]["items"]:
+            assert item["customer_display_facts"] == facts
+            assert item["status"] == status and item["reason_code"] == reason
+            assert item["suggestion"] == published[_RECORD_A["visit_id"]]["suggestion"]
+        # 待确认字段与确认缺项重叠、或出现在完整结论里，保存合同必须拒绝。
+        from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
+        overlap = deepcopy(published[_RECORD_A["visit_id"]])
+        overlap["customer_display_facts"]["pending_fields"] = ["preop_diagnosis"]
+        overlap["customer_display_facts"]["missing_fields"] = ["preop_diagnosis"]
+        if status == "data_gap":
+            overlap["customer_display_facts"]["missing_fields"] = ["preop_diagnosis"]
+        with pytest.raises(ValueError):
+            validated_customer_explanation(overlap, rule_id=rule_id, status=status)
+
+    pool_id, sample_id = _create_ready_sample_pool(engine, pool_service)
+    jobs = _entry_job_ids(app=app, workspace=workspace, pool_id=pool_id,
+                          sample_item_id=sample_id, workspace_rule_ids=[rule_id], on_terminal=verify)
+    assert len(jobs) == 3
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("rule_id,missing", [
     ("LX0609-04-01-04", ["precautions"]),
     ("LX0609-04-01-05", []),
+    ("LX0609-04-01-05", ["specific_opinions"]),
+    ("LX0609-04-01-05", ["specific_opinions", "recorder_signature"]),
 ])
 def test_preop_published_documents_survive_worker_store_and_api(
     monkeypatch, _isolated_database, rule_id, missing,
@@ -997,6 +1175,13 @@ def test_preop_published_documents_survive_worker_store_and_api(
     }
     assert safe_surgery_document_customer_display_facts(rule_id=rule_id, raw=facts) == facts
     status = "non_compliant" if missing else "compliant"
+    from app.services.luxian_0609.customer_renderer import preop_summary_customer_message
+    message = preop_summary_customer_message(rule_id=rule_id, status=status, facts=facts)
+    if rule_id == "LX0609-04-01-05" and missing:
+        assert message is not None
+        assert "具体讨论意见" in message[0] and "具体讨论意见" in message[2]
+        assert "主持人小结" not in message[2]
+        assert ("记录者签名" in message[2]) == ("recorder_signature" in missing)
     original = luxian_execution.aggregate_luxian_0609_results
     published = {}
 
@@ -1007,7 +1192,8 @@ def test_preop_published_documents_survive_worker_store_and_api(
             status=status, result_status=status, display_status=status, is_compliant=not bool(missing),
             reason_code="requirement_violated" if missing else "requirement_satisfied",
             customer_display_facts=deepcopy(facts), evidence=[], customer_evidence=[],
-            conclusion="术前文书核对完成。", suggestion="请逐份核对术前文书。",
+            conclusion=message[0] if message else "术前文书核对完成。",
+            suggestion=message[2] if message else "请逐份核对术前文书。",
         )
         published[kwargs["audit_context"]["visit_id"]] = deepcopy(result[0])
         return result

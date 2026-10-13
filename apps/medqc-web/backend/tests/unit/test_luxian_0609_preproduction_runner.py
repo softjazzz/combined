@@ -330,38 +330,41 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         if item.source_contract_state == "typed_shadow_v1"
     }
     typed_source_only_rule_ids = {
-        "LX0609-03-02-01",
-        "LX0609-09-02-01",
-        "LX0609-06-04-01",
-        "LX0609-06-04-02",
+        "LX0609-01-02-02",
+        "LX0609-04-01-04",
+        "LX0609-04-01-05",
+        "LX0609-04-02-06",
+        "LX0609-04-02-07",
+        "LX0609-04-02-08",
+        "LX0609-04-05-01",
+        "LX0609-04-05-03",
         "LX0609-05-01-02",
-        "LX0609-05-01-03",
         "LX0609-05-01-04",
         "LX0609-05-01-05",
         "LX0609-05-01-06",
-        "LX0609-04-02-06",
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-02-01",
+        "LX0609-06-03-02",
+        "LX0609-06-04-01",
+        "LX0609-06-04-02",
         "LX0609-08-01-01",
         "LX0609-08-01-02",
         "LX0609-08-01-03",
-        "LX0609-04-05-01",
-        "LX0609-04-05-02",
-        "LX0609-04-05-03",
-        "LX0609-08-02-01",
+        "LX0609-08-01-05",
         "LX0609-08-02-02",
-        "LX0609-04-02-07",
-        "LX0609-07-01-03",
+        "LX0609-09-01-02",
+        "LX0609-09-02-01",
         "LX0609-10-01-01",
         "LX0609-10-02-01",
         "LX0609-10-02-02",
-        "LX0609-12-02-01",
         "LX0609-10-03-01",
-        "LX0609-04-02-08",
-        "LX0609-01-02-02",
+        "LX0609-12-02-01",
     }
     assert typed_source_rule_ids - typed_contract_rule_ids == typed_source_only_rule_ids
-    # 025/059 合同升级后，当前已有 50 条规则使用非 v1 决策合同；
+    # 截至 2026-10-12 合同文件，已有 55 条规则使用非 v1 决策合同；
     # 这里验证合同成熟度及尚待升级的精确成员，不等同于正式可执行规则数量。
-    assert result["metrics"]["rule_decision_count"] == 50
+    assert result["metrics"]["rule_decision_count"] == 55
     assert result["metrics"]["typed_shadow_adapter_count"] == len(
         typed_source_only_rule_ids
     )
@@ -697,7 +700,8 @@ def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
     [
         ("LX0609-01-01-01", "LX0609-01-01-01"),
         ("LX0609-01-02-01", "LX0609-01-01-01"),
-        ("LX0609-04-01-04",),
+        # 目录外编号（04-01-04 已于 2026-09 进入目录，不能再代表目录外编号）。
+        ("LX0609-99-99-99",),
         ("SC-001",),
         (),
     ],
@@ -910,3 +914,20 @@ asyncio.run(main())
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_safe_string_allows_controlled_text_quoting_body_datetimes() -> None:
+    body = "抢救经过：患者突发室颤，予电除颤。抢救结束时间：2026-06-02 10:00:00，生命体征平稳。"
+    finding = (
+        "抢救记录于抢救结束后 7 小时完成（抢救结束时间 2026-06-02 10:00:00；"
+        "记录时间 2026-06-02 17:00:00），超过 6 小时要求 1 小时。"
+    )
+
+    assert preproduction_runner._safe_string(finding, private_terms={body}) == finding
+
+
+def test_safe_string_still_redacts_body_text_around_datetimes() -> None:
+    body = "抢救经过：患者突发室颤，予电除颤。抢救结束时间：2026-06-02 10:00:00，生命体征平稳。"
+    quote = "2026-06-02 10:00:00 患者突发室颤，予电除颤。"
+
+    assert preproduction_runner._safe_string(quote, private_terms={body}) == "[redacted]"

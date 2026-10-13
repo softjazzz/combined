@@ -1,0 +1,2268 @@
+{
+  "schema_version": "engine-audit-sample-gaps-v1",
+  "date": "2026-10-08",
+  "head": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": [
+    "0609",
+    "0916"
+  ],
+  "read_only_evidence": true,
+  "real_model_calls": 0,
+  "pg_connections": 0,
+  "raw_case_reads": 0,
+  "authorization": {
+    "previous_authorized_calls": 4,
+    "remaining": 0,
+    "source": "本轮任务约束",
+    "proposal_is_authorization": false,
+    "existing_batches": "只读复用、不外发、不重入"
+  },
+  "status_contract": {
+    "common": [
+      "compliant",
+      "non_compliant",
+      "not_applicable"
+    ],
+    "gap_0609": "data_gap",
+    "gap_0916": "data_quality_gap",
+    "unknown": "未决标注，非对外交付状态",
+    "technical_failure": "单列，不作临床负例"
+  },
+  "fixture_0609": {
+    "rules": 84,
+    "formal": 76,
+    "temporary": 8,
+    "bound_status_references": 270,
+    "slot_counts": {
+      "not_required": 32,
+      "missing": 21,
+      "covered": 245,
+      "pending_definition": 38
+    },
+    "boundary_counts": {
+      "pending_definition": 3,
+      "missing": 54,
+      "covered": 15
+    },
+    "missing_slots": [
+      {
+        "rule_id": "LX0609-06-01-02",
+        "title": "CT/MRI检查记录：CT/MRI检查前无说明检查原因的病程记录",
+        "slot": "not_applicable",
+        "family": "exam_lab"
+      },
+      {
+        "rule_id": "LX0609-12-01-02",
+        "title": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
+        "slot": "confirmed_issue",
+        "family": "course_quality"
+      },
+      {
+        "rule_id": "LX0609-03-01-04",
+        "title": "会诊记录：会诊建议未找到执行证据，或执行记录未明确具体执行情况",
+        "slot": "confirmed_issue",
+        "family": "consultation_quality"
+      },
+      {
+        "rule_id": "LX0609-03-01-04",
+        "title": "会诊记录：会诊建议未找到执行证据，或执行记录未明确具体执行情况",
+        "slot": "not_applicable",
+        "family": "consultation_quality"
+      },
+      {
+        "rule_id": "LX0609-04-02-03",
+        "title": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
+        "slot": "not_applicable",
+        "family": "surgery_anesthesia"
+      },
+      {
+        "rule_id": "LX0609-11-03-01",
+        "title": "输血知情同意书：无输血知情同意书",
+        "slot": "compliant",
+        "family": "transfusion"
+      },
+      {
+        "rule_id": "LX0609-11-03-01",
+        "title": "输血知情同意书：无输血知情同意书",
+        "slot": "confirmed_issue",
+        "family": "transfusion"
+      },
+      {
+        "rule_id": "LX0609-11-03-02",
+        "title": "输血知情同意书：输血知情同意书填写或签名不完整",
+        "slot": "compliant",
+        "family": "transfusion"
+      },
+      {
+        "rule_id": "LX0609-11-03-02",
+        "title": "输血知情同意书：输血知情同意书填写或签名不完整",
+        "slot": "confirmed_issue",
+        "family": "transfusion"
+      },
+      {
+        "rule_id": "LX0609-04-01-04",
+        "title": "术前小结：术前小结内容不完整",
+        "slot": "compliant",
+        "family": "surgery_anesthesia"
+      },
+      {
+        "rule_id": "LX0609-04-01-04",
+        "title": "术前小结：术前小结内容不完整",
+        "slot": "confirmed_issue",
+        "family": "surgery_anesthesia"
+      },
+      {
+        "rule_id": "LX0609-04-01-05",
+        "title": "术前讨论记录：术前讨论记录内容不完整",
+        "slot": "compliant",
+        "family": "surgery_anesthesia"
+      },
+      {
+        "rule_id": "LX0609-04-01-05",
+        "title": "术前讨论记录：术前讨论记录内容不完整",
+        "slot": "confirmed_issue",
+        "family": "surgery_anesthesia"
+      },
+      {
+        "rule_id": "LX0609-06-01-03",
+        "title": "CT/MRI检查记录：报告单完整性",
+        "slot": "compliant",
+        "family": "exam_lab"
+      },
+      {
+        "rule_id": "LX0609-06-01-03",
+        "title": "CT/MRI检查记录：报告单完整性",
+        "slot": "confirmed_issue",
+        "family": "exam_lab"
+      },
+      {
+        "rule_id": "LX0609-06-03-02",
+        "title": "微生物培养检查记录：报告单完整性",
+        "slot": "compliant",
+        "family": "exam_lab"
+      },
+      {
+        "rule_id": "LX0609-06-03-02",
+        "title": "微生物培养检查记录：报告单完整性",
+        "slot": "confirmed_issue",
+        "family": "exam_lab"
+      },
+      {
+        "rule_id": "LX0609-06-02-01",
+        "title": "病理检查记录：报告单完整性",
+        "slot": "compliant",
+        "family": "tumor_pathology"
+      },
+      {
+        "rule_id": "LX0609-06-02-01",
+        "title": "病理检查记录：报告单完整性",
+        "slot": "confirmed_issue",
+        "family": "tumor_pathology"
+      },
+      {
+        "rule_id": "LX0609-09-01-02",
+        "title": "抢救记录：内容完整性",
+        "slot": "compliant",
+        "family": "basic_timeliness"
+      },
+      {
+        "rule_id": "LX0609-09-01-02",
+        "title": "抢救记录：内容完整性",
+        "slot": "confirmed_issue",
+        "family": "basic_timeliness"
+      }
+    ],
+    "unbound_boundaries": [
+      {
+        "rule_id": "LX0609-04-02-01",
+        "title": "手术记录：手术后24小时内是否完成",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-02-01",
+        "title": "手术记录：手术后24小时内是否完成",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-02-01",
+        "title": "手术记录：手术后24小时内是否完成",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-03",
+        "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-03",
+        "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-03",
+        "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-04",
+        "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-04",
+        "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-04",
+        "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-05",
+        "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-05",
+        "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-02-01-05",
+        "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-01-04",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-01-04",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-01-04",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-01-05",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-01-05",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-01-05",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-03-03",
+        "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-03-03",
+        "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-03-03",
+        "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-03-04",
+        "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-03-04",
+        "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-03-04",
+        "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-05-01-01",
+        "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+        "boundary": "before_threshold",
+        "coverage": "pending_definition"
+      },
+      {
+        "rule_id": "LX0609-05-01-01",
+        "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+        "boundary": "at_threshold",
+        "coverage": "pending_definition"
+      },
+      {
+        "rule_id": "LX0609-05-01-01",
+        "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+        "boundary": "after_threshold",
+        "coverage": "pending_definition"
+      },
+      {
+        "rule_id": "LX0609-03-02-01",
+        "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-03-02-01",
+        "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-03-02-01",
+        "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-09-02-01",
+        "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-09-02-01",
+        "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-09-02-01",
+        "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-04-01",
+        "title": "危急值记录：6小时内未书写危急值处置记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-04-01",
+        "title": "危急值记录：6小时内未书写危急值处置记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-06-04-01",
+        "title": "危急值记录：6小时内未书写危急值处置记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-05-01-03",
+        "title": "抗菌药物使用记录：48至72小时内无效果评价",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-05-01-03",
+        "title": "抗菌药物使用记录：48至72小时内无效果评价",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-05-01-03",
+        "title": "抗菌药物使用记录：48至72小时内无效果评价",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-08-01-01",
+        "title": "出院记录：出院记录未在出院后24小时内完成",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-08-01-01",
+        "title": "出院记录：出院记录未在出院后24小时内完成",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-08-01-01",
+        "title": "出院记录：出院记录未在出院后24小时内完成",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-05-01",
+        "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-05-01",
+        "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-05-01",
+        "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-05-02",
+        "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-05-02",
+        "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-05-02",
+        "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-02-07",
+        "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-02-07",
+        "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-04-02-07",
+        "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-10-01-01",
+        "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-10-01-01",
+        "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-10-01-01",
+        "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-10-02-01",
+        "title": "转科记录：转科病人24小时内未完成转入、转出记录",
+        "boundary": "before_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-10-02-01",
+        "title": "转科记录：转科病人24小时内未完成转入、转出记录",
+        "boundary": "at_threshold",
+        "coverage": "missing"
+      },
+      {
+        "rule_id": "LX0609-10-02-01",
+        "title": "转科记录：转科病人24小时内未完成转入、转出记录",
+        "boundary": "after_threshold",
+        "coverage": "missing"
+      }
+    ],
+    "rules_detail": [
+      {
+        "rule_id": "LX0609-01-01-01",
+        "title": "入院记录：入院后24小时内是否完成",
+        "family": "basic_timeliness",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-01-02-01",
+        "title": "首次病程：入院后8小时内无首次病程记录",
+        "family": "basic_timeliness",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-02-01",
+        "title": "手术记录：手术后24小时内是否完成",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-09-01-01",
+        "title": "抢救记录：抢救结束后6小时内是否完成",
+        "family": "basic_timeliness",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-02-01-01",
+        "title": "上级医生查房记录：入院后48小时内无主治医师首次查房记录",
+        "family": "basic_timeliness",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-02-01-02",
+        "title": "上级医生查房记录：入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
+        "family": "basic_timeliness",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-02-01-03",
+        "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-02-01-04",
+        "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-02-01-05",
+        "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-01-02",
+        "title": "CT/MRI检查记录：CT/MRI检查前无说明检查原因的病程记录",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "missing",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-01-04",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-01-05",
+        "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-02-03",
+        "title": "病理检查：病理检查结果在手术记录、病程中未记录",
+        "family": "tumor_pathology",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-03-03",
+        "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-03-04",
+        "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-12-01-01",
+        "title": "不合理复制病历：首次病程记录病例特点与入院记录、现病史完全相同",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-12-01-02",
+        "title": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-01-01-02",
+        "title": "入院记录：主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-02-02",
+        "title": "病理检查：取材情况未在病程记录或手术记录中记录",
+        "family": "tumor_pathology",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-03-01-01",
+        "title": "会诊记录：有会诊记录单无请会诊执行记录",
+        "family": "consultation_quality",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-03-01-02",
+        "title": "会诊记录：会诊申请单会诊目的不明确",
+        "family": "consultation_quality",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-03-01-03",
+        "title": "会诊记录：会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
+        "family": "consultation_quality",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-03-01-04",
+        "title": "会诊记录：会诊建议未找到执行证据，或执行记录未明确具体执行情况",
+        "family": "consultation_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "missing",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 2
+      },
+      {
+        "rule_id": "LX0609-04-02-03",
+        "title": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "missing",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 2
+      },
+      {
+        "rule_id": "LX0609-04-02-04",
+        "title": "手术记录：未记录植入物名称、种类、规格或型号、材质及数量等信息",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "not_required",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-05-02-01",
+        "title": "恶性肿瘤化学治疗记录：病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
+        "family": "tumor_pathology",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-08-01-04",
+        "title": "出院记录：恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
+        "family": "tumor_pathology",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-05-01-01",
+        "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-04-01-01",
+        "title": "术前小结：有手术医嘱但无术前小结",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-02-02",
+        "title": "手术记录：有手术医嘱但无手术记录",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-02-05",
+        "title": "手术记录：手术记录非手术者签字（核对术者及签名医生）",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-03-01",
+        "title": "手术安全核查表：有手术记录但无手术安全核查表",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-11-01-01",
+        "title": "手术知情同意书：有手术记录但无手术知情同意书",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-11-02-01",
+        "title": "麻醉知情同意书：有麻醉记录但无麻醉知情同意书",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-11-02-02",
+        "title": "麻醉知情同意书：填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-04-01",
+        "title": "麻醉访视：无麻醉术前或麻醉术后访视记录（局麻除外）",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-04-02",
+        "title": "麻醉访视：麻醉术前和术后访视记录填写不规范（局麻除外）",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-04-03",
+        "title": "麻醉记录单：无麻醉记录单（局麻除外）",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-01-02",
+        "title": "术前讨论记录：除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-01-03",
+        "title": "术前多学科讨论记录：四级手术术前讨论未开展多学科讨论",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-11-03-01",
+        "title": "输血知情同意书：无输血知情同意书",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-11-03-02",
+        "title": "输血知情同意书：输血知情同意书填写或签名不完整",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-07-01-01",
+        "title": "输血前辅助检查：输血前常规检查不完整",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-07-01-02",
+        "title": "输血前评估：无输血前评估记录或记录不完整",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-07-02-01",
+        "title": "输血记录：无输血病程记录",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-07-02-02",
+        "title": "输血记录：输血病程记录不完整或不规范",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-07-03-01",
+        "title": "输血后评价：无输血后评价",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-07-04-01",
+        "title": "输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-07-04-02",
+        "title": "输血医嘱：输血医嘱与收费不一致",
+        "family": "transfusion",
+        "tier": "formal",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-03-02-01",
+        "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-09-02-01",
+        "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-06-04-01",
+        "title": "危急值记录：6小时内未书写危急值处置记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-06-04-02",
+        "title": "危急值记录：检验检查危急值报告后无危急值处置记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-05-01-02",
+        "title": "抗菌药物使用记录：使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-05-01-03",
+        "title": "抗菌药物使用记录：48至72小时内无效果评价",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-05-01-04",
+        "title": "抗菌药物使用记录：接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-05-01-05",
+        "title": "抗菌药物使用记录：经验用药时未说明理由，无样可采时未注明原因",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-05-01-06",
+        "title": "抗菌药物使用记录：使用特殊级抗菌药物缺少专家查房或会诊记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-05-03-01",
+        "title": "医嘱：缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "not_required",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-04-02-06",
+        "title": "死亡记录：死亡患者无死亡记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-08-01-01",
+        "title": "出院记录：出院记录未在出院后24小时内完成",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-08-01-02",
+        "title": "出院记录：出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-08-01-03",
+        "title": "出院记录：出院诊断或死亡诊断错填、漏填、顺序错误",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-05-01",
+        "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-05-02",
+        "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-05-03",
+        "title": "术后首次病程记录：无术后首次病程记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-08-02-01",
+        "title": "出院前病程记录：无出院前一天或当天的病程记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-08-02-02",
+        "title": "出院前病程记录：无上级医师同意出院的意见",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-02-07",
+        "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-07-01-03",
+        "title": "输血前评估：未做输血前相关九项检查",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-10-01-01",
+        "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-10-02-01",
+        "title": "转科记录：转科病人24小时内未完成转入、转出记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-10-02-02",
+        "title": "转科记录：有转科医嘱但无转入、转出记录",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-12-02-01",
+        "title": "病程记录：修正或补充诊断时，未记录修改或补充理由及诊断依据",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-10-03-01",
+        "title": "有创操作记录：有创操作医嘱但无有创操作记录",
+        "family": "extended_document",
+        "tier": "temporary",
+        "phase": "pending_definition",
+        "slots": {
+          "confirmed_issue": "pending_definition",
+          "not_applicable": "pending_definition",
+          "data_insufficient": "pending_definition",
+          "compliant": "pending_definition"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-04-02-08",
+        "title": "死亡记录：死亡时间缺失",
+        "family": "extended_document",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-01-02-02",
+        "title": "首次病程记录：鉴别诊断未与初步诊断中第一诊断相关联",
+        "family": "course_quality",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-04-01-04",
+        "title": "术前小结：术前小结内容不完整",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-04-01-05",
+        "title": "术前讨论记录：术前讨论记录内容不完整",
+        "family": "surgery_anesthesia",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-01-01",
+        "title": "CT/MRI检查记录：医嘱与病程一致性",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "covered",
+          "not_applicable": "covered",
+          "data_insufficient": "covered",
+          "compliant": "covered"
+        },
+        "max_llm_calls_per_rule": 1
+      },
+      {
+        "rule_id": "LX0609-06-01-03",
+        "title": "CT/MRI检查记录：报告单完整性",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-06-03-02",
+        "title": "微生物培养检查记录：报告单完整性",
+        "family": "exam_lab",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-06-02-01",
+        "title": "病理检查记录：报告单完整性",
+        "family": "tumor_pathology",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 0
+      },
+      {
+        "rule_id": "LX0609-09-01-02",
+        "title": "抢救记录：内容完整性",
+        "family": "basic_timeliness",
+        "tier": "formal",
+        "phase": "phase_1_target",
+        "slots": {
+          "confirmed_issue": "missing",
+          "not_applicable": "not_required",
+          "data_insufficient": "covered",
+          "compliant": "missing"
+        },
+        "max_llm_calls_per_rule": 1
+      }
+    ],
+    "meaning": "受控fixture绑定，不等于执行/真实样本/临床验收",
+    "contract_test_drift": {
+      "hardcoded_rules": 83,
+      "hardcoded_formal": 75,
+      "hardcoded_refs": 265,
+      "hardcoded_covered": 241,
+      "test_run": false
+    }
+  },
+  "historical_0609": {
+    "old_three_digit_rules": 49,
+    "pending_candidates": 178,
+    "accepted_candidates": 0,
+    "candidate_complete_pnb_rules": 3,
+    "partial_rules": 7,
+    "no_candidate_rules": 39,
+    "not_current_directory_coverage": true
+  },
+  "evidence_0916": {
+    "rules": 32,
+    "historical_real_package_cases": 30,
+    "current_specialized": [
+      "003",
+      "005",
+      "006",
+      "007",
+      "008",
+      "010",
+      "011",
+      "012",
+      "014"
+    ],
+    "historical_specialized": [
+      "015",
+      "016"
+    ],
+    "historical_experiment": [
+      "024",
+      "025",
+      "026"
+    ],
+    "no_independent_specialized": [
+      "001",
+      "002",
+      "004",
+      "009",
+      "013",
+      "017",
+      "018",
+      "019",
+      "020",
+      "021",
+      "022",
+      "023",
+      "027",
+      "028",
+      "029",
+      "030",
+      "031",
+      "032"
+    ],
+    "limited_engineering_milestones": [
+      "005",
+      "006",
+      "010",
+      "012"
+    ],
+    "complete_current_engineering_acceptance": 0,
+    "clinical_signoff": 0,
+    "publication_approval": 0,
+    "rules_detail": [
+      {
+        "rule": "LX0916-001 多次入院诊疗总结",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1，30真例整包；入院事后审计H8",
+        "version_applicability": "V1，旧共享响应仅属历史输入",
+        "sample_coverage": "未找到独立专项冻结预期；整包不等于多次入院分支覆盖",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "多次入院触发、总结质量及来源不足分支需独立核对",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-002 病史陈述者能力",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1，30真例整包；H8",
+        "version_applicability": "V1，共享链/失败分类不同",
+        "sample_coverage": "未找到独立专项预期；能力与陈述者组合未独立签认",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "真实触发、角色事实与来源缺口核对",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-003 现病史完整性",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H2；首批3例正式任务、PG与浏览器；H6只读复核",
+        "version_applicability": "V1，入院/共享链已变，旧3/3不可当新版本验收",
+        "sample_coverage": "3真例工程预期，均合规；无独立临床答案及确认缺陷真例",
+        "reported_result": "历史3/3工程状态一致；本轮未补齐逐项证据",
+        "gaps": "逐项质量事实/引文、真实缺陷与来源边界、版本参数留痕",
+        "engineering": "状态阶段核对；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-004 鉴别诊断重要症状",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8，30真例",
+        "version_applicability": "V1",
+        "sample_coverage": "未找到独立专项预期；重要阳阴性症状未逐例签认",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "具体症状、鉴别诊断关联及证据充分性复核",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-005 院前检查治疗效果",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H2/H3/H4；早期2/3、后续3/3，正式PG/页面证据保留",
+        "version_applicability": "V1，D有005逐项实现但未提交；不能只凭HEAD复现A结论",
+        "sample_coverage": "3真例工程预期；C03明确不详、C04泛化治疗、C21合规；无临床签认",
+        "reported_result": "最新历史正式3/3；C03为recorded_information_unknown，未改旧争议记录",
+        "gaps": "C03/C04详细程度人工复核；源码/版本冻结及当前整链门禁",
+        "engineering": "正式链路阶段达成；未完成",
+        "clinical": "待签，争议保留",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-006 既往史完整性",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H2/H3/H6；早期1/3后收敛，7例保护及正式回读",
+        "version_applicability": "V1，D有006逐项实现；当前源码快照与A整链尚未等价冻结",
+        "sample_coverage": "6真例+1合成，明确不详/否认/缺接种保护；无临床金标准",
+        "reported_result": "7/7工程状态/原因/逐项事实保持；55新引文逐字命中，4例引文改变",
+        "gaps": "不详与缺陷真例临床复核；较短引文充分性不能以零状态变化代替",
+        "engineering": "保护/保存阶段达成；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-007 个人婚育月经家族史",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H4/H7；早期C04假合规，后续逐项专项",
+        "version_applicability": "V2，A逐项和源范围改造不能移植为D通过",
+        "sample_coverage": "最新2真例+1合成预冻结工程预期；未成年人/性别适用性未签认",
+        "reported_result": "最新3/3状态一致，但C04未取得可定位007事实；PG及函数回读",
+        "gaps": "C04事实可复核性、人工适用性；最新认证HTTP/页面未完成",
+        "engineering": "有结果，未闭环；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-008 儿童喂养发育史",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H4/H6/H7/H13；真实生成失败、合成故障保护及有界复验均保留",
+        "version_applicability": "V2；A最新版008也未闭环",
+        "sample_coverage": "最新3真例+1合成预期；年龄界限工程口径未临床确认",
+        "reported_result": "最新3/4；10/5当前09bf离线重放和原保存全字段相同，C20原响应recorded/unknown差异独立复现；未改预期",
+        "gaps": "抽取稳定性、历史内容角色/来源覆盖；当前保存/认证页面门禁",
+        "engineering": "失败语义曾专项修复，内容未闭环；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-009 体格检查重要体征",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8，30真例；入院试验中的旁路变化不计验收",
+        "version_applicability": "V1",
+        "sample_coverage": "未找到独立专项预期/临床签认",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "重要体征、准确性及具体证据独立核对",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-010 首程病例特点存在性",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H6/H10/H13/H15/H19/H21；先2真+2合成，后4真例正式保存",
+        "version_applicability": "V3；H19绑定b5fb15f76工作区；H21成本复验绑定d7a1cab21实际源，均非正式发布构建",
+        "sample_coverage": "两批工程预期分别4例；最新C01/C06/C17/C30仅正例，非临床质量答案",
+        "reported_result": "H19独立010整包128有效/0失败、四行认证API same及页面回读；H21补成本保存和真实部分失败运输，不连带充分性验收",
+        "gaps": "真实缺项、临床独立复核、正式发布版本；H19旧job成本0保留，不回填",
+        "engineering": "当前正式Worker/PG/认证页面工程链路达成；完整未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-011 病例特点归纳充分性",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H9；C01/C30两真例本地受控抽取；H10/S1含非目标失败样本",
+        "version_applicability": "V3；D已补首程字段和031d失败交付，旧本地充分性结果仅条件复用",
+        "sample_coverage": "仅C01-011为窄范围工程adequate候选；C30人工复核；无临床独立答案",
+        "reported_result": "两例模型均合规，仅1个工程候选一致；evidence为空；D新增合成故障保护不是临床通过",
+        "gaps": "归纳理由/直接证据、真实缺陷、正式保存/回读和临床判断",
+        "engineering": "本地候选及故障保护；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-012 首程三要素存在性",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H6/H10/H13/H15/H19/H21；2真+2合成后4真例；H21独立012正式任务",
+        "version_applicability": "V3；D d7a1cab21实际工作区28份列示源码冻结到退出未变，非发布构建",
+        "sample_coverage": "四真例预冻结工程预期均三栏非空；真实缺项候选有界扫描0，此前负例仍仅合成",
+        "reported_result": "H21四目标冻结字段及历史原生8字段一致，PG/认证API/四例页面回读；125有效+3非目标执行失败完整覆盖128计划对；成本PG/API精确相符",
+        "gaps": "真实缺项、独立临床复核及发布冻结；不评价充分性、不称整包全成功；模型事件job关联未建立",
+        "engineering": "独立正式Worker/PG/认证页面及成本工程阶段达成；完整未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-013 诊断鉴别依据充分性",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；H10/S1及第十一章D合成故障保护，不是充分性专项",
+        "version_applicability": "V3，D031d已迁入失败交付，首程取值也已修复；当前模型/医学结果未复验",
+        "sample_coverage": "未找到独立充分性专项预期；技术异常样本不是临床负例",
+        "reported_result": "无本轮医学专项；D29有效/3技术失败的合成API保护不补计为013验收",
+        "gaps": "充分性理由/证据及临床答案；当前D真实故障保存/认证页面",
+        "engineering": "整包/故障工程证据；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-014 诊疗计划全面具体",
+        "category": "本轮专项",
+        "historical_evidence": "H0/H1/H9；2真例本地抽取；H10/S1有非目标故障保护",
+        "version_applicability": "V3",
+        "sample_coverage": "C01/C30均在运行前保留人工复核；无确定临床金标准/真负例",
+        "reported_result": "两例输出合规，均没有质量理由/直接evidence，不计临床通过",
+        "gaps": "剂量/疗程等标准维度与Prompt检查范围需复核；证据及正式保存",
+        "engineering": "有本地结果，未闭环；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-015 病情变化记录完整",
+        "category": "历史专项",
+        "historical_evidence": "H0/H1/H5/H13/H14/H15/H16/H17/H18；旧文本盲测、结构化30例、Stage2两轮30例及七事件当前审读表",
+        "version_applicability": "V4，Stage2已接线；df199时点六例同快照核实两候选缓存、触发和五源实际宽查询；非旧运行恢复",
+        "sample_coverage": "结构化24无触发+6触发7事件；35工程草案已独立审读并整理交接，关联/最早坐标异议未转gold",
+        "reported_result": "12候选五源complete、输入门禁无缺口，完整目录/Prompt/归一化事实精确相同；30项引用的60候选scene核查一致；新模型0",
+        "gaps": "当前五事实预期冻结、正式任务scene、独立未见病例及临床签认；旧原响应仍缺；完整Worker未验收",
+        "engineering": "历史回归/当前输入覆盖及草案审读；完整未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-016 病情变化分析处理",
+        "category": "历史专项",
+        "historical_evidence": "H0/H1/H5/H13/H14/H15/H16/H17/H18，同一专属抽取、Python分别判定",
+        "version_applicability": "V4，Stage2已实现；六例当前五源实际查询覆盖已核，不证明完整evidence/历史场景",
+        "sample_coverage": "同015；35事实草案与原注释精确保留并绑定新覆盖，独立异议不自动选边",
+        "reported_result": "历史两轮24不适用+6合规；当前两候选scene目录/Prompt/触发事实相同；C04五unknown仍非已证实缺失",
+        "gaps": "分析/处理和事件归属预期冻结、正式场景、真实缺陷与临床签认；原merge不保证医学冲突校验",
+        "engineering": "历史回归/当前输入覆盖及草案审读；完整未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-017 检查用药合理性",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8，30真例整包",
+        "version_applicability": "V4，事件执行模块同但共享抽取/失败分类不同",
+        "sample_coverage": "未找到独立合理性专项预期",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "独立临床合理性答案、医嘱触发/覆盖与证据解释",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-018 危急值报告处理",
+        "category": "整包/审计，输入修复与预期准备",
+        "historical_evidence": "H0/H1/H8/H12/H21/H22/H23/H31/H32；严格输入、主键、当前纯重建及90分句审读草案",
+        "version_applicability": "H22身份修复9c10265ef保持；H32正式raw fixture补document_id单行，生产未改",
+        "sample_coverage": "H23两事实unknown草案、6候选/17反证定位；关联保留，不当absence；C01仍仅副本",
+        "reported_result": "H32三文件54通过，root独立四Worker+22身份保护26通过；四Stage2各1次替身，真实模型0",
+        "gaps": "报告/处置唯一关联、独立预期冻结、正式任务与临床复核；真实完整无触发仍缺",
+        "engineering": "Stage1闭环及fixture修复；单规则验收未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-019 重要操作记录规范",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8，30真例整包",
+        "version_applicability": "V4，事件模块同，旧响应版本未等价",
+        "sample_coverage": "未找到独立操作专项预期",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "真实操作触发、记录缺陷、时间/关联及资料缺口验证",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-020 修正诊断理由依据",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8，30真例整包",
+        "version_applicability": "V4",
+        "sample_coverage": "未找到独立诊断修正专项预期；不等于标准未定",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "独立修正事件与病程依据关联、真实缺陷/来源不足",
+        "engineering": "整包历史；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-021 手术同意书完整性",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；run5的30条事后核对均无法复核",
+        "version_applicability": "V4，对应执行模块同，实验树不能替代整链",
+        "sample_coverage": "未找到独立冻结预期；30条无法复核不能当准确率",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "同意书实际来源覆盖、手术关联与缺项引文",
+        "engineering": "整包/事后审计；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-022 麻醉同意书完整性",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；早期29资料不足+1不适用，发布来源门禁未过",
+        "version_applicability": "V4",
+        "sample_coverage": "未找到独立冻结临床预期；有合成路由保护，不是真实来源通过",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "麻醉同意书真实来源链及适用性/具体缺项验证",
+        "engineering": "来源门禁未过；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-023 麻醉记录存在性",
+        "category": "整包/审计，局部修复完成、正式验收未出结果",
+        "historical_evidence": "H0/H1/H8/H22–H31/H33；15条事后supported、两冻结正例、副本/预期/旧run保存、技术基线重冻结及新POST内存失败",
+        "version_applicability": "H33实际65份验收源码及私有冻结保持，不把HEAD当构建身份；只改私有证据落盘候选",
+        "sample_coverage": "C02/C03两工程正例development，gold/clinical=False；技术字段已授权重冻结，原预期不改",
+        "reported_result": "H33一次新run POST在INSERT前私有json.dumps出现MemoryError/HTTP500，root PG证明无新run/creating、保护不变；模型0，0新规则结果",
+        "gaps": "一次POST额度已使用、实际任务/模型/定向刷新未使用；额外一次请求待确认；真缺失/局麻/多麻醉关联/临床仍缺",
+        "engineering": "创建/预期保存及局部门控修复；正式规则验收未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-024 麻醉记录完整性",
+        "category": "历史实验",
+        "historical_evidence": "H0/H1/H8/H11；专用两轮30例含16触发，run5另有10条事后支持",
+        "version_applicability": "V5，C实验未证明与D/A当前相同",
+        "sample_coverage": "未找到独立预冻结临床gold；整族稳定性试验不是逐规则准确率",
+        "reported_result": "H11整族passed=false，9例跨轮变化；不将整族失败推断为024独有漂移",
+        "gaps": "实验版本/输入绑定、稳定性、缺项证据、独立答案及正式回读",
+        "engineering": "历史专项实验未通过整族门禁；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-025 手术记录完整性",
+        "category": "历史实验",
+        "historical_evidence": "H0/H1/H8/H11；H11实际summary明确含025，不因文件名漏计；run5有1条支持",
+        "version_applicability": "V5",
+        "sample_coverage": "无独立预冻结临床gold；来源缺口多，不可用无异常数替代验收",
+        "reported_result": "两轮各14资料不足+2不合规+14不适用；整族稳定性失败",
+        "gaps": "来源覆盖、手术关联、独立预期与可定位缺项；不能因025状态计数相同判全通过",
+        "engineering": "历史专项实验未通过整族门禁；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-026 手术安全核查完整性",
+        "category": "历史实验",
+        "historical_evidence": "H0/H1/H8/H11；两轮30例，run5另有10条事后支持",
+        "version_applicability": "V5",
+        "sample_coverage": "无独立临床gold；无真实输血阳性，输血条件仅合成保护",
+        "reported_result": "两轮资料不足6到2、不合规10到14；整族9例漂移、passed=false",
+        "gaps": "抽取合同、跨文书/多手术关联、真实输血条件与三方签字事实",
+        "engineering": "历史专项实验未通过；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-027 急诊手术上级指示",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；run5的30条均无法复核",
+        "version_applicability": "V4",
+        "sample_coverage": "无独立急诊触发专项预期",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "急诊触发、上级医师角色/指示及手术关联验证",
+        "engineering": "整包/事后审计；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-028 非计划再次手术说明",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；run5的30条均无法复核",
+        "version_applicability": "V4",
+        "sample_coverage": "无独立非计划再次手术专项预期",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "多手术事件、非计划属性、上次情况/原因关联及真例",
+        "engineering": "整包/事后审计；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-029 特殊项目同意书",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；run5的30条均无法复核",
+        "version_applicability": "V4",
+        "sample_coverage": "无独立特殊项目触发专项预期",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "项目触发、对应同意书来源/角色及完整性验证",
+        "engineering": "整包/事后审计；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-030 病危重通知书完整性",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；run5的30条均无法复核",
+        "version_applicability": "V4",
+        "sample_coverage": "无独立通知书专项预期；015/016病危重医嘱回放不能代替本条",
+        "reported_result": "未找到本轮专项结果",
+        "gaps": "通知书来源、签字/内容事实；与医嘱触发分开验收",
+        "engineering": "整包/事后审计；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-031 出院诊疗经过详细性",
+        "category": "整包/审计",
+        "historical_evidence": "H0/H1/H8；run5有5条supported，root-verify单文书词项核对",
+        "version_applicability": "V4，出院模块同，旧源/响应未绑定当前版",
+        "sample_coverage": "事后原文核对无独立预冻结临床答案",
+        "reported_result": "未找到本轮独立专项结果",
+        "gaps": "全程诊疗事实与出院总结对应、充分性及临床签认",
+        "engineering": "局部事后复核；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      },
+      {
+        "rule": "LX0916-032 出院医嘱完整性",
+        "category": "整包/审计，原文草案准备",
+        "historical_evidence": "H0/H1/H8/H31/H32；run5仅1条supported；新增两真实历史原文草案先冻结后看旧结果",
+        "version_applicability": "H31当前context/rule/selector纯投影；H32解析JSON纠正裸引文匹配假阴性，非当前PG或正式模型验收",
+        "sample_coverage": "两例仍unknown草案，七连续引文精确命中；无临床gold/明确完整正负例",
+        "reported_result": "H32 root核C30解码Prompt与raw/selected逐字同、2209字符且未截断；纯规则gap非医嘱确实缺失",
+        "gaps": "带药适用性、个性化指导充分性、真实全源覆盖及时间字段意义；撤回该例尾部投影遗漏判断",
+        "engineering": "原文及可执行边界准备；未完成",
+        "clinical": "待签",
+        "publication": "未批准"
+      }
+    ],
+    "latest_correction": "032完整复访引文已进入解码Prompt，2209字符未截断；两草案仍unknown；023新POST失败无规则结果"
+  },
+  "orthogonal_tags": [
+    "explicit_negation",
+    "planned_not_performed",
+    "cancelled_or_revoked",
+    "stopped_historical_event",
+    "multi_event_mixed_outcomes",
+    "before_threshold",
+    "at_threshold",
+    "after_threshold",
+    "immature_window",
+    "cross_day_timezone",
+    "shared_extraction_family"
+  ],
+  "candidate_groups": [
+    {
+      "id": "A",
+      "max_materials": 3,
+      "rules": [
+        "LX0916-015",
+        "LX0916-016",
+        "LX0916-018"
+      ],
+      "branches": [
+        "明确阳性",
+        "完整源无触发",
+        "双事件混合或明确缺项"
+      ],
+      "gate": "报告处置唯一关联、五事实独立预期、来源ready"
+    },
+    {
+      "id": "B",
+      "max_materials": 4,
+      "rules": [
+        "LX0916-023",
+        "LX0916-024",
+        "LX0916-025",
+        "LX0916-026"
+      ],
+      "branches": [
+        "复用一正例",
+        "局麻或拟而未行",
+        "多麻醉缺其一",
+        "来源不足"
+      ],
+      "gate": "running送模覆盖与来源门控，不改scope"
+    },
+    {
+      "id": "C",
+      "max_materials": 4,
+      "rules": [
+        "当前0609检查检验族待验收报告完整性点及已上线同族"
+      ],
+      "branches": [
+        "合规",
+        "明确缺项",
+        "无适用检查",
+        "来源不足"
+      ],
+      "gate": "impact声明、上线后scope、同族保护集"
+    },
+    {
+      "id": "D",
+      "max_materials": 2,
+      "rules": [
+        "LX0916-032",
+        "LX0916-010",
+        "LX0916-012"
+      ],
+      "real_generate_proposed_before_resolution": 0,
+      "gate": "两unknown先临床裁决；既有正例只读保护"
+    }
+  ],
+  "budget_method": {
+    "unit": "去重病例×场景×抽取owner",
+    "generate_upper_bound": "sum(c_i) × 独立轮数",
+    "attempt_upper_bound": "sum(c_i) × 轮数 × (1 + 新授权最大重试数)",
+    "full_0916_execution_rules": 32,
+    "rule_result_count_is_call_count": false,
+    "historical_reference": {
+      "H19_generate": 4,
+      "H19_token": 20487,
+      "H19_cumulative_api_seconds": 86.848,
+      "H22_known_responses": 3,
+      "H22_known_token": 5045,
+      "H22_complete": false
+    },
+    "pricing": "执行前核官方当期价格，本轮未查价",
+    "mutations": "run/job、POST、create、预期PUT、Bundle字段目标次数及模型观测分别授权"
+  },
+  "review_chain": [
+    "版本和模型参数冻结",
+    "人工预期先冻结",
+    "正式Worker",
+    "保存",
+    "PG与认证API同一结果",
+    "页面逐例复核",
+    "临床签认"
+  ],
+  "source_files": [
+    "apps/medqc-web/backend/app/data/luxian_0609_acceptance_matrix.json",
+    "apps/medqc-web/docs/reports/luxian-0609-rule-acceptance-status.md",
+    "apps/medqc-web/docs/plans/2026-10-05-0916-unified-validation-progress.md",
+    "apps/medqc-web/docs/plans/2026-10-03-rule-validation-0916.md",
+    "apps/medqc-web/docs/plans/2026-09-28-rule-validation-release-workflow.md",
+    "apps/medqc-web/src/views/workstation-v4/rule-validation/presentation.ts"
+  ],
+  "limitations": [
+    "未读原始病例/.env/PG/真实模型",
+    "未执行测试或验证历史声明",
+    "未核当前临床来源与实时状态",
+    "源码或决定性输入变更后需重新绑定",
+    "提案不构成授权"
+  ]
+}

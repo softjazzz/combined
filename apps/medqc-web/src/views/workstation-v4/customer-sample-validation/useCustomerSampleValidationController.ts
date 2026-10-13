@@ -1,6 +1,7 @@
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
@@ -115,6 +116,7 @@ import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/u
 const LEGACY_RESULT_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
 
 export function useCustomerSampleValidationController() {
+  const workstationConfirmation = useWorkstationConfirmation()
   const {
     customerSampleGuideOpen,
     customerSampleGuideStepIndex,
@@ -3047,7 +3049,7 @@ export function useCustomerSampleValidationController() {
   function confirmCancelBatchJob(jobId: string) {
     const normalizedJobId = String(jobId || '').trim()
     if (!normalizedJobId || cancelBatchJobLoading.value) return
-    Modal.confirm({
+    workstationConfirmation.confirm({
       title: '停止当前质控任务？',
       content: '停止后将保留已返回结果，后续未执行的病历和质控点不再继续。',
       okText: '停止质控',

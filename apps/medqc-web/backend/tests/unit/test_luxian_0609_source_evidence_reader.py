@@ -323,14 +323,15 @@ class _SeverityConnection:
 
 
 class _DischargeFallbackConnection:
-    def __init__(self):
+    def __init__(self, registration_rows=None):
         self.calls: list[str] = []
+        self.registration_rows = registration_rows or []
 
     def execute(self, statement, params):
         sql = str(statement)
         self.calls.append(sql)
         if '"inpat_registration"' in sql:
-            return _Rows([])
+            return _Rows(list(self.registration_rows))
         if '"mr"' in sql:
             return _Rows([{"discharge_datetime": "2026-07-15 16:20:31"}])
         raise AssertionError(f"unexpected source query: {sql}")
@@ -369,6 +370,48 @@ def test_discharge_horizon_reader_falls_back_to_mr_when_registration_has_no_row(
     assert result.truncated is False
     assert any('"inpat_registration"' in sql for sql in connection.calls)
     assert any('"mr"' in sql for sql in connection.calls)
+
+
+def _read_horizon_with(monkeypatch, connection):
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm"
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, table: (
+            ["institute_id", "patient_id", "visit_id", "discharge_datetime"]
+            if table in {"inpat_registration", "mr"}
+            else []
+        ),
+    )
+    return source_evidence_reader.read_luxian_0609_discharge_horizon_rows(
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+    )
+
+
+@pytest.mark.parametrize("blank", [None, "", "  "])
+def test_discharge_horizon_reader_falls_back_to_mr_when_registration_time_is_blank(
+    monkeypatch, blank
+) -> None:
+    # 0910 真实样本：登记表有行但出院时间为空，曾让时间界限静默落回评价日。
+    connection = _DischargeFallbackConnection([{"discharge_datetime": blank}])
+    result = _read_horizon_with(monkeypatch, connection)
+    assert result.rows[0]["discharge_datetime"] == "2026-07-15 16:20:31"
+    assert any('"mr"' in sql for sql in connection.calls)
+
+
+def test_discharge_horizon_reader_prefers_registration_time_when_present(monkeypatch) -> None:
+    connection = _DischargeFallbackConnection([{"discharge_datetime": "2026-07-14 10:00:00"}])
+    result = _read_horizon_with(monkeypatch, connection)
+    assert result.rows[0]["discharge_datetime"] == "2026-07-14 10:00:00"
+    assert not any('"mr"' in sql for sql in connection.calls)
 
 
 def test_exam_lab_order_reader_filters_before_limit_so_unrelated_orders_cannot_hide_target(

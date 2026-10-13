@@ -60,6 +60,7 @@ from .luxian_0609.customer_renderer import (
     customer_finding_from_controlled_facts,
 )
 from .qc_workspace.export_service import (
+    append_complete_workbook_row,
     map_item_status_label as _map_item_status_label,
     render_customer_safe_csv,
     render_customer_safe_html,
@@ -444,11 +445,15 @@ def _authorized_document_excerpt(
     """返回精确字段摘录或明确标注的文书级摘录；不做正文相似匹配。"""
 
     normalized_field = _safe_text(field_path).lower()
+    discussion = _safe_text(document.get("document_type")).lower() == "presurg_discussion"
+    if discussion and normalized_field == "presurg_discussion_template":
+        return "", ""
     if normalized_field:
         matches = [
             section
             for section in list(document.get("sections") or [])
             if isinstance(section, dict)
+            and (not discussion or isinstance(section.get("text"), str))
             and _safe_text(section.get("source_field") or section.get("key")).lower()
             == normalized_field
         ]
@@ -456,6 +461,22 @@ def _authorized_document_excerpt(
             excerpt = _compact_authorized_evidence_excerpt(matches[0].get("text"))
             if excerpt:
                 return excerpt, "字段级依据"
+
+    if discussion:
+        # Missing/ambiguous explicit fields and synthetic display templates cannot
+        # become evidence for another field. Without a field coordinate only an
+        # actual content string section can supply a document-level excerpt.
+        if not normalized_field:
+            for section in list(document.get("sections") or []):
+                if (isinstance(section, dict)
+                        and section.get("source_field") in {
+                            "record_content", "content", "host_summary", "discuss_staff",
+                        }
+                        and isinstance(section.get("text"), str)):
+                    excerpt = _compact_authorized_evidence_excerpt(section["text"])
+                    if excerpt:
+                        return excerpt, "文书级依据"
+        return "", ""
 
     # 缺失字段类结论没有“缺失字段原文”；只能呈现同一 src_ref 已绑定文书的
     # 文书级摘录，且明确标识，避免客户误解为精确命中片段。
@@ -2871,6 +2892,7 @@ class CustomQCWorkspaceService:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
+        _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         return self._record_repository().collect_records(
             scope=scope,
@@ -2883,6 +2905,7 @@ class CustomQCWorkspaceService:
             record_ids=record_ids,
             record_refs=record_refs,
             sync_scope=sync_scope,
+            **({"_private_identity_collector": _private_identity_collector} if _private_identity_collector is not None else {}),
         )
 
     def count_records(
@@ -5300,7 +5323,8 @@ class CustomQCWorkspaceService:
             ]
         )
         for item in issue_items:
-            ws_items.append(
+            append_complete_workbook_row(
+                ws_items,
                 [
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
@@ -5353,7 +5377,8 @@ class CustomQCWorkspaceService:
             ]
         )
         for item in items:
-            ws_all.append(
+            append_complete_workbook_row(
+                ws_all,
                 [
                     item.get("record_id") or "",
                     item.get("patient_name") or "",

@@ -1,0 +1,89 @@
+{
+  "scope": "0609 only",
+  "base_commit": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "repairs": {
+    "PRIV005": {
+      "commit": "041b3be67",
+      "status": "fixed_scoped_errors_offline_verified",
+      "tests": 8,
+      "hook_at_original_commit": "not_run_missing_local_runtime"
+    },
+    "PRIV004": {
+      "commit": "6b8fa3e58",
+      "status": "fixed_preproduction_attempt_scope_offline_verified",
+      "tests": 12,
+      "hook": "standard_husky_passed_lint_staged_no_match_encoding_5_files"
+    },
+    "PRIV002": {
+      "commit": null,
+      "status": "implemented_already_read_orm_identity_offline_verified_awaiting_serial_commit_and_independent_review",
+      "tests": 47,
+      "hook": "not_yet_run",
+      "source_audit_commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+      "source_audit_sha256": "e59447b460df670553acffce4c0b87715a19f4fc8156d5bb09a67ef85571562f",
+      "source_bound_to_complete_case_ref": true,
+      "new_pg_queries": 0,
+      "assembly_modified": false,
+      "uncovered": "patient_information-specific identities not read by existing queries"
+    }
+  },
+  "offline_tests": {
+    "total": 67,
+    "passed": 67,
+    "seconds": 3.29,
+    "method": "current-source AST seams and pure privacy modules with memory Session/cache/business/transport doubles",
+    "does_not_claim": [
+      "application E2E",
+      "all identity completeness",
+      "clinical result validation"
+    ],
+    "red_phases": [
+      {
+        "total": 18,
+        "failed": 1,
+        "reason": "delayed child after parent exit"
+      },
+      {
+        "total": 20,
+        "failed": 2,
+        "reason": "samecase provider overwritten"
+      },
+      {
+        "total": 4,
+        "failed": 4,
+        "reason": "fixed 6b8fa3e58 worker wrapper lacks collected source binding, current privacy gate retained",
+        "memory_observation_capture_transport_per_case": [
+          1,
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  "prior_171_gate": "preserved_as_archived_not_rerun",
+  "unclosed": {
+    "PRIV003": "patient-bearing ordinary shadow and semantic20 direct client paths inventoried, unchanged",
+    "PRIV002_remaining": "unread patient_information identities, whole application integration validation and independent review"
+  },
+  "checks": {
+    "ruff": "passed_modified_6_production_files_and_exclusive_tests",
+    "git_diff_check": "passed_before_priv002_commit",
+    "frontend_full_checks": "not_run_coordinator_scheduling",
+    "priv002_hook": "awaiting_serial_authorization"
+  },
+  "safety": {
+    "network_calls": 0,
+    "model_calls": 0,
+    "pg_calls": 0,
+    "env_files_read": 0,
+    "real_patient_reads": 0,
+    "global_identity_cache": false,
+    "serializable_identity_fields_added": false
+  },
+  "real_external_send_release": "not_authorized",
+  "expanded_write_files": [
+    "sichuan_workspace_batch_worker.py",
+    "qc_workspace/record_repository.py",
+    "custom_qc_workspace_service.py"
+  ]
+}

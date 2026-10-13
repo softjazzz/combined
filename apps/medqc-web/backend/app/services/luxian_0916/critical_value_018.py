@@ -49,6 +49,7 @@ def build_critical_value_018_facts(
         top_level_report_ids,
         projection_partial,
         timeline_match_required,
+        raw_detail_identity,
     ) = _shared_item_rows(bundle, evidence_payload=evidence_payload)
     master_rows = _shared_master_rows(
         bundle,
@@ -94,6 +95,7 @@ def build_critical_value_018_facts(
     events, invalid_count = _build_events(
         item_rows=critical_rows,
         master_rows=master_rows,
+        raw_detail_identity=raw_detail_identity,
     )
     if invalid_count:
         return _source_gap(
@@ -129,6 +131,7 @@ def _build_events(
     *,
     item_rows: Sequence[Mapping[str, Any]],
     master_rows: Sequence[Mapping[str, Any]],
+    raw_detail_identity: bool,
 ) -> tuple[tuple[dict[str, Any], ...], int]:
     master_index = _master_index(master_rows)
     groups: dict[str, list[Mapping[str, Any]]] = {}
@@ -141,6 +144,7 @@ def _build_events(
         groups.setdefault(report_id, []).append(row)
 
     events: list[dict[str, Any]] = []
+    raw_item_ids: set[str] = set()
     for report_id, rows in groups.items():
         master, master_ambiguous = _matched_master(rows, master_index)
         if master_ambiguous:
@@ -177,8 +181,8 @@ def _build_events(
         critical_items: list[dict[str, str]] = []
         item_ids: list[str] = []
         group_invalid = False
-        for ordinal, row in enumerate(rows, start=1):
-            item_id = _item_id(row, ordinal=ordinal)
+        for row in rows:
+            item_id = _item_id(row, raw_detail_identity=raw_detail_identity)
             item_name = _bounded_text(row.get("item_name"))
             result = _bounded_text(row.get("result"))
             flag = _clean(row.get("abnormal_indicator")).upper()
@@ -189,6 +193,7 @@ def _build_events(
                 or not result
                 or flag not in _CRITICAL_FLAGS
                 or item_id in item_ids
+                or (raw_detail_identity and item_id in raw_item_ids)
             ):
                 group_invalid = True
                 break
@@ -205,6 +210,9 @@ def _build_events(
         if group_invalid:
             invalid_count += 1
             continue
+
+        if raw_detail_identity:
+            raw_item_ids.update(item_ids)
 
         flags = sorted({item["critical_flag"] for item in critical_items})
         event: dict[str, Any] = {
@@ -265,13 +273,14 @@ def _report_id(row: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _item_id(row: Mapping[str, Any], *, ordinal: int) -> str | None:
-    for field in ("item_id", "item_no", "document_id"):
+def _item_id(row: Mapping[str, Any], *, raw_detail_identity: bool) -> str | None:
+    # raw 文档编号是明细主键；grouped 文档编号属于父报告，不能用作明细身份。
+    fields = ("document_id",) if raw_detail_identity else ("item_id", "item_no")
+    for field in fields:
         value = _controlled_text(row.get(field))
         if value is not None:
             return value
-    report_id = _report_id(row)
-    return f"{report_id}:item:{ordinal}" if report_id is not None else None
+    return None
 
 
 def _resolved_report_time(
@@ -337,13 +346,14 @@ def _shared_item_rows(
     frozenset[str],
     bool,
     bool,
+    bool,
 ]:
     shared_rows = _evidence_structured_rows(
         evidence_payload,
         "labtest_item_report",
     )
     if shared_rows is not None:
-        return shared_rows, frozenset(), False, False
+        return shared_rows, frozenset(), False, False, True
 
     inventory = _shared_inventory(bundle)
     if inventory is not None:
@@ -367,14 +377,14 @@ def _shared_item_rows(
             )
             report_id = _controlled_text(raw_document.get("document_id"))
             if report_id is None:
-                return None, frozenset(), True, True
+                return None, frozenset(), True, True, False
             report_ids.add(report_id)
             nested_items = raw_document.get("report_items")
             if isinstance(nested_items, Sequence) and not isinstance(
                 nested_items, (str, bytes, bytearray)
             ):
                 if any(not isinstance(item, Mapping) for item in nested_items):
-                    return None, frozenset(), True, True
+                    return None, frozenset(), True, True, False
                 metadata = _mapping(raw_document.get("report_metadata"))
                 test_id = _source_field_value(raw_document, "test_id")
                 test_no = _source_field_value(raw_document, "test_no") or report_id
@@ -407,7 +417,7 @@ def _shared_item_rows(
             ):
                 rows.append(dict(raw_document))
                 continue
-            return None, frozenset(), True, True
+            return None, frozenset(), True, True, False
         if found_source:
             structured_documents = _mapping(
                 _mapping(bundle.get("structured_context")).get("documents")
@@ -424,16 +434,16 @@ def _shared_item_rows(
                     if (report_id := _report_id(row)) is not None
                 }
                 projection_partial = projection_partial or raw_report_ids != report_ids
-                return raw_rows, frozenset(report_ids), projection_partial, True
-            return tuple(rows), frozenset(report_ids), projection_partial, True
-        return (), frozenset(), False, True
+                return raw_rows, frozenset(report_ids), projection_partial, True, True
+            return tuple(rows), frozenset(report_ids), projection_partial, True, False
+        return (), frozenset(), False, True, False
 
     structured = _mapping(bundle.get("structured_context"))
     documents = structured.get("documents")
     if not isinstance(documents, Mapping):
-        return None, frozenset(), False, True
+        return None, frozenset(), False, True, True
     raw_rows = _rows(documents, "labtest_item_report")
-    return raw_rows, frozenset(), False, True
+    return raw_rows, frozenset(), False, True, True
 
 
 def _shared_master_rows(

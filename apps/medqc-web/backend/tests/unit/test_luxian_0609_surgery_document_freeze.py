@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Any, Mapping, Sequence
 
 import pytest
+from luxian_0609_anesthesia_test_facts import ExplicitAnesthesiaFactClient
 
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import (
@@ -78,6 +80,20 @@ def _surgery(
         "anesthesia_method": anesthesia_method,
         "surgical_level": "三级",
     }
+
+
+def _mr_surgery(surgery_id: str = "mr-surgery-1") -> Mapping[str, Any]:
+    """MR权威时间使用医院naive墙钟；保留原UTC08/09的同一绝对时刻。"""
+    row = dict(_surgery(surgery_id))
+    begin = row.pop("surgery_begin_time")
+    end = row.pop("surgery_end_time")
+    hospital_timezone = ZoneInfo("Asia/Shanghai")
+    row.update(
+        surgery_id=surgery_id,
+        surgery_begin_datetime=begin.astimezone(hospital_timezone).replace(tzinfo=None),
+        surgery_end_datetime=end.astimezone(hospital_timezone).replace(tzinfo=None),
+    )
+    return row
 
 
 def _anesthesia_record(document_id: str = "anesthesia-1") -> Mapping[str, Any]:
@@ -163,13 +179,15 @@ async def _run_chain(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
     error_sources: frozenset[str] = frozenset(),
+    anesthesia_facts: str | None = None,
 ) -> tuple[Any, Any, Any, Any]:
+    assert anesthesia_facts is None or rule_id == "LX0609-04-04-02"
     session = _session(rule_id, rows_by_source, error_sources=error_sources)
     execution = await execute_luxian_0609_native_surgery_document_rules(
         rule_ids=(rule_id,),
         wrapper_rules=(_wrapper(rule_id),),
         evidence_payload=None,
-        llm_client=_NoLlmClient(),
+        llm_client=_NoLlmClient() if anesthesia_facts is None else ExplicitAnesthesiaFactClient(anesthesia_facts),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=(rule_id,),
@@ -268,7 +286,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-01-01",
             {
                 "surgery_record": _rows(_surgery()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "mr_surgery": _rows(_mr_surgery("mr-surgery-1")),
                 "presurg_summary": _rows(
                     {
                         "document_id": "summary-1",
@@ -366,7 +384,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-04-02",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "mr_surgery": _rows(_mr_surgery("mr-surgery-1")),
                 "preane_surveil_record": _rows(_visit("pre-visit-1", post=False)),
                 "postane_surveil_record": _rows(_visit("post-visit-1", post=True)),
             },
@@ -378,27 +396,33 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "checked_sources": ["preane_surveil_record", "postane_surveil_record"],
                 "checked_fields_by_visit": {
                     "preanesthesia_visit": [
-                        "asa_level",
-                        "airway_assessment",
-                        "fasting_status",
-                        "anesthesia_history",
-                        "risk_discussion",
+                        "preop_visit_within_24h",
+                        "general_condition",
+                        "brief_history",
+                        "relevant_examinations",
+                        "planned_procedure_and_anesthesia",
+                        "anesthesia_indication",
+                        "precautions",
+                        "preoperative_orders",
                         "anesthetist_signature",
                         "record_time",
                     ],
                     "postanesthesia_visit": [
+                        "postop_visit_within_24h",
+                        "recovery_status",
                         "consciousness_status",
-                        "respiratory_status",
-                        "circulatory_status",
-                        "complication_assessment",
+                        "extubation_status",
+                        "postoperative_orders",
+                        "special_situations",
                         "anesthetist_signature",
                         "record_time",
                     ],
                 },
             },
             (
-                ("material", "mr_surgery", "mr-surgery-1"),
+                # 内容寻址引用按摘要排序；病案首页手术行带权威结束时间后摘要随之变化。
                 ("material", "preane_surveil_record", "pre-visit-1"),
+                ("material", "mr_surgery", "mr-surgery-1"),
                 ("material", "postane_surveil_record", "post-visit-1"),
             ),
             {
@@ -407,9 +431,9 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 ("preane_surveil_record", "pre-visit-1"),
             },
             (
-                "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、"
-                "麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、"
-                "呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。"
+                "麻醉术前访视已核对：术前24小时内访视、一般情况、简要病史、相关检查、拟行手术和麻醉方式、适应证、注意事项、"
+                "术前医嘱、麻醉医师签名、记录时间；麻醉术后访视已核对：术后24小时内访视、恢复情况、"
+                "清醒情况、拔管情况、术后医嘱、特殊情况、麻醉医师签名、记录时间。"
             ),
         ),
         (
@@ -463,7 +487,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 ("material", "surgery_record", "surgery-2"),
             ),
             {("surgery_record", "surgery-1"), ("surgery_record", "surgery-2")},
-            "发现质控问题",
+            "已确认实施手术，文书未记载为紧急抢救手术，但未找到术前讨论记录。",
         ),
     ),
 )
@@ -477,7 +501,7 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     evidence: set[tuple[str, str]],
     findings: str,
 ) -> None:
-    session, execution, reduced, result = await _run_chain(rule_id, rows_by_source)
+    session, execution, reduced, result = await _run_chain(rule_id, rows_by_source, anesthesia_facts="freeze_complete" if rule_id == "LX0609-04-04-02" else None)
 
     decision = execution.decisions[0]
     assert decision.reason_code == reason_code
@@ -492,10 +516,14 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     assert _evidence_coordinates(result) == evidence
     assert _fact_ref_coordinates(session, decision.fact_refs) == fact_ref_coordinates
 
-    assert execution.llm_call_count == 0
-    assert execution.prompt_tokens == 0
-    assert execution.completion_tokens == 0
-    assert execution.total_tokens == 0
+    if rule_id == "LX0609-04-04-02":
+        assert execution.llm_call_count == 1
+        assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (10, 5, 15)
+    else:
+        assert execution.llm_call_count == 0
+        assert execution.prompt_tokens == 0
+        assert execution.completion_tokens == 0
+        assert execution.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -621,6 +649,8 @@ def test_surgery_document_family_rule_set_and_aggregator_ownership_is_zero() -> 
             "LX0609-04-04-02",
             "LX0609-04-04-03",
             "LX0609-04-01-02",
+            "LX0609-04-01-04",
+            "LX0609-04-01-05",
     )
 
     # 迁移完成后，聚合器不得再按本族规则号解释事实、状态或证据。

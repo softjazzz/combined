@@ -1,0 +1,41 @@
+{
+  "commit": "511bd12dbd96d3f65927963c956bc8a132444c0f",
+  "method": "independently authored assertions; owner AST helper reused; actual current attempt method AST with in-memory capture/observation/transport; business/config/material parsing replaced; no true script import/config/CLI/network/PG",
+  "results": [
+    {
+      "id": "F01",
+      "status": "passed"
+    },
+    {
+      "id": "F03_F04",
+      "status": "passed"
+    },
+    {
+      "id": "F02_F06_PHONE_raw",
+      "status": "passed"
+    },
+    {
+      "id": "F06_residual",
+      "status": "passed"
+    },
+    {
+      "id": "F05_existing_wrapper_closed",
+      "status": "passed"
+    },
+    {
+      "id": "F07_original_objects",
+      "status": "passed"
+    },
+    {
+      "id": "F08_scope_lifecycle",
+      "status": "passed"
+    }
+  ],
+  "passed": 7,
+  "failed": 0,
+  "network_calls": 0,
+  "pg_calls": 0,
+  "env_files_read": 0,
+  "source_or_patient_files_read": "only pinned code/helper source; synthetic source rows",
+  "frozen_expectations_changed": false
+}

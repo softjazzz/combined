@@ -1,0 +1,106 @@
+{
+  "audit_id": "060-current-targeted-evidence-binding-review-v1",
+  "fixed_current_commit": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "tree": "F:/MedQC-worktrees/qc-integration-20261008",
+  "conclusion": "current_targeted_synthetic_engineering_evidence_bound_no_confirmed_blocker",
+  "confirmed_blockers": [],
+  "rules": [
+    {
+      "rule_id": "LX0609-04-02-06",
+      "legacy_rule_id": "LX0609-060",
+      "name": "死亡患者无死亡记录",
+      "status": "current_source_bound_targeted_replay_pass",
+      "native_existing_cases": 4,
+      "finalizer_existing_cases": 1,
+      "published_existing_parameters": 6,
+      "all_11_pass": true,
+      "clinical_acceptance": false,
+      "evidence": [
+        "manifest-v1.json",
+        "inherited-inputs-expected-v1.json",
+        "observed-v1.json",
+        "run-01.log",
+        "review-v1.md"
+      ]
+    }
+  ],
+  "authoritative_identity": {
+    "master_path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+    "master_version": "2026-09-22-identity-v1",
+    "pointer": "/rules/59",
+    "entry": {
+      "rule_id": "LX0609-04-02-06",
+      "source_document": "死亡记录",
+      "qc_point": "死亡患者无死亡记录",
+      "implementation_status": "active",
+      "policy_sources": [
+        "customer_confirmed"
+      ],
+      "policy_summary": "当前按客户已确认的《死亡记录》质控点执行；新增或变更口径须单独验收。"
+    },
+    "master_has_legacy_field": false,
+    "legacy_id": "LX0609-060",
+    "legacy_source": "current surgery-anesthesia.json /rules/10 and catalog confirmed by root",
+    "test_canonical_id": "LX0609-04-02-06",
+    "identity_mismatch": false
+  },
+  "source_manifest_sha256": "93a9f7c343ba068d715500f21d5deffadc1579c269dbd07c2531650e6ae57905",
+  "source_hashes_unchanged": true,
+  "input_expected_sha256": "9b9ddb3fbf272948d7b0d81b6bd6fcbec4daaa6011d4f955827a5e36fc8b2cb5",
+  "runner_sha256": "8f73d823de9f824e140a901b0c0c21716a8486ef94087289aa1be8eb22532fff",
+  "historical_binding": {
+    "reported_baseline": "c3a87a4f820259bca37a01764522ea1f3f485a3c",
+    "historical_source_sha256": null,
+    "gap_retained": true,
+    "current_sha_is_historical_sha": false,
+    "real_six_inheritance": "NA_no_death_trigger_only",
+    "private_material_read": false,
+    "old_four_synthetic_cases": "037_not_reassigned_to060"
+  },
+  "actual_validation_layer": "synthetic_session_AST→native→Binding_Reducer→Finalizer_and_published_format_only",
+  "HTTP_validation": false,
+  "store_validation": false,
+  "API_validation": false,
+  "browser_validation": false,
+  "real_death_positive_validation": false,
+  "module_substitutes": [
+    "app.database.connection engine=None",
+    "app.services.bundles.assembly engine=None",
+    "app.core.settings get_settings blocked"
+  ],
+  "other_import_isolation": [
+    "database_and_bundles_parent_namespace_paths_only",
+    "customer_rule_package static_same_source_AST_literal",
+    "dotenv_load_dotenv_and_dotenv_values_blocked"
+  ],
+  "published_legal_forms_oracle": "same_safe_facts_existing_format_equivalence_not_independent_medical_oracle",
+  "shared_test_projection": "preserve_original_rows_only_original060_assert_component_counted",
+  "guard_attempts": {
+    "env": 0,
+    "private": 0,
+    "network": 0,
+    "database": 0,
+    "model": 0,
+    "foreign_write": 0
+  },
+  "PG_calls": 0,
+  "real_model_calls": 0,
+  "private_material_reads": 0,
+  "production_modified": false,
+  "shared_tests_modified": false,
+  "historical_real_cases_replayed": 0,
+  "first_run_id": "run-01",
+  "first_run_exit": 0,
+  "first_error_overwritten": false,
+  "rerun_performed": false,
+  "remaining_validation_gaps": [
+    "historical_source_sha_binding",
+    "real_death_positive_gold_and_source_coverage",
+    "HTTP_API_store_browser",
+    "clinical_semantic_signoff"
+  ],
+  "observed_sha256": "951f2f686769343fdaa0dc4598011feca9b063406c61c58f6a836568925f2b9e",
+  "log_sha256": "4552620e7e5d3438824b4f71cd3b59d78d5c622accf2575c56b80f20259b2ce8",
+  "test_slot_released": true,
+  "running_processes": 0
+}

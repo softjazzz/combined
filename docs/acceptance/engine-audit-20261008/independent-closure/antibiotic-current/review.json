@@ -1,0 +1,77 @@
+{
+  "id": "ANTIBIOTIC-EVIDENCE-CURRENT-054-057",
+  "scope": [
+    "LX0609-05-01-02",
+    "LX0609-05-01-05"
+  ],
+  "legacy_ids": [
+    "054",
+    "057"
+  ],
+  "sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "conclusion": "specified historical synthetic evidence bound to current fixed source; all historical observations reproduced; not all original expectations satisfied",
+  "source_manifest_gap": "closed_for_13_explicit_synthetic_cases_only",
+  "current_executions": 13,
+  "expected_matches": 8,
+  "original_expectation_mismatches": 5,
+  "prior_observation_matches": 13,
+  "new_product_findings": [],
+  "findings": [],
+  "defects": [],
+  "blockers": [],
+  "retained_limits": [
+    {
+      "indices": [
+        2,
+        3
+      ],
+      "classification": "llm_client=None: semantic candidates fail closed with technical_error/model_transport_error; not verified semantic misjudgment",
+      "existing_issue_id": "TP-L01"
+    },
+    {
+      "indices": [
+        5
+      ],
+      "classification": "Original conservative data_gap differs from not_applicable; no hospital approved complete drug catalog/code-map evidence obtained, so existing dictionary scope risk rather than newly confirmed approved-range omission",
+      "existing_issue_id": "TP-Q03"
+    },
+    {
+      "indices": [
+        19
+      ],
+      "classification": "no-sputum reason sufficiency dispute; non_compliant; existing TP-Q05",
+      "existing_issue_id": "TP-Q05"
+    },
+    {
+      "indices": [
+        21
+      ],
+      "classification": "consultation source boundary dispute; not_applicable; existing TP-Q04",
+      "existing_issue_id": "TP-Q04"
+    }
+  ],
+  "method": "existing synthetic snapshot/material helper -> whole real fixed native executor -> real binding/reducer -> real canonical Finalizer; no Worker/save/API/deployment",
+  "runtime_boundary_attempts": [],
+  "source_provenance_errors": [],
+  "unchanged_fixed_sources": 727,
+  "loaded_real_app_sources": 168,
+  "scope_limit": "Synthetic fixture -> real executor/binding/finalizer only; no real source collector, Worker, Store or API",
+  "artifact_dir": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current",
+  "artifacts": [
+    "review.md",
+    "manifest.json",
+    "case-bindings.json",
+    "cases.json",
+    "results.json",
+    "replay.py",
+    "support-failures.json",
+    "historical-report.fixed.md",
+    "ledger-selected-rules.json"
+  ],
+  "not_completed": [
+    "real clinical source/model validation",
+    "Worker and collector full chain",
+    "Store/API/customer endpoint",
+    "deployment acceptance"
+  ]
+}

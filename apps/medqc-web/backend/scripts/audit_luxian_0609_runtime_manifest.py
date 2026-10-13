@@ -55,7 +55,19 @@ def build_runtime_audit(
         if isinstance(item, Mapping)
     )
     contract_items = tuple(contracts)
-    scope_items = tuple(phase_scope)
+    # 规则总表保留、但已从规则目录撤下的待定义规则（如 2026-09-22 撤下的 06-03-01）
+    # 不进入运行清单；单独列出，不视为漂移。其他不一致仍拒绝。
+    manifest_id_set = set(manifest_ids)
+    withdrawn_pending_ids = [
+        str(getattr(item, "rule_id", "") or "").strip().upper()
+        for item in phase_scope
+        if str(getattr(item, "rule_id", "") or "").strip().upper() not in manifest_id_set
+        and getattr(item, "phase_status", "") == "pending_definition"
+    ]
+    scope_items = tuple(
+        item for item in phase_scope
+        if str(getattr(item, "rule_id", "") or "").strip().upper() not in set(withdrawn_pending_ids)
+    )
     contract_ids = _ordered_ids(contract_items)
     scope_ids = _ordered_ids(scope_items)
     if not manifest_ids or contract_ids != manifest_ids:
@@ -180,6 +192,7 @@ def build_runtime_audit(
             "temporary": approved_temporary_target,
         },
         "definition_target_reconciled": reconciled,
+        "catalog_withdrawn_pending_rule_ids": withdrawn_pending_ids,
         "definition_target_gap": {
             "formal_missing": max(approved_formal_target - current_formal, 0),
             "temporary_unassigned": max(current_temporary - approved_temporary_target, 0),

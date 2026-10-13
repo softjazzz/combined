@@ -1,0 +1,869 @@
+{
+  "baseline": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "scope": "0609 only",
+  "note": "问题级执行队列，不等同规则数；待复核与业务争议不冒认为已确认缺陷。N13两来源合并。",
+  "issues": [
+    {
+      "id": "N12",
+      "rule_ids": [
+        "LX0609-04-04-02"
+      ],
+      "claim": "麻醉空标签残留；未找到后续独立关闭",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": "/root/repair_iml01",
+      "state": "carrier_engineering_closed_integrated_f1c6ec095_real_model_pending",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "note": "Core5649f6396 plus test-only fac4ef67c independently reviewed. Root strict offline guard actual348:346pass2same-parent baseline failures (029 association and family ownership); all original03728 protections and new43 pass. Original medical inputs/oracles retained. Root383 joint also passed. Independent43 core/wrapper and SQLite3 passed with script failures disclosed. Real semantic model/full-scan accuracy not validated. Later rootfad64946e354/354 after independent test-only029 MR schema and explicit031/032 family drift correction; no production medical relaxation.",
+      "commits": [
+        "08aed59db3ed9bf08316fc792a757a3ee65d992b"
+      ],
+      "integration_commit": "5649f6396",
+      "test_adaptation_commit": "fac4ef67c",
+      "latest_evidence": "docs/acceptance/engine-audit-20261008/independent-closure/n12-carrier-integration/independent-review.md",
+      "latest_result": "Sourcee5f225bd4 integratedf1c6ec095. Independent fixedblob/AST review and root375/375 strictoffline pass10.55s, source hashes unchanged. Preserves priorred6/9 and firstgreen370/5 harness failures. Same-ID sN collision and real-model semantics remain unverified; no whole-rule clinical closure. Later bounded sourcee5f supplement2synthetic cases/3documents preserves final same-ID sN marker exactbody/spans/order/length through formal wrapper; root read probe and actual report. Does not imply arbitrary marker combinations or model semantics."
+    },
+    {
+      "id": "N10",
+      "rule_ids": [
+        "LX0609-04-05-02",
+        "LX0609-08-02-01"
+      ],
+      "claim": "正文模板壳残留；先核补丁，不重复修",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": "/root",
+      "state": "engineering_integrated_real_semantics_and_formal_chain_pending",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "note": "原问题历史保留；本轮受控正文事实集成，禁止关键词/姓名/病例特判。原四坐标占位夹具单独修正并保留原字面反例，不宣称同输入零变化。root 85事实+133旧保护+8新SQLite实例回读通过，共享出口504通过；独审无工程阻断。真实模型、正式API/UI链、独立TRUNCATED快照仍未验。",
+      "integration_commit": "1fb745b4312a1b932654703e9f6323f095ebee25",
+      "shared_support_commit": "3c233802497093ca72627a0510bc4cb3c2c41e58",
+      "latest_evidence": "docs/acceptance/engine-audit-20261008/resumption-execution.md"
+    },
+    {
+      "id": "N13",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "未比较却发布matched，旧独立复审保留",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": "/root/repair_chemo",
+      "state": "limited_engineering_repair_integrated_business_acceptance_open",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "source_commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+      "note": "Independent47observations39match;6NCbusinessoracle fail asgap baseline/final;2DGcount0expected/1actual reflectunprovenownership, keptunmet.8falseNC fixed;20publiccontracts+14dosechecks pass. No new confirmed regression in frozen matrix;notwholeN13accepted.",
+      "integration_commit": "880a433b0"
+    },
+    {
+      "id": "TR-044-MULTI",
+      "rule_ids": [
+        "LX0609-07-01-02"
+      ],
+      "claim": "三项多事件基线也失败；合同关闭不等于事实闭环",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "SURGERY-029030",
+      "rule_ids": [
+        "LX0609-04-01-01",
+        "LX0609-04-02-02"
+      ],
+      "claim": "正常材料资料不足回退反例仍待独立闭环",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": "/root/audit_course_timing",
+      "state": "old_normal_regressions_not_reproduced_current_two_controls_pass_negative_coverage_open",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "latest_evidence": "docs/acceptance/engine-audit-20261008/independent-closure/surgery029030-current/review-v1.json",
+      "latest_result": "Original two C cases current native/Binding/Finalizer2/2; old unintegratedcandidate gap not currentroot regression. Multiple-event negative scope remains open. Three pre-import support failures preserved; no clinical/model claims."
+    },
+    {
+      "id": "PREOP-MEDICAL",
+      "rule_ids": [
+        "LX0609-04-01-04",
+        "LX0609-04-01-05"
+      ],
+      "claim": "诊断充分性及术式归属人工争议；限定工程闭环已完成",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "CT-INPUT-CHANGE",
+      "rule_ids": [
+        "LX0609-06-01-04",
+        "LX0609-06-01-05"
+      ],
+      "claim": "移除DR后送模目录变更；旧真实响应不可替代当前输入",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PATH-INPUT-CHANGE",
+      "rule_ids": [
+        "LX0609-06-02-02",
+        "LX0609-06-02-03"
+      ],
+      "claim": "跨事件同键/标本/时间门禁改变，需正常适用材料",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PROMPT-074",
+      "rule_ids": [
+        "LX0609-12-02-01"
+      ],
+      "claim": "Prompt已改，旧真实响应/合法替身不能代替当前输出",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "SURGERY-FREEZE",
+      "rule_ids": [
+        "LX0609-04-02-02",
+        "LX0609-04-03-01",
+        "LX0609-04-01-03"
+      ],
+      "claim": "7项冻结差异含新增事实/文案/坐标及技术失败，不是7医学误判",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "identified_fixture_and_catalog_drift_corrected_other_semantic_items_open",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "note": "Source216431018 integratedfad64946e test-only: only029 MR fixture true fields/identical absolute time; original medicalC/fullfact/ref/assertions unchanged. Other five MR inputs restored after overbroad fixture edit gave3 hash-order failures. Originalred and351/3 retained. Explicit family031/032 appended. Root354/3544.78s; multi-order029/030 semantic issues not closed."
+    },
+    {
+      "id": "TR-048-REAL",
+      "rule_ids": [
+        "LX0609-07-04-01"
+      ],
+      "claim": "真实材料缺实际触发及三类完整文书；继承048配对工程证据",
+      "evidence_path": "apps/medqc-web/docs/acceptance/2026-10-08-0609-outcome-reconciliation.md",
+      "reconciliation_state": "affected_needs_revalidation",
+      "source_classification": "historical_evidence",
+      "owner": null,
+      "state": "revalidation_evidence_preparation",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "course-timing:CT-01",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "否定与未来条件中的诊断不明确误触发当前缺陷",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_defect",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "course-timing:CT-02",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "当前不明确病程缺可信时间时被静默排除并作完整未触发",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_defect",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "integration_commit": "7d36d0316",
+      "note": "Independent30scenarios+16baseline equality+25publicguards+3SQLite; root108pass includes56new29PUB23RRD02. Three extra-key rejection oracles were overstrict; filtering permitted. CT01/03 remainopen."
+    },
+    {
+      "id": "course-timing:CT-03",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "空白讨论行被当成书写完成并判合规；应缺陷还是数据缺口待口径",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/course-timing.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_defect",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "integration_commit": "64e5b99c5",
+      "note": "Fixed25406 independently27/28; only preexistingCT04 failed. CT02 protection30/publicconstraints61/SQLite3 passed. Root137=136pass+sameCT04failure; no claim of all green or semantic completeness."
+    },
+    {
+      "id": "discharge-death:DD-F01",
+      "rule_ids": [
+        "LX0609-08-01-03"
+      ],
+      "claim": "死亡患者未形成出院记录时，死亡诊断冲突核对被正常出院记录存在性门控跳过。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_offline_scope_gap",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "note": "Independent39pass;owner73+old8;integrated73pass at1deefproductionb130. Oldtypeddeath anddischargefacts preserved. NoPG/clinicalclaim.",
+      "source_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+      "integration_commit": "b13043c3d"
+    },
+    {
+      "id": "discharge-death:DD-F02",
+      "rule_ids": [
+        "LX0609-08-01-02"
+      ],
+      "claim": "带药现分支验证名称、剂量、途径、时间字段非空；没有药名/剂量错误或与医嘱一致性比较。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_rule_coverage_limit",
+      "owner": "/root/audit_discharge_death",
+      "state": "authority_discharge_medication_source_and_error_scope_required",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "latest_evidence": "docs/acceptance/engine-audit-20261008/next-batch/discharge-medication/boundary.md"
+    },
+    {
+      "id": "discharge-death:DD-F05",
+      "rule_ids": [
+        "LX0609-08-01-04"
+      ],
+      "claim": "旧业务基线027允许肿瘤治疗或随访；当前总表质控点与确定性实现仅肿瘤治疗计划满足要求。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/discharge-death.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "documentation_policy_alignment",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "imaging-laboratory:IML-01",
+      "rule_ids": [
+        "LX0609-06-01-01",
+        "LX0609-06-01-03",
+        "LX0609-06-03-02"
+      ],
+      "claim": "按任一行目标名称确认事件，不校验同键主从身份互相否定；非目标报告也可证明目标已执行/报告齐全",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "确认缺陷",
+      "owner": "/root/repair_iml01",
+      "state": "integrated_confirmed_subissues_joint_ct_mri_contract_open",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "source_commit": "11211cc42becaa03d0f5b36056bdc3e17a31842a",
+      "integration_commit": "ef19df8a2",
+      "note": "Independent16pass/1pending plusSQL6pass. CT/MRI same-key joint event contract remains pending; new source fields require real-input impact check."
+    },
+    {
+      "id": "imaging-laboratory:IML-02",
+      "rule_ids": [
+        "LX0609-06-04-01",
+        "LX0609-06-04-02"
+      ],
+      "claim": "report_time or report_datetime or record_time取首值，记录时间替代报告时间，别名冲突被静默忽略",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "确认缺陷",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_engineering_closed",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "source_commit": "0628782191861460bbf24edbf848eb601829876c",
+      "integration_commit": "a8ad74e69",
+      "independent_review": "F:/MedQC-worktrees/review-artifacts/iml02-closure/fixed-062878219-results.json",
+      "evidence": "225 worker focused tests; 44 independent fixed-source event results + 13 public contract observations; no real model/PG/clinical claim"
+    },
+    {
+      "id": "imaging-laboratory:IML-D01",
+      "rule_ids": [
+        "LX0609-06-01-03"
+      ],
+      "claim": "主记录明确取消而同键有效正式报告仍被视为已完成；源状态是否最终或历史残留需确认，暂不计确认P1",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "争议",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "imaging-laboratory:IML-D02",
+      "rule_ids": [
+        "LX0609-06-01-02"
+      ],
+      "claim": "前48小时硬裁剪与判定，在业务基线010仅要求检查前原因；本轮未找到48小时客户确认来源。旧测试固定此行为，不据测试宣称标准已经确定。",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/imaging-laboratory.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "争议",
+      "owner": null,
+      "state": "business_basis_review_no_code_decision",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "rescue-remaining:RR-D01",
+      "rule_ids": [
+        "LX0609-09-02-01"
+      ],
+      "claim": "见原报告",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
+      "owner": "/root/repair_iml01",
+      "state": "evaluation_horizon_material_visibility_contract_pending",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "note": "Do not silently turnfrozenclinicalevaluationendpoint into sourcevisibilitycutoff; no productionchangeapproved."
+    },
+    {
+      "id": "rescue-remaining:RR-D02",
+      "rule_ids": [
+        "LX0609-09-02-01"
+      ],
+      "claim": "见原报告",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
+      "owner": "/root/repair_iml01",
+      "state": "integrated_limited_engineering_closed",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "source_commit": "3e7ee94ff607e53b7f4f54660f4a389abb3a8dbb",
+      "integration_commit": "efb8bc62b",
+      "note": "Owner39pass;independent23pass incl2native-reducer-Canonical zero-model;realPG/clinicalnotclaimed. RR-D01open."
+    },
+    {
+      "id": "rescue-remaining:RR-M01",
+      "rule_ids": [
+        "LX0609-12-02-01"
+      ],
+      "claim": "见原报告",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_contract_execution_drift",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_engineering_contract_closed",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "integration_commit": "305974e38",
+      "note": "7static+3runtime controls; no new model call behavior. Real semantic accuracy tracked separately byPROMPT-074."
+    },
+    {
+      "id": "treatment-consultation:TC-01",
+      "rule_ids": [
+        "LX0609-07-01-01",
+        "LX0609-07-01-02",
+        "LX0609-07-02-01",
+        "LX0609-07-02-02",
+        "LX0609-07-03-01"
+      ],
+      "claim": "专用输血正文长度把计划、拒绝、暂缓判成已实施",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_function_defect",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "treatment-consultation:TC-02",
+      "rule_ids": [
+        "LX0609-07-01-03"
+      ],
+      "claim": "070取消记录的完成时间被当作输血实施时间",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_branch_input_defect",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_performed_fact_and_privacy_carrier_engineering_closed_real_model_pending",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "latest_result": "219b+196d independently fixed reviewed; integrated011d26b86+35909964a; root289/2895.40s with source hashes unchanged and actual app paths. Original guard-only13 failures retained; no medical oracle/source correction in rerun. Clinical/model/multi-time capabilities and existing normalC missing labID exact-card remain open.",
+      "integration_commits": [
+        "011d26b86",
+        "35909964a"
+      ]
+    },
+    {
+      "id": "treatment-consultation:TC-03",
+      "rule_ids": [
+        "LX0609-07-04-01"
+      ],
+      "claim": "048否定术中输血与备血量仍生成术中输血差异",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/treatment-consultation.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_function_defect",
+      "owner": null,
+      "state": "queued_evidence_review",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D01",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "空化疗病程返回元组长度错误，正式执行中断",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open",
+      "owner": "/root/repair_chemo",
+      "state": "integrated_engineering_closed",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "integration_commit": "e256e8ea9",
+      "source_commit": "d0f9c829901152a5a9fd7d97bc9916fe076b67cd",
+      "evidence": "4 native/Finalizer synthetic tests by worker; independent fixed-blob AST comparison 8 observations; no real model/PG/clinical claim",
+      "independent_review": "F:/MedQC-worktrees/review-artifacts/chemo-d01/review.md"
+    },
+    {
+      "id": "tumor-pathology:TP-D02",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "单目标药整篇病程比较可借用其他药剂量，并把否定或计划给药判合规",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open",
+      "owner": "/root/repair_chemo",
+      "state": "candidate_frozen_not_integrable_semantic_failures_and_legacy_regression_unverified",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "latest_evidence": "F:/MedQC-worktrees/review-artifacts/chemo-next-repair/local-dose-implementation/frozen-dependency-and-delivery.md",
+      "latest_result": "67合成用例65通过2原语义失败；3公共合同失败转绿；旧115保护未验证恢复；生产未集成，跨药及否定问题不关闭"
+    },
+    {
+      "id": "tumor-pathology:TP-D03",
+      "rule_ids": [
+        "LX0609-05-02-01"
+      ],
+      "claim": "化疗适用事件只按药物分类筛选，无取消状态约束",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open_policy_details_pending",
+      "owner": "/root/repair_chemo",
+      "state": "design_before_semantic_changes",
+      "depends_on": [],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D04",
+      "rule_ids": [
+        "LX0609-05-01-06"
+      ],
+      "claim": "单个特殊抗菌药事件可借用明确属于其他药的专家支持",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open",
+      "owner": "/root/repair_iml02",
+      "state": "limited_engineering_repair_integrated_independently_verified",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ],
+      "commits": [
+        "f2d744f273a1b55fe3ff2bfd29a863f72292741e",
+        "0162efe65ebe2ae6105080a9eaada7b51b6aa892"
+      ],
+      "note": "Independent35/35 including original18 unchanged, supplementary17 and three fresh SQLite reads. Other-drug support/time excluded; multi-drug half-coverage copy correct. Unknown drug names, TP-D05 and N13 remain outside closure. Root joined383 passed at5649f6396.",
+      "integration_commits": [
+        "35dd17bce",
+        "2f402affe"
+      ]
+    },
+    {
+      "id": "tumor-pathology:TP-D05",
+      "rule_ids": [
+        "LX0609-05-01-03"
+      ],
+      "claim": "明确效果评价但不含有限结果词时被判缺评价",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/tumor-pathology.json",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_open_semantic_coverage",
+      "owner": null,
+      "state": "queued_shared_module",
+      "depends_on": [
+        "imaging-laboratory:IML-02"
+      ],
+      "closure_requirements": [
+        "Fixed evidence and input expectation preserved",
+        "Root diff and independent reviewer verification",
+        "No regression of named normal protection",
+        "Status facts evidence copy and applicable persistence verified",
+        "No claim of real model/clinical pass from synthetic tests"
+      ]
+    },
+    {
+      "id": "PRIV-002",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "0609上游原始身份已在masked投影丢失：与已完成gate分列",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "integrated_limited_source_boundary_engineering_closed",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": [],
+      "source_commit": "4232ca617",
+      "note": "49 independent bounded probes and integrated67 privacy tests pass. No real PG/job/browser; unread identity sources/PRIV003 open.",
+      "integration_commit": "26f4fe645"
+    },
+    {
+      "id": "PRIV-003",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "独立native/语义复核辅助脚本绕开发送边界",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "limited_send_boundary_integrated_real_CLI_identity_source_open",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": [],
+      "note": "Independent source-plan ataa7a confirms real worker collector exists, but two standalone CLIs have no natural production caller to borrow it. Existing parameters sufficient for future same-process caller; no new unused API or private source guessing. Standalone CLI intentionally failclosed; functional prerequisite open, not evidence of continued send leakage.",
+      "integration_commit": "d2e1718bb"
+    },
+    {
+      "id": "PRIV-004",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "0609准生产旁路共用execution的prompt包装但未建立最终请求scope",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "integrated_engineering_closed",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": [],
+      "source_commit": "6b8fa3e58",
+      "integration_commit": "d501584dd",
+      "note": "Independent13 bounded source-method probes, no full PG endpoint."
+    },
+    {
+      "id": "PRIV-005",
+      "rule_ids": [
+        "0609 cross-cutting"
+      ],
+      "claim": "上游错误摘要与快照异常日志存在原文传播面",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/privacy-model-paths.json",
+      "state": "integrated_engineering_closed",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": [],
+      "integration_commit": "1225aff95",
+      "evidence": "8 worker isolated cases; 15 independent fixed-source client/prepare observations, not full app or real provider",
+      "independent_review": "F:/MedQC-worktrees/review-artifacts/privacy005/review.md"
+    },
+    {
+      "id": "rescue-remaining:RR-PUB01",
+      "rule_ids": [
+        "0609 publication boundary"
+      ],
+      "claim": "未知规则回退NotImplemented被当dict调用get；非目录边界，不计新增正式规则缺陷",
+      "state": "integrated_limited_engineering_closed",
+      "owner": "/root/repair_iml02",
+      "depends_on": [],
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
+      "integration_commit": "574e925a5",
+      "independent_result": "37/37 fixed bb3 real modules and synthetic SQLite; API/real history not executed",
+      "root_regression": "29 tests passed in root230 suite at575418244"
+    },
+    {
+      "id": "rescue-remaining:RR-SCOPE01",
+      "rule_ids": [
+        "0609 catalog tests"
+      ],
+      "claim": "86/80目录与旧85/79断言漂移；先核正确集合，不能只改计数冒充业务修复",
+      "state": "test_contract_drift_closed_in_fixed_catalog_scope",
+      "owner": "/root/repair_chemo",
+      "depends_on": [],
+      "evidence_path": "docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+      "reconciliation_state": "engineering_boundary_not_extra_catalog_rule",
+      "source_commit": "36a3175b4c2ec2a4cc574b15405638ef44c0361a",
+      "integration_commit": "0dd25d30b",
+      "note": "Only test expectations updated from approved independent identities; production release unchanged; first root50pass, second root201 pending",
+      "integration_commits": [
+        "0dd25d30b",
+        "fc1056eb4"
+      ],
+      "root_regression": "50 first + 201 second all passed; tests independent identity oracle, production release unchanged"
+    },
+    {
+      "id": "course-timing:CT-04",
+      "rule_ids": [
+        "LX0609-03-02-01"
+      ],
+      "claim": "Prethreshold diagnosis course plus discussion row: native NA becomes public technical_error.",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/independent-closure/ct03/review-v1.md",
+      "reconciliation_state": "open_issue",
+      "source_classification": "confirmed_preexisting_defect",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "depends_on": [],
+      "closure_requirements": [
+        "Preserve original NA expected result",
+        "Mature NC/C and data gap protections",
+        "Independent fixed SHA verification",
+        "Fresh SQLite persistence/readback"
+      ],
+      "integration_commit": "da31efd03",
+      "note": "Fixed515bcec independent12native/87public/CT03 28/CT02 30/SQLite3 allpass; root da31efd03 guarded172allpass6.54s,1warning,0external calls."
+    },
+    {
+      "id": "SCOPE6-01",
+      "rule_ids": [
+        "LX0609-06-03-01"
+      ],
+      "claim": "Unregistered paused rule mixed with active rule may bypass sample creation validation and fail in Worker inventory validation.",
+      "source_classification": "static_path_runtime_reproduction_pending",
+      "reconciliation_state": "open_issue",
+      "evidence_path": "docs/acceptance/engine-audit-20261008/scope-six-review.md",
+      "state": "integrated_formal_entry_engineering_closed",
+      "owner": "/root/repair_privacy_closure",
+      "depends_on": [],
+      "closure_requirements": [
+        "Frozen synthetic entry expectation",
+        "No rule registration or release scope changes",
+        "Actual entry rejects unsupported selection before task creation",
+        "Valid active and registered paused protections"
+      ],
+      "note": "Original valid red1fail5pass proved200/1job/1dispatch. Minimal13-line original-selection membership guard before paused filtering. Independent static review no new blocker; root formal TestClient+realSQLite21/21,15.35s. Registry/default/Worker unchanged. Full membership list not independently hardcoded; existing fixed scope and retry controls retained. No PG/browser/model claim.",
+      "commits": [
+        "b5d0991a22c79aea3821a7819042a66a974c033f"
+      ],
+      "integration_commit": "4c47be30c"
+    }
+  ]
+}

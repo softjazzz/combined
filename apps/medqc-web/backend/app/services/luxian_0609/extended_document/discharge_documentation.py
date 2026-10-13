@@ -95,15 +95,14 @@ def evaluate_discharge_documentation_timeliness(
     else:
         hours = (record_time - discharge_time).total_seconds() / 3600
         actual_interval_hours = hours if hours < 0 else round(hours, 2)
-        if hours < 0:
-            final_state, reason_code = "data_gap", "authoritative_time_conflict"
-        else:
-            final_state = "compliant" if hours <= 24 else "non_compliant"
-            reason_code = (
-                "requirement_within_threshold"
-                if hours <= 24
-                else "threshold_exceeded"
-            )
+        # 院方口径（2026-10-10）：24 小时是完成期限上限，出院前已完成同样满足；
+        # 负间隔保留符号供文案说明“出院前完成”。
+        final_state = "compliant" if hours <= 24 else "non_compliant"
+        reason_code = (
+            "requirement_within_threshold"
+            if hours <= 24
+            else "threshold_exceeded"
+        )
 
     customer_display_facts = {
         "verification_kind": "discharge_record_timeliness_check",

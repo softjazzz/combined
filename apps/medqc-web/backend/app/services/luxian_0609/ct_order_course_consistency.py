@@ -46,6 +46,10 @@ _ISSUE_STATES = {
     "execution_unconfirmed": "data_gap",
     "association_unresolved": "data_gap",
     "executed_order_without_course": "data_gap",
+    # 院方口径（2026-10-10）：病程来源完整而全程未记载已执行检查，判不合规；
+    # 在院运行中报告出具未满24小时的暂不评价。
+    "course_record_missing": "non_compliant",
+    "course_not_yet_due": "not_applicable",
     "course_without_order": "data_gap",
     "source_scope_incomplete": "data_gap",
     "course_content_unavailable": "data_gap",
@@ -78,6 +82,8 @@ class CtReviewInput:
     clauses: tuple[CourseClause, ...]
     initial_findings: Mapping[int, HandbookFinding]
     complete: bool
+    horizon_basis: str = ""
+    horizon: datetime | None = None
 
     @property
     def reference_budget_exceeded(self) -> bool:
@@ -86,13 +92,52 @@ class CtReviewInput:
 
     @property
     def needs_model(self) -> bool:
-        return (not self.reference_budget_exceeded and self.complete
-                and bool(self.eligible_positions) and bool(self.clauses))
+        # 无已执行事件但病程提到 CT/MRI 时，也须由模型区分本次住院检查与院外/入院前门急诊检查
+        # （用户口径 2026-10-12），不能凭检查名称直接报“有记载无医嘱”。已有关联/执行缺口时
+        # 结论必为资料缺口，仍在语义调用前停止。
+        return (not self.reference_budget_exceeded and self.complete and bool(self.clauses)
+                and (bool(self.eligible_positions)
+                     or (all(item.status == "not_applicable" for item in self.initial_findings.values())
+                         and any(target_name("exam", clause.text) for clause in self.clauses))))
+
+
+_COURSE_DUE_HOURS = 24
+
+
+def _report_moment(event: HandbookEvent) -> datetime | None:
+    moments = []
+    for _, row in event.reports:
+        value = row.get("report_time") or row.get("report_datetime")
+        try:
+            parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None)
+        moments.append(parsed)
+    return max(moments) if moments else None
+
+
+def _missing_course_issue(
+    *, event: HandbookEvent, complete: bool, horizon_basis: str, horizon: datetime | None,
+) -> str:
+    """病程全程未见已执行检查时的事件结论；来源不完整仍是资料缺口。"""
+    if not complete:
+        return "executed_order_without_course"
+    if horizon_basis == "running":
+        reported = _report_moment(event)
+        if reported is None or horizon is None:
+            return "executed_order_without_course"
+        cutoff = horizon.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None) if horizon.tzinfo else horizon
+        if cutoff - reported < timedelta(hours=_COURSE_DUE_HOURS):
+            return "course_not_yet_due"
+    return "course_record_missing"
 
 
 def build_ct_review_input(
     *, ledger: HandbookLedger, snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    horizon_basis: str = "", horizon: datetime | None = None,
 ) -> CtReviewInput:
     """未裁剪的病程范围独立于旧010/011的时间窗口。"""
     complete = ledger.complete(REPORT_RULE_ID)
@@ -144,7 +189,15 @@ def build_ct_review_input(
             findings[position] = HandbookFinding(_ISSUE_STATES[issue], issue, event.refs, event.name)
         else:
             eligible.append(position)
-    return CtReviewInput(events, tuple(eligible), tuple(clauses), findings, complete)
+    if not clauses:
+        for position, finding in tuple(findings.items()):
+            if finding.issue == "executed_order_without_course":
+                issue = _missing_course_issue(
+                    event=events[position - 1], complete=complete,
+                    horizon_basis=horizon_basis, horizon=horizon,
+                )
+                findings[position] = HandbookFinding(_ISSUE_STATES[issue], issue, finding.refs, finding.name)
+    return CtReviewInput(events, tuple(eligible), tuple(clauses), findings, complete, horizon_basis, horizon)
 
 
 def _event_orders(event: HandbookEvent) -> tuple[Mapping[str, Any], ...]:
@@ -196,8 +249,8 @@ def build_ct_fact_prompt(review: CtReviewInput) -> str:
         "absent表示提供的全部病程中未发现；unknown表示关联或语义无法确定。"
         "有记载的语义请只返回病程分句ID，不生成引文。absent/unknown的clause_ids必须为空；"
         "一致或矛盾必须引用1至8个真实分句。不要把医嘱未执行/同步缺失判断为医生缺陷。"
-        "unmatched_current_clause_ids列出明确属于本次已执行CT/MRI、但不能对应上述任一事件的分句；"
-        "不要列历史或计划。每个(event_position,order_position)必须恰好返回一次，"
+        "unmatched_current_clause_ids列出明确属于本次住院已执行CT/MRI、但不能对应上述任一事件的分句；"
+        "不要列历史或计划；写明其他医疗机构名称的院外检查、入院前的门急诊检查不属于本次住院医嘱，也不要列入。每个(event_position,order_position)必须恰好返回一次，"
         "禁止编造事件、原文或最终状态。"
         f'仅返回JSON：{{"schema_version":"{SCHEMA_VERSION}","events":'
         '[{"event_position":1,"order_position":1,"record_state":"consistent_description","clause_ids":["C1"]}],'
@@ -209,16 +262,19 @@ def build_ct_fact_prompt(review: CtReviewInput) -> str:
 
 def ct_fact_response_format(review: CtReviewInput) -> dict[str, Any]:
     clause_list = {"type": "array", "items": {"type": "string"}, "maxItems": 8}
+    # 无已执行事件时只核对未关联分句：事件数组必须为空，空枚举不是合法的 JSON Schema。
+    position = ({"type": "integer", "enum": list(review.eligible_positions)} if review.eligible_positions
+                else {"type": "integer"})
     return {"type": "json_schema", "json_schema": {"name": "ct_order_course_facts", "strict": True, "schema": {
         "type": "object", "additionalProperties": False,
         "required": ["schema_version", "events", "unmatched_current_clause_ids"],
         "properties": {
             "schema_version": {"type": "string", "enum": [SCHEMA_VERSION]},
-            "events": {"type": "array", "items": {
+            "events": {"type": "array", **({} if review.eligible_positions else {"maxItems": 0}), "items": {
                 "type": "object", "additionalProperties": False,
                 "required": ["event_position", "order_position", "record_state", "clause_ids"],
                 "properties": {
-                    "event_position": {"type": "integer", "enum": list(review.eligible_positions)},
+                    "event_position": position,
                     "order_position": {"type": "integer", "minimum": 1},
                     "record_state": {"type": "string", "enum": sorted(_FACT_STATES)},
                     "clause_ids": clause_list,
@@ -248,21 +304,75 @@ def _normalized_name(value: Any) -> str:
     return "".join(char for char in unicodedata.normalize("NFKC", str(value or "")).casefold()
                    if char.isalnum())
 
+# CT/MRI 医嘱名称中的模态与扫描方式词；去掉后剩下的是检查部位。
+_MODALITY_TOKENS = {
+    "ct": ("ct",),
+    "mr": ("磁共振", "核磁", "mri", "mr"),
+}
+_METHOD_TOKENS = ("核磁共振", "磁共振", "核磁", "mri", "mr", "ct", "平扫", "增强", "检查", "扫描", "成像",
+                  "螺旋", "造影", "薄层")
+# 医嘱名称括号内是范围或计费说明（如“(含膈上肋骨)”“(T1-T12)”），不属于部位。
+_PARENTHETICAL = re.compile(r"[（(][^（）()]*[)）]")
+# 病程常把多个部位并列后共用一个模态：“MRI胸椎、腰椎平扫”“上腹/下腹/盆腔腹部螺旋CT”。
+_SITE_SEPARATOR = r"[、/+＋]"
+_OTHER_SITE = r"[\u4e00-\u9fffa-z0-9\-]{1,10}?"
+_SCAN_WORDS = r"(?:螺旋|平扫|增强|薄层|造影|扫描)*"
+
+
+def _order_modality(name: str) -> str:
+    """医嘱名称（已归一化）所属模态；CT 与 MR 同时出现时不确定。"""
+    found = {key for key, tokens in _MODALITY_TOKENS.items() if any(token in name for token in tokens)}
+    return next(iter(found)) if len(found) == 1 else ""
+
+
+def _order_site(name: str) -> str:
+    for token in _METHOD_TOKENS:
+        name = name.replace(token, "")
+    return name
+
+
+def _exam_key(order: Mapping[str, Any]) -> tuple[str, str] | None:
+    name = _normalized_name(_PARENTHETICAL.sub("", unicodedata.normalize("NFKC", str(order.get("order_name") or ""))))
+    modality, site = _order_modality(name), _order_site(name)
+    return (modality, site) if modality and site else None
 
 
 def _has_explicit_order_description(
     event: HandbookEvent, order_position: int, clauses: tuple[CourseClause, ...],
 ) -> bool:
-    """首版只接纳可直接复核的名称或医嘱号；结果部位不能代替检查名称。
+    """模型判一致时，程序复核引用分句确实写的是这项检查。
 
-    只归一化Unicode、大小写和标点，不删除部位/增强方法，不扩充同义词表。
-    临床简称可能真实等价，但本轮保留关联缺口，不能仅依赖模型猜测为合规。
+    接纳医嘱号/检查号、医嘱全称，或同一模态（CT；MRI/磁共振）加同一部位
+    （医嘱名称去掉模态与平扫/增强等方式词后的部分）。病程很少照抄医嘱全称，
+    “胸部CT示…”即对应“胸部CT平扫”。仅有结果部位而无模态不算。
     """
     if _has_explicit_event_identifier(event, order_position, clauses):
         return True
 
-    name = _normalized_name(_event_orders(event)[order_position - 1].get("order_name"))
-    return bool(name) and any(name in _normalized_name(clause.text) for clause in clauses)
+    order = _event_orders(event)[order_position - 1]
+    name = _normalized_name(order.get("order_name"))
+    if name and any(name in _normalized_name(clause.text) for clause in clauses):
+        return True
+    key = _exam_key(order)
+    if key is None:
+        return False
+    modality, site = key
+    # 部位须紧接模态（可夹扫描方式词，或以顿号、斜杠等并列其他部位），模态在前在后均可；
+    # 标点（冒号、句号等）隔开时不成立，“左膝CT：胸部另见…”不能证明胸部CT。
+    # “上腹部”在病程中常写作“上腹”，并列时也会共用“腹部”后缀（“盆腔腹部”）。
+    base = site[:-1] if site.endswith("部") and len(site) > 1 else site
+    site_pattern = re.escape(base) + "(?:腹?部)?"
+    modality_pattern = "(?:" + "|".join(re.escape(token) for token in _MODALITY_TOKENS[modality]) + ")"
+    pattern = re.compile(
+        site_pattern + "(?:" + _SITE_SEPARATOR + _OTHER_SITE + ")*" + _SCAN_WORDS + modality_pattern
+        + "|" + modality_pattern + _SCAN_WORDS + "(?:" + _OTHER_SITE + _SITE_SEPARATOR + ")*" + site_pattern
+    )
+    return any(pattern.search(_compact_text(clause.text)) for clause in clauses)
+
+
+def _compact_text(value: Any) -> str:
+    """保留标点的归一化文本：标点用于判断部位与模态是否属于同一检查表述。"""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value or "")).casefold())
 
 
 def _aggregate_status(findings: tuple[HandbookFinding, ...], complete: bool) -> str:
@@ -282,12 +392,18 @@ def _unique_temporal_anchor(
     event = review.events[position - 1]
     if _has_explicit_event_identifier(event, order_position, clauses):
         return True
-    name = _normalized_name(_event_orders(event)[order_position - 1].get("order_name"))
+    order = _event_orders(event)[order_position - 1]
+    name = _normalized_name(order.get("order_name"))
+    key = _exam_key(order)
+    # 同名或同模态同部位的其他已执行事件都可能被同一段病程描述；
+    # 只有本住院内唯一时，模型给出的归属才可直接接纳。
     candidates = [candidate for candidate in review.events if not candidate.excluded
-                  and any(_normalized_name(order.get("order_name"))
-                          and any(_normalized_name(order.get("order_name")) in _normalized_name(clause.text)
-                                  for clause in clauses)
-                          for order in _event_orders(candidate))]
+                  and any(_normalized_name(other.get("order_name"))
+                          and (any(_normalized_name(other.get("order_name")) in _normalized_name(clause.text)
+                                   for clause in clauses)
+                               or _normalized_name(other.get("order_name")) == name
+                               or (key is not None and _exam_key(other) == key))
+                          for other in _event_orders(candidate))]
     if len(candidates) <= 1:
         return True
 
@@ -421,7 +537,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
                     "order_course_conflict" if _has_explicit_event_identifier(event, order_position, clauses)
                     else "association_unresolved"
                 ),
-                "absent": "executed_order_without_course",
+                "absent": _missing_course_issue(
+                    event=event, complete=review.complete,
+                    horizon_basis=review.horizon_basis, horizon=review.horizon,
+                ),
                 "unknown": "semantic_fact_unknown",
             }[state]
             refs = tuple(dict.fromkeys((*event.refs, *(clause.document_ref for clause in clauses))))
@@ -449,7 +568,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
         extras.append(HandbookFinding("data_gap", "source_scope_incomplete"))
     all_findings = tuple(findings[key] for key in sorted(findings)) + tuple(extras)
     status = _aggregate_status(all_findings, review.complete)
-    reason = {"compliant": "requirement_satisfied", "non_compliant": "requirement_violated", "data_gap": "required_field_missing", "not_applicable": "performed_event_absent"}[status]
+    reason = {"compliant": "requirement_satisfied", "non_compliant": "requirement_violated", "data_gap": "required_field_missing", "not_applicable": (
+        "evaluation_window_not_mature" if any(item.issue == "course_not_yet_due" for item in all_findings)
+        else "performed_event_absent"
+    )}[status]
     display = {
         "verification_kind": "ct_order_course_review", "subject": "ct_mri",
         "requirement": "order_course_consistency", "review_scope_complete": review.complete,
@@ -536,7 +658,8 @@ def validate_ct_display_facts(raw: Any) -> dict[str, Any] | None:
                     or not 0 <= location["start"] < location["end"]
                     or type(location["clause_id"]) is not str or re.fullmatch(r"C[1-9][0-9]{0,2}", location["clause_id"]) is None):
                 return None
-        if order["status"] in {"compliant", "non_compliant"} and not locations:
+        if (order["status"] in {"compliant", "non_compliant"} and not locations
+                and order["issue_kind"] != "course_record_missing"):
             return None
         by_event.setdefault(event_position, []).append(HandbookFinding(order["status"], order["issue_kind"]))
     for position, event in enumerate(results[:count], 1):

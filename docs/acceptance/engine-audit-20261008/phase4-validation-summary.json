@@ -1,0 +1,114 @@
+{
+  "scope": [
+    "050",
+    "048"
+  ],
+  "integrated": [
+    "050"
+  ],
+  "stopped_not_integrated": [
+    "048"
+  ],
+  "final_engineering_passes": 1223,
+  "isolated_sqlite_passes": 4,
+  "browser_acceptance": "deferred",
+  "050_final_semantic_matches": 14,
+  "050_final_status_matches": 4,
+  "050_final_status_gold_unset": 10,
+  "048_final_status_matches": 14,
+  "048_final_status_mismatches": 1,
+  "048_failure_case": "048_cancelled_plan_then_actual",
+  "048_candidate_archive": ".tmp/phase2-root-review/held-048-third-candidate",
+  "runs": [
+    {
+      "artifact": "real-phase4-048-20261009T133314Z-1791552794428825000",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 15,
+      "tokens": 15967,
+      "gate_matches": 13,
+      "gate_unknown": 2,
+      "gate_mismatches": 0,
+      "responses_sha256": "5954995e2e1c72e9f79aced18fc949faa2a758256a66737063a5ec18ea760148"
+    },
+    {
+      "artifact": "real-phase4-048-20261009T133547Z-1791552947539502800",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 15,
+      "tokens": 16035,
+      "gate_matches": 15,
+      "gate_unknown": 0,
+      "gate_mismatches": 0,
+      "responses_sha256": "1e082c2bd2a4cd1c83c7f1babcda39f9b07facd584427c67417bab1b18d9eeae"
+    },
+    {
+      "artifact": "real-phase4-048-20261009T134008Z-1791553208841457500",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 15,
+      "tokens": 17428,
+      "gate_matches": 14,
+      "gate_unknown": 1,
+      "gate_mismatches": 0,
+      "responses_sha256": "5b91f6ccb30f8c17b8c0bf7e9d14792d178373ccbf5876719a615e6d1a61e45d"
+    },
+    {
+      "artifact": "real-phase4-048-20261009T134357Z-1791553437794473600",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 15,
+      "tokens": 14008,
+      "gate_matches": 15,
+      "gate_unknown": 0,
+      "gate_mismatches": 0,
+      "responses_sha256": "c5b949f22fc565fc513c66ca71ed90730b5df530e29c7fb02b08b3d8af5326a2"
+    },
+    {
+      "artifact": "real-phase4-048-events-1791553098281322900",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 3,
+      "tokens": 3688,
+      "gate_matches": 1,
+      "gate_unknown": 0,
+      "gate_mismatches": 2,
+      "responses_sha256": "472c30fb0a357908f359d765b8d9040edce2f6de4e2b30e64fc29b44b95ab578"
+    },
+    {
+      "artifact": "real-phase4-048-events-1791553167829001600",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 3,
+      "tokens": 4066,
+      "gate_matches": 3,
+      "gate_unknown": 0,
+      "gate_mismatches": 0,
+      "responses_sha256": "74c9574970db28b262e56055f0ceb3224ce7b0ba59e04b839e8329b972716da7"
+    },
+    {
+      "artifact": "real-phase4-050-20261009T132652Z-1791552412844723900",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 14,
+      "tokens": 13975,
+      "gate_matches": 12,
+      "gate_unknown": 2,
+      "gate_mismatches": 0,
+      "responses_sha256": "b89c4a30ba30eae01c41e5a5004b9052c400ed6d6aa31acbf88c41dca1c388d6"
+    },
+    {
+      "artifact": "real-phase4-050-20261009T133034Z-1791552634795869000",
+      "model": "qwen3.8-flash",
+      "provider": "alibaba",
+      "requests": 14,
+      "tokens": 15510,
+      "gate_matches": 14,
+      "gate_unknown": 0,
+      "gate_mismatches": 0,
+      "responses_sha256": "3c9c6ea4b57b7364a560b7fab6ca6b936381f82a42db8f6a5a5bba8dd773ed08"
+    }
+  ],
+  "total_requests": 94,
+  "total_tokens": 100677
+}

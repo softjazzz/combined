@@ -1,0 +1,89 @@
+/* v7.1：页面布局保留，视觉值引用公共 Token。 */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--mq-bg-subtle);
+  border-radius: var(--mq-radius-control);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--mq-bg-subtle);
+}
+
+.icd-detail-panel {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+.icd-detail-panel .text-slate-900,
+.icd-detail-panel .text-slate-800,
+.icd-detail-panel .text-slate-700 {
+  color: var(--mq-text-primary) !important;
+}
+
+.icd-detail-panel .text-slate-600,
+.icd-detail-panel .text-slate-500,
+.icd-detail-panel .text-slate-400 {
+  color: var(--mq-text-secondary) !important;
+}
+
+.icd-detail-panel .border-slate-100,
+.icd-detail-panel .border-slate-200,
+.icd-detail-panel .border-slate-200\/80 {
+  border-color: var(--mq-border) !important;
+}
+
+.icd-detail-panel .bg-slate-50\/80,
+.icd-detail-panel .bg-white {
+  background: var(--mq-glass-bg-strong) !important;
+}
+
+.icd-detail-panel .bg-blue-50,
+.icd-detail-panel .bg-blue-50\/50,
+.icd-detail-panel .bg-blue-50\/80,
+.icd-detail-panel .bg-\[linear-gradient\(180deg\,\#f0f6ff\,\#dbeafe\)\] {
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+}
+
+.icd-detail-panel .border-blue-100,
+.icd-detail-panel .border-blue-100\/80 {
+  border-color: color-mix(in srgb, var(--mq-brand-600) 16%, transparent) !important;
+}
+
+.icd-detail-panel .text-\[\#0a5fd6\],
+.icd-detail-panel .text-\[\#0a6cff\],
+.icd-detail-panel .text-blue-500,
+.icd-detail-panel .text-blue-400,
+.icd-detail-panel .text-blue-300 {
+  color: var(--mq-brand-600) !important;
+}
+
+.icd-detail-panel button {
+  border-radius: var(--mq-radius-control);
+  transition:
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.icd-detail-panel button:hover {
+  transform: none;
+}
+
+.icd-detail-panel .from-\[\#0a6cff\],
+.icd-detail-panel .to-\[\#0a5fd6\] {
+  --tw-gradient-from: var(--mq-brand-600) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: var(--mq-brand-600) var(--tw-gradient-to-position) !important;
+}
+
+.icd-workstation,
+.icd-detail-panel,
+.upload-workstation {
+  font-size: var(--mq-font-14);
+}

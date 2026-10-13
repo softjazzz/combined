@@ -1,0 +1,890 @@
+{
+  "schema_version": "iml-current-synthetic-results-v1",
+  "target_sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "historical_sha": "c3a87a4f820259bca37a01764522ea1f3f485a3c",
+  "historical_evidence_relabelled": false,
+  "original_expectations_changed": false,
+  "total": 45,
+  "passed": 44,
+  "failed": 1,
+  "errors": 0,
+  "skipped": 0,
+  "counts_by_coverage_kind": {
+    "direct_rule_synthetic": {
+      "passed": 10
+    },
+    "rule_fact_parser_only": {
+      "passed": 1
+    },
+    "shared_seam_only": {
+      "passed": 33
+    },
+    "legacy_prompt_oracle": {
+      "failed": 1
+    }
+  },
+  "not_45_medical_rule_passes": true,
+  "source_bindings": {
+    "native_exam_lab_execution.py": {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py",
+      "historical_blob": "f5d54399fbc603b235e609cd7932270f135fc4a7",
+      "current_blob": "f5d54399fbc603b235e609cd7932270f135fc4a7",
+      "source_changed": false,
+      "changed_symbols": [],
+      "added_symbols": []
+    },
+    "exam_lab_fact_extraction.py": {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+      "historical_blob": "c14d8be7fce2a999d662025410d60e6e9a65801a",
+      "current_blob": "c14d8be7fce2a999d662025410d60e6e9a65801a",
+      "source_changed": false,
+      "changed_symbols": [],
+      "added_symbols": []
+    }
+  },
+  "test_bindings": [
+    {
+      "name": "test_luxian_0609_culture_source_gap.py",
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_culture_source_gap.py",
+      "historical_blob": "37a1954066d2fae3a105e423e1a5c4a0ecee9e13",
+      "current_blob": "37a1954066d2fae3a105e423e1a5c4a0ecee9e13",
+      "sha256": "557b59358d3d551b50c7eb6dc9dcf141610c3eefe20fc381511a0159788f9a77",
+      "raw_input_oracle_unchanged": true
+    },
+    {
+      "name": "test_luxian_0609_culture_identified_organism.py",
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_culture_identified_organism.py",
+      "historical_blob": "e5d7b4a82a8b74e6ec8882eaf1dc810bffaf1274",
+      "current_blob": "e5d7b4a82a8b74e6ec8882eaf1dc810bffaf1274",
+      "sha256": "98aa9bc0e95e17b00b7fb497ce6b452b180c3e9aee9cfbd1d685cfa8e7779c12",
+      "raw_input_oracle_unchanged": true
+    }
+  ],
+  "runner_sha256": "88e1404bb8d9fbee84668e4ef4705fd646b94a6a188baef38dccc30ed41e8b0d",
+  "integrity": {
+    "all_source_test_runner_hashes_unchanged": true,
+    "all_loaded_app_paths_in_target": true
+  },
+  "legacy_oracle_resolution": {
+    "classification": "stale identity literal under explicit four-part rule ID protocol",
+    "fixed_csv_path": "apps/medqc-web/docs/plans/lx0609-four-part-rule-code-mapping-v1.csv",
+    "fixed_csv_blob": "72262fcad59f4e4c10cffd1cbd463ff250c7490c",
+    "fixed_csv_rows": [
+      {
+        "line": 49,
+        "text": "LX0609-014,LX0609-06-03-03,06,检查检验,03,微生物培养,细菌培养记录,细菌培养结果在报告出具后24小时内未在病程中记录,frozen_identity_migration"
+      },
+      {
+        "line": 50,
+        "text": "LX0609-015,LX0609-06-03-04,06,检查检验,03,微生物培养,细菌培养结果无分析,细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析,frozen_identity_migration"
+      }
+    ],
+    "source_path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+    "source_blob": "c14d8be7fce2a999d662025410d60e6e9a65801a",
+    "source_lines": [
+      28,
+      32,
+      1163,
+      1172,
+      1249,
+      1394,
+      1396
+    ],
+    "ast_comparison": {
+      "fixed_sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+      "method": "AST text-only comparison, no prompt builder/test execution",
+      "old_015_expected_literal_retained": true,
+      "original_expected_present_in_fixed_prompt_literal": false,
+      "only_identity_substitution_matches_fixed_prompt_literal": true,
+      "old_identity": "015",
+      "approved_current_identity": "LX0609-06-03-04",
+      "inference_scope": "this synthetic full-text assertion only; no claim excluding truncation in other clinical inputs"
+    },
+    "original_failure_preserved": true,
+    "does_not_establish_real_input_truncation_absence": true
+  },
+  "evidence_files": [
+    "first-run.log",
+    "current-synthetic.xml",
+    "current-synthetic-manifest.json",
+    "replay-plan.json",
+    "legacy-oracle-static.json"
+  ],
+  "cases": [
+    {
+      "pytest_name": "test_culture_mention_without_report_cannot_be_delivered_as_no_event[False-course_rows]",
+      "function": "test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_mention_without_report_cannot_be_delivered_as_no_event[False-consultation_rows]",
+      "function": "test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_mention_without_report_cannot_be_delivered_as_no_event[True-course_rows]",
+      "function": "test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_mention_without_report_cannot_be_delivered_as_no_event[True-consultation_rows]",
+      "function": "test_culture_mention_without_report_cannot_be_delivered_as_no_event",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer -> aggregator",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_mention_without_report_cannot_be_delivered_as_no_event#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result[\\u60a3\\u8005\\u4e00\\u822c\\u60c5\\u51b5\\u5e73\\u7a33\\u3002-available-not_applicable-trigger_absent_complete]",
+      "function": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result[\\u62df\\u5b8c\\u5584\\u57f9\\u517b\\uff0c\\u7ed3\\u679c\\u56de\\u62a5\\u540e\\u518d\\u8bc4\\u4f30\\u3002-available-data_gap-association_failed]",
+      "function": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result[\\u65e2\\u5f80\\u57f9\\u517b\\u9634\\u6027\\uff0c\\u672c\\u6b21\\u672a\\u9001\\u57f9\\u517b\\u3002-available-data_gap-association_failed]",
+      "function": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result[-unavailable-data_gap-source_unavailable]",
+      "function": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result[\\u60a3\\u8005\\u4e00\\u822c\\u60c5\\u51b5\\u5e73\\u7a33\\u3002-truncated-data_gap-source_unavailable]",
+      "function": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result[-error-technical_error-source_query_error]",
+      "function": "test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result",
+      "result": "passed",
+      "coverage_kind": "direct_rule_synthetic",
+      "layer": "native -> binding/reducer",
+      "actual_rule_ids": [
+        "LX0609-06-03-03",
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#0",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#1",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#2",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#3",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#4",
+        "test_luxian_0609_culture_source_gap.py::test_culture_absence_requires_readable_sources_and_does_not_infer_positive_result#5"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_identified_organism_promotes_projection_and_parser_to_positive",
+      "function": "test_identified_organism_promotes_projection_and_parser_to_positive",
+      "result": "passed",
+      "coverage_kind": "rule_fact_parser_only",
+      "layer": "shared culture projection -> parse_exam_lab_fact_response",
+      "actual_rule_ids": [
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_identified_organism_promotes_projection_and_parser_to_positive#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_pending_sensitivity_and_empty_alternate_slots_do_not_downgrade_identified_organism",
+      "function": "test_pending_sensitivity_and_empty_alternate_slots_do_not_downgrade_identified_organism",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_pending_sensitivity_and_empty_alternate_slots_do_not_downgrade_identified_organism#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_bacteria_result_item_name_allows_optional_method_number_and_colon[\\u7ec6\\u83cc\\u7ed3\\u679c]",
+      "function": "test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#0",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#1",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#2",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_bacteria_result_item_name_allows_optional_method_number_and_colon[\\u7ec6\\u83cc\\u7ed3\\u679c1]",
+      "function": "test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#0",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#1",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#2",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_bacteria_result_item_name_allows_optional_method_number_and_colon[\\u7ec6\\u83cc\\u7ed3\\u679c (\\u8d28\\u8c31\\u6cd5) 1:]",
+      "function": "test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#0",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#1",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#2",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_bacteria_result_item_name_allows_optional_method_number_and_colon[\\u7ec6\\u83cc\\u7ed3\\u679c\\uff08\\u8d28\\u8c31\\u6cd5\\uff092]",
+      "function": "test_bacteria_result_item_name_allows_optional_method_number_and_colon",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#0",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#1",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#2",
+        "test_luxian_0609_culture_identified_organism.py::test_bacteria_result_item_name_allows_optional_method_number_and_colon#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive[\\u5f85\\u5b9a]",
+      "function": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive[\\u8003\\u8651\\u6c61\\u67d3]",
+      "function": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive[\\u6b63\\u5e38\\u83cc\\u7fa4]",
+      "function": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive[\\u6df7\\u5408\\u83cc\\u7fa4]",
+      "function": "test_ambiguous_or_non_organism_result_does_not_become_structured_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_ambiguous_or_non_organism_result_does_not_become_structured_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u6682\\u65e0\\u7ed3\\u679c]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u62a5\\u544a\\u672a\\u51fa]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u57f9\\u517b\\u4e2d]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u672a\\u5b8c\\u6210]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u8be6\\u89c1\\u62a5\\u544a]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u672a\\u77e5\\u7ec6\\u83cc]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u7591\\u4f3c\\u67d0\\u83cc]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u53ef\\u80fd\\u4e3a\\u67d0\\u83cc]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u5f85\\u9274\\u5b9a\\u83cc]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u65e0\\u7ec6\\u83cc]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_unresolved_result_text_does_not_match_organism_name_shape[\\u6df7\\u5408\\u83cc]",
+      "function": "test_unresolved_result_text_does_not_match_organism_name_shape",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#0",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#1",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#2",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#3",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#4",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#5",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#6",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#7",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#8",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#9",
+        "test_luxian_0609_culture_identified_organism.py::test_unresolved_result_text_does_not_match_organism_name_shape#10"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_identified_organism_conflicting_with_no_growth_stays_unknown",
+      "function": "test_identified_organism_conflicting_with_no_growth_stays_unknown",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_identified_organism_conflicting_with_no_growth_stays_unknown#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive[\\u672a\\u57f9\\u517b\\u51fa\\u7ec6\\u83cc]",
+      "function": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive[\\u672a\\u5206\\u79bb\\u51fa\\u7ec6\\u83cc]",
+      "function": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive[\\u672a\\u9274\\u5b9a\\u83cc]",
+      "function": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive[\\u672a\\u786e\\u5b9a\\u83cc]",
+      "function": "test_explicit_unidentified_or_not_isolated_result_does_not_become_positive",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#0",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#1",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#2",
+        "test_luxian_0609_culture_identified_organism.py::test_explicit_unidentified_or_not_isolated_result_does_not_become_positive#3"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_conflict_in_any_same_event_result_row_stays_unknown[\\u9634\\u6027]",
+      "function": "test_conflict_in_any_same_event_result_row_stays_unknown",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#0",
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#1",
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#2"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_conflict_in_any_same_event_result_row_stays_unknown[\\u57f9\\u517b\\u4e24\\u65e5\\u65e0\\u7ec6\\u83cc\\u751f\\u957f]",
+      "function": "test_conflict_in_any_same_event_result_row_stays_unknown",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#0",
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#1",
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#2"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_conflict_in_any_same_event_result_row_stays_unknown[\\u8003\\u8651\\u6c61\\u67d3]",
+      "function": "test_conflict_in_any_same_event_result_row_stays_unknown",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#0",
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#1",
+        "test_luxian_0609_culture_identified_organism.py::test_conflict_in_any_same_event_result_row_stays_unknown#2"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_named_organism_starting_with_wu_is_not_treated_as_no_bacteria",
+      "function": "test_named_organism_starting_with_wu_is_not_treated_as_no_bacteria",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_named_organism_starting_with_wu_is_not_treated_as_no_bacteria#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_negative_master_indicator_conflicts_even_without_item_name",
+      "function": "test_negative_master_indicator_conflicts_even_without_item_name",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_negative_master_indicator_conflicts_even_without_item_name#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_only_result_field_on_exact_item_name_counts_and_unrelated_item_does_not",
+      "function": "test_only_result_field_on_exact_item_name_counts_and_unrelated_item_does_not",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_only_result_field_on_exact_item_name_counts_and_unrelated_item_does_not#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_organism_name_in_course_text_or_record_content_is_not_structured_evidence",
+      "function": "test_organism_name_in_course_text_or_record_content_is_not_structured_evidence",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_organism_name_in_course_text_or_record_content_is_not_structured_evidence#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_identified_organism_isolated_to_its_bound_culture_event",
+      "function": "test_identified_organism_isolated_to_its_bound_culture_event",
+      "result": "passed",
+      "coverage_kind": "shared_seam_only",
+      "layer": "shared culture projection",
+      "actual_rule_ids": [],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_identified_organism_isolated_to_its_bound_culture_event#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim"
+    },
+    {
+      "pytest_name": "test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite",
+      "function": "test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite",
+      "result": "failed",
+      "coverage_kind": "legacy_prompt_oracle",
+      "layer": "build_exam_lab_fact_prompt",
+      "actual_rule_ids": [
+        "LX0609-06-03-04"
+      ],
+      "original_oracle_plan_case_keys": [
+        "test_luxian_0609_culture_identified_organism.py::test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite#0"
+      ],
+      "matching_scope": "function coverage classification; pytest parameter id retained verbatim",
+      "failure_message": "assert '送检、培养中、待报告、污染可能、无生长不得标阳性。015依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在015判定范围内。' in '你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。\\n本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：[\"LX0609-06-03-04\"]。\\nLX0609-06-01-02=CT/...06-03-04\",\"applicability\":\"unknown\",\"semantic_state\":\"unknown\",\"positive_state\":\"unknown\",\"course_doc_positions\":[]}]}'"
+    }
+  ],
+  "limitations": [
+    "Only original two synthetic unit files ran.",
+    "Shared projection and parser coverage is not full two-rule medical acceptance.",
+    "Historic real/model manifests and six-case semantic extraction remain unverified at current SHA.",
+    "This old literal failure is not evidence of actual clinical input truncation; truncation outside these original fixtures remains unverified."
+  ]
+}

@@ -19,22 +19,33 @@ from app.services.luxian_0609.decision_model import (
 from app.services.luxian_0609.decision_reducer import (
     reduce_luxian_0609_rule_decision,
 )
+from app.services.luxian_0609.customer_renderer import _RULE_NON_COMPLIANT_MESSAGES
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 
 
+# 2026 手册新增、由 customer_renderer 专门渲染不合规建议的规则（2026-10-12）。
+HANDBOOK_RENDERED_RULE_IDS = frozenset({
+    "LX0609-04-01-04",
+    "LX0609-04-01-05",
+    "LX0609-06-01-01",
+    "LX0609-06-01-03",
+    "LX0609-06-02-01",
+    "LX0609-06-03-02",
+    "LX0609-09-01-02",
+})
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 
 
 def test_every_active_non_compliant_rule_has_structured_action() -> None:
-    # 正式范围以规则总表为准：active 与 pending 必须无交集且完整覆盖 77 条，
+    # 正式范围以规则总表为准：active 与 pending 必须无交集且完整覆盖 86 条（2026-10-12），
     # 避免硬编码数量掩盖规则丢失或分区遗漏。
     master_rule_ids = tuple(entry.rule_id for entry in load_luxian_0609_rule_master())
-    assert len(master_rule_ids) == 77
+    assert len(master_rule_ids) == 86
     assert len(master_rule_ids) == len(set(master_rule_ids))
     assert set(ACTIVE_FORMAL_RULE_IDS).isdisjoint(PENDING_RULE_IDS)
     assert set(ACTIVE_FORMAL_RULE_IDS) | set(PENDING_RULE_IDS) == set(master_rule_ids)
-    assert len(ACTIVE_FORMAL_RULE_IDS) + len(PENDING_RULE_IDS) == 77
+    assert len(ACTIVE_FORMAL_RULE_IDS) + len(PENDING_RULE_IDS) == 86
 
     for rule_id in ACTIVE_FORMAL_RULE_IDS:
         suggestion = build_customer_remediation_suggestion(
@@ -43,6 +54,11 @@ def test_every_active_non_compliant_rule_has_structured_action() -> None:
             reason_code="requirement_violated",
         )
 
+        if rule_id in HANDBOOK_RENDERED_RULE_IDS:
+            # 2026 手册新增规则由客户渲染层按裁决事实给出专门建议，不走四段式模板。
+            assert not suggestion, rule_id
+            assert _RULE_NON_COMPLIANT_MESSAGES[rule_id][2], rule_id
+            continue
         assert suggestion, rule_id
         for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
             assert section in suggestion, (rule_id, suggestion)

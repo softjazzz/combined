@@ -1,0 +1,119 @@
+{
+  "full_commit": "aa7a98c7e43bc23439db485fa56cd90ea6da4bd1",
+  "worktree": "F:\\MedQC-worktrees\\qc-integration-20261008",
+  "scope": "remaining identity source wiring of two failclosed CLI, existing gate inherited",
+  "conclusion": "no_confirmed_natural_production_caller; existing in-process borrowed collector parameters suffice but standalone CLI has no legal complete source",
+  "new_send_leakage_finding": false,
+  "cli_restored": false,
+  "must_keep_failclosed": true,
+  "legal_existing_source": {
+    "owner": "run_sichuan_workspace_batch_job",
+    "chain": [
+      "worker collector creation",
+      "CustomQCWorkspaceService.collect_records private callback forwarding",
+      "RecordRepository existing ORM query result before serialization",
+      "collector.capture(vars(source))",
+      "per-case live provider",
+      "owner finally close"
+    ],
+    "query_additions_for_callback": 0
+  },
+  "natural_caller_search": {
+    "scope": "backend app/scripts, direct function/module symbols",
+    "production_caller_for_two_validation_scripts_found": false,
+    "worker_is_existing_caller": false,
+    "test_callers_do_not_establish_runtime_use": true
+  },
+  "blockers": [
+    {
+      "id": "PRIV003_REAL_CLI_IDENTITY_SOURCE",
+      "kind": "functional_prerequisite_not_send_leak",
+      "reason": "Independent CLI process has neither complete original identity data from existing reads nor a production caller passing request-scoped collector; no memory bridge across separate processes."
+    }
+  ],
+  "minimal_plan": {
+    "add_api": false,
+    "existing_arguments": "_private_identity_collector",
+    "precondition": "confirmed natural caller already performing authorized collect operation and actually requiring this validation",
+    "production_files_to_change_now": [],
+    "conditional_script_locks": [
+      "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py",
+      "apps/medqc-web/backend/scripts/review_luxian_0609_semantic20.py"
+    ],
+    "conditional_test_lock": "apps/medqc-web/backend/tests/privacy_closure_20261008/test_cli_identity_source_wiring.py",
+    "do_not_edit_public_scope6_modules": true
+  },
+  "no_new_query_bridge_available_in_current_actual_call_path": false,
+  "identity_from_body_or_masked_bundle_forbidden": true,
+  "raw_identity_in_serializable_bundle_or_global_cache_forbidden": true,
+  "planned_test_inputs": [
+    "generated exact-case loaded ORM identities",
+    "same patient/visit wrong institute",
+    "coordinates/masked/JSON/dict/callable/body-only rejection",
+    "lazy-attribute trap no extra read",
+    "closed wrapper/retry/exception/cancel/delayed child",
+    "raw PHONE counterexample and clinical markers",
+    "CLI absent source remains refused"
+  ],
+  "evidence_limitations": [
+    "static source only",
+    "natural caller search cannot establish out-of-repo callers",
+    "model schema existence does not mean SELECT loaded identity",
+    "actual import/config not executed"
+  ],
+  "source_manifest": {
+    "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py": {
+      "sha256_git_blob": "b108029029b0703b09965d42a0d5abe9e69a7c2b46058870c9f1e5f0e4ac9a77",
+      "sha256_worktree_bytes": "b108029029b0703b09965d42a0d5abe9e69a7c2b46058870c9f1e5f0e4ac9a77",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_validation.py": {
+      "sha256_git_blob": "46ec1d10a2eeac7ba446ceb1cf91a27a7ac92c9eb695f6b83e672cf3d2f7eda0",
+      "sha256_worktree_bytes": "46ec1d10a2eeac7ba446ceb1cf91a27a7ac92c9eb695f6b83e672cf3d2f7eda0",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/scripts/review_luxian_0609_semantic20.py": {
+      "sha256_git_blob": "f6407187f7a9e6e2fda14b0562a241aa5daa0605b886196914cef54cade3ae06",
+      "sha256_worktree_bytes": "f6407187f7a9e6e2fda14b0562a241aa5daa0605b886196914cef54cade3ae06",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py": {
+      "sha256_git_blob": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "sha256_worktree_bytes": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py": {
+      "sha256_git_blob": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+      "sha256_worktree_bytes": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/app/services/qc_workspace/record_repository.py": {
+      "sha256_git_blob": "c2b4089fd269ed81119713ca25c9fef831a0c5c892c59c00f2946a44c296b817",
+      "sha256_worktree_bytes": "c2b4089fd269ed81119713ca25c9fef831a0c5c892c59c00f2946a44c296b817",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py": {
+      "sha256_git_blob": "455d5689323a186ed747a83ffe693c06838e0a80bf784af5e671bd0ac3bbbd8d",
+      "sha256_worktree_bytes": "455d5689323a186ed747a83ffe693c06838e0a80bf784af5e671bd0ac3bbbd8d",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py": {
+      "sha256_git_blob": "c39f4ac3f2169fe787099dae2989834861f0070bc0be4095af40924efd4c1e77",
+      "sha256_worktree_bytes": "c39f4ac3f2169fe787099dae2989834861f0070bc0be4095af40924efd4c1e77",
+      "matches_pinned_bytes": true
+    },
+    "apps/medqc-web/backend/app/database/models/cdm.py": {
+      "sha256_git_blob": "f0a5bc7e829cdb62ca288839f19bfe0cf24ec4dba70bf097555ee4ebec5d8023",
+      "sha256_worktree_bytes": "f0a5bc7e829cdb62ca288839f19bfe0cf24ec4dba70bf097555ee4ebec5d8023",
+      "matches_pinned_bytes": true
+    }
+  },
+  "all_read_source_bytes_match_fixed_commit": true,
+  "tests_run": false,
+  "production_edited": false,
+  "real_patients_read": false,
+  "pg_calls": 0,
+  "network_calls": 0,
+  "env_files_read": 0,
+  "artifact_md_sha256": "c1b40f7babd5a1f5205106c2754c8a2ccbcac9ccd576a18a3251f2a292537c4a"
+}

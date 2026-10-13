@@ -1,6 +1,7 @@
 """067 的正文存在性、时间优先级及客户定位合同。"""
 
 import pytest
+from luxian_0609_course_body_test_facts import FrozenCourseBodyClient, LEGACY_MANUAL_COURSE_BODY_FACTS
 
 from test_luxian_0609_native_extended_document_execution import (
     _canonical_extended_result,
@@ -8,7 +9,8 @@ from test_luxian_0609_native_extended_document_execution import (
 )
 
 
-async def _run(daily, senior=()):
+async def _run(daily, senior=(), *, facts=None, expected_calls=0):
+    client = FrozenCourseBodyClient(facts or {})
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-08-02-01",),
         {
@@ -16,12 +18,15 @@ async def _run(daily, senior=()):
             "daily_course_record": daily,
             "senior_course_record": senior,
         },
+        llm_client=client,
     )
     canonical = _canonical_extended_result(
         rule_id="LX0609-08-02-01", snapshot=snapshot, materials=materials,
         result=result, reduced=reduced,
     )
-    assert result.llm_call_count == result.total_tokens == 0
+    assert client.fixture_error is None
+    assert result.llm_call_count == len(client.calls) == expected_calls
+    assert result.total_tokens == 15 * expected_calls
     return canonical
 
 
@@ -32,7 +37,7 @@ def _row(body, *, document_id="shell", time="2026-07-02 09:00:00"):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("body", [None, "", " \n\t", "医生签名:", "医师签名：", " 医生 签名 : \n"])
 async def test_window_shell_is_specific_body_gap_with_exact_location(body):
-    result = await _run((_row(body), _row("病情稳定", document_id="outside", time="2026-07-01 09:00:00")))
+    result = await _run((_row(body), _row("病情稳定", document_id="outside", time="2026-07-01 09:00:00")), facts={body: LEGACY_MANUAL_COURSE_BODY_FACTS[body]} if isinstance(body, str) and body.strip() else {}, expected_calls=int(isinstance(body, str) and bool(body.strip())))
     assert result["status"] == "data_gap"
     assert result["reason_code"] == "required_field_missing"
     assert result["customer_display_facts"]["missing_body_count"] == 1
@@ -47,14 +52,14 @@ async def test_window_shell_is_specific_body_gap_with_exact_location(body):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("body", ["稳定", "医生签名:继续观察。", "病情稳定。医生签名:"])
 async def test_short_or_signature_containing_body_is_present(body):
-    result = await _run((_row("医生签名:"),), (_row(body, document_id="valid"),))
+    result = await _run((_row("医生签名:"),), (_row(body, document_id="valid"),), facts={"医生签名:": ("absent", None), body: LEGACY_MANUAL_COURSE_BODY_FACTS[body]}, expected_calls=1)
     assert result["status"] == "compliant"
     assert [item["source_document_id"] for item in result["customer_evidence"]] == ["valid"]
 
 
 @pytest.mark.asyncio
 async def test_undated_body_takes_time_gap_priority_over_window_shell():
-    result = await _run((_row("医生签名:"), _row("病情稳定", document_id="undated", time=None)))
+    result = await _run((_row("医生签名:"), _row("病情稳定", document_id="undated", time=None)), facts={"医生签名:": ("absent", None), "病情稳定": ("present", "病情稳定")}, expected_calls=1)
     assert result["reason_code"] == "authoritative_time_missing"
     assert [item["source_document_id"] for item in result["customer_evidence"]] == ["undated"]
 
@@ -68,7 +73,7 @@ async def test_undated_shell_keeps_existing_time_gap_contract():
 
 @pytest.mark.asyncio
 async def test_two_window_shells_report_both_and_no_other_documents():
-    result = await _run((_row(None),), (_row("医师签名：", document_id="senior"),))
+    result = await _run((_row(None),), (_row("医师签名：", document_id="senior"),), facts={"医师签名：": ("absent", None)}, expected_calls=1)
     assert result["missing_fields"] == ["出院前一天或当天病程记录正文（2份）"]
     assert {item["source_document_id"] for item in result["customer_evidence"]} == {"shell", "senior"}
 

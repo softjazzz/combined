@@ -6918,11 +6918,16 @@ async def test_018_sends_only_lowest_structured_admission_diagnosis_to_model():
 @pytest.mark.parametrize(
     "diagnoses",
     [
+        # 多条无序号诊断不能由数据库行序补位；单条无序号诊断见下方正向测试。
         [
             {
                 "diagnosis_type": "入院诊断",
                 "diagnosis_name": "不稳定型心绞痛",
-            }
+            },
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "急性胆囊炎",
+            },
         ],
         [
             {
@@ -6955,6 +6960,33 @@ async def test_018_missing_or_conflicting_structured_order_fails_closed(
 
     assert [item["status"] for item in result.results] == ["data_gap"]
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_018_single_unnumbered_preliminary_diagnosis_is_the_first_diagnosis():
+    """0910 真实样本：初步诊断仅一条且无序号时不存在顺序歧义，应进入主诉核对。"""
+    client = _Client([{
+        "diagnostic_relation_state": "supported",
+        "diagnostic_reason_dimensions": ["symptom_pattern"],
+        "diagnostic_rationale_code": "supported",
+    }])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-01-02",),
+        wrapper_rules=[_wrapper("LX0609-01-01-02")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [_row("主诉：双侧腹股沟区可复性包块2年。现病史完整。")],
+                "admission_record_diagnosis": [
+                    {"diagnosis_type": "入院诊断", "diagnosis_name": ""},
+                    {"diagnosis_type": "初步诊断", "diagnosis_name": "双侧腹股沟斜疝"},
+                ],
+            }
+        ),
+        llm_client=client,
+    )
+
+    assert result.llm_call_count == 1
+    assert "双侧腹股沟斜疝" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -7367,3 +7399,79 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
     assert result.llm_call_count == 1
+
+
+_017_SPECIFIC_REPEAT = (
+    "患者病情稳定，生命体征平稳，查体无明显异常，"
+    "CT提示右下肺炎，诊断社区获得性肺炎，继续头孢曲松静滴治疗。"
+)
+
+
+def test_017_same_day_minutes_apart_repeat_is_duplicate_save_suspicion_not_copy():
+    """院方口径（2026-10-10）：同类病程同日数分钟内几乎相同不算复制，但提出疑点。"""
+    from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
+
+    result = course._copy_result(
+        {
+            "senior_course_record": [
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:20:38"),
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:26:51"),
+            ]
+        },
+        source_complete=True,
+    )
+
+    assert result["status"] == "compliant"
+    assert result["metadata"]["reason_code"] == "copy_duplicate_save_suspected"
+    from app.services.luxian_0609.course_quality_result_mapping import (
+        safe_course_quality_customer_display_facts,
+    )
+    from app.services.luxian_0609.course_quality.rules_016_017 import (
+        _assess_copy,
+        _copy_customer_display_facts,
+    )
+
+    raw_facts = _copy_customer_display_facts(_assess_copy(
+        {
+            "senior_course_record": [
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:20:38"),
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:26:51"),
+            ]
+        },
+        source_complete=True,
+    ))
+    facts = safe_course_quality_customer_display_facts(rule_id="LX0609-12-01-02", raw=raw_facts)
+    assert facts is not None and facts["failure_kind"] == "copy_duplicate_save_suspected"
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-12-01-02", facts=facts)
+    assert finding.startswith("疑点：")
+    assert "疑似同一记录重复保存" in finding
+
+
+@pytest.mark.parametrize("second_time", ["2026-06-01 12:30:00", "2026-06-02 10:20:38"])
+def test_017_repeat_beyond_duplicate_window_remains_copy(second_time):
+    result = course._copy_result(
+        {
+            "senior_course_record": [
+                _row(_017_SPECIFIC_REPEAT, "2026-06-01 10:20:38"),
+                _row(_017_SPECIFIC_REPEAT, second_time),
+            ]
+        },
+        source_complete=True,
+    )
+
+    assert result["status"] == "non_compliant"
+
+
+def test_077_prompt_requires_no_related_item_for_unrelated() -> None:
+    """用户口径（2026-10-11）：鉴别诊断至少一项围绕第一诊断即合规，全部无关才不合规。"""
+    from app.services.luxian_0609.course_quality.rule_077 import _prompt
+
+    prompt = _prompt(
+        first_diagnosis="合成症状待查：合成病甲？",
+        full_diagnosis="合成症状待查：合成病甲？；合成病乙",
+        differential="1.合成病丙：不支持。2.合成病甲完全型：暂不考虑。",
+    )
+    assert "只要有任一项鉴别诊断围绕第一诊断的临床问题展开即判 related" in prompt
+    assert "没有任何一项与第一诊断的临床问题相关" in prompt
+    assert "no_related_item" in prompt
+    assert "至少一项明显无关" not in prompt

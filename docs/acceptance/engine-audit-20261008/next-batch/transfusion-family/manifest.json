@@ -1,0 +1,96 @@
+{
+  "root_sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+  "tc02_readonly_candidate_sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+  "root_native_equal_old_snapshot": true,
+  "sources": [
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+      "export": "native-transfusion.root.fixed.py",
+      "blob": "b160e84d1553fa0e462d89fd0ed8e8e2a988d81d",
+      "sha256": "bdc7dfd538fa8b13cfa434804835d73777d9f25cd1b08e9bdc6a02d51edaf652"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pretransfusion_assessment.py",
+      "export": "preassessment.root.fixed.py",
+      "blob": "b3b6bcca2f2c379dccc927992171bc6ce37e16b2",
+      "sha256": "b385dbe4d9ba4be1daaaaa181057be4195d0cb0d60311584a19d89e34e95e73f"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py",
+      "export": "result-mapping.root.fixed.py",
+      "blob": "a6c468fabe992b2839f1cb9143e2285cb283c3f2",
+      "sha256": "b2306a2d9ce4de035c5b1ae654d740e6faf2b01cf7e6374f4fe1e61936b246ba"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json",
+      "export": "contracts.root.fixed.json",
+      "blob": "a930eb5c6ca2097b0d0332a323d92610253b3c5d",
+      "sha256": "05423d9745556b9725f0b353cb492e4d48dd10ab8cf14da78c3fa0c836ae6b90"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_044_policy.py",
+      "export": "044-policy-tests.root.fixed.py",
+      "blob": "f405b1ba3b9f0aafab3ad46b2b20ffb353bb0f7f",
+      "sha256": "fb998707cfe13568143caf6a445f6fcc6b31fc53e07adbba6a911c4b8544effe"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_transfusion_freeze.py",
+      "export": "freeze-tests.root.fixed.py",
+      "blob": "a999cf3c5b46c7dc3cd3f7a951dd215cd4142087",
+      "sha256": "de6d848a50f09d19bf35cbc5865b0b09f2d62225d6ed343479bc4fb6023154da"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_transfusion_execution.py",
+      "export": "native-tests.root.fixed.py",
+      "blob": "177aca5365c4564dca45dbfbcfc5f01c4c769402",
+      "sha256": "533737a1ea560bad1cdb5f137b226442ec206438c3ee0ed3a8422bc00fe51075"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/docs/acceptance/2026-10-08-isolated-qc-integration.md",
+      "export": "prior-integration.root.fixed.md",
+      "blob": "7d070704dd3f7346ba0903305d7dfea7cb3233da",
+      "sha256": "502a7a9c27eebc3d3af683c113d03c5a06d1fc6cee81e70bcb62c67147e84e83"
+    },
+    {
+      "sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+      "path": "apps/medqc-web/docs/acceptance/2026-09-06-lx0609-transfusion-family-convergence.md",
+      "export": "convergence.root.fixed.md",
+      "blob": "f624151956a3018b049f0ceace7743d4a6d53042",
+      "sha256": "0a3b370313002b0b7cbb021c5ee0103e904456792bbfa1cadb83eac3b4aa46cf"
+    },
+    {
+      "sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py",
+      "export": "tc02-extraction.fixed.py",
+      "blob": "e1efc5b6df073b869de4fdad03a69c1dca321079",
+      "sha256": "cbc66468d12e4e47a44eec52dd27c5a29edfa7f4989f3ebeafd2740ce1607d2b"
+    },
+    {
+      "sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "export": "tc02-consumer.fixed.py",
+      "blob": "da155894fb56112bf6283dc915dc01c6b4ee4879",
+      "sha256": "72789f8b6953e55bdfe2e276fce052ec80428bd2ac742ffa3662b2432265e442"
+    },
+    {
+      "sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+      "path": "apps/medqc-web/docs/acceptance/2026-10-08-transfusion-performed-event-closure.md",
+      "export": "tc02-design.fixed.md",
+      "blob": "445a4dca29c937bfb270201c9a0c539bc640a55f",
+      "sha256": "94e89fe2918f7c90b0a2232f54908ea51389bfe08a78a23ef492904a82280296"
+    }
+  ],
+  "preparation_executions": 0,
+  "production_edits": 0,
+  "private_materials_opened": false,
+  "044_original_three_manifest_status": "unknown; public documents declare three failures but no precise nodes/inputs/expectation manifest; registry independently confirms index unknown",
+  "tc01_case_count": 6
+}

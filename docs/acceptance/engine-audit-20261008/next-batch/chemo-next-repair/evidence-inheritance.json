@@ -1,0 +1,2290 @@
+{
+  "requested_fixed_baseline": "aa7a98c7e (root提供；本轮禁止Git，未自行解析完整SHA)",
+  "method": "filesystem_read_json_parse_hash_and_ast_only; no production import or execution",
+  "n13_final_source_byte_equal": true,
+  "n13_pending_observations": [
+    {
+      "case_id": "different_day_explicit_mismatch",
+      "order_variant": 0,
+      "classification": "business_nc_unmet",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "奥沙利铂",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "2026-04-26 使用奥沙利铂120mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "2026-04-26 使用奥沙利铂120mg 静滴。",
+        "expected_status": "non_compliant",
+        "unresolved_event_count": 0
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "different_day_explicit_mismatch",
+          "order_variant": 0,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "different_day_explicit_mismatch",
+          "order_variant": 0,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "different_day_explicit_mismatch",
+      "order_variant": 1,
+      "classification": "business_nc_unmet",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "奥沙利铂",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "2026-04-26 使用奥沙利铂120mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "2026-04-26 使用奥沙利铂120mg 静滴。",
+        "expected_status": "non_compliant",
+        "unresolved_event_count": 0
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "different_day_explicit_mismatch",
+          "order_variant": 1,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "different_day_explicit_mismatch",
+          "order_variant": 1,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "different_day_relative_mismatch",
+      "order_variant": 0,
+      "classification": "business_nc_unmet",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "奥沙利铂",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "今日使用奥沙利铂120mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "今日使用奥沙利铂120mg 静滴。",
+        "expected_status": "non_compliant",
+        "unresolved_event_count": 0
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "different_day_relative_mismatch",
+          "order_variant": 0,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "different_day_relative_mismatch",
+          "order_variant": 0,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "different_day_relative_mismatch",
+      "order_variant": 1,
+      "classification": "business_nc_unmet",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "奥沙利铂",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "今日使用奥沙利铂120mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "今日使用奥沙利铂120mg 静滴。",
+        "expected_status": "non_compliant",
+        "unresolved_event_count": 0
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "different_day_relative_mismatch",
+          "order_variant": 1,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "different_day_relative_mismatch",
+          "order_variant": 1,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "partial_missing_name_different_day_explicit",
+      "order_variant": 0,
+      "classification": "business_nc_unmet",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "2026-04-26 使用奥沙利铂120mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "generic_name": "",
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "2026-04-26 使用奥沙利铂120mg 静滴。",
+        "expected_status": "non_compliant",
+        "unresolved_event_count": 0
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "partial_missing_name_different_day_explicit",
+          "order_variant": 0,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "partial_missing_name_different_day_explicit",
+          "order_variant": 0,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "partial_missing_name_different_day_explicit",
+      "order_variant": 1,
+      "classification": "business_nc_unmet",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "2026-04-26 使用奥沙利铂120mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "generic_name": "",
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "2026-04-26 使用奥沙利铂120mg 静滴。",
+        "expected_status": "non_compliant",
+        "unresolved_event_count": 0
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "partial_missing_name_different_day_explicit",
+          "order_variant": 1,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "partial_missing_name_different_day_explicit",
+          "order_variant": 1,
+          "expected_status": "non_compliant",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose",
+              "drug_name"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": false,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "different_day_explicit_matched",
+      "order_variant": 0,
+      "classification": "counter_difference",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "奥沙利铂",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "2026-04-26 使用奥沙利铂130mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "2026-04-26 使用奥沙利铂130mg 静滴。",
+        "expected_status": "data_gap",
+        "unresolved_event_count": 0,
+        "expected_no_confirmed_mismatch": true
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "different_day_explicit_matched",
+          "order_variant": 0,
+          "expected_status": "data_gap",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": true,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true,
+            "no_confirmed_mismatch": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "different_day_explicit_matched",
+          "order_variant": 0,
+          "expected_status": "data_gap",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-complete",
+            "synthetic-partial-same-drug"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": true,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "no_confirmed_mismatch": true,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "case_id": "different_day_explicit_matched",
+      "order_variant": 1,
+      "classification": "counter_difference",
+      "documentary_fixture": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-partial-same-drug",
+            "order_id": "synthetic-partial-same-drug-id",
+            "generic_name": "奥沙利铂",
+            "single_dose": "150",
+            "single_dose_unit": "",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-27 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          },
+          {
+            "document_id": "synthetic-complete",
+            "order_id": "synthetic-complete-order",
+            "generic_name": "奥沙利铂",
+            "single_dose": "130",
+            "single_dose_unit": "mg",
+            "drug_apply_method": "静滴",
+            "prescribed_datetime": "2026-04-26 09:00:00",
+            "drug_type": "抗肿瘤化疗药物",
+            "order_status": "执行"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-course",
+            "record_content": "2026-04-26 使用奥沙利铂130mg 静滴。",
+            "record_time": "2026-04-26 16:00:00"
+          }
+        ]
+      },
+      "unchanged_oracle": {
+        "partial": {
+          "prescribed_datetime": "2026-04-27 09:00:00"
+        },
+        "text": "2026-04-26 使用奥沙利铂130mg 静滴。",
+        "expected_status": "data_gap",
+        "unresolved_event_count": 0,
+        "expected_no_confirmed_mismatch": true
+      },
+      "existing_fixed_observations": [
+        {
+          "commit": "e256e8ea926f0bcb19cb000cd826dd781e157eaf",
+          "case_id": "different_day_explicit_matched",
+          "order_variant": 1,
+          "expected_status": "data_gap",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "unknown",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": true,
+            "missing_order_event_count": false,
+            "unresolved_event_count": true,
+            "no_confirmed_mismatch": true
+          },
+          "matches_frozen_expectations": false
+        },
+        {
+          "commit": "59b3d7cbc83ee5d3de946f08409d04fc9357dc57",
+          "case_id": "different_day_explicit_matched",
+          "order_variant": 1,
+          "expected_status": "data_gap",
+          "observed_status": "data_gap",
+          "reason": "chemotherapy_order_fields_missing",
+          "facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 2,
+            "field_results": {
+              "drug_name": "unknown",
+              "dose": "unknown",
+              "route": "unknown",
+              "time": "unknown"
+            },
+            "missing_order_fields": [
+              "dose"
+            ],
+            "missing_order_event_count": 1,
+            "unresolved_event_count": 1,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "public_status_contract_valid": true,
+          "selected_order_docs": [
+            "synthetic-partial-same-drug",
+            "synthetic-complete"
+          ],
+          "selected_course_docs": [],
+          "checks": {
+            "status": true,
+            "missing_order_event_count": true,
+            "unresolved_event_count": false,
+            "no_confirmed_mismatch": true,
+            "published_contract": true
+          },
+          "matches_frozen_expectations": false
+        }
+      ],
+      "shared_root_cause": "drug_administration_clinical_date_ownership_not_proved",
+      "reexecuted_on_aa7a": false
+    }
+  ],
+  "tp_d02_d03_inherited_cases": [
+    {
+      "original_case": {
+        "id": "dose_130mg",
+        "expected": "compliant",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 使用奥沙利铂 130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "完整剂量数值/原单位必须一致；同值单位别名或换算口径待客户确认，保守预期data_gap"
+      },
+      "old_observation": {
+        "id": "dose_130mg",
+        "rule": "LX0609-05-02-01",
+        "expected": "compliant",
+        "observed": "compliant",
+        "pass": true,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 使用奥沙利铂 130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            },
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "order_取消",
+        "expected": "not_applicable",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "取消"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "取消无效医嘱不证明已用药；未实施状态不应肯定匹配"
+      },
+      "old_observation": {
+        "id": "order_取消",
+        "rule": "LX0609-05-02-01",
+        "expected": "not_applicable",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            },
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "order_撤销",
+        "expected": "not_applicable",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "撤销"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "取消无效医嘱不证明已用药；未实施状态不应肯定匹配"
+      },
+      "old_observation": {
+        "id": "order_撤销",
+        "rule": "LX0609-05-02-01",
+        "expected": "not_applicable",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            },
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "order_作废",
+        "expected": "not_applicable",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "作废"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "取消无效医嘱不证明已用药；未实施状态不应肯定匹配"
+      },
+      "old_observation": {
+        "id": "order_作废",
+        "rule": "LX0609-05-02-01",
+        "expected": "not_applicable",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            },
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "order_拟执行",
+        "expected": "data_gap",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "拟执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "取消无效医嘱不证明已用药；未实施状态不应肯定匹配"
+      },
+      "old_observation": {
+        "id": "order_拟执行",
+        "rule": "LX0609-05-02-01",
+        "expected": "data_gap",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            },
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "negated_course",
+        "expected": "non_compliant",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "否定使用陈述不应成为一致用药证据"
+      },
+      "old_observation": {
+        "id": "negated_course",
+        "rule": "LX0609-05-02-01",
+        "expected": "non_compliant",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 未给予奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            },
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "planned_course",
+        "expected": "data_gap",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 拟给予奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "仅计划不能证明治疗已实施"
+      },
+      "old_observation": {
+        "id": "planned_course",
+        "rule": "LX0609-05-02-01",
+        "expected": "data_gap",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            },
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 拟给予奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "foreign_drug_dose",
+        "expected": "non_compliant",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 使用奥沙利铂120mg 静滴。另予昂丹司琼130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "不能借用非化疗药物剂量"
+      },
+      "old_observation": {
+        "id": "foreign_drug_dose",
+        "rule": "LX0609-05-02-01",
+        "expected": "non_compliant",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 使用奥沙利铂120mg 静滴。另予昂丹司琼130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            },
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "conflicting_dose_in_one_record",
+        "expected": "data_gap",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "2026-04-26 使用奥沙利铂120mg 静滴。计划改为奥沙利铂130mg 静滴。",
+              "record_time": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "执行120mg和计划130mg不能被any匹配覆盖"
+      },
+      "old_observation": {
+        "id": "conflicting_dose_in_one_record",
+        "rule": "LX0609-05-02-01",
+        "expected": "data_gap",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            },
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "2026-04-26 使用奥沙利铂120mg 静滴。计划改为奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    },
+    {
+      "original_case": {
+        "id": "relative_date_submit_only",
+        "expected": "data_gap",
+        "rows": {
+          "diagnosis": [
+            {
+              "document_id": "synthetic-diag",
+              "diagnosis_code": "C18.9"
+            }
+          ],
+          "inpat_drug_order": [
+            {
+              "document_id": "synthetic-order",
+              "generic_name": "奥沙利铂",
+              "single_dose": "130",
+              "single_dose_unit": "mg",
+              "drug_apply_method": "静滴",
+              "prescribed_datetime": "2026-04-26 09:00:00",
+              "drug_type": "抗肿瘤化疗药物",
+              "order_status": "执行"
+            }
+          ],
+          "daily_course_record": [
+            {
+              "document_id": "synthetic-course",
+              "record_content": "今日使用奥沙利铂130mg 静滴。",
+              "submit_datetime": "2026-04-26 16:00:00"
+            }
+          ],
+          "discharge_record": [
+            {
+              "document_id": "synthetic-discharge",
+              "discharge_order": "出院后随访。"
+            }
+          ]
+        },
+        "rule": "LX0609-05-02-01",
+        "rationale": "提交时间不应代替临床用药记录时点"
+      },
+      "old_observation": {
+        "id": "relative_date_submit_only",
+        "rule": "LX0609-05-02-01",
+        "expected": "data_gap",
+        "observed": "compliant",
+        "pass": false,
+        "final": {
+          "rule_id": "LX0609-05-02-01",
+          "rule_code": "LX0609-05-02-01",
+          "rule_name": "恶性肿瘤化学治疗记录：病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "qc_point_id": "LX0609-05-02-01",
+          "rule_set_key": "luxian_0609_qc_v1",
+          "rule_set_version": "2026-06-09",
+          "rule_version": "2026-06-09",
+          "schema_version": "lx0609-customer-result-v2",
+          "status": "compliant",
+          "result_status": "compliant",
+          "is_compliant": true,
+          "findings": "已核对 1 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。",
+          "evidence": "已根据受控证据完成判断。",
+          "suggestion": "继续保持。",
+          "confidence": null,
+          "reason_code": "requirement_satisfied",
+          "evidence_items": [],
+          "criterion_results": [],
+          "customer_display_facts": {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": 1,
+            "field_results": {
+              "drug_name": "matched",
+              "dose": "matched",
+              "route": "matched",
+              "time": "matched"
+            },
+            "missing_order_fields": [],
+            "unresolved_event_count": 0,
+            "missing_course_event_count": 0,
+            "unknown_time_event_count": 0
+          },
+          "customer_evidence": [
+            {
+              "source_type": "daily_course_record",
+              "source_document_id": "synthetic-course",
+              "record_time": "2026-04-26 16:00:00",
+              "field_path": "record_content",
+              "evidence_excerpt": "今日使用奥沙利铂130mg 静滴。",
+              "excerpt_kind": "文书级依据"
+            },
+            {
+              "source_type": "inpat_drug_order",
+              "source_document_id": "synthetic-order",
+              "record_time": "2026-04-26 09:00:00"
+            }
+          ]
+        }
+      },
+      "reexecuted_on_aa7a": false
+    }
+  ],
+  "source_hashes": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py": "3e2299951c92f9835da0787f8c24fc5ef49b51a39b350429d654351411890264",
+    "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+    "apps/medqc-web/backend/app/services/luxian_0609_fact_extraction.py": "1d25e3315a99fd21e860a767efbc58dbf984c7b51f24097e4e23d44f122d4f77",
+    "apps/medqc-web/backend/app/services/luxian_0609/malignancy_fact.py": "fe5aa2918d5f76660acd71102da06b9a89602c4a499c0c6728a6a91b17d0d1f9",
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/antimicrobial_action_extraction.py": "e75d4e23eb616100d45af979c2de9bf940f03374772fb12a20536772da4c9b9f",
+    "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py": "1ef1640e9dc194a328df6c934b0ea519c56df65f82031ad8376cb97b9278d7f5",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_chemo_closure.py": "ff17d2ad3b46d3df20a9da1099060d634ac0e0c0aafa7f44c8b6b30921680558"
+  },
+  "inherited_oracle_hashes": {
+    "expectations-independent.json": "dda21ec9401e668f4904d73f6277d911851129e13491c057718fe722e1eeef36",
+    "expectations-association-supplement.json": "ffbe44e890fef5b7c0e8f5c94dc4c38315bbad66ea6e9fad500f50937d239e1c",
+    "expectations-e8-supplement.json": "1db66397d03eb63ad17912a79a4302ec5dfd21a525b9ea3e6f37ddf9988fcf4f",
+    "expectations-final-classification.json": "a5c34230ac1ac17b61ec34505c22a20a5e2cce034cf1a6d77ab7971afd6873a6",
+    "verify_final_fixed_ast.py": "ba8bf68ddba2e397a1230138ed9d263eb8fee53731f806483db0b2892cc5bb09",
+    "results-final-independent.json": "d08351bc0734a063c4ebbeb3aecbdfe7272537f188a17828c8e68b5ce1d13516"
+  },
+  "semantic_budget_proposal": {
+    "schema_version": "lx0609_chemo_local_dose_facts_v1 (拟定，尚未注册/调用)",
+    "additional_calls_per_selected_026_request_with_usable_course": 1,
+    "additional_calls_per_order_event": 0,
+    "existing_local_administration_calls": 0,
+    "proposed_local_administration_calls_max": 1,
+    "malignancy_resolution_calls": "原0或1独立保留，不合并/重发；总上限原预算+1",
+    "affected_rule_ids": [
+      "LX0609-05-02-01"
+    ],
+    "approved_to_execute": false
+  }
+}

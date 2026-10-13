@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 import re
 from typing import Any, Mapping
 
@@ -95,6 +96,18 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     end_time, record_time, elapsed = (
         raw.get("surgery_end_time"), raw.get("record_time"), raw.get("elapsed_hours")
     )
+    # 新事实用精确秒校验裁决；两位小时仍保留为展示值，旧事实沿用原合同。
+    precise_hours = elapsed
+    if "elapsed_seconds" in raw:
+        seconds = raw["elapsed_seconds"]
+        if type(seconds) not in {int, float}:
+            return None
+        try:
+            if not isfinite(seconds) or seconds < 0 or round(seconds / 3600, 2) != elapsed:
+                return None
+        except (OverflowError, ValueError):
+            return None
+        precise_hours = seconds / 3600
     if (
         kind not in {"surgery_record_late", "surgery_record_within_threshold"}
         or raw.get("performed_surgery_confirmed") is not True
@@ -102,11 +115,11 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or not isinstance(record_time, str)
         or not isinstance(elapsed, (int, float))
         or raw.get("threshold_hours") != 24
-        or (kind == "surgery_record_late" and elapsed <= 24)
-        or (kind == "surgery_record_within_threshold" and not 0 <= elapsed <= 24)
+        or (kind == "surgery_record_late" and precise_hours <= 24)
+        or (kind == "surgery_record_within_threshold" and not 0 <= precise_hours <= 24)
     ):
         return None
-    return {
+    facts = {
         "failure_kind": kind,
         "performed_surgery_confirmed": True,
         "surgery_end_time": end_time,
@@ -115,6 +128,9 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "threshold_hours": 24,
         "source_label": "手术记录",
     }
+    if "elapsed_seconds" in raw:
+        facts["elapsed_seconds"] = raw["elapsed_seconds"]
+    return facts
 
 
 def surgery_timeliness_gap_display(facts: Any) -> tuple[list[str], str] | None:
@@ -134,6 +150,22 @@ def surgery_timeliness_gap_display(facts: Any) -> tuple[list[str], str] | None:
 
 
 def _safe_024(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "colon_pathology_lymph_node_items_missing":
+        missing = raw.get("missing_items")
+        if (
+            raw.get("performed_surgery_confirmed") is not True
+            or raw.get("malignant_surgery_confirmed") is not True
+            or not isinstance(missing, list)
+            or not missing
+            or any(item not in {"lymph_node_count", "pathologic_stage"} for item in missing)
+        ):
+            return None
+        return {
+            "failure_kind": "colon_pathology_lymph_node_items_missing",
+            "performed_surgery_confirmed": True,
+            "malignant_surgery_confirmed": True,
+            "missing_items": list(dict.fromkeys(missing)),
+        }
     checked = raw.get("checked_sources")
     if (
         raw.get("failure_kind") != "lymph_node_dissection_not_documented"
@@ -248,7 +280,47 @@ def _safe_025(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+_028_GAP_KINDS = frozenset({
+    "incision_class_unavailable", "order_stop_time_unavailable", "order_start_time_unavailable",
+    "surgery_time_unavailable", "infection_evidence_unresolved",
+})
+_028_CHECK_KEYS = frozenset({
+    "verification_kind", "incision_class", "cardiac_surgery", "threshold_hours", "duration_hours",
+    "anchor", "anchor_time", "last_antibacterial_time", "infection_evidence", "requirement_met",
+})
+
+
+def _safe_028_check(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """院方口径（2026-10-11）：Ⅰ类心脏48h、其余24h；超时须病程记录感染证据。"""
+    if raw.get("verification_kind") != "prophylaxis_duration_check":
+        if set(raw) == {"failure_kind"} and raw.get("failure_kind") in _028_GAP_KINDS:
+            return {"failure_kind": raw["failure_kind"]}
+        return None
+    duration, threshold, evidence, met = (
+        raw.get("duration_hours"), raw.get("threshold_hours"), raw.get("infection_evidence"), raw.get("requirement_met"),
+    )
+    if (
+        set(raw) != _028_CHECK_KEYS
+        or raw.get("incision_class") not in {"I", "II"}
+        or type(raw.get("cardiac_surgery")) is not bool
+        or threshold != (48 if raw.get("cardiac_surgery") else 24)
+        or (raw.get("cardiac_surgery") and raw.get("incision_class") != "I")
+        or isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0
+        or raw.get("anchor") not in {"surgery_end", "surgery_begin"}
+        or any(not isinstance(raw.get(key), str) or not _TIMESTAMP.fullmatch(raw[key])
+               for key in ("anchor_time", "last_antibacterial_time"))
+        or type(met) is not bool
+        or evidence not in {"not_required", "recorded", "not_recorded"}
+        or (evidence == "not_required") != (duration <= threshold)
+        or met != (evidence != "not_recorded")
+    ):
+        return None
+    return {key: raw[key] for key in sorted(_028_CHECK_KEYS)}
+
+
 def _safe_028(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if "verification_kind" in raw or set(raw) == {"failure_kind"}:
+        return _safe_028_check(raw)
     kind, start, end, duration, threshold = (
         raw.get("failure_kind"), raw.get("start_time"), raw.get("end_time"),
         raw.get("duration_hours"), raw.get("threshold_hours"),
@@ -376,6 +448,12 @@ def surgery_gate_customer_fact_status_is_valid(*, rule_id: str, status: str, rea
             "surgery_record_late": "non_compliant", "surgery_record_within_threshold": "compliant",
         }.get(str(safe_facts.get("verification_kind") or safe_facts.get("failure_kind") or ""))
         return expected is None or status == expected
+    if rule_id == "LX0609-05-01-01" and isinstance(safe_facts, Mapping):
+        if safe_facts.get("verification_kind") == "prophylaxis_duration_check":
+            return status == ("compliant" if safe_facts.get("requirement_met") else "non_compliant")
+        if safe_facts.get("failure_kind") in _028_GAP_KINDS:
+            return status == "data_gap"
+        return True
     if rule_id != "LX0609-04-02-04":
         return True
     expected = {"non_compliant": "implant_information_incomplete", "compliant": "implant_information_complete", "not_applicable": "implant_not_used"}.get(status)

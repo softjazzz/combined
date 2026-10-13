@@ -49,7 +49,11 @@ DB_SCHEMA_MODE = _resolve_schema_mode()
 DB_SEARCH_PATH = _resolve_search_path(DB_SCHEMA_MODE)
 
 _engine_kwargs = {}
-if DATABASE_URL:
+# 与 app/core/supabase_client.py 一致：connect_timeout、search_path 与连接池参数只对
+# PostgreSQL 有效，SQLite（测试用临时库）传入 connect_timeout 会在建立连接时抛 TypeError。
+if DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+elif DATABASE_URL:
     connect_args = {
         "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5")),
     }

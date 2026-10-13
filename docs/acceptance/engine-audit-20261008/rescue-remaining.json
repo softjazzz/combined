@@ -1,0 +1,646 @@
+{
+  "schema_version": "engine-audit-v1",
+  "group": "rescue-remaining",
+  "base_commit": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope": "0609_only",
+  "excluded_scope": [
+    "0916（用户排除；未审查/运行该组测试）"
+  ],
+  "inventory": {
+    "master_count": 86,
+    "group_count": 15,
+    "category_09_count": 3,
+    "remaining_category_10_11_12_count": 12
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-09-01-01",
+      "qc_point": "抢救结束后6小时内是否完成",
+      "source_document": "抢救记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "同份抢救记录的结束时间与完成时间关联；严格结束标签、6小时含秒边界；存在确定超时优先，未知时间或顺序冲突资料不足，无记录但有效抢救医嘱仍资料不足。",
+      "source_refs": [
+        "native_basic_timeliness.py:1171",
+        "basic_timeliness_facts.py:218"
+      ],
+      "test_refs": "test_luxian_0609_native_basic_timeliness.py（004/rescue筛选）",
+      "evidence_gaps": "既有脱敏历史只证明结束时间可解析和离线等价；无临床金标，未验证真实多事件全面关联。",
+      "contract": {
+        "rule_id": "LX0609-09-01-01",
+        "contract_version": "v2",
+        "family_key": "basic_timeliness",
+        "executor_key": "basic_timeliness",
+        "execution_mode": "native_sync",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-12-01-01",
+      "qc_point": "首次病程记录病例特点与入院记录、现病史完全相同",
+      "source_document": "不合理复制病历",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "首次病程病例特点与入院现病史完整结构化段比较；完全同文才触发，包含关系不等于完全复制，缺段资料不足，零模型。",
+      "source_refs": [
+        "native_course_quality_execution.py:833,857"
+      ],
+      "test_refs": "test_luxian_0609_native_course_quality_execution.py（016筛选）",
+      "evidence_gaps": "生产正文/结构化段映射真实覆盖及临床对复制业务答案未确认。",
+      "contract": {
+        "rule_id": "LX0609-12-01-01",
+        "contract_version": "v3",
+        "family_key": "course_quality",
+        "executor_key": "course_quality",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-12-01-02",
+      "qc_point": "2次以上病程记录完全相同（相似度大于70%）",
+      "source_document": "不合理复制病历",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "同次住院归一化与快速相似度筛选，精确比较候选；≥70%候选，模板歧义单次语义复核，Python映射状态；无模型/无效响应保守失败，保持可定位组合。",
+      "source_refs": [
+        "native_course_quality_execution.py:694,740,1099"
+      ],
+      "test_refs": "test_luxian_0609_native_course_quality_execution.py（017筛选）",
+      "evidence_gaps": "门槛≥70%按现行业务基线，旧标题“大于70%”不能作为新反例；缺独立真实高/低相似及模板金标。",
+      "contract": {
+        "rule_id": "LX0609-12-01-02",
+        "contract_version": "v7",
+        "family_key": "course_quality",
+        "executor_key": "course_quality",
+        "execution_mode": "native_async",
+        "decision_authority": "program_then_optional_llm",
+        "max_llm_calls_per_rule": 1,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-01-01",
+      "qc_point": "有手术记录但无手术知情同意书",
+      "source_document": "手术知情同意书",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "可靠手术实施事实先门控，专用手术同意书来源ready且完整空为缺失，空壳正文不合规；非空同意书与当前手术关联使用一次受控语义抽取。",
+      "source_refs": [
+        "native_surgery_gate_execution.py:2492,2531,2580,2596"
+      ],
+      "test_refs": "test_luxian_0609_native_surgery_gate_execution.py（033筛选，5项含联合规则）",
+      "evidence_gaps": "本轮未验证真实同意书/紧急授权例外、多手术逐事件临床正确率，合成门禁通过不代表上线批准。",
+      "contract": {
+        "rule_id": "LX0609-11-01-01",
+        "contract_version": "v2",
+        "family_key": "surgery_anesthesia",
+        "executor_key": "surgery_gate",
+        "execution_mode": "native_async",
+        "decision_authority": "program_then_optional_llm",
+        "max_llm_calls_per_rule": 1,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-02-01",
+      "qc_point": "有麻醉记录但无麻醉知情同意书",
+      "source_document": "麻醉知情同意书",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "麻醉实施门控后识别麻醉同意书；来源失败资料不足，完整空或无明确类型同意书存在性缺失；Python零模型。",
+      "source_refs": [
+        "native_surgery_document_execution.py:775,1336"
+      ],
+      "test_refs": "test_luxian_0609_native_surgery_document_execution.py（034/consent筛选）",
+      "evidence_gaps": "当前只证明受控来源和类型判定；紧急授权例外、同次住院多次麻醉对应关系缺独立真实证据。",
+      "contract": {
+        "rule_id": "LX0609-11-02-01",
+        "contract_version": "v2",
+        "family_key": "surgery_anesthesia",
+        "executor_key": "surgery_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-02-02",
+      "qc_point": "填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "source_document": "麻醉知情同意书",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "仅在同意书存在后检查签名与分钟级时间；患者/医师空白及占位缺陷，时间严格有效；多同意书association_failed，无同意书不适用由存在性规则负责。",
+      "source_refs": [
+        "native_surgery_document_execution.py:798,828,837,1397"
+      ],
+      "test_refs": "test_luxian_0609_native_surgery_document_execution.py（035/consent筛选）",
+      "evidence_gaps": "合法代理人签署等授权语义、实际病例和多事件未临床确认。",
+      "contract": {
+        "rule_id": "LX0609-11-02-02",
+        "contract_version": "v2",
+        "family_key": "surgery_anesthesia",
+        "executor_key": "surgery_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-03-01",
+      "qc_point": "无输血知情同意书",
+      "source_document": "输血知情同意书",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "可靠输血实施触发，专门类型输血同意书存在性；完整空缺失不合规，来源不可读资料不足，保持实施证据引用；零模型。",
+      "source_refs": [
+        "native_transfusion_execution.py:975,1018,3161"
+      ],
+      "test_refs": "test_luxian_0609_native_transfusion_execution.py（041/consent筛选）",
+      "evidence_gaps": "只读10月7脱敏门控修复报告；未重验真实输血、授权例外或保存/API/浏览器。",
+      "contract": {
+        "rule_id": "LX0609-11-03-01",
+        "contract_version": "v2",
+        "family_key": "transfusion",
+        "executor_key": "transfusion",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-03-02",
+      "qc_point": "输血知情同意书填写或签名不完整",
+      "source_document": "输血知情同意书",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "同意书必要内容、双方签名及分钟级时间逐项检查，缺项不合规、未有同意书不适用；Python零模型。",
+      "source_refs": [
+        "native_transfusion_execution.py:1059,1082,1089"
+      ],
+      "test_refs": "test_luxian_0609_native_transfusion_execution.py（042/consent筛选）",
+      "evidence_gaps": "本轮未形成合法代理人、否定/复杂书写及多次输血同意关系真实金标。",
+      "contract": {
+        "rule_id": "LX0609-11-03-02",
+        "contract_version": "v2",
+        "family_key": "transfusion",
+        "executor_key": "transfusion",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-09-02-01",
+      "qc_point": "患者死亡后7天未书写死亡病历讨论记录",
+      "source_document": "死亡病历讨论记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "发现离线缺陷候选，业务复核待完成",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "死亡后最早有效讨论7天/168小时；未知死亡时间资料不足，空讨论需成熟评价终点。D01未来讨论、D02未知完成时间讨论与超时讨论并存均传播到Canonical超时。",
+      "source_refs": [
+        "extended_document/death_discussion.py:43,89,94",
+        "native_extended_document_execution.py:3222"
+      ],
+      "test_refs": "test_luxian_0609_native_extended_document_execution.py（051筛选）；D01/D02",
+      "evidence_gaps": "历史30例死亡/死亡讨论专表零不证明适用性；两探针为合成业务预期，终点排除及未知文书有效性仍需独立业务确认。",
+      "contract": {
+        "rule_id": "LX0609-09-02-01",
+        "contract_version": "v1",
+        "family_key": "extended_document",
+        "executor_key": "extended_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-01-01",
+      "qc_point": "经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+      "source_document": "交接班记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "经治医师变更、变更医嘱或病程签名时间线；交班前、接班后24小时；多事件分离窗口、关联/身份/完成时间未知资料不足，证据仅匹配行。",
+      "source_refs": [
+        "extended_document/physician_handoff.py",
+        "native_extended_document_execution.py:4420"
+      ],
+      "test_refs": "test_luxian_0609_native_extended_document_execution.py（071筛选）；continuity公开映射",
+      "evidence_gaps": "历史30例交/接班专表为空，未完整审查事件和签名时间线，未覆盖适用真实病例。",
+      "contract": {
+        "rule_id": "LX0609-10-01-01",
+        "contract_version": "v1",
+        "family_key": "extended_document",
+        "executor_key": "extended_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-02-01",
+      "qc_point": "转科病人24小时内未完成转入、转出记录",
+      "source_document": "转科记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，旧触发误报反例已消退",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "正式转科医嘱触发；双向记录24小时，历史记录排除，时间缺失/多医嘱或多候选关联失败资料不足，空记录需成熟终点。T01计划且暂不转科返回not_applicable。",
+      "source_refs": [
+        "extended_document/transfer_documentation.py:37,49,106",
+        "native_extended_document_execution.py:4469"
+      ],
+      "test_refs": "test_luxian_0609_native_extended_document_execution.py（072筛选）；T01",
+      "evidence_gaps": "脱敏历史两真实多事件仅4/4资料不足；不能证明多事件业务完备。所有同义计划/否定边界未穷尽。",
+      "contract": {
+        "rule_id": "LX0609-10-02-01",
+        "contract_version": "v1",
+        "family_key": "extended_document",
+        "executor_key": "extended_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-02-02",
+      "qc_point": "有转科医嘱但无转入、转出记录",
+      "source_document": "转科记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "部分工程证据，旧触发误报反例已消退",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "转科医嘱双向记录存在性，无需等待24小时；当前事件不能用历史记录替代，多事件/多候选保持关联缺口。T02计划且暂不转科返回not_applicable。",
+      "source_refs": [
+        "extended_document/transfer_documentation.py:37,49",
+        "native_extended_document_execution.py:4469"
+      ],
+      "test_refs": "test_luxian_0609_native_extended_document_execution.py（073筛选）；T02",
+      "evidence_gaps": "同072真实证据只证明资料不足，未形成临床金标。",
+      "contract": {
+        "rule_id": "LX0609-10-02-02",
+        "contract_version": "v1",
+        "family_key": "extended_document",
+        "executor_key": "extended_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-12-02-01",
+      "qc_point": "修正或补充诊断时，未记录修改或补充理由及诊断依据",
+      "source_document": "病程记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "default",
+      "assessment": "确认合同/执行漂移；临床未验收",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "显式修正/补充声明触发；理由与依据按同文书关联，不跨事件补齐；M01合法引文合规且1次Fake调用，但加载合同program_only/0。unknown及传输失败分支不交付确定临床结论。",
+      "source_refs": [
+        "native_extended_document_execution.py:4516,4665",
+        "extended_document/diagnosis_change_extraction.py",
+        "luxian_0609_phase1_rule_contracts_extension_v1.json:267"
+      ],
+      "test_refs": "test_luxian_0609_native_extended_document_execution.py（074筛选）；M01",
+      "evidence_gaps": "当前只确认权限/计量合同漂移，不推断真实模型稳定性；结构化声明兼容路径及真实正文未新增审查。",
+      "contract": {
+        "rule_id": "LX0609-12-02-01",
+        "contract_version": "v1",
+        "family_key": "extended_document",
+        "executor_key": "extended_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-03-01",
+      "qc_point": "有创操作医嘱但无有创操作记录",
+      "source_document": "有创操作记录",
+      "implementation_status": "active",
+      "phase_status_declared": "pending_definition",
+      "release_scope": "default",
+      "assessment": "待定义暂停，不计医学判定通过",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "总表pending_definition/invasive_procedure_catalog_missing；正式scope分区返回not_executed及空证据，不生成资料不足或合规/不合规。低层执行器仍留关键词执行分支，不能据该低层075单测声称正式启用。",
+      "source_refs": [
+        "phase_scope.py:121",
+        "native_extended_document_execution.py:3055"
+      ],
+      "test_refs": "test_luxian_0609_phase_scope.py（暂停合同通过）；低层075仅记录边界",
+      "evidence_gaps": "有创操作目录未冻结，客户业务验收未完成；本轮不新增主链旁路审查。",
+      "contract": {
+        "rule_id": "LX0609-10-03-01",
+        "contract_version": "v1",
+        "family_key": "extended_document",
+        "executor_key": "extended_document",
+        "execution_mode": "native_async",
+        "decision_authority": "program_only",
+        "max_llm_calls_per_rule": 0,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "qc_point": "内容完整性",
+      "source_document": "抢救记录",
+      "implementation_status": "active",
+      "phase_status_declared": "default",
+      "release_scope": "acceptance_only",
+      "assessment": "部分工程证据，acceptance_only",
+      "clinical_acceptance": "not_confirmed",
+      "checked_behavior": "六字段逐份present/absent/unknown，严格原文坐标，唯一引文回填；最多8份、单份6000字、总12000字，最多一次有界调用；缺项优先不合规，未知资料不足。R01计划标签不会覆写正确absent。",
+      "source_refs": [
+        "rescue_record_completeness.py:75,147,227,281,346"
+      ],
+      "test_refs": "test_luxian_0609_rescue_record_completeness.py（80项）；R01",
+      "evidence_gaps": "只读脱敏历史R01为唯一真实抢救例，原响应回放无独立临床金标；保守否定词筛查的病情描述假阴性已知，泛化未确认。",
+      "contract": {
+        "rule_id": "LX0609-09-01-02",
+        "contract_version": "v1",
+        "family_key": "basic_timeliness",
+        "executor_key": "basic_timeliness",
+        "execution_mode": "native_sync",
+        "decision_authority": "program_then_optional_llm",
+        "max_llm_calls_per_rule": 1,
+        "source_contract_state": "typed_shadow_v1",
+        "golden_gate_state": "pending"
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "RR-D01",
+      "severity": "P1",
+      "rule_id": "LX0609-09-02-01",
+      "classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
+      "probe": "D01",
+      "expected": "评价9月3日早于9月8日截止；9月10日讨论未来于评价时点，应data_gap/evaluation_window_not_mature",
+      "actual": "native+Binding/Reducer+Canonical均non_compliant/threshold_exceeded，文案超时48小时",
+      "responsibility": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py:43-114（selected_discussion分支在horizon校验前返回）",
+      "limitation": "未验证实际Provider是否会排除未来文书，评价终点业务契约须主协调独立确认"
+    },
+    {
+      "id": "RR-D02",
+      "severity": "P1",
+      "rule_id": "LX0609-09-02-01",
+      "classification": "confirmed_offline_behavior_business_expectation_needs_confirmation",
+      "probe": "D02",
+      "expected": "一份真实讨论时间未知与第9天讨论并存，无法证明最早讨论超时，应data_gap/authoritative_time_missing",
+      "actual": "未知时间行被过滤，native+Binding/Reducer+Canonical确定超时",
+      "responsibility": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py:43-93（仅全部无时才资料不足）",
+      "limitation": "合成未定时文书的有效性、正文合同及真实采集链尚未独立临床核定"
+    },
+    {
+      "id": "RR-M01",
+      "severity": "P2",
+      "rule_id": "LX0609-12-02-01",
+      "classification": "confirmed_contract_execution_drift",
+      "probe": "M01",
+      "expected": "发生一次事实抽取时，加载权限应program_then_optional_llm且max_llm_calls=1，或实现符合0调用合同",
+      "actual": "执行合规且Fake调用1；加载contract.decision_authority=program_only、max_llm_calls_per_rule=0",
+      "responsibility": "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json:267；apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py:4665",
+      "limitation": "本轮不判定应更改合同还是执行，医学语义未扩展"
+    },
+    {
+      "id": "RR-PUB01",
+      "severity": "P2",
+      "rule_id": "LX0609-99-99-99（非目录反例）",
+      "classification": "confirmed_existing_test_failure",
+      "test": "test_luxian_0609_basic_timeliness_customer_projection.py::test_unknown_rule_is_not_claimed_by_basic_family",
+      "actual": "raw={}时对NotImplemented调用.get，AttributeError",
+      "responsibility": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py:628",
+      "limitation": "未知ID回退合同异常，不声称15条正式规则均受影响"
+    },
+    {
+      "id": "RR-SCOPE01",
+      "severity": "P2",
+      "rule_id": "catalog",
+      "classification": "existing_stale_count_assertions",
+      "tests": [
+        "test_luxian_0609_phase_scope.py::test_phase_scope_freezes_all_85_customer_rules",
+        "test_luxian_0609_phase_scope.py::test_customer_delivery_excludes_registration_only_handbook_rules"
+      ],
+      "actual": "当前总表86而断言85；delivery80而断言79",
+      "responsibility": "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py:20,169",
+      "limitation": "计数漂移测试未更新；不能仅据计数失败确认发布范围有业务缺陷"
+    }
+  ],
+  "probe_expectations_artifact": ".tmp/engine-audit-20261008/rescue-remaining/expectations.json",
+  "probe_results_artifact": ".tmp/engine-audit-20261008/rescue-remaining/probe-results.json",
+  "probes": [
+    {
+      "probe": "D01",
+      "actual_state": "non_compliant",
+      "actual_reason": "threshold_exceeded",
+      "facts": {
+        "verification_kind": "death_discussion_timeliness_check",
+        "death_time": "2026-09-01 08:00:00",
+        "discussion_time": "2026-09-10 08:00:00",
+        "threshold_hours": 168,
+        "actual_interval_hours": 216.0,
+        "source_document_refs": [
+          {
+            "source_type": "death_record",
+            "source_document_id": "SYNTH-DEATH"
+          },
+          {
+            "source_type": "death_discussion",
+            "source_document_id": "SYNTH-DISC-FUTURE"
+          }
+        ]
+      },
+      "native_state": "non_compliant",
+      "canonical_status": "non_compliant",
+      "canonical_findings": "死亡时间 2026-09-01 08:00:00，死亡病历讨论时间 2026-09-10 08:00:00，实际间隔 216小时（超时48小时），规定时限 168 小时。",
+      "llm_call_count": 0,
+      "layer": "deterministic evaluator + native executor + binding/reducer + canonical"
+    },
+    {
+      "probe": "D02",
+      "actual_state": "non_compliant",
+      "actual_reason": "threshold_exceeded",
+      "facts": {
+        "verification_kind": "death_discussion_timeliness_check",
+        "death_time": "2026-09-01 08:00:00",
+        "discussion_time": "2026-09-10 08:00:00",
+        "threshold_hours": 168,
+        "actual_interval_hours": 216.0,
+        "source_document_refs": [
+          {
+            "source_type": "death_record",
+            "source_document_id": "SYNTH-DEATH"
+          },
+          {
+            "source_type": "death_discussion",
+            "source_document_id": "SYNTH-DISC-LATE"
+          }
+        ]
+      },
+      "native_state": "non_compliant",
+      "canonical_status": "non_compliant",
+      "canonical_findings": "死亡时间 2026-09-01 08:00:00，死亡病历讨论时间 2026-09-10 08:00:00，实际间隔 216小时（超时48小时），规定时限 168 小时。",
+      "llm_call_count": 0,
+      "layer": "deterministic evaluator + native executor + binding/reducer + canonical"
+    },
+    {
+      "probe": "T01",
+      "actual_state": "not_applicable",
+      "actual_reason": "trigger_absent_complete",
+      "layer": "deterministic evaluator"
+    },
+    {
+      "probe": "T02",
+      "actual_state": "not_applicable",
+      "actual_reason": "trigger_absent_complete",
+      "layer": "deterministic evaluator"
+    },
+    {
+      "probe": "M01",
+      "actual_state": "compliant",
+      "actual_reason": "requirement_satisfied",
+      "calls": 1,
+      "client_calls": 1,
+      "contract_authority": "program_only",
+      "contract_max_calls": 0,
+      "layer": "native executor + reducer + loaded contract"
+    },
+    {
+      "probe": "R01",
+      "actual_state": "non_compliant",
+      "calls": 1,
+      "missing_fields": [
+        "rescue_time"
+      ],
+      "layer": "native executor + reducer"
+    }
+  ],
+  "test_runs": [
+    {
+      "artifact": ".tmp/engine-audit-20261008/rescue-remaining/core-tests.xml",
+      "tests": 198,
+      "failures": 0,
+      "errors": 0,
+      "passed": 198
+    },
+    {
+      "artifact": ".tmp/engine-audit-20261008/rescue-remaining/remaining-tests.xml",
+      "tests": 124,
+      "failures": 0,
+      "errors": 0,
+      "passed": 124
+    },
+    {
+      "artifact": ".tmp/engine-audit-20261008/rescue-remaining/public-tests.xml",
+      "tests": 174,
+      "failures": 1,
+      "errors": 0,
+      "passed": 173
+    },
+    {
+      "artifact": ".tmp/engine-audit-20261008/rescue-remaining/consent-tests.xml",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "passed": 5
+    },
+    {
+      "artifact": ".tmp/engine-audit-20261008/rescue-remaining/scope-tests.xml",
+      "tests": 11,
+      "failures": 2,
+      "errors": 0,
+      "passed": 9
+    }
+  ],
+  "test_summary": {
+    "passed": 509,
+    "failed": 3,
+    "errors": 0
+  },
+  "method": {
+    "source_read_only": true,
+    "new_real_model_calls": 0,
+    "postgres_access": false,
+    "dotenv_read": false,
+    "patient_original_read": false,
+    "production_edits": false,
+    "shared_test_edits": false,
+    "commits": false,
+    "synthetic_expectations_frozen_before_execution": true,
+    "offline_launcher": ".tmp/engine-audit-20261008/rescue-remaining/offline_runner.py",
+    "restrictions": "dotenv.load_dotenv/dotenv_values及Pydantic DotEnv文件读取禁用；DATABASE_URL清空；socket外连拒绝，仅允许asyncio自身socketpair；--noconftest禁用app.main启动；公开合同测试使用内存SQLite。"
+  },
+  "limitations": [
+    "本组逐条clinical_acceptance均not_confirmed，不批准业务上线。",
+    "现有脱敏历史报告仅作为证据线索；没有读取私有原始病例或历史.env脚本。",
+    "第一次启动工具因socketpair拦截和F盘输出权限失败，不计生产测试失败；修正本组离线launcher后才统计JUnit五批结果。",
+    "收尾收到停止新pytest指令后只做报告归档；不重跑，不修生产。"
+  ],
+  "subsequent_remediation_not_reverified": [
+    {
+      "finding_id": "RR-M01",
+      "status": "open",
+      "source": "engine_coverage_registry更正并撤回此前通知",
+      "note": "此前074已关闭的通知属错误归并，已撤回且不适用。现无证据关闭M01，保留7b894dc84基线中已确认的合同/执行漂移；未新审查或执行。"
+    }
+  ]
+}

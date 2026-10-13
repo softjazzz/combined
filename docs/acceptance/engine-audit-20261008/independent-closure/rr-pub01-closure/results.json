@@ -1,0 +1,167 @@
+{
+  "fixed_sha": "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b",
+  "baseline_sha": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+  "expectations_sha256": "645f3270588c4a96ec4195c7cdf8ecf88bd60f17c98ea86a91b69b933062a6e2",
+  "passed": 37,
+  "failed": 0,
+  "rows": [
+    {
+      "id": "unknown_LX0609-99-99-99_NoneType_None",
+      "passed": true
+    },
+    {
+      "id": "unknown_LX0609-99-99-99_dict_0",
+      "passed": true
+    },
+    {
+      "id": "unknown_LX0609-99-99-99_dict_2",
+      "passed": true
+    },
+    {
+      "id": "unknown_LX0609-99-99-99_list_0",
+      "passed": true
+    },
+    {
+      "id": "unknown_LX0609-99-99-99_str_9",
+      "passed": true
+    },
+    {
+      "id": "unknown_LX0609-99-99-99_int_1",
+      "passed": true
+    },
+    {
+      "id": "unknown_lx0609-99-99-99_NoneType_None",
+      "passed": true
+    },
+    {
+      "id": "unknown_lx0609-99-99-99_dict_0",
+      "passed": true
+    },
+    {
+      "id": "unknown_lx0609-99-99-99_dict_2",
+      "passed": true
+    },
+    {
+      "id": "unknown_lx0609-99-99-99_list_0",
+      "passed": true
+    },
+    {
+      "id": "unknown_lx0609-99-99-99_str_9",
+      "passed": true
+    },
+    {
+      "id": "unknown_lx0609-99-99-99_int_1",
+      "passed": true
+    },
+    {
+      "id": "store_unknown_safe_False",
+      "passed": true
+    },
+    {
+      "id": "unknown_nc_without_explanation_False",
+      "passed": true
+    },
+    {
+      "id": "store_unknown_safe_True",
+      "passed": true
+    },
+    {
+      "id": "unknown_nc_without_explanation_True",
+      "passed": true
+    },
+    {
+      "id": "conflicting_rule_identity",
+      "passed": true
+    },
+    {
+      "id": "known_preserve_LX0609-01-01-01",
+      "passed": true
+    },
+    {
+      "id": "known_invalid_LX0609-01-01-01",
+      "passed": true
+    },
+    {
+      "id": "known_contradictory_LX0609-01-01-01",
+      "passed": true
+    },
+    {
+      "id": "known_preserve_LX0609-05-01-02",
+      "passed": true
+    },
+    {
+      "id": "known_invalid_LX0609-05-01-02",
+      "passed": true
+    },
+    {
+      "id": "known_contradictory_LX0609-05-01-02",
+      "passed": true
+    },
+    {
+      "id": "known_preserve_LX0609-08-01-03",
+      "passed": true
+    },
+    {
+      "id": "known_invalid_LX0609-08-01-03",
+      "passed": true
+    },
+    {
+      "id": "known_contradictory_LX0609-08-01-03",
+      "passed": true
+    },
+    {
+      "id": "antimicrobial_existing_whitelist_filters_extra_fields",
+      "passed": true
+    },
+    {
+      "id": "pending_absent_True",
+      "passed": true
+    },
+    {
+      "id": "pending_absent_False",
+      "passed": true
+    },
+    {
+      "id": "parent_counterexample_False",
+      "passed": true
+    },
+    {
+      "id": "parent_counterexample_True",
+      "passed": true
+    },
+    {
+      "id": "known_parent_candidate_compatibility",
+      "passed": true
+    },
+    {
+      "id": "normal_unknown_registered_LX_save_rejected",
+      "passed": true
+    },
+    {
+      "id": "new_engine_new_store_known_read_LX0609-01-01-01",
+      "passed": true
+    },
+    {
+      "id": "new_engine_new_store_known_read_LX0609-05-01-02",
+      "passed": true
+    },
+    {
+      "id": "new_engine_new_store_known_read_LX0609-08-01-03",
+      "passed": true
+    },
+    {
+      "id": "historical_unknown_internal_raw_retained_customer_facts_empty",
+      "passed": true
+    }
+  ],
+  "elapsed_seconds": 0.139,
+  "isolated_sqlite": "F:\\MedQC-worktrees\\review-artifacts\\rr-pub01-closure\\isolated-1791483977042815400.sqlite",
+  "probe_level": "fixed real Finalizer/Store/dependency modules with package initializers suppressed and synthetic-only process environment; actual SQLite new-engine/new-store consumption; AST workspace table factory only; not application endpoint/deployment",
+  "pytest_used": false,
+  "postgres_connected": false,
+  "env_read": false,
+  "process_environment": "cleared then synthetic-only",
+  "dotenv_disabled": true,
+  "real_model_calls": 0,
+  "production_edited": false
+}

@@ -1,0 +1,11 @@
+{
+  "test_file": "F:\\MedQC-worktrees\\qc-fix-chemo-v2-20261008\\apps\\medqc-web\\backend\\tests\\unit\\test_luxian_0609_special_antimicrobial_support_closure.py",
+  "test_sha256": "dace2fad205b0e1e8a4122fa2b57fc756ebd4343aff62fbb071886ad77138e5e",
+  "expectations_sha256": "3be945d5414d1396f7014ced5aa5687a0fc75443247446e49f127d199f50e2aa",
+  "case_count": 9,
+  "planned_pytest_count": 18,
+  "native_owned_sha256": "bd63c9ac5927deb8130d13a480196ab514a4301ee5e1f47abd69df29a0c903d5",
+  "native_integration_sha256": "e98f5d7524defa0502b1154d03083b9405d7f530d859d3508295bc26b3c1625a",
+  "tp_d04_branch_byte_equal": true,
+  "tp_d04_branch_sha256": "1bf943b9a3e2b631f63c8b848ba9c1308cfedbecd3b16d3bb4de336ae55a25b3"
+}

@@ -1,0 +1,29 @@
+{
+  "scope": [
+    "LX0609-04-05-02",
+    "LX0609-08-02-01"
+  ],
+  "read_at_root_sha": "aa7a98c7e43bc23439db485fa56cd90ea6da4bd1",
+  "status": "static_preparation_only",
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py": "568032eff813c98fd678442de476f1cbf62b29b617205d732828d14890393306",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d",
+    "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7"
+  },
+  "historical_observation": "two residual shell inputs remained compliant in independent round6 report; no fresh execution",
+  "original_metadata_closure": "not_proven_by_public_artifacts",
+  "tests_run": false,
+  "production_imports": false,
+  "git_commands": false,
+  "real_model": false,
+  "pg": false,
+  "private_inputs_read": false,
+  "production_changed": false,
+  "source_fields": "whitelist permits title/time/author; SQL intersects actual columns; original row completeness unconfirmed",
+  "existing_contract": "both extension entries program_only/max0",
+  "blocking_for_full_closure": [
+    "original frozen row metadata unavailable in public report",
+    "metadata-free text requires approved controlled semantic contract",
+    "synthetic facts do not prove actual model semantics"
+  ]
+}

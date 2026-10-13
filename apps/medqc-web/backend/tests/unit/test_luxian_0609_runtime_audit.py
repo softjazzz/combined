@@ -170,7 +170,17 @@ def test_runtime_audit_reports_exact_customer_scope_partition() -> None:
     )
     executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
     delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
-    phase_scope = load_luxian_0609_phase_scope()
+    manifest_ids = {item["rule_id"] for item in manifest["rules"]}
+    full_phase_scope = load_luxian_0609_phase_scope()
+    # 总表保留、已从目录撤下的待定义规则单独列出，不计入运行清单的目标数。
+    withdrawn = [entry.rule_id for entry in full_phase_scope if entry.rule_id not in manifest_ids]
+    assert all(
+        entry.phase_status == "pending_definition"
+        for entry in full_phase_scope
+        if entry.rule_id in withdrawn
+    )
+    assert audit["catalog_withdrawn_pending_rule_ids"] == withdrawn
+    phase_scope = [entry for entry in full_phase_scope if entry.rule_id in manifest_ids]
     expected_formal = sum(
         entry.phase_status in {"phase_1_target", "phase_1_partial"}
         for entry in phase_scope

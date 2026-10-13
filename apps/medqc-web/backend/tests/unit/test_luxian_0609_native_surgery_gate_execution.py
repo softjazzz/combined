@@ -701,6 +701,7 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
                 "performed_surgery_confirmed": True,
                 "surgery_end_time": "2026-01-01 08:00:00",
                 "record_time": "2026-01-02 08:00:00",
+                "elapsed_seconds": 86400.0,
                 "elapsed_hours": 24.0,
                 "threshold_hours": 24,
                 "source_label": "手术记录",
@@ -883,14 +884,16 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
     elif source_mode == "available":
         # 同一快照已完整读取手术知情同意书来源且为空，可确定为缺少文书。
         expected_states[-1] = "non_compliant"
+        # 028 程序判定（2026-10-11）：有手术、围术期无全身抗菌药物医嘱 → 不适用，无需模型。
+        expected_states[2] = "not_applicable"
     assert [item.final_state.value for item in reduced] == expected_states
     if expected_reason is not None:
         expected_reasons = {expected_reason}
         assert {item.reason_code for item in result.decisions} == expected_reasons
     elif source_mode == "available":
         assert [item.reason_code for item in result.decisions[:-1]] == [
-            "required_field_missing",
-        ] * 4
+            "required_field_missing", "required_field_missing", "trigger_absent_complete", "required_field_missing",
+        ]
         assert result.decisions[-1].reason_code == "requirement_violated"
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1028,12 +1031,13 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_code": "32.4100",
                 "surgery_process": "术中置入人工硬脑膜。",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
             "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
             "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
-            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER", "diagnosis_code": "C34.100"},),
             "inpat_drug_order": ({"generic_name": "SAFE_DRUG_MARKER"},),
             "daily_course_record": ({
                 "record_time": "2026-01-01 12:00:00+08",
@@ -1081,7 +1085,9 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
     prompt = client.prompts[0]
-    assert all(rule_id in prompt for rule_id in selected)
+    # 028 已改为程序判定（2026-10-11），不再进入联合提取。
+    assert all(rule_id in prompt for rule_id in selected if rule_id != "LX0609-05-01-01")
+    assert "LX0609-05-01-01" not in prompt
     assert "SAFE_SURGERY_MARKER" in prompt
     assert "SAFE_CONSENT_MARKER" in prompt
     assert "current_surgery|other_or_unclear|unknown" in prompt
@@ -1093,7 +1099,7 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
         evidence_materials=session.materials,
     )
     assert [item.final_state.value for item in reduced] == [
-        "compliant", "compliant", "data_gap", "compliant",
+        "compliant", "compliant", "not_applicable", "compliant",
     ]
 
 
@@ -1303,6 +1309,7 @@ async def test_typed_024_short_circuits_confirmed_lymph_fact_before_unrelated_so
         "document_id": "c04-surgery-1",
         "surgery_begin_time": "2026-01-01 08:00:00+08",
         "surgery_name": "胸腔镜下右肺上叶切除+纵隔淋巴结清扫术",
+        "surgery_code": "32.4100",
         "surgery_process": "术中清扫11组、10组、7组淋巴结，送冰冻切片。",
     }
 
@@ -1499,11 +1506,12 @@ async def test_joint_033_rejects_surgery_only_evidence_ref() -> None:
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_code": "32.4100",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
             "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
             "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
-            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER", "diagnosis_code": "C34.100"},),
             "surgery_inform_consent": ({"record_content": "SAFE_CONSENT_MARKER"},),
         }
         return SnapshotSourceRows.create(
@@ -1560,6 +1568,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_code": "32.4100",
                 "surgery_process": "术中置入人工硬脑膜。",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
@@ -1568,7 +1577,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
                 for index in range(7)
             ),
             "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
-            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER", "diagnosis_code": "C34.100"},),
         }
         return SnapshotSourceRows.create(
             source_key=source_key,
@@ -1775,6 +1784,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
                     "performed_surgery_confirmed": True,
                     "surgery_end_time": "2026-01-01 08:00:00",
                     "record_time": "2026-01-02 08:00:01",
+                    "elapsed_seconds": 86401.0,
                     "elapsed_hours": 24.0,
                     "threshold_hours": 24,
                     "source_label": "手术记录",
@@ -1925,6 +1935,7 @@ async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
                 "performed_surgery_confirmed": True,
                 "surgery_end_time": "2026-07-15 18:20:00",
                 "record_time": "2026-07-15 18:55:46",
+                "elapsed_seconds": 2146.0,
                 "elapsed_hours": 0.6,
                 "threshold_hours": 24,
                 "source_label": "手术记录",

@@ -720,3 +720,13 @@ def test_schema_and_empty_review_template_are_safe_and_do_not_fake_acceptance() 
             "review_revision",
             "review_status",
         ]
+
+
+def test_git_head_sha_with_phone_like_digits_is_not_treated_as_phone() -> None:
+    """真实提交号 6d1488578… 含 11 位手机号形数字串；仅 git_head 精确提交号豁免内容扫描。"""
+
+    ledger_builder._assert_safe_api_dto({"git_head": "6d14885780875ef7ce7ebe7a13b63ef64fd73cef"})
+    with pytest.raises(ValueError, match="unsafe API DTO"):
+        ledger_builder._assert_safe_api_dto({"note": "6d14885780875ef7ce7ebe7a13b63ef64fd73cef"})
+    with pytest.raises(ValueError, match="unsafe API DTO"):
+        ledger_builder._assert_safe_api_dto({"git_head": "联系 14885780875"})

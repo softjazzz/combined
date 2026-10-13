@@ -1,18 +1,16 @@
 .drg-workbench-page {
-  --drg-page-bg: #f5f5f7;
-  --drg-surface: rgba(255, 255, 255, 0.86);
-  --drg-surface-soft: rgba(255, 255, 255, 0.72);
-  --drg-border: rgba(0, 0, 0, 0.08);
-  --drg-text: #1d1d1f;
-  --drg-muted: rgba(29, 29, 31, 0.6);
-  --drg-subtle: rgba(29, 29, 31, 0.38);
-  --drg-primary: #0a6cff;
-  --drg-primary-soft: #eaf2ff;
+  --drg-page-bg: var(--mq-bg-subtle);
+  --drg-surface: var(--mq-glass-bg-strong);
+  --drg-surface-soft: var(--mq-glass-bg);
+  --drg-border: var(--mq-border);
+  --drg-text: var(--mq-text-primary);
+  --drg-muted: var(--mq-text-secondary);
+  --drg-subtle: var(--mq-text-tertiary);
+  --drg-primary: var(--mq-brand-600);
+  --drg-primary-soft: var(--mq-bg-subtle);
   color: var(--drg-text);
   background: var(--drg-page-bg);
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: var(--mq-font-family);
   font-feature-settings:
     'rlig' 1,
     'calt' 1;
@@ -24,11 +22,9 @@
 .payment-monitoring-page,
 .post-event-analysis-page,
 .in-process-page {
-  color: #1d1d1f !important;
-  background: #f5f5f7 !important;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif !important;
+  color: var(--mq-text-primary) !important;
+  background: var(--mq-bg-subtle) !important;
+  font-family: var(--mq-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -38,13 +34,13 @@
 .payment-monitoring-page :is(.payment-header, .monitor-card, .risk-panel, .detail-card),
 .post-event-analysis-page :is(.analysis-header, .summary-card, .analysis-panel, .metric-card),
 .in-process-page :is(.page-header, .panel, .kpi-card) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.86) !important;
+  border-color: var(--mq-border) !important;
+  background: var(--mq-glass-bg-strong) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .pre-analysis-shell
@@ -67,11 +63,11 @@
     .kpi-card
   ):hover,
 .in-process-page :is(.page-header, .panel, .kpi-card):hover {
-  border-color: rgba(0, 0, 0, 0.14) !important;
+  border-color: var(--mq-border-strong) !important;
   box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075) !important;
-  transform: translateY(-2px);
+    0 2px 12px var(--mq-border-strong),
+    0 6px 22px var(--mq-border) !important;
+  transform: none;
 }
 
 .pre-analysis-shell :is(.command-header, .surface, .metric-card, .correction-panel, .trace-card),
@@ -98,7 +94,7 @@
 .payment-monitoring-page :is(.payment-title, .monitor-card strong, .risk-panel strong),
 .post-event-analysis-page :is(h2, h3, strong, .metric-value),
 .in-process-page :is(h2, h3, strong, .kpi-value) {
-  color: #1d1d1f !important;
+  color: var(--mq-text-primary) !important;
   letter-spacing: 0 !important;
 }
 
@@ -113,7 +109,7 @@
 .payment-monitoring-page :is(.payment-subtitle, .payment-eyebrow, p, .muted),
 .post-event-analysis-page :is(p, .muted, .analysis-subtitle),
 .in-process-page :is(p, .breadcrumb, .panel-meta) {
-  color: rgba(29, 29, 31, 0.6) !important;
+  color: var(--mq-text-secondary) !important;
 }
 
 .pre-analysis-shell :is(.btn-primary, .primary-button, .segmented-item.active),
@@ -122,9 +118,9 @@
 .post-event-analysis-page
   :is(.primary-button, .ant-btn-primary, button.bg-blue-500, button.bg-blue-600),
 .in-process-page :is(.primary-button, .ant-btn-primary, button.bg-blue-500, button.bg-blue-600) {
-  border-color: #0a6cff !important;
-  background: #0a6cff !important;
-  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18) !important;
+  border-color: var(--mq-brand-600) !important;
+  background: var(--mq-brand-600) !important;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--mq-brand-600) 18%, transparent) !important;
 }
 
 .pre-analysis-shell
@@ -144,9 +140,9 @@
   :is(.filter-chip, .standard-status, .standard-summary-meta span, .status-filter, .case-link),
 .post-event-analysis-page :is(.mode-chip, .metric-tabs, .insight-row, .ant-tag),
 .in-process-page :is(.filter-chip, .mode-chip, .status-pill, .chart-toolbar span) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.78) !important;
-  color: rgba(29, 29, 31, 0.66) !important;
+  border-color: var(--mq-border) !important;
+  background: var(--mq-glass-bg) !important;
+  color: var(--mq-text-secondary) !important;
 }
 
 .pre-analysis-shell
@@ -155,15 +151,15 @@
 .post-event-analysis-page
   :is(.metric-tabs button.active, .tone-blue .kpi-icon, .tone-blue.insight-row .insight-icon),
 .in-process-page :is(.threshold-chip, .kpi-icon--blue, .change-tag--down) {
-  border-color: rgba(10, 108, 255, 0.16) !important;
-  background: rgba(10, 108, 255, 0.08) !important;
-  color: #0a6cff !important;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 16%, transparent) !important;
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .payment-monitoring-page :is(.kpi-card-green, .kpi-card-red, .kpi-card-amber),
 .post-event-analysis-page :is(.tone-green, .tone-amber, .tone-red, .tone-purple),
 .in-process-page :is(.kpi-icon--green, .kpi-icon--amber, .kpi-icon--red) {
-  background: rgba(255, 255, 255, 0.86) !important;
+  background: var(--mq-glass-bg-strong) !important;
 }
 
 .payment-monitoring-page :is(.risk-head, .risk-row, .payment-table th, .payment-table td),
@@ -171,14 +167,14 @@
   :is(.rank-head, .rank-row, .task-head, .task-row, .drg-legend-head, .drg-legend-row),
 .in-process-page :is(.case-list th, .case-list td, .priority-row, .change-row),
 .pre-analysis-shell :is(.summary-row, .metric-card) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-color: var(--mq-border) !important;
 }
 
 .payment-monitoring-page :is(.risk-head, .payment-table th),
 .post-event-analysis-page :is(.rank-head, .task-head, .drg-legend-head),
 .in-process-page .case-list th {
-  background: rgba(255, 255, 255, 0.72) !important;
-  color: rgba(29, 29, 31, 0.52) !important;
+  background: var(--mq-glass-bg) !important;
+  color: var(--mq-text-secondary) !important;
   font-weight: 600 !important;
 }
 
@@ -197,14 +193,14 @@
 .in-process-page :is(.trend-chart, .cost-chart, .case-list),
 .pre-analysis-shell
   :is(.reader-scroll, .medical-editor-wrap, .reader-preview, .summary-list, .workflow-block) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: var(--mq-border) !important;
+  background: var(--mq-glass-bg) !important;
 }
 
 .payment-monitoring-page :is(.text-link, .link-button, a),
 .post-event-analysis-page :is(.text-link, .link-button, a),
 .in-process-page :is(.text-link, .link-button, a) {
-  color: #0a6cff !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .drg-workbench-page .drg-page-header,
@@ -214,8 +210,8 @@
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .drg-workbench-page .drg-page-header h2,
@@ -232,31 +228,31 @@
 .drg-workbench-page .drg-filter-bar {
   border-color: var(--drg-border) !important;
   background: var(--drg-surface) !important;
-  border-radius: 14px !important;
+  border-radius: var(--mq-radius-control) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .drg-workbench-page .drg-kpi-card {
   min-height: 112px;
   border-color: var(--drg-border) !important;
-  border-radius: 16px !important;
+  border-radius: var(--mq-radius-card) !important;
   background: var(--drg-surface) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .drg-workbench-page .drg-kpi-card:hover {
-  border-color: rgba(0, 0, 0, 0.14) !important;
+  border-color: var(--mq-border-strong) !important;
   box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075) !important;
+    0 2px 12px var(--mq-border-strong),
+    0 6px 22px var(--mq-border) !important;
 }
 
 .drg-workbench-page .drg-kpi-card .text-2xl,
@@ -268,13 +264,13 @@
 
 .drg-workbench-page .drg-panel {
   border-color: var(--drg-border) !important;
-  border-radius: 18px !important;
+  border-radius: var(--mq-radius-card) !important;
   background: var(--drg-surface) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .drg-workbench-page table {
@@ -283,18 +279,18 @@
 }
 
 .drg-workbench-page thead {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--mq-glass-bg) !important;
 }
 
 .drg-workbench-page th {
-  color: rgba(29, 29, 31, 0.52) !important;
+  color: var(--mq-text-secondary) !important;
   font-size: 13px;
   line-height: 18px;
   font-weight: 600 !important;
 }
 
 .drg-workbench-page td {
-  color: rgba(29, 29, 31, 0.72);
+  color: color-mix(in srgb, var(--mq-text-primary) 72%, transparent);
   font-size: 14px;
   line-height: 22px;
 }
@@ -304,61 +300,59 @@
 }
 
 .drg-workbench-page tbody tr:hover {
-  background: rgba(0, 0, 0, 0.025) !important;
+  background: var(--mq-border) !important;
 }
 
 .drg-workbench-page .ant-btn-primary,
 .drg-workbench-page button.bg-blue-500,
 .drg-workbench-page button.bg-blue-600 {
-  border-radius: 8px !important;
+  border-radius: var(--mq-radius-control) !important;
   background: var(--drg-primary) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(10, 108, 255, 0.18) !important;
+    inset 0 1px 0 color-mix(in srgb, var(--mq-bg-surface) 18%, transparent),
+    0 5px 14px color-mix(in srgb, var(--mq-brand-600) 18%, transparent) !important;
 }
 
 .drg-workbench-page .ant-tag {
-  border-radius: 999px;
+  border-radius: var(--mq-radius-tag);
   font-weight: 700;
 }
 
 .drg-workbench-page .ant-segmented {
   border: 1px solid var(--drg-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-glass-bg);
 }
 
 .drg-workbench-page .ant-select-selector,
 .drg-workbench-page .ant-picker {
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  border-radius: 8px !important;
+  border-color: var(--mq-border-strong) !important;
+  border-radius: var(--mq-radius-control) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 {
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='bg-gradient-to-br'],
 .workbench-layout .panel-body > .space-y-6 [class*='dark:bg-slate'],
 .workbench-layout .panel-body > .space-y-6 [class*='bg-slate-50'],
 .workbench-layout .panel-body > .space-y-6 [class*='bg-white'] {
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.86) !important;
-  color: #1d1d1f !important;
+  border: 1px solid var(--mq-border) !important;
+  background: var(--mq-glass-bg-strong) !important;
+  color: var(--mq-text-primary) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='bg-gradient-to-br']::before {
   position: absolute;
   inset: 0;
-  border-left: 3px solid #0a6cff;
+  border-left: 3px solid var(--mq-brand-600);
   pointer-events: none;
   content: '';
 }
@@ -367,21 +361,19 @@
 .workbench-layout .panel-body > .space-y-6 [class*='text-slate-800'],
 .workbench-layout .panel-body > .space-y-6 [class*='dark:text-white'],
 .workbench-layout .panel-body > .space-y-6 [class*='dark:text-slate'] {
-  color: #1d1d1f !important;
+  color: var(--mq-text-primary) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='text-blue-100'],
 .workbench-layout .panel-body > .space-y-6 [class*='text-slate-500'],
 .workbench-layout .panel-body > .space-y-6 [class*='dark:text-slate'] {
-  color: rgba(29, 29, 31, 0.6) !important;
+  color: var(--mq-text-secondary) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='text-4xl'],
 .workbench-layout .panel-body > .space-y-6 [class*='text-3xl'] {
-  color: #1d1d1f !important;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif !important;
+  color: var(--mq-text-primary) !important;
+  font-family: var(--mq-font-family);
   font-size: 24px !important;
   font-weight: 650 !important;
   letter-spacing: 0 !important;
@@ -398,86 +390,84 @@
 .workbench-layout .panel-body > .space-y-6 [class*='text-[#0a5fd6]'],
 .workbench-layout .panel-body > .space-y-6 [class*='text-blue-500'],
 .workbench-layout .panel-body > .space-y-6 [class*='hover:text-[#0a6cff]'] {
-  color: #0a6cff !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='bg-blue-100'],
 .workbench-layout .panel-body > .space-y-6 [class*='bg-blue-50'],
 .workbench-layout .panel-body > .space-y-6 [class*='bg-white/20'] {
-  border: 1px solid rgba(10, 108, 255, 0.12) !important;
-  background: rgba(10, 108, 255, 0.08) !important;
-  color: #0a6cff !important;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 [class*='bg-slate-100'] {
-  background: rgba(0, 0, 0, 0.06) !important;
+  background: var(--mq-border) !important;
 }
 
 .workbench-layout .panel-body > .space-y-6 button,
 .workbench-layout .panel-body > .h-full button {
-  border-radius: 8px !important;
+  border-radius: var(--mq-radius-control) !important;
   font-weight: 600 !important;
   letter-spacing: 0 !important;
-  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.16) !important;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--mq-brand-600) 16%, transparent) !important;
 }
 
 .workbench-layout .panel-body > .h-full {
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
 }
 
 .workbench-layout .panel-body > .h-full [class*='bg-blue-50'],
 .workbench-layout .panel-body > .h-full [class*='dark:bg-blue'] {
-  border: 1px solid rgba(10, 108, 255, 0.12) !important;
-  background: rgba(10, 108, 255, 0.08) !important;
-  color: #0a6cff !important;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .workbench-layout .panel-body > .h-full [class*='text-slate'],
 .workbench-layout .panel-body > .h-full [class*='dark:text'] {
-  color: rgba(29, 29, 31, 0.6) !important;
+  color: var(--mq-text-secondary) !important;
 }
 
 .workbench-layout .panel-body > .h-full h3 {
-  color: #1d1d1f !important;
+  color: var(--mq-text-primary) !important;
   font-size: 17px !important;
   font-weight: 600 !important;
   letter-spacing: 0 !important;
 }
 
 .workbench-layout .panel-body > .h-full button[class*='bg-blue'] {
-  border-color: #0a6cff !important;
-  background: #0a6cff !important;
-  color: #ffffff !important;
+  border-color: var(--mq-brand-600) !important;
+  background: var(--mq-brand-600) !important;
+  color: var(--mq-bg-surface) !important;
 }
 
 .drg-grouping-tab {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 
 .drg-grouping-tab :is(.drg-primary-card, .drg-glass-card) {
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.86) !important;
-  color: #1d1d1f !important;
+  border: 1px solid var(--mq-border) !important;
+  background: var(--mq-glass-bg-strong) !important;
+  color: var(--mq-text-primary) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
 }
 
 .drg-grouping-tab :is(.drg-primary-card, .drg-glass-card):hover {
-  border-color: rgba(0, 0, 0, 0.14) !important;
+  border-color: var(--mq-border-strong) !important;
   box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075) !important;
+    0 2px 12px var(--mq-border-strong),
+    0 6px 22px var(--mq-border) !important;
 }
 
 .drg-grouping-tab
   :is(.drg-primary-card .text-blue-100, [class*='text-slate-500'], [class*='text-slate-400']) {
-  color: rgba(29, 29, 31, 0.6) !important;
+  color: var(--mq-text-secondary) !important;
 }
 
 .drg-grouping-tab
@@ -487,21 +477,71 @@
     [class*='text-slate-800'],
     [class*='dark:text-white']
   ) {
-  color: #1d1d1f !important;
+  color: var(--mq-text-primary) !important;
 }
 
 .drg-grouping-tab :is([class*='bg-white/20'], [class*='bg-blue-100'], [class*='bg-blue-50']) {
-  border: 1px solid rgba(10, 108, 255, 0.12) !important;
-  background: rgba(10, 108, 255, 0.08) !important;
-  color: #0a6cff !important;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent) !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .drg-grouping-tab :is([class*='rounded-xl'], [class*='rounded-lg']) {
-  border-radius: 12px !important;
+  border-radius: var(--mq-radius-control) !important;
 }
 
 @media (max-width: 1024px) {
   .drg-workbench-page {
     padding: 14px !important;
   }
+}
+
+/* v7.1 内部组件同样遵循公共卡片，不只覆盖页面外壳。 */
+.drg-workbench-page .mq-card {
+  border: 1px solid var(--mq-glass-border) !important;
+  border-radius: var(--mq-radius-card) !important;
+  background: var(--mq-glass-bg) !important;
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow) !important;
+}
+.drg-workbench-page .mq-card:hover {
+  transform: none;
+  box-shadow: var(--mq-glass-shadow) !important;
+}
+.drg-workbench-page .mq-page-head {
+  background: transparent !important;
+  border: 0;
+  box-shadow: none !important;
+  padding: 0 4px;
+}
+.drg-workbench-page :is(.btn, .primary-button, .back-button, .back-icon-button, .ant-btn) {
+  border-radius: var(--mq-radius-tag) !important;
+  min-height: var(--mq-control-height);
+}
+.drg-workbench-page .mq-page-title {
+  font-size: var(--mq-font-title) !important;
+  font-family: var(--mq-font-display);
+  font-weight: 700;
+}
+.drg-workbench-page .mq-page-eyebrow {
+  color: var(--mq-text-tertiary) !important;
+}
+
+/* 原生分段按钮沿用现有 active 状态，材质与公共分段切换一致。 */
+.drg-workbench-page .mq-segmented .mq-segmented__item {
+  background: transparent !important;
+  color: var(--mq-text-secondary) !important;
+  box-shadow: none !important;
+}
+.drg-workbench-page .mq-segmented .mq-segmented__item.active {
+  background: var(--mq-bg-surface) !important;
+  color: var(--mq-brand-600) !important;
+  box-shadow: var(--mq-float-shadow) !important;
+}
+.drg-workbench-page {
+  font-size: var(--mq-font-14);
+}
+.drg-workbench-page :is(input, textarea, select) {
+  font-family: var(--mq-font-family);
 }

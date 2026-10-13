@@ -1,0 +1,1545 @@
+{
+  "schema_version": "phase3-independent-expectations-v1",
+  "created_date": "2026-10-09",
+  "scope": [
+    "050",
+    "055"
+  ],
+  "evidence_level": "独立合成工程语义预期；不是临床金标、真实模型验证或正式链路通过证据",
+  "basis": {
+    "business_standard": "apps/medqc-web/docs/0602/泸县0609质控点-业务标准基线-v1.md:142,145",
+    "reports": [
+      "docs/acceptance/engine-audit-20261008/phase2-other-reproduction.md",
+      "docs/acceptance/engine-audit-20261008/phase2-independent-expectations.md"
+    ],
+    "original_source": ".tmp/phase2-other-20261009/frozen-cases.json",
+    "original_source_sha256": "df6f636981d8c4406c4af6ca27ede89fe13d67ea076529a3cc849012ed1f3451"
+  },
+  "separation_contract": {
+    "original_expected": "原10项expected逐字保持，仅原冻结oracle，不等价于完整临床验收",
+    "semantic_expectation": "从输入语义及批准标准冻结，未读生产代码反推",
+    "program_expectation": "时间窗口、触发/目标评价子条件；不裁定新Finalizer状态",
+    "final_rule_expectation": "新增项status=null表示状态合同待root冻结；不代表data_gap或not_applicable",
+    "unknown": "null未知与false明确不存在不同；关联歧义不得猜owner",
+    "055_safety": "疗效子事实不证明安全性评价完成；原C只按历史局部oracle保留"
+  },
+  "synthetic_source_assumptions": {
+    "rows_are_synthetic": true,
+    "listed_sources_complete_for_cases": true,
+    "source_truncated": false,
+    "structured_order_start_assumed_first_actual_execution": true,
+    "050_missing_discussion_is_fixture_assumption": true,
+    "source_readiness_and_invalid_model_output": "不属于文本语义gold；须用独立协议/来源合同测试，不能将合法空数组解释为无事实"
+  },
+  "failure_limit": {
+    "max_failed_rounds_per_root_cause": 3,
+    "reset_on_schema_or_stage_rename": false,
+    "on_third_failure": "停止实现与重跑，保留首败及各轮源码hash、结果和原因并回报root"
+  },
+  "original_cases": [
+    {
+      "id": "050_positive",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "non_compliant",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "目前诊断仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_no_marker",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "not_applicable",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "目前诊断已明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_negated_marker",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "not_applicable",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "目前不存在诊断不明确的问题。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "050_planned_marker",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "expected": "not_applicable",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-COURSE",
+            "record_content": "如后续诊断不明确，拟进行疑难讨论。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "effect_hour_47",
+      "rule": "LX0609-05-01-03",
+      "expected": "non_compliant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-03 07:00:00",
+            "record_content": "美罗培南抗感染治疗效果评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "rationale": "",
+      "group": "055"
+    },
+    {
+      "id": "effect_hour_48",
+      "rule": "LX0609-05-01-03",
+      "expected": "compliant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-03 08:00:00",
+            "record_content": "美罗培南抗感染治疗效果评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "rationale": "",
+      "group": "055"
+    },
+    {
+      "id": "effect_hour_60",
+      "rule": "LX0609-05-01-03",
+      "expected": "compliant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南抗感染治疗效果评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "rationale": "",
+      "group": "055"
+    },
+    {
+      "id": "effect_hour_72",
+      "rule": "LX0609-05-01-03",
+      "expected": "compliant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-04 08:00:00",
+            "record_content": "美罗培南抗感染治疗效果评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "rationale": "",
+      "group": "055"
+    },
+    {
+      "id": "effect_hour_73",
+      "rule": "LX0609-05-01-03",
+      "expected": "non_compliant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-04 09:00:00",
+            "record_content": "美罗培南抗感染治疗效果评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "rationale": "",
+      "group": "055"
+    },
+    {
+      "id": "effect_unrelated",
+      "rule": "LX0609-05-01-03",
+      "expected": "non_compliant",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "synthetic-note",
+            "record_time": "2026-04-03 08:00:00",
+            "record_content": "镇痛治疗效果良好。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "rationale": "",
+      "group": "055"
+    }
+  ],
+  "synthetic_cases": [
+    {
+      "id": "050_negation_reordered",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_negation_reordered",
+            "record_content": "诊断不明确的问题，目前并不存在。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "诊断不明确",
+            "state": "absent",
+            "time_scope": "current",
+            "polarity": "negated"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "否定作用于当前诊断不明确问题，语序变化不改变不存在。"
+    },
+    {
+      "id": "050_future_condition_reordered",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_future_condition_reordered",
+            "record_content": "拟在后续诊断仍不明确时开展疑难病例讨论。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "诊断不明确",
+            "state": "unresolved",
+            "time_scope": "future_conditional",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "计划讨论条件不是当前问题事实。"
+    },
+    {
+      "id": "050_historical_resolved",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_historical_resolved",
+            "record_content": "入院时发热病因诊断不明确；目前已明确为肺炎，发热病因问题已解决。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "historical",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "发热病因",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "同一问题历史未明确且当前明确解决，不能作为当前触发。"
+    },
+    {
+      "id": "050_historical_persisting",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_historical_persisting",
+            "record_content": "入院时发热病因诊断不明确；目前该发热病因仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "historical",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "历史问题明确延续至当前。"
+    },
+    {
+      "id": "050_multi_problem_one_unresolved",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_multi_problem_one_unresolved",
+            "record_content": "肺炎诊断已明确；贫血病因目前仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "贫血病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "问题各自归属，另一诊断明确不能抵消当前贫血病因未明。"
+    },
+    {
+      "id": "050_multi_problem_historical_other",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_multi_problem_historical_other",
+            "record_content": "入院时贫血病因诊断不明确，现已明确为缺铁性贫血；目前胸腔积液病因仍不明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "贫血病因",
+            "state": "unresolved",
+            "time_scope": "historical",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "贫血病因",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "胸腔积液病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "历史问题解决不抵消另一当前问题。"
+    },
+    {
+      "id": "050_multi_problem_all_resolved",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_multi_problem_all_resolved",
+            "record_content": "肺炎诊断已明确；贫血病因也已明确，目前无诊断不明确问题。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "贫血病因",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "诊断不明确",
+            "state": "absent",
+            "time_scope": "current",
+            "polarity": "negated"
+          }
+        ],
+        "current_unresolved_trigger": false
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "完整明确的当前无未明问题保护。"
+    },
+    {
+      "id": "050_double_negation",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_double_negation",
+            "record_content": "不能说发热病因不存在诊断不明确的问题；目前发热病因仍待明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "发热病因",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "双重否定及明确仍待明确不能被单一否定词抹掉。"
+    },
+    {
+      "id": "050_plan_difficult_current",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_plan_difficult_current",
+            "record_content": "目前肺炎诊断明确，但该患者诊疗方案难以确定。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎",
+            "state": "resolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          },
+          {
+            "problem": "诊疗方案",
+            "state": "undetermined",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "050批准标准含诊疗方案难以确定，不能只识别诊断未明。"
+    },
+    {
+      "id": "050_ambiguous_problem_owner",
+      "group": "050",
+      "rule": "LX0609-03-02-01",
+      "rows": {
+        "inpat_registration": [
+          {
+            "admission_datetime": "2026-06-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-050_ambiguous_problem_owner",
+            "record_content": "肺炎与胸腔积液曾均待明确。目前其中一项已明确，另一项尚未明确。",
+            "record_time": "2026-06-08 09:00:00"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "problems": [
+          {
+            "problem": "肺炎或胸腔积液",
+            "state": "unresolved",
+            "time_scope": "current",
+            "polarity": "affirmed"
+          }
+        ],
+        "current_unresolved_trigger": true
+      },
+      "program_expectation": {
+        "admission_mature_7_days": true,
+        "discussion_present": false,
+        "trigger_basis_confirmed": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "新增语义金标不直接冻结Finalizer状态；由已批准状态映射合同另行裁定。"
+      },
+      "rationale": "至少一项当前未明明确，但不可猜测是哪一项。",
+      "notes": {
+        "problem_identity": "association_ambiguous",
+        "must_not_assign_resolved_state_to_both": true
+      }
+    },
+    {
+      "id": "055_target_synonym",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_target_synonym",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南抗感染疗效评价：患者体温较前降低。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "明确同药抗感染疗效评价语境内体温变化属于疗效评价。"
+    },
+    {
+      "id": "055_other_antimicrobial_synonym",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "头孢曲松",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_other_antimicrobial_synonym",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "头孢曲松抗感染疗效评价：热退，感染症状较前改善。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "头孢曲松",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "不同目标抗菌药的明确同药疗效评价，不能按美罗培南专例识别。"
+    },
+    {
+      "id": "055_other_drug_only",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_other_drug_only",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南治疗继续；头孢曲松抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "other_drug",
+        "other_drug_effect_evaluation": true
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "评价明确属于头孢曲松，不能借给美罗培南。"
+    },
+    {
+      "id": "055_analgesic_only",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_analgesic_only",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南继续使用。吗啡镇痛疗效评价：疼痛明显减轻。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "other_drug"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "镇痛疗效与目标抗菌药不同。"
+    },
+    {
+      "id": "055_multi_drug_target_positive",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_multi_drug_target_positive",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "头孢曲松疗效尚未评价；美罗培南抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event",
+        "other_drug_effect_evaluation": false
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "同文书他药未评价不抵消目标药明确评价。"
+    },
+    {
+      "id": "055_multi_drug_target_negative",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_multi_drug_target_negative",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南抗感染疗效尚未评价；头孢曲松抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "not_completed",
+        "evaluation_owner": "other_drug",
+        "target_evaluation_polarity": "negated",
+        "other_drug_effect_evaluation": true
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "同文书另一药正向评价不能覆盖目标药明确未评价。"
+    },
+    {
+      "id": "055_temperature_trend_only",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_temperature_trend_only",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "今日体温由39℃降至37.5℃，继续美罗培南治疗。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "none"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "单纯体温趋势及药名邻接没有明确目标药疗效评价语境。"
+    },
+    {
+      "id": "055_lab_trend_only",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_lab_trend_only",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南继续使用。CRP由80mg/L降至50mg/L，白细胞下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "none"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "检验趋势不能自行升级为目标药疗效评价。"
+    },
+    {
+      "id": "055_future_evaluation",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_future_evaluation",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "拟明日对美罗培南抗感染疗效进行评价，预计体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "future_planned",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "未来拟评价及预测结果不证明评价已完成。"
+    },
+    {
+      "id": "055_explicit_not_evaluated",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_explicit_not_evaluated",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南抗感染疗效尚未评价。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "not_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "否定/尚未评价不是完成评价。"
+    },
+    {
+      "id": "055_historical_other_course",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_historical_other_course",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "上次住院美罗培南抗感染疗效评价：体温下降。本次疗效尚未评价。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": false,
+        "evaluation_time_scope": "historical_other_event",
+        "evaluation_owner": "other_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "同药历史疗程不能借给本次目标事件。"
+    },
+    {
+      "id": "055_boundary_48_before",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_boundary_48_before",
+            "record_time": "2026-04-03 07:59:59",
+            "record_content": "美罗培南抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 47.999722222222225,
+        "within_inclusive_48_72_hours": false,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "48小时前一秒有评价事实但不满足冻结包含端点窗口。"
+    },
+    {
+      "id": "055_boundary_48_exact",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_boundary_48_exact",
+            "record_time": "2026-04-03 08:00:00",
+            "record_content": "美罗培南抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 48,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "48小时恰好处于包含端点窗口。"
+    },
+    {
+      "id": "055_boundary_72_exact",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_boundary_72_exact",
+            "record_time": "2026-04-04 08:00:00",
+            "record_content": "美罗培南抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 72,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": true
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "72小时恰好处于包含端点窗口。"
+    },
+    {
+      "id": "055_boundary_72_after",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_boundary_72_after",
+            "record_time": "2026-04-04 08:00:01",
+            "record_content": "美罗培南抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": true,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "target_event"
+      },
+      "program_expectation": {
+        "elapsed_hours": 72.00027777777778,
+        "within_inclusive_48_72_hours": false,
+        "satisfies_effect_evaluation_window": false
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "72小时后一秒仍是评价事实但不满足冻结窗口。"
+    },
+    {
+      "id": "055_ambiguous_drug_owner",
+      "group": "055",
+      "rule": "LX0609-05-01-03",
+      "rows": {
+        "inpat_drug_order": [
+          {
+            "document_id": "synthetic-order",
+            "order_id": "synthetic-O1",
+            "generic_name": "美罗培南",
+            "drug_apply_method": "静脉滴注",
+            "order_status": "已执行",
+            "planned_start_datetime": "2026-04-01 08:00:00",
+            "prescribed_datetime": "2026-04-01 08:00:00"
+          }
+        ],
+        "daily_course_record": [
+          {
+            "document_id": "SYN-055_ambiguous_drug_owner",
+            "record_time": "2026-04-03 20:00:00",
+            "record_content": "美罗培南与头孢曲松治疗继续。其抗感染疗效评价：体温下降。"
+          }
+        ],
+        "evaluation_context.horizon": [
+          {
+            "horizon_date": "2026-04-08",
+            "basis": "evaluation_as_of"
+          }
+        ]
+      },
+      "semantic_expectation": {
+        "target_drug": "美罗培南",
+        "target_event_key": "synthetic-O1",
+        "completed_target_effect_evaluation": null,
+        "evaluation_time_scope": "current_completed",
+        "evaluation_owner": "association_ambiguous"
+      },
+      "program_expectation": {
+        "elapsed_hours": 60,
+        "within_inclusive_48_72_hours": true,
+        "satisfies_effect_evaluation_window": null
+      },
+      "final_rule_expectation": {
+        "status": null,
+        "basis": "仅冻结疗效评价子事实；不得推断安全性评价完成或整体C，最终状态按批准合同另行冻结。"
+      },
+      "rationale": "其指向两药无法唯一关联，引用存在不证明目标owner。"
+    }
+  ]
+}

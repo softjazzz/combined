@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .anesthesia_visit_fact_extraction import (
+    VisitDocument,
+    extract_anesthesia_visit_facts,
+    visit_document_scope_issue,
+)
+from .surgery_document_result_mapping import _VISIT_FIELDS
 from .decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -252,14 +259,20 @@ def _typed_decision_from_outcome(
                     "anesthesia_visit_absent",
                     "local_anesthesia_exception",
                     "emergency_rescue_exception",
+                    "endoscopic_procedure_exception",
                 }
+                else "evaluation_window_not_mature"
+                if outcome.reason_code == "evaluation_window_not_mature"
                 else "performed_event_absent"
             ),
         )
     elif outcome.status == "data_gap":
         controlled_reason = (
             outcome.reason_code
-            if outcome.reason_code
+            if (outcome.rule_id == "LX0609-04-04-02" and outcome.reason_code in {
+                "semantic_extraction_unresolved", "candidate_scope_incomplete", "source_readiness_unproven",
+            })
+            or outcome.reason_code
             in {
                 "source_unavailable",
                 "source_empty",
@@ -799,7 +812,38 @@ def _minute_signature_state(value: Any) -> str:
     text = _clean(value)
     if not text:
         return "missing"
-    return "present" if re.search(r"\d{1,2}:\d{2}", text) else "invalid"
+    if isinstance(value, datetime):
+        return "present"
+    # 同时验证分钟精度和日期时间有效性；保留中文日期分隔符。
+    text = re.sub(r"\s+", " ", text.replace("年", "-").replace("月", "-").replace("日", " ")).strip()
+    if not re.fullmatch(
+        r"\d{4}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}"
+        r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?",
+        text,
+    ):
+        return "invalid"
+    candidate = text.replace("/", "-").replace("Z", "+00:00")
+    try:
+        datetime.fromisoformat(candidate)
+    except ValueError:
+        # Preserve the existing single-digit month/day/hour input forms.
+        for format_ in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+            try:
+                datetime.strptime(candidate.replace("T", " "), format_)
+                return "present"
+            except ValueError:
+                continue
+        return "invalid"
+    return "present"
+
+
+def _consent_signature_value_present(value: Any) -> bool:
+    text = _clean(value).strip("。.;；")
+    return bool(text) and not (
+        _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(text)
+        or re.fullmatch(r"[-—_/\\\s]+|null|none|n/?a|\[\]|\{\}|缺失", text, re.IGNORECASE)
+        or re.match(r"^(?:未签|尚未签|未见签|拒绝签|拒签|无签)", text)
+    )
 
 
 def _anesthesia_consent_completeness(
@@ -811,9 +855,11 @@ def _anesthesia_consent_completeness(
         return "association_failed", []
     row = rows[0]
     missing: list[str] = []
-    if not _clean(row.get("patient_sign")):
+    if not _consent_signature_value_present(row.get("patient_sign")):
         missing.append("patient_signature")
-    if not _clean(row.get("physician_sign") or row.get("surgeon_sign")):
+    if not _consent_signature_value_present(
+        row.get("physician_sign") or row.get("surgeon_sign")
+    ):
         missing.append("physician_signature")
     if _minute_signature_state(row.get("patient_sign_datetime")) != "present":
         missing.append("patient_signature_time")
@@ -854,11 +900,32 @@ def _row_has_any(
         return False
     # 不能将一处“未完成/未告知”扩散到同一文书的所有字段；按最小分句
     # 核对每一个标记，并只拒绝该标记所在分句的明确缺失表述。
+    # 只在已知访视字段标签前切分紧连文本，不能把“清醒”等值切给下一字段。
+    # 未知标签仍由空白/标点分隔；单字段空标签校验不依赖前缀词表。
+    label = (
+        r"(?:术前|术后|既往)?(?:ASA(?:分级|评估)?|气道(?:评估)?|禁食禁饮|禁食|禁饮|"
+        r"麻醉手术史|麻醉史|麻醉风险告知|麻醉风险|风险告知|围术期风险|"
+        r"麻醉医师签名|医师签名|意识|神志|呼吸系统|呼吸|循环|并发症|恶心呕吐|咽痛|特殊情况|备注)"
+        r"\s*[:：]"
+    )
     segments = tuple(
-        segment.strip() for segment in re.split(r"[。；;，,\n]+", text) if segment.strip()
+        segment.strip()
+        for clause in re.split(r"[。；;，,\n]+", text)
+        for segment in re.split(r"\s+(?=[^\s:：]+[:：])|(?=" + label + r")", clause)
+        if segment.strip()
     )
     return any(
         marker in segment
+        # 空值只否定该标签自身；后续未知标签的冒号不能抹掉前面已填的值。
+        and not (
+            (empty_label := re.search(label + r"[\s_—/\-（）()]*$", segment))
+            and marker in empty_label.group(0)
+        )
+        # 空表单标题不能证明字段已经填写；仍保留“无并发症”等有效阴性。
+        and not re.fullmatch(
+            r"(?:分级|评估|情况|状态|记录|告知|签名|禁食|禁饮|[\s:：_—/\-（）()])*",
+            segment.replace(marker, "", 1),
+        )
         and not any(re.search(pattern, segment) for pattern in negative_text_patterns)
         for marker in text_markers
         for segment in segments
@@ -916,6 +983,19 @@ def _anesthesia_visit_completeness(
 
     pre = rows_by_source["preane_surveil_record"][0]
     post = rows_by_source["postane_surveil_record"][0]
+    # 文书ID在不同来源本应不同；只用同名业务键识别明确事件冲突。
+    # 保留无业务键单事件资料的既有语义，不能用A事件术前补B事件术后。
+    try:
+        anesthesia_rows = tuple(materials.rows("anesthesia_record")) if materials else ()
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return "unavailable", {}
+    for field in ("application_id", "anesthesia_id", "surgery_id"):
+        identities = {
+            value for row in (pre, post, *anesthesia_rows)
+            if (value := _clean(row.get(field)))
+        }
+        if len(identities) > 1:
+            return "association_failed", {}
     pre_checks = {
         "asa_level": _row_has_any(
             pre,
@@ -964,8 +1044,9 @@ def _anesthesia_visit_completeness(
             structured_fields=("anesthetist_sign",),
             text_markers=("医师签名",),
         ),
-        "record_time": _row_has_any(
-            pre, structured_fields=("record_time", "submit_datetime")
+        "record_time": any(
+            _minute_signature_state(pre.get(field)) == "present"
+            for field in ("record_time", "submit_datetime")
         ),
     }
     post_checks = {
@@ -982,8 +1063,9 @@ def _anesthesia_visit_completeness(
             structured_fields=("anesthetist_sign",),
             text_markers=("医师签名",),
         ),
-        "record_time": _row_has_any(
-            post, structured_fields=("record_time", "submit_datetime")
+        "record_time": any(
+            _minute_signature_state(post.get(field)) == "present"
+            for field in ("record_time", "submit_datetime")
         ),
     }
     missing = {
@@ -992,6 +1074,203 @@ def _anesthesia_visit_completeness(
     }
     missing = {source: fields for source, fields in missing.items() if fields}
     return ("incomplete" if missing else "complete"), missing
+
+
+# 结构化列可能承载模板内容而正文缺失；送检时以“标签：值”并入正文，避免误判未记载。
+_VISIT_STRUCTURED_TEXT_FIELDS = {
+    "preane_surveil_record": (
+        ("condition_summary", "病情摘要"),
+        ("planned_anesthesia_method", "拟施麻醉方式"),
+        ("ASA_level", "ASA分级"),
+    ),
+    "postane_surveil_record": (
+        ("surgery_name", "手术名称"),
+        ("anesthesia_method", "麻醉方式"),
+        ("resume_descirption", "恢复情况"),
+    ),
+}
+# 院方口径：术前和术后24小时内须访视（替代基线的术后48小时）。
+_POSTANESTHESIA_VISIT_WINDOW_SECONDS = 24 * 3600
+
+
+def _visit_document_body(row: Mapping[str, Any], source: str) -> Any:
+    body = row.get("record_content")
+    if body is not None and not isinstance(body, str):
+        return body
+    structured = [
+        f"{label}：{value}"
+        for key, label in _VISIT_STRUCTURED_TEXT_FIELDS.get(source, ())
+        if (value := _clean(row.get(key))) and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(value)
+    ]
+    if body is None and not structured:
+        return None
+    return "\n".join([*structured, *([body] if body else [])])
+
+
+def _visit_datetime(value: Any) -> datetime | None:
+    from .extended_document.shared import _LX0609_HOSPITAL_TIMEZONE, _parse_datetime
+
+    if isinstance(value, datetime):
+        # 带时区的时刻统一换算为医院本地墙钟，与无时区的病历时间可比。
+        return value.astimezone(_LX0609_HOSPITAL_TIMEZONE).replace(tzinfo=None) if value.tzinfo else value
+    return _parse_datetime(value)
+
+
+def _surgery_times(
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[tuple[datetime, datetime], ...] | None:
+    """本次住院非局麻手术的 (开始, 结束) 时间；无法可靠取得时返回 None。
+
+    运行病历质控时病案首页（mr_surgery）通常尚未生成，优先用手术记录的起止时间；
+    手术记录缺失或任一份起止时间不全时，才回退到病案首页。
+    """
+
+    def rows(source_key: str) -> tuple[Mapping[str, Any], ...]:
+        try:
+            return tuple(materials.rows(source_key))
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, KeyError):
+            return ()
+
+    def first_time(row: Mapping[str, Any], fields: Sequence[str]) -> datetime | None:
+        return next((parsed for key in fields if (parsed := _visit_datetime(row.get(key))) is not None), None)
+
+    candidates = (
+        ("surgery_record", ("surgery_begin_time", "surgery_begin_datetime"), ("surgery_end_time", "surgery_end_datetime")),
+        ("mr_surgery", ("surgery_begin_datetime",), ("surgery_end_datetime",)),
+    )
+    for source_key, begin_fields, end_fields in candidates:
+        surgeries = [
+            row for row in rows(source_key)
+            if _clean(row.get("anesthesia_method")) not in _LOCAL_ANESTHESIA_VALUES
+        ]
+        if not surgeries:
+            continue
+        times = [(first_time(row, begin_fields), first_time(row, end_fields)) for row in surgeries]
+        if all(begin is not None and end is not None and begin <= end for begin, end in times):
+            return tuple(times)  # type: ignore[arg-type]
+    return None
+
+
+def _surgery_end_times(materials: Luxian0609EvidenceMaterialStore) -> tuple[datetime, ...] | None:
+    times = _surgery_times(materials)
+    return tuple(end for _begin, end in times) if times else None
+
+
+def _visit_window_states(
+    materials: Luxian0609EvidenceMaterialStore, snapshot: Luxian0609EvidenceSnapshot,
+) -> tuple[str, str]:
+    """院方口径：每台非局麻手术开始前24小时内须有术前访视、结束后24小时内须有术后访视。"""
+
+    times = _surgery_times(materials)
+    if not times:
+        return "unknown", "unknown"
+
+    def visit_times(source_key: str) -> list[datetime]:
+        return [
+            visit_time
+            for _ref, row in materials.document_rows(source_key, snapshot=snapshot)
+            if (visit_time := _visit_datetime(row.get("record_time") or row.get("submit_datetime"))) is not None
+        ]
+
+    pre_visits, post_visits = visit_times("preane_surveil_record"), visit_times("postane_surveil_record")
+    window = _POSTANESTHESIA_VISIT_WINDOW_SECONDS
+    pre = all(any(0 <= (begin - visit).total_seconds() <= window for visit in pre_visits) for begin, _end in times)
+    post = all(any(0 <= (visit - end).total_seconds() <= window for visit in post_visits) for _begin, end in times)
+    return ("present" if pre else "absent"), ("present" if post else "absent")
+
+
+def _postanesthesia_window_mature(materials: Luxian0609EvidenceMaterialStore) -> bool | None:
+    """评价截止时间是否已过所有手术结束后24小时；无法判断时返回 None。"""
+
+    end_times = _surgery_end_times(materials)
+    if not end_times:
+        return None
+    try:
+        horizon_rows = tuple(materials.rows("evaluation_context.horizon"))
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, KeyError):
+        return None
+    if len(horizon_rows) != 1:
+        return None
+    horizon = _visit_datetime(horizon_rows[0].get("horizon_datetime"))
+    if horizon is None:
+        horizon_date = _clean(horizon_rows[0].get("horizon_date"))
+        try:
+            # 仅有日期时按当日零点计，宁可暂不评价也不提前判缺陷。
+            horizon = datetime.fromisoformat(horizon_date) if horizon_date else None
+        except ValueError:
+            horizon = None
+    if horizon is None:
+        return None
+    return all((horizon - end).total_seconds() >= _POSTANESTHESIA_VISIT_WINDOW_SECONDS for end in end_times)
+
+
+async def _typed_037_controlled_outcome(
+    *, outcome: _SurgeryDocumentOutcome, snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore, llm_client: SurgeryDocumentLLMClient | None,
+) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
+    if outcome.reason_code not in {"anesthesia_visits_complete", "anesthesia_visit_incomplete"}:
+        return outcome, 0, 0, 0, 0, 0.0
+    pre_window, post_window = _visit_window_states(materials, snapshot)
+    if "unknown" in (pre_window, post_window):
+        # 无法取得手术起止时间时不能核对术前/术后24小时内访视，不送模、不作确定结论。
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", "authoritative_time_missing", "program"), 0, 0, 0, 0, 0.0
+    documents = []
+    reliable: dict[str, dict[str, str]] = {}
+    group_keys: dict[str, tuple[str, str]] = {}
+    sources = (("preane_surveil_record", "preanesthesia_visit"), ("postane_surveil_record", "postanesthesia_visit"))
+    for source, visit in sources:
+        for ref, row in materials.document_rows(source, snapshot=snapshot):
+            states = {"record_time": "present" if any(_minute_signature_state(row.get(key)) == "present"
+                for key in ("record_time", "submit_datetime")) else "absent"}
+            signature = _clean(row.get("anesthetist_sign"))
+            if signature and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(signature):
+                states["anesthetist_signature"] = "present"
+            if visit == "preanesthesia_visit":
+                states["preop_visit_within_24h"] = pre_window
+            else:
+                states["postop_visit_within_24h"] = post_window
+            reliable[ref] = states
+            group_keys[ref] = (source, _clean(row.get("document_id")) or _clean(row.get("id")) or ref)
+            scope = "source_truncated" if any(row.get(key) is True for key in ("truncated", "content_truncated", "record_content_truncated")) else (
+                "source_readiness_unproven" if any(row.get(key) is False for key in ("content_complete", "record_content_complete")) else "")
+            documents.append(VisitDocument(ref, source, _visit_document_body(row, source),
+                tuple(name for name in _VISIT_FIELDS[visit] if name not in states), scope))
+    scope_issue = visit_document_scope_issue(documents)
+    if scope_issue:
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", scope_issue, "program"), 0, 0, 0, 0, 0.0
+    # 仅明确同一实际文书的分段行可共同取证；业务事件ID不能合并正文。
+    groups: dict[tuple[str, str], list[VisitDocument]] = {}
+    for doc in documents:
+        groups.setdefault(group_keys[doc.document_ref], []).append(doc)
+    grouped = []
+    for (source, _identity), parts in groups.items():
+        ref = parts[0].document_ref
+        states = {name: ("present" if any(reliable[part.document_ref].get(name) == "present" for part in parts) else "absent")
+            for name in {name for part in parts for name in reliable[part.document_ref]}}
+        reliable[ref] = states
+        visit = next(visit for key, visit in sources if key == source)
+        grouped.append(VisitDocument(ref, source, "\n".join(dict.fromkeys(part.body for part in parts)),
+            tuple(name for name in _VISIT_FIELDS[visit] if name not in states)))
+    documents = grouped
+    extraction = await extract_anesthesia_visit_facts(documents, llm_client)
+    metrics = (extraction.llm_call_count, extraction.prompt_tokens, extraction.completion_tokens, extraction.total_tokens, extraction.api_time)
+    if extraction.state != "ready":
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", extraction.reason_code, "llm" if extraction.llm_call_count else "program"), *metrics
+    states_by_ref = {doc.document_ref: {**reliable[doc.document_ref], **extraction.fields.get(doc.document_ref, {})} for doc in documents}
+    if any("unknown" in states.values() for states in states_by_ref.values()):
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", "semantic_extraction_unresolved", "llm"), *metrics
+    missing = {}
+    for source, visit in sources:
+        rows = [states_by_ref[doc.document_ref] for doc in documents if doc.source_type == source]
+        # 不适用（如未插管时的拔管情况）视同已满足。
+        fields = [name for name in _VISIT_FIELDS[visit] if any(row.get(name) not in {"present", "not_applicable"} for row in rows)]
+        if fields:
+            missing[visit] = fields
+    facts = ({"failure_kind": "anesthesia_visit_incomplete", "performed_anesthesia_confirmed": True, "missing_fields_by_visit": missing}
+        if missing else {"verification_kind": "anesthesia_visits_complete", "performed_anesthesia_confirmed": True,
+            "checked_sources": [source for source, _ in sources], "checked_fields_by_visit": {visit: list(_VISIT_FIELDS[visit]) for _, visit in sources}})
+    return _SurgeryDocumentOutcome(outcome.rule_id, "non_compliant" if missing else "compliant",
+        "anesthesia_visit_incomplete" if missing else "anesthesia_visits_complete", "llm" if extraction.llm_call_count else "program", facts), *metrics
 
 
 def _source_row_count(
@@ -1109,9 +1388,12 @@ def _typed_terminal_outcome(
                 )
                 != "unknown"
             }
+            # 院方口径（2026-10-10）：文书未写急诊即视为非急诊；仅来源间明确冲突时未知。
             emergency_state = (
                 next(iter(emergency_states))
                 if len(emergency_states) == 1
+                else "absent"
+                if not emergency_states
                 else "unknown"
             )
         else:
@@ -1376,6 +1658,9 @@ def _typed_terminal_outcome(
             for source_key in typed_visit_sources
             if _typed_observation_state(snapshot, source_key) == "empty"
         )
+        if missing_visit_sources == ("postane_surveil_record",) and _postanesthesia_window_mature(materials) is False:
+            # 只缺术后访视且手术结束尚未满24小时：访视时限未到，不提前判缺失。
+            return _SurgeryDocumentOutcome(rule_id, "not_applicable", "evaluation_window_not_mature", "program")
         if missing_visit_sources:
             facts = _with_trigger_document_id(
                 {
@@ -1801,12 +2086,45 @@ def _typed_029_trigger_display_facts(*, performed_triggered: bool) -> dict[str, 
     }
 
 
+# 院方口径（2026-10-10）：纤维支气管镜下活检、内镜下息肉切除等自然腔道内镜操作不需要
+# 术前小结；腹腔镜、胸腔镜、关节镜等镜下手术仍按手术核对。
+_ENDOSCOPIC_PROCEDURE_PATTERN = re.compile(r"支气管镜|纤支镜|胃镜|肠镜|十二指肠镜|内镜|内窥镜")
+_SURGICAL_SCOPE_PATTERN = re.compile(r"腹腔镜|胸腔镜|关节镜|宫腔镜|膀胱镜|输尿管镜|椎间孔镜|鼻内镜|耳内镜")
+
+
+def _only_endoscopic_procedures(materials: Luxian0609EvidenceMaterialStore) -> bool:
+    names: list[str] = []
+    for source_key in ("surgery_record", "mr_surgery"):
+        try:
+            rows = materials.rows(source_key)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, KeyError, ValueError):
+            return False
+        names.extend(
+            _clean(row.get("surgery_name") or row.get("operation_name") or row.get("procedure_name"))
+            for row in rows
+        )
+    return bool(names) and all(
+        name
+        and _ENDOSCOPIC_PROCEDURE_PATTERN.search(name)
+        and not _SURGICAL_SCOPE_PATTERN.search(name)
+        for name in names
+    )
+
+
 async def _typed_029_outcome(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
 ) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
     """029：确认手术事件覆盖后，核对每台手术的术前小结存在性。"""
+
+    if _only_endoscopic_procedures(materials):
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-04-01-01", "not_applicable", "endoscopic_procedure_exception", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
 
     # 029 是纯存在性规则：已证明仅一台手术时，只看术前小结正文是否为
     # 非空、非占位值。多台手术缺少稳定关联时不得让任一小结覆盖全部事件。
@@ -2310,6 +2628,16 @@ async def execute_luxian_0609_native_surgery_document_rules(
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
                 )
+                if rule_id == "LX0609-04-04-02":
+                    assert evidence_materials is not None
+                    outcome, calls, prompt, completion, total, elapsed = await _typed_037_controlled_outcome(
+                        outcome=outcome, snapshot=evidence_snapshot, materials=evidence_materials, llm_client=llm_client,
+                    )
+                    llm_call_count += calls
+                    prompt_tokens += prompt
+                    completion_tokens += completion
+                    total_tokens += total
+                    api_time += elapsed
                 if (
                     outcome.customer_display_facts is not None
                 ):

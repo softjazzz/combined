@@ -7,6 +7,11 @@ import inspect
 
 import pytest
 
+from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient
+from intraoperative_transfusion_test_support import (
+    ABSENT, UNKNOWN, FrozenIntraoperativeClient, item, present,
+)
+
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -22,6 +27,141 @@ from app.services.luxian_0609.decision_binding import (
 )
 
 
+# 人工审阅的历史病例协议标签；仅用于冻结模型oracle，不由产品函数推断。
+_COURSE_LABELS = {
+    '16:00输血结束。未记录输血后评价。': 'record',
+    '2026-01-01 16:10 输血结束。': 'record',
+    '2026-01-01 16:10 输血结束后评价未见异常，生命体征平稳，无输血不良反应。': 'record',
+    '2026-06-05 10:00:00输血结束；输血后复查血红蛋白较前改善。': 'record',
+    '2026-06-05 10:00输血结束。未记录输血后评价。2026-06-05 16:00输血结束。输血后复查血红蛋白改善。': 'record',
+    '2026-06-05 10:00输血结束。输血后复查血红蛋白改善。': 'record',
+    '2026-06-05 10:00输血结束。输血后复查血红蛋白改善。2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
+    '2026-06-05 10:00输血结束，过程顺利。2026-06-05 16:00输血结束。输血后复查血红蛋白改善。': 'record',
+    '2026-06-05 16:00:00输血结束。': 'record',
+    '2026-06-05 16:00:00输血结束；未记录输血结束后评价。': 'record',
+    '2026-06-05 16:00:00输血结束；输血后复查凝血功能改善。': 'record',
+    '2026-06-05 16:00:00输血结束；输血后复查血红蛋白较前改善。': 'record',
+    '2026-06-05 16:00:00输血结束；输血后复查血红蛋白较前改善，未见输血不良反应。': 'record',
+    '2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
+    '2026-06-05 16:10:00+08:00输血结束': 'record',
+    '2026-06-05 16:10:00+08输血结束': 'record',
+    '2026-06-05 16:10记录：输血结束。生命体征平稳。': 'record',
+    '2026-06-05 16:10输血结束。': 'record',
+    '2026-06-05 16:10输血结束后': 'record',
+    '2026-06-05 16:10输血结束，输注过程顺利。': 'record',
+    '2026年6月5日14:20开始输注红细胞2U，2026年6月5日16:10输血结束。输血过程中严密观察，生命体征平稳，未见发热及输血不良反应。': 'record',
+    '2026年6月5日15:30观察生命体征平稳，2026年6月5日16:10输注完毕。': 'record',
+    '2026年6月5日16:10输注完毕。输血后复查血红蛋白较前改善，未见输血不良反应。': 'record',
+    '2026年6月5日16:10输注完毕后': 'record',
+    '因血红蛋白65g/L申请输注悬浮红细胞2U。': 'not_record',
+    '实际输血记录，输注红细胞2U。': 'record',
+    '患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，10时输毕，输注过程中生命体征平稳，未见不良反应。': 'record',
+    '患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。': 'record',
+    '患者已完成输血治疗，过程资料记录较为简略。': 'record',
+    '患者已输血，过程记录不完整。': 'record',
+    '患者血红蛋白降低，拟输红细胞；既往无不良反应，生命体征平稳。': 'not_record',
+    '患者贫血，血红蛋白降低，具有输血指征及必要性；既往无输血不良反应，已评估输血风险和生命体征。': 'not_record',
+    '既往无输血不良反应，已说明风险。': 'not_record',
+    '明确未记录输血前评估。': 'not_record',
+    '普通病程仅提到拟输血和备血。': 'not_record',
+    '未记录输血病程主要内容。': 'not_record',
+    '术中出血约800ml，输注红细胞2U。': 'record',
+    '术后记录术中输注红细胞2U。': 'record',
+    '术后记录术中输注血浆200ml。': 'record',
+    '病程记录：患者贫血，拟输注红细胞。': 'not_record',
+    '病程记录：输血结束后继续观察。': 'record',
+    '输入A型Rh(D)阳性2U': 'record',
+    '输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。过程顺利，未见皮疹及输血反应。': 'record',
+    '输注去白悬浮红细胞2U，过程平稳。': 'record',
+    '输注完毕后复查血红蛋白上升，症状改善。': 'record',
+    '输注红细胞2U，过程平稳。': 'record',
+    '输血前评估及申请资料。': 'not_record',
+    '输血前评估完整且风险已说明。': 'not_record',
+    '输血前评估记录：患者存在输血指征，其他风险资料待结合判断。': 'not_record',
+    '输血前评估：患者具有输血指征。': 'not_record',
+    '输血前评估：患者具有输血指征，输血目的为纠正贫血，血红蛋白降低，既往无输血不良反应，生命体征平稳；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见寒战、发热及其他输血不良反应。': 'record',
+    '输血后复查血红蛋白上升，症状改善。': 'record',
+    '输血后复查血红蛋白较前改善，未见输血不良反应。': 'record',
+    '输血后继续观察，患者生命体征平稳。': 'record',
+    '输血后继续观察，生命体征平稳。': 'record',
+    '输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，结束时间19:00。输注过程中严密观察，过程顺利，未见皮疹、胸闷及输血反应。': 'record',
+    '输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。输血过程顺利，生命体征平稳，未见发热及输血不良反应。': 'record',
+    '输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，2026年07月07日18:27输注完毕。输血过程中严密观察，患者生命体征平稳，未见寒战、皮疹及输血不良反应。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见寒战、发热及其他输血不良反应。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注红细胞2U，结束时间16:10。输血过程中严密观察，未见不良反应。': 'record',
+    '输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，18:27输注完毕。输血过程顺利，未见输血不良反应。': 'record',
+    '输血目的：纠正贫血；开始时间18:00，结束时间19:00。输血过程中严密观察，生命体征平稳，未见输血不良反应。': 'record',
+    '输血目的：纠正贫血；患者血红蛋白降低。': 'not_record',
+    '输血目的：纠正贫血；患者血红蛋白降低，既往无输血不良反应，输注前生命体征平稳。': 'not_record',
+    '输血目的：纠正贫血；输注红细胞，过程平稳。': 'record',
+    '输血目的：纠正贫血；输血前评估：患者血红蛋白下降，存在输血指征，已说明输血风险。2026年6月5日14:20开始输注红细胞2U，2026年6月5日16:10输血结束。输血过程中严密观察，生命体征平稳，未见发热及输血不良反应。输血后复查血红蛋白改善。': 'record',
+    '输血结束，继续观察，未见输血不良反应。': 'record',
+    '输血记录正文，记录实际输注过程及观察情况。': 'record',
+    '输血记录：已记录输血指征，输注过程平稳。': 'record',
+    '输血记录：患者拟输注红细胞，输血过程中生命体征平稳，记录血红蛋白检查结果，但未形成输血前评估。': 'not_record',
+    '输血记录：按医嘱完成输注。': 'record',
+    '输血记录：按评估及医嘱完成输注。': 'record',
+    '输血记录：过程顺利，无输血不良反应。': 'record',
+    '输血过程中患者生命体征平稳。': 'record',
+    '输血过程及输血后评价记录。': 'not_record',
+    '预计2026-06-05 16:10输血结束。生命体征平稳。': 'not_record',
+    '空模板': 'not_record',
+    '输血结束，继续观察。': 'record',
+    '输血后继续观察。': 'record',
+    # 047 时间/评价用例：均为测试作者写成的实际输注记录。
+    **{f'{end_text}，复查血红蛋白较前改善，未见输血不良反应。': 'record' for end_text in (
+        '2026-06-05 16:10:00+08输血结束', '2026-06-05 16:10:00+08:00输血结束',
+        '2026-06-05 16:10输血结束后', '2026年6月5日16:10输注完毕后')},
+    **{f'2026-06-05 16:10输血结束。{text}': 'record' for text in (
+        '未见输血后评价异常。', '无输血后评价异常。', '输血后评价未见异常。',
+        '未记录输血后评价。', '缺少输血后评价。', '未书写输血后评价。')},
+    '2026-06-05 16:10记录：输血结束。生命体征平稳。': 'record',
+    '2026-06-05 16:10输血结束，输注过程顺利。': 'record',
+    '2026-06-05 10:00输血结束。输血后复查血红蛋白改善。': 'record',
+    '16:00输血结束。未记录输血后评价。': 'record',
+    '2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
+}
+# 048 术中文书的人工原子事实标注：只有本次术中实际输注才是 present。
+_INTRAOPERATIVE_LABELS = {
+    "术中出血约800ml，输注红细胞2U。": present(item("输注红细胞2U", "红细胞", "2U")),
+    "术后患者生命体征平稳，切口敷料干燥。": ABSENT,
+    "中心静脉置管术，过程顺利。": ABSENT,
+    "术中输注红细胞2U。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术后记录术中输注红细胞2U。": present(item("术中输注红细胞2U", "红细胞", "2U")),
+    "术后记录术中输注血浆200ml。": present(item("术中输注血浆200ml", "血浆", "200ml")),
+    "手术记录中的术中输血信息。": UNKNOWN,
+    "麻醉记录中的术中输血信息。": UNKNOWN,
+    "术后首次病程中的输血信息。": UNKNOWN,
+    "手术记录。": ABSENT,
+    "首次病程记录。": ABSENT,
+}
+_protocol_call_counts: dict[int, int] = {}
+
+
+def _protocol_calls(result) -> int:
+    return _protocol_call_counts.get(id(result), 0)
+
+
+async def _execute_order_contract(**kwargs):
+    # 其他输血族规则仍使用原legacy资料合同，医嘱协议只给044/045/046新增来源状态。
+    order_rules = {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
+    if not order_rules.intersection(kwargs["rule_ids"]) and kwargs.get("evidence_payload"):
+        payload = kwargs["evidence_payload"]
+        documents = dict(payload["programmatic_timeline"]["documents"])
+        documents.pop("__logical_source_states__", None)
+        kwargs["evidence_payload"] = {"programmatic_timeline": {"documents": documents}}
+    client = FrozenTransfusionProtocolClient(
+        kwargs.get("llm_client"), course_labels=_COURSE_LABELS,
+        intraoperative=FrozenIntraoperativeClient(_INTRAOPERATIVE_LABELS),
+    )
+    kwargs["llm_client"] = client
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(**kwargs)
+    _protocol_call_counts[id(result)] = client.protocol_calls
+    return result
+
+
 def _documents(**overrides: list[dict]) -> dict:
     documents = {
         "bloodtrans_record": [{"content": "输血记录正文，记录实际输注过程及观察情况。"}],
@@ -33,10 +173,14 @@ def _documents(**overrides: list[dict]) -> dict:
         "surgery_record": [{"content": "手术记录中的术中输血信息。"}],
         "anesthesia_record": [{"content": "麻醉记录中的术中输血信息。"}],
         "postsurg_firstcourse_record": [{"content": "术后首次病程中的输血信息。"}],
-        "inpat_nondrug_order": [{"content": "输血医嘱中的成分和数量。"}],
+        "inpat_nondrug_order": [{**OPEN_TRANSFUSION_ORDER, "content": "输血医嘱中的成分和数量。"}],
+        "inpat_drug_order": [],
         "inpat_bill_item": [{"content": "输血收费中的成分和数量。"}],
     }
     documents.update(overrides)
+    for index, row in enumerate(documents["bloodtrans_record"]):
+        row.setdefault("document_id", f"fixture-course-{index}")
+    documents["__logical_source_states__"] = {key: "available" if documents[key] else "empty" for key in ("bloodtrans_record", "surgery_record", "anesthesia_record")}
     return {"programmatic_timeline": {"documents": documents}}
 
 
@@ -73,6 +217,10 @@ class _Client:
 
 
 def _reader(*, source_key: str, **_: object) -> list[dict]:
+    if source_key == "inpat_nondrug_order":
+        return [dict(OPEN_TRANSFUSION_ORDER)]
+    if source_key == "inpat_drug_order":
+        return []
     if source_key == "mr_bloodtrans":
         return []
     if source_key == "bloodtrans_record":
@@ -106,6 +254,8 @@ def _typed_decision_session(
     def read(**kwargs):
         source_key = kwargs["source_key"]
         rows_by_source = {
+            "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)] if performed else [],
+            "inpat_drug_order": [],
             "mr_bloodtrans": [
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ] if performed else [],
@@ -220,6 +370,7 @@ def test_typed_transfusion_preserves_only_approved_canonical_reasons(
         decisions=(decision,),
         expected_rule_ids=("LX0609-07-02-01",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )[0]
 
     assert decision.reason_code == canonical_reason
@@ -274,7 +425,7 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
     )
     client = None if model_output is None else _Client([model_output])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(),
@@ -291,11 +442,12 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-07-01-02",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
     assert result.customer_display_facts == ()
-    assert result.llm_call_count == expected_calls
+    assert result.llm_call_count == (1 if model_output is None else expected_calls) + _protocol_calls(result)
     assert result.total_tokens == expected_tokens
     assert canonical[0].final_state.value == expected_final_state
     assert canonical[0].reason_code == expected_reason
@@ -347,7 +499,7 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
     )
     client = None if model_output is None else _Client([model_output])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(),
@@ -364,11 +516,12 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-07-02-02",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
     assert result.customer_display_facts == ()
-    assert result.llm_call_count == (0 if model_output is None else 1)
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == expected_tokens
     assert canonical[0].final_state.value == expected_final_state
     assert canonical[0].reason_code == expected_reason
@@ -388,6 +541,7 @@ async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
     expected_reason,
     expected_tokens,
 ):
+    # 新合同：本例已明确记载完成输血，generic bool模型不再决定045记录存在。
     session = _typed_decision_session(
         selected_rule_ids=("LX0609-07-02-01",),
         bloodtrans_content="患者已完成输血治疗，过程资料记录较为简略。",
@@ -399,7 +553,7 @@ async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
     )
     client = _Client([model_output])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(),
@@ -416,14 +570,16 @@ async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-07-02-01",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
-    assert result.customer_display_facts == ()
-    assert result.llm_call_count == 1
-    assert result.total_tokens == expected_tokens
-    assert canonical[0].final_state.value == "technical_error"
-    assert canonical[0].reason_code == expected_reason
+    assert dict(result.customer_display_facts)["LX0609-07-02-01"]["record_count"] == 1
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 0
+    assert client.prompts == []
+    assert canonical[0].final_state.value == "compliant"
+    assert canonical[0].reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio
@@ -467,12 +623,12 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
         "decision_rule_ids": ("LX0609-07-02-01",),
     }
 
-    complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    complete = await _execute_order_contract(
         **common,
         evidence_snapshot=complete_session.snapshot,
         evidence_materials=complete_session.materials,
     )
-    incomplete = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    incomplete = await _execute_order_contract(
         **common,
         evidence_snapshot=incomplete_session.snapshot,
         evidence_materials=incomplete_session.materials,
@@ -483,8 +639,9 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
     ).final_state.value == "compliant"
     assert reduce_luxian_0609_rule_decision(
         incomplete.decisions[0]
-    ).final_state.value == "technical_error"
-    assert incomplete.decisions[0].reason_code == "model_transport_error"
+    ).final_state.value == "compliant"
+    assert incomplete.decisions[0].reason_code == "requirement_satisfied"
+    # 045存在性合同接受简短实际过程，完整字段由046单独判定。
     assert complete_session.snapshot.snapshot_hash != incomplete_session.snapshot.snapshot_hash
     assert complete.decisions[0].snapshot_hash == complete_session.snapshot.snapshot_hash
     assert incomplete.decisions[0].snapshot_hash == incomplete_session.snapshot.snapshot_hash
@@ -521,7 +678,7 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
         ),
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         # 与同一 session 材料冲突：旧 payload 明确声称缺少输血前评估。
@@ -541,7 +698,7 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
     )
 
     assert result.results == ()
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert [item.rule_id for item in result.decisions] == ["LX0609-07-01-02"]
     assert (
         reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value
@@ -577,12 +734,12 @@ async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeyp
         "decision_rule_ids": ("LX0609-07-01-02",),
     }
 
-    complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    complete = await _execute_order_contract(
         **common,
         evidence_snapshot=complete_session.snapshot,
         evidence_materials=complete_session.materials,
     )
-    missing = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    missing = await _execute_order_contract(
         **common,
         evidence_snapshot=missing_session.snapshot,
         evidence_materials=missing_session.materials,
@@ -627,6 +784,8 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
             rows = []
         else:
             rows = {
+                "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)] if source_mode != "empty" else [],
+                "inpat_drug_order": [],
                 "mr_bloodtrans": [
                     {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
                 ],
@@ -664,7 +823,7 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no fallback")),
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(),
@@ -681,7 +840,7 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
 
     assert reduce_luxian_0609_rule_decision(decision).final_state.value == expected_state
     assert decision.reason_code == expected_reason
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert "private unavailable detail" not in repr(result)
     assert "private query detail" not in repr(result)
 
@@ -718,11 +877,11 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
         "source_schema": None,
     }
 
-    raw = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    raw = await _execute_order_contract(
         **common,
         llm_client=raw_client,
     )
-    typed = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    typed = await _execute_order_contract(
         **common,
         llm_client=typed_client,
         evidence_materials=session.materials,
@@ -735,7 +894,7 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
         typed.decisions[0]
     ).final_state.value == "non_compliant"
     assert typed.results == ()
-    assert raw.llm_call_count == typed.llm_call_count == 1
+    assert raw.llm_call_count == typed.llm_call_count == 1 + _protocol_calls(raw)
     assert raw.total_tokens == typed.total_tokens == 110
     assert raw_client.prompts == typed_client.prompts
 
@@ -756,6 +915,8 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
     def read(**kwargs):
         source_key = kwargs["source_key"]
         rows = {
+            "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
+            "inpat_drug_order": [],
             "mr_bloodtrans": [
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ],
@@ -793,7 +954,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no legacy read")),
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
         evidence_payload=_documents(),
@@ -810,7 +971,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
     assert result.results == ()
     assert result.planned_rule_ids == selected
     assert [item.rule_id for item in result.decisions] == list(selected)
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     states = {
         item.rule_id: reduce_luxian_0609_rule_decision(item).final_state.value
@@ -830,6 +991,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert all(item.final_state.value != "technical_error" for item in bound)
     assert "输血目的" not in repr(result)
@@ -849,6 +1011,8 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     def read(**kwargs):
         source_key = kwargs["source_key"]
         rows_by_source = {
+            "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
+            "inpat_drug_order": [],
             "mr_bloodtrans": [
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ],
@@ -899,7 +1063,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     )
     client = _Client([{"is_compliant": True}] * len(selected))
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
         evidence_payload=_documents(),
@@ -919,7 +1083,8 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
     ] == ["non_compliant", "not_applicable", "non_compliant", "not_applicable", "data_gap"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
     assert client.prompts == []
     assert private_marker not in repr(result)
 
@@ -952,7 +1117,7 @@ async def test_remaining_typed_rules_are_not_applicable_only_after_complete_no_t
         row_reader=read,
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
         evidence_payload=_documents(),
@@ -972,7 +1137,8 @@ async def test_remaining_typed_rules_are_not_applicable_only_after_complete_no_t
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
     ] == ["not_applicable"] * len(selected)
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -1011,7 +1177,7 @@ async def test_remaining_typed_rules_surface_shared_trigger_query_error_without_
         created_at="2026-07-17T12:00:00+08:00",
         row_reader=read,
     )
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
         evidence_payload=_documents(),
@@ -1031,7 +1197,8 @@ async def test_remaining_typed_rules_surface_shared_trigger_query_error_without_
         for item in result.decisions
     ] == ["technical_error"] * len(selected)
     assert all(item.reason_code == "source_query_error" for item in result.decisions)
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
     assert private_error not in repr(result)
 
 
@@ -1054,6 +1221,8 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
         if source_key == "bloodtrans_record" and failure_mode == "query_error":
             raise SourceEvidenceQueryError("private query failure")
         rows_by_source = {
+            "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
+            "inpat_drug_order": [],
             "mr_bloodtrans": [
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ],
@@ -1088,7 +1257,7 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no fallback read")),
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(),
@@ -1105,7 +1274,7 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
 
     assert reduced.final_state.value == expected_state
     assert result.decisions[0].reason_code == expected_reason
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert "private query failure" not in repr(result)
 
 
@@ -1151,7 +1320,7 @@ async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
         ),
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01",),
         wrapper_rules=[_wrapper("LX0609-11-03-01")],
         evidence_payload=_documents(bloodtrans_record=[]),
@@ -1201,7 +1370,7 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
         ),
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01",),
         wrapper_rules=[_wrapper("LX0609-11-03-01")],
         evidence_payload=_documents(bloodtrans_record=[]),
@@ -1218,7 +1387,7 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
         result.results[0]["metadata"]["reason_code"]
         == "transfusion_source_unavailable"
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
 
 
 @pytest.mark.asyncio
@@ -1226,12 +1395,18 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", lambda **_: [])
     client = _Client([])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=transfusion.TRANSFUSION_RULE_IDS,
         wrapper_rules=[_wrapper(rule_id) for rule_id in transfusion.TRANSFUSION_RULE_IDS],
         evidence_payload=_documents(
+            inpat_nondrug_order=[],
+            inpat_drug_order=[],
             bloodtrans_record=[],
             daily_course_record=[{"content": "普通病程仅提到拟输血和备血。"}],
+            # 048 只看本次手术文书；无手术文书即无术中输血事实。
+            surgery_record=[],
+            anesthesia_record=[],
+            postsurg_firstcourse_record=[],
         ),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -1241,7 +1416,7 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
     )
 
     assert [item["status"] for item in result.results] == ["not_applicable"] * 9
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert client.prompts == []
 
 
@@ -1259,7 +1434,7 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         ]
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=tuple(reversed(transfusion.TRANSFUSION_RULE_IDS)),
         wrapper_rules=[_wrapper(rule_id) for rule_id in transfusion.TRANSFUSION_RULE_IDS],
         evidence_payload=_documents(
@@ -1289,10 +1464,11 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         "compliant",
         "non_compliant",
         "compliant",
-        "not_applicable",
+        # 默认夹具的手术/麻醉/术后正文只是“含术中输血信息”的占位，无法判断是否实施。
+        "data_gap",
         "data_gap",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == 110
     assert all("SHOULD_NOT_LEAK" not in prompt for prompt in client.prompts)
 
@@ -1306,7 +1482,7 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _typed_reader)
     client = _Client([{"is_compliant": True}])
-    typed = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    typed = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(bloodtrans_record=[{"content": "空模板"}]),
@@ -1316,8 +1492,9 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
         source_schema=None,
         llm_client=client,
     )
-    assert typed.results[0]["status"] == "compliant"
-    assert typed.llm_call_count == 1
+    assert typed.results[0]["status"] == "non_compliant"
+    assert client.prompts == []
+    assert typed.llm_call_count == 2
 
     def _shell_reader(*, source_key: str, **_: object) -> list[dict]:
         if source_key == "bloodtrans_record":
@@ -1325,7 +1502,7 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
         return []
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _shell_reader)
-    shell = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    shell = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(bloodtrans_record=[]),
@@ -1335,8 +1512,8 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
         source_schema=None,
         llm_client=_Client([]),
     )
-    assert shell.results[0]["status"] == "data_gap"
-    assert shell.llm_call_count == 0
+    assert shell.results[0]["status"] == "non_compliant"
+    assert shell.llm_call_count == 0 + _protocol_calls(shell)
 
 
 @pytest.mark.asyncio
@@ -1346,7 +1523,7 @@ async def test_045_substantive_dedicated_course_record_is_compliant_without_mode
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": False}])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
@@ -1373,7 +1550,7 @@ async def test_045_substantive_dedicated_course_record_is_compliant_without_mode
         "transfusion_course_record_present"
     )
     assert result.results[0]["metadata"]["executor_type"] == "program"
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -1384,7 +1561,7 @@ async def test_045_projects_the_checked_transfusion_document_ids_for_evidence(
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
@@ -1431,7 +1608,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     )
     client = _Client([])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
@@ -1463,7 +1640,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     assert set(result.decisions[0].fact_refs).intersection(
         session.snapshot.document_refs
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -1496,14 +1673,14 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             ),
             [{"is_compliant": False}],
             True,
-            "non_compliant",
+            "compliant",
         ),
         (
             "LX0609-07-02-01",
             _documents(daily_course_record=[]),
             [],
             True,
-            "data_gap",
+            "compliant",
         ),
         (
             "LX0609-07-02-02",
@@ -1627,11 +1804,11 @@ async def test_typed_045_047_preserves_raw_state_order_and_model_usage(
         "evidence_materials": session.materials,
     }
 
-    raw = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    raw = await _execute_order_contract(
         **common,
         llm_client=raw_client,
     )
-    typed = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    typed = await _execute_order_contract(
         **common,
         llm_client=typed_client,
         evidence_snapshot=session.snapshot,
@@ -1689,13 +1866,13 @@ async def test_typed_transfusion_session_and_refs_fail_closed(monkeypatch):
     }
 
     with pytest.raises(ValueError, match="one evidence session"):
-        await transfusion.execute_luxian_0609_native_transfusion_rules(
+        await _execute_order_contract(
             **common,
             evidence_snapshot=session.snapshot,
             evidence_materials=other_session.materials,
         )
 
-    typed = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    typed = await _execute_order_contract(
         **common,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
@@ -1705,6 +1882,7 @@ async def test_typed_transfusion_session_and_refs_fail_closed(monkeypatch):
         decisions=(forged,),
         expected_rule_ids=("LX0609-07-02-01",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "technical_error"
@@ -1734,7 +1912,7 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
             )
         },
     ]
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
@@ -1753,7 +1931,7 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
         "transfusion_course_record_complete"
     )
     assert result.results[0]["metadata"]["executor_type"] == "program"
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -1783,7 +1961,7 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
         }
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(bloodtrans_record=rows),
@@ -1804,7 +1982,8 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
     assert facts["missing_fields"] == ["component", "dose"]
     assert facts["missing_field_record_counts"] == {"component": 1, "dose": 1}
     assert facts["source_document_ids"] == ["blood-046-incomplete-9"]
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -1812,7 +1991,7 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": False}])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
@@ -1837,7 +2016,7 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
     assert result.results[0]["metadata"]["reason_code"] == (
         "transfusion_course_record_complete"
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert client.prompts == []
 
 
@@ -1848,7 +2027,7 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": True}])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
@@ -1886,7 +2065,7 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
         "dose",
         "reason_or_indication",
     ]
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -1916,7 +2095,7 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
         }
     ])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
@@ -1946,7 +2125,7 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
     facts = dict(result.customer_display_facts)["LX0609-07-02-02"]
     assert facts["missing_fields"] == []
     assert facts["source_document_ids"] == ["typed-transfusion-document"]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
     assert record in client.prompts[0]
@@ -2020,7 +2199,7 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
         "输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。"
     )
     client = _Client([model_output])
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
@@ -2035,7 +2214,7 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
 
     assert result.results[0]["status"] == expected_status
     assert result.results[0]["metadata"]["reason_code"] == expected_reason
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == (0 if isinstance(model_output, Exception) else 110)
     if expected_status == "non_compliant":
         assert dict(result.customer_display_facts)["LX0609-07-02-02"]["missing_fields"] == ["component"]
@@ -2060,7 +2239,7 @@ async def test_046_llm_accepts_component_that_includes_blood_type_but_not_type_o
             "document_ref": "blood-046-ab-red-suspension",
         }
     ])
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
@@ -2076,7 +2255,7 @@ async def test_046_llm_accepts_component_that_includes_blood_type_but_not_type_o
     )
 
     assert result.results[0]["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == 110
 
 
@@ -2085,7 +2264,7 @@ async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_bl
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": True}])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-02-01"),
         wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-11-03-02"), _wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(consent_form=[]),
@@ -2097,7 +2276,7 @@ async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_bl
     )
 
     assert [item["status"] for item in result.results] == ["data_gap", "data_gap", "compliant"]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -2117,7 +2296,7 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
         "record_time": "2026-06-05 16:20:00",
     }
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01"),
         wrapper_rules=[
             _wrapper("LX0609-07-01-02"),
@@ -2154,7 +2333,7 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
         "start_and_end_time",
     ]
     assert display_facts["LX0609-07-02-02"]["missing_fields"] == []
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -2174,7 +2353,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
         )
     }
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02", "LX0609-07-02-02", "LX0609-07-03-01"),
         wrapper_rules=[
             _wrapper("LX0609-07-01-02"),
@@ -2209,16 +2388,13 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     )
     assert dict(result.customer_display_facts) == {
         "LX0609-07-01-02": {
-            "failure_kind": "pretransfusion_assessment_missing",
-            "performed_transfusion_confirmed": True,
-            "checked_fields": [
-                "indication",
-                "laboratory_indicator",
-                "risk_history_or_status",
-            ],
-            "missing_fields": [
-                "indication",
-                "laboratory_indicator",
+            "transfusion_order_present": True,
+            "failure_kind": "transfusion_requirement_not_documented",
+            "requirement": "pretransfusion_assessment",
+            "checked_sources": [
+                "bloodtrans_record",
+                "blood_application",
+                "course_record",
             ],
             "source_document_refs": [
                 {
@@ -2229,7 +2405,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
         },
         "LX0609-07-02-02": {
             "failure_kind": "transfusion_course_record_incomplete",
-            "performed_transfusion_confirmed": True,
+            "transfusion_order_present": True,
             "record_count": 1,
             "incomplete_record_count": 1,
             "checked_fields": [
@@ -2245,7 +2421,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "source_document_ids": ["blood-record-1"],
         },
     }
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -2300,6 +2476,8 @@ def test_045_explicit_missing_course_and_complete_empty_source_are_non_compliant
 def test_046_explicit_incomplete_course_is_non_compliant_without_model():
     assert transfusion._programmatic_046_status(
         {
+            # 此内部字段检查的前置条件是course协议已确认实际记录。
+            "__course_presence_verified__": True,
             "bloodtrans_record": [
                 {"record_content": "患者已输血，过程记录不完整。"}
             ]
@@ -2462,7 +2640,7 @@ async def test_047_missing_authoritative_end_stays_data_gap_without_daily_projec
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2480,7 +2658,7 @@ async def test_047_missing_authoritative_end_stays_data_gap_without_daily_projec
     assert result.results[0]["metadata"]["reason_code"] == (
         "transfusion_end_time_unavailable"
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
 
 
 @pytest.mark.asyncio
@@ -2507,7 +2685,7 @@ async def test_043_incomplete_test_contract_is_data_gap_without_model(monkeypatc
             ],
         },
     ):
-        result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        result = await _execute_order_contract(
             rule_ids=("LX0609-07-01-01",),
             wrapper_rules=[_wrapper("LX0609-07-01-01")],
             evidence_payload=_documents(**lab_documents),
@@ -2524,7 +2702,7 @@ async def test_043_incomplete_test_contract_is_data_gap_without_model(monkeypatc
             == "pretransfusion_item_contract_unavailable"
         )
         assert result.results[0]["metadata"]["executor_type"] == "program"
-        assert result.llm_call_count == 0
+        assert result.llm_call_count == 0 + _protocol_calls(result)
         assert result.total_tokens == 0
 
     assert client.prompts == []
@@ -2534,7 +2712,7 @@ async def test_043_incomplete_test_contract_is_data_gap_without_model(monkeypatc
 async def test_047_posttransfusion_evaluation_is_deterministic_without_model(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    same_record = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    same_record = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2565,13 +2743,13 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
         "posttransfusion_evaluation_complete"
     )
     assert same_record.results[0]["metadata"]["executor_type"] == "program"
-    assert same_record.llm_call_count == 0
+    assert same_record.llm_call_count == 0 + _protocol_calls(same_record)
     same_record_facts = dict(same_record.customer_display_facts)["LX0609-07-03-01"]
     assert same_record_facts["transfusion_end_time"] == "2026-06-05 16:10:00"
     assert same_record_facts["evaluation_time"] == "2026-06-05 16:20:00"
     assert same_record_facts["elapsed_hours"] == 0.17
 
-    later_course = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    later_course = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2592,7 +2770,7 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
         llm_client=_Client([]),
     )
     assert later_course.results[0]["status"] == "compliant"
-    assert later_course.llm_call_count == 0
+    assert later_course.llm_call_count == 0 + _protocol_calls(later_course)
 
 
 @pytest.mark.asyncio
@@ -2610,7 +2788,7 @@ async def test_047_accepts_controlled_timezone_and_postposition_forms(
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2633,7 +2811,7 @@ async def test_047_accepts_controlled_timezone_and_postposition_forms(
     )
 
     assert result.results[0]["status"] == "compliant"
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
 
 
 @pytest.mark.asyncio
@@ -2668,7 +2846,7 @@ async def test_047_allows_final_summary_but_preserves_explicit_missing_statement
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2685,7 +2863,7 @@ async def test_047_allows_final_summary_but_preserves_explicit_missing_statement
     )
 
     assert result.results[0]["status"] == expected_status
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
 
 
 @pytest.mark.asyncio
@@ -2705,7 +2883,7 @@ async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2725,7 +2903,7 @@ async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
     )
 
     assert result.results[0]["status"] == expected_status
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
 
 
 @pytest.mark.asyncio
@@ -2734,7 +2912,7 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    no_post_evaluation = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    no_post_evaluation = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2763,9 +2941,9 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
     assert no_post_evaluation.results[0]["metadata"]["reason_code"] == (
         "posttransfusion_evaluation_time_unavailable"
     )
-    assert no_post_evaluation.llm_call_count == 0
+    assert no_post_evaluation.llm_call_count == 0 + _protocol_calls(no_post_evaluation)
 
-    missing_end_time = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    missing_end_time = await _execute_order_contract(
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
@@ -2789,7 +2967,7 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
     assert missing_end_time.results[0]["metadata"]["reason_code"] == (
         "transfusion_end_time_unavailable"
     )
-    assert missing_end_time.llm_call_count == 0
+    assert missing_end_time.llm_call_count == 0 + _protocol_calls(missing_end_time)
 
 
 @pytest.mark.asyncio
@@ -2801,7 +2979,7 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
     async def _execute(
         *, blood_rows: list[dict], daily_rows: list[dict]
     ) -> transfusion.NativeTransfusionExecutionResult:
-        return await transfusion.execute_luxian_0609_native_transfusion_rules(
+        return await _execute_order_contract(
             rule_ids=("LX0609-07-03-01",),
             wrapper_rules=[_wrapper("LX0609-07-03-01")],
             evidence_payload=_documents(
@@ -2821,9 +2999,10 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
         ],
         daily_rows=[{"content": "普通病程：继续观察。"}],
     )
+    # 只有计划记录、没有结构化实施时间：停在实施门控，不进入结束时间判定。
     assert planned.results[0]["status"] == "data_gap"
     assert planned.results[0]["metadata"]["reason_code"] == (
-        "transfusion_end_time_unavailable"
+        "transfusion_source_unavailable"
     )
 
     document_time = await _execute(
@@ -2880,16 +3059,16 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
         daily_rows=[{"content": "普通病程：继续观察。"}],
     )
     assert one_of_two_missing.results[0]["status"] == "data_gap"
-    assert planned.llm_call_count == weak_context.llm_call_count == 0
-    assert document_time.llm_call_count == unresolved_row.llm_call_count == 0
-    assert one_of_two_missing.llm_call_count == 0
+    # 每次只有一次专用记录实施核验，047 时间判定本身不调用模型。
+    for result in (planned, weak_context, document_time, unresolved_row, one_of_two_missing):
+        assert result.llm_call_count == _protocol_calls(result) == 1
 
 
 @pytest.mark.asyncio
 async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_without_model(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
-    missing = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    missing = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -2913,9 +3092,9 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     assert missing.results[0]["status"] == "non_compliant"
     assert missing.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_missing"
     assert missing.results[0]["metadata"]["executor_type"] == "program"
-    assert missing.llm_call_count == 0
+    assert missing.llm_call_count == 0 + _protocol_calls(missing)
 
-    complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    complete = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -2940,10 +3119,10 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     assert complete.results[0]["status"] == "compliant"
     assert complete.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_complete"
     assert complete.results[0]["metadata"]["executor_type"] == "program"
-    assert complete.llm_call_count == 0
+    assert complete.llm_call_count == 0 + _protocol_calls(complete)
 
     gray_client = _Client([{"is_compliant": True}])
-    gray = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    gray = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -2961,11 +3140,11 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     assert gray.results[0]["metadata"]["reason_code"] == (
         "pretransfusion_assessment_missing"
     )
-    assert gray.llm_call_count == 0
+    assert gray.llm_call_count == 0 + _protocol_calls(gray)
     assert gray_client.prompts == []
 
     split_client = _Client([{"is_compliant": False}])
-    split = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    split = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -2981,10 +3160,10 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     )
     assert split.results[0]["status"] == "non_compliant"
     assert split.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
-    assert split.llm_call_count == 1
+    assert split.llm_call_count == 1 + _protocol_calls(split)
 
     application_client = _Client([{"is_compliant": True}])
-    application_gray = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    application_gray = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -3009,7 +3188,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
     assert application_gray.results[0]["metadata"]["reason_code"] == (
         "pretransfusion_assessment_incomplete"
     )
-    assert application_gray.llm_call_count == 0
+    assert application_gray.llm_call_count == 0 + _protocol_calls(application_gray)
     assert application_client.prompts == []
 
 
@@ -3020,7 +3199,7 @@ async def test_044_same_record_purpose_without_assessment_marker_is_non_complian
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -3047,7 +3226,7 @@ async def test_044_same_record_purpose_without_assessment_marker_is_non_complian
         "pretransfusion_assessment_missing"
     )
     assert result.results[0]["metadata"]["executor_type"] == "program"
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -3059,7 +3238,7 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": True}])
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -3080,7 +3259,7 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
     assert result.results[0]["metadata"]["reason_code"] == (
         "pretransfusion_assessment_missing"
     )
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 0 + _protocol_calls(result)
     assert client.prompts == []
 
 
@@ -3098,7 +3277,7 @@ async def test_044_uses_one_bounded_llm_call_for_legacy_application_reason(
         }]
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -3126,7 +3305,7 @@ async def test_044_uses_one_bounded_llm_call_for_legacy_application_reason(
         "pretransfusion_assessment_complete"
     )
     assert result.results[0]["metadata"]["executor_type"] == "llm"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
     assert application_text in client.prompts[0]
@@ -3145,7 +3324,7 @@ async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypat
         }]
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -3168,7 +3347,7 @@ async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypat
 
     assert result.results[0]["status"] == "uncertain"
     assert result.results[0]["metadata"]["reason_code"] == "semantic_output_unknown"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
     assert application_text in client.prompts[0]
@@ -3185,7 +3364,7 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
         }]
     )
 
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
@@ -3212,7 +3391,7 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
     assert result.results[0]["metadata"]["reason_code"] == (
         "model_invalid_output"
     )
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 1 + _protocol_calls(result)
 
 
 @pytest.mark.asyncio
@@ -3220,7 +3399,7 @@ async def test_048_does_not_claim_three_document_mismatch_before_comparison_cont
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-04-01",),
         wrapper_rules=[_wrapper("LX0609-07-04-01")],
         evidence_payload=_documents(
@@ -3243,17 +3422,16 @@ async def test_048_does_not_claim_three_document_mismatch_before_comparison_cont
     assert result.results[0]["metadata"]["reason_code"] == (
         "transfusion_comparison_fields_unavailable"
     )
+    # 麻醉记录只有空正文，视同缺失；不能据此宣称三份文书不一致。
     assert result.customer_display_facts == ((
         "LX0609-07-04-01",
         {
-            "failure_kind": "transfusion_comparison_fields_missing",
-            "missing_fields_by_source": {
-                "anesthesia_record": ["components", "doses"],
-                "postsurg_firstcourse_record": ["components", "doses"],
-            },
+            "failure_kind": "transfusion_comparison_material_missing",
+            "missing_sources": ["anesthesia_record"],
         },
     ),)
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -3261,7 +3439,7 @@ async def test_048_without_credible_intraoperative_transfusion_is_not_applicable
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-04-01",),
         wrapper_rules=[_wrapper("LX0609-07-04-01")],
         evidence_payload=_documents(
@@ -3281,7 +3459,8 @@ async def test_048_without_credible_intraoperative_transfusion_is_not_applicable
         "intraoperative_transfusion_fact_absent"
     )
     assert result.results[0]["findings"] == "未发现可信的术中输血事实，本规则不适用。"
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -3325,7 +3504,7 @@ async def test_041_042_use_dedicated_consent_and_return_controlled_facts() -> No
         created_at="2026-07-17T12:00:00+08:00",
         row_reader=read,
     )
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
         evidence_payload=_documents(),
@@ -3460,7 +3639,7 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
         created_at="2026-07-17T12:00:00+08:00",
         row_reader=read,
     )
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper("LX0609-07-01-01")],
         evidence_payload=_documents(),
@@ -3496,7 +3675,7 @@ async def test_048_compares_component_and_dose_across_three_documents(
     monkeypatch, postop_text: str, expected_status: str, expected_kind: str
 ) -> None:
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-07-04-01",),
         wrapper_rules=[_wrapper("LX0609-07-04-01")],
         evidence_payload=_documents(
@@ -3527,7 +3706,7 @@ async def test_conservative_transfusion_gaps_explain_missing_material_not_patien
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     selected = ("LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01", "LX0609-07-04-02")
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=selected,
         wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
         evidence_payload=_documents(),
@@ -3559,7 +3738,8 @@ async def test_conservative_transfusion_gaps_explain_missing_material_not_patien
     assert "数据源" not in customer_copy
     assert "字段映射" not in customer_copy
     assert "契约" not in customer_copy
-    assert result.llm_call_count == result.total_tokens == 0
+    assert result.llm_call_count == _protocol_calls(result)
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -3570,7 +3750,7 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
         raise RuntimeError(secret)
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _failed_reader)
-    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01", "LX0609-07-04-02"),
         wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-07-04-02")],
         evidence_payload=_documents(bloodtrans_record=[]),
@@ -3584,7 +3764,7 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
     assert secret not in repr(result)
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    invalid = await transfusion.execute_luxian_0609_native_transfusion_rules(
+    invalid = await _execute_order_contract(
         rule_ids=("LX0609-07-04-02",),
         wrapper_rules=[_wrapper("LX0609-07-04-02")],
         evidence_payload=_documents(),

@@ -435,6 +435,9 @@ def _time_case(time_text: str, *, before: str = "", inline_before: str = "",
     ("抢救时间：2026-07-16 09:00", "抢救措施：吸氧。"),
     ("于2026.7.16 09:00予以", "吸氧并持续监护。"),
     ("于09:00开始", "实施胸外按压。"),
+    # 0910 真实样本写法：时间后直接接以“予以”开头的措施引文。
+    ("2026.7.16 09:39", "予以合成溶栓药45mg行静脉溶栓。"),
+    ("2026.7.16 09:39", "立即给予胸外按压。"),
 ])
 def test_actual_rescue_time_with_label_or_action_link_is_present(time_text, measures):
     session, payload = _time_case(time_text, measures=measures)
@@ -453,6 +456,7 @@ def test_actual_rescue_time_with_label_or_action_link_is_present(time_text, meas
     ("于2026-07-16 09:00予以", "", "治疗。\n"),
     ("于2026-07-16 09:00", "", "抢救措施：吸氧。\n"),
     ("于2026-07-16 25:99予以", "", ""),
+    ("于2026-07-16 09:00", "", "未予以"),
 ])
 def test_non_rescue_or_unlinked_time_remains_unknown(time_text, before, after):
     session, payload = _time_case(time_text, before=before, after=after)
@@ -505,3 +509,22 @@ def test_narrated_time_requires_asserted_action_in_full_parse(inline_before, bet
     assert time_state == ("present" if expected == "compliant" else "unknown")
     assert _state(result) == expected
     assert _facts(result)["failure_kind"] == ""
+
+
+@pytest.mark.parametrize("prefix", ["计划", "既往", "未发生的", "若需", "拟", "曾经"])
+def test_nonactual_labeled_time_does_not_override_correct_model_absence(prefix):
+    body = "\n".join(prefix + value if key == "rescue_time" else value for key, value in SNIPPETS.items())
+    session = _session([_row(body=body)])
+    llm = FakeLLM(_response(session, missing_by_id={"R1": ("rescue_time",)}))
+    result = _execute(session, llm)
+    assert _state(result) == "non_compliant"
+    assert _facts(result)["missing_fields"] == ["rescue_time"]
+    assert len(llm.calls) == result.llm_call_count == 1
+
+
+def test_separate_nonactual_time_does_not_hide_actual_labeled_time():
+    body = "既往抢救时间：2026-06-01 08:00。\n" + _row()["record_content"]
+    session = _session([_row(body=body)])
+    result = _execute(session, FakeLLM(_response(session, missing_by_id={"R1": ("rescue_time",)})))
+    assert _state(result) == "compliant"
+    assert "2026-07-16" in _facts(result)["rescue_content_events"][0]["field_facts"]["rescue_time"]["quote"]

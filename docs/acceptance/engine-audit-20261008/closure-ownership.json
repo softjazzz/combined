@@ -1,0 +1,523 @@
+{
+  "baseline": "6930540f27e9c279241d35ac05d1c1c6e9134f82",
+  "scope": "0609 only",
+  "max_repair_workers": 4,
+  "max_heavy_test_processes": 1,
+  "integration_owner": "/root",
+  "tasks": [
+    {
+      "id": "T0",
+      "owner": "engine_coverage_registry",
+      "state": "complete_evidence_reconciliation_not_clinical_acceptance",
+      "write_paths": [
+        "docs/acceptance/engine-audit-20261008/catalog-coverage.json",
+        "docs/acceptance/engine-audit-20261008/catalog-coverage.md"
+      ],
+      "test_slot": null
+    },
+    {
+      "id": "IML-01",
+      "owner": "/root/repair_iml01",
+      "state": "integrated_confirmed_subissues_engineering_verified_joint_ct_mri_contract_open",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_handbook_identity_conflict_closure.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py"
+      ],
+      "excluded_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py"
+      ],
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-ledger-20261008",
+      "test_slot": null,
+      "commits": [
+        "11211cc42becaa03d0f5b36056bdc3e17a31842a",
+        "8c9df71af38c934570df6402f9251e046c489a98"
+      ],
+      "integration_commits": [
+        "ef19df8a2"
+      ]
+    },
+    {
+      "id": "IML-02",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_engineering_verified",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_critical_time_authority_closure.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/extended_document_critical_value.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/critical_value_result_mapping.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "note": "all other changes to this file queued under same owner, including discharge/course issues",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-critical-v2-20261008",
+      "test_slot": null,
+      "scope_constraint": "Only critical-value report-time conflict contract and copy; all unrelated renderer logic frozen; Finalizer only add critical_value_report_time_conflict to existing critical-value enum",
+      "commits": [
+        "0628782191861460bbf24edbf848eb601829876c"
+      ],
+      "integration_commits": [
+        "a8ad74e69"
+      ]
+    },
+    {
+      "id": "CHEMO",
+      "owner": "/root/repair_chemo",
+      "state": "limited_N13_integrated_eight_business_observations_open",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_chemo_closure.py"
+      ],
+      "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
+      "branch": "codex/qc-fix-chemo-v2-20261008",
+      "test_slot": null,
+      "scope_constraint": "Only05-02-01; structuralD01/N13 first, semanticD02/D03 design reviewed before implementation",
+      "commits": [
+        "d0f9c829901152a5a9fd7d97bc9916fe076b67cd",
+        "df3ea6837225c85de81fe5fd9929853feeadb599",
+        "e8f7dcb746a413d7736986535939f00d1573dad3",
+        "59b3d7cbc83ee5d3de946f08409d04fc9357dc57"
+      ],
+      "integration_commits": [
+        "e256e8ea9",
+        "880a433b0"
+      ]
+    },
+    {
+      "id": "PRIVACY",
+      "owner": "/root/repair_privacy_closure",
+      "state": "002_004_005_integrated_003_send_boundary_integrated_real_CLI_source_open",
+      "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
+      "branch": "codex/qc-fix-privacy-v2-20261008",
+      "test_slot": null,
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/preproduction_runner.py",
+        "apps/medqc-web/backend/app/services/qc_llm_client.py",
+        "apps/medqc-web/backend/app/services/sichuan_workspace_batch_worker.py",
+        "apps/medqc-web/backend/app/services/qc_workspace/record_repository.py",
+        "apps/medqc-web/backend/app/services/custom_qc_workspace_service.py",
+        "apps/medqc-web/backend/scripts/review_luxian_0609_semantic20.py",
+        "apps/medqc-web/backend/scripts/run_luxian_0609_028_synthetic_golden.py",
+        "apps/medqc-web/backend/scripts/run_luxian_0609_consultation_ordinary_shadow_validation.py"
+      ],
+      "scope_constraint": "0609 privacy only; assembly/callers require explicit ownership extension; no patient/PG/model access",
+      "commits": [
+        "041b3be67",
+        "6b8fa3e58",
+        "4232ca617",
+        "511bd12db"
+      ],
+      "integration_commits": [
+        "1225aff95",
+        "d501584dd",
+        "26f4fe645"
+      ]
+    },
+    {
+      "id": "RR-M01",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_engineering_contract_closed_real_prompt_validation_open",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json",
+        "apps/medqc-web/backend/app/data/luxian_0609_phase1_rules_extension_v1.json",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py"
+      ],
+      "scope_constraint": "Only074existing one-call metadata and tests; no new prompt/call/retry/release behavior",
+      "test_slot": null,
+      "commits": [
+        "b85b49882bcdab5703ddacf54225c671bac353da"
+      ],
+      "integration_commits": [
+        "305974e38"
+      ]
+    },
+    {
+      "id": "DD-F01",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_engineering_closed",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-critical-v2-20261008",
+      "test_slot": null,
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only063 death/discharge scope; authoritative typed mr death diagnosis is valid evidence; preserve original normal fixture; no Finalizer or074 changes",
+      "commits": [
+        "58e29ffe9edc559bee552c734dc66ebed9ebf32c"
+      ],
+      "integration_commits": [
+        "b13043c3d"
+      ]
+    },
+    {
+      "id": "RR-DEATH-DISCUSSION",
+      "owner": "/root/repair_iml01",
+      "state": "RR_D02_integrated_RR_D01_contract_open",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-ledger-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_death_discussion_closure.py"
+      ],
+      "test_slot": null,
+      "commits": [
+        "3e7ee94ff607e53b7f4f54660f4a389abb3a8dbb"
+      ],
+      "integration_commits": [
+        "efb8bc62b"
+      ]
+    },
+    {
+      "id": "RR-SCOPE01",
+      "owner": "/root/repair_chemo",
+      "state": "both_batches_integrated_root50_and201_passed",
+      "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_phase_scope.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_master.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_rule_contracts.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_package.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_evidence_snapshot_provider.py",
+        "apps/medqc-web/backend/tests/unit/test_luxian_0609_golden_gate.py"
+      ],
+      "scope_constraint": "Tests only; no production catalog or publishing changes; preserve migration and explicit release assertions",
+      "test_slot": null,
+      "commits": [
+        "36a3175b4c2ec2a4cc574b15405638ef44c0361a",
+        "a55d27612b77743442a7a7a4c37b543193d39b80"
+      ],
+      "integration_commits": [
+        "0dd25d30b",
+        "fc1056eb4"
+      ]
+    },
+    {
+      "id": "RR-PUB01",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_independent37_pass",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only precise NotImplemented identity fallback; knowninvalidfacts muststillraise; no rawpass-through",
+      "test_slot": null,
+      "commits": [
+        "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b"
+      ],
+      "integration_commits": [
+        "574e925a5"
+      ]
+    },
+    {
+      "id": "CT-02",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only050 authoritative-time gaps including narrow Finalizer status consistency after RR-PUB37 independent release; no CT01 semantic words/CT03 changes",
+      "test_slot": null,
+      "commits": [
+        "81fe8fed3027ea7f636014fd59237819138f7f9c"
+      ],
+      "integration_commits": [
+        "7d36d0316"
+      ]
+    },
+    {
+      "id": "CT-03",
+      "owner": "/root/repair_iml02",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "state": "integrated_limited_engineering_closed",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only050 known discussion rows without usable record_content; no CT01 semantics/CT02 regression; separate commit",
+      "test_slot": null,
+      "commits": [
+        "25406df7d2506f4870674ca73cddd10523bf966d"
+      ],
+      "integration_commits": [
+        "64e5b99c5"
+      ]
+    },
+    {
+      "id": "N12",
+      "owner": "/root/repair_iml01",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-anesthesia-20261008",
+      "baseline": "036999e40cf88fc41261b2562aaccf414549db33",
+      "state": "limited_engineering_closed_real_model_pending",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
+        "apps/medqc-web/backend/app/data/luxian_0609_rule_contracts_v1.json",
+        "apps/medqc-web/backend/app/data/luxian_0609_rules_v1.json",
+        "apps/medqc-web/backend/app/services/luxian_0609/decision_model.py"
+      ],
+      "scope_constraint": "Only037; one controlled extraction logicalcall; private wrapper and exact source boundaries; no external calls. Sharedrenderer/Finalizer owned separately. OldNoModel assertions must not redefine medical expected outcomes.",
+      "test_slot": null
+    },
+    {
+      "id": "N12-COPY",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_copy_support_core_pending",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py"
+      ],
+      "scope_constraint": "Only037 semantic_extraction_unresolved message/explanation tuples and suggestion protection; no rejudging",
+      "test_slot": null,
+      "commits": [
+        "195e20cf16402052acb4aff23f76234d144296f4"
+      ],
+      "integration_commits": [
+        "4e51e5540"
+      ]
+    },
+    {
+      "id": "CT-04",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py"
+      ],
+      "commits": [
+        "515bcec6dc7ebcf11a8f54699aeb7b7f4dba663e"
+      ],
+      "integration_commits": [
+        "da31efd03"
+      ],
+      "test_slot": null
+    },
+    {
+      "id": "TP-D04",
+      "owner": "/root/repair_iml02",
+      "state": "integrated_limited_engineering_closed",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "write_paths": [
+        "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+        "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py"
+      ],
+      "scope_constraint": "Only058 known different drug support association and consistent existing facts/copy; no new drug lexicon",
+      "test_slot": null
+    },
+    {
+      "id": "SCOPE6-01",
+      "owner": "/root/repair_privacy_closure",
+      "state": "integrated_formal_entry_engineering_closed",
+      "worktree": "F:/MedQC-worktrees/qc-fix-privacy-v2-20261008",
+      "branch": "codex/qc-fix-scope-six-20261008",
+      "baseline": "f4d32a679",
+      "write_paths": [
+        "apps/medqc-web/backend/tests/integration/test_luxian_0609_sample_scope_membership.py",
+        "apps/medqc-web/backend/app/routers/qc_sample_pools.py"
+      ],
+      "scope_constraint": "No registration/default enable; production change requires actual red proof and root narrow approval",
+      "test_slot": null
+    },
+    {
+      "id": "TC02",
+      "owner": "/root/repair_iml02",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "state": "integrated_35909964a_root289_engineering_real_model_pending",
+      "responsibility": [
+        "native_extended_document_execution.py:070",
+        "extended_document/transfusion_performance_extraction.py",
+        "transfusion_result_mapping.py:070",
+        "customer_renderer.py:070",
+        "app/data/luxian_0609_phase1_rule_contracts_extension_v1.json:070",
+        "app/data/luxian_0609_phase1_rules_extension_v1.json:070",
+        "tests/unit/test_luxian_0609_rule_contracts.py:070 exclusively until fixed commit",
+        "canonical_result_finalizer.py:070 explanation and raw reserved count gate"
+      ],
+      "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
+    },
+    {
+      "id": "TP-D02-LOCAL",
+      "owner": "/root/repair_chemo",
+      "worktree": "F:/MedQC-worktrees/qc-fix-chemo-v2-20261008",
+      "state": "candidate_frozen_not_integrable_semantic_and_legacy_regression_open",
+      "responsibility": [
+        "native_tumor_pathology_execution.py:026",
+        "chemotherapy_local_dose_facts.py",
+        "rule_contracts.py:026 budget",
+        "app/data/luxian_0609_rule_contracts_v1.json:026",
+        "app/data/luxian_0609_rules_v1.json:026",
+        "tumor_pathology_result_mapping.py:026 local unresolved subset and status only"
+      ],
+      "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
+    },
+    {
+      "id": "SURGERY-FREEZE-TEST",
+      "owner": "/root/repair_iml01",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "state": "integrated_test_fixture_closed_semantic_association_still_open",
+      "responsibility": [
+        "tests/unit/test_luxian_0609_surgery_document_freeze.py:029 fixture and family tuple",
+        "tests/unit/test_surgery_029_mr_fixture_contract.py"
+      ],
+      "note": "Exact file single writer; no PG/env/network/real model. Shared runtime schema/renderer ownership changes require root coordination. No new worktree."
+    },
+    {
+      "id": "N12-PV01",
+      "owner": "/root/repair_iml01",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-n12-carrier-20261008",
+      "state": "integrated_f1c6ec095_independent_review_root375_pass_engineering_only",
+      "responsibility": [
+        "anesthesia_visit_fact_extraction.py:carrier only",
+        "test_n12_anesthesia_visit_controlled_facts.py:reader only",
+        "test_n12_anesthesia_visit_document_groups.py:reader only",
+        "luxian_0609_anesthesia_test_facts.py:reader only frozen facts unchanged",
+        "test_n12_formal_privacy_carrier.py",
+        "own acceptance document"
+      ],
+      "note": "Globalprivacy/schema/medical oracles unchanged. Reviewer audit_imaging_laboratory. No real data/network/model."
+    },
+    {
+      "id": "TC01-SCOPE",
+      "owner": "/root/resume_transfusion",
+      "worktree": "F:/MedQC-worktrees/qc-fix-critical-v2-20261008",
+      "branch": "codex/qc-fix-transfusion-family-20261008",
+      "state": "425_passed_3_contract_failures_readiness_closed_candidate_not_integrated",
+      "responsibility": [
+        "native_transfusion_execution.py:043-047 only",
+        "new versioned performance scope extractor",
+        "rule contracts/catalog exact043-047 entries",
+        "own new tests and document",
+        "rule_contracts.py:exact044-046 budget2 enumeration only",
+        "transfusion_result_mapping.py:043-047 unconfirmed count only",
+        "customer_renderer.py:043-047 mixed NC disclosure only",
+        "canonical_result_finalizer.py:043-047 count and explanation only"
+      ],
+      "note": "Root granted exact shared paths after scope review. Preserve070 and all other rules. Same-execution lazy scope once; original6 and normal multitime oracles unchanged. Reviewer audit_pipeline_release. No PG/env/network/model. Author twice terminal model capacity errors; root sole writer now. Initial65 failures retained; new97 pass incl synthetic SQLite; family356=265pass91fail pending classification. No integration.",
+      "historical_owner": "/root",
+      "historical_state": "root_takeover_capacity_errors_new97_green_family356_91fail_unintegrated",
+      "resumption_responsibility_note": "仅root精确授权文件；共享Renderer/Finalizer归root，原responsibility保留历史，非并行写授权。"
+    },
+    {
+      "id": "N10-BODY",
+      "owner": "/root/resume_course",
+      "worktree": "F:/MedQC-worktrees/qc-fix-ledger-20261008",
+      "branch": "codex/qc-fix-course-body-20261008",
+      "state": "engineering_integrated_real_semantics_and_formal_chain_pending",
+      "responsibility": [
+        "new course_body_fact_extraction.py",
+        "native_extended_document_execution.py:065/067 only",
+        "extended_document/discharge_course.py:065/067 only",
+        "extension contracts/catalog:065/067 only",
+        "new dedicated tests/document"
+      ],
+      "note": "Reuse clean tree base0683dfb9e. Preserve old medical inputs/oracles; original missing row metadata not invented. Each rule1 bounded call; no real model/PG/env/network. TC01 owns renderer/Finalizer/rule_contracts.py: N10 must request serial support, no concurrent edits.",
+      "historical_owner": "/root/repair_iml01",
+      "historical_state": "technical_direction_approved_freeze_and_original_red_preparation",
+      "resumption_responsibility_note": "仅root精确授权文件；共享Renderer/Finalizer归root，原responsibility保留历史，非并行写授权。",
+      "resumption_commit": "1fb745b4312a1b932654703e9f6323f095ebee25"
+    }
+  ],
+  "rules": [
+    "One writer per production/test file; expansion requires root reassignment",
+    "No writes to D primary checkout",
+    "No model/PG calls for offline repairs",
+    "Existing reports and frozen expectations preserved",
+    "Only root integrates commits sequentially",
+    "Git commit/Husky serialized by root; shared git stash metadata must not race"
+  ],
+  "preserved_worktrees": [
+    {
+      "path": "F:/MedQC-worktrees/qc-critical-gaps-20261008",
+      "reason": "历史未提交生产/测试成果，禁止reset覆盖，未用于本轮修复"
+    }
+  ],
+  "resource_note": "IML01 PowerShell启动OOM后降并发1；IML02自有typecheck已退出，未宣称通过。前端全量暂缓。",
+  "integration_head": "1fb745b4312a1b932654703e9f6323f095ebee25",
+  "current_test_slot_owner": null,
+  "queued_tests": [],
+  "resumption": {
+    "date": "2026-10-08",
+    "baseline": "4757e4dee6ff1b1161db7b474e22b3d77a528e3e",
+    "plan": "docs/plans/2026-10-08-main-agent-resumption.md",
+    "snapshot_index": ".tmp/resumption-20261008/index.json",
+    "max_failed_repair_rounds_per_root_cause": 3,
+    "no_hardcoded_case_repairs": true,
+    "test_slot_owner": null,
+    "agents": {
+      "transfusion": "/root/resume_transfusion",
+      "course_body": "/root/resume_course",
+      "independent_review": "/root/resume_review",
+      "reconciliation": "/root/resume_reconciliation"
+    },
+    "shared_file_owner": "/root",
+    "note": "旧owner保留历史；新写入由本段及root精确授予路径控制。基线红测不计修复轮；3轮失败停止报root，禁止改名重置。",
+    "shared_copy_validation": {
+      "baseline": "4 failed / 4 passed",
+      "focused": "8 passed",
+      "full_renderer_finalizer": "504 passed",
+      "artifact": ".tmp/resumption-20261008/root-test-00021a8634",
+      "review": "resumption-review.md",
+      "commit": "3c2338024",
+      "minimum_gates": "encoding: 3 staged files passed; npm run lint exit 0; hook passed"
+    },
+    "repair_rounds": {
+      "transfusion_capacity": {
+        "implementation_rounds": 2,
+        "state": "focused_passed"
+      },
+      "transfusion_046_full_body": {
+        "implementation_rounds": 1,
+        "state": "focused_passed"
+      },
+      "transfusion_legacy_scope_protocol": {
+        "implementation_rounds": 2,
+        "state": "protocol_closed_411_passed_3_production_contract_failures_preserved"
+      },
+      "course_shared_customer_copy": {
+        "implementation_rounds": 1,
+        "state": "passed_committed"
+      },
+      "course_timezone_fixture": {
+        "implementation_rounds": 1,
+        "state": "passed_original_naive_time_counterexamples_preserved"
+      },
+      "course_deep_json_boundary": {
+        "implementation_rounds": 1,
+        "state": "red_reproduced_then_passed"
+      },
+      "transfusion_source_readiness": {
+        "implementation_rounds": 1,
+        "state": "independently reviewed engineering subitem closed; 14 passed, 428 combined425 passed3 unchanged contract failures",
+        "production_sha256": "0517c4b7402c7cf7438177969c5a94fbdf6dd6a73d4b3a8b5a35a26d3561d2e6",
+        "semantic_validation": "not performed; deterministic source-readiness change only",
+        "verification_attempts_completed": 3,
+        "test_helper_correction_state": "two erroneous test assertions corrected within three validation attempts; all first failures retained",
+        "integration": "candidate only; not integrated"
+      }
+    },
+    "course_validation": {
+      "facts": "85 passed (original 84 + deep JSON receipt)",
+      "legacy": "133 passed",
+      "artifact_prefix": ".tmp/resumption-20261008/r2-",
+      "integration": "committed 1fb745b4312a1b932654703e9f6323f095ebee25; root 85+133+8 passed, encoding16/hook passed; only design markdown formatted by hook",
+      "persistence": "8 isolated SQLite new-engine reload cases passed"
+    }
+  }
+}

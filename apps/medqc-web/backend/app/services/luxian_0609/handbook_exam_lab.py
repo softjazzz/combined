@@ -1,8 +1,9 @@
 """2026 手册检查检验事件台账、报告完整性与安全展示合同。
 
 本模块只消费同一次证据会话。CDM 的 COMPLETE 证明查询未截断，不能证明
-上游已全部同步；因此单纯未找到报告/医嘱/病程只能构成资料缺口。既有五条
-规则继续使用原合同，本模块不改变其触发范围、24 小时窗口或模型调用。
+上游已全部同步；因此单纯未找到报告/医嘱/病程默认只构成资料缺口。院方口径
+（2026-10-10）：已执行培养在出院终末质控时仍无报告判不合规；在院运行中
+缺报告或报告仍在培养中属时限未到，暂不评价。既有五条规则继续使用原合同。
 """
 
 from __future__ import annotations
@@ -15,6 +16,10 @@ from typing import Any, Mapping, Sequence
 from .evidence_material import EvidenceMaterialUnavailable, Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .exam_order_linkage import resolve_exam_master_order_ids
+from .exam_lab_fact_extraction import (
+    _EXPLICIT_NON_TARGET_EXAM_PATTERN,
+    _EXPLICIT_NON_TARGET_CULTURE_PATTERN,
+)
 
 
 ORDER_SOURCE = "inpat_nondrug_order.exam_lab_order"
@@ -29,7 +34,9 @@ FINAL_STATES = frozenset({"compliant", "non_compliant", "not_applicable", "data_
 ISSUE_KINDS = frozenset({
     "report_present", "report_missing", "report_content_unavailable", "execution_unconfirmed",
     "association_unresolved", "source_scope_incomplete", "no_performed_event",
+    "report_not_yet_due",
 })
+HORIZON_SOURCE = "evaluation_context.horizon"
 _IMAGING = re.compile(r"(?<![A-Za-z])(?:CT|MRI)(?![A-Za-z])|计算机断层|磁共振|核磁", re.I)
 _SUPPLY = re.compile(r"胶片|光盘|耗材|打印|刻录")
 _EXCLUDED = re.compile(r"取消|撤销|作废|未执行|未实施|计划|拟行|待执行|预约|cancelled|canceled|planned", re.I)
@@ -74,7 +81,7 @@ _CURRENT_PENDING_CONTEXT = re.compile(
     r"当前|目前|现(?:仍|待|处于|在)|仍(?:然|在)?|尚(?:未|在)?|继续"
 )
 _REPORT_CLAUSE_BOUNDARY = re.compile(r"[\r\n。；;！？!?]+")
-_NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "lab_type", "test_type")
+_NAME_FIELDS = ("order_name", "exam_name", "exam_item_name", "item_name", "lab_item_name", "labtest_subject", "exam_type", "modality", "lab_type", "test_type")
 _REPORT_FIELDS = ("exam_result", "exam_impression", "exam_conclusion", "impression", "conclusion", "description", "result", "record_content")
 _COURSE_FIELDS = ("case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan", "record_content", "content")
 
@@ -94,6 +101,53 @@ def target_name(family: str, value: str) -> bool:
 
 def _names(row: Mapping[str, Any]) -> str:
     return " ".join(dict.fromkeys(clean(row.get(field)) for field in _NAME_FIELDS if clean(row.get(field))))
+
+
+def _identity_state(family: str, value: str) -> str:
+    """复用既有目标/非目标口径，混合身份与未识别身份均不作确定推断。"""
+    pattern = _EXPLICIT_NON_TARGET_EXAM_PATTERN if family == "exam" else _EXPLICIT_NON_TARGET_CULTURE_PATTERN
+    target = target_name(family, value)
+    non_target = bool(pattern.search(value) or (family == "exam" and _SUPPLY.search(value)))
+    return "target" if target and not non_target else "non_target" if non_target and not target else "unknown"
+
+
+def _modality_identity(value: Any) -> str | None:
+    """只归一化结构化模态整值；类别和未知值不作检查模态推断。"""
+    return {"CT": "CT", "MR": "MRI", "MRI": "MRI", "US": "US", "DR": "DR"}.get(clean(value).upper())
+
+
+def _identity_conflicts(
+    family: str, rows: Sequence[tuple[str, Mapping[str, Any]]], *,
+    report_refs: frozenset[str] = frozenset(),
+) -> bool:
+    """同键目标事件出现明确反证或混合身份时，保留为关联缺口。
+
+    模态代码按结构化整值归一化，类别如“介入/其他”不否定CT/MRI。
+    培养报告的菌种鉴定/药敏明细名称不是整个检验身份，不能充当反证；
+    主项名称仍保留既有身份来源。正文不参与身份核查。
+    """
+    fields = (
+        ("modality", "exam_type", "order_name", "exam_name", "exam_item_name", "item_name")
+        if family == "exam" else
+        ("lab_type", "test_type", "order_name", "labtest_subject", "lab_item_name", "item_name")
+    )
+    for ref, row in rows:
+        row_fields = tuple(
+            field for field in fields
+            if not (family == "culture" and ref in report_refs and field in {"lab_item_name", "item_name"})
+        )
+        values = tuple((field, clean(row.get(field))) for field in row_fields if clean(row.get(field)))
+        if not values and family == "exam":
+            values = (("performed_dept", clean(row.get("performed_dept"))),)
+        for field, value in values:
+            modality = _modality_identity(value) if family == "exam" and field in {"modality", "exam_type"} else None
+            state = (
+                "target" if modality in {"CT", "MRI"} else "non_target" if modality is not None
+                else _identity_state(family, value)
+            )
+            if state == "non_target" or (state == "unknown" and target_name(family, value)):
+                return True
+    return False
 
 
 def _time(value: Any) -> bool:
@@ -262,6 +316,11 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         names = tuple(_names(row) for _, row in all_rows)
         if not any(target_name(family, name) for name in names):
             continue
+        # 业务键相同不能覆盖主记录、报告或关联医嘱的明确身份冲突。
+        # 保留全部事件引用，由共用台账消费者在语义调用前交付关联缺口。
+        unresolved = unresolved or _identity_conflicts(
+            family, all_rows, report_refs=frozenset(ref for ref, _ in report_rows),
+        )
         used_orders.update(linked_ids)
         # 一个业务键可以有多条明细和重复导入；不同检查仍由业务键分开。
         # 多个不相同的原始医嘱号不能被静默合并，显式 ^ 合并键由既有函数验证。
@@ -294,7 +353,8 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         events.append(HandbookEvent(
             family, f"order:{order_id}", _names(rows[0][1])[:200], (), rows, (),
             performed, False, excluded,
-            not order_id.startswith("missing:") and len({_names(row) for _, row in rows}) == 1,
+            not order_id.startswith("missing:") and len({_names(row) for _, row in rows}) == 1
+            and not _identity_conflicts(family, rows),
         ))
     return tuple(events)
 
@@ -305,6 +365,28 @@ def build_handbook_ledger(*, rule_ids: Sequence[str], snapshot: Luxian0609Eviden
     events = {family: _build_family_events(family, sources) for family in dict.fromkeys(REPORT_RULES[rule] for rule in rule_ids)}
     overflow = frozenset(family for family, items in events.items() if len(items) > MAX_EVENTS)
     return HandbookLedger(sources, {family: items[:MAX_EVENTS] for family, items in events.items()}, overflow)
+
+
+def evaluation_horizon(
+    snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, datetime | None]:
+    """返回（"discharge"|"running"|""，评价截止时刻）；仅有日期时按当日零点。"""
+    rows = _read_source(snapshot, materials, HORIZON_SOURCE)
+    if not rows.complete or len(rows.rows) != 1:
+        return "", None
+    row = rows.rows[0][1]
+    moment = None
+    for value in (row.get("horizon_datetime"), row.get("horizon_date")):
+        if clean(value):
+            try:
+                moment = datetime.fromisoformat(clean(value).replace("Z", "+00:00"))
+                break
+            except ValueError:
+                return "", None
+    if moment is None:
+        return "", None
+    basis = {"discharge_date": "discharge", "evaluation_as_of": "running"}.get(clean(row.get("basis")), "")
+    return (basis, moment) if basis else ("", None)
 
 
 def finish_evaluation(rule_id: str, findings: Sequence[HandbookFinding], *, complete: bool) -> HandbookEvaluation:
@@ -320,7 +402,11 @@ def finish_evaluation(rule_id: str, findings: Sequence[HandbookFinding], *, comp
     issue = next((item.issue for item in findings if item.status == status), "no_performed_event")
     reason = {
         "compliant": "requirement_satisfied", "non_compliant": "requirement_violated",
-        "not_applicable": "performed_event_absent", "data_gap": (
+        "not_applicable": (
+            "evaluation_window_not_mature"
+            if any(item.issue == "report_not_yet_due" for item in findings)
+            else "performed_event_absent"
+        ), "data_gap": (
             "source_truncated" if not complete else "association_failed" if issue == "association_unresolved"
             else "target_report_missing" if issue in {"report_missing", "report_content_unavailable"}
             else "source_readiness_unproven" if issue in {"course_without_order", "executed_order_without_course"}
@@ -344,7 +430,11 @@ def finish_evaluation(rule_id: str, findings: Sequence[HandbookFinding], *, comp
     return HandbookEvaluation(rule_id, status, reason, refs, display)
 
 
-def evaluate_report_completeness(rule_id: str, ledger: HandbookLedger) -> HandbookEvaluation:
+def evaluate_report_completeness(
+    rule_id: str, ledger: HandbookLedger, *, horizon_basis: str = "",
+) -> HandbookEvaluation:
+    """horizon_basis 仅对培养生效：discharge=出院终末，running=在院运行中。"""
+    culture = REPORT_RULES[rule_id] == "culture"
     findings: list[HandbookFinding] = []
     for event in ledger.events[REPORT_RULES[rule_id]]:
         if event.excluded:
@@ -356,9 +446,18 @@ def evaluate_report_completeness(rule_id: str, ledger: HandbookLedger) -> Handbo
         elif event.reports and event.formal_report_present:
             status, issue = "compliant", "report_present"
         elif event.reports:
-            status, issue = "data_gap", "report_content_unavailable"
+            pending = any(_report_pending(row) for _, row in (*event.rows, *event.reports))
+            status, issue = (
+                ("not_applicable", "report_not_yet_due")
+                if culture and pending and horizon_basis == "running"
+                else ("data_gap", "report_content_unavailable")
+            )
+        elif culture and horizon_basis == "discharge":
+            status, issue = "non_compliant", "report_missing"
+        elif culture and horizon_basis == "running":
+            status, issue = "not_applicable", "report_not_yet_due"
         else:
-            # 完整 CDM 检索仍不能将同步缺口定性为临床漏报告。
+            # 无评价截止依据时不能区分同步缺口与临床漏报告。
             status, issue = "data_gap", "report_missing"
         findings.append(HandbookFinding(status, issue, event.refs, event.name))
     return finish_evaluation(rule_id, findings, complete=ledger.complete(rule_id))

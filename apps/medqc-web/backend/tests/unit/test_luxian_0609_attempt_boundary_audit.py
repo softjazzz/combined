@@ -33,6 +33,9 @@ from app.services.qc_workspace.canonical_result_store import CanonicalResultStor
 from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _WorkspaceStub
 
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
+
 @pytest.fixture
 def storage(monkeypatch):
     engine = sa.create_engine("sqlite://")
@@ -1190,3 +1193,22 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
     assert _status(engine, table) == "running"
     with engine.connect() as connection:
         assert connection.execute(sa.select(table.c.items_json)).scalar_one() is None
+
+
+def test_submission_dedup_candidates_do_not_load_result_payloads(storage):
+    service, engine, table = storage
+    statements = []
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement)
+    sa.event.listen(engine, "before_cursor_execute", capture)
+    try:
+        rows = service.list_recent_batch_job_candidates(created_by="tester", cutoff=datetime(2026, 9, 23))
+        assert [row["id"] for row in rows] == ["attempt-job"]
+        assert all("summary_json" not in sql and "items_json" not in sql for sql in statements)
+        assert service.list_recent_batch_job_candidates(created_by="other", cutoff=datetime(2026, 9, 23)) == []
+        assert service.list_recent_batch_job_candidates(created_by="tester", cutoff=datetime(2026, 9, 25)) == []
+        with engine.begin() as connection:
+            connection.execute(table.update().values(parent_job_id="parent"))
+        assert service.list_recent_batch_job_candidates(created_by="tester", cutoff=datetime(2026, 9, 23)) == []
+    finally:
+        sa.event.remove(engine, "before_cursor_execute", capture)

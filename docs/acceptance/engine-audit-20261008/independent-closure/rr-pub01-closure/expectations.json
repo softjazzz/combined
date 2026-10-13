@@ -1,0 +1,26 @@
+{
+  "candidate_sha": "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b",
+  "baseline_sha": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+  "frozen_before_probe": true,
+  "production_diff_expected": "only two lines in public Finalizer fallback: if validated is NotImplemented: return NotImplemented",
+  "unknown_rule_ids": ["LX0609-99-99-99", " lx0609-99-99-99 "],
+  "unknown_raw_cases": [null, {}, {"verification_kind":"synthetic_unowned","private_payload":"SYN_RRPUB_PRIVATE"}, [], "synthetic", 1],
+  "expected_unknown": "None for absent/non-dictionary; identical NotImplemented for dictionaries; no input mutation",
+  "known_cases": [
+    {"rule_id":"LX0609-01-01-01","status":"compliant","raw":{"failure_kind":"timeliness_requirement_satisfied","target_document":"admission_record","timeliness_state":"within","threshold_hours":24,"source_label":"入院记录"}},
+    {"rule_id":"LX0609-05-01-02","status":"non_compliant","raw":{"verification_kind":"antimicrobial_reason_documentation_check","antimicrobials":["合成药品甲"],"reason_documented":false,"unmatched_antimicrobials":["合成药品甲"],"association_ambiguous":false}},
+    {"rule_id":"LX0609-08-01-03","status":"data_gap","raw":{"verification_kind":"discharge_diagnosis_data_gap","authoritative_gap":"scope_conflict","written_gap":null}}
+  ],
+  "invariants": [
+    "known valid dictionaries are exactly preserved; known malformed and contradictory state rejected; timeliness/discharge illegal fields reject while antimicrobial existing whitelist may remove extras",
+    "pending_definition absent facts remain None under original policy gate",
+    "Store.safe_customer_display_facts projects unknown LX dictionary to empty dictionary; never returns private raw payload",
+    "unknown LX non_compliant without auditable facts is rejected; unknown LX normal replace_for_job is rejected by registered-rule contract",
+    "known saves can be read by a new Store instance and new isolated connection with equal facts/status",
+    "unknown LX historical envelope can retain internal raw decision_facts but customer-safe projection excludes it",
+    "do not require unrelated nonLX internal envelope raw text to be filtered by an LX-specific boundary",
+    "production two-line change does not turn sentinel into raw dictionary or swallow known-contract errors"
+  ],
+  "evidence_levels": ["owner 30 developer red cases included ten AttributeError; root-reported 321 focused green", "independent fixed-source probe prepared after owner commit; no full endpoint/deployment claim"],
+  "execution_pending": true
+}

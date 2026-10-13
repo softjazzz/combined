@@ -64,8 +64,24 @@ _TYPED_SOURCE_KEYS = (
     "consultation_record",
     "inpat_registration.discharge_horizon",
     "evaluation_context.horizon",
+    "inpat_registration",
+    "admission_record",
 )
 
+
+
+@pytest.fixture(autouse=True)
+def _skip_012_relevance_pre_step(request, monkeypatch):
+    """本文件用例验证主抽取；012 前置相关性判定由专门测试覆盖，这里固定为跳过。"""
+    if request.node.get_closest_marker("relevance_pre_step"):
+        return
+    from app.services.luxian_0609 import native_exam_lab_execution as _native
+    from app.services.luxian_0609.exam_finding_relevance import FindingRelevanceOutcome
+
+    async def _skipped(projection, llm_client):
+        return FindingRelevanceOutcome("skipped", {})
+
+    monkeypatch.setattr(_native, "classify_exam_finding_relevance", _skipped)
 
 def _typed_session(
     monkeypatch,
@@ -80,6 +96,7 @@ def _typed_session(
     consultation_rows: tuple[dict, ...] = (),
     discharge_horizon_rows: tuple[dict, ...] = (),
     evaluation_horizon_rows: tuple[dict, ...] = (),
+    admission_rows: tuple[dict, ...] = (),
     source_states: dict[str, str] | None = None,
 ):
     source_states = dict(source_states or {})
@@ -121,6 +138,8 @@ def _typed_session(
         "consultation_record": consultation_rows,
         "inpat_registration.discharge_horizon": discharge_horizon_rows,
         "evaluation_context.horizon": evaluation_horizon_rows,
+        "inpat_registration": (),
+        "admission_record": admission_rows,
     }
     observations = []
     material_sources = {}
@@ -479,7 +498,7 @@ async def test_typed_strict_schema_client_receives_dynamic_schema_on_first_and_i
         decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
     assert len(client.response_formats) == 2
     first_schema = client.response_formats[0]["json_schema"]
     retry_schema = client.response_formats[1]["json_schema"]
@@ -1728,6 +1747,7 @@ async def _run_010_public_native(
     order_rows: tuple[dict, ...] = (),
     course_rows: tuple[dict, ...] = (),
     rescue_rows: tuple[dict, ...] = (),
+    admission_rows: tuple[dict, ...] = (),
     llm_outputs: tuple[object, ...] = (),
 ):
     snapshot, materials = _typed_session(
@@ -1737,6 +1757,7 @@ async def _run_010_public_native(
         nondrug_order_rows=order_rows,
         course_rows=course_rows,
         rescue_rows=rescue_rows,
+        admission_rows=admission_rows,
     )
     client = _Client(list(llm_outputs))
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -1852,7 +1873,7 @@ def test_rule_scoped_course_catalog_keeps_010_expansion_out_of_011():
         projection=projection,
     )
     catalog = json.loads(
-        prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
+        prompt.split("逐规则事件目录=", 1)[1].split("。LX0609-06-01-02目录", 1)[0]
     )
 
     assert catalog["LX0609-06-01-02"][0]["course_doc_positions"] == [1, 2]
@@ -1899,21 +1920,23 @@ def test_non_010_keeps_nearest_pre_exam_course_outside_010_48h_window():
         projection=projection,
     )
     catalog = json.loads(
-        prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
+        prompt.split("逐规则事件目录=", 1)[1].split("。LX0609-06-01-02目录", 1)[0]
     )
 
     assert catalog["LX0609-06-01-02"][0]["course_doc_positions"] == []
     assert catalog["LX0609-06-01-04"][0]["course_doc_positions"] == [1, 2]
     assert "检查前72小时的最近病程" in prompt
 
+    # 用户口径（2026-10-11）：010窗口内无病程时程序直接判为未写原因，
+    # 模型越窗引用不再导致整批拒收，也不会被采信。
     payload = _fact_response(("LX0609-06-01-02",))
     payload["facts"][0]["course_doc_positions"] = [1]
-    with pytest.raises(ValueError, match="evidence ref mismatch"):
-        parse_exam_lab_fact_response(
-            response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-06-01-02",),
-            projection=projection,
-        )
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(payload)},
+        selected_rule_ids=("LX0609-06-01-02",),
+        projection=projection,
+    )
+    assert facts[0].semantic_state == "absent" and facts[0].course_doc_refs == ()
 
 
 def test_010_parser_rejects_post_exam_course_reference():
@@ -2067,8 +2090,8 @@ async def test_010_orders_and_course_mentions_without_actual_exam_are_not_applic
 
 
 @pytest.mark.asyncio
-async def test_010_missing_authoritative_exam_time_does_not_call_llm(monkeypatch):
-    """模型只能判断语义，不能补造或猜测检查发生时间。"""
+async def test_010_course_between_order_and_report_counts_as_pre_exam(monkeypatch):
+    """院方口径（2026-10-10）：检查发生在开立与报告之间，窗口截至报告时间。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2094,13 +2117,91 @@ async def test_010_missing_authoritative_exam_time_does_not_call_llm(monkeypatch
                 "record_content": "因头痛拟行头颅CT明确有无颅内出血。",
             },
         ),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
+    )
+
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
+    assert decision.final_state.value == "compliant"
+    assert canonical["status"] == "compliant"
+
+
+def _010_exam_rows(order_time: str, report_time: str):
+    return dict(
+        exam_rows=({"exam_id": "EX-1", "order_id": "ORD-1", "exam_name": "头颅CT平扫", "report_time": report_time},),
+        order_rows=({"order_id": "ORD-1", "order_name": "头颅CT平扫", "order_status": "新开",
+                     "prescribed_datetime": order_time},),
+    )
+
+
+@pytest.mark.asyncio
+async def test_010_exam_ordered_within_24h_of_admission_is_exempt_without_model(monkeypatch):
+    """院方口径（2026-10-10，B1 第 4 条）：入院 24 小时内开立的检查不核对检查前病程。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        **_010_exam_rows("2026-08-18 20:00:00", "2026-08-18 22:00:00"),
+        course_rows=(),
+        admission_rows=({"admission_datetime": "2026-08-18 09:00:00"},),
     )
 
     assert result.llm_call_count == 0
     assert client.prompts == []
-    assert decision.final_state.value == "data_gap"
-    assert decision.reason_code == "authoritative_time_missing"
-    assert canonical["status"] == "data_gap"
+    assert decision.final_state.value == "not_applicable"
+    assert decision.reason_code == "eligibility_not_met"
+    assert canonical["status"] == "not_applicable"
+    assert "入院 24 小时内开立" in canonical["findings"]
+
+
+@pytest.mark.asyncio
+async def test_010_exam_ordered_after_admission_window_is_still_checked(monkeypatch):
+    result, decision, _canonical, client = await _run_010_public_native(
+        monkeypatch,
+        **_010_exam_rows("2026-08-20 09:00:00", "2026-08-20 13:00:00"),
+        course_rows=(
+            {"record_time": "2026-08-20 08:00:00", "record_content": "头痛加重，拟复查头颅CT。"},
+        ),
+        admission_rows=({"admission_datetime": "2026-08-18 09:00:00"},),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
+    )
+
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
+    assert decision.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_010_course_after_report_is_outside_pre_exam_window(monkeypatch):
+    """报告之后的病程不能算检查前病程：窗口内无病程时不能引用窗口外文书。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-1",
+                "order_id": "ORD-1",
+                "exam_name": "头颅CT平扫",
+                "report_time": "2026-08-18 13:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "ORD-1",
+                "order_name": "头颅CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-08-18 09:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-08-18 14:00:00",
+                "record_content": "因头痛已行头颅CT，未见颅内出血。",
+            },
+        ),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",), semantic_state="absent"),),
+    )
+
+    assert result.llm_call_count == 1
+    assert "因头痛已行头颅CT" not in client.prompts[0]
+    assert decision.final_state.value == "non_compliant"
 
 
 @pytest.mark.asyncio
@@ -2200,11 +2301,11 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
         ),
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert decision.final_state.value == "compliant"
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -2359,7 +2460,7 @@ async def test_010_public_native_uses_order_exam_report_contract(
     elif expected_state in {"non_compliant", "data_gap"}:
         facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
         assert facts["failure_kind"] == expected_failure_kind
-    assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
+    assert result.llm_call_count == (2 if expected_state == "compliant" else 0)  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == (110 if expected_state == "compliant" else 0)
     assert len(client.prompts) == result.llm_call_count
 
@@ -2517,9 +2618,9 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -2680,6 +2781,24 @@ def test_010_composite_exam_id_links_one_master_to_explicit_component_orders():
     }
 
 
+def test_composite_exam_id_ignores_same_visit_non_exam_component():
+    """真实样本：合并检查夹带同次住院的“薄层扫描(加收)”计费项，它不在 CT/MRI 医嘱集合内。"""
+    from app.services.luxian_0609.exam_order_linkage import resolve_exam_master_order_ids
+
+    row = {"exam_id": "VISIT||44^VISIT||43", "order_id": "VISIT||43+VISIT||43"}
+    assert resolve_exam_master_order_ids(row, known_order_ids=("VISIT||43",)) == ("VISIT||43",)
+    merged = {"exam_id": "VISIT||48^VISIT||45^VISIT||47", "order_id": "VISIT||47+VISIT||47+VISIT||47"}
+    assert resolve_exam_master_order_ids(merged, known_order_ids=("VISIT||45", "VISIT||47")) == (
+        "VISIT||45", "VISIT||47")
+    # 其他住院号前缀、无住院号前缀，或 order_id 本身不在检查医嘱集合内，均保持失败关闭。
+    assert resolve_exam_master_order_ids(
+        {"exam_id": "VISIT||43^OTHER||44", "order_id": "VISIT||43+VISIT||43"}, known_order_ids=("VISIT||43",)) == ()
+    assert resolve_exam_master_order_ids(
+        {"exam_id": "A^B", "order_id": "A+A"}, known_order_ids=("A",)) == ()
+    assert resolve_exam_master_order_ids(
+        {"exam_id": "VISIT||44^VISIT||43", "order_id": "VISIT||44+VISIT||44"}, known_order_ids=("VISIT||43",)) == ()
+
+
 def test_010_composite_exam_id_with_unknown_component_stays_data_gap():
     """复合检查只要有一个组件不属于本次就诊医嘱，就不能猜测关联。"""
 
@@ -2810,8 +2929,8 @@ def test_010_mixed_real_exam_and_film_supply_counts_only_real_exam_order():
 
 
 @pytest.mark.asyncio
-async def test_010_composite_exam_id_reaches_authoritative_exam_time_gate(monkeypatch):
-    """复合键已完整关联后，缺实际检查时间应报告时间缺口而非关联失败。"""
+async def test_010_composite_exam_without_exam_time_anchors_on_order_time(monkeypatch):
+    """院方口径（2026-10-10）：源库无检查时间时以关联医嘱开立时间为锚点。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2850,14 +2969,12 @@ async def test_010_composite_exam_id_reaches_authoritative_exam_time_gate(monkey
                 "record_content": "因腰背痛完善胸椎及腰椎MRI明确骨折情况。",
             },
         ),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
-    assert decision.final_state.value == "data_gap"
-    assert decision.reason_code == "authoritative_time_missing"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "authoritative_time_missing"
-    assert result.llm_call_count == result.total_tokens == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
+    assert decision.final_state.value == "compliant"
+    assert canonical["status"] == "compliant"
 
 
 @pytest.mark.asyncio
@@ -2900,9 +3017,9 @@ async def test_010_pending_order_does_not_poison_executed_exam(monkeypatch):
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -2957,9 +3074,9 @@ async def test_010_multiple_pending_orders_do_not_poison_one_executed_exam(monke
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -4594,7 +4711,13 @@ async def test_typed_controlled_triggers_call_each_selected_rule_once_with_cropp
             },
         ),
     )
-    client = _Client([_fact_response(exam_lab.EXAM_LAB_RULE_IDS)])
+    response = _fact_response(exam_lab.EXAM_LAB_RULE_IDS)
+    # 无关联医嘱时 010 以报告时间为锚点进入同一次调用；报告前 48 小时内没有
+    # 病程候选，按用户口径（2026-10-11）由程序判为未写明原因。
+    for fact in response["facts"]:
+        if fact["rule_id"] == "LX0609-06-01-02":
+            fact.update(semantic_state="unknown", course_doc_positions=[])
+    client = _Client([response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
@@ -4609,13 +4732,13 @@ async def test_typed_controlled_triggers_call_each_selected_rule_once_with_cropp
     assert result.results == ()
     assert [item.rule_id for item in result.decisions] == list(exam_lab.EXAM_LAB_RULE_IDS)
     assert [item.qc_direction.value for item in result.decisions] == [
-        "unknown",
+        "defect",
         "satisfied",
         "satisfied",
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -4670,7 +4793,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     assert [item.final_state.value for item in reduced] == ["compliant"] * 5
     assert all(item.reason_code != "snapshot_mismatch" for item in reduced)
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 3  # 含 010 检查前原因、06-01-04 结果记录核对各 1 次（替身未作答，回退主抽取）
     assert all("SHOULD_NOT_REACH_PROMPT" not in prompt for prompt in client.prompts)
     assert all("FULL_CHART" not in prompt for prompt in client.prompts)
     assert all("主执行规则" not in prompt for prompt in client.prompts)
@@ -4772,9 +4895,9 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
     assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2  # 第 2 次为 06-01-04 结果记录核对
     assert "event_position" in client.prompts[0]
     assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]
@@ -4965,7 +5088,8 @@ def test_010_shared_course_different_same_modality_body_does_not_cover_second():
     assert facts[1].semantic_state == "unknown"
 
 
-def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysis():
+@pytest.mark.parametrize("additional_text", ["", "该影像证实本次症状来源，故选择手术治疗。"])
+def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysis(additional_text):
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": (
@@ -4985,7 +5109,7 @@ def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysi
             "daily_course_record": (
                 {
                     "record_time": "2026-04-01 13:00:00",
-                    "record_content": "查看胸部CT报告，记录提示右肺结节。",
+                    "record_content": "查看胸部CT报告，记录提示右肺结节。" + additional_text,
                 },
                 {
                     "record_time": "2026-04-02 13:00:00",
@@ -5018,8 +5142,9 @@ def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysi
         projection=projection,
     )
 
-    assert [fact.semantic_state for fact in facts] == ["absent", "absent"]
-    assert [fact.course_doc_refs for fact in facts] == [(), ()]
+    assert [fact.semantic_state for fact in facts] == ["present" if additional_text else "unknown", "unknown"]
+    assert bool(facts[0].course_doc_refs) is bool(additional_text)
+    assert facts[1].course_doc_refs == ()
 
 
 def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result():
@@ -5075,7 +5200,7 @@ def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result()
         projection=projection,
     )
 
-    assert facts[0].semantic_state == "absent"
+    assert facts[0].semantic_state == "unknown"
     assert facts[0].course_doc_refs == ()
     assert facts[1].semantic_state == "present"
     assert len(facts[1].course_doc_refs) == 1
@@ -5591,6 +5716,9 @@ def test_exam_lab_fact_prompt_contains_per_rule_decision_table_for_single_event(
     )
 
     assert "逐规则决策表" in prompt
+    assert "LX0609-06-01-04=CT/MRI报告后记录结果" in prompt
+    assert "LX0609-06-01-05=检出异常病灶或异常征象的CT/MRI结果分析" in prompt
+    assert "010=" not in prompt and "011=" not in prompt and "012=" not in prompt
     assert "unknown 不是默认答案" in prompt
     assert "最小有效引用示例" in prompt
     assert "COURSE_DOC_POSITION=[1]" in prompt
@@ -5701,7 +5829,7 @@ async def test_text_first_synthetic_missing_ct_reason_is_non_compliant_after_one
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -6217,7 +6345,7 @@ async def test_typed_and_legacy_rules_are_isolated_in_mixed_rollback_mode(monkey
     assert result.decisions[0].reason_code == "semantic_output_unknown"
     assert [item["rule_id"] for item in result.results] == ["LX0609-06-03-03"]
     assert result.results[0]["status"] == "data_gap"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 010 检查前原因核对（替身未作答，回退主抽取）
 
 
 @pytest.mark.asyncio
@@ -6339,7 +6467,7 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
         },
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
     assert not result.parse_failure_kinds
     display_facts = dict(result.customer_display_facts)
     for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05"):
@@ -6545,3 +6673,85 @@ async def test_typed_value_failure_retries_only_failed_rule_and_keeps_valid_sibl
     assert '"rule_id":"LX0609-06-01-04"' in client.prompts[1]
     assert '"rule_id":"LX0609-06-01-05"' not in client.prompts[1]
     assert result.parse_failure_kinds == ("value",)
+
+
+@pytest.mark.asyncio
+async def test_prompt_requires_result_content_for_recorded_result_not_just_report_received(monkeypatch):
+    """011/014“记录结果”须写出结果内容；只写“已回报/详见报告”不算（真实模型曾误判为已记录）。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "exam_id": "EXAM-011", "exam_type": "CT", "exam_name": "胸部CT",
+            "exam_time": "2026-04-26 08:00:00", "report_time": "2026-04-26 12:00:00",
+            "exam_conclusion": "右肺上叶见约8mm实性结节。",
+        },),
+        course_rows=({"record_time": "2026-04-26 16:00:00", "record_content": "胸部CT结果已回报，详见报告。"},),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-30"},),
+    )
+    client = _Client([_fact_response(("LX0609-06-01-04",), semantic_state="absent")])
+    await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-06-01-04",), wrapper_rules=[_wrapper("LX0609-06-01-04")], evidence_payload=None,
+        llm_client=client, evidence_snapshot=snapshot, evidence_materials=materials,
+        decision_rule_ids=("LX0609-06-01-04",),
+    )
+    prompt = client.prompts[0]
+    assert "必须在病程中写出本次报告的结果内容" in prompt
+    assert "只写“结果已回报”“详见报告”“已查看报告”而没有任何结果内容的，为absent" in prompt
+
+
+@pytest.mark.parametrize("semantic_state", ["present", "unknown", "absent"])
+def test_010_empty_reason_window_is_program_absent_regardless_of_model(semantic_state):
+    """用户口径（2026-10-11）：检查前48小时窗口内没有病程时，程序直接判为未写明原因。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "order_id": "ORD-1",
+                    "exam_name": "胸部CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-18 15:00:00",
+                    "record_content": "检查后病程：完善胸部CT了解肺部情况。",
+                },
+            ),
+        }
+    )
+    payload = _fact_response(("LX0609-06-01-02",), semantic_state=semantic_state)
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(payload)},
+        selected_rule_ids=("LX0609-06-01-02",),
+        projection=projection,
+    )
+
+    assert facts[0].applicability == "applicable"
+    assert facts[0].semantic_state == "absent"
+    assert facts[0].course_doc_refs == ()
+
+
+def test_exam_prompt_carries_2026_10_11_reason_incidental_and_differential_policy():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "exam_name": "胸部CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+        }
+    )
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-06-01-02", "LX0609-06-01-05"),
+        projection=projection,
+    )
+    assert "完善胸部CT了解肺部情况" in prompt
+    assert "与本次主诉、入院诊断及检查目的无关的附带发现" in prompt
+    assert "模板式鉴别诊断不算" in prompt

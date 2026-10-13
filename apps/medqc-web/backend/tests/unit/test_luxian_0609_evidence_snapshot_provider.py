@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 import json
+from pathlib import Path
 
 import pytest
 
@@ -29,7 +30,11 @@ from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
 )
+from app.services.luxian_0609.executor_registry import (
+    resolve_legacy_executor_material_source_keys,
+)
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
+from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609.source_registry import (
     SOURCE_REGISTRY_VERSION,
     SourceAccessMode,
@@ -52,9 +57,6 @@ def test_039_accepts_explicit_emergency_life_saving_surgery_wording():
     },))
 
     assert state is True
-from app.services.luxian_0609.executor_registry import (
-    resolve_legacy_executor_material_source_keys,
-)
 
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
@@ -1529,10 +1531,14 @@ def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
     assert calls == [
         "anesthesia_record",
         "consent_form",
+        # 036/037 术后24小时访视时限需评价截止时间（由住院登记派生）。
+        "inpat_registration",
         "mr_surgery",
         "postane_surveil_record",
         "preane_surveil_record",
         "surgery_inform_consent",
+        # 036/037 访视时限按手术记录起止时间核对（病案首页仅作回退）。
+        "surgery_record",
     ]
     observations = {item.source_key: item for item in snapshot.observations}
     assert all(
@@ -1688,7 +1694,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
     assert "discharge_record" not in calls
 
 
-def test_all_79_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
+def test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -1706,7 +1712,14 @@ def test_all_79_registered_rules_query_each_bounded_source_once_and_never_query_
             for source_key in entry.physical_source_keys
         }
     )
-    assert len(selected) == 79
+    raw_rules = json.loads(
+        (Path(__file__).resolve().parents[2] / "app/data/luxian_0609_rule_master_v1.json").read_text(encoding="utf-8")
+    )["rules"]
+    expected_ids = tuple(raw["rule_id"] for raw in raw_rules if raw["implementation_status"] == "active")
+    assert expected_ids
+    assert len(set(expected_ids)) == len(expected_ids)
+    assert selected == expected_ids
+    assert tuple(str(item["rule_id"]) for item in load_luxian_0609_rules()) == expected_ids
     assert calls == sorted(
         {
             *expected_bounded,
@@ -1967,10 +1980,14 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
     ]
 
 
+def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
+    # ea5ed2b047 新增手册来源时已正式从 v33 升为 v34；此处保留全局冻结门禁。
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v34"
+
+
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v33"
     assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
     assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 
@@ -2786,3 +2803,67 @@ def test_snapshot_reader_rejects_source_without_approved_projection_before_sql(m
             visit_id="v",
             source_schema=None,
         )
+
+
+def test_derived_horizon_rows_are_readable_by_snapshot_and_identity_gate() -> None:
+    """评价时点派生来源须登记进快照文书引用；否则遍历全部来源的发送前身份
+    核验在读取它时判身份不符，整例模型调用被拒发（0910 真实样本复现）。"""
+    from app.services.luxian_0609.privacy_identity_context import build_luxian_0609_identity_provider
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(source_key, [{"discharge_datetime": "2026-07-13 09:00:00"}], limit_rows=1)
+        return _rows(source_key, [])
+
+    coordinates = {
+        "institute_id": "institute-horizon-gate",
+        "patient_id": "patient-horizon-gate",
+        "visit_id": "visit-horizon-gate",
+    }
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-02-01-04",),
+        source_schema=None,
+        evaluation_as_of_date="2026-07-16",
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=reader,
+        **coordinates,
+    )
+
+    rows = session.materials.document_rows(EVALUATION_HORIZON_SOURCE_KEY, snapshot=session.snapshot)
+    assert len(rows) == 1
+    provider = build_luxian_0609_identity_provider(
+        **coordinates, snapshot=session.snapshot, materials=session.materials,
+    )
+    assert set(coordinates.values()) <= set(provider())
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_controlled_fact_source_without_material_does_not_block_identity_gate(present: bool) -> None:
+    """受控事实来源只产出有/无事实、不入材料库；发送前身份核验不能因读不到
+    它的原始行而拒发整例模型调用（0910 真实样本复现）。"""
+    from app.services.luxian_0609.privacy_identity_context import build_luxian_0609_identity_provider
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            return _rows(source_key, [{"present": True}] if present else [], limit_rows=1)
+        return _rows(source_key, [])
+
+    coordinates = {
+        "institute_id": "institute-controlled-gate",
+        "patient_id": "patient-controlled-gate",
+        "visit_id": "visit-controlled-gate",
+    }
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-02-01-03",),
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        **coordinates,
+    )
+    assert not session.materials.has_source(CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY)
+    provider = build_luxian_0609_identity_provider(
+        **coordinates, snapshot=session.snapshot, materials=session.materials,
+    )
+    assert set(coordinates.values()) <= set(provider())

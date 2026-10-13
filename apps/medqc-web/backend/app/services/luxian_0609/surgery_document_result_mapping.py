@@ -34,21 +34,29 @@ _CONSENT_FIELDS = (
     "physician_signature_time",
 )
 _VISIT_SOURCES = ("preane_surveil_record", "postane_surveil_record")
+# 按业务基线 037：术前访视含一般情况、简要病史、相关检查、拟行手术和麻醉方式、
+# 适应证、注意事项、术前医嘱、签名和日期；术后48小时内至少访视1次，记录恢复、
+# 清醒、拔管、术后医嘱、特殊情况、签名和时间。院方口径：术前24小时内、术后24小时内须访视。
 _VISIT_FIELDS = {
     "preanesthesia_visit": (
-        "asa_level",
-        "airway_assessment",
-        "fasting_status",
-        "anesthesia_history",
-        "risk_discussion",
+        "preop_visit_within_24h",
+        "general_condition",
+        "brief_history",
+        "relevant_examinations",
+        "planned_procedure_and_anesthesia",
+        "anesthesia_indication",
+        "precautions",
+        "preoperative_orders",
         "anesthetist_signature",
         "record_time",
     ),
     "postanesthesia_visit": (
+        "postop_visit_within_24h",
+        "recovery_status",
         "consciousness_status",
-        "respiratory_status",
-        "circulatory_status",
-        "complication_assessment",
+        "extubation_status",
+        "postoperative_orders",
+        "special_situations",
         "anesthetist_signature",
         "record_time",
     ),
@@ -289,7 +297,45 @@ def _safe_039(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+_PREOP_SIDES = frozenset({"左", "右", "双侧"})
+
+
 def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """078 可附带侧别冲突提示（仅侧别标签与手术序号），其余字段按原合同校验。"""
+
+    if "laterality_conflicts" not in raw:
+        return _safe_preop_content_core(rule_id, raw)
+    conflicts = raw.get("laterality_conflicts")
+    if (
+        rule_id != "LX0609-04-01-04"
+        or not isinstance(conflicts, list)
+        or not conflicts
+        or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"event_index", "planned_side", "performed_side"}
+            or type(item["event_index"]) is not int
+            or item["event_index"] < 1
+            or item["planned_side"] not in _PREOP_SIDES
+            or item["performed_side"] not in _PREOP_SIDES
+            or item["planned_side"] == item["performed_side"]
+            for item in conflicts
+        )
+    ):
+        return None
+    safe = _safe_preop_content_core(
+        rule_id, {key: value for key, value in raw.items() if key != "laterality_conflicts"}
+    )
+    if safe is None or safe["verification_kind"] == "preop_fact_extraction_invalid":
+        return None
+    matched_events = {
+        item["event_index"] for item in safe["documents"] if item["association_state"] == "matched"
+    }
+    if any(item["event_index"] not in matched_events for item in conflicts):
+        return None
+    return {**safe, "laterality_conflicts": [dict(item) for item in conflicts]}
+
+
+def _safe_preop_content_core(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
     target = {"LX0609-04-01-04": "presurg_summary", "LX0609-04-01-05": "presurg_discussion"}[rule_id]
     allowed = {
         "LX0609-04-01-04": (
@@ -309,10 +355,137 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
             "preop_content_complete",
             "preop_content_incomplete",
             "preop_surgery_association_ambiguous",
+            "preop_discussion_content_uncertain",
+            "preop_summary_content_uncertain",
+            "preop_fact_extraction_invalid",
         }
         or raw.get("target_document") != target
         or raw.get("checked_fields") != list(allowed)
     ):
+        return None
+    if kind == "preop_fact_extraction_invalid":
+        # 抽取未通过原文校验：只交付失败范围与字段名，不含任何模型引文或文书明细。
+        invalid = raw.get("invalid_fields")
+        scope = raw.get("failure_scope")
+        if (
+            set(raw) != {
+                "verification_kind", "target_document", "checked_fields",
+                "missing_fields", "documents", "failure_scope", "invalid_fields",
+            }
+            or raw.get("missing_fields") != []
+            or raw.get("documents") != []
+            or scope not in {"field", "document"}
+            or not isinstance(invalid, list)
+            or any(item not in allowed for item in invalid)
+            or len(set(invalid)) != len(invalid)
+            or (scope == "field" and not invalid)
+        ):
+            return None
+        return {
+            "verification_kind": kind,
+            "target_document": target,
+            "checked_fields": list(allowed),
+            "missing_fields": [],
+            "documents": [],
+            "failure_scope": scope,
+            "invalid_fields": list(invalid),
+        }
+    uncertain = raw.get("uncertain_fields", [])
+    if kind == "preop_discussion_content_uncertain":
+        # 内容unknown只属于079；不得夹带确认缺项、手术关联或未请求的事实。
+        if (
+            rule_id != "LX0609-04-01-05"
+            or set(raw) != {
+                "verification_kind", "target_document", "checked_fields",
+                "missing_fields", "documents", "uncertain_fields",
+            }
+            or raw.get("missing_fields") != []
+            or not isinstance(uncertain, list)
+            or not uncertain
+            or any(not isinstance(field, str) or field not in allowed for field in uncertain)
+            or len(uncertain) != len(set(uncertain))
+        ):
+            return None
+        documents = raw.get("documents")
+        if not isinstance(documents, list) or not documents or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"document_index", "event_index", "association_state", "missing_fields"}
+            or type(item["document_index"]) is not int
+            or item["document_index"] < 1
+            or item["association_state"] != "not_required"
+            or item["event_index"] is not None
+            or item["missing_fields"] != []
+            for item in documents
+        ):
+            return None
+        if len({item["document_index"] for item in documents}) != len(documents):
+            return None
+    elif rule_id == "LX0609-04-01-04" and (
+        kind == "preop_summary_content_uncertain" or "uncertain_fields" in raw
+        or isinstance(raw.get("documents"), list) and any(
+            isinstance(doc, Mapping) and "uncertain_fields" in doc for doc in raw["documents"]
+        )
+    ):
+        # 078语义unknown与归属pending分别保留；旧已保存事实不强制补新键。
+        keys = {"verification_kind", "target_document", "checked_fields", "missing_fields", "documents"}
+        if set(raw) - keys - {"uncertain_fields", "pending_fields"} or not keys <= set(raw):
+            return None
+        if (
+            not isinstance(uncertain, list)
+            or any(not isinstance(field, str) or field not in allowed for field in uncertain)
+            or len(uncertain) != len(set(uncertain))
+            or ("uncertain_fields" in raw and (not uncertain or kind not in {"preop_summary_content_uncertain", "preop_content_incomplete"}))
+            or kind == "preop_summary_content_uncertain" and (not uncertain or raw.get("missing_fields") != [])
+        ):
+            return None
+        missing_fields = raw.get("missing_fields")
+        if (
+            not isinstance(missing_fields, list)
+            or any(not isinstance(field, str) or field not in allowed for field in missing_fields)
+            or len(missing_fields) != len(set(missing_fields))
+            or set(missing_fields) & set(uncertain)
+        ):
+            return None
+        documents = raw.get("documents")
+        if not isinstance(documents, list) or not documents:
+            return None
+        seen: set[int] = set()
+        all_unknown: set[str] = set()
+        for doc in documents:
+            if not isinstance(doc, Mapping) or set(doc) not in (
+                {"document_index", "event_index", "association_state", "missing_fields"},
+                {"document_index", "event_index", "association_state", "missing_fields", "uncertain_fields"},
+            ):
+                return None
+            index, event, state = doc["document_index"], doc["event_index"], doc["association_state"]
+            if (
+                type(index) is not int or index < 1 or index in seen
+                or not isinstance(state, str) or state not in {"matched", "not_required", "ambiguous"}
+                or (state == "matched" and (type(event) is not int or event < 1))
+                or (state != "matched" and event is not None)
+            ):
+                return None
+            seen.add(index)
+            doc_missing, doc_unknown = doc["missing_fields"], doc.get("uncertain_fields", [])
+            for fields in (doc_missing, doc_unknown):
+                if not isinstance(fields, list) or any(not isinstance(field, str) or field not in allowed for field in fields) or len(fields) != len(set(fields)):
+                    return None
+            if ("uncertain_fields" in doc and not doc_unknown) or set(doc_missing) & set(doc_unknown):
+                return None
+            all_unknown.update(doc_unknown)
+        if not set(uncertain) <= all_unknown:
+            return None
+        pending_fields = raw.get("pending_fields", [])
+        if not isinstance(pending_fields, list) or any(
+            not isinstance(field, str) or field not in allowed or not any(
+                doc["association_state"] == "ambiguous"
+                and field not in doc["missing_fields"] and field not in doc.get("uncertain_fields", [])
+                for doc in documents
+            )
+            for field in pending_fields
+        ):
+            return None
+    elif "uncertain_fields" in raw or kind == "preop_summary_content_uncertain":
         return None
     missing = raw.get("missing_fields")
     if not isinstance(missing, list):
@@ -322,17 +495,28 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         kind == "preop_content_incomplete" and not safe_missing
     ):
         return None
+    pending = raw.get("pending_fields", [])
+    if not isinstance(pending, list):
+        return None
+    safe_pending = list(dict.fromkeys(item for item in pending if item in allowed))
+    if (
+        len(safe_pending) != len(pending)
+        # 待确认字段只属于术前小结，不能与确认缺项重叠，也不能出现在完整结论中。
+        or (safe_pending and rule_id != "LX0609-04-01-04")
+        or set(safe_pending) & set(safe_missing)
+        or (safe_pending and kind == "preop_content_complete")
+    ):
+        return None
     documents = raw.get("documents")
     if not isinstance(documents, list):
         return None
     safe_documents: list[dict[str, Any]] = []
     for document in documents:
-        if not isinstance(document, Mapping) or set(document) != {
-            "document_index",
-            "event_index",
-            "association_state",
-            "missing_fields",
-        }:
+        document_keys = {"document_index", "event_index", "association_state", "missing_fields"}
+        if not isinstance(document, Mapping) or not (
+            set(document) == document_keys
+            or rule_id == "LX0609-04-01-04" and set(document) == document_keys | {"uncertain_fields"}
+        ):
             return None
         document_index = document.get("document_index")
         event_index = document.get("event_index")
@@ -355,6 +539,7 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
                 "missing_fields": list(
                     dict.fromkeys(item for item in document_missing if item in allowed)
                 ),
+                **({"uncertain_fields": list(document["uncertain_fields"])} if "uncertain_fields" in document else {}),
             }
         )
     if kind == "preop_surgery_association_ambiguous" and not any(
@@ -367,6 +552,8 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         "checked_fields": list(allowed),
         "missing_fields": safe_missing,
         "documents": safe_documents,
+        **({"uncertain_fields": list(uncertain)} if uncertain else {}),
+        **({"pending_fields": safe_pending} if safe_pending else {}),
     }
 
 
@@ -392,6 +579,10 @@ def safe_surgery_document_customer_display_facts(
 def surgery_document_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
 ) -> bool:
+    if isinstance(safe_facts, Mapping) and safe_facts.get("verification_kind") == "preop_discussion_content_uncertain":
+        return str(rule_id or "").strip().upper() == "LX0609-04-01-05" and status == "data_gap"
+    if isinstance(safe_facts, Mapping) and safe_facts.get("verification_kind") == "preop_summary_content_uncertain":
+        return str(rule_id or "").strip().upper() == "LX0609-04-01-04" and status == "data_gap"
     if not is_surgery_document_customer_rule(rule_id):
         return True
     if not isinstance(safe_facts, Mapping):
@@ -417,5 +608,8 @@ def surgery_document_customer_fact_status_is_valid(
         "preop_content_complete": "compliant",
         "preop_content_incomplete": "non_compliant",
         "preop_surgery_association_ambiguous": "data_gap",
+        "preop_discussion_content_uncertain": "data_gap",
+        "preop_summary_content_uncertain": "data_gap",
+        "preop_fact_extraction_invalid": "data_gap",
     }.get(str(kind))
     return expected is not None and status == expected

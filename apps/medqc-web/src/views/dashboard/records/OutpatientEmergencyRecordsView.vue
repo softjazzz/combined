@@ -1,41 +1,40 @@
 <template>
-  <div class="outpatient-emergency-page min-h-screen p-5 lg:p-6">
+  <div class="outpatient-emergency-page mq-page">
+    <header class="mq-page-head">
+      <div class="mq-page-head__copy">
+        <div class="mq-page-eyebrow">病历 · 门急诊</div>
+        <h1 class="mq-page-title">门急诊病历</h1>
+        <p>查看门急诊病历及缺陷，跟踪复核与整改。</p>
+      </div>
+    </header>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <div class="apple-metric-card">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          门急诊病历总量
-        </div>
+      <div class="apple-metric-card mq-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">门急诊病历总量</div>
         <div class="apple-metric-value apple-primary">
           {{ formatInteger(overviewStats.total_records) }}
         </div>
       </div>
-      <div class="apple-metric-card">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          待处理
-        </div>
+      <div class="apple-metric-card mq-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">待处理</div>
         <div class="apple-metric-value apple-warning">
           {{ formatInteger(overviewStats.pending_count) }}
         </div>
       </div>
-      <div class="apple-metric-card">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          缺陷总数
-        </div>
+      <div class="apple-metric-card mq-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">缺陷总数</div>
         <div class="apple-metric-value apple-danger">
           {{ formatInteger(overviewStats.total_defects) }}
         </div>
       </div>
-      <div class="apple-metric-card">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          通过率
-        </div>
+      <div class="apple-metric-card mq-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">通过率</div>
         <div class="apple-metric-value apple-success">
           {{ formatRate(overviewStats.pass_rate) }}%
         </div>
       </div>
     </div>
 
-    <div class="apple-workbench flex flex-col h-[calc(100vh-180px)]">
+    <div class="apple-workbench mq-card flex flex-col h-[calc(100vh-180px)]">
       <div
         class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
@@ -47,15 +46,9 @@
               class="w-64 apple-input !pl-10"
               @press-enter="handleSearch"
             />
-            <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <MqIcon name="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
-          <a-button
-            type="primary"
-            class="!rounded-xl"
-            @click="handleSearch"
-          >
-            查询
-          </a-button>
+          <a-button type="primary" class="!rounded-xl" @click="handleSearch"> 查询 </a-button>
 
           <a-select
             v-model:value="selectedDepartment"
@@ -80,18 +73,10 @@
             :bordered="false"
             allow-clear
           >
-            <a-select-option value="pending">
-              待处理
-            </a-select-option>
-            <a-select-option value="reviewing">
-              审核中
-            </a-select-option>
-            <a-select-option value="approved">
-              已通过
-            </a-select-option>
-            <a-select-option value="rejected">
-              已驳回
-            </a-select-option>
+            <a-select-option value="pending"> 待处理 </a-select-option>
+            <a-select-option value="reviewing"> 审核中 </a-select-option>
+            <a-select-option value="approved"> 已通过 </a-select-option>
+            <a-select-option value="rejected"> 已驳回 </a-select-option>
           </a-select>
 
           <a-range-picker
@@ -100,12 +85,7 @@
             :bordered="false"
           />
 
-          <a-button
-            class="!rounded-xl !border-slate-200"
-            @click="resetFilters"
-          >
-            重置
-          </a-button>
+          <a-button class="!rounded-xl !border-slate-200" @click="resetFilters"> 重置 </a-button>
         </div>
 
         <div class="flex items-center gap-2">
@@ -137,18 +117,13 @@
           >
             批量派发整改
           </a-button>
-          <a-button
-            class="!rounded-xl"
-            @click="handleExportDefects"
-          >
-            导出缺陷
-          </a-button>
+          <a-button class="!rounded-xl" @click="handleExportDefects"> 导出缺陷 </a-button>
           <a-tooltip title="刷新数据">
             <a-button
               class="apple-icon-button !h-9 !w-9 !p-0 flex items-center justify-center"
               @click="handleRefresh"
             >
-              <ReloadOutlined :spin="loading" />
+              <MqIcon name="sync" :spin="loading" />
             </a-button>
           </a-tooltip>
         </div>
@@ -165,16 +140,12 @@
         v-if="selectedRowKeys.length"
         class="px-6 py-2 bg-[rgba(43,108,246,0.06)] border-b border-[rgba(43,108,246,0.12)] text-sm text-slate-700 flex items-center justify-between"
       >
-        <span>已选择
+        <span
+          >已选择
           <span class="font-semibold text-[#2b6cf6]">{{ selectedRowKeys.length }}</span>
-          条门急诊病历</span>
-        <a-button
-          type="link"
-          class="!px-0"
-          @click="selectedRowKeys = []"
+          条门急诊病历</span
         >
-          清空选择
-        </a-button>
+        <a-button type="link" class="!px-0" @click="selectedRowKeys = []"> 清空选择 </a-button>
       </div>
 
       <div class="flex-1 overflow-hidden px-6 py-2">
@@ -252,11 +223,12 @@
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+
 import {
   approveDefect,
   batchDefectAction,
@@ -642,147 +614,4 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
-.outpatient-emergency-page {
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-.apple-metric-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.86);
-  padding: 16px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.045);
-  backdrop-filter: blur(18px);
-}
-
-.apple-metric-value {
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 31px;
-}
-
-.apple-primary {
-  color: #2b6cf6;
-}
-
-.apple-warning {
-  color: #b7791f;
-}
-
-.apple-danger {
-  color: #d92d20;
-}
-
-.apple-success {
-  color: #0f8f67;
-}
-
-.apple-workbench {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.06),
-    0 10px 30px rgba(0, 0, 0, 0.045);
-  backdrop-filter: blur(18px);
-}
-
-.apple-input {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  border-radius: 8px !important;
-  background: rgba(255, 255, 255, 0.72) !important;
-}
-
-.apple-picker {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  border-radius: 8px !important;
-  background: rgba(255, 255, 255, 0.72) !important;
-}
-
-.apple-icon-button {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  border-radius: 8px !important;
-  color: rgba(29, 29, 31, 0.6) !important;
-}
-
-.apple-icon-button:hover {
-  border-color: rgba(43, 108, 246, 0.24) !important;
-  color: #2b6cf6 !important;
-}
-
-:deep(.ant-btn-primary) {
-  border-color: #2b6cf6 !important;
-  background: #2b6cf6 !important;
-  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.18) !important;
-}
-
-:deep(.ant-btn-link) {
-  color: #2b6cf6;
-}
-
-:deep(.ant-input:hover),
-:deep(.ant-input:focus),
-:deep(.ant-picker:hover),
-:deep(.ant-picker-focused) {
-  border-color: rgba(43, 108, 246, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
-}
-
-:deep(.custom-select .ant-select-selector) {
-  background-color: rgba(255, 255, 255, 0.72) !important;
-  border-radius: 8px !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  height: 36px !important;
-  display: flex;
-  align-items: center;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-}
-
-:deep(.custom-select:hover .ant-select-selector) {
-  border-color: rgba(43, 108, 246, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
-}
-
-:deep(.modern-table .ant-table-thead > tr > th) {
-  background: rgba(245, 245, 247, 0.76);
-  color: rgba(29, 29, 31, 0.6);
-  font-weight: 600;
-  font-size: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-:deep(.modern-table .ant-table-tbody > tr > td) {
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  font-size: 13px;
-}
-
-:deep(.modern-table .ant-table-tbody > tr:hover > td) {
-  background: rgba(0, 0, 0, 0.035);
-}
-
-:deep(.ant-tag-blue) {
-  color: #2b6cf6;
-  border-color: rgba(43, 108, 246, 0.16);
-  background: rgba(43, 108, 246, 0.08);
-}
-
-:deep(.ant-pagination-item-active) {
-  border-color: #2b6cf6;
-}
-
-:deep(.ant-pagination-item-active a) {
-  color: #2b6cf6;
-}
-</style>
+<style scoped src="../../workstation-v4/styles/outpatient-records.css"></style>

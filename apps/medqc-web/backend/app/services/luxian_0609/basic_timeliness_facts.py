@@ -11,6 +11,7 @@ from datetime import date, datetime
 from enum import Enum
 import re
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from .source_evidence_reader import (
     authoritative_document_time_value,
@@ -19,8 +20,10 @@ from .source_evidence_reader import (
 
 
 _AUTHORITATIVE_DATETIME_PATTERN = re.compile(
-    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$"
+    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?"
+    r"(?:Z|[+-]\d{2}:?\d{2})?$"
 )
+_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _INLINE_RESCUE_END_TIME_PATTERN = re.compile(
     r"(?<![\w\u4e00-\u9fff])抢救结束时间\s*[:：]\s*(?P<value>"
     r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
@@ -89,20 +92,28 @@ class TimelinessAssociation:
 
 
 def parse_authoritative_datetime(value: Any) -> datetime | None:
-    """只接受权威字段整值，不从标题或普通正文猜测时间。"""
+    """只接受权威字段整值，显式时区转换为医院本地时间后比较。"""
 
     if isinstance(value, datetime):
-        return value if value.tzinfo is None else None
+        return (
+            value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+            if value.utcoffset() is not None
+            else value
+        )
     if not isinstance(value, str):
         return None
     normalized = value.strip()
     if not _AUTHORITATIVE_DATETIME_PATTERN.fullmatch(normalized):
         return None
     try:
-        parsed = datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return parsed if parsed.tzinfo is None else None
+    return (
+        parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+        if parsed.utcoffset() is not None
+        else parsed
+    )
 
 
 def parse_authoritative_date(value: Any) -> date | None:

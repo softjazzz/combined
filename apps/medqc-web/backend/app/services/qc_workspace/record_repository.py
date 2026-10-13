@@ -17,6 +17,15 @@ from ...database.models.cdm import (
 from ..case_identity import CaseRef, CaseRefInput, normalize_case_refs
 
 
+def _capture_private_orm_identities(collector: Callable[[str, Any], None] | None, source_key: str, rows: Sequence[Any]) -> None:
+    """可选0609回调只消费本次已加载ORM，不新增查询或返回字段。"""
+    if collector is None:
+        return
+    for row in rows:
+        source = row[0] if isinstance(row, tuple) or (hasattr(row, "_mapping") and not hasattr(row, "visit_id")) else row
+        collector(source_key, source)
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -160,6 +169,7 @@ class RecordRepository:
         start_date: Optional[str],
         end_date: Optional[str],
         keyword: Optional[str],
+        _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         """为没有病案首页的在院病例补充本地执行锚点。"""
         missing_ids = list(
@@ -193,6 +203,10 @@ class RecordRepository:
             .filter(AdmissionRecord.visit_id.in_(missing_ids))
             .all()
         )
+
+        _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
+        _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
+        _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
 
         anchor_by_visit: Dict[str, Any] = {}
         for row in registration_rows:
@@ -299,6 +313,7 @@ class RecordRepository:
         start_date: Optional[str],
         end_date: Optional[str],
         keyword: Optional[str],
+        _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         """按三坐标补充没有病案首页的执行锚点，禁止按 visit 串病例。"""
         missing_refs = [
@@ -324,6 +339,10 @@ class RecordRepository:
             session.query(InpatRegistration).filter(exact_clause(InpatRegistration)).all()
         )
         admission_rows = session.query(AdmissionRecord).filter(exact_clause(AdmissionRecord)).all()
+        _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
+        _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
+        _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
+
         discharge_by_ref = {
             CaseRef.from_mapping(row.__dict__): row for row in discharge_rows
         }
@@ -443,6 +462,7 @@ class RecordRepository:
         start_date: Optional[str],
         end_date: Optional[str],
         keyword: Optional[str],
+        _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         """复用病历池口径补齐今日核验在院、但尚无病案首页的病例。"""
 
@@ -492,6 +512,7 @@ class RecordRepository:
             start_date=None,
             end_date=None,
             keyword=None,
+            _private_identity_collector=_private_identity_collector,
         )
 
     def _build_records_query(
@@ -799,6 +820,7 @@ class RecordRepository:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
+        _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         session = self._session_factory()
         try:
@@ -819,6 +841,7 @@ class RecordRepository:
                 desc(MedicalRecordFrontpage.discharge_datetime),
                 desc(MedicalRecordFrontpage.admission_datetime),
             ).all()
+            _capture_private_orm_identities(_private_identity_collector, "mr", rows)
             records = [self._serialize_record_row(row) for row in rows]
             if record_refs:
                 records.extend(
@@ -837,6 +860,7 @@ class RecordRepository:
                         start_date=start_date,
                         end_date=end_date,
                         keyword=keyword,
+                        _private_identity_collector=_private_identity_collector,
                     )
                 )
             elif record_ids:
@@ -856,6 +880,7 @@ class RecordRepository:
                         start_date=start_date,
                         end_date=end_date,
                         keyword=keyword,
+                        _private_identity_collector=_private_identity_collector,
                     )
                 )
             elif _safe_text(sync_scope).lower() == "today_inpatient":
@@ -874,6 +899,7 @@ class RecordRepository:
                         start_date=start_date,
                         end_date=end_date,
                         keyword=keyword,
+                        _private_identity_collector=_private_identity_collector,
                     )
                 )
             return records

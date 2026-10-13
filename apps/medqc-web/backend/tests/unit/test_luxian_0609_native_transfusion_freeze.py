@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER, FrozenTransfusionProtocolClient
+
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
@@ -59,7 +61,8 @@ async def _execute_and_aggregate(
         patient_id="freeze-patient",
         visit_id="freeze-visit",
         source_schema=None,
-        llm_client=None,
+        # 冻结用例的专用输血记录均为测试作者写成的实际输注过程。
+        llm_client=FrozenTransfusionProtocolClient(default_course_label="record"),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=rule_ids,
@@ -104,6 +107,8 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
     execution, reduced, customer_results, session = await _execute_and_aggregate(
         rule_ids=selected,
         rows_by_source={
+            # 045/046 按已开立且未取消的输血医嘱触发（用户已确认合同）。
+            "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
             "mr_bloodtrans": [
                 {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}
             ],
@@ -142,7 +147,8 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
     facts = dict(execution.customer_display_facts)
     assert facts["LX0609-07-02-01"] == {
         "verification_kind": "transfusion_course_record_present",
-        "performed_transfusion_confirmed": True,
+        # 医嘱触发合同：只声明存在有效输血医嘱，不宣称已实际输血。
+        "transfusion_order_present": True,
         "record_count": 2,
         "checked_sources": ["bloodtrans_record", "daily_course_record"],
         "source_document_ids": ["blood-freeze-1", "blood-freeze-2"],
@@ -191,6 +197,8 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
     } == {
         ("bloodtrans_record", "blood-freeze-1"),
         ("bloodtrans_record", "blood-freeze-2"),
+        # 触发 045 的输血医嘱同属本条依据。
+        ("inpat_nondrug_order", OPEN_TRANSFUSION_ORDER["order_id"]),
     }
 
 
@@ -220,17 +228,28 @@ async def test_transfusion_freeze_no_event_and_source_error_keep_distinct_states
         failing_sources=frozenset({"mr_bloodtrans"}),
     )
     assert error_execution.results == ()
-    assert [item.final_state.value for item in error_reduced] == ["technical_error"] * 9
-    assert [item.reason_code for item in error_reduced] == ["source_query_error"] * 9
+    # 044–046 按输血医嘱触发，不读取 mr_bloodtrans；其余规则的实施门控查询失败必须是技术错误。
+    order_rules = {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
+    expected_states = [
+        ("not_applicable", "trigger_absent_complete")
+        if rule_id in order_rules
+        else ("technical_error", "source_query_error")
+        for rule_id in selected
+    ]
+    assert [
+        (item.final_state.value, item.reason_code) for item in error_reduced
+    ] == expected_states
     error_ref = next(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in error_session.snapshot.observations
         if observation.source_key == "mr_bloodtrans"
     )
     # 技术失败仍引用同一次 session 中发生异常的触发来源，供审计定位；不伪造文书坐标。
-    assert all(error_ref in item.fact_refs for item in error_reduced)
-    assert [item["status"] for item in error_results] == ["technical_error"] * 9
-    assert [item["reason_code"] for item in error_results] == ["source_query_error"] * 9
+    error_items = [item for item in error_reduced if item.rule_id not in order_rules]
+    assert all(error_ref in item.fact_refs for item in error_items)
+    assert [
+        (item["status"], item["reason_code"]) for item in error_results
+    ] == expected_states
     assert all(item["criterion_results"] == [] for item in error_results)
     assert all("customer_evidence" not in item for item in error_results)
     assert error_results[0]["findings"] == "质控执行未完成"

@@ -1,0 +1,3641 @@
+{
+  "fixed_commit": "25406df7d2506f4870674ca73cddd10523bf966d",
+  "baseline": "81fe8fed3027ea7f636014fd59237819138f7f9c",
+  "expectation_sha256": "c92061e62c1d0049f4d68ea007e774cb43ef54c81672289dba78134afe29ad9e",
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "144611674c789f518f351c9b376e784eabc11a5bdf7a7a27a6377eb4727a6cac",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "2eb71565d668704dd8833235287d2591e5e9df2b3c8f06add843246eee3b881e",
+    "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py": "bada1a2dbee38febf69f2b58ff93072d2267b6664f66708cd04820a01b7b78b0",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "e98f5d7524defa0502b1154d03083b9405d7f530d859d3508295bc26b3c1625a",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_difficult_discussion_body_gap_closure.py": "a82593c7ac28fbd40bc5b8f602d699d3035efb5de9814c896e323f7467ef97b9",
+    "apps/medqc-web/docs/acceptance/2026-10-08-difficult-discussion-body-gap-design.md": "7f79c63bfc10cb77b77f294c682f57f065e6db71d6b17fd5d498b6d8a79d9e5d"
+  },
+  "source_unchanged": true,
+  "scenarios": [
+    {
+      "case_id": "B01_body_missing_key",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "680068c7d4380f2053a84f4f1905ea5fe496c5607527ddf9209cbef0a697373b",
+        "c29239fbbdc5bef2b3ce4b705ffb830b4a81de39c998285f9cd583323567d988",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B02_body_null",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "357287a5aa118fc1542ed708dfbc3f476b73d03e1fb10806ced8d66987915b2d",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1",
+        "ed230cd450099b99b542c846c530d9543d7f68609191556c968e0d93254e51a4"
+      ]
+    },
+    {
+      "case_id": "B03_body_integer",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "123",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "5ea74d983a7eeff66314532cd7fa0a31eb00efedbb162b8b082782ac0d05627e",
+        "ab22dc9082dd3f465e090221a489244052cdc592affd4288959807a13d90b699",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B04_body_true",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "True",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "2d21bb24e19032c5b4a03740d707d1d02c247bfee2e919ba94b00929a20c03f3",
+        "3a096c4dd70c583342fbae2ebd036b405ce0b434b7f124a42a545cd8fd0b0729",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B05_body_false",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "6158a8adf26f2e7ecb210092869d86e8d8a24891dbe94707517298d7826607fb",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e42fd5bcdb1e9483774358bce9890f93b65a349148d5222c3e0fa4580c999d05",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B06_body_list",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "['合成正文']",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "2ca7695c3562e3936deab0d11857ae36ff9f5eafc312b733fc98e27685100bfc",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "8c57cf1c9de36436c22a1de51d8c4d6921fcba117e165a8798ee2ead14366f23",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B07_body_dict",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "{'text': '合成正文'}",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "7536e40902c6cc4dfc51dd4ae942b8b84fb72d9f9c56e7fcc7a8ff00912fb0be",
+        "c619e9cc17f23fb89bd5a54eb30d82010ce91bec7471387bb8bf706f1f5d032a",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B08_body_empty",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4804f6db2f196ab307cccade85de4300587c84e684025b45f15c8069ac6b52c8",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "9b0841f38a708abe2796eb1bed0840c56fbfa7239dd0e937f0ef7d565453b289",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B09_body_whitespace",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "75fd9a1577ae27dfd527d4f9b1ef4187f12336b091857fce863d0e2e58d9e4ab",
+        "c78af9f251bd46daec7fd74af53d219cd817e3fd26a349b17f69a5dfe1d33682",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B10_body_float",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "1.5",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "de4e4edf67793290a94df0275d664225914a335f22690ed2a514bd7fc0f7a1d3",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1",
+        "f36d6e7590a8244c719b1374aa4b6b1d980cebdfd6fb4a447e00efaa575bc0df"
+      ]
+    },
+    {
+      "case_id": "B11_two_unusable_rows",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料2份，其中2份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2,
+          "discussion_body_gap_count": 2
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D2",
+            "record_time": "2026-06-09 10:00:00"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D1",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "431b66b8a88cae575b824cbe9ae7f0682b2ba964d6f49f2df72d716e23de4d75",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "9c839bc523d937176720245d4bd6274bd1e301c6f0069aaaadd52edddb866c68",
+        "c71c3f595211c968a11e26741a62331501088b9a8f8b9f3ba7783b1be063b030",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "B12_three_unusable_rows",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料3份，其中3份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 3,
+          "discussion_body_gap_count": 3
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D2",
+            "record_time": "2026-06-09 10:00:00"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D1",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D3",
+            "record_time": "2026-06-09 11:00:00"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "3e6809956d3c0fc86a8079004418dbb9d5c8952be8325fe9e14688d167badf33",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "b425619301b9754e91a4bec33f0b89d14e153e23f2df40e0c2a630f802229d29",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e1955c32de6aebf592b4d9edc1792344246fcef9c3a6e430718c22e3ec933e84",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1",
+        "f22161dd827d5bdfc4630f23d8d56a2f5fa610477718e9c3b4a90e02fb0d969a"
+      ]
+    },
+    {
+      "case_id": "B13_title_signature_cannot_supply_body",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "document_title",
+            "evidence_excerpt": "合成疑难讨论",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "223e4eec64e93947ae166e1f1d6d2fa059b512653175bf1ad8dc23a369510054",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1",
+        "ea5aad23126a252ad302f249fc4d6c0ee4a1437f8387b40ba34b5414aa0ddd97"
+      ]
+    },
+    {
+      "case_id": "B14_missing_id_legal_source_anchor_only",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "0b8f8321f0dc2945925e02cbe8fb52b8e6a711501422b315e7b57f554ec36d15",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "P01_no_discussion_rows",
+      "pass": true,
+      "errors": [],
+      "native_state": "non_compliant",
+      "native_reason": "required_document_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 0 份。",
+        "evidence": "已核对第 7 日病程和疑难病例讨论资料，当前诊断仍不明确且未检出讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录\n需要补充：诊断不明确的依据、讨论意见、诊疗方案和讨论结论\n推荐写法：请补充疑难病例讨论记录，写明诊断难点、讨论意见、诊疗方案及结论。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 0
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "8234750fb7c3ddd8adaee88f655a0166e0be3229ae59c790c1c04da9f9dba1f0",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "P02_short_one_character_body",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "x",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "f1206a8ad219b08101f087b3ebf78d64c922c9f22855781663202d490329f8b7"
+      ]
+    },
+    {
+      "case_id": "P03_short_chinese_body",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "讨论",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "0497bfa13ec585a1a28a962b81c7f063139b2193986fcf353d9ad9dc47538b09",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "P04_trimmed_nonempty_body",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "9aabe703c3451f9ffa5a37cdaea32c0db56ecefc21dab4b6fc83baafc8276e7f",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "P05_mixed_empty_then_usable",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 2 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "2c4e089333595d911c0d15455f5d945247aa1d1d04bc727fd704109d40adc928",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "P06_mixed_usable_then_empty",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 2 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "2c4e089333595d911c0d15455f5d945247aa1d1d04bc727fd704109d40adc928",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "P07_nonempty_plan_keeps_existing_path_not_semantic_acceptance",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "拟讨论。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "030853a23e41619f42b85f87762b4ea024d38db3f608274c6661c01152756df6",
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "T01_only_untimed_strong_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "authoritative_time_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00；1份候选病程缺少可用的权威时间，暂无法确认是否位于入院满7天后，当前资料不足以完成疑难病例讨论要求核对。",
+        "evidence": "已读取候选病程，但权威记录时间缺失或不可解析，不能据此确认入院七天适用条件。",
+        "suggestion": "请核对源系统的病程权威记录时间及同步情况后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "authoritative_time_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_course_time_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "用于计算质控时限的权威时间"
+        ],
+        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "authoritative_time_missing",
+          "reason_label": "权威时间缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "用于计算质控时限的权威时间"
+          ],
+          "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "00a64ae67c6b9003c9dcc744e2cbd397906ab550d09e4b765a8ee0d4c3592379",
+        "115e2cdce414a2c0a92b5537b7df827302937fa5209b47b91b55bed9bfb90fa4",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e02cd645c0fa03dabfb8c1b806a0fe1f2c3d0d4eb239b0f06c4f86a369958536",
+        "e2b33654c23359fb056f344f6f49de258ae642d1ce7c066e5a70031f3b5ce232"
+      ]
+    },
+    {
+      "case_id": "T02_no_mature_strong_local_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "native_state": "evaluation_unknown",
+      "native_reason": "diagnosis_scope_uncertain",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "uncertain",
+        "result_status": "uncertain",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00；入院满 7 天后的病程于 2026-06-09 09:00:00 出现局部原因待查或性质待定表述。现有资料无法确认这是否表示本次住院整体诊断仍不明确，不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。",
+        "evidence": "现有受控证据存在冲突或语义不确定性。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录\n需要补充：可核验的完整文书、权威时间及必要关联信息\n推荐写法：请人工核对相关文书与结构化资料，必要时补齐可验证信息后重新评估。\n注意事项：当前结论不确定，不得将其当作合规或确定问题，也不得按建议倒推补写事实。",
+        "confidence": null,
+        "reason_code": "diagnosis_scope_uncertain",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_scope_unverified",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-09 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-LOCAL",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "患者发热原因待查，当前诊断为社区获得性肺炎。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          }
+        ]
+      },
+      "fact_refs": [
+        "27ad2646adc3d09494b91da8cf2c1eccdabe0969caaf585b9f56afbfdfdedfef",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e2b33654c23359fb056f344f6f49de258ae642d1ce7c066e5a70031f3b5ce232"
+      ]
+    },
+    {
+      "case_id": "T03_before_seven_days_plus_empty_discussion",
+      "pass": false,
+      "errors": [
+        "published_status",
+        "published_reason"
+      ],
+      "native_state": "not_applicable",
+      "native_reason": "trigger_absent_complete",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "technical_error",
+        "result_status": "technical_error",
+        "is_compliant": null,
+        "confidence": null,
+        "reason_code": "model_invalid_output"
+      },
+      "fact_refs": [
+        "40b3026c441aa93809222b355e04c4fe6cb8048152b9bf87d3abda643afb9e2c",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e2b33654c23359fb056f344f6f49de258ae642d1ce7c066e5a70031f3b5ce232"
+      ]
+    },
+    {
+      "case_id": "T04_mature_strong_and_untimed_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "required_field_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。另有1份候选病程时间不全，无法确认其七天适用条件。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。另请核对候选病程的权威记录时间及同步情况。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "00a64ae67c6b9003c9dcc744e2cbd397906ab550d09e4b765a8ee0d4c3592379",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "5ca843215672e7622190b5e9c81f6e6264eadf7fd8a7384f16b198309aa63856",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e02cd645c0fa03dabfb8c1b806a0fe1f2c3d0d4eb239b0f06c4f86a369958536",
+        "e2b33654c23359fb056f344f6f49de258ae642d1ce7c066e5a70031f3b5ce232",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1"
+      ]
+    },
+    {
+      "case_id": "T05_mature_strong_and_untimed_plus_usable_discussion",
+      "pass": true,
+      "errors": [],
+      "native_state": "compliant",
+      "native_reason": "requirement_satisfied",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。另有1份候选病程时间不全，无法确认其七天适用条件；以上已确认结论保留。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。 对另列的候选病程时间缺口，请先核对源系统时间及同步情况；不得据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      },
+      "fact_refs": [
+        "11bb2563a4856c1f3aef1d76961e264232ad645aacc779467fc6733b534835f6",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "5ca843215672e7622190b5e9c81f6e6264eadf7fd8a7384f16b198309aa63856",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e02cd645c0fa03dabfb8c1b806a0fe1f2c3d0d4eb239b0f06c4f86a369958536",
+        "e95fd5235f2a35be1905068fe52a379d3659aa0c9f7520018aa966ef44b596e1",
+        "ea2dfaa78c2a2c8f825d423e27991c89b362e4f79ca43cb34610220743f47be9"
+      ]
+    },
+    {
+      "case_id": "T06_source_error_priority",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "source_unavailable",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "当前缺少入院时间、入院满7天后的诊断状态或疑难病例讨论记录，暂时无法完成核对；暂无法核对入院7天后诊断不明确病例的讨论记录",
+        "evidence": "当前缺少入院时间、满7天后的诊断状态或疑难病例讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录的核对资料\n需要补充：完整可读取的文书、权威时间及必要关联字段\n推荐写法：先确认资料同步完整并补齐关联信息后重新评估；仅在人工确认内容确实缺失后再按本质控点整改。\n注意事项：资料不足不代表病历内容缺失，不得直接判定合规或不合规。",
+        "confidence": null,
+        "reason_code": "source_unavailable",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [
+          "质控所需数据源"
+        ],
+        "missing_fields": [],
+        "customer_message": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
+        "data_gap_details": {
+          "reason_code": "source_unavailable",
+          "reason_label": "数据源未接入",
+          "missing_sources": [
+            "质控所需数据源"
+          ],
+          "missing_fields": [],
+          "customer_message": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "4c38cf62479ee7e8c523483c4509e366868840939ad542a96b6219fe56131612",
+        "b63656f55c0e07d2e90b619c91e3613d2592c7e7f2b4f3e8a93698c34db99b79",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb"
+      ]
+    },
+    {
+      "case_id": "T07_missing_admission_priority",
+      "pass": true,
+      "errors": [],
+      "native_state": "data_gap",
+      "native_reason": "authoritative_time_missing",
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "当前缺少入院时间、入院满7天后的诊断状态或疑难病例讨论记录，暂时无法完成核对；暂无法核对入院7天后诊断不明确病例的讨论记录",
+        "evidence": "当前缺少入院时间、满7天后的诊断状态或疑难病例讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录的核对资料\n需要补充：完整可读取的文书、权威时间及必要关联字段\n推荐写法：先确认资料同步完整并补齐关联信息后重新评估；仅在人工确认内容确实缺失后再按本质控点整改。\n注意事项：资料不足不代表病历内容缺失，不得直接判定合规或不合规。",
+        "confidence": null,
+        "reason_code": "authoritative_time_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "用于计算质控时限的权威时间"
+        ],
+        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "authoritative_time_missing",
+          "reason_label": "权威时间缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "用于计算质控时限的权威时间"
+          ],
+          "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。"
+        }
+      },
+      "fact_refs": [
+        "3de40bada093b8e96d9704355953268c8062c50846e9760c1b2f200499c62943",
+        "d80703ca6d8716d3103064cc994e6b885f4be7ee7875592878aef2e01aca6ffb",
+        "e2b33654c23359fb056f344f6f49de258ae642d1ce7c066e5a70031f3b5ce232",
+        "e4eebefd8874386d2899ae7db4d585df130a13ab8fbe460aaaa6b3159615936c"
+      ]
+    }
+  ],
+  "baseline_compatibility": [
+    {
+      "case_id": "P01_no_discussion_rows",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "P02_short_one_character_body",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "P03_short_chinese_body",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "P04_trimmed_nonempty_body",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "P05_mixed_empty_then_usable",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "P06_mixed_usable_then_empty",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "P07_nonempty_plan_keeps_existing_path_not_semantic_acceptance",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "T02_no_mature_strong_local_plus_empty_discussion",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "T03_before_seven_days_plus_empty_discussion",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "T05_mature_strong_and_untimed_plus_usable_discussion",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "T06_source_error_priority",
+      "pass": true,
+      "differences": []
+    },
+    {
+      "case_id": "T07_missing_admission_priority",
+      "pass": true,
+      "differences": []
+    }
+  ],
+  "CT02_protection": [
+    {
+      "case_id": "G01_original_missing_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G02_invalid_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G03_null_blank_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G04_discussion_cannot_prove_window",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G05_known_nc_plus_missing",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G06_known_nc_plus_missing_reversed",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G07_known_c_plus_missing",
+      "pass": true,
+      "errors": [],
+      "status": "compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "P01_exact_seven_days",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P02_one_second_before_window",
+      "pass": true,
+      "errors": [],
+      "status": "not_applicable",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P03_one_second_after_window",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:01"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P04_no_diagnostic_candidate_no_time",
+      "pass": true,
+      "errors": [],
+      "status": "not_applicable",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P05_complete_empty_daily_source",
+      "pass": true,
+      "errors": [],
+      "status": "not_applicable",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P06_mature_with_normal_discussion",
+      "pass": true,
+      "errors": [],
+      "status": "compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      }
+    },
+    {
+      "case_id": "P07_mature_local_scope_only",
+      "pass": true,
+      "errors": [],
+      "status": "uncertain",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-09 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "G08_local_scope_missing_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "P08_source_error_priority",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {}
+    },
+    {
+      "case_id": "P09_admission_missing_priority",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {}
+    },
+    {
+      "case_id": "A01_record_time",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A02_record_datetime",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A03_submit_time",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A04_submit_datetime",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A05_blank_high_priority_fallback",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "G09_invalid_high_priority_no_fallback",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "A06_utc_same_boundary",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A07_plus08_same_boundary",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "G10_no_time_with_modified_created_title_date",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G11_missing_document_id",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G12_two_missing_candidates",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 2
+      }
+    },
+    {
+      "case_id": "S01_mature_local_plus_missing_strong",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "S02_mature_local_plus_missing_local",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    }
+  ],
+  "public_contracts": [
+    {
+      "case": "body_status",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "output": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      }
+    },
+    {
+      "case": "body_status",
+      "status": "compliant",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "non_compliant",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "not_applicable",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "uncertain",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "technical_error",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "not_executed",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": "unknown",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_status",
+      "status": null,
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "output": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      }
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "compliant",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "non_compliant",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "not_applicable",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "uncertain",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "technical_error",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "not_executed",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": "unknown",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "body_and_time_status",
+      "status": null,
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": -1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": true,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": false,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1.5,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": "1",
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": null,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 0
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": -1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": true
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": false
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1.5
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": "1"
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": null
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 0
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": -1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": true
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": false
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1.5
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": "1"
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_candidate_course_time_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": null
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "missing_verification_kind",
+      "status": "data_gap",
+      "raw": {
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "missing_admission_time",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "missing_uncertain_record_times",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "missing_discussion_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "missing_discussion_body_gap_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_mature_time_list",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_mature_time_list",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "invalid-time"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_mature_time_list",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-02-30 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_mature_time_list",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": null,
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "invalid_mature_time_list",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": "2026-06-08 09:00:00",
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "mismatched_row_and_body_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 2
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "mismatched_row_and_body_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 2,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "mismatched_row_and_body_count",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "discussion_body_gap_count": 0
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "contradictory_kind_body_summary",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "unknown",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "contradictory_kind_body_summary",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "contradictory_kind_body_summary",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "contradictory_kind_body_summary",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "output": null
+    },
+    {
+      "case": "extra_private_filtered",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "document_id": "SYN-PRIVATE"
+      },
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "output": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      }
+    },
+    {
+      "case": "extra_private_filtered",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "raw_payload": "SYN-PRIVATE"
+      },
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "output": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      }
+    },
+    {
+      "case": "extra_private_filtered",
+      "status": "data_gap",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "record_content": "SYN-PRIVATE"
+      },
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "output": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      }
+    }
+  ],
+  "synthetic_fresh_store": [
+    {
+      "case_id": "B09_body_whitespace",
+      "pass": true,
+      "errors": [],
+      "fresh_engine_and_store": true,
+      "saved": {
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": "LX0609-03-02-01",
+        "status": "data_gap",
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "missing_sources": [],
+        "is_compliant": null,
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "rule_code": "LX0609-03-02-01",
+        "qc_point_id": "LX0609-03-02-01",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "reason_code": "required_field_missing",
+        "rule_version": "2026-08-02",
+        "criterion_results": [],
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        },
+        "result_status": "data_gap",
+        "evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "record_time": "2026-06-09 09:00:00",
+            "source_ref": "src_084a0d8a6d48455cb7e54d88"
+          },
+          {
+            "source_type": "daily_course_record",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_be581a267612d8c51bde527d"
+          }
+        ],
+        "decision_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "conclusion": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "record_ref": "rec_369d670bc6031335c50bfaca"
+      },
+      "independent_evidence_properties_checked": true,
+      "note": "absence of per-discussion exact cards in mixedC is existing projection limitation; no blank-body excerpt invented"
+    },
+    {
+      "case_id": "T04_mature_strong_and_untimed_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "fresh_engine_and_store": true,
+      "saved": {
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。另有1份候选病程时间不全，无法确认其七天适用条件。",
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": "LX0609-03-02-01",
+        "status": "data_gap",
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "missing_sources": [],
+        "is_compliant": null,
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "rule_code": "LX0609-03-02-01",
+        "qc_point_id": "LX0609-03-02-01",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。另请核对候选病程的权威记录时间及同步情况。",
+        "reason_code": "required_field_missing",
+        "rule_version": "2026-08-02",
+        "criterion_results": [],
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        },
+        "result_status": "data_gap",
+        "evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "record_time": "2026-06-09 09:00:00",
+            "source_ref": "src_084a0d8a6d48455cb7e54d88"
+          },
+          {
+            "source_type": "daily_course_record",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_9d93fa044e0bc763b680b73d"
+          },
+          {
+            "source_type": "daily_course_record",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_be581a267612d8c51bde527d"
+          }
+        ],
+        "decision_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "conclusion": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。另有1份候选病程时间不全，无法确认其七天适用条件。",
+        "record_ref": "rec_369d670bc6031335c50bfaca"
+      },
+      "independent_evidence_properties_checked": true,
+      "note": "absence of per-discussion exact cards in mixedC is existing projection limitation; no blank-body excerpt invented"
+    },
+    {
+      "case_id": "P05_mixed_empty_then_usable",
+      "pass": true,
+      "errors": [],
+      "fresh_engine_and_store": true,
+      "saved": {
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 2 份。",
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": "LX0609-03-02-01",
+        "status": "compliant",
+        "is_compliant": true,
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2
+        },
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "rule_code": "LX0609-03-02-01",
+        "qc_point_id": "LX0609-03-02-01",
+        "suggestion": "继续保持。",
+        "reason_code": "requirement_satisfied",
+        "rule_version": "2026-08-02",
+        "criterion_results": [],
+        "result_status": "compliant",
+        "evidence": [
+          {
+            "source_type": "daily_course_record",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_be581a267612d8c51bde527d"
+          }
+        ],
+        "decision_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2
+        },
+        "conclusion": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 2 份。",
+        "record_ref": "rec_369d670bc6031335c50bfaca"
+      },
+      "independent_evidence_properties_checked": true,
+      "note": "absence of per-discussion exact cards in mixedC is existing projection limitation; no blank-body excerpt invented"
+    }
+  ],
+  "external_guard_violations": [],
+  "real_model_calls": 0,
+  "pg_calls": 0,
+  "env_reads": 0,
+  "owner_tests_run": false,
+  "known_existing_unclosed": "CT04",
+  "original_expectation_preserved": true
+}

@@ -100,6 +100,12 @@ def _controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
         )
         covered_dates = _controlled_date_list(item.get("covered_postop_dates"))
         surgeon_round_present = item.get("surgeon_round_present")
+        preop_surgeon_round_present = item.get("preop_surgeon_round_present")
+        if (
+            preop_surgeon_round_present is not None
+            and type(preop_surgeon_round_present) is not bool
+        ):
+            return None
         if (
             surgery_time is None
             or not isinstance(surgeon_names, (list, tuple))
@@ -119,6 +125,12 @@ def _controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
             "covered_postop_dates": covered_dates,
             "surgeon_round_present": surgeon_round_present,
         }
+        if preop_surgeon_round_present is not None:
+            safe_event["preop_surgeon_round_present"] = preop_surgeon_round_present
+        if "course_time_unresolved" in item:
+            if type(item["course_time_unresolved"]) is not bool:
+                return None
+            safe_event["course_time_unresolved"] = item["course_time_unresolved"]
         surgery_name = item.get("surgery_name")
         if surgery_name:
             safe_surgery_name = _controlled_string(surgery_name, allow_empty=True)
@@ -158,11 +170,13 @@ def _safe_three_day_coverage(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     required_dates = _controlled_date_list(raw.get("required_postop_dates"))
     covered_dates = _controlled_date_list(raw.get("covered_postop_dates"))
     surgeon_round_present = raw.get("surgeon_round_present")
+    preop_surgeon_round_present = raw.get("preop_surgeon_round_present")
     if (
         _controlled_string(surgery_time) is None
         or required_dates is None
         or covered_dates is None
         or type(surgeon_round_present) is not bool
+        or (preop_surgeon_round_present is not None and type(preop_surgeon_round_present) is not bool)
     ):
         return None
     safe: dict[str, Any] = {
@@ -172,6 +186,8 @@ def _safe_three_day_coverage(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "covered_postop_dates": covered_dates,
         "surgeon_round_present": surgeon_round_present,
     }
+    if preop_surgeon_round_present is not None:
+        safe["preop_surgeon_round_present"] = preop_surgeon_round_present
     if raw.get("surgery_events") is None:
         return safe
     surgery_events = _controlled_postoperative_events(raw.get("surgery_events"))
@@ -279,6 +295,13 @@ def safe_postoperative_customer_display_facts(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if not isinstance(raw, Mapping) or normalized_rule_id not in _POSTOPERATIVE_KINDS_BY_RULE:
         return None
+    if "surgery_time_basis" in raw:
+        # 院方口径（2026-10-10）：缺结束时间时按开始时间推算，仅允许这一种标记。
+        if raw["surgery_time_basis"] != "begin_time":
+            return None
+        rest = {key: value for key, value in raw.items() if key != "surgery_time_basis"}
+        safe = safe_postoperative_customer_display_facts(rule_id=rule_id, raw=rest)
+        return None if safe is None else {**safe, "surgery_time_basis": "begin_time"}
     kind = raw.get("verification_kind")
     if kind not in _POSTOPERATIVE_KINDS_BY_RULE[normalized_rule_id]:
         return None
@@ -328,6 +351,7 @@ def postoperative_customer_fact_status_is_valid(
         complete = (
             safe_facts.get("required_postop_dates") == safe_facts.get("covered_postop_dates")
             and safe_facts.get("surgeon_round_present") is True
+            and safe_facts.get("preop_surgeon_round_present") is not False
         )
         if normalized_status == "compliant":
             return complete

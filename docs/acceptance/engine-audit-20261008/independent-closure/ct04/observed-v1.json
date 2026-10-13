@@ -1,0 +1,4910 @@
+{
+  "fixed_commit": "515bcec6dc7ebcf11a8f54699aeb7b7f4dba663e",
+  "baseline": "25406df7d2506f4870674ca73cddd10523bf966d",
+  "original_expectation_sha256": "818456501701e3f3088902e647bed7302d5e510ae130ac7fd668f1b10d724505",
+  "CT03_expectation_sha256": "c92061e62c1d0049f4d68ea007e774cb43ef54c81672289dba78134afe29ad9e",
+  "source_sha256": {
+    "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py": "62a97d2f51b9ed79adbfab8943a86028bfddcc0b0bd417a7d319d39634abdf38",
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_difficult_case_na_contract_closure.py": "206c1c39d0baf017d035d08128d9e7d6da3171e48a5946cbbc741bfe17a9e498",
+    "apps/medqc-web/docs/acceptance/2026-10-08-difficult-case-na-contract-closure.md": "55b13b3ed32c190c2d8509235c45c044c56934d3fbb1e374ca3f5503a6e301cf",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py": "e98f5d7524defa0502b1154d03083b9405d7f530d859d3508295bc26b3c1625a",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py": "c32f34cabd19aaa9e26bb519f93310ec883f52c7947a8bf8d73650293455e640",
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa"
+  },
+  "source_unchanged": true,
+  "native_scenarios": [
+    {
+      "case_id": "N01_unmatured_with_valid_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        }
+      }
+    },
+    {
+      "case_id": "N02_unmatured_with_missing_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        }
+      }
+    },
+    {
+      "case_id": "N03_unmatured_with_blank_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        }
+      }
+    },
+    {
+      "case_id": "N04_unmatured_with_nonstring_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        }
+      }
+    },
+    {
+      "case_id": "N05_unmatured_multiple_discussions",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 2
+        }
+      }
+    },
+    {
+      "case_id": "N06_unmatured_no_discussion_old_na",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 0
+        }
+      }
+    },
+    {
+      "case_id": "N07_no_uncertainty_candidate_with_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        }
+      }
+    },
+    {
+      "case_id": "N08_exact_seven_days_no_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 08:00:00）；疑难病例讨论记录 0 份。",
+        "evidence": "已核对第 7 日病程和疑难病例讨论资料，当前诊断仍不明确且未检出讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录\n需要补充：诊断不明确的依据、讨论意见、诊疗方案和讨论结论\n推荐写法：请补充疑难病例讨论记录，写明诊断难点、讨论意见、诊疗方案及结论。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 08:00:00"
+          ],
+          "discussion_count": 0
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "N09_exact_seven_days_valid_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 08:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 08:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "N10_pure_time_gap_prioritized",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00；1份候选病程缺少可用的权威时间，暂无法确认是否位于入院满7天后，当前资料不足以完成疑难病例讨论要求核对。",
+        "evidence": "已读取候选病程，但权威记录时间缺失或不可解析，不能据此确认入院七天适用条件。",
+        "suggestion": "请核对源系统的病程权威记录时间及同步情况后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "authoritative_time_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_course_time_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "用于计算质控时限的权威时间"
+        ],
+        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "authoritative_time_missing",
+          "reason_label": "权威时间缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "用于计算质控时限的权威时间"
+          ],
+          "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "N11_mature_local_only_scope_preserved",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "uncertain",
+        "result_status": "uncertain",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00；入院满 7 天后的病程于 2026-06-08 09:00:00 出现局部原因待查或性质待定表述。现有资料无法确认这是否表示本次住院整体诊断仍不明确，不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。",
+        "evidence": "现有受控证据存在冲突或语义不确定性。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录\n需要补充：可核验的完整文书、权威时间及必要关联信息\n推荐写法：请人工核对相关文书与结构化资料，必要时补齐可验证信息后重新评估。\n注意事项：当前结论不确定，不得将其当作合规或确定问题，也不得按建议倒推补写事实。",
+        "confidence": null,
+        "reason_code": "diagnosis_scope_uncertain",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_scope_unverified",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-LOCAL",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "患者发热原因待查，当前诊断为社区获得性肺炎。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "N12_mature_strong_blank_discussion_body_gap_preserved",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-08 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    }
+  ],
+  "public_contracts": [
+    {
+      "case_id": "C01_empty_times_count0_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      },
+      "status": "not_applicable",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C02_empty_times_count1_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C03_empty_times_count2_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 2
+      },
+      "status": "not_applicable",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 2
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 2
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C04_nonempty_times_count0_fake_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C05_nonempty_times_count1_fake_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C06_empty_times_count1_fake_c",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C07_empty_times_count0_fake_nc",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      },
+      "status": "non_compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C08_mature_count0_nc",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "status": "non_compliant",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C09_mature_count1_c",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status": "compliant",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C10_mature_count0_fake_c",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "status": "compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C11_mature_count1_fake_nc",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status": "non_compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C12_empty_times_optional_timegap_fake_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C13_pure_time_kind_fake_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C14_pure_body_kind_fake_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "C15_scope_kind_fake_na",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_na_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": -1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_na_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": true
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_na_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": false
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_na_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1.5
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_na_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": "1"
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_na_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": null
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "missing_verification_kind",
+      "raw": {
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "missing_admission_time",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "missing_uncertain_record_times",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "missing_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": []
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_time_list",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": null,
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_time_list",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": "2026-06-08 09:00:00",
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_time_list",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "invalid"
+        ],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_time_list",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-02-30 09:00:00"
+        ],
+        "discussion_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "non_compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "uncertain",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "not_executed",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "unknown",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "old_empty_times_wrong_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status": "",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "non_compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "uncertain",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "technical_error",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "not_executed",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "unknown",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "non_compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "uncertain",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "technical_error",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "not_executed",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "unknown",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "non_compliant",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "not_applicable",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "uncertain",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "technical_error",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "not_executed",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "unknown",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "body_time_state",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1
+      },
+      "status": "",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1,
+        "discussion_body_gap_count": 1
+      },
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": -1,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": true,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": false,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1.5,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": "1",
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": null,
+        "discussion_body_gap_count": 1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 0
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": -1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": true
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": false
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1.5
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": "1"
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_discussion_body_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": null
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 0
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": -1
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": true
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": false
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": 1.5
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": "1"
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "invalid_gap_candidate_course_time_gap_count",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "discussion_body_gap_count": 1,
+        "candidate_course_time_gap_count": null
+      },
+      "status": "data_gap",
+      "expected_accept": false,
+      "actual_accept": false,
+      "pass": true,
+      "sanitized": null,
+      "status_validator_accept": false,
+      "published_helper_accept": false,
+      "published": null,
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "private_extra_filter",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "document_id": "SYN-PRIVATE"
+      },
+      "status": "not_applicable",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "private_extra_filter",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "raw_payload": "SYN-PRIVATE"
+      },
+      "status": "not_applicable",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    },
+    {
+      "case_id": "private_extra_filter",
+      "raw": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "record_content": "SYN-PRIVATE"
+      },
+      "status": "not_applicable",
+      "expected_accept": true,
+      "actual_accept": true,
+      "pass": true,
+      "sanitized": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "status_validator_accept": true,
+      "published_helper_accept": true,
+      "published": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1
+      },
+      "note": "old helper is not standalone old-kind status validator; native finalizer and explicit status validator are verified separately"
+    }
+  ],
+  "CT03_protection": [
+    {
+      "case_id": "B01_body_missing_key",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B02_body_null",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B03_body_integer",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "123",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B04_body_true",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "True",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B05_body_false",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B06_body_list",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "['合成正文']",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B07_body_dict",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "{'text': '合成正文'}",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B08_body_empty",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B09_body_whitespace",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B10_body_float",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "1.5",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B11_two_unusable_rows",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料2份，其中2份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2,
+          "discussion_body_gap_count": 2
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D2",
+            "record_time": "2026-06-09 10:00:00"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D1",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B12_three_unusable_rows",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料3份，其中3份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 3,
+          "discussion_body_gap_count": 3
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D2",
+            "record_time": "2026-06-09 10:00:00"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D1",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-D3",
+            "record_time": "2026-06-09 11:00:00"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B13_title_signature_cannot_supply_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "document_title",
+            "evidence_excerpt": "合成疑难讨论",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "B14_missing_id_legal_source_anchor_only",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "P01_no_discussion_rows",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 0 份。",
+        "evidence": "已核对第 7 日病程和疑难病例讨论资料，当前诊断仍不明确且未检出讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录\n需要补充：诊断不明确的依据、讨论意见、诊疗方案和讨论结论\n推荐写法：请补充疑难病例讨论记录，写明诊断难点、讨论意见、诊疗方案及结论。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "required_document_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 0
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "P02_short_one_character_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "x",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "P03_short_chinese_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "讨论",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "P04_trimmed_nonempty_body",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "P05_mixed_empty_then_usable",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 2 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "P06_mixed_usable_then_empty",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 2 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 2
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "P07_nonempty_plan_keeps_existing_path_not_semantic_acceptance",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "拟讨论。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "T01_only_untimed_strong_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00；1份候选病程缺少可用的权威时间，暂无法确认是否位于入院满7天后，当前资料不足以完成疑难病例讨论要求核对。",
+        "evidence": "已读取候选病程，但权威记录时间缺失或不可解析，不能据此确认入院七天适用条件。",
+        "suggestion": "请核对源系统的病程权威记录时间及同步情况后重新评估；不应据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "authoritative_time_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_course_time_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "用于计算质控时限的权威时间"
+        ],
+        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "authoritative_time_missing",
+          "reason_label": "权威时间缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "用于计算质控时限的权威时间"
+          ],
+          "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "T02_no_mature_strong_local_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "uncertain",
+        "result_status": "uncertain",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00；入院满 7 天后的病程于 2026-06-09 09:00:00 出现局部原因待查或性质待定表述。现有资料无法确认这是否表示本次住院整体诊断仍不明确，不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。",
+        "evidence": "现有受控证据存在冲突或语义不确定性。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录\n需要补充：可核验的完整文书、权威时间及必要关联信息\n推荐写法：请人工核对相关文书与结构化资料，必要时补齐可验证信息后重新评估。\n注意事项：当前结论不确定，不得将其当作合规或确定问题，也不得按建议倒推补写事实。",
+        "confidence": null,
+        "reason_code": "diagnosis_scope_uncertain",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_scope_unverified",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-09 09:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-LOCAL",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "患者发热原因待查，当前诊断为社区获得性肺炎。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "T03_before_seven_days_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "evidence": "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        }
+      }
+    },
+    {
+      "case_id": "T04_mature_strong_and_untimed_plus_empty_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。另有1份候选病程时间不全，无法确认其七天适用条件。",
+        "evidence": "已读取疑难病例讨论资料行，但正文缺失或不可用，文书定位信息不能证明讨论内容完整。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。另请核对候选病程的权威记录时间及同步情况。",
+        "confidence": null,
+        "reason_code": "required_field_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        }
+      }
+    },
+    {
+      "case_id": "T05_mature_strong_and_untimed_plus_usable_discussion",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 09:00:00）；疑难病例讨论记录 1 份。另有1份候选病程时间不全，无法确认其七天适用条件；以上已确认结论保留。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。 对另列的候选病程时间缺口，请先核对源系统时间及同步情况；不得据此补写或倒签记录。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "candidate_course_time_gap_count": 1
+        },
+        "customer_evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-UNTIMED",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "T06_source_error_priority",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "当前缺少入院时间、入院满7天后的诊断状态或疑难病例讨论记录，暂时无法完成核对；暂无法核对入院7天后诊断不明确病例的讨论记录",
+        "evidence": "当前缺少入院时间、满7天后的诊断状态或疑难病例讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录的核对资料\n需要补充：完整可读取的文书、权威时间及必要关联字段\n推荐写法：先确认资料同步完整并补齐关联信息后重新评估；仅在人工确认内容确实缺失后再按本质控点整改。\n注意事项：资料不足不代表病历内容缺失，不得直接判定合规或不合规。",
+        "confidence": null,
+        "reason_code": "source_unavailable",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          }
+        ],
+        "missing_sources": [
+          "质控所需数据源"
+        ],
+        "missing_fields": [],
+        "customer_message": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
+        "data_gap_details": {
+          "reason_code": "source_unavailable",
+          "reason_label": "数据源未接入",
+          "missing_sources": [
+            "质控所需数据源"
+          ],
+          "missing_fields": [],
+          "customer_message": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。"
+        }
+      }
+    },
+    {
+      "case_id": "T07_missing_admission_priority",
+      "pass": true,
+      "errors": [],
+      "result": {
+        "rule_id": "LX0609-03-02-01",
+        "rule_code": "LX0609-03-02-01",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "qc_point_id": "LX0609-03-02-01",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "result_status": "data_gap",
+        "is_compliant": null,
+        "findings": "当前缺少入院时间、入院满7天后的诊断状态或疑难病例讨论记录，暂时无法完成核对；暂无法核对入院7天后诊断不明确病例的讨论记录",
+        "evidence": "当前缺少入院时间、满7天后的诊断状态或疑难病例讨论记录。",
+        "suggestion": "修改对象：入院7天后疑难病例讨论记录的核对资料\n需要补充：完整可读取的文书、权威时间及必要关联字段\n推荐写法：先确认资料同步完整并补齐关联信息后重新评估；仅在人工确认内容确实缺失后再按本质控点整改。\n注意事项：资料不足不代表病历内容缺失，不得直接判定合规或不合规。",
+        "confidence": null,
+        "reason_code": "authoritative_time_missing",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-MATURE",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "source_document_id": "SYN-DISCUSSION",
+            "record_time": "2026-06-09 09:00:00"
+          }
+        ],
+        "missing_sources": [],
+        "missing_fields": [
+          "用于计算质控时限的权威时间"
+        ],
+        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+        "data_gap_details": {
+          "reason_code": "authoritative_time_missing",
+          "reason_label": "权威时间缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "用于计算质控时限的权威时间"
+          ],
+          "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。"
+        }
+      }
+    }
+  ],
+  "CT02_protection": [
+    {
+      "case_id": "G01_original_missing_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G02_invalid_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G03_null_blank_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G04_discussion_cannot_prove_window",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G05_known_nc_plus_missing",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G06_known_nc_plus_missing_reversed",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G07_known_c_plus_missing",
+      "pass": true,
+      "errors": [],
+      "status": "compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "P01_exact_seven_days",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P02_one_second_before_window",
+      "pass": true,
+      "errors": [],
+      "status": "not_applicable",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P03_one_second_after_window",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:01"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P04_no_diagnostic_candidate_no_time",
+      "pass": true,
+      "errors": [],
+      "status": "not_applicable",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P05_complete_empty_daily_source",
+      "pass": true,
+      "errors": [],
+      "status": "not_applicable",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "P06_mature_with_normal_discussion",
+      "pass": true,
+      "errors": [],
+      "status": "compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 1
+      }
+    },
+    {
+      "case_id": "P07_mature_local_scope_only",
+      "pass": true,
+      "errors": [],
+      "status": "uncertain",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-09 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "G08_local_scope_missing_time",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "P08_source_error_priority",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {}
+    },
+    {
+      "case_id": "P09_admission_missing_priority",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {}
+    },
+    {
+      "case_id": "A01_record_time",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A02_record_datetime",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A03_submit_time",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A04_submit_datetime",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A05_blank_high_priority_fallback",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 09:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "G09_invalid_high_priority_no_fallback",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "A06_utc_same_boundary",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "A07_plus08_same_boundary",
+      "pass": true,
+      "errors": [],
+      "status": "non_compliant",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [
+          "2026-06-08 08:00:00"
+        ],
+        "discussion_count": 0
+      }
+    },
+    {
+      "case_id": "G10_no_time_with_modified_created_title_date",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G11_missing_document_id",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "G12_two_missing_candidates",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 2
+      }
+    },
+    {
+      "case_id": "S01_mature_local_plus_missing_strong",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    },
+    {
+      "case_id": "S02_mature_local_plus_missing_local",
+      "pass": true,
+      "errors": [],
+      "status": "data_gap",
+      "facts": {
+        "verification_kind": "uncertain_diagnosis_course_time_gap",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+        "candidate_course_time_gap_count": 1
+      }
+    }
+  ],
+  "synthetic_fresh_store": [
+    {
+      "case_id": "N01_unmatured_with_valid_discussion",
+      "pass": true,
+      "errors": [],
+      "fresh_engine_store": true,
+      "saved": {
+        "rule_code": "LX0609-03-02-01",
+        "is_compliant": null,
+        "evidence": [],
+        "criterion_results": [],
+        "result_status": "not_applicable",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "rule_version": "2026-08-02",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "suggestion": "无需按本质控点处理。",
+        "findings": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "rule_id": "LX0609-03-02-01",
+        "reason_code": "trigger_absent_complete",
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        },
+        "qc_point_id": "LX0609-03-02-01",
+        "decision_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [],
+          "discussion_count": 1
+        },
+        "conclusion": "入院时间为 2026-06-01 08:00:00，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。",
+        "record_ref": "rec_369d670bc6031335c50bfaca"
+      }
+    },
+    {
+      "case_id": "N09_exact_seven_days_valid_discussion",
+      "pass": true,
+      "errors": [],
+      "fresh_engine_store": true,
+      "saved": {
+        "rule_code": "LX0609-03-02-01",
+        "is_compliant": true,
+        "evidence": [
+          {
+            "source_type": "daily_course_record",
+            "record_time": "2026-06-08 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_be581a267612d8c51bde527d"
+          },
+          {
+            "source_type": "diffcase_discussion_record",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "合成正文",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_084a0d8a6d48455cb7e54d88"
+          }
+        ],
+        "criterion_results": [],
+        "result_status": "compliant",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "rule_version": "2026-08-02",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "suggestion": "继续保持。",
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 08:00:00）；疑难病例讨论记录 1 份。",
+        "rule_id": "LX0609-03-02-01",
+        "reason_code": "requirement_satisfied",
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 08:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "qc_point_id": "LX0609-03-02-01",
+        "decision_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_check",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 08:00:00"
+          ],
+          "discussion_count": 1
+        },
+        "conclusion": "入院时间为 2026-06-01 08:00:00，入院满 7 天后仍有诊断不明确记录（2026-06-08 08:00:00）；疑难病例讨论记录 1 份。",
+        "record_ref": "rec_369d670bc6031335c50bfaca"
+      }
+    },
+    {
+      "case_id": "N12_mature_strong_blank_discussion_body_gap_preserved",
+      "pass": true,
+      "errors": [],
+      "fresh_engine_store": true,
+      "saved": {
+        "rule_code": "LX0609-03-02-01",
+        "is_compliant": null,
+        "evidence": [
+          {
+            "source_type": "diffcase_discussion_record",
+            "record_time": "2026-06-08 09:00:00",
+            "source_ref": "src_084a0d8a6d48455cb7e54d88"
+          },
+          {
+            "source_type": "daily_course_record",
+            "record_time": "2026-06-08 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "目前诊断仍不明确。",
+            "excerpt_kind": "文书级依据",
+            "source_ref": "src_be581a267612d8c51bde527d"
+          }
+        ],
+        "criterion_results": [],
+        "result_status": "data_gap",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "data_gap",
+        "rule_version": "2026-08-02",
+        "rule_name": "疑难病历讨论记录：诊断不明确入院后7天未书写疑难病历讨论",
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        "suggestion": "请核对源系统的疑难病例讨论正文及同步情况，资料可用后重新评估；不应据此补写或倒签记录。",
+        "findings": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "data_gap_details": {
+          "reason_code": "required_field_missing",
+          "reason_label": "关键字段缺失",
+          "missing_sources": [],
+          "missing_fields": [
+            "完成判定所需的关键字段"
+          ],
+          "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+        },
+        "missing_sources": [],
+        "missing_fields": [
+          "完成判定所需的关键字段"
+        ],
+        "rule_id": "LX0609-03-02-01",
+        "reason_code": "required_field_missing",
+        "customer_display_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "qc_point_id": "LX0609-03-02-01",
+        "decision_facts": {
+          "verification_kind": "uncertain_diagnosis_discussion_body_gap",
+          "admission_time": "2026-06-01 08:00:00",
+          "uncertain_record_times": [
+            "2026-06-08 09:00:00"
+          ],
+          "discussion_count": 1,
+          "discussion_body_gap_count": 1
+        },
+        "conclusion": "入院时间为 2026-06-01 08:00:00，入院满7天后已有诊断不明确记录（2026-06-08 09:00:00）；已读取疑难病例讨论资料1份，其中1份正文缺失或不可用，资料不足，无法核对讨论内容。",
+        "record_ref": "rec_369d670bc6031335c50bfaca"
+      }
+    }
+  ],
+  "guard_violations": [],
+  "env_reads": 0,
+  "PG_calls": 0,
+  "real_model_calls": 0,
+  "owner_suite_run": false
+}

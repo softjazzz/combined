@@ -1,0 +1,35 @@
+{
+  "fixed_sha": "bb3d0b5c3762ea7a0c8aa0580af8ec666794347b",
+  "files": [
+    {
+      "git_path": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "git_blob_sha": "2b0ee67861e072ab932b42d9eaea290254c2499e",
+      "sha256": "e7e73f283d2dc9313b41dbe48d8e659ff85c190c05eb3cdc40bfa3148e51eb43",
+      "snapshot_matches_git_show": true
+    },
+    {
+      "git_path": "apps/medqc-web/backend/app/services/qc_workspace/canonical_result_store.py",
+      "git_blob_sha": "4c217f88909954006d13f0dbaa5310f02fa623b0",
+      "sha256": "67d80d42efdd4c0010684017932d49c86856f5c2950d83af4f1eb5516b2bdf4a",
+      "snapshot_matches_git_show": true
+    },
+    {
+      "git_path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_customer_projection.py",
+      "git_blob_sha": "36b41d80074a6ac4f36a30b3d210f46e2d868325",
+      "sha256": "7bfd7c99b9d71154fb5724831527ba58eda8ebafbd243ca87a072b44de470672",
+      "snapshot_matches_git_show": true
+    },
+    {
+      "git_path": "apps/medqc-web/backend/app/services/luxian_0609/antimicrobial_result_mapping.py",
+      "git_blob_sha": "3ba9cb5c0d15f94470c7546d0e39f70944f82811",
+      "sha256": "690b83f2b578f11dc25401d6277d0533d26abe0ead987cc13c3a2a3188b469df",
+      "snapshot_matches_git_show": true
+    },
+    {
+      "git_path": "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+      "git_blob_sha": "309338024a8351df5f47b53943429ab0255e8a82",
+      "sha256": "79d33291885b7375c0474f3cd3f3eea9efc32dfcaa884b2c6c0c5da55864923e",
+      "snapshot_matches_git_show": true
+    }
+  ]
+}

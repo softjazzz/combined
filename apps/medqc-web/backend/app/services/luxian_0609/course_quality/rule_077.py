@@ -40,7 +40,7 @@ _DELIVERABLE_DATA_GAP_REASONS = frozenset(
 )
 _RELATION_STATES = frozenset({"related", "unrelated", "unknown"})
 _RATIONALE_CODES = frozenset(
-    {"same_clinical_problem", "obvious_unrelated_item", "insufficient_information"}
+    {"same_clinical_problem", "no_related_item", "insufficient_information"}
 )
 _DIFFERENTIAL_SECTION = re.compile(
     r"鉴别诊断\s*[:：]\s*(?P<body>.+?)(?=\n\s*(?:诊疗计划|治疗计划|诊治计划|医师签名)\s*[:：]|$)",
@@ -305,18 +305,18 @@ def _decision(
 def _prompt(*, first_diagnosis: str, full_diagnosis: str, differential: str) -> str:
     return f"""你是病历质控中的鉴别诊断关联性核对器。
 
-只判断首次病程记录中已经写出的鉴别诊断，是否是用于解释相同主诉、体征、检查发现或同一临床问题的合理备选诊断。不要判断诊断是否正确，不要补充病历中不存在的诊断。疾病系统相同本身不是充分条件，跨系统也不是否决条件；只有明显不能解释同一临床问题且正文未说明关联时才判 unrelated。
+只判断首次病程记录中已经写出的鉴别诊断，是否是用于解释相同主诉、体征、检查发现或同一临床问题的合理备选诊断。不要判断诊断是否正确，不要补充病历中不存在的诊断。疾病系统相同本身不是充分条件，跨系统也不是否决条件。只要有任一项鉴别诊断围绕第一诊断的临床问题展开即判 related，其余项围绕其他诊断或其他问题不影响；只有全部鉴别诊断都明显不能解释第一诊断的临床问题且正文未说明关联时才判 unrelated。
 
 第一诊断：{first_diagnosis}
 初步诊断完整列表/文本：{full_diagnosis}
 鉴别诊断：{differential}
 
 relation_state 只能是 related、unrelated、unknown：
-- related：各项鉴别诊断与第一诊断或同一临床问题存在合理临床关联；
-- unrelated：至少一项明显无关且正文未解释关联；
+- related：至少一项鉴别诊断与第一诊断或其同一临床问题存在合理临床关联；
+- unrelated：没有任何一项与第一诊断的临床问题相关，且正文未解释关联；
 - unknown：信息存在但无法可靠判断。
 
-只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|obvious_unrelated_item|insufficient_information"}}。"""
+只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|no_related_item|insufficient_information"}}。"""
 
 
 async def evaluate_rule_077(
@@ -445,7 +445,7 @@ async def evaluate_rule_077(
     rationale = clean_text(payload.get("rationale_code")) if payload else ""
     rationale_matches_state = {
         "related": "same_clinical_problem",
-        "unrelated": "obvious_unrelated_item",
+        "unrelated": "no_related_item",
         "unknown": "insufficient_information",
     }
     if (

@@ -443,6 +443,8 @@ class _WorkspaceStub:
         keyword: Optional[str],
         record_ids: Optional[List[str]] = None,
         record_refs: Optional[List[Dict[str, str]]] = None,
+        # 与真实 collect_records 签名一致；替身记录非 ORM 行，不采集身份。
+        _private_identity_collector: Any = None,
     ) -> List[Dict[str, Any]]:
         refs = list(record_refs or [])
         ids = list(
@@ -582,7 +584,8 @@ class _WorkspaceStub:
             }
         )
 
-    def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
+    def fail_batch_job(self, *, job_id: str, error_message: str, **_attempt_kwargs: Any) -> None:
+        # 与真实 fail_batch_job 一致接受 queued_only / attempt 条件参数。
         self.job["status"] = "failed"
         self.job["error_message"] = error_message
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from hashlib import sha256
@@ -11,7 +10,7 @@ import json
 from pathlib import Path
 import re
 import sys
-from typing import Any, Awaitable, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from app.services.luxian_0609.native_consultation_execution import _context as consultation_context
 from app.services.luxian_0609.native_course_quality_execution import (
@@ -21,6 +20,19 @@ from app.services.luxian_0609.native_course_quality_execution import (
     _row_text,
 )
 from app.services.luxian_0609.source_evidence_reader import read_luxian_0609_native_source_rows
+
+
+from app.services.case_identity import CaseRef
+from app.services.luxian_0609.llm_prompt_privacy import (
+    PatientPrivacyViolation, PrivacyIdentityContextError, wrap_luxian_0609_llm_client,
+)
+from app.services.luxian_0609.privacy_identity_context import (
+    _Luxian0609IdentityCollector, PrivacyIdentityContextUnavailable,
+    build_luxian_0609_identity_provider,
+)
+from app.services.luxian_0609.privacy_request_scope import (
+    bind_luxian_0609_identity_provider, luxian_0609_case_identity_scope, protect_current_payload,
+)
 
 
 SCHEMA_VERSION = "lx0609-semantic20-review-v1"
@@ -44,7 +56,7 @@ _PARSE_ERROR_CODES = frozenset(
         "parse_invalid_state",
         "parse_invalid_confidence",
         "parse_invalid_reason",
-        "transport_error",
+        "privacy_boundary_error", "transport_error",
         "source_error",
     }
 )
@@ -433,10 +445,34 @@ def _output_row(
     }
 
 
+def _source_identity_provider(collector, coordinates):
+    # 只借用已审查collect操作内存对象；不接受字符串、字典或任意provider。
+    if not isinstance(collector, _Luxian0609IdentityCollector):
+        raise PrivacyIdentityContextUnavailable()
+    try:
+        return collector.provider_for_case(CaseRef(*coordinates))
+    except Exception:
+        raise PrivacyIdentityContextUnavailable() from None
+
+
+def _bind_script_identity(source_provider, coordinates, **material_kwargs):
+    material_provider = build_luxian_0609_identity_provider(
+        **dict(zip(("institute_id", "patient_id", "visit_id"), coordinates)),
+        **material_kwargs,
+    )
+
+    def combined():
+        # 原值只在每次调用的临时集合；不能将来源预检当作发送时校验。
+        return tuple(sorted(set(source_provider()) | set(material_provider())))
+
+    return bind_luxian_0609_identity_provider(combined, case_coordinates=coordinates)
+
+
 async def build_semantic20_review(
     *, case_map: Mapping[str, Any], candidate: Mapping[str, Any],
     review_queue: Sequence[Mapping[str, Any]], llm_client: Any,
     row_loader: RowLoader = read_luxian_0609_native_source_rows,
+    _private_identity_collector: _Luxian0609IdentityCollector | None = None,
 ) -> dict[str, Any]:
     cases = _case_rows(case_map)
     targets = _review_rows(review_queue)
@@ -452,109 +488,131 @@ async def build_semantic20_review(
     call_count = 0
     for case in cases:
         case_targets = targets_by_case.get(case["case_label"], [])
-        cache: dict[str, list[Mapping[str, Any]]] = {}
+        coordinates = tuple(case[key] for key in ("institute_id", "patient_id", "visit_id"))
+        try:
+            source_provider = _source_identity_provider(_private_identity_collector, coordinates)
+            source_provider()
+        except PrivacyIdentityContextUnavailable:
+            output_rows.extend(_review_error_rows(case_targets, candidates, [], "privacy_boundary_error"))
+            continue
+        with luxian_0609_case_identity_scope(case_coordinates=coordinates, identity_provider=source_provider):
+            cache: dict[str, list[Mapping[str, Any]]] = {}
 
-        def rows(source_key: str) -> list[Mapping[str, Any]]:
-            if source_key not in cache:
-                cache[source_key] = list(
-                    row_loader(
-                        source_key=source_key, institute_id=case["institute_id"],
-                        patient_id=case["patient_id"], visit_id=case["visit_id"], source_schema=None,
+            def rows(source_key: str) -> list[Mapping[str, Any]]:
+                if source_key not in cache:
+                    cache[source_key] = list(
+                        row_loader(
+                            source_key=source_key, institute_id=case["institute_id"],
+                            patient_id=case["patient_id"], visit_id=case["visit_id"], source_schema=None,
+                        )
                     )
-                )
-            return cache[source_key]
+                return cache[source_key]
 
-        copy_targets = [row for row in case_targets if row["rule_id"] == "LX0609-12-01-02"]
-        if copy_targets:
-            try:
-                source_rows = {
-                    key: rows(key) for key in ("daily_course_record", "senior_course_record")
-                }
-                review_context, safe_metrics = _copy_review_context(source_rows)
-                hashes = _evidence_hashes(case_label=case["case_label"], sources=source_rows)
-            except Exception:
-                output_rows.extend(
-                    _review_error_rows(copy_targets, candidates, [], "source_error")
-                )
-            else:
+            copy_targets = [row for row in case_targets if row["rule_id"] == "LX0609-12-01-02"]
+            if copy_targets:
                 try:
-                    call_count += 1
-                    response = await llm_client.generate(
-                        _copy_prompt(review_context, safe_metrics)
-                    )
+                    source_rows = {
+                        key: rows(key) for key in ("daily_course_record", "senior_course_record")
+                    }
+                    review_context, safe_metrics = _copy_review_context(source_rows)
+                    hashes = _evidence_hashes(case_label=case["case_label"], sources=source_rows)
                 except Exception:
                     output_rows.extend(
-                        _review_error_rows(copy_targets, candidates, hashes, "transport_error")
+                        _review_error_rows(copy_targets, candidates, [], "source_error")
                     )
                 else:
-                    token_usage.update(_usage(response))
-                    parsed = _parse_reviews(response, ("LX0609-12-01-02",))["LX0609-12-01-02"]
-                    error_code = parsed.get("error_code")
-                    if error_code:
+                    try:
+                        identity_provider = _bind_script_identity(
+                            source_provider, coordinates,
+                            evidence_payload={"programmatic_timeline": {"structured_source_rows": dict(cache)}},
+                        )
+                        identity_provider()
+                        guarded_client = wrap_luxian_0609_llm_client(llm_client, identity_provider=identity_provider)
+                        protected = protect_current_payload({"messages": [{"role": "user", "content": _copy_prompt(review_context, safe_metrics)}]})
+                        call_count += 1
+                        response = await guarded_client.generate(protected["messages"][0]["content"])
+                    except (PrivacyIdentityContextUnavailable, PrivacyIdentityContextError, PatientPrivacyViolation):
+                        output_rows.extend(_review_error_rows(copy_targets, candidates, hashes, "privacy_boundary_error"))
+                    except Exception:
                         output_rows.extend(
-                            _review_error_rows(copy_targets, candidates, hashes, str(error_code))
+                            _review_error_rows(copy_targets, candidates, hashes, "transport_error")
                         )
                     else:
-                        output_rows.append(
-                            _output_row(
-                                target=copy_targets[0],
-                                candidate=candidates[(case["case_label"], "LX0609-12-01-02")],
-                                review_status="completed", review_state=str(parsed["state"]),
-                                review_reason=str(parsed["reason"]),
-                                confidence=str(parsed["confidence"]), evidence_hashes=hashes,
-                            )
-                        )
-
-        consultation_targets = [row for row in case_targets if row["rule_id"] != "LX0609-12-01-02"]
-        if consultation_targets:
-            try:
-                source_rows = {
-                    key: rows(key)
-                    for key in ("consultation_record", "daily_course_record", "senior_course_record")
-                }
-                hashes = _evidence_hashes(case_label=case["case_label"], sources=source_rows)
-                rule_ids = tuple(row["rule_id"] for row in consultation_targets)
-            except Exception:
-                output_rows.extend(
-                    _review_error_rows(consultation_targets, candidates, [], "source_error")
-                )
-            else:
-                try:
-                    call_count += 1
-                    response = await llm_client.generate(
-                        _consultation_prompt(rule_ids, consultation_context(source_rows))
-                    )
-                except Exception:
-                    output_rows.extend(
-                        _review_error_rows(
-                            consultation_targets, candidates, hashes, "transport_error"
-                        )
-                    )
-                else:
-                    token_usage.update(_usage(response))
-                    parsed = _parse_reviews(response, rule_ids)
-                    for target in consultation_targets:
-                        result = parsed[target["rule_id"]]
-                        error_code = result.get("error_code")
+                        token_usage.update(_usage(response))
+                        parsed = _parse_reviews(response, ("LX0609-12-01-02",))["LX0609-12-01-02"]
+                        error_code = parsed.get("error_code")
                         if error_code:
                             output_rows.extend(
-                                _review_error_rows(
-                                    [target], candidates, hashes, str(error_code)
+                                _review_error_rows(copy_targets, candidates, hashes, str(error_code))
+                            )
+                        else:
+                            output_rows.append(
+                                _output_row(
+                                    target=copy_targets[0],
+                                    candidate=candidates[(case["case_label"], "LX0609-12-01-02")],
+                                    review_status="completed", review_state=str(parsed["state"]),
+                                    review_reason=str(parsed["reason"]),
+                                    confidence=str(parsed["confidence"]), evidence_hashes=hashes,
                                 )
                             )
-                            continue
-                        state, reason = str(result["state"]), str(result["reason"])
-                        if result["confidence"] != "high":
-                            state, reason = "evaluation_unknown", "semantic_low_confidence"
-                        output_rows.append(
-                            _output_row(
-                                target=target,
-                                candidate=candidates[(case["case_label"], target["rule_id"])],
-                                review_status="completed", review_state=state,
-                                review_reason=reason, confidence=str(result["confidence"]),
-                                evidence_hashes=hashes,
+
+            consultation_targets = [row for row in case_targets if row["rule_id"] != "LX0609-12-01-02"]
+            if consultation_targets:
+                try:
+                    source_rows = {
+                        key: rows(key)
+                        for key in ("consultation_record", "daily_course_record", "senior_course_record")
+                    }
+                    hashes = _evidence_hashes(case_label=case["case_label"], sources=source_rows)
+                    rule_ids = tuple(row["rule_id"] for row in consultation_targets)
+                except Exception:
+                    output_rows.extend(
+                        _review_error_rows(consultation_targets, candidates, [], "source_error")
+                    )
+                else:
+                    try:
+                        identity_provider = _bind_script_identity(
+                            source_provider, coordinates,
+                            evidence_payload={"programmatic_timeline": {"structured_source_rows": dict(cache)}},
+                        )
+                        identity_provider()
+                        guarded_client = wrap_luxian_0609_llm_client(llm_client, identity_provider=identity_provider)
+                        protected = protect_current_payload({"messages": [{"role": "user", "content": _consultation_prompt(rule_ids, consultation_context(source_rows))}]})
+                        call_count += 1
+                        response = await guarded_client.generate(protected["messages"][0]["content"])
+                    except (PrivacyIdentityContextUnavailable, PrivacyIdentityContextError, PatientPrivacyViolation):
+                        output_rows.extend(_review_error_rows(consultation_targets, candidates, hashes, "privacy_boundary_error"))
+                    except Exception:
+                        output_rows.extend(
+                            _review_error_rows(
+                                consultation_targets, candidates, hashes, "transport_error"
                             )
                         )
+                    else:
+                        token_usage.update(_usage(response))
+                        parsed = _parse_reviews(response, rule_ids)
+                        for target in consultation_targets:
+                            result = parsed[target["rule_id"]]
+                            error_code = result.get("error_code")
+                            if error_code:
+                                output_rows.extend(
+                                    _review_error_rows(
+                                        [target], candidates, hashes, str(error_code)
+                                    )
+                                )
+                                continue
+                            state, reason = str(result["state"]), str(result["reason"])
+                            if result["confidence"] != "high":
+                                state, reason = "evaluation_unknown", "semantic_low_confidence"
+                            output_rows.append(
+                                _output_row(
+                                    target=target,
+                                    candidate=candidates[(case["case_label"], target["rule_id"])],
+                                    review_status="completed", review_state=state,
+                                    review_reason=reason, confidence=str(result["confidence"]),
+                                    evidence_hashes=hashes,
+                                )
+                            )
 
     order = {(row["case_label"], row["rule_id"]): index for index, row in enumerate(targets)}
     output_rows.sort(key=lambda row: order[(row["case_label"], row["rule_id"])])
@@ -644,24 +702,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parse_args(argv)
-    try:
-        output = asyncio.run(
-            build_semantic20_review(
-                case_map=_load_json(args.case_map), candidate=_load_json(args.candidate),
-                review_queue=_load_json(args.review_queue), llm_client=_build_llm_client(),
-            )
-        )
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
-            json.dumps(output, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
-            encoding="utf-8", newline="\n",
-        )
-    except Exception:
-        print("LX0609 semantic20 review failed safely", file=sys.stderr)
-        return 1
-    print(json.dumps(output["summary"], ensure_ascii=False, separators=(",", ":")))
-    return 0
+    _parse_args(argv)
+    # 独立CLI无合法collect内存来源，不能读JSON中的三ID后直接外发。
+    print("LX0609 semantic20 requires trusted in-memory identity source", file=sys.stderr)
+    return 1
+
 
 
 if __name__ == "__main__":

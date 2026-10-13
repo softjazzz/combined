@@ -1,0 +1,14 @@
+{
+  "fixed_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "probe": "fixed_runtime_probe.py",
+  "sha256": "44d7c826b8bc6e24f0a53390327a8f0c03feec434ab4e53758298b6785281a99",
+  "exit_code": 1,
+  "wall_seconds": 3.7851,
+  "native_and_wrapper_43_cases": "all assertions completed before SQLite read assertion",
+  "failure_phase": "first SQLite NORMAL evidence equality raw Canonical string vs public Envelope evidence list",
+  "actual_projection": "formal projector converts customer_evidence to evidence list and HMAC refs; raw Canonical evidence is explanatory string",
+  "classification": "review harness stage contract assertion error, accepted by root; not clinical status/reason/facts regression",
+  "original_expectations_retained": true,
+  "initial_sqlite_file": "independent-b6d4bd43-5549-4bd9-b636-f4cdffcfcd55.sqlite",
+  "final_acceptance": false
+}

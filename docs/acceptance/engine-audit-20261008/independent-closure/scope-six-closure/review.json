@@ -1,0 +1,35 @@
+{
+  "id": "SCOPE6-01",
+  "scope": "0609 only",
+  "excluded_scope": ["0916"],
+  "sha": "b5d0991a22c79aea3821a7819042a66a974c033f",
+  "parent_sha": "f4d32a679ddb6614afbe6bda4fb6e16fc4121dc3",
+  "prior_candidate_sha": "c289d82ef876404ab3286501c31e96646b6807de",
+  "conclusion": "accepted_for_serial_integration_by_independent_static_review",
+  "completion_level": "original-selection entry membership contract; static fixed-source review",
+  "independent_runtime_executions": 0,
+  "frozen_contracts": 6,
+  "production_changed_paths": ["apps/medqc-web/backend/app/routers/qc_sample_pools.py"],
+  "production_delta": "+13 lines; validate normalized original selected IDs against resolved rule set before paused removal",
+  "findings": [],
+  "defects": [],
+  "blockers": [],
+  "release_gate_gaps": [
+    {"id": "S6-GATE-LINT", "status": "not_run", "detail": "AGENTS minimum encoding+lint; owner reports encoding/Husky passed but lint not run. Python has no lint-staged match and no identified backend Ruff config."},
+    {"id": "S6-GATE-INTEGRATED-SHA", "status": "pending_root", "detail": "Focused 0609 scope/release regression must run at final integrated SHA; owner candidate 21 passed does not replace it."},
+    {"id": "S6-GATE-RELEASE", "status": "not_demonstrated", "detail": "Full frontend checks, customer chain, real authorization/model config, PG migration and deployment acceptance are not covered by this static review."}
+  ],
+  "owner_evidence_not_independently_rerun": {
+    "corrected_original_red": "1 failed / 5 passed; unregistered pending+active yielded HTTP200/new_jobs1/dispatch1",
+    "fixed_green": "21 passed in 18.91s; new6 + unchanged release_scope15",
+    "earlier_support_failures": "socketpair guard setup errors and scoped ordering expectation; not product defects",
+    "hook": "fixed design records genuine Husky successful, lint-staged no matches and encoding passed; not independently rerun"
+  },
+  "method": {
+    "fixed_sources": "git show final SHA; no current working-tree production reads as source",
+    "real_boundaries_in_owner_tests": ["FastAPI production router", "rule set/resolver/phase/inventory", "SQLAlchemy SQLite task count", "real create/save/read", "real record collection"],
+    "substitutes": ["authentication/activation", "settings and hospital sources", "model config/no-LLM", "dispatch capture", "SQLite single-schema adaptation and parent-column migration stub"],
+    "limits": ["No independent runtime execution", "No full Worker endpoint", "dynamic registered-paused first intersection", "default full expected set shares production delivery helper", "old15 have independent PILOTS/active IDs/75-65 counts/retry invariants but do not independently enumerate full default set"]
+  },
+  "artifacts": ["review.md", "expectations.json", "source-hashes.json", "fixed.diff", "router.fixed.py", "membership-test.fixed.py", "release-scope-test.fixed.py", "chain-fixture.fixed.py", "rule-sets.fixed.py", "worker.fixed.py", "phase-scope.fixed.py", "rule-master.fixed.py", "design.fixed.md", "agents.fixed.md", "package.fixed.json", "precommit.fixed.sh"]
+}

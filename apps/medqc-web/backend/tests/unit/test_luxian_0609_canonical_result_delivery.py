@@ -64,6 +64,9 @@ from app.services.luxian_0609.basic_timeliness_customer_projection import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
+
 class _Rows:
     def __init__(self, rows: list[dict[str, Any]]):
         self._rows = rows
@@ -3087,7 +3090,7 @@ def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text()
     projected = project_customer_safe_result_item(
         {
             "rule_id": "LX0609-03-02-01",
-            "status": "uncertain",
+            "status": "data_gap",
             "reason_code": "diagnosis_scope_uncertain",
             "customer_display_facts": {
                 "verification_kind": "uncertain_diagnosis_scope_unverified",
@@ -3101,7 +3104,7 @@ def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text()
         hmac_key="unit-test-key",
     )
 
-    assert projected["status"] == "uncertain"
+    assert projected["status"] == "data_gap"
     assert projected["reason_code"] == "diagnosis_scope_uncertain"
     assert "2026-08-09 09:00:00" in projected["conclusion"]
     assert "不能据此认定缺少疑难病例讨论" in projected["conclusion"]
@@ -3116,7 +3119,7 @@ def test_typed_050_scope_uncertainty_survives_safe_projection_without_raw_text()
         ("admission_time", "患者张三，身份证 510000199001011234"),
         ("admission_time", "2026-02-30 08:00:00"),
         ("uncertain_record_times", ["病历正文：患者李四住院于2026年08月01日"]),
-        ("uncertain_record_times", ["2026-08-09 09:00:00"] * 101),
+        ("uncertain_record_times", ["2026-08-09 09:00:00"] * 201),  # 上限 2026-10-09 由 100 调至 200
     ],
 )
 def test_typed_050_customer_projection_rejects_non_datetime_controlled_facts(

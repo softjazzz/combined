@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime
 import json
 
@@ -45,6 +46,24 @@ EXECUTION_BASE = {"completed_opinion_episode_count": 1, "recommendation_count": 
 EVIDENCE = {"episode_index": 1, "recommendation_index": 1, "execution_state": "specific",
             "opinion_refs": [{"source_type": "consultation_record", "source_document_id": "CONSULT-1"}],
             "execution_refs": [{"source_type": "daily_course_record", "source_document_id": "COURSE-1"}]}
+
+@pytest.fixture(autouse=True)
+def _measure_check_all_evidenced(monkeypatch):
+    """本模块验证会诊一、二阶段合同；措施逐项核对由 test_luxian_0609_consultation_measure_check 覆盖。
+    脚本化客户端未准备措施核对的回答：仍照常发出该次调用（调用数、用量与提示词记录不变），
+    结果固定为“每项措施均有执行证据”，避免核对失败改判资料不足。"""
+    real_check = episode.check_consultation_measures
+
+    async def _all_evidenced(*, completed, **kwargs):
+        outcome = await real_check(completed=completed, **kwargs)
+        return replace(
+            outcome,
+            state="ready",
+            missing_measures={item.recommendation.recommendation_ref: () for item in completed},
+        )
+
+    monkeypatch.setattr(episode, "check_consultation_measures", _all_evidenced)
+
 
 
 @pytest.mark.parametrize("rule_id,raw", [
@@ -271,7 +290,7 @@ async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_us
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
     assert projection_calls == [RULE_023]
-    assert native.llm_call_count == 2 and native.total_tokens == 32
+    assert native.llm_call_count == 3 and native.total_tokens == 32  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert (reduced[0].final_state.value, reduced[0].reason_code) == ("compliant", "requirement_satisfied")
     assert (canonical["status"], canonical["reason_code"]) == ("compliant", "requirement_satisfied")
     assert canonical["customer_display_facts"] == consultation_projection.safe_consultation_customer_display_facts(

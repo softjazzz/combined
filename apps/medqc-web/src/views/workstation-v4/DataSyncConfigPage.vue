@@ -4,9 +4,7 @@
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">数据与配置 · 系统配置</span>
-        <h1 class="mq-page-title">
-          系统配置
-        </h1>
+        <h1 class="mq-page-title">系统配置</h1>
       </div>
       <div
         class="mq-segmented"
@@ -32,36 +30,23 @@
     </header>
 
     <template v-if="activeTab === 'dataSync'">
-      <section
-        class="mq-card mq-card--padded sync-card"
-        aria-labelledby="sync-card-title"
-      >
+      <section class="mq-card mq-card--padded sync-card" aria-labelledby="sync-card-title">
         <div class="mq-card__head">
           <div>
-            <h2
-              id="sync-card-title"
-              class="mq-card__title"
-            >
-              病历数据同步设置
-            </h2>
+            <h2 id="sync-card-title" class="mq-card__title">病历数据同步设置</h2>
             <p class="mq-card__desc">
               {{ pageSubtitle }}
             </p>
           </div>
-          <span
-            v-if="lastSyncLabel"
-            class="mq-status"
-            :class="lastSyncStatusClass"
-          >{{ lastSyncLabel }}</span>
+          <span v-if="lastSyncLabel" class="mq-status" :class="lastSyncStatusClass">{{
+            lastSyncLabel
+          }}</span>
         </div>
 
         <ol class="sync-steps">
           <!-- 第 1 步：病历类型 -->
           <li class="sync-step is-done">
-            <span
-              class="sync-step__marker"
-              aria-hidden="true"
-            >
+            <span class="sync-step__marker" aria-hidden="true">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -69,7 +54,9 @@
                 stroke-width="3"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-              ><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+              >
+                <path d="m5 12.5 4.5 4.5L19 7.5" />
+              </svg>
             </span>
             <div class="sync-step__body">
               <div class="sync-step__heading">
@@ -87,31 +74,20 @@
                   :disabled="isReadonly"
                   @click="selectSyncScene(option.value)"
                 >
-                  <span
-                    class="sync-scene-card__radio"
-                    aria-hidden="true"
-                  />
+                  <span class="sync-scene-card__radio" aria-hidden="true" />
                   <span class="sync-scene-card__copy">
                     <strong>{{ option.label }}</strong>
                     <span>{{ option.description }}</span>
                   </span>
                 </button>
               </div>
-              <p class="sync-step__note">
-                按机构、患者和就诊三坐标匹配病历；mr_no 不是同步条件。
-              </p>
+              <p class="sync-step__note">按机构、患者和就诊三坐标匹配病历；mr_no 不是同步条件。</p>
             </div>
           </li>
 
           <!-- 第 2 步：同步范围 -->
-          <li
-            class="sync-step"
-            :class="{ 'is-done': Boolean(state.preflightResult) }"
-          >
-            <span
-              class="sync-step__marker"
-              aria-hidden="true"
-            >
+          <li class="sync-step" :class="{ 'is-done': Boolean(state.preflightResult) }">
+            <span class="sync-step__marker" aria-hidden="true">
               <svg
                 v-if="state.preflightResult"
                 viewBox="0 0 24 24"
@@ -120,7 +96,9 @@
                 stroke-width="3"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-              ><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+              >
+                <path d="m5 12.5 4.5 4.5L19 7.5" />
+              </svg>
               <template v-else>2</template>
             </span>
             <div class="sync-step__body">
@@ -148,12 +126,11 @@
                   class="mq-field sync-scope-fields__now"
                 >
                   <span class="mq-field__label">当前在院统计时间</span>
-                  <strong class="sync-scope-fields__now-value">以执行检查时的医院当前时间为准</strong>
+                  <strong class="sync-scope-fields__now-value"
+                    >以执行检查时的医院当前时间为准</strong
+                  >
                 </div>
-                <label
-                  v-else
-                  class="mq-field"
-                >
+                <label v-else class="mq-field">
                   <span class="mq-field__label">{{ syncStartDateLabel }}</span>
                   <a-date-picker
                     v-model:value="state.policyForm.start_date"
@@ -165,10 +142,7 @@
                     :placeholder="syncStartDatePlaceholder"
                   />
                 </label>
-                <label
-                  v-if="state.policyForm.scope !== 'running'"
-                  class="mq-field"
-                >
+                <label v-if="state.policyForm.scope !== 'running'" class="mq-field">
                   <span class="mq-field__label">{{ syncEndDateLabel }}</span>
                   <a-date-picker
                     v-model:value="state.policyForm.end_date"
@@ -195,23 +169,20 @@
 
           <!-- 第 3 步：检查结果与执行 -->
           <li class="sync-step sync-step--last">
-            <span
-              class="sync-step__marker"
-              aria-hidden="true"
-            >3</span>
+            <span class="sync-step__marker" aria-hidden="true">3</span>
             <div class="sync-step__body">
               <div class="sync-step__heading">
                 <h3>检查结果</h3>
                 <p>{{ preflightSummary }}</p>
               </div>
 
-              <div
-                v-if="state.preflightResult"
-                class="mq-soft sync-result"
-              >
+              <div v-if="state.preflightResult" class="mq-soft sync-result">
                 <div class="sync-result__metric sync-result__metric--primary">
                   <span>{{ candidateProgressLabel }}</span>
-                  <strong>{{ Number(state.preflightResult.estimated_impact || 0).toLocaleString() }}<small>份病历</small></strong>
+                  <strong
+                    >{{ Number(state.preflightResult.estimated_impact || 0).toLocaleString()
+                    }}<small>份病历</small></strong
+                  >
                 </div>
                 <div class="sync-result__metric">
                   <span>病历类型</span>
@@ -223,27 +194,18 @@
                   <strong>{{ policyDepartmentLabel }}</strong>
                   <em>{{ policyDateRangeLabel }}</em>
                 </div>
-                <span
-                  class="mq-status sync-result__status"
-                  :class="preflightStatusClass"
-                >
+                <span class="mq-status sync-result__status" :class="preflightStatusClass">
                   {{ hasPreflightPass ? '可同步' : '需处理' }}
                 </span>
               </div>
-              <div
-                v-else
-                class="sync-result-empty"
-              >
-                <span
-                  class="mq-status"
-                >待检查</span>
+              <div v-else class="sync-result-empty">
+                <span class="mq-status">待检查</span>
                 选择范围后点击“检查病历范围”，这里会显示候选病历数和阻断原因。
               </div>
 
               <div
                 v-if="
-                  state.preflightResult?.blockers?.length ||
-                    state.preflightResult?.warnings?.length
+                  state.preflightResult?.blockers?.length || state.preflightResult?.warnings?.length
                 "
                 class="sync-messages"
               >
@@ -252,11 +214,7 @@
                   :key="`blocker-${item}`"
                   class="sync-message is-blocker"
                 >
-                  <MqIcon
-                    name="tech_error"
-                    :size="18"
-                    color="#E0263A"
-                  />
+                  <MqIcon name="tech_error" :size="18" color="#E0263A" />
                   {{ item }}
                 </p>
                 <p
@@ -264,19 +222,12 @@
                   :key="`warning-${item}`"
                   class="sync-message is-warning"
                 >
-                  <MqIcon
-                    name="tech_error"
-                    :size="18"
-                    color="#C25E00"
-                  />
+                  <MqIcon name="tech_error" :size="18" color="#C25E00" />
                   {{ item }}
                 </p>
               </div>
 
-              <div
-                v-if="showSyncProgress"
-                class="mq-inset sync-progress"
-              >
+              <div v-if="showSyncProgress" class="mq-inset sync-progress">
                 <div class="sync-progress__head">
                   <div>
                     <h4>同步执行进度</h4>
@@ -304,7 +255,9 @@
                   </div>
                   <div>
                     <span>可进入病历池</span>
-                    <strong>{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong>
+                    <strong
+                      >{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong
+                    >
                   </div>
                   <div>
                     <span>资料类别进度</span>
@@ -312,8 +265,9 @@
                   </div>
                   <div v-if="syncBundleProgressVisible">
                     <span>病历资料视图</span>
-                    <strong>{{ syncBundleProgressCompleted }} /
-                      {{ syncBundleProgressTotal }} 份</strong>
+                    <strong
+                      >{{ syncBundleProgressCompleted }} / {{ syncBundleProgressTotal }} 份</strong
+                    >
                   </div>
                 </div>
 
@@ -337,22 +291,14 @@
                 </p>
               </div>
 
-              <div
-                v-if="hasPreflightPass"
-                class="sync-actions"
-              >
-                <label
-                  class="sync-actions__confirm"
-                  :class="{ 'is-disabled': isReadonly }"
-                >
-                  <input
-                    v-model="syncScopeConfirmed"
-                    type="checkbox"
-                    :disabled="isReadonly"
-                  >
-                  <span>我已确认同步
+              <div v-if="hasPreflightPass" class="sync-actions">
+                <label class="sync-actions__confirm" :class="{ 'is-disabled': isReadonly }">
+                  <input v-model="syncScopeConfirmed" type="checkbox" :disabled="isReadonly" />
+                  <span
+                    >我已确认同步
                     {{ Number(state.preflightResult?.estimated_impact || 0).toLocaleString() }}
-                    份病历</span>
+                    份病历</span
+                  >
                 </label>
                 <a-tooltip :title="syncScopeConfirmed ? '正式写入本地 CDM' : '请先确认同步范围'">
                   <a-button
@@ -379,12 +325,7 @@
       >
         <div class="mq-card__head">
           <div>
-            <h2
-              id="sync-advanced-title"
-              class="mq-card__title"
-            >
-              高级设置与运行记录
-            </h2>
+            <h2 id="sync-advanced-title" class="mq-card__title">高级设置与运行记录</h2>
             <p class="mq-card__desc">
               仅供实施/管理员排障使用。这里包含连接配置、表组预检、源库诊断和运行日志。
             </p>
@@ -415,16 +356,10 @@
                 {{ preflightBlockerCount }} 项，警告 {{ preflightWarningCount }} 项。
               </span>
             </div>
-            <div
-              v-if="preflightTableRows.length === 0"
-              class="mq-inset sync-preflight__empty"
-            >
+            <div v-if="preflightTableRows.length === 0" class="mq-inset sync-preflight__empty">
               尚未生成表组预检结果。
             </div>
-            <div
-              v-else
-              class="mq-inset sync-preflight__table"
-            >
+            <div v-else class="mq-inset sync-preflight__table">
               <table class="mq-table">
                 <thead>
                   <tr>
@@ -436,10 +371,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="row in preflightTableRows"
-                    :key="row.table"
-                  >
+                  <tr v-for="row in preflightTableRows" :key="row.table">
                     <td class="mq-mono">
                       {{ row.table }}
                     </td>
@@ -509,16 +441,8 @@
       :mask-style="{ backdropFilter: 'blur(6px)' }"
       @cancel="closeExecuteConfirm(false)"
     >
-      <div
-        v-if="executeConfirm.open"
-        class="sync-confirm"
-      >
-        <MqIconTile
-          name="sync"
-          tone="brand"
-          :size="52"
-          :icon-size="28"
-        />
+      <div v-if="executeConfirm.open" class="sync-confirm">
+        <MqIconTile name="sync" tone="brand" :size="52" :icon-size="28" />
         <div class="sync-confirm__copy">
           <h2>{{ isDemoSyncUser ? '开始同步' : '执行前确认' }}</h2>
           <p>
@@ -540,13 +464,7 @@
           </div>
         </dl>
         <div class="sync-confirm__actions">
-          <button
-            type="button"
-            class="mq-btn"
-            @click="closeExecuteConfirm(false)"
-          >
-            取消
-          </button>
+          <button type="button" class="mq-btn" @click="closeExecuteConfirm(false)">取消</button>
           <button
             type="button"
             class="mq-btn mq-btn--primary"
@@ -562,9 +480,10 @@
 </template>
 
 <script setup lang="ts">
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import datePickerZhCN from 'ant-design-vue/es/date-picker/locale/zh_CN'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
@@ -578,6 +497,8 @@ import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerf
 import { useAuthStore } from '@/stores/auth'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
+
+const workstationConfirmation = useWorkstationConfirmation()
 
 const activeTab = ref('dataSync')
 const syncInitialized = ref(false)
@@ -1033,7 +954,7 @@ async function handleRunPreflight() {
 async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
   if (autoSavePolicy) {
     const shouldSavePolicy = await new Promise<boolean>((resolve) => {
-      Modal.confirm({
+      workstationConfirmation.confirm({
         title: isDemoSyncUser.value ? '保存范围并检查' : '保存策略并同步',
         content: isDemoSyncUser.value
           ? '将先保存当前住院范围、科室和日期，再检查是否有可同步病历。'

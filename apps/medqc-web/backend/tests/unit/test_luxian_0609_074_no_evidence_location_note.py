@@ -27,6 +27,7 @@ from app.services.qc_workspace.canonical_result_store import (
 from tests.unit.test_luxian_0609_native_extended_document_execution import (
     _canonical_extended_result,
     _DiagnosisChangeClient,
+    _DiagnosisChangeStateClient,
     _diagnosis_change_item,
     _evaluate_selected,
 )
@@ -67,7 +68,7 @@ def _declared_change_only_rows() -> dict:
 
 
 def _declared_change_with_marked_course_rows() -> dict:
-    """结构化声明成立，且病程带理由/依据标记（产生逐条证据定位）。"""
+    """结构化声明成立，病程只记依据未记理由（产生逐条证据定位的不合规）。"""
 
     return {
         "admission_record_diagnosis": (
@@ -77,10 +78,7 @@ def _declared_change_with_marked_course_rows() -> dict:
             {
                 "document_id": "COURSE-074-EVIDENCE",
                 "record_time": "2025-08-20 10:00:00",
-                "record_content": (
-                    "结合痰培养结果，细菌性肺炎诊断依据：痰培养提示肺炎克雷伯菌，"
-                    "修改理由：抗感染方案需调整。"
-                ),
+                "record_content": "细菌性肺炎诊断依据：痰培养提示肺炎克雷伯菌。",
             },
         ),
     }
@@ -172,13 +170,13 @@ async def test_074_empty_evidence_explanation_reaches_customer_delivery_path() -
 
 @pytest.mark.asyncio
 async def test_074_non_compliant_with_evidence_does_not_get_explanation() -> None:
-    client = _DiagnosisChangeClient()
+    client = _DiagnosisChangeStateClient(("missing", "present"))
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-12-02-01",), _declared_change_with_marked_course_rows(), llm_client=client
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert execution.llm_call_count == 0
+    assert execution.llm_call_count == len(client.calls) == 1
 
     final = _canonical_extended_result(
         rule_id="LX0609-12-02-01",

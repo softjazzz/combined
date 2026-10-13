@@ -135,6 +135,23 @@ def build_luxian_0916_context(
         event_facts["surgery_performed"] = True
     event_facts.update(_mapping(explicit.get("event_facts")))
 
+    # 只有完整读取的有效空列表才支持阴性事件，来源失败不等于未麻醉。
+    readiness = _mapping(timeline.get("source_readiness"))
+    raw_documents = _mapping(timeline.get("documents"))
+    anesthesia_rows = raw_documents.get("anesthesia_record")
+    if (
+        not source_documents.get("anesthesia_record")
+        and ("anesthesia_record" in raw_documents or "anesthesia_record" in readiness)
+        and event_facts.get("anesthesia_performed") is not True
+        and not (
+            readiness.get("anesthesia_record") == "complete"
+            and isinstance(anesthesia_rows, Sequence)
+            and not isinstance(anesthesia_rows, (str, bytes))
+            and not anesthesia_rows
+        )
+    ):
+        event_facts["anesthesia_performed"] = None
+
     discharge_time = str(timeline.get("discharge_time") or "").strip()
     discharge_record_formed = bool(source_documents.get("discharge_record"))
     discharge_facts: dict[str, Any] = {}

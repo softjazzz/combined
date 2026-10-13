@@ -19,6 +19,7 @@ import traceback
 import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
+from .consultation_measure_check import apply_measure_check, check_consultation_measures
 from .consultation_decision_evidence import (
     bind_document_material_rows,
     is_material_binding_error,
@@ -40,6 +41,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .extended_document.shared import _parse_datetime
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     SourceEvidenceQueryError,
@@ -109,6 +111,9 @@ _COURSE_EXECUTION_SOURCE_KEYS = frozenset((
     "daily_course_record",
     "senior_course_record",
 ))
+# 检查/检验主记录是表头行；客户源表常只有检查号、医嘱号、科室和时间，名称与结果分别在
+# 医嘱和明细报告中。无文字但医嘱号均能在本次医嘱中找到的表头行，其内容已由医嘱候选代表。
+_MASTER_HEADER_SOURCE_KEYS = frozenset(("exam_master", "labtest_master"))
 _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
     *_COURSE_EXECUTION_SOURCE_KEYS,
     "consultation_record",
@@ -245,6 +250,9 @@ _EXECUTION_TRACE_BOUNDARY_PROMPT = (
     "例如病程写‘今遵会诊意见完善相关检查，并复查肾功、电解质’，已经包含具体动作，"
     "必须判specific_trace。病程写‘继续中药内服，方选消风散加减’同样是具体治疗动作，"
     "不能因使用‘继续’二字判成no_trace。"
+    "病程明确写明某条建议不执行、暂缓或停用，并说明具体原因（如检验异常、禁忌证、患者或家属拒绝）时，"
+    "已记录该建议的执行情况，判specific_trace且recommendation_coverage_state=complete；"
+    "只写暂不执行、未写原因的判generic_trace。"
     "‘余治疗方案同前’‘继续当前治疗’不得自动关联到本次新会诊建议；"
     "同一病程未明确写出该建议对应动作时按no_trace判断。"
 )
@@ -1045,12 +1053,10 @@ def _parse_observed_time(value: Any) -> _ObservedTime | None:
             return _ObservedTime(datetime.strptime(normalized, fmt), False)
         except ValueError:
             continue
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
+    # 带偏移时间按既定医院时区换算，避免跨午夜证据被错误移出住院窗口。
+    parsed = _parse_datetime(normalized)
+    if parsed is None:
         return None
-    if parsed.tzinfo is not None:
-        parsed = parsed.replace(tzinfo=None)
     return _ObservedTime(parsed, "T" in normalized or " " in normalized)
 
 
@@ -1251,6 +1257,8 @@ def _candidate_documents(
     source_complete_keys: set[str] = set()
     source_incomplete_keys: set[str] = set()
     source_technical = False
+    # 已读取医嘱的医嘱号（截断前）；_EXECUTION_SOURCE_KEYS 中医嘱来源排在主记录之前。
+    observed_order_ids: set[str] = set()
     source_keys = (
         _SNAPSHOT_EXECUTION_SOURCE_KEYS
         if evidence_materials is not None and evidence_snapshot is not None
@@ -1323,6 +1331,10 @@ def _candidate_documents(
             except _SourceTechnical:
                 source_technical = True
                 continue
+        if is_order_source:
+            observed_order_ids.update(
+                order_id for row in rows if (order_id := _clean(row.get("order_id")))
+            )
         source_is_complete = True
         if evidence_snapshot is not None:
             observation = next(
@@ -1367,6 +1379,12 @@ def _candidate_documents(
                 # 无标题、无正文的病程占位行不可能承载会诊执行事实；忽略该
                 # 空工件，不能仅因它同时缺时间就把完整病程来源降为不完整。
                 continue
+            if not text and source_key in _MASTER_HEADER_SOURCE_KEYS:
+                linked_order_ids = {
+                    part for part in re.split(r"[+^]", _clean(row.get("order_id"))) if part
+                }
+                if linked_order_ids and linked_order_ids <= observed_order_ids:
+                    continue
             if observed_time is None or not text or len(text) > text_limit:
                 source_is_complete = False
                 continue
@@ -3199,15 +3217,25 @@ def _parse_executions(
             # 但保留已经逐字落地的病程trace，不让模型的冗余枚举作废主事实。
             state = "absent"
         all_refs = [*trace_refs, *structured_refs]
-        reference_scope_invalid = any(
-            ref not in allowed_refs[recommendation_ref]
-            for ref in all_refs
-        )
         if any(ref not in candidate_by_ref for ref in all_refs):
             raise _SemanticInvalid(_SemanticInvalidKind.REFERENCE_NOT_CANDIDATE)
-        if reference_scope_invalid:
-            parsed.append(_unknown_execution_assessment(recommendation_ref))
-            continue
+        out_of_scope_refs = {
+            ref for ref in all_refs if ref not in allowed_refs[recommendation_ref]
+        }
+        if out_of_scope_refs:
+            # 用户口径（2026-10-12，与 06-01-02 方案 A 同一原则）：本条建议允许范围外
+            # （如会诊意见之前）的候选不能作为执行证据。只剔除越界引用后按剩余引用
+            # 判断，不再把整条降为未知；真实样本中整条降级使结论在资料不足与
+            # 不合规之间多轮翻转。
+            trace_refs = [ref for ref in trace_refs if ref not in out_of_scope_refs]
+            structured_refs = [ref for ref in structured_refs if ref not in out_of_scope_refs]
+            if not trace_refs and execution_record_state in _RECORDED_TRACE_LEVELS:
+                execution_record_state = "no_trace"
+            if not structured_refs and state in {"linked_specific", "linked_vague"}:
+                state = "absent"
+            if not trace_refs and not structured_refs:
+                raw_quotes = []
+            all_refs = [*trace_refs, *structured_refs]
         if (
             len(trace_refs) != len(set(trace_refs))
             or len(structured_refs) != len(set(structured_refs))
@@ -3343,9 +3371,14 @@ def _parse_executions(
             candidates,
             source_quote=recommendation_by_ref[recommendation_ref].source_quote,
         ):
+            # 只否定病程执行痕迹；已关联的结构化医嘱独立证明执行，不随之清除。
+            # 此前一并改为 absent 却保留医嘱引用，形成“未执行但有医嘱”的矛盾事实，
+            # 023 因此落为资料不足（真实样本多轮翻转）。
             assessment = replace(
                 assessment,
-                execution_state="absent",
+                execution_state=(
+                    assessment.execution_state if assessment.execution_refs else "absent"
+                ),
                 confidence="high",
                 execution_quotes=(),
                 execution_record_state="no_trace",
@@ -3404,7 +3437,7 @@ def _execution_quality_outcome(
     """023 逐条核对会诊建议是否有具体执行证据。
 
     任一建议明确缺少执行证据，或只找到笼统执行记录，即不合规；只有全部
-    建议都找到具体病程记录或高置信结构化医嘱时才合规。来源不完整或模型
+    建议都找到具体病程记录或结构化医嘱时才合规（不看模型自评置信度）。来源不完整或模型
     未形成可靠逐条事实时返回资料不足，不能把未知当成“未执行”。
     """
 
@@ -3436,9 +3469,9 @@ def _execution_quality_outcome(
             # copied_opinion 仅作为旧响应的兼容值，按“不具体”处理。
             has_confirmed_defect = True
             continue
-        if item.confidence != "high":
-            has_unknown = True
-            continue
+        # 用户口径（2026-10-11）：模型已给出明确执行事实时按事实判定，不再以模型
+        # 自评置信度降为资料不足（真实样本中同一事实的置信度在多轮间随机波动）；
+        # unknown 状态及引用不全仍按无法确认处理。
         if item.execution_record_state == "specific_trace" and item.trace_refs:
             continue
         if item.execution_record_state == "no_trace" and order_refs:
@@ -4736,6 +4769,44 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     source_technical=execution_source_technical,
                     source_incomplete_keys=execution_source_incomplete_keys,
                     context_only_candidate_present=context_only_candidate_present,
+                )
+            if (
+                "LX0609-03-01-04" in stage_two_rule_ids
+                and statuses.get("LX0609-03-01-04", ("",))[0] == "compliant"
+                and execution_candidate_projection is not None
+                and llm_client is not None
+            ):
+                # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
+                # 只对原判合规者逐项核对；核对失败或漏拆改判资料不足，不沿用合规。
+                measure_candidates = execution_candidate_projection.candidates
+                _, measure_allowed_refs = _execution_prompt(
+                    completed=completed_recommendations,
+                    candidates=measure_candidates,
+                )
+                measure_outcome = await check_consultation_measures(
+                    completed=completed_recommendations,
+                    candidates=measure_candidates,
+                    allowed_refs=measure_allowed_refs,
+                    alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
+                    llm_client=llm_client,
+                )
+                calls += measure_outcome.llm_call_count
+                prompt_tokens += measure_outcome.prompt_tokens
+                completion_tokens += measure_outcome.completion_tokens
+                total_tokens += measure_outcome.total_tokens
+                api_time += measure_outcome.api_time
+                action_types = {
+                    item.recommendation.recommendation_ref: item.recommendation.action_type
+                    for item in completed_recommendations
+                }
+                statuses["LX0609-03-01-04"] = apply_measure_check(
+                    statuses["LX0609-03-01-04"],
+                    measure_outcome,
+                    relevant_source_incomplete=lambda ref: bool(
+                        _ACTION_TYPE_SOURCE_KEYS.get(
+                            action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
+                        ).intersection(execution_source_incomplete_keys)
+                    ),
                 )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,

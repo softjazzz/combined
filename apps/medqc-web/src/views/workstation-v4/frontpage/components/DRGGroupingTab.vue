@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-if="drgResult"
-    class="drg-grouping-tab space-y-6 pb-10"
-  >
+  <div v-if="drgResult" class="drg-grouping-tab space-y-6 pb-10">
     <!-- DRG Key Metrics -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <!-- DRG Code -->
@@ -12,7 +9,7 @@
         <div
           class="absolute right-0 top-0 opacity-10 transform translate-x-1/3 -translate-y-1/3 transition-transform group-hover:scale-110 duration-500"
         >
-          <AppstoreOutlined style="font-size: 100px" />
+          <MqIcon name="stack" style="font-size: 100px" />
         </div>
         <div class="z-10">
           <div class="text-blue-100 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -21,10 +18,7 @@
           <div class="text-3xl font-semibold font-mono tracking-tight">
             {{ drgResult.code }}
           </div>
-          <div
-            class="text-blue-100 mt-2 font-medium truncate"
-            :title="drgResult.name"
-          >
+          <div class="text-blue-100 mt-2 font-medium truncate" :title="drgResult.name">
             {{ drgResult.name }}
           </div>
         </div>
@@ -53,21 +47,22 @@
           <div
             class="w-10 h-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center text-green-500"
           >
-            <DollarOutlined class="text-xl" />
+            <MqIcon name="settlement" class="text-xl" />
           </div>
         </div>
         <div class="mt-4 text-xs text-slate-500 flex items-center justify-between">
-          <span>实际费用:
-            <span class="font-medium">¥ {{ drgResult.actual_cost?.toLocaleString() || '-' }}</span></span>
+          <span
+            >实际费用:
+            <span class="font-medium"
+              >¥ {{ drgResult.actual_cost?.toLocaleString() || '-' }}</span
+            ></span
+          >
           <span :class="drgResult.profit >= 0 ? 'text-green-500' : 'text-red-500'">
             {{ drgResult.profit >= 0 ? '+' : '' }}{{ drgResult.profit?.toLocaleString() }}
           </span>
         </div>
         <!-- Cost Consumption Rate Progress -->
-        <div
-          v-if="drgResult.payment > 0"
-          class="mt-3"
-        >
+        <div v-if="drgResult.payment > 0" class="mt-3">
           <div class="flex justify-between text-[10px] text-slate-400 mb-1">
             <span>费用消耗率</span>
             <span>{{ Math.round((drgResult.actual_cost / drgResult.payment) * 100) }}%</span>
@@ -111,14 +106,8 @@
           <div
             class="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-500"
           >
-            <RiseOutlined
-              v-if="drgResult.profit >= 0"
-              class="text-xl"
-            />
-            <FallOutlined
-              v-else
-              class="text-xl"
-            />
+            <MqIcon v-if="drgResult.profit >= 0" name="stats" class="text-xl" />
+            <MqIcon v-else name="stats" class="text-xl" />
           </div>
         </div>
         <div class="mt-4 w-full bg-slate-100 dark:bg-slate-600 h-2 rounded-full overflow-hidden">
@@ -139,7 +128,7 @@
       class="drg-glass-card bg-slate-50 dark:bg-slate-700/30 rounded-xl p-6 border border-slate-100 dark:border-slate-700"
     >
       <h4 class="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
-        <CalculatorOutlined class="text-blue-500" /> 入组详情
+        <MqIcon name="drg" class="text-blue-500" /> 入组详情
       </h4>
       <div class="space-y-4">
         <div
@@ -168,24 +157,16 @@
               </span>
               {{ mainProcedureName }}
             </template>
-            <span
-              v-else
-              class="text-slate-400 italic"
-            >无手术操作</span>
+            <span v-else class="text-slate-400 italic">无手术操作</span>
           </div>
         </div>
         <div
           v-if="drgResult.messages && drgResult.messages.length > 0"
           class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-900/40"
         >
-          <div class="text-yellow-700 dark:text-yellow-500 font-medium text-sm mb-2">
-            入组提示
-          </div>
+          <div class="text-yellow-700 dark:text-yellow-500 font-medium text-sm mb-2">入组提示</div>
           <ul class="list-disc list-inside text-xs text-yellow-600 dark:text-yellow-400 space-y-1">
-            <li
-              v-for="(msg, idx) in drgResult.messages"
-              :key="idx"
-            >
+            <li v-for="(msg, idx) in drgResult.messages" :key="idx">
               {{ msg }}
             </li>
           </ul>
@@ -199,7 +180,7 @@
         class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#0a6cff] px-6 py-2 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 group"
         @click="$emit('openOptimization')"
       >
-        <ThunderboltOutlined class="group-hover:text-amber-500 transition-colors" />
+        <MqIcon name="running" class="group-hover:text-amber-500 transition-colors" />
         AI 编码优化建议
       </button>
     </div>
@@ -213,11 +194,9 @@
     <div
       class="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 rounded-2xl mb-5 flex items-center justify-center"
     >
-      <AppstoreOutlined class="text-4xl text-blue-500" />
+      <MqIcon name="stack" class="text-4xl text-blue-500" />
     </div>
-    <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-2">
-      DRG/DIP 智能分组
-    </h3>
+    <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-2">DRG/DIP 智能分组</h3>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-xs">
       基于病案首页数据进行预分组，预测入组结果、RW值及支付费用。
     </p>
@@ -226,27 +205,15 @@
       class="bg-[#0a6cff] hover:bg-[#0a5fd6] disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-[0_5px_14px_rgba(10, 108, 255,0.18)] flex items-center gap-2"
       @click="$emit('group')"
     >
-      <CalculatorOutlined />
+      <MqIcon name="drg" />
       {{ loading ? '正在分组...' : '开始分组预测' }}
     </button>
-    <p
-      v-if="!hasFrontpage"
-      class="text-xs text-orange-500 mt-3"
-    >
-      请先完成 AI 结构化提取
-    </p>
+    <p v-if="!hasFrontpage" class="text-xs text-orange-500 mt-3">请先完成 AI 结构化提取</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import {
-  AppstoreOutlined,
-  DollarOutlined,
-  RiseOutlined,
-  FallOutlined,
-  CalculatorOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons-vue'
+import MqIcon from '@/components/icons/MqIcon.vue'
 
 export interface DRGResult {
   code: string
@@ -274,53 +241,5 @@ defineEmits<{
 }>()
 </script>
 
-<style scoped>
-@import './drg-dip-workbench.css';
-
-.drg-grouping-tab {
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.drg-primary-card,
-.drg-glass-card {
-  border-radius: 16px;
-}
-
-.drg-primary-card {
-  box-shadow: 0 5px 14px rgba(10, 108, 255, 0.16);
-}
-
-.drg-glass-card,
-.drg-grouping-tab :deep(.dark\:bg-slate-800),
-.drg-grouping-tab :deep(.dark\:bg-slate-700\/50),
-.drg-grouping-tab :deep(.dark\:bg-slate-700\/30) {
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  background: rgba(255, 255, 255, 0.86) !important;
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035) !important;
-}
-
-.drg-grouping-tab :deep(.dark\:text-white),
-.drg-grouping-tab :deep(.dark\:text-slate-200),
-.drg-grouping-tab :deep(.text-slate-800) {
-  color: #1d1d1f !important;
-}
-
-.drg-grouping-tab :deep(.dark\:text-slate-400),
-.drg-grouping-tab :deep(.text-slate-500),
-.drg-grouping-tab :deep(.text-slate-400) {
-  color: rgba(29, 29, 31, 0.6) !important;
-}
-
-.drg-grouping-tab :deep(.text-blue-500) {
-  color: #0a6cff !important;
-}
-</style>
+<style scoped src="../../styles/drg-grouping.css"></style>
+<style scoped src="./drg-dip-workbench.css"></style>

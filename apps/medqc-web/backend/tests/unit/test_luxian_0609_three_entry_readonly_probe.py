@@ -33,14 +33,16 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
     class _FrozenDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
+            # 入口按服务器本地时区取冻结日；固定在 UTC 正午（北京时间 20:00），
+            # 使 UTC-12 至 UTC+11 的机器都得到同一冻结日，不依赖运行机器时区。
             fixed = datetime(
-                2026, 9, 24, 12, 0, tzinfo=timezone(timedelta(hours=8)),
+                2026, 9, 24, 20, 0, tzinfo=timezone(timedelta(hours=8)),
             )
             return fixed.astimezone(tz) if tz is not None else fixed
 
         @classmethod
         def utcnow(cls):
-            return datetime(2026, 9, 24, 4, 0)
+            return datetime(2026, 9, 24, 12, 0)
 
     monkeypatch.setattr(qc_sichuan, "datetime", _FrozenDatetime)
     monkeypatch.setattr(qc_sample_pools, "datetime", _FrozenDatetime)

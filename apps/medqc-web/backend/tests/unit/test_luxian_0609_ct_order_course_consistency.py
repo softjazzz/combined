@@ -10,7 +10,7 @@ from app.services.luxian_0609 import native_exam_lab_execution as native
 from app.services.luxian_0609.ct_order_course_consistency import (
     RULE_ID, REPORT_RULE_ID, COURSE_SOURCES, SCHEMA_VERSION,
     CourseClause, CtReviewInput, build_ct_review_input, build_ct_fact_prompt,
-    ct_display_status_matches, evaluate_ct_review, validate_ct_display_facts,
+    ct_display_status_matches, ct_fact_response_format, evaluate_ct_review, validate_ct_display_facts,
     CtEvidenceBudgetExceeded,
 )
 from app.services.luxian_0609.evidence_material import (
@@ -59,9 +59,34 @@ def test_complete_positive_facts_keep_same_event_refs_and_publish_without_text()
     assert not ct_display_status_matches("non_compliant", result.display_facts)
 
 
-@pytest.mark.parametrize("state,clauses", [("absent", []), ("unknown", [])])
-def test_no_clinical_defect_from_missing_or_uncertain_material(state, clauses):
-    assert evaluate_ct_review(_review(), _payload(state, clauses=clauses)).status == "data_gap"
+def test_uncertain_semantics_is_not_a_clinical_defect():
+    assert evaluate_ct_review(_review(), _payload("unknown", clauses=[])).status == "data_gap"
+
+
+def test_executed_exam_absent_from_complete_course_scope_is_non_compliant():
+    """院方口径：病程来源完整而全程未记载已执行检查，判不合规。"""
+    result = evaluate_ct_review(_review(), _payload("absent", clauses=[]))
+    assert (result.status, result.reason_code) == ("non_compliant", "requirement_violated")
+    assert result.display_facts["event_results"][0]["issue_kind"] == "course_record_missing"
+    assert validate_ct_display_facts(result.display_facts) == result.display_facts
+
+
+def test_absent_exam_with_incomplete_course_scope_stays_data_gap():
+    result = evaluate_ct_review(_review(complete=False), _payload("absent", clauses=[]))
+    assert result.status == "data_gap"
+
+
+@pytest.mark.parametrize("horizon,expected", [
+    ("2026-09-01T20:00:00", ("not_applicable", "evaluation_window_not_mature")),
+    ("2026-09-03T00:00:00", ("non_compliant", "requirement_violated")),
+])
+def test_running_record_absent_course_waits_24_hours_after_report(horizon, expected):
+    from datetime import datetime
+    review = replace(_review(), horizon_basis="running", horizon=datetime.fromisoformat(horizon))
+    payload = _payload("absent", clauses=[])
+    result = evaluate_ct_review(review, payload)
+    assert (result.status, result.reason_code) == expected
+    assert validate_ct_display_facts(result.display_facts) == result.display_facts
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -93,7 +118,8 @@ def test_one_merged_report_cannot_use_one_order_to_cover_all_body_sites():
     payload["events"].append({"event_position": 1, "order_position": 2,
                               "record_state": "absent", "clause_ids": []})
     result = evaluate_ct_review(review, payload)
-    assert result.status == "data_gap"
+    # 胸部CT那条医嘱在完整病程中未见记载，不能被左膝CT的记载覆盖。
+    assert result.status == "non_compliant"
     assert result.display_facts["event_count"] == 1
 
 
@@ -204,10 +230,15 @@ def test_formal_report_proves_execution_despite_new_order_status_and_unnamed_mas
     assert evaluate_ct_review(review, _payload()).status == "compliant"
 
 
+def _unmatched_only(*clause_ids):
+    return {"schema_version": SCHEMA_VERSION, "events": [], "unmatched_current_clause_ids": list(clause_ids)}
+
+
 def test_pending_order_without_execution_never_calls_model_or_becomes_a_defect():
     rows = _rows()
     rows["exam_item_report"] = []
     review = _project(rows)
+    # 执行未确认已是资料缺口，不再调用模型。
     assert not review.needs_model
     assert evaluate_ct_review(review).status == "data_gap"
 
@@ -223,14 +254,27 @@ def test_gaps_stop_model_and_prevent_false_compliance(change):
         rows[ORDER_SOURCE] = []
         rows["exam_master"][0]["exam_name"] = "左膝CT"
     review = _project(rows, ("daily_course_record",) if change == "unproven_course" else ())
+    # 病程来源完整但没有任何病程：已执行检查未被记载，按院方口径判不合规。
+    expected = "non_compliant" if change == "empty_course" else "data_gap"
     assert not review.needs_model
-    assert evaluate_ct_review(review).status == "data_gap"
+    assert evaluate_ct_review(review).status == expected
 
 
 def test_empty_sources_and_course_only_trigger_have_different_results():
     assert evaluate_ct_review(_project()).status == "not_applicable"
     review = _project({"daily_course_record": [{"document_id": "D1", "record_content": "本次已行左膝CT。"}]})
-    assert evaluate_ct_review(review).status == "data_gap"
+    assert review.needs_model
+    assert evaluate_ct_review(review, _unmatched_only("C1")).status == "data_gap"
+
+
+def test_outside_hospital_or_pre_admission_exam_is_not_reviewed():
+    """用户口径（2026-10-12）：写明院外医院名称或入院前门急诊的检查不纳入本条核对。"""
+    review = _project({"daily_course_record": [
+        {"document_id": "D1", "record_content": "院外辅助检查：2025年08月06日某市人民医院腹部CT提示右肾积水。"}]})
+    assert review.needs_model
+    assert "院外检查" in build_ct_fact_prompt(review) and "门急诊检查" in build_ct_fact_prompt(review)
+    assert evaluate_ct_review(review, _unmatched_only()).status == "not_applicable"
+    assert ct_fact_response_format(review)["json_schema"]["schema"]["properties"]["events"]["maxItems"] == 0
 
 
 @pytest.mark.parametrize("order_count", [1, 3])
@@ -238,7 +282,7 @@ def test_unrelated_canceled_orders_do_not_hide_current_course_event(order_count)
     rows = {ORDER_SOURCE: [{"order_id": f"O{i}", "order_name": "左膝CT", "order_status": "取消"}
                           for i in range(order_count)],
             "daily_course_record": [{"document_id": "D1", "record_content": "本次已完成胸部CT，提示炎症。"}]}
-    assert evaluate_ct_review(_project(rows)).status == "data_gap"
+    assert evaluate_ct_review(_project(rows), _unmatched_only("C1")).status == "data_gap"
     rows["daily_course_record"][0]["record_content"] = "患者病情平稳。"
     assert evaluate_ct_review(_project(rows)).status == "not_applicable"
 
@@ -657,3 +701,88 @@ def test_r1_yesterday_uses_beijing_document_day(written, expected_first):
     result = evaluate_ct_review(review, payload)
     assert result.display_facts["order_results"][0]["status"] == expected_first
     assert result.display_facts["order_results"][1]["status"] == "data_gap"
+
+
+def _named_event(name, key="EXAM-001", order_id="ORDER-001"):
+    return replace(_event(key), name=name, orders=(("order:" + order_id, {"order_id": order_id, "order_name": name}),))
+
+
+@pytest.mark.parametrize("order_name,text", [
+    ("胸部CT平扫", "今日胸部CT示右肺上叶结节。"),
+    ("头颅MRI平扫+增强", "头颅磁共振增强示左侧基底节梗死。"),
+    ("上腹部CT增强", "上腹部增强CT示肝内低密度灶。"),
+    # 真实样本写法：医嘱名含括号范围说明与“螺旋/造影”，病程模态在前或多部位并列共用模态。
+    ("胸部螺旋CT平扫(含膈上肋骨)", "2025-07-06 胸部螺旋CT平扫：双肺下叶少许渗出；"),
+    ("颅脑螺旋CT平扫", "院内辅助检查：2025-07-28颅脑CT+胸部螺旋CT平扫(含膈上肋骨) 双侧"),
+    ("胸椎螺旋CT平扫(T1-T12)", "辅助检查：2025-7-10 胸椎螺旋CT：T11椎体压缩性骨折成形术后改变。"),
+    ("MRI腰椎平扫", "辅助检查：2025-07-06 MRI胸椎、腰椎平扫：T11椎体压缩性骨折。"),
+    ("MRI胸椎平扫", "辅助检查：2025-07-06 MRI胸椎、腰椎平扫：T11椎体压缩性骨折。"),
+    ("上腹部螺旋CT平扫(肝胆胰脾、膈下肋骨)", "2025-07-29 上腹/下腹/盆腔腹部螺旋CT平扫:前列腺钙化灶。"),
+    ("盆腔螺旋CT平扫", "2025-07-29 上腹/下腹/盆腔腹部螺旋CT平扫:前列腺钙化灶。"),
+    ("颈动脉CT造影成像", "2025-07-09 颅内动脉、颈动脉CT造影成像 前交通动脉显示。"),
+])
+def test_course_need_not_copy_full_order_name_when_modality_and_site_match(order_name, text):
+    result = evaluate_ct_review(_review(text, events=(_named_event(order_name),)), _payload())
+    assert result.status == "compliant"
+
+
+@pytest.mark.parametrize("order_name,text", [
+    ("胸部CT平扫", "今日头颅CT未见异常。"),
+    ("胸部CT平扫", "胸部MRI示纵隔占位。"),
+    ("头颅MRI平扫", "头颅CT未见出血。"),
+    # 部位与模态被冒号、逗号或连词隔开时不属于同一检查表述；相近部位不能互相代替。
+    ("胸部CT平扫", "左膝CT：胸部另见结节。"),
+    ("胸部CT平扫", "胸椎CT示压缩骨折。"),
+    ("头颅MRI平扫", "左膝MRI，头颅未查。"),
+    ("头颅MRI平扫", "左膝MRI及头颅CT。"),
+    ("腰椎MRI平扫", "胸椎MRI示骨折。"),
+])
+def test_modality_and_site_must_both_match_the_order(order_name, text):
+    result = evaluate_ct_review(_review(text, events=(_named_event(order_name),)), _payload())
+    assert result.status == "data_gap"
+
+
+def test_abbreviated_course_cannot_pick_between_same_site_same_modality_events():
+    events = (_named_event("胸部CT平扫"), _named_event("胸部CT增强", key="EXAM-002", order_id="ORDER-002"))
+    review = CtReviewInput(events, (1, 2), (CourseClause("C1", "course:1", "胸部CT示右肺结节。",
+                                                         field_path="record_content", end=9),), {}, True)
+    payload = _payload()
+    payload["events"].append({"event_position": 2, "order_position": 1, "record_state": "absent", "clause_ids": []})
+    result = evaluate_ct_review(review, payload)
+    assert result.display_facts["event_results"][0]["issue_kind"] == "association_unresolved"
+
+
+def test_course_record_missing_and_not_yet_due_have_specific_customer_copy():
+    from datetime import datetime
+    from app.services.luxian_0609.customer_renderer import handbook_customer_message
+
+    missing = evaluate_ct_review(_review(), _payload("absent", clauses=[]))
+    message = handbook_customer_message(rule_id=RULE_ID, status="non_compliant", facts=missing.display_facts)
+    assert message[0] == "有1次已执行的CT/MRI检查在本次住院病程中未见记载"
+    waiting = evaluate_ct_review(
+        replace(_review(), horizon_basis="running", horizon=datetime(2026, 9, 1, 20)),
+        _payload("absent", clauses=[]),
+    )
+    message = handbook_customer_message(rule_id=RULE_ID, status="not_applicable", facts=waiting.display_facts)
+    assert message[0] == "CT/MRI报告出具尚未满24小时，病程暂未记载，暂不评价。"
+
+
+@pytest.mark.asyncio
+async def test_capable_client_extracts_ct_facts_with_thinking_disabled():
+    class StructuredClient(_Client):
+        def supports_strict_json_schema(self):
+            return True
+
+        async def generate(self, prompt, *, allow_length_retry, **kwargs):
+            self.kwargs = kwargs
+            return await super().generate(prompt, allow_length_retry=allow_length_retry)
+
+    snapshot, material = _session(_rows())
+    client = StructuredClient()
+    result = await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(RULE_ID,), decision_rule_ids=(RULE_ID,), wrapper_rules=(),
+        evidence_payload=None, llm_client=client, evidence_snapshot=snapshot, evidence_materials=material,
+    )
+    assert result.decisions[0].reason_code == "requirement_satisfied"
+    assert client.kwargs["enable_thinking"] is False
+    assert client.kwargs["response_format"]["type"] == "json_schema"

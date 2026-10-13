@@ -1,48 +1,32 @@
 <template>
-  <div class="post-event-analysis-page">
-    <header class="analysis-header">
+  <div class="post-event-analysis-page drg-workbench-page">
+    <header class="analysis-header mq-page-head">
       <div class="analysis-title-block">
-        <button
-          class="back-icon-button"
-          type="button"
-          aria-label="返回"
-        >
-          <ArrowLeftOutlined />
+        <button class="back-icon-button" type="button" aria-label="返回">
+          <MqIcon name="back" />
         </button>
         <div>
-          <h2>事后分析</h2>
+          <h2 class="mq-page-title">事后分析</h2>
           <p>从质量、费用和分组结果复盘科室效率表现与改进方向</p>
         </div>
       </div>
 
       <div class="header-actions">
-        <span
-          v-if="useDemoData || hasUploadedDataset"
-          class="mode-chip"
-        >
-          <WarningOutlined />
+        <span v-if="useDemoData || hasUploadedDataset" class="mode-chip">
+          <MqIcon name="issue" />
           {{ drgModeHintText }}
         </span>
         <a-dropdown>
           <template #overlay>
             <a-menu @click="handleExportMenuClick">
-              <a-menu-item key="excel">
-                <FileExcelOutlined /> 导出 Excel
-              </a-menu-item>
-              <a-menu-item key="pdf">
-                <FilePdfOutlined /> 导出 PDF
-              </a-menu-item>
-              <a-menu-item key="word">
-                <FileWordOutlined /> 导出 Word
-              </a-menu-item>
+              <a-menu-item key="excel"> <MqIcon name="data" /> 导出 Excel </a-menu-item>
+              <a-menu-item key="pdf"> <MqIcon name="doc" /> 导出 PDF </a-menu-item>
+              <a-menu-item key="word"> <MqIcon name="doc" /> 导出 Word </a-menu-item>
             </a-menu>
           </template>
-          <a-button
-            type="primary"
-            class="export-button"
-          >
+          <a-button type="primary" class="export-button">
             <template #icon>
-              <DownloadOutlined />
+              <MqIcon name="download" />
             </template>
             导出报告
           </a-button>
@@ -50,7 +34,7 @@
       </div>
     </header>
 
-    <section class="analysis-toolbar">
+    <section class="analysis-toolbar mq-card">
       <div class="dimension-control">
         <span class="control-label">分析维度</span>
         <a-radio-group
@@ -59,21 +43,11 @@
           size="small"
           @change="handleDimensionChange"
         >
-          <a-radio-button value="hospital">
-            全院
-          </a-radio-button>
-          <a-radio-button value="department">
-            科室
-          </a-radio-button>
-          <a-radio-button value="ward">
-            病区
-          </a-radio-button>
-          <a-radio-button value="chief_group">
-            主诊组
-          </a-radio-button>
-          <a-radio-button value="person">
-            个人
-          </a-radio-button>
+          <a-radio-button value="hospital"> 全院 </a-radio-button>
+          <a-radio-button value="department"> 科室 </a-radio-button>
+          <a-radio-button value="ward"> 病区 </a-radio-button>
+          <a-radio-button value="chief_group"> 主诊组 </a-radio-button>
+          <a-radio-button value="person"> 个人 </a-radio-button>
         </a-radio-group>
       </div>
 
@@ -83,25 +57,16 @@
           v-model:value="dateRange"
           class="date-range-picker"
         />
-        <a-select
-          v-model:value="analysisType"
-          class="analysis-type-select"
-        >
-          <a-select-option value="quality">
-            质量分析
-          </a-select-option>
-          <a-select-option value="cost">
-            费用分析
-          </a-select-option>
-          <a-select-option value="drg">
-            DRG分析
-          </a-select-option>
+        <a-select v-model:value="analysisType" class="analysis-type-select">
+          <a-select-option value="quality"> 质量分析 </a-select-option>
+          <a-select-option value="cost"> 费用分析 </a-select-option>
+          <a-select-option value="drg"> DRG分析 </a-select-option>
         </a-select>
       </div>
     </section>
 
     <DatasetUploadPanel
-      class="dataset-upload-compact"
+      class="dataset-upload-compact mq-card"
       @data-changed="handleDatasetChanged"
     />
 
@@ -109,10 +74,10 @@
       <article
         v-for="(card, index) in primaryKpiCards"
         :key="card.label"
-        :class="['kpi-card', getKpiToneClass(index), card.cardClass]"
+        :class="['kpi-card mq-card', getKpiToneClass(index), card.cardClass]"
       >
         <div class="kpi-icon">
-          <InfoCircleOutlined />
+          <MqIcon name="data_gap" />
         </div>
         <div class="kpi-content">
           <span class="kpi-label">{{ card.label }}</span>
@@ -123,7 +88,7 @@
     </section>
 
     <section class="analysis-primary-grid">
-      <article class="analysis-panel trend-panel">
+      <article class="analysis-panel mq-card trend-panel">
         <div class="panel-header">
           <div>
             <h3>绩效复盘趋势</h3>
@@ -153,16 +118,11 @@
             </button>
           </div>
         </div>
-        <div
-          ref="qualityTrendRef"
-          class="trend-chart"
-        />
-        <p class="chart-note">
-          注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。
-        </p>
+        <div ref="qualityTrendRef" class="trend-chart" />
+        <p class="chart-note">注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。</p>
       </article>
 
-      <aside class="analysis-panel insight-panel">
+      <aside class="analysis-panel mq-card insight-panel">
         <div class="panel-header compact">
           <div>
             <h3>关键结论</h3>
@@ -179,9 +139,9 @@
             :class="['insight-row', getInsightToneClass(item.tone)]"
           >
             <span class="insight-icon">
-              <ExclamationCircleOutlined v-if="item.tone === 'danger'" />
-              <WarningOutlined v-else-if="item.tone === 'warning'" />
-              <InfoCircleOutlined v-else />
+              <MqIcon v-if="item.tone === 'danger'" name="issue" />
+              <MqIcon v-else-if="item.tone === 'warning'" name="issue" />
+              <MqIcon v-else name="data_gap" />
             </span>
             <div>
               <div class="insight-title-line">
@@ -202,18 +162,15 @@
     </section>
 
     <section class="analysis-secondary-grid">
-      <article class="analysis-panel department-panel">
+      <article class="analysis-panel mq-card department-panel">
         <div class="panel-header">
           <div>
             <h3>{{ chartTitles.comparison }}</h3>
             <p>科室 CMI、费用指数与病例规模对比</p>
           </div>
-          <InfoCircleOutlined class="panel-info-icon" />
+          <MqIcon name="data_gap" class="panel-info-icon" />
         </div>
-        <div
-          ref="deptComparisonRef"
-          class="department-chart"
-        />
+        <div ref="deptComparisonRef" class="department-chart" />
         <div class="rank-table">
           <div class="rank-head">
             <span>排名</span>
@@ -222,11 +179,7 @@
             <span>CMI</span>
             <span>费用指数</span>
           </div>
-          <div
-            v-for="row in departmentRows"
-            :key="row.name"
-            class="rank-row"
-          >
+          <div v-for="row in departmentRows" :key="row.name" class="rank-row">
             <span class="rank-no">{{ row.rank }}</span>
             <span class="rank-name">
               {{ row.name }}
@@ -239,30 +192,23 @@
         </div>
       </article>
 
-      <article class="analysis-panel drg-structure-panel">
+      <article class="analysis-panel mq-card drg-structure-panel">
         <div class="panel-header">
           <div>
             <h3>DRG 结构分布</h3>
             <p>按权重/病组区间查看病例构成</p>
           </div>
-          <InfoCircleOutlined class="panel-info-icon" />
+          <MqIcon name="data_gap" class="panel-info-icon" />
         </div>
         <div class="drg-structure-content">
-          <div
-            ref="drgPieRef"
-            class="drg-chart"
-          />
+          <div ref="drgPieRef" class="drg-chart" />
           <div class="drg-legend-table">
             <div class="drg-legend-head">
               <span>DRG 权重区间</span>
               <span>病例数</span>
               <span>占比</span>
             </div>
-            <div
-              v-for="row in drgStructureRows"
-              :key="row.name"
-              class="drg-legend-row"
-            >
+            <div v-for="row in drgStructureRows" :key="row.name" class="drg-legend-row">
               <span>
                 <i :class="row.dotClass" />
                 {{ row.name }}
@@ -275,18 +221,13 @@
       </article>
     </section>
 
-    <section class="analysis-panel task-panel">
+    <section class="analysis-panel mq-card task-panel">
       <div class="panel-header">
         <div>
           <h3>改进任务清单</h3>
           <p>根据当前分析结果生成可跟踪的科室改进动作</p>
         </div>
-        <a-button
-          type="link"
-          size="small"
-        >
-          查看全部任务
-        </a-button>
+        <a-button type="link" size="small"> 查看全部任务 </a-button>
       </div>
       <div class="task-table">
         <div class="task-head">
@@ -298,11 +239,7 @@
           <span>状态</span>
           <span>截止</span>
         </div>
-        <div
-          v-for="task in improvementTasks"
-          :key="`${task.owner}-${task.issue}`"
-          class="task-row"
-        >
+        <div v-for="task in improvementTasks" :key="`${task.owner}-${task.issue}`" class="task-row">
           <span>{{ task.owner }}</span>
           <span>
             <a-tag :color="task.tagColor">{{ task.issue }}</a-tag>
@@ -326,68 +263,44 @@
         :dimension-label="dimensionLabel"
       />
 
-      <article class="analysis-panel cost-panel">
+      <article class="analysis-panel mq-card cost-panel">
         <div class="panel-header">
           <div>
             <h3>费用结构分析</h3>
             <p>按药品、耗材、检查、治疗拆解费用构成</p>
           </div>
         </div>
-        <div
-          ref="costStructureRef"
-          class="cost-chart"
-        />
+        <div ref="costStructureRef" class="cost-chart" />
       </article>
     </section>
 
-    <section
-      v-if="advancedChartsAvailable"
-      class="advanced-chart-grid"
-    >
-      <article
-        v-show="stats.charts.profit_waterfall"
-        class="analysis-panel"
-      >
+    <section v-if="advancedChartsAvailable" class="advanced-chart-grid">
+      <article v-show="stats.charts.profit_waterfall" class="analysis-panel mq-card">
         <div class="panel-header">
           <div>
             <h3>支付差额瀑布</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div
-          ref="waterfallRef"
-          class="advanced-chart"
-        />
+        <div ref="waterfallRef" class="advanced-chart" />
       </article>
-      <article
-        v-show="stats.charts.dept_profit_ranking"
-        class="analysis-panel"
-      >
+      <article v-show="stats.charts.dept_profit_ranking" class="analysis-panel mq-card">
         <div class="panel-header">
           <div>
             <h3>科室盈亏排行</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div
-          ref="deptRankingRef"
-          class="advanced-chart"
-        />
+        <div ref="deptRankingRef" class="advanced-chart" />
       </article>
-      <article
-        v-show="stats.charts.drg_scatter"
-        class="analysis-panel wide"
-      >
+      <article v-show="stats.charts.drg_scatter" class="analysis-panel mq-card wide">
         <div class="panel-header">
           <div>
             <h3>DRG 风险散点</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div
-          ref="drgScatterRef"
-          class="advanced-chart large"
-        />
+        <div ref="drgScatterRef" class="advanced-chart large" />
       </article>
     </section>
   </div>
@@ -404,22 +317,14 @@
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import axios from 'axios'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import DrillDownModal from './DrillDownModal.vue'
 import OverCostAnalysisCard from './OverCostAnalysisCard.vue'
-import {
-  ArrowLeftOutlined,
-  ExclamationCircleOutlined,
-  WarningOutlined,
-  InfoCircleOutlined,
-  FileExcelOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
-  DownloadOutlined,
-} from '@ant-design/icons-vue'
+
 import { message } from 'ant-design-vue'
 import { isDrgMockModeEnabled, onDrgMockModeChange } from '@/utils/drgMockMode'
 import { exportDrgMockReport, type DrgExportFormat } from '@/utils/drgMockExport'
@@ -2130,713 +2035,5 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
-@import './drg-dip-workbench.css';
-
-.post-event-analysis-page {
-  min-height: 100%;
-  padding: 20px 24px 28px;
-  overflow-y: auto;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  font-feature-settings:
-    'rlig' 1,
-    'calt' 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.analysis-header,
-.analysis-toolbar,
-.analysis-panel {
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.analysis-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 18px 20px;
-  border-radius: 14px;
-}
-
-.analysis-title-block {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 280px;
-}
-
-.back-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: rgba(29, 29, 31, 0.6);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-}
-
-.analysis-title-block h2 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.analysis-title-block p,
-.panel-header p,
-.chart-note {
-  margin: 2px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.header-actions,
-.filter-actions,
-.dimension-control {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mode-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 420px;
-  padding: 5px 10px;
-  color: #b45309;
-  font-size: 12px;
-  font-weight: 700;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-radius: 999px;
-}
-
-.export-button {
-  border-radius: 8px;
-  font-weight: 700;
-}
-
-.analysis-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-}
-
-.control-label {
-  color: rgba(29, 29, 31, 0.68);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.date-range-picker {
-  width: 280px;
-}
-
-.analysis-type-select {
-  width: 128px;
-}
-
-.dataset-upload-compact {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 14px;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.dataset-upload-compact :deep(.mode-alert) {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-
-.dataset-upload-compact :deep(.action-bar) {
-  margin: 0;
-}
-
-.dataset-upload-compact :deep(.validation-result) {
-  grid-column: 1 / -1;
-}
-
-.kpi-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.kpi-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 92px;
-  padding: 16px 18px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.kpi-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  font-size: 18px;
-}
-
-.kpi-content {
-  min-width: 0;
-}
-
-.kpi-label {
-  display: block;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.kpi-content strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 24px;
-  line-height: 30px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.kpi-hint {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 700;
-}
-
-.tone-blue .kpi-icon,
-.tone-blue.insight-row .insight-icon {
-  color: #0a6cff;
-  background: rgba(10, 108, 255, 0.08);
-}
-
-.tone-green .kpi-icon {
-  color: #10b981;
-  background: #dcfce7;
-}
-
-.tone-orange .kpi-icon,
-.tone-warning .insight-icon {
-  color: #f59e0b;
-  background: #fff7ed;
-}
-
-.tone-red .kpi-icon,
-.tone-danger .insight-icon {
-  color: #ef4444;
-  background: #fee2e2;
-}
-
-.tone-cyan .insight-icon {
-  color: #06b6d4;
-  background: #ecfeff;
-}
-
-.tone-purple .insight-icon {
-  color: #7c3aed;
-  background: #f3e8ff;
-}
-
-.analysis-primary-grid,
-.analysis-secondary-grid,
-.supplementary-grid,
-.advanced-chart-grid {
-  display: grid;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.analysis-primary-grid {
-  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.95fr);
-}
-
-.analysis-secondary-grid,
-.supplementary-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.advanced-chart-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.analysis-panel {
-  min-width: 0;
-  padding: 16px 18px;
-  border-radius: 12px;
-}
-
-.analysis-panel.wide {
-  grid-column: 1 / -1;
-}
-
-.panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.panel-header.compact {
-  align-items: center;
-}
-
-.panel-header h3 {
-  margin: 0;
-  color: #1d1d1f;
-  font-size: 17px;
-  line-height: 24px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.panel-info-icon {
-  color: #94a3b8;
-}
-
-.metric-tabs {
-  display: inline-flex;
-  padding: 2px;
-  background: #f8fbff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-}
-
-.metric-tabs button {
-  min-width: 58px;
-  height: 28px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-}
-
-.metric-tabs button.active {
-  color: #0a6cff;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
-}
-
-.trend-chart {
-  width: 100%;
-  height: 288px;
-}
-
-.department-chart,
-.drg-chart {
-  width: 100%;
-  height: 210px;
-}
-
-.cost-chart {
-  width: 100%;
-  height: 260px;
-}
-
-.advanced-chart {
-  width: 100%;
-  height: 300px;
-}
-
-.advanced-chart.large {
-  height: 360px;
-}
-
-.chart-note {
-  padding-top: 4px;
-  color: #64748b;
-}
-
-.insight-list {
-  display: grid;
-  gap: 10px;
-}
-
-.insight-row {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-}
-
-.insight-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-}
-
-.insight-title-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.insight-row p {
-  margin: 4px 0 0;
-  color: #475569;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.rank-table,
-.task-table,
-.drg-legend-table {
-  border-top: 1px solid #e2e8f0;
-}
-
-.rank-head,
-.rank-row,
-.task-head,
-.task-row,
-.drg-legend-head,
-.drg-legend-row {
-  display: grid;
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  border-bottom: 1px solid #edf2f7;
-}
-
-.rank-head,
-.task-head,
-.drg-legend-head {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.rank-row,
-.task-row,
-.drg-legend-row {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.rank-head,
-.rank-row {
-  grid-template-columns: 44px minmax(120px, 1fr) 76px 76px 88px;
-}
-
-.rank-no {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-  background: #f59e0b;
-  border-radius: 6px;
-}
-
-.rank-name {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.rank-name i {
-  display: block;
-  max-width: 100%;
-  height: 5px;
-  background: linear-gradient(90deg, #0a6cff, #93c5fd);
-  border-radius: 999px;
-}
-
-.metric-up {
-  color: #ef4444;
-}
-
-.metric-down {
-  color: #10b981;
-}
-
-.drg-structure-content {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-}
-
-.drg-legend-head,
-.drg-legend-row {
-  grid-template-columns: minmax(120px, 1fr) 72px 72px;
-}
-
-.drg-legend-row span:first-child {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.drg-legend-row i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.dot-blue {
-  background: #0a6cff;
-}
-
-.dot-green {
-  background: #10b981;
-}
-
-.dot-orange {
-  background: #f59e0b;
-}
-
-.dot-purple {
-  background: #7c3aed;
-}
-
-.task-panel {
-  margin-bottom: 14px;
-}
-
-.task-head,
-.task-row {
-  grid-template-columns:
-    minmax(90px, 0.8fr)
-    minmax(104px, 0.9fr)
-    minmax(170px, 1.35fr)
-    minmax(260px, 2fr)
-    minmax(90px, 0.9fr)
-    minmax(82px, 0.7fr)
-    minmax(96px, 0.8fr);
-}
-
-.task-row {
-  min-height: 44px;
-}
-
-.post-event-analysis-page {
-  --workstation-canvas: #f5f5f7;
-  --workstation-surface: rgba(255, 255, 255, 0.86);
-  --workstation-surface-strong: rgba(255, 255, 255, 0.94);
-  --workstation-border: rgba(0, 0, 0, 0.08);
-  --workstation-text: #1d1d1f;
-  --workstation-muted: rgba(29, 29, 31, 0.6);
-  --workstation-subtle: rgba(29, 29, 31, 0.38);
-  --workstation-primary: #0a6cff;
-  --workstation-primary-soft: rgba(10, 108, 255, 0.1);
-
-  background: var(--workstation-canvas);
-  color: var(--workstation-text);
-  font-family:
-    'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.analysis-header,
-.analysis-toolbar,
-.analysis-panel,
-.dataset-upload-compact,
-.kpi-card {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.045),
-    0 2px 8px rgba(0, 0, 0, 0.035);
-}
-
-.analysis-header {
-  border-radius: 20px;
-}
-
-.analysis-toolbar,
-.analysis-panel,
-.dataset-upload-compact,
-.kpi-card {
-  border-radius: 16px;
-}
-
-.analysis-header:hover,
-.analysis-toolbar:hover,
-.analysis-panel:hover,
-.dataset-upload-compact:hover,
-.kpi-card:hover {
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075);
-}
-
-.analysis-title-block h2,
-.panel-header h3,
-.insight-title-line,
-.kpi-content strong,
-.rank-row,
-.task-row,
-.drg-legend-row {
-  color: var(--workstation-text);
-}
-
-.analysis-title-block p,
-.panel-header p,
-.chart-note,
-.kpi-label,
-.insight-row p,
-.rank-head,
-.task-head,
-.drg-legend-head {
-  color: var(--workstation-muted);
-}
-
-.back-icon-button,
-.metric-tabs,
-.insight-row {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface-strong);
-  color: var(--workstation-muted);
-}
-
-.back-icon-button:hover {
-  border-color: rgba(10, 108, 255, 0.22);
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
-}
-
-.tone-blue .kpi-icon,
-.tone-blue.insight-row .insight-icon,
-.metric-tabs button.active {
-  color: var(--workstation-primary);
-  background: var(--workstation-primary-soft);
-}
-
-.metric-tabs button.active {
-  box-shadow: 0 2px 8px rgba(10, 108, 255, 0.1);
-}
-
-.rank-name i {
-  background: linear-gradient(90deg, var(--workstation-primary), rgba(10, 108, 255, 0.28));
-}
-
-.dot-blue {
-  background: var(--workstation-primary);
-}
-
-.rank-table,
-.task-table,
-.drg-legend-table,
-.rank-head,
-.rank-row,
-.task-head,
-.task-row,
-.drg-legend-head,
-.drg-legend-row {
-  border-color: rgba(0, 0, 0, 0.08);
-}
-
-@media (max-width: 1280px) {
-  .analysis-primary-grid,
-  .analysis-secondary-grid,
-  .supplementary-grid,
-  .advanced-chart-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .drg-structure-content {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 960px) {
-  .post-event-analysis-page {
-    padding: 16px;
-  }
-
-  .analysis-header,
-  .analysis-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .header-actions,
-  .filter-actions,
-  .dimension-control {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
-  .dataset-upload-compact,
-  .kpi-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .task-table {
-    overflow-x: auto;
-  }
-
-  .task-head,
-  .task-row {
-    min-width: 1040px;
-  }
-}
-</style>
+<style scoped src="../../styles/drg-post-analysis.css"></style>
+<style scoped src="./drg-dip-workbench.css"></style>

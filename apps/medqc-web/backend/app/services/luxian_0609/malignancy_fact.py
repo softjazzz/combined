@@ -10,6 +10,8 @@ import math
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .structured_output import structured_output_kwargs
+
 
 SCHEMA_VERSION = "lx0609_malignancy_v1"
 # 32条诊断的逐条受控结果在真实 qwen3.7-flash 响应中超过1024 Token；
@@ -432,11 +434,17 @@ class MalignancyFactResolver:
             return MalignancyResolution("technical_error", "malignancy_llm_unavailable"), empty_usage
         usage = empty_usage
         try:
+            # 严格 JSON 协议须关闭 thinking（与其他受控抽取一致）。
             response = await self._llm_client.generate(
                 _prompt(items),
                 max_completion_tokens=MAX_COMPLETION_TOKENS,
                 allow_length_retry=False,
+                **structured_output_kwargs(self._llm_client),
             )
+        except Exception:
+            # 传输失败与输出无效分开报告，避免下游归为执行器异常。
+            return MalignancyResolution("technical_error", "malignancy_llm_transport_error"), usage
+        try:
             usage = _strict_usage(response)
             parsed = _parse_resolution(response, items=items)
             resolution = (

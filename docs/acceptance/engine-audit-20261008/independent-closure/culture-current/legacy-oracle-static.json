@@ -1,0 +1,10 @@
+{
+  "fixed_sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "method": "AST text-only comparison, no prompt builder/test execution",
+  "old_015_expected_literal_retained": true,
+  "original_expected_present_in_fixed_prompt_literal": false,
+  "only_identity_substitution_matches_fixed_prompt_literal": true,
+  "old_identity": "015",
+  "approved_current_identity": "LX0609-06-03-04",
+  "inference_scope": "this synthetic full-text assertion only; no claim excluding truncation in other clinical inputs"
+}

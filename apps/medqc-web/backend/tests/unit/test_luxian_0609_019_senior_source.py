@@ -31,10 +31,12 @@ from app.services.luxian_0609.tumor_pathology_result_mapping import (
     safe_tumor_pathology_customer_display_facts,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
-from test_luxian_0609_native_tumor_pathology_execution import _Client, _wrapper
+from test_luxian_0609_native_tumor_pathology_execution import _wrapper
+from luxian_0609_pathology_test_facts import PathologyFactsClient
 
 
 CREATED_AT = "2026-09-10T12:00:00+08:00"
+RECORD_TIME = "2025-08-16 09:00:00"
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 C30_SENIOR_TEXT = (
@@ -46,8 +48,8 @@ C30_SENIOR_TEXT = (
 def _session(
     *,
     senior_rows: tuple[dict, ...],
-    surgery_rows: tuple[dict, ...] = ({"record_content": "术后情况平稳。"},),
-    daily_rows: tuple[dict, ...] = ({"record_content": "继续观察病情变化。"},),
+    surgery_rows: tuple[dict, ...] = ({"record_content": "术后情况平稳。", "record_time": RECORD_TIME},),
+    daily_rows: tuple[dict, ...] = ({"record_content": "继续观察病情变化。", "record_time": RECORD_TIME},),
 ):
     rows_by_source = {
         "pathology_exam_master": ({"specimen_name": "胃组织"},),
@@ -99,58 +101,48 @@ async def _execute(session, client):
     )
 
 
-def test_019_declares_senior_course_as_decision_support_source() -> None:
-    assert "senior_course_record" in resolve_luxian_0609_decision_support_source_keys(
+def test_019_does_not_declare_senior_course_as_source() -> None:
+    """院方口径：病理取材只看手术记录和日常病程，不看上级医师查房记录。"""
+    assert "senior_course_record" not in resolve_luxian_0609_decision_support_source_keys(
         ("LX0609-06-02-02",)
     )
 
 
-def test_019_runtime_prompt_accepts_senior_as_course_sampling_evidence() -> None:
+def test_019_runtime_prompt_excludes_senior_from_sampling_evidence() -> None:
     prompt = next(
         item["custom_prompt"]
         for item in load_luxian_0609_rules()
         if item["rule_id"] == "LX0609-06-02-02"
     )
 
-    assert (
-        "适用文书: daily_course_record、surgery_record、senior_course_record"
-        in prompt
-    )
-    assert "上级医师查房记录属于病程证据" in prompt
-    assert "已明确实施的取材情况" in prompt
-    assert "任一来源证明" in prompt
+    assert "适用文书: daily_course_record、surgery_record\n" in prompt
+    assert "上级医师查房记录不作为取材记录来源" in prompt
+    assert "有手术记录时，取材情况须记录在手术记录中" in prompt
     assert "不得把取材部位、数量或送检信息作为额外强制条件" in prompt
 
 
 @pytest.mark.asyncio
-async def test_019_c30_senior_text_enters_single_semantic_call_and_exact_refs() -> None:
-    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT},))
-    client = _Client([{"is_compliant": False}])
+async def test_019_senior_text_is_not_sent_or_cited() -> None:
+    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
+    client = PathologyFactsClient()
 
     result = await _execute(session, client)
 
     assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
-    assert "[senior_course_record-1]" in client.prompts[0]
-    assert "贲门息肉，内镜下钳除术" in client.prompts[0]
-    senior_ref = session.materials.document_rows(
-        "senior_course_record", snapshot=session.snapshot
-    )[0][0]
-    assert senior_ref.removeprefix("sha256:") in result.decisions[0].fact_refs
-    facts = dict(result.customer_display_facts)["LX0609-06-02-02"]
-    assert [item["source"] for item in facts["checked_target_sources"]] == [
-        "surgery_record",
-        "daily_course_record",
-        "senior_course_record",
+    assert "追踪病检结果" not in client.prompts[0]
+    # 手术记录未写取材：不合规；查房记录不参与核对，有手术记录时也不看日常病程。
+    assert result.decisions[0].reason_code == "requirement_violated"
+    assert dict(result.customer_display_facts)["LX0609-06-02-02"]["checked_target_sources"] == [
+        {"source": "surgery_record", "state": "present"},
     ]
 
 
 @pytest.mark.asyncio
-async def test_019_senior_documented_sampling_is_programmatic() -> None:
+async def test_019_sampling_written_only_in_senior_round_is_not_documented() -> None:
     session = _session(
-        senior_rows=({"record_content": "术中切取组织标本，已送病理检查。"},)
+        senior_rows=({"record_content": "术中切取胃组织标本，已送病理检查。", "record_time": RECORD_TIME},)
     )
-    client = _Client([])
+    client = PathologyFactsClient()
 
     result = await _execute(session, client)
 
@@ -160,11 +152,8 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
-    assert reduced.final_state.value == "compliant"
-    assert reduced.reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 0
-    facts = dict(result.customer_display_facts)["LX0609-06-02-02"]
-    assert facts["documented_sources"] == ["senior_course_record"]
+    assert reduced.final_state.value == "non_compliant"
+    assert "已送病理检查" not in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -175,14 +164,13 @@ async def test_019_senior_documented_sampling_is_programmatic() -> None:
         "病理结果提示慢性炎症，继续随访。",
     ),
 )
-async def test_019_senior_plan_or_result_only_stays_semantic(content: str) -> None:
-    session = _session(senior_rows=({"record_content": content},))
-    client = _Client([{"is_compliant": False}])
+async def test_019_senior_plan_or_result_only_is_not_sampling(content: str) -> None:
+    session = _session(senior_rows=({"record_content": content, "record_time": RECORD_TIME},))
 
-    result = await _execute(session, client)
+    result = await _execute(session, PathologyFactsClient())
 
+    # 计划取材或只写结果都不是已实施的取材记录（语义由模型抽取，此处为脚本化事实）。
     assert result.llm_call_count == 1
-    assert content in client.prompts[0]
     assert result.decisions[0].reason_code == "requirement_violated"
 
 
@@ -275,8 +263,8 @@ def test_019_trigger_absent_does_not_claim_target_sources_were_checked() -> None
 
 @pytest.mark.asyncio
 async def test_013_does_not_consume_senior_course_source() -> None:
-    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT},))
-    client = _Client([{"is_compliant": True}])
+    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
+    client = PathologyFactsClient()
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=("LX0609-06-02-03",),
         wrapper_rules=[_wrapper("LX0609-06-02-03")],
@@ -292,8 +280,9 @@ async def test_013_does_not_consume_senior_course_source() -> None:
     )
 
     assert result.llm_call_count == 1
-    assert "senior_course_record" not in client.prompts[0]
-    senior_ref = session.materials.document_rows(
-        "senior_course_record", snapshot=session.snapshot
-    )[0][0]
-    assert senior_ref.removeprefix("sha256:") not in result.decisions[0].fact_refs
+    assert "追踪病检结果" not in client.prompts[0]
+    assert result.decisions[0].reason_code == "requirement_violated"
+    # 013/019 都不读取上级医师查房记录，本会话中也不再请求该来源。
+    assert "senior_course_record" not in {
+        item.source_key for item in session.snapshot.observations
+    }

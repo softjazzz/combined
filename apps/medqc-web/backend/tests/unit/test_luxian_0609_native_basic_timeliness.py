@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from datetime import datetime, timezone
 
 import pytest
 
@@ -35,6 +36,35 @@ from app.services.qc_workspace.canonical_result_store import validated_customer_
 
 
 _LEGACY_RULE_IDS = ("SC-002", "CL-081", "SC-021", "SC-054", "SC-048", "SC-049", "CL-080")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("completion", "expected"),
+    [
+        (datetime(2026, 10, 5, 1, tzinfo=timezone.utc), CustomerFinalState.COMPLIANT),
+        ("2026-10-06T00:00:00Z", CustomerFinalState.COMPLIANT),
+        ("2026-10-06T00:00:01Z", CustomerFinalState.NON_COMPLIANT),
+    ],
+)
+def test_001_pg_timezone_completion_keeps_actual_elapsed_boundary(completion, expected):
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [{"admission_datetime": "2026-10-05 08:00:00"}],
+            "admission_record": [{
+                "document_id": "timezone-admission",
+                "record_time": None,
+                "record_datetime": completion,
+                "submit_datetime": "2026-10-05 09:00:00",
+                "record_content": "工程合成病例，一般情况良好，无特殊不适。",
+            }],
+        },
+        selected_rule_ids=("LX0609-01-01-01",),
+        evaluation_as_of_date="2026-10-07",
+    )
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
+    assert reduced[0].final_state is expected
+    assert getattr(execution, "llm_call_count", 0) == 0
 
 
 def _typed_basic_session(

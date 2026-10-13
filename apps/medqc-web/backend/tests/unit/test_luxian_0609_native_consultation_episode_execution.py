@@ -36,6 +36,24 @@ from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
+@pytest.fixture(autouse=True)
+def _measure_check_all_evidenced(monkeypatch):
+    """本模块验证会诊一、二阶段合同；措施逐项核对由 test_luxian_0609_consultation_measure_check 覆盖。
+    脚本化客户端未准备措施核对的回答：仍照常发出该次调用（调用数、用量与提示词记录不变），
+    结果固定为“每项措施均有执行证据”，避免核对失败改判资料不足。"""
+    real_check = episode.check_consultation_measures
+
+    async def _all_evidenced(*, completed, **kwargs):
+        outcome = await real_check(completed=completed, **kwargs)
+        return replace(
+            outcome,
+            state="ready",
+            missing_measures={item.recommendation.recommendation_ref: () for item in completed},
+        )
+
+    monkeypatch.setattr(episode, "check_consultation_measures", _all_evidenced)
+
+
 
 class _Client:
     def __init__(self, payload):
@@ -1064,16 +1082,16 @@ def test_023_missing_evidence_with_incomplete_source_is_data_gap():
     (
         ("linked_specific", "high", ("compliant", "requirement_satisfied")),
         ("linked_vague", "high", ("non_compliant", "requirement_violated")),
-        # 中/低置信关联不能证明建议已有执行证据。
+        # 用户口径（2026-10-11）：明确的执行事实不再因模型自评置信度降为资料不足。
         (
             "linked_specific",
             "low",
-            ("data_gap", "linkage_unresolved"),
+            ("compliant", "requirement_satisfied"),
         ),
         (
             "linked_specific",
             "medium",
-            ("data_gap", "linkage_unresolved"),
+            ("compliant", "requirement_satisfied"),
         ),
     ),
 )
@@ -1082,7 +1100,7 @@ def test_023_structured_order_match_respects_specificity_and_confidence(
     confidence,
     expected,
 ):
-    """医嘱匹配只在具体且高置信度时形成023合规结论。"""
+    """医嘱匹配按具体/笼统形成023结论，不看模型自评置信度（用户口径 2026-10-11）。"""
 
     completed = (_coverage_completed_recommendation(),)
     assessment = episode._ExecutionAssessment(
@@ -1104,24 +1122,24 @@ def test_023_structured_order_match_respects_specificity_and_confidence(
 @pytest.mark.parametrize(
     ("structured_rows", "expected"),
     (
-        # C29 形态：只有中置信结构化关联时，尚未确认存在执行证据。
+        # 用户口径（2026-10-11）：不看模型自评置信度，按明确的执行事实判定。
         (
             (("medium", "linked_specific"),),
-            ("data_gap", "linkage_unresolved"),
+            ("compliant", "requirement_satisfied"),
         ),
-        # 低置信 absent 与中置信 linked_specific 混合，同样没有高置信痕迹。
+        # 明确无任何执行痕迹的建议即缺执行证据。
         (
             (("low", "absent"), ("medium", "linked_specific")),
-            ("data_gap", "linkage_unresolved"),
+            ("non_compliant", "requirement_violated"),
         ),
-        # 仍有建议处于中/低置信状态时，不能宣称全部建议均有具体证据。
+        # 任一建议只有笼统执行即不具体。
         (
             (
                 ("high", "linked_specific"),
                 ("medium", "linked_vague"),
                 ("low", "linked_specific"),
             ),
-            ("data_gap", "linkage_unresolved"),
+            ("non_compliant", "requirement_violated"),
         ),
         # 高置信笼统痕迹不因同时存在中置信具体项而降级。
         (
@@ -1143,7 +1161,7 @@ def test_023_structured_execution_uses_high_confidence_links_only(
     structured_rows,
     expected,
 ):
-    """只有高置信结构化医嘱关联参与023判罚；中/低置信项等价于没有痕迹。"""
+    """结构化医嘱关联按具体/笼统/无痕迹参与023判罚，不看模型自评置信度。"""
 
     assessments = tuple(
         episode._ExecutionAssessment(
@@ -1682,7 +1700,7 @@ async def test_020_document_copies_share_one_semantically_confirmed_event(monkey
     facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert facts["completed_opinion_episode_count"] == 1
     assert facts["recommendation_count"] == 1
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert all("CONSULT-COPY" not in prompt for prompt in client.prompts)
 
 
@@ -2494,7 +2512,7 @@ async def test_semantic_neuroblock_recommendation_can_link_to_different_specific
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -2526,7 +2544,7 @@ async def test_one_execution_document_can_explicitly_cover_two_recommendations(m
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -2651,7 +2669,9 @@ def test_course_only_execution_prompt_and_parser_use_compact_trace_contract():
     )
 
 
-def test_one_out_of_window_trace_only_downgrades_that_recommendation():
+def test_one_out_of_window_trace_only_affects_that_recommendation():
+    """用户口径（2026-10-12）：会诊意见之前的病程不能证明该建议已执行，越界引用剔除后按无痕迹判断，
+    不再把整条降为未知（真实样本中整条降级使 023 在资料不足与不合规之间翻转）。"""
     completed = (
         episode._CompletedRecommendation(
             "consultation_record-1",
@@ -2705,9 +2725,9 @@ def test_one_out_of_window_trace_only_downgrades_that_recommendation():
 
     assert parsed[0].execution_record_state == "no_trace"
     assert parsed[0].confidence == "high"
-    assert parsed[1].execution_record_state == "unknown"
+    assert parsed[1].execution_record_state == "no_trace"
     assert parsed[1].trace_refs == ()
-    assert parsed[1].confidence == "low"
+    assert parsed[1].execution_state == "absent"
 
 
 def test_low_confidence_structured_link_keeps_unknown_execution_record_state():
@@ -4066,8 +4086,8 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant", "compliant", "compliant"]
-    assert result.llm_call_count == 2
-    assert len(client.prompts) == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
     assert len(execution_payload["candidate_documents"]) == 1
     assert execution_payload["candidate_documents"][0]["ref"] == "c1"
@@ -4115,7 +4135,8 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert tuple(item["status"] for item in result.results) == expected
-    assert result.llm_call_count == 2
+    # 023 原判合规时另有 1 次会诊措施逐项核对（替身未按措施格式作答，沿用原判定）。
+    assert result.llm_call_count == (3 if expected[1] == "compliant" else 2)
 
 
 @pytest.mark.asyncio
@@ -4252,7 +4273,7 @@ async def test_020_023_accept_exact_course_ref_when_model_omits_redundant_quote(
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     facts = dict(result.customer_display_facts)
     assert "source_document_refs" not in facts["LX0609-03-01-04"]
     assert facts["LX0609-03-01-04"]["specific_execution_count"] == 1
@@ -4446,7 +4467,7 @@ async def test_023_accepts_specific_order_match_without_course_trace(monkeypatch
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     # 结构化医嘱不能替代020的病程存在性要求，但可作为023的具体执行证据。
     assert "头孢哌酮舒巴坦" in client.prompts[1]
 
@@ -4645,7 +4666,8 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
         "non_compliant",
         "compliant" if is_specific else "non_compliant",
     ]
-    assert result.llm_call_count == 2
+    # 023 原判合规时另有 1 次会诊措施逐项核对（替身未按措施格式作答，沿用原判定）。
+    assert result.llm_call_count == (3 if is_specific else 2)
     # 医嘱候选以短别名进入二阶段提示词，正文只暴露可辨识的结构化动作。
     assert (
         order_row.get("generic_name") or order_row["order_name"]
@@ -4741,7 +4763,7 @@ async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
         "non_compliant",
         "compliant",
     ]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert any(
         target_row["order_name"] in text
         for text in _stage_two_candidate_texts(client.prompts[1])
@@ -4845,7 +4867,7 @@ async def test_complete_daily_trace_closes_020_023_when_senior_source_is_incompl
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -4992,7 +5014,7 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert "同一会诊文书" in client.prompts[1]
 
 
@@ -5088,7 +5110,7 @@ async def test_023_rechecks_high_generic_label_that_conflicts_with_concrete_acti
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert "consultation_record-1#r1" in client.prompts[2]
     assert "consultation_record-1#r2" not in client.prompts[2]
 
@@ -5175,7 +5197,7 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert result.total_tokens == 32
     safe_facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert "source_document_refs" not in safe_facts
@@ -5450,7 +5472,7 @@ async def test_020_023_keep_action_matched_exam_lab_and_surgery_evidence(
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
     expected_sources = {
         ref.rsplit("-", 1)[0] for ref in structured_refs
@@ -6167,7 +6189,7 @@ async def test_course_time_is_recovered_from_same_document_id_without_guessing(
         "compliant",
         "compliant",
     ]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -6450,7 +6472,7 @@ async def test_same_day_date_only_candidate_can_be_semantically_linked(monkeypat
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert "已完成复查血常规" in client.prompts[1]
 
 
@@ -6492,8 +6514,8 @@ async def test_same_day_date_only_candidate_does_not_block_later_specific_link(m
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
-    assert len(client.prompts) == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -6806,7 +6828,7 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
             {"source_type": "daily_course_record", "source_document_id": "COURSE-EXECUTION-1"},
         ],
     ]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -6844,8 +6866,8 @@ async def test_020_023_retries_one_transient_stage_two_transport_failure_without
     assert [item["status"] for item in result.results] == [
         "compliant", "compliant", "compliant", "compliant",
     ]
-    assert result.llm_call_count == 3
-    assert len(client.prompts) == 3
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert len(client.prompts) == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert client.prompts[1] == client.prompts[2]
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (24, 8, 32)
 
@@ -7058,7 +7080,7 @@ async def test_020_023_retries_one_stage_two_shape_error_with_same_prompt():
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert client.prompts[1] == client.prompts[2]
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (
         36,
@@ -7183,12 +7205,13 @@ async def test_stage_two_shape_retry_skips_low_confidence_recheck():
         evidence_materials=session.materials,
     )
 
-    assert result.llm_call_count == 3
-    assert len(client.prompts) == 3
-    # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定。
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert len(client.prompts) == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定
+    # （用户口径 2026-10-11：不看模型自评置信度）。
     assert [item["status"] for item in result.results] == [
         "compliant",
-        "data_gap",
+        "compliant",
     ]
 
 
@@ -7303,7 +7326,7 @@ async def test_020_023_reasks_only_omitted_recommendation_once():
         "requirement_satisfied",
         "requirement_satisfied",
     ]
-    assert result.llm_call_count == 3
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert "consultation_record-1#r1" not in client.prompts[2]
     assert "consultation_record-1#r2" in client.prompts[2]
 
@@ -7698,7 +7721,7 @@ async def test_020_023_window_allows_later_specific_execution_when_admission_reg
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 @pytest.mark.asyncio
@@ -7801,8 +7824,8 @@ async def test_many_or_long_course_candidates_remain_available_to_stage_two(
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
-    assert len(client.prompts) == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
     assert any(
         item["source"] == "daily_course_record"
@@ -7907,7 +7930,7 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
         "requirement_satisfied",
         "requirement_satisfied",
     ]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert secret not in repr(result)
 
 
@@ -8415,7 +8438,7 @@ async def test_untimed_order_does_not_block_linked_execution_candidate(monkeypat
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     assert timely_execution in client.prompts[1]
     assert untimed_order not in client.prompts[1]
 
@@ -8982,7 +9005,7 @@ async def test_stage_two_top_level_array_retries_once(monkeypatch):
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3
+    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
 
 
 def test_valid_course_trace_survives_misplaced_auxiliary_course_reference():
@@ -9073,7 +9096,7 @@ async def test_direct_reader_keeps_nondrug_order_as_structured_evidence_without_
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
-    assert result.llm_call_count == 2
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
     # 医嘱只以结构化动作字段进入候选；本地正文不进入模型上下文。
     assert "会诊后转入康复治疗" in client.prompts[1]
     assert "不应作为正文候选" not in client.prompts[1]
@@ -9141,3 +9164,101 @@ async def test_no_usable_candidate_with_technical_source_is_technical_without_se
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert result.llm_call_count == 1
+
+
+@pytest.mark.parametrize("order_id,expected_incomplete", [
+    ("V||43+V||43", False),
+    ("V||44^V||43", False),
+    ("V||99", True),
+    ("", True),
+])
+def test_textless_exam_master_header_linked_to_known_order_does_not_mark_scope_incomplete(
+    order_id, expected_incomplete,
+):
+    """真实样本：检查主记录常只有检查号、医嘱号、科室和时间，名称与结果在医嘱和明细报告中。
+
+    该表头行无法单独承载执行事实；医嘱号均能在本次医嘱中找到时，不应据此把检查来源降为不完整，
+    否则会诊检验建议明确未执行时会被错退为资料不足。医嘱号缺失或找不到时仍保守处理。
+    """
+
+    source_rows = {
+        "inpat_nondrug_order": tuple(
+            {"order_id": f"V||{seq}", "order_name": name, "start_time": "2026-07-20 08:00:00"}
+            for seq, name in ((43, "胸部CT平扫"), (44, "薄层扫描(加收)"))
+        ),
+        "exam_master": ({
+            "exam_id": "V||44^V||43", "order_id": order_id,
+            "performed_dept": "放射科", "report_time": "2026-07-20 10:00:00",
+        },),
+    }
+    session = _window_session(rows_by_source=source_rows)
+
+    projection = episode._candidate_documents(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        stay_window=episode._resolve_execution_stay_window(
+            evidence_materials=session.materials,
+            evidence_snapshot=session.snapshot,
+        ),
+    )
+
+    assert ("exam_master" in projection.source_incomplete_keys) is expected_incomplete
+    assert not [item for item in projection.candidates if item.source_key == "exam_master"]
+
+
+def test_planned_only_course_trace_keeps_independent_structured_execution():
+    """真实样本：病程只写“建议行神经阻滞治疗，配合针灸理疗，续观”，针灸等医嘱已执行。
+    只否定病程痕迹，结构化医嘱的落实判断保留，不能形成“未执行但有医嘱”的矛盾事实。"""
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r1", "procedure", "针灸、中频、磁疗、穴位贴敷康复治疗",
+                "针灸、中频、磁疗、穴位贴敷康复治疗", "consultation_record-1"
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        ),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "senior_course_record-1",
+            "senior_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+            "建议行神经阻滞治疗，配合针灸理疗，余治疗同前，续观。",
+        ),
+        episode._CandidateDocument(
+            "inpat_nondrug_order-1",
+            "inpat_nondrug_order",
+            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            "电针；治疗",
+        ),
+    )
+    _, allowed_refs = episode._execution_prompt(completed=completed, candidates=candidates)
+    alias = episode._prompt_alias_by_ref(candidates, allowed_refs)
+    parsed = episode._parse_executions(
+        {"executions": [{
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "generic_trace",
+            "trace_refs": [alias["senior_course_record-1"]],
+            "execution_state": "linked_specific",
+            "structured_action_refs": [alias["inpat_nondrug_order-1"]],
+            "execution_quotes": ["配合针灸理疗，余治疗同前"],
+            "confidence": "high",
+        }]},
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+    assert parsed[0].execution_record_state == "no_trace" and parsed[0].trace_refs == ()
+    assert parsed[0].execution_state == "linked_specific"
+    assert parsed[0].execution_refs == ("inpat_nondrug_order-1",)
+    assert episode._execution_quality_outcome(
+        assessments=parsed,
+        completed_recommendations=completed,
+        source_incomplete_keys=frozenset(),
+    ) == ("compliant", "requirement_satisfied")
+

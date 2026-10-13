@@ -1,0 +1,1685 @@
+{
+  "sha": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "case_count": 13,
+  "completed_without_exception": 13,
+  "expected_matches": 8,
+  "prior_observation_matches": 13,
+  "boundary_attempts": [],
+  "elapsed_seconds": 0.984,
+  "cases_sha256": "032b456895aa2eedfb54598171f8d324febe4d86380e40b5a4a2c23538ad5e5f",
+  "pytest_execution": false,
+  "real_model_calls": 0,
+  "production_edits": false,
+  "cases": [
+    {
+      "original_index": 0,
+      "id": "reason_今日启用美罗培南，因为细菌培养证实感染。",
+      "rule": "LX0609-05-01-02",
+      "expected": "compliant",
+      "prior_observed": "compliant",
+      "observed": "compliant",
+      "reason_code": "requirement_satisfied",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-02",
+        "rule_code": "LX0609-05-01-02",
+        "rule_name": "抗菌药物：用药调整无充分理由",
+        "qc_point_id": "LX0609-05-01-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "已核对抗菌药物 美罗培南，病程中已记录使用或调整理由。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "antimicrobial_reason_documentation_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "reason_documented": true,
+          "unmatched_antimicrobials": [],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "今日启用美罗培南，因为细菌培养证实感染。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 1,
+      "id": "reason_今日启用美罗培南，用药理由未记录。",
+      "rule": "LX0609-05-01-02",
+      "expected": "non_compliant",
+      "prior_observed": "non_compliant",
+      "observed": "non_compliant",
+      "reason_code": "requirement_violated",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-02",
+        "rule_code": "LX0609-05-01-02",
+        "rule_name": "抗菌药物：用药调整无充分理由",
+        "qc_point_id": "LX0609-05-01-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已核对抗菌药物 美罗培南；其中 美罗培南 未找到明确的使用或调整动作及理由。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：抗菌药物医嘱及相关病程\n需要补充：用药原因、方案调整动作、调整理由和依据\n推荐写法：请在病程中补充抗菌药物的使用原因、方案调整理由及相关依据。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "antimicrobial_reason_documentation_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "reason_documented": false,
+          "unmatched_antimicrobials": [
+            "美罗培南"
+          ],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "今日启用美罗培南，用药理由未记录。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 2,
+      "id": "reason_拟使用美罗培南，后续评估。",
+      "rule": "LX0609-05-01-02",
+      "expected": "not_applicable",
+      "prior_observed": "technical_error",
+      "observed": "technical_error",
+      "reason_code": "model_transport_error",
+      "expected_match": false,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-02",
+        "rule_code": "LX0609-05-01-02",
+        "rule_name": "抗菌药物：用药调整无充分理由",
+        "qc_point_id": "LX0609-05-01-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "technical_error",
+        "result_status": "technical_error",
+        "is_compliant": null,
+        "findings": "已核对抗菌药物 美罗培南；现有病程未明确关联到具体药物使用或调整事件，暂无法逐项核对理由。",
+        "evidence": "本次执行未形成临床结论。",
+        "suggestion": "修改对象：本质控点的质控执行链\n需要补充：可用的数据源、规则执行服务及结果保存能力\n推荐写法：请排查数据读取、规则执行或结果保存异常，恢复后重新质控。\n注意事项：技术异常不代表病历存在缺陷，不应要求医务人员据此补写临床记录。",
+        "confidence": null,
+        "reason_code": "model_transport_error",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "antimicrobial_reason_documentation_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "reason_documented": false,
+          "unmatched_antimicrobials": [
+            "美罗培南"
+          ],
+          "association_ambiguous": true
+        }
+      }
+    },
+    {
+      "original_index": 3,
+      "id": "reason_今日未使用美罗培南。",
+      "rule": "LX0609-05-01-02",
+      "expected": "not_applicable",
+      "prior_observed": "technical_error",
+      "observed": "technical_error",
+      "reason_code": "model_transport_error",
+      "expected_match": false,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-02",
+        "rule_code": "LX0609-05-01-02",
+        "rule_name": "抗菌药物：用药调整无充分理由",
+        "qc_point_id": "LX0609-05-01-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "technical_error",
+        "result_status": "technical_error",
+        "is_compliant": null,
+        "findings": "已核对抗菌药物 美罗培南；现有病程未明确关联到具体药物使用或调整事件，暂无法逐项核对理由。",
+        "evidence": "本次执行未形成临床结论。",
+        "suggestion": "修改对象：本质控点的质控执行链\n需要补充：可用的数据源、规则执行服务及结果保存能力\n推荐写法：请排查数据读取、规则执行或结果保存异常，恢复后重新质控。\n注意事项：技术异常不代表病历存在缺陷，不应要求医务人员据此补写临床记录。",
+        "confidence": null,
+        "reason_code": "model_transport_error",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "antimicrobial_reason_documentation_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "reason_documented": false,
+          "unmatched_antimicrobials": [
+            "美罗培南"
+          ],
+          "association_ambiguous": true
+        }
+      }
+    },
+    {
+      "original_index": 4,
+      "id": "reason_今日停用美罗培南，理由未记录。",
+      "rule": "LX0609-05-01-02",
+      "expected": "non_compliant",
+      "prior_observed": "non_compliant",
+      "observed": "non_compliant",
+      "reason_code": "requirement_violated",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-02",
+        "rule_code": "LX0609-05-01-02",
+        "rule_name": "抗菌药物：用药调整无充分理由",
+        "qc_point_id": "LX0609-05-01-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已核对抗菌药物 美罗培南；其中 美罗培南 未找到明确的使用或调整动作及理由。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：抗菌药物医嘱及相关病程\n需要补充：用药原因、方案调整动作、调整理由和依据\n推荐写法：请在病程中补充抗菌药物的使用原因、方案调整理由及相关依据。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "antimicrobial_reason_documentation_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "reason_documented": false,
+          "unmatched_antimicrobials": [
+            "美罗培南"
+          ],
+          "association_ambiguous": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "今日停用美罗培南，理由未记录。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 5,
+      "id": "reason_unknown_antibiotic",
+      "rule": "LX0609-05-01-02",
+      "expected": "data_gap",
+      "prior_observed": "not_applicable",
+      "observed": "not_applicable",
+      "reason_code": "trigger_absent_complete",
+      "expected_match": false,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-02",
+        "rule_code": "LX0609-05-01-02",
+        "rule_name": "抗菌药物：用药调整无充分理由",
+        "qc_point_id": "LX0609-05-01-02",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "本次未发现需要核对理由的抗菌药物使用或调整动作",
+        "evidence": "已核对抗菌药物医嘱及相关病程，未触发使用或调整理由核对。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": []
+      }
+    },
+    {
+      "original_index": 13,
+      "id": "cancel_no_actual_05",
+      "rule": "LX0609-05-01-05",
+      "expected": "not_applicable",
+      "prior_observed": "not_applicable",
+      "observed": "not_applicable",
+      "reason_code": "trigger_absent_complete",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "本次未发现经验性抗菌药物使用",
+        "evidence": "已核对抗菌药物医嘱及病程，未触发经验用药理由核对。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_evidence": [
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "拟使用美罗培南，取消医嘱，未实际给药。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 16,
+      "id": "empiric_胸部影像证实细菌性肺炎，予以美罗培南经验性抗感染治疗。",
+      "rule": "LX0609-05-01-05",
+      "expected": "compliant",
+      "prior_observed": "compliant",
+      "observed": "compliant",
+      "reason_code": "requirement_satisfied",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": true,
+        "findings": "已确认经验使用 美罗培南，并记录经验用药理由或无样可采原因。",
+        "evidence": "已根据受控证据完成判断。",
+        "suggestion": "继续保持。",
+        "confidence": null,
+        "reason_code": "requirement_satisfied",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "empiric_antimicrobial_reason_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "empiric_use_confirmed": true,
+          "reason_or_no_specimen_documented": true
+        },
+        "customer_evidence": [
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "胸部影像证实细菌性肺炎，予以美罗培南经验性抗感染治疗。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 17,
+      "id": "empiric_胸部影像尚不能证实细菌性肺炎，予以美罗培南经验性抗感染治疗。",
+      "rule": "LX0609-05-01-05",
+      "expected": "non_compliant",
+      "prior_observed": "non_compliant",
+      "observed": "non_compliant",
+      "reason_code": "requirement_violated",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已确认经验使用 美罗培南，但未记录经验用药理由或无样可采原因。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：经验性抗菌药物用药病程\n需要补充：经验用药理由、病情依据及无样本可采原因\n推荐写法：请在病程中记录经验使用抗菌药物的理由，或明确记录无样本可采原因。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "empiric_antimicrobial_reason_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "empiric_use_confirmed": true,
+          "reason_or_no_specimen_documented": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "胸部影像尚不能证实细菌性肺炎，予以美罗培南经验性抗感染治疗。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 18,
+      "id": "empiric_予以美罗培南经验性抗感染治疗，理由未记录。",
+      "rule": "LX0609-05-01-05",
+      "expected": "non_compliant",
+      "prior_observed": "non_compliant",
+      "observed": "non_compliant",
+      "reason_code": "requirement_violated",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已确认经验使用 美罗培南，但未记录经验用药理由或无样可采原因。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：经验性抗菌药物用药病程\n需要补充：经验用药理由、病情依据及无样本可采原因\n推荐写法：请在病程中记录经验使用抗菌药物的理由，或明确记录无样本可采原因。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "empiric_antimicrobial_reason_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "empiric_use_confirmed": true,
+          "reason_or_no_specimen_documented": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          },
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "予以美罗培南经验性抗感染治疗，理由未记录。",
+            "excerpt_kind": "文书级依据"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 19,
+      "id": "empiric_美罗培南经验性抗感染治疗，无痰标本可采。",
+      "rule": "LX0609-05-01-05",
+      "expected": "compliant",
+      "prior_observed": "non_compliant",
+      "observed": "non_compliant",
+      "reason_code": "requirement_violated",
+      "expected_match": false,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已确认经验使用 美罗培南，但未记录经验用药理由或无样可采原因。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：经验性抗菌药物用药病程\n需要补充：经验用药理由、病情依据及无样本可采原因\n推荐写法：请在病程中记录经验使用抗菌药物的理由，或明确记录无样本可采原因。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "empiric_antimicrobial_reason_check",
+          "antimicrobials": [
+            "美罗培南"
+          ],
+          "empiric_use_confirmed": true,
+          "reason_or_no_specimen_documented": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "美罗培南经验性抗感染治疗，无痰标本可采。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 20,
+      "id": "empiric_source_daily_course_record",
+      "rule": "LX0609-05-01-05",
+      "expected": "non_compliant",
+      "prior_observed": "non_compliant",
+      "observed": "non_compliant",
+      "reason_code": "requirement_violated",
+      "expected_match": true,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": false,
+        "findings": "已确认经验使用 万古霉素，但未记录经验用药理由或无样可采原因。",
+        "evidence": "受控证据表明本次记录未满足质控要求。",
+        "suggestion": "修改对象：经验性抗菌药物用药病程\n需要补充：经验用药理由、病情依据及无样本可采原因\n推荐写法：请在病程中记录经验使用抗菌药物的理由，或明确记录无样本可采原因。\n注意事项：请依据本次实际诊疗事实补充，保留原始记录；不要编造未核实事实，不要倒签。",
+        "confidence": null,
+        "reason_code": "requirement_violated",
+        "evidence_items": [],
+        "criterion_results": [],
+        "customer_display_facts": {
+          "verification_kind": "empiric_antimicrobial_reason_check",
+          "antimicrobials": [
+            "万古霉素"
+          ],
+          "empiric_use_confirmed": true,
+          "reason_or_no_specimen_documented": false
+        },
+        "customer_evidence": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "synthetic-note",
+            "record_time": "2026-04-01 09:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "建议万古霉素经验性抗感染治疗，已遵会诊意见给予万古霉素。",
+            "excerpt_kind": "文书级依据"
+          },
+          {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "synthetic-order",
+            "record_time": "2026-04-01 08:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "original_index": 21,
+      "id": "empiric_source_consultation_record",
+      "rule": "LX0609-05-01-05",
+      "expected": "non_compliant",
+      "prior_observed": "not_applicable",
+      "observed": "not_applicable",
+      "reason_code": "trigger_absent_complete",
+      "expected_match": false,
+      "prior_observation_match": true,
+      "llm_call_count": 0,
+      "final": {
+        "rule_id": "LX0609-05-01-05",
+        "rule_code": "LX0609-05-01-05",
+        "rule_name": "抗菌药物：经验用药未说明理由",
+        "qc_point_id": "LX0609-05-01-05",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "rule_version": "2026-08-02-provisional",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "not_applicable",
+        "result_status": "not_applicable",
+        "is_compliant": null,
+        "findings": "本次未发现经验性抗菌药物使用",
+        "evidence": "已核对抗菌药物医嘱及病程，未触发经验用药理由核对。",
+        "suggestion": "无需按本质控点处理。",
+        "confidence": null,
+        "reason_code": "trigger_absent_complete",
+        "evidence_items": [],
+        "criterion_results": []
+      }
+    }
+  ],
+  "loaded_app_modules": [
+    {
+      "module": "app",
+      "kind": "declared_package_initializer_suppression"
+    },
+    {
+      "module": "app.constants",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\constants\\__init__.py",
+      "sha256": "2a394938ee8df6b579da2a795a67dc293320099df0a5df548c71237f423d71a7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.constants.doc_types",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\constants\\doc_types.py",
+      "sha256": "73e0fca8f7bfe50d064897e4417f80b55ffc01babeb5755436f6a69c01bee8b9",
+      "manifest_match": true
+    },
+    {
+      "module": "app.core",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\core\\__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.core.settings",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\core\\settings.py",
+      "sha256": "b37ba5fe698382e9ae3b43bfb18b349280d33aea3abc5475bc4c5d40dcba3c86",
+      "manifest_match": true
+    },
+    {
+      "module": "app.database",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\database\\__init__.py",
+      "sha256": "1117429753489aa6fdf122a4dce7809f6d984d5c367e93f3a0de7946d5a2f988",
+      "manifest_match": true
+    },
+    {
+      "module": "app.database.connection",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\database\\connection.py",
+      "sha256": "b0a84f204ba13df4e469cd55df32925e5e7c5304a9c7acd7f77526cfb90563b3",
+      "manifest_match": true
+    },
+    {
+      "module": "app.database.models",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\database\\models\\__init__.py",
+      "sha256": "316198b01e3c4b4b2f10551a029a13834b5566be4417b15e331d254de94a5da6",
+      "manifest_match": true
+    },
+    {
+      "module": "app.database.models.cdm",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\database\\models\\cdm.py",
+      "sha256": "f0a5bc7e829cdb62ca288839f19bfe0cf24ec4dba70bf097555ee4ebec5d8023",
+      "manifest_match": true
+    },
+    {
+      "module": "app.database.models.qc",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\database\\models\\qc.py",
+      "sha256": "3b815e348f404f56b766299f8a5b7abf70b2ba5c8ee85889b1a32681a9a7ff84",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services",
+      "kind": "declared_package_initializer_suppression"
+    },
+    {
+      "module": "app.services.bundles",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\__init__.py",
+      "sha256": "deeba1f1ec227983bc5f034b2373ccfcf6c1248cc72eb8d43fb0c43b0628b76d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.bundles.assembly",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\assembly.py",
+      "sha256": "4a9a70ff7514f6d55353150020d62cce0bf9bf6622a436684e305e72ec59ebd5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.bundles.contracts",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\contracts.py",
+      "sha256": "98295cf3d1c2e6c3f9420ab415bef7c40165f2d724b96e50ac0fcd75fc24bbd8",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.bundles.emr_view",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\emr_view.py",
+      "sha256": "10de73a5297dc4c1501009996d6319461c34b356426bc74e5bfbf21e0644392f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.bundles.factory",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\factory.py",
+      "sha256": "cec1e63b5a59d93fd9a881780a96249199e57c8179cd245bb98c53a50b498a3e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.bundles.masking",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\masking.py",
+      "sha256": "708decf42e9ca458989b2b32879c9494800413bcd289a67220e022ebc328f69c",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.bundles.refresh_manager",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\bundles\\refresh_manager.py",
+      "sha256": "dca89e34a17252986f8e5e0b4cf6faee276dfc77d8027e62e092f8c5385043a7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.case_identity",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\case_identity.py",
+      "sha256": "32a7c37820cf6f08e9218ee4348e40be78b6235822ed263ffad36ab3a0191181",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.custom_qc_workspace_service",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\custom_qc_workspace_service.py",
+      "sha256": "455d5689323a186ed747a83ffe693c06838e0a80bf784af5e671bd0ac3bbbd8d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.customer_rule_sets",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\customer_rule_sets.py",
+      "sha256": "46a776175ac722988c61126cdf8f944dcffe7cbfcb3e37b551305c1656ed511f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.document_assembly",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\document_assembly\\__init__.py",
+      "sha256": "160c3fc5af4bc170ba8678169e7289d75adfdc898b12441b60ad4ed8d06a2f8b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.document_assembly.assembler",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\document_assembly\\assembler.py",
+      "sha256": "9ac91d1c6c783526e3aae10482b3b60e25bf11d022e1c99c675452fe3957775f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.document_domain_alignment",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\document_domain_alignment.py",
+      "sha256": "1fb72f3c43fe0d6a21f83665a3e149859652085c96bab9881134ba9a804b1c14",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.effect_priority_qc",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\effect_priority_qc.py",
+      "sha256": "982670b9ae066549e144a902654b63764418adbd2eeeccba660203c57c8358f6",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.fast_screen_qc",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\fast_screen_qc.py",
+      "sha256": "4306e5ce1e49388ea886c14869f018a18a10ad37c14ad93786e549a2bef92371",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.formal_qc_rule_criteria",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\formal_qc_rule_criteria.py",
+      "sha256": "2d54bb13ae41e1e5d8b628c3f4722555988971604303338561f54954359ea5bf",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.formal_qc_subitem_anchors",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\formal_qc_subitem_anchors.py",
+      "sha256": "55a07f24a9fcf8ff7c67b8969e6a493b41dbcbe43d8271e3d9fddfeeb9233673",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.llm_observability",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\llm_observability.py",
+      "sha256": "ff88b0ddd17b0b5f34f6cd3071903b8bedf12712659747e67c5b3e59343426f8",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609",
+      "kind": "declared_package_initializer_suppression"
+    },
+    {
+      "module": "app.services.luxian_0609.anesthesia_visit_fact_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\anesthesia_visit_fact_extraction.py",
+      "sha256": "d3246420d34d83ca7332bb8bb8918047c7d8a6cdcfae32fdf2d355d68b7ad840",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.antimicrobial_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\antimicrobial_result_mapping.py",
+      "sha256": "690b83f2b578f11dc25401d6277d0533d26abe0ead987cc13c3a2a3188b469df",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.basic_timeliness_customer_projection",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\basic_timeliness_customer_projection.py",
+      "sha256": "7bfd7c99b9d71154fb5724831527ba58eda8ebafbd243ca87a072b44de470672",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.basic_timeliness_facts",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\basic_timeliness_facts.py",
+      "sha256": "3b72a97f44064d6d21c01635c2733204c0b2ca5bbe64987621b064238b7b779b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.canonical_result_finalizer",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\canonical_result_finalizer.py",
+      "sha256": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.consultation_customer_projection",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\consultation_customer_projection.py",
+      "sha256": "0b1076de255db5846d16f898d3e4d9f02762c1b79425a6bdb7a7abdfd07f35b3",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.consultation_decision_evidence",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\consultation_decision_evidence.py",
+      "sha256": "55a58fbeff7a50608179b0d6fab91e420bbb2d29754c20ac3f1ffefe0dbe87a7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.consultation_opinion_freeze",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\consultation_opinion_freeze.py",
+      "sha256": "5d8cbcccdaad0024cbd10c6028ea84f66ade8ca5a2d7c0bc4f7d8a8c12b3ca85",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.continuity_evidence_selection",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\continuity_evidence_selection.py",
+      "sha256": "e6be32ff8a109e7c3d1380c796fab4fc3fde6f489100652b26f1d07777017de7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.continuity_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\continuity_result_mapping.py",
+      "sha256": "7e21cde62910528e97cffe833a9e5ce26217e1197e0320ebcdc39ba00b19a0ec",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\__init__.py",
+      "sha256": "a18880381e3051c2bf798bd2c45affb2f4460c7e8a7a620a543595213cb898c3",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality.rule_007",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\rule_007.py",
+      "sha256": "4fc0395fae910f334980b4edb214621c5a0f2341ac688a2586321b727d3e5b23",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality.rule_018",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\rule_018.py",
+      "sha256": "5523ffdb69f81e460ec8fe7cb167ebabe7051a563492ad96d388e7396d836293",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality.rule_077",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\rule_077.py",
+      "sha256": "1f849f629c9f454145dc273116c1cb00666e7da04b3b6bd0721e2186c1e5ca2e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality.rules_008_009",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\rules_008_009.py",
+      "sha256": "2faa3c759e786f86409866f5938f0f543e69ab2c8ec842baf2b87d2024d0d0af",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality.rules_016_017",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\rules_016_017.py",
+      "sha256": "b87472a2feb3c692ae38ad1802194988343b01422c837288cd4ed7e70cadf4db",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality.shared",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality\\shared.py",
+      "sha256": "09333473e69e59de6aacb54b2da14f07f2891311c4690a7e3b0f0654ba51bf15",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.course_quality_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\course_quality_result_mapping.py",
+      "sha256": "9e3ba792f6eb37839e3ba73b8f5bda26cba7798b3ae4579f7e025025dafa49c5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.critical_value_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\critical_value_result_mapping.py",
+      "sha256": "8a62a1f5194117f317cc09ebea7dfd2972dbb93758473d9d613f4cfe9cc1d3bc",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.ct_order_course_consistency",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\ct_order_course_consistency.py",
+      "sha256": "ac5c2d0d7f0b0593314d12d1ee5ab7c5464afa30ef0d85aa937d9388bc78f183",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.customer_evidence_enrichment",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\customer_evidence_enrichment.py",
+      "sha256": "d18a11c6cb22c987238b850140f0cd2f05ea73d3609e6db05f5d97e391607599",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.customer_remediation",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\customer_remediation.py",
+      "sha256": "5ba54e2c0567b95715e49d6da2e35c810b2108527905a2a9bce16b94d0ca5bfb",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.customer_renderer",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\customer_renderer.py",
+      "sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.customer_rule_package",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\customer_rule_package.py",
+      "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.death_document_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\death_document_result_mapping.py",
+      "sha256": "a5a87c9b78639029d38daea3c996eea282e495c1f4d67e46b083843d84f45df5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.decision_binding",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\decision_binding.py",
+      "sha256": "897ec218c45e6eccea60ab92c9d3bb7c1b0ab9dbed222d5cab64dc8a70f3abcb",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.decision_model",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\decision_model.py",
+      "sha256": "43ad743b4e4094aabbb676bd74def8c071d9ca37437d0def6b4a32003bc86fae",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.decision_reducer",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\decision_reducer.py",
+      "sha256": "84d30a75e31c6c5063e8d1181e470a40bad9fd0f02bb888d7ecf6e092feb0fd4",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.deterministic_gate",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\deterministic_gate.py",
+      "sha256": "e28cec4ad2fe9fc0b09fc32fa31b340ade6e797eab7b72d97aed0ad68d49f4b7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.difficult_case_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\difficult_case_result_mapping.py",
+      "sha256": "62a97d2f51b9ed79adbfab8943a86028bfddcc0b0bd417a7d319d39634abdf38",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.discharge_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\discharge_result_mapping.py",
+      "sha256": "79d33291885b7375c0474f3cd3f3eea9efc32dfcaa884b2c6c0c5da55864923e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.evaluation_horizon",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\evaluation_horizon.py",
+      "sha256": "752f42886e05becfa4f7964f10e95ecaa4a8b9af6341a235cc367f62da8a06de",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.evidence_material",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\evidence_material.py",
+      "sha256": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.evidence_snapshot",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\evidence_snapshot.py",
+      "sha256": "a534207dafe48f4cc4a4306316515f47dd567d87576840871c5e7b8a7bc1bedd",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.evidence_snapshot_provider",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\evidence_snapshot_provider.py",
+      "sha256": "d0bdd012b26742fd85a777ed0ea5001c89d71c64204e125b7956926a7ed9c3d9",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.exam_lab_course_time",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\exam_lab_course_time.py",
+      "sha256": "c6aa81414713015f8af468410c0730c8b8260ef9c1b581379d86caf4fc7ac26f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.exam_lab_event_recovery",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\exam_lab_event_recovery.py",
+      "sha256": "25e526816e1504eed835378dcad13d5d0cc170122f4dbbf58960433b45cd4f31",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.exam_lab_fact_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\exam_lab_fact_extraction.py",
+      "sha256": "ac9e5dee95c00d65e87deb907ea8b922fe7392bfe263cd496f4add72c9ca97b5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.exam_lab_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\exam_lab_result_mapping.py",
+      "sha256": "6a2d05130c009cce9327f217b5976af6d7c5efb5af0632785a590daaf42eee7d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.exam_lab_window",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\exam_lab_window.py",
+      "sha256": "b62572ec9d04cd3d52ee7f998781abeb81299a47e7c0b3e396be0fe8c0c38a6e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.exam_order_linkage",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\exam_order_linkage.py",
+      "sha256": "8020255542be6db8d219de106748280373eb12adbb5adcf58b23750850d46401",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\__init__.py",
+      "sha256": "909b9529f9b9f5db7ee3a0993c46cde2ef12025fdb169511b773251b00bfb6e7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.antimicrobial_action_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\antimicrobial_action_extraction.py",
+      "sha256": "e75d4e23eb616100d45af979c2de9bf940f03374772fb12a20536772da4c9b9f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.consultation_timeliness",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\consultation_timeliness.py",
+      "sha256": "eb29ce5554eca52bc01a71f6206e17d4ec60333a8e9c9c9c16a982accf3295c0",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.death_discussion",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\death_discussion.py",
+      "sha256": "1d18fffff8ec0802004dd668f462b9cb41e562a8460d1d6beeec663ff356ca79",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.diagnosis_change_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\diagnosis_change_extraction.py",
+      "sha256": "eb6f67e2fa4cc9f028a0740a1acbb16deab052ec0f822287c9b869cbd9b7e853",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.difficult_case_trigger",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\difficult_case_trigger.py",
+      "sha256": "0874fc4865386393fdd5b435e2e343a9cdd73429eeae26f5cb6af1d1f9daba62",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.discharge_approval_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\discharge_approval_extraction.py",
+      "sha256": "8ac47003c3e18873e906e28e11e7db51aec7ff8aeddc30ef21da0a9e09fc455b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.discharge_course",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\discharge_course.py",
+      "sha256": "568032eff813c98fd678442de476f1cbf62b29b617205d732828d14890393306",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.discharge_course_content",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\discharge_course_content.py",
+      "sha256": "8d88c37a9a8314a855cf0e2bdb64a363c9e1c357feb2bcd98dba598649d52290",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.discharge_course_stages",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\discharge_course_stages.py",
+      "sha256": "ff3d1dfdf3ebfcc7a28190275f2d8defb3a6efff44e678dc363212818df32f29",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.discharge_documentation",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\discharge_documentation.py",
+      "sha256": "5f423f29b2e4ac3bca1c42388d12dc6c5593fbacd135f72ab5fc05997a56805c",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.discharge_medication_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\discharge_medication_extraction.py",
+      "sha256": "2b191f6cb529cb52e1023e5a34b9013cadcfd4bb9797c1c010897f3a4ee905ff",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.physician_handoff",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\physician_handoff.py",
+      "sha256": "b45b6d42c656b914f04c55c638864299a12691cc3b9f08666840d1e9d8964d4b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.rule_076",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\rule_076.py",
+      "sha256": "43a27394890f536b1261cece32c4507303c40477a50ca3a26cb9cf9f39681e37",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.shared",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\shared.py",
+      "sha256": "bc46b0d7f3a1aec581dec6caaf9f7eb7f043c9158133832128062cfe769bd69b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document.transfer_documentation",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document\\transfer_documentation.py",
+      "sha256": "77df9c66a7179d3b2c80dbc3b23059c203f61a82d8e1fec27d704fcacf8fc829",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.extended_document_critical_value",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\extended_document_critical_value.py",
+      "sha256": "957d86b873c9683c6ae3a9822d9a2c47357734a7693bc3c7d7eafac9e06a9835",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.fact_coverage",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\fact_coverage.py",
+      "sha256": "225bcd062cf0df416248b7a0a7d4deaca62a3d9ea138881fd6eb2b37472f3c6b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.fact_schema",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\fact_schema.py",
+      "sha256": "bc5629f1bef3b6d5296cc7909b6a5f6540328bc68d713347d6259b5814fe3486",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.handbook_exam_lab",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\handbook_exam_lab.py",
+      "sha256": "89ff208f6e68ce4b055d43221baa0027618e7a8c01634be80ce5f09ea6c54e96",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.imaging_report_scope",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\imaging_report_scope.py",
+      "sha256": "33c4b37a33737d6a709977645cd9813c9eb181932178faaba4c1179958e55d95",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.legacy_fact_adapter",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\legacy_fact_adapter.py",
+      "sha256": "cc199e9a5db9bca9a56b624e9ae2c76294005c271a8b7ec67d69c6b801032a85",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.llm_prompt_privacy",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\llm_prompt_privacy.py",
+      "sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.malignancy_fact",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\malignancy_fact.py",
+      "sha256": "fe5aa2918d5f76660acd71102da06b9a89602c4a499c0c6728a6a91b17d0d1f9",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_basic_timeliness",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_basic_timeliness.py",
+      "sha256": "5cc9f4fb5f1adcc603154fe6b9bedbb54d55ebca7d4c8700cc2e3b0fc4e171ec",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_consultation_episode_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_consultation_episode_execution.py",
+      "sha256": "73a51b5d720e0c89cddbc7dc29b7efa451295b039099594b887b07a478519cdc",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_course_quality_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_course_quality_execution.py",
+      "sha256": "9e2d89255576bd00feea216ddb7e1f83875ff17d6f993ec21460c752e50a9940",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_exam_lab_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_exam_lab_execution.py",
+      "sha256": "a1e8dbee770fe1376d0ab71d7fd9bd7eb1a328ba6a1ba4e190979e0fa7125979",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_execution.py",
+      "sha256": "8edf38acf87fd0279000af412ae2d13de722b165cee7219c7e900888e8007e2e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_extended_document_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_extended_document_execution.py",
+      "sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_mdt_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_mdt_execution.py",
+      "sha256": "42cff55f0c600808fb5173dce8af55fb51f78ea87a7b2bd74b72d60276bb93f7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_package",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_package.py",
+      "sha256": "b1709f4a107d30a714fdd7a4a78a2edc94fde27bc8868c98f23eddc6fee1b319",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_preop_content_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_preop_content_execution.py",
+      "sha256": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_surgery_document_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_surgery_document_execution.py",
+      "sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_surgery_gate_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_surgery_gate_execution.py",
+      "sha256": "f7ff9644a3c9509970efaa2dac42138a27d32ed628f04fddedbfaa488da301f6",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_transfusion_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_transfusion_execution.py",
+      "sha256": "bdc7dfd538fa8b13cfa434804835d73777d9f25cd1b08e9bdc6a02d51edaf652",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.native_tumor_pathology_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\native_tumor_pathology_execution.py",
+      "sha256": "3e2299951c92f9835da0787f8c24fc5ef49b51a39b350429d654351411890264",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.pathology_report_completeness",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\pathology_report_completeness.py",
+      "sha256": "8e8a67d6158a3821fc5890aad6387f1c0bc974e3cef576a16c57c20c3dbbdc34",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.phase_scope",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\phase_scope.py",
+      "sha256": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.planner",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\planner.py",
+      "sha256": "3fac23dba1b0aa398f017db9b71aa75b05ce7e4dcf8025e4a78b76cb9f1bb3f0",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.postoperative_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\postoperative_result_mapping.py",
+      "sha256": "822dd16406726fc9e92f877df10b4dba92db760bc9ecf4cba689a95e5dff195a",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.pretransfusion_assessment",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\pretransfusion_assessment.py",
+      "sha256": "b385dbe4d9ba4be1daaaaa181057be4195d0cb0d60311584a19d89e34e95e73f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.programmatic_rules",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\programmatic_rules.py",
+      "sha256": "082eca62c70d351d8125cef751c12aa6004e9f3130a8816c4ae94078d5446e88",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.record_result_read_model",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\record_result_read_model.py",
+      "sha256": "3eb18d35868e9a523414141e7380ab3abb3c60cd116ad0aa245321042f60b17d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.rescue_record_completeness",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\rescue_record_completeness.py",
+      "sha256": "a72a1f3cb9817726408490257ec1e1379c717aad5caccf29e2678d02bfac7b7e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.result_aggregator",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\result_aggregator.py",
+      "sha256": "b68c849481a8f8685948c1485294e2bc6d40d85a831cb0cd3c198a2496ab8e17",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.rule_contracts",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\rule_contracts.py",
+      "sha256": "b540f4d8dab09c135d31079720d771e9b92b50172f57e47586748e70e8ead297",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.runtime_shadow_assembler",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\runtime_shadow_assembler.py",
+      "sha256": "d65c79e1fb58359dd5b6470c4064e6942fd57cd64d0425fdf0688fb3cff3cdfc",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.runtime_shadow_input_provider",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\runtime_shadow_input_provider.py",
+      "sha256": "a73508cedb5e4818cade67f7ce716cb04663a2be9fcdc699749aec7fd821591d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.shadow_execution",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\shadow_execution.py",
+      "sha256": "53a9494d522d533e0c6def6440f5a0474e6086b54a5fac84a127012ebb74a675",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.shadow_fact_bundle",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\shadow_fact_bundle.py",
+      "sha256": "05d82e42d34a8877fd8fbeb15d4a7048077c1c2cc3786bfb4a4f70e25bf1710d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.source_evidence_reader",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\source_evidence_reader.py",
+      "sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.source_gap_contract",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\source_gap_contract.py",
+      "sha256": "b386295a317df8d9560d6d986741a8ce48954295905cc8b6684267887fa9f0e5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.source_manifest",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\source_manifest.py",
+      "sha256": "98dcf8162f3b412c0d6b5ac646161c9c77c357a949433d98f5512e205339ecdb",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.source_manifest_builder",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\source_manifest_builder.py",
+      "sha256": "bbcf938806bc48cd2374b2b53bacc1b72845aef619fde83d0c3dbad112899478",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.source_registry",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\source_registry.py",
+      "sha256": "2c562562a8035b2fada29c823c0cfebaf9fd6cec74529036225008917364e01e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_applicability",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_applicability.py",
+      "sha256": "a493ef1c9376c993c27dc1a2e1f31b5da833804b562b9156cd37f65dfd59e809",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_document_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_document_result_mapping.py",
+      "sha256": "bd3f183d426b8e15db0f7bb71aa01315c2eeb5e0af72429538917806a5913f8e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_event_association",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_event_association.py",
+      "sha256": "64956e8e52278bcf5e27c71e20275573af39f4a619e49a7caf5ae36dbd8c582f",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_gate_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_gate_result_mapping.py",
+      "sha256": "0c54f2ea434c0ec0fe5c221ff8995541ca6eb6082afdd61dd7cf7e0a605e4008",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_mdt_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_mdt_result_mapping.py",
+      "sha256": "0336a92f9dbe99bd3833e6d43a6b28ba36469fe2d91e402ee7175ce3ba988c38",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_presence_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_presence_result_mapping.py",
+      "sha256": "d39cc5f74fdc673e8071abe5a69c437800dc96afd8e6aade2f13c8a755e0eb30",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_procedure_catalog",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_procedure_catalog.py",
+      "sha256": "eac2428d0436d94c34415f51ab8d8396ec5019d988498585fb2c1d2eff7b865b",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.surgery_text_fact_contract",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\surgery_text_fact_contract.py",
+      "sha256": "85b4edad1c19f4cb6ada7d87c291dece55c00ce1f971e274ec89eeb7d41137ca",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.transfusion_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\transfusion_result_mapping.py",
+      "sha256": "b2306a2d9ce4de035c5b1ae654d740e6faf2b01cf7e6374f4fe1e61936b246ba",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609.tumor_pathology_result_mapping",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609\\tumor_pathology_result_mapping.py",
+      "sha256": "1ef1640e9dc194a328df6c934b0ea519c56df65f82031ad8376cb97b9278d7f5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_evidence_formatter",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_evidence_formatter.py",
+      "sha256": "c225be2df25b4037f40ddd6eb44018f8e7ae669d120669b31e9851b19057f852",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_fact_extraction",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_fact_extraction.py",
+      "sha256": "1d25e3315a99fd21e860a767efbc58dbf984c7b51f24097e4e23d44f122d4f77",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_legacy_result_adapter",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_legacy_result_adapter.py",
+      "sha256": "6dd5daf12f8d6946cd6bc8b8c150613ec4a1d8c1648501d6e064f709244388d6",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_llm_gate",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_llm_gate.py",
+      "sha256": "2958645e84ce86fac15a70e64089d5d594007dadab8141abccdf802c2595663e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_programmatic_rules",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_programmatic_rules.py",
+      "sha256": "d057a29f60a6be0fb1b78a1efdc7ac71a3e74c7fb0332cbeb7ada5ddc8513f45",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_result_aggregator",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_result_aggregator.py",
+      "sha256": "27ba4a80384291fa26a097efd811a491fb3b034059f72dbb2efa57f1d7c288a1",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_result_export_service",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_result_export_service.py",
+      "sha256": "2b7aa5b6a09a887647eea456a96937fe15b9faa1cd86b90d9cfc1ad213e4a007",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_result_review_service",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_result_review_service.py",
+      "sha256": "0942c6b81c8c629dd433a6239c0a236f56d279e7ee7b6c48243f95cec51e0332",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_result_schema",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_result_schema.py",
+      "sha256": "268b0d3b731d2f231c2844e03669cea8f97776c407f54e3e691bd60185be1576",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_rule_catalog",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_rule_catalog.py",
+      "sha256": "175b7ab251ef98d90b51ff01f3dad1ead84d0814005607c898b1dd4d8a4de931",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_rule_master",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_rule_master.py",
+      "sha256": "8d249f3912304877ee0d35b1bbe1495895dea963e85959633bdc95e2562e7d70",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0609_trigger_gate",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0609_trigger_gate.py",
+      "sha256": "4b5281f1749ca1cfc40a588845d820dd5ea7e7f8ea09a9a7e951ed6b1fe88a17",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0916",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0916\\__init__.py",
+      "sha256": "4d03b8b271b975f2d2ed0377b01a2fc92191377919dd112d522242741a4a3bf9",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0916.contracts",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0916\\contracts.py",
+      "sha256": "ef62c3345e743dc7d0c02a294c1cf3f65d242c2539eb73427b3796fb78bb6ec0",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0916.execution_integrity",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0916\\execution_integrity.py",
+      "sha256": "b9a06398e4398e60b968058fa79728f7052c33c6f0f2bc3781ffa125538738be",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.luxian_0916.rule_catalog",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\luxian_0916\\rule_catalog.py",
+      "sha256": "6d85a60af64887675721f880cf70ce11911e1e664904f400b949935ee160a24e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_cancellation",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_cancellation.py",
+      "sha256": "694adf305ac31ac606f2cc16283c781a9068e1b5b022c392ddbb793fba2564c0",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_diagnostics",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_diagnostics\\__init__.py",
+      "sha256": "bf3d04f2cb63148f8f1271128937b0f5707e6213510cfef8b2f9913e203af037",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_diagnostics.capture",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_diagnostics\\capture.py",
+      "sha256": "d77cbfa64c9551a4d351a01db00c6e9e6b7bdd82ba5f75ce4d844b1235b97e6d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_diagnostics.contracts",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_diagnostics\\contracts.py",
+      "sha256": "42040c3e5b689e38d46069c8e63f852c9a14db078814a63347c0dff3fca65401",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_diagnostics.runtime_build",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_diagnostics\\runtime_build.py",
+      "sha256": "10ddd742b9f503add914d2633b039005c10c2e4701749629c47268d25b5accb0",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_diagnostics.typed_values",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_diagnostics\\typed_values.py",
+      "sha256": "7f3e248bc85af3f6b7cf6df129f1a61a4ffb8751900af427db9e6f1d4fa7d0f5",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_rule_sets",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_rule_sets.py",
+      "sha256": "079cf208a963d84e8b86fcee57b2341d79550a7746436b6d0bf89dab8673883e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\__init__.py",
+      "sha256": "a1b7c25d3d17b62facdc0103b1c532b6fb664047334bd5b8670b446899555958",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace.canonical_result_store",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\canonical_result_store.py",
+      "sha256": "67d80d42efdd4c0010684017932d49c86856f5c2950d83af4f1eb5516b2bdf4a",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace.execution_failure",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\execution_failure.py",
+      "sha256": "c42020fcc2049cf49046d0fed3ad3c7d7ba8523f3a9b89611a2d9f52f96f6bff",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace.export_service",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\export_service.py",
+      "sha256": "1255f0e8058ce7b3d23076fb3babc79a639c4eff0bafc0753ab40a376846a94d",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace.failed_rule_retry",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\failed_rule_retry.py",
+      "sha256": "097d66248c57f28186db579907d1e1969a1c9c4732f875c090624f5ff3542687",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace.partial_record_delivery",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\partial_record_delivery.py",
+      "sha256": "97027e406a5cf0ba82956ca3578ef2ca587f7cd8853b5e1a8aeb32ec1d177705",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.qc_workspace.record_repository",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\qc_workspace\\record_repository.py",
+      "sha256": "c2b4089fd269ed81119713ca25c9fef831a0c5c892c59c00f2946a44c296b817",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.rule_domain_router",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\rule_domain_router.py",
+      "sha256": "5133580535a0543d4e557fa0be55eb8af4cbe4dd59cc22018578737c8e09a80c",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.sample_validation_rule_sets",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\sample_validation_rule_sets.py",
+      "sha256": "c316eb7f80233f2e2abebe2981d539d826ef2a0bf8f7b3b5d118ab0db720488e",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.sc_rule_family",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\sc_rule_family.py",
+      "sha256": "645d4ac6aea4ced0935c906a94d34214866b22d950cca88a23d7f3327263715a",
+      "manifest_match": true
+    },
+    {
+      "module": "app.services.sc_rule_launch_tier",
+      "source_path": "F:\\MedQC-worktrees\\review-artifacts\\antibiotic-evidence-current\\source\\app\\services\\sc_rule_launch_tier.py",
+      "sha256": "397fbde768f89bb33b8f218c353c5b57059fb9585bcf9612366fae4393c1c108",
+      "manifest_match": true
+    }
+  ],
+  "source_provenance_errors": [],
+  "post_execution_changed_sources": [],
+  "method": "existing synthetic snapshot/material helper -> whole real fixed native executor -> real binding/reducer -> real canonical Finalizer; no Worker/save/API/deployment",
+  "scope_limit": "Synthetic fixture -> real executor/binding/finalizer only; no real source collector, Worker, Store or API"
+}

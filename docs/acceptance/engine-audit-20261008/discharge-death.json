@@ -1,0 +1,1565 @@
+{
+  "schema_version": "engine-audit-discharge-death-v1",
+  "baseline_commit": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+  "scope_rule_ids": [
+    "LX0609-08-01-01",
+    "LX0609-08-01-02",
+    "LX0609-08-01-03",
+    "LX0609-08-01-04",
+    "LX0609-08-01-05",
+    "LX0609-08-02-01",
+    "LX0609-08-02-02"
+  ],
+  "stage": "offline_first_round",
+  "clinical_acceptance_complete": false,
+  "baseline_cases": 31,
+  "baseline_passed": 31,
+  "supplemental_cases": 1,
+  "supplemental_passed": 0,
+  "real_model_calls": 0,
+  "pg_connections": 0,
+  "dotenv_reads": 0,
+  "original_patient_records_read": 0,
+  "production_files_modified": false,
+  "frozen_sha256": "8dc0233355036eea8d585d6055572971666fa6f8847bb4b80004494c92e4d289",
+  "supplemental_frozen_sha256": "4f5ac6c516463ac55ee7230ca53e0929e15a76a4861b671bb2847de7be292486",
+  "rules": [
+    {
+      "rule_id": "LX0609-08-01-01",
+      "legacy_index": "061",
+      "name": "出院完成24小时",
+      "release_scope": "default",
+      "offline_result": "7/7",
+      "conclusion": "离线确定性边界通过；缺失、冲突与死亡不适用均区分。"
+    },
+    {
+      "rule_id": "LX0609-08-01-02",
+      "legacy_index": "062",
+      "name": "出院带药",
+      "release_scope": "default",
+      "offline_result": "5/5",
+      "conclusion": "结构化完整性/来源缺口通过；药名剂量错误及与医嘱一致性仍未被本分支覆盖。"
+    },
+    {
+      "rule_id": "LX0609-08-01-03",
+      "legacy_index": "063",
+      "name": "出院或死亡诊断",
+      "release_scope": "default",
+      "offline_result": "5/5 + 0/1",
+      "conclusion": "诊断内容及排序通过；死亡无出院记录反例漏执行，需修复/澄清。"
+    },
+    {
+      "rule_id": "LX0609-08-01-04",
+      "legacy_index": "027",
+      "name": "恶性肿瘤出院计划",
+      "release_scope": "default",
+      "offline_result": "4/4",
+      "conclusion": "未来治疗子判定通过；未运行完整恶性适用事实链。基线称治疗或随访，当前总表/实现要求肿瘤治疗；口径文档需对齐。"
+    },
+    {
+      "rule_id": "LX0609-08-01-05",
+      "legacy_index": null,
+      "name": "出院诊疗经过",
+      "release_scope": "acceptance_only",
+      "offline_result": "1/1",
+      "conclusion": "仅验证当前范围开关；本轮不启用、不证明内容充分性。",
+      "legacy_index_note": "后新增规则，无旧编号；旧077对应LX0609-01-02-02。"
+    },
+    {
+      "rule_id": "LX0609-08-02-01",
+      "legacy_index": "067",
+      "name": "出院前病程",
+      "release_scope": "default",
+      "offline_result": "5/5",
+      "conclusion": "前一天/当天临床正文、纯标题签名、缺时间和死亡边界通过。"
+    },
+    {
+      "rule_id": "LX0609-08-02-02",
+      "legacy_index": "068",
+      "name": "上级医师同意出院",
+      "release_scope": "default",
+      "offline_result": "4/4",
+      "conclusion": "角色、窗口、缺时间、来源失败区分通过。"
+    }
+  ],
+  "findings": [
+    {
+      "id": "DD-F01",
+      "priority": "P1",
+      "rule_id": "LX0609-08-01-03",
+      "classification": "confirmed_offline_scope_gap",
+      "case_id": "DD-S01",
+      "summary": "死亡患者未形成出院记录时，死亡诊断冲突核对被正常出院记录存在性门控跳过。",
+      "evidence": "native_extended_document_execution.py:2889-2895 先判断无 discharge_rows => not_applicable；同文件373-394明确支持死亡诊断类型。",
+      "actual": {
+        "case_id": "DD-S01",
+        "rule_id": "LX0609-08-01-03",
+        "scenario": "death_diagnosis_conflict_without_discharge_record",
+        "expected_status": "non_compliant",
+        "basis": "规则明确包含死亡诊断；已确认死亡且有可读权威/书写死亡诊断的内容冲突，不因正常死亡患者无出院记录而跳过",
+        "actual_status": "not_applicable",
+        "passed": false,
+        "finding": "本次尚未形成出院记录",
+        "reason_code": "trigger_absent_complete"
+      },
+      "required_followup": "主协调独立复核 death-only 来源合同；若死亡诊断属于本规则范围，不能只以无出院记录判不适用。",
+      "engineering_closure": {
+        "finding_id": "DD-F01",
+        "engineering_status": "closed_with_independent_frozen_checks",
+        "fix_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+        "independent_check_count": 39,
+        "independent_passed": 39,
+        "results_path": "F:\\MedQC-worktrees\\review-artifacts\\dd-f01-closure\\independent-fixed-58e29-results.json",
+        "results_sha256": "2ce1c41cd2ad0276ff25f66172c6b2b5dc7d99488e754276bec35beb087c65fc",
+        "frozen_sha256": "ba15b3e8b125c725a8ac8c973959ef2ad9d121a6fb36d06020c39e69177656f4",
+        "clinical_acceptance_complete": false,
+        "baseline_original_counterexample_preserved": true,
+        "test_slot_released": true
+      }
+    },
+    {
+      "id": "DD-F02",
+      "priority": "P2",
+      "rule_id": "LX0609-08-01-02",
+      "classification": "confirmed_rule_coverage_limit",
+      "summary": "带药现分支验证名称、剂量、途径、时间字段非空；没有药名/剂量错误或与医嘱一致性比较。",
+      "evidence": "native_extended_document_execution.py:3470-3509；executor_registry.py:226-236 的062来源不含带药权威医嘱；业务基线-v1.md:152要求并与医嘱一致。",
+      "required_followup": "独立冻结合法与错药名/错剂量案例及比较依据；不能把5/5完整性测试称为062全项临床准确验收。"
+    },
+    {
+      "id": "DD-F05",
+      "priority": "P2",
+      "rule_id": "LX0609-08-01-04",
+      "classification": "documentation_policy_alignment",
+      "summary": "旧业务基线027允许肿瘤治疗或随访；当前总表质控点与确定性实现仅肿瘤治疗计划满足要求。",
+      "evidence": "业务标准基线-v1.md:108；rule_master_v1.json:230-236；native_tumor_pathology_execution.py:1587-1624。",
+      "required_followup": "按已确认当前客户总表执行，不据旧基线擅改临床口径；将版本冲突提交主协调核对。"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "DD-001",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "exact24",
+      "expected_status": "compliant",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "compliant",
+      "passed": true,
+      "reason_code": "requirement_within_threshold",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-10-01 08:00:00",
+        "record_time": "2026-10-02 08:00:00",
+        "threshold_hours": 24,
+        "actual_interval_hours": 24.0
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-002",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "24plus1sec",
+      "expected_status": "non_compliant",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "threshold_exceeded",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-10-01 08:00:00",
+        "record_time": "2026-10-02 08:00:01",
+        "threshold_hours": 24,
+        "actual_interval_hours": 24.0
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-003",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "negative_interval",
+      "expected_status": "data_gap",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "authoritative_time_conflict",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-10-01 08:00:00",
+        "record_time": "2026-10-01 07:59:59",
+        "threshold_hours": 24,
+        "actual_interval_hours": -0.0002777777777777778
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-004",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "missing_completion",
+      "expected_status": "data_gap",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "authoritative_time_missing",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-10-01 08:00:00",
+        "record_time": null,
+        "threshold_hours": 24,
+        "actual_interval_hours": null
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-005",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "empty_source",
+      "expected_status": "data_gap",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "source_empty",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-10-01 08:00:00",
+        "record_time": null,
+        "threshold_hours": 24,
+        "actual_interval_hours": null
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-006",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "death_confirmed",
+      "expected_status": "not_applicable",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "not_applicable",
+      "passed": true,
+      "reason_code": "trigger_absent_complete",
+      "finding": "",
+      "display_facts": null,
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-007",
+      "rule_id": "LX0609-08-01-01",
+      "scenario": "conflicting_discharge",
+      "expected_status": "data_gap",
+      "clinical_basis": "24小时含边界；缺失/冲突不得报临床超时；死亡不适用出院完成时限",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "authoritative_time_conflict",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": null,
+        "record_time": null,
+        "threshold_hours": 24,
+        "actual_interval_hours": null,
+        "conflicting_discharge_times": [
+          "2026-10-01 08:00:00",
+          "2026-10-01 09:00:00"
+        ]
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-008",
+      "rule_id": "LX0609-08-01-02",
+      "scenario": "structured_complete",
+      "expected_status": "compliant",
+      "clinical_basis": "已确认带药须有名称剂量途径时间；空/非法数据与明确缺项区分",
+      "actual_status": "compliant",
+      "passed": true,
+      "reason_code": "requirement_satisfied",
+      "finding": "共核对 1 项出院带药，药名、剂量、途径及用药时间均完整。",
+      "display_facts": {
+        "verification_kind": "discharge_medication_completeness_check",
+        "medication_count": 1,
+        "required_fields": [
+          "drug_name",
+          "dose",
+          "route",
+          "duration"
+        ],
+        "missing_fields": []
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-009",
+      "rule_id": "LX0609-08-01-02",
+      "scenario": "structured_missing_route",
+      "expected_status": "non_compliant",
+      "clinical_basis": "已确认带药须有名称剂量途径时间；空/非法数据与明确缺项区分",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "requirement_violated",
+      "finding": "出院带药缺少字段：给药途径。",
+      "display_facts": {
+        "verification_kind": "discharge_medication_completeness_check",
+        "medication_count": 1,
+        "required_fields": [
+          "drug_name",
+          "dose",
+          "route",
+          "duration"
+        ],
+        "missing_fields": [
+          "route"
+        ]
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-010",
+      "rule_id": "LX0609-08-01-02",
+      "scenario": "explicit_no_medications",
+      "expected_status": "not_applicable",
+      "clinical_basis": "已确认带药须有名称剂量途径时间；空/非法数据与明确缺项区分",
+      "actual_status": "not_applicable",
+      "passed": true,
+      "reason_code": "trigger_absent_complete",
+      "finding": "本次未发现需要核对的出院带药",
+      "display_facts": null,
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-011",
+      "rule_id": "LX0609-08-01-02",
+      "scenario": "unavailable_source",
+      "expected_status": "data_gap",
+      "clinical_basis": "已确认带药须有名称剂量途径时间；空/非法数据与明确缺项区分",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "source_unavailable",
+      "finding": "当前缺少出院带药的药名、剂量、途径或用药时间，暂时无法完成核对；暂无法核对出院带药信息是否完整",
+      "display_facts": null,
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-012",
+      "rule_id": "LX0609-08-01-02",
+      "scenario": "invalid_structured",
+      "expected_status": "data_gap",
+      "clinical_basis": "已确认带药须有名称剂量途径时间；空/非法数据与明确缺项区分",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "required_field_missing",
+      "finding": "当前缺少出院带药的药名、剂量、途径或用药时间，暂时无法完成核对；暂无法核对出院带药信息是否完整",
+      "display_facts": null,
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-013",
+      "rule_id": "LX0609-08-01-03",
+      "scenario": "same_valid_order",
+      "expected_status": "compliant",
+      "clinical_basis": "出院/死亡诊断内容与可靠排序比对；缺失权威来源不能判实际漏填",
+      "actual_status": "compliant",
+      "passed": true,
+      "reason_code": "requirement_satisfied",
+      "finding": "权威出院诊断为“合成诊断甲、合成诊断乙”，出院记录诊断为“合成诊断甲、合成诊断乙”，两者顺序及内容一致。",
+      "display_facts": {
+        "verification_kind": "discharge_diagnosis_consistency_check",
+        "authoritative_diagnoses": [
+          "合成诊断甲",
+          "合成诊断乙"
+        ],
+        "written_diagnoses": [
+          "合成诊断甲",
+          "合成诊断乙"
+        ],
+        "diagnoses_consistent": true,
+        "order_comparable": true
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-014",
+      "rule_id": "LX0609-08-01-03",
+      "scenario": "order_mismatch",
+      "expected_status": "non_compliant",
+      "clinical_basis": "出院/死亡诊断内容与可靠排序比对；缺失权威来源不能判实际漏填",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "requirement_violated",
+      "finding": "权威出院诊断为“合成诊断甲、合成诊断乙”，出院记录诊断为“合成诊断乙、合成诊断甲”，两者顺序及内容不一致。",
+      "display_facts": {
+        "verification_kind": "discharge_diagnosis_consistency_check",
+        "authoritative_diagnoses": [
+          "合成诊断甲",
+          "合成诊断乙"
+        ],
+        "written_diagnoses": [
+          "合成诊断乙",
+          "合成诊断甲"
+        ],
+        "diagnoses_consistent": false,
+        "order_comparable": true
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-015",
+      "rule_id": "LX0609-08-01-03",
+      "scenario": "content_mismatch_no_order",
+      "expected_status": "non_compliant",
+      "clinical_basis": "出院/死亡诊断内容与可靠排序比对；缺失权威来源不能判实际漏填",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "requirement_violated",
+      "finding": "权威出院诊断包含“合成诊断乙、合成诊断甲”，出院记录诊断包含“合成诊断丙、合成诊断甲”，两者内容不一致；顺序尚无法核对，以上列示不代表诊断排列顺序。",
+      "display_facts": {
+        "verification_kind": "discharge_diagnosis_consistency_check",
+        "authoritative_diagnoses": [
+          "合成诊断乙",
+          "合成诊断甲"
+        ],
+        "written_diagnoses": [
+          "合成诊断丙",
+          "合成诊断甲"
+        ],
+        "diagnoses_consistent": false,
+        "order_comparable": false
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-016",
+      "rule_id": "LX0609-08-01-03",
+      "scenario": "same_names_no_order",
+      "expected_status": "data_gap",
+      "clinical_basis": "出院/死亡诊断内容与可靠排序比对；缺失权威来源不能判实际漏填",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "required_field_missing",
+      "finding": "权威出院诊断缺少可靠排列序号；出院记录诊断缺少可靠排列序号，暂时无法完成诊断内容及顺序核对。",
+      "display_facts": {
+        "verification_kind": "discharge_diagnosis_data_gap",
+        "authoritative_gap": "order_missing",
+        "written_gap": "order_missing"
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-017",
+      "rule_id": "LX0609-08-01-03",
+      "scenario": "missing_authority",
+      "expected_status": "data_gap",
+      "clinical_basis": "出院/死亡诊断内容与可靠排序比对；缺失权威来源不能判实际漏填",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "required_field_missing",
+      "finding": "未取得权威出院诊断，暂时无法完成诊断内容及顺序核对。",
+      "display_facts": {
+        "verification_kind": "discharge_diagnosis_data_gap",
+        "authoritative_gap": "diagnoses_missing",
+        "written_gap": null
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-018",
+      "rule_id": "LX0609-08-01-04",
+      "scenario": "future_treatment",
+      "expected_status": "compliant",
+      "clinical_basis": "恶性肿瘤适用性已确认后的内容子判定：未来肿瘤治疗计划不能被随访或历史治疗替代",
+      "actual_status": "compliant",
+      "passed": true,
+      "reason_code": "malignant_discharge_plan_recorded",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "malignant_discharge_plan_check",
+        "malignant_diagnosis_present": true,
+        "plan_items": {
+          "future_plan": true,
+          "tumor_treatment": true,
+          "follow_up": false
+        },
+        "requirement_met": true
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-019",
+      "rule_id": "LX0609-08-01-04",
+      "scenario": "followup_only",
+      "expected_status": "non_compliant",
+      "clinical_basis": "恶性肿瘤适用性已确认后的内容子判定：未来肿瘤治疗计划不能被随访或历史治疗替代",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "malignant_discharge_plan_missing",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "malignant_discharge_plan_check",
+        "malignant_diagnosis_present": true,
+        "plan_items": {
+          "future_plan": true,
+          "tumor_treatment": false,
+          "follow_up": true
+        },
+        "requirement_met": false
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-020",
+      "rule_id": "LX0609-08-01-04",
+      "scenario": "historical_treatment_only",
+      "expected_status": "non_compliant",
+      "clinical_basis": "恶性肿瘤适用性已确认后的内容子判定：未来肿瘤治疗计划不能被随访或历史治疗替代",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "malignant_discharge_plan_missing",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "malignant_discharge_plan_check",
+        "malignant_diagnosis_present": true,
+        "plan_items": {
+          "future_plan": true,
+          "tumor_treatment": false,
+          "follow_up": true
+        },
+        "requirement_met": false
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-021",
+      "rule_id": "LX0609-08-01-04",
+      "scenario": "negated_future_treatment",
+      "expected_status": "non_compliant",
+      "clinical_basis": "恶性肿瘤适用性已确认后的内容子判定：未来肿瘤治疗计划不能被随访或历史治疗替代",
+      "actual_status": "non_compliant",
+      "passed": true,
+      "reason_code": "malignant_discharge_plan_missing",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "malignant_discharge_plan_check",
+        "malignant_diagnosis_present": true,
+        "plan_items": {
+          "future_plan": true,
+          "tumor_treatment": false,
+          "follow_up": false
+        },
+        "requirement_met": false
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-022",
+      "rule_id": "LX0609-08-01-05",
+      "scenario": "release_scope",
+      "expected_status": "acceptance_only",
+      "clinical_basis": "当前总表停默认、仅显式验收；不因active擅自默认启用",
+      "actual_status": "acceptance_only",
+      "passed": true,
+      "reason_code": "",
+      "finding": "",
+      "display_facts": {},
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-023",
+      "rule_id": "LX0609-08-02-01",
+      "scenario": "previous_day_body",
+      "expected_status": "compliant",
+      "clinical_basis": "前一日或当天有临床正文；时间/正文/空来源只输出来源缺口",
+      "actual_status": "compliant",
+      "passed": true,
+      "reason_code": "requirement_satisfied",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "predischarge_course_presence_check",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "course_present": true,
+        "source_document_refs": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-C"
+          }
+        ]
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-024",
+      "rule_id": "LX0609-08-02-01",
+      "scenario": "outside_calendar_window",
+      "expected_status": "data_gap",
+      "clinical_basis": "前一日或当天有临床正文；时间/正文/空来源只输出来源缺口",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "source_empty",
+      "finding": "",
+      "display_facts": {
+        "verification_kind": "predischarge_course_presence_check",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "course_present": false,
+        "source_document_refs": []
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-025",
+      "rule_id": "LX0609-08-02-01",
+      "scenario": "title_signature_only",
+      "expected_status": "data_gap",
+      "clinical_basis": "前一日或当天有临床正文；时间/正文/空来源只输出来源缺口",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "required_field_missing",
+      "finding": "",
+      "display_facts": {
+        "failure_kind": "predischarge_course_body_missing",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "missing_body_count": 1,
+        "source_document_refs": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-C"
+          }
+        ]
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-026",
+      "rule_id": "LX0609-08-02-01",
+      "scenario": "missing_time",
+      "expected_status": "data_gap",
+      "clinical_basis": "前一日或当天有临床正文；时间/正文/空来源只输出来源缺口",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "authoritative_time_missing",
+      "finding": "",
+      "display_facts": {
+        "failure_kind": "predischarge_course_time_missing",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "missing_time_count": 1,
+        "source_document_refs": [
+          {
+            "source_type": "daily_course_record",
+            "source_document_id": "SYN-C"
+          }
+        ]
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-027",
+      "rule_id": "LX0609-08-02-01",
+      "scenario": "death_confirmed",
+      "expected_status": "not_applicable",
+      "clinical_basis": "前一日或当天有临床正文；时间/正文/空来源只输出来源缺口",
+      "actual_status": "not_applicable",
+      "passed": true,
+      "reason_code": "trigger_absent_complete",
+      "finding": "",
+      "display_facts": null,
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-028",
+      "rule_id": "LX0609-08-02-02",
+      "scenario": "senior_approval",
+      "expected_status": "compliant",
+      "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代",
+      "actual_status": "compliant",
+      "passed": true,
+      "reason_code": "requirement_satisfied",
+      "finding": "已确认出院前病程记录了上级医师同意出院意见，或完整记录了自动出院的请示与书面签署过程。",
+      "display_facts": {
+        "verification_kind": "senior_discharge_approval_present",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "checked_source": "senior_course_record",
+        "approval_present": true,
+        "approval_path": "senior_approval"
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-029",
+      "rule_id": "LX0609-08-02-02",
+      "scenario": "ordinary_doctor_only",
+      "expected_status": "data_gap",
+      "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "source_empty",
+      "finding": "当前缺少出院日期、出院前病程、上级医师意见或自动出院书签署记录，暂时无法完成核对；暂无法核对上级医师同意出院意见",
+      "display_facts": {
+        "failure_kind": "senior_discharge_approval_missing",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "checked_source": "daily_course_record,senior_course_record",
+        "approval_present": false
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-030",
+      "rule_id": "LX0609-08-02-02",
+      "scenario": "undated_approval",
+      "expected_status": "data_gap",
+      "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "authoritative_time_missing",
+      "finding": "出院日期2026-10-01，核查窗口为2026-09-30、2026-10-01。已找到1份含同意出院意见的病程记录，但缺少有效记录时间，无法确认是否位于该窗口。请通过证据定位核对这些文书的时间。",
+      "display_facts": {
+        "failure_kind": "senior_discharge_approval_time_missing",
+        "discharge_date": "2026-10-01",
+        "checked_dates": [
+          "2026-09-30",
+          "2026-10-01"
+        ],
+        "missing_time_count": 1
+      },
+      "stub_call_count": 0
+    },
+    {
+      "case_id": "DD-031",
+      "rule_id": "LX0609-08-02-02",
+      "scenario": "source_unavailable",
+      "expected_status": "data_gap",
+      "clinical_basis": "必须绑定窗口内上级同意；不能用普通医生意见或缺时间替代",
+      "actual_status": "data_gap",
+      "passed": true,
+      "reason_code": "source_unavailable",
+      "finding": "当前缺少出院日期、出院前病程、上级医师意见或自动出院书签署记录，暂时无法完成核对；暂无法核对上级医师同意出院意见",
+      "display_facts": null,
+      "stub_call_count": 0
+    }
+  ],
+  "supplemental_cases_detail": [
+    {
+      "case_id": "DD-S01",
+      "rule_id": "LX0609-08-01-03",
+      "scenario": "death_diagnosis_conflict_without_discharge_record",
+      "expected_status": "non_compliant",
+      "basis": "规则明确包含死亡诊断；已确认死亡且有可读权威/书写死亡诊断的内容冲突，不因正常死亡患者无出院记录而跳过",
+      "actual_status": "not_applicable",
+      "passed": false,
+      "finding": "本次尚未形成出院记录",
+      "reason_code": "trigger_absent_complete"
+    }
+  ],
+  "limitations": [
+    "0609-061/067为纯确定性内容函数，0609-027为恶性适用性已确认后的内容子判定；不冒称所有项都跑过公共最终入口。",
+    "062/063/068使用合成Evidence Session执行、绑定、归约与Canonical聚合。",
+    "未运行真实模型/PG/用户病例，不代表客户实际来源覆盖或临床签认。"
+  ],
+  "probe_paths": [
+    ".tmp/engine-audit-20261008/discharge-death/frozen-expectations.json",
+    ".tmp/engine-audit-20261008/discharge-death/probe.py",
+    ".tmp/engine-audit-20261008/discharge-death/probe-results.json",
+    ".tmp/engine-audit-20261008/discharge-death/supplemental-frozen-expectations.json",
+    ".tmp/engine-audit-20261008/discharge-death/supplemental.py",
+    ".tmp/engine-audit-20261008/discharge-death/supplemental-results.json"
+  ],
+  "scope_excluded_by_user": {
+    "rule_ids": [
+      "LX0916-028",
+      "LX0916-029",
+      "LX0916-030",
+      "LX0916-031",
+      "LX0916-032"
+    ],
+    "reason": "用户最新明确本轮不需要审核0916；保留已生成离线记录，不计分母、阻断或完成率。",
+    "rules": [
+      {
+        "rule_id": "LX0916-028",
+        "legacy_index": "028",
+        "name": "非计划再次手术说明",
+        "release_scope": "explicit_only",
+        "offline_result": "6/6",
+        "conclusion": "事实门控通过；缺上次手术/原因关联的独立语义预期及客户答案。",
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "rule_id": "LX0916-029",
+        "legacy_index": "029",
+        "name": "特殊项目同意书",
+        "release_scope": "explicit_only",
+        "offline_result": "6/6 + 0/1",
+        "conclusion": "只接受daily_course_record来源；consent_form来源被过滤。真实文书来源覆盖待确认。",
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "rule_id": "LX0916-030",
+        "legacy_index": "030",
+        "name": "病危重通知书",
+        "release_scope": "explicit_only",
+        "offline_result": "6/6 + 0/1",
+        "conclusion": "只接受daily_course_record来源；consent_form来源被过滤。签字与完整性专项语义合同未冻结。",
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "rule_id": "LX0916-031",
+        "legacy_index": "031",
+        "name": "出院诊疗经过详细性",
+        "release_scope": "explicit_only",
+        "offline_result": "6/6",
+        "conclusion": "仅总体完整性及出院时点门控。当前目录含本规则，随0916整包显式选择；不因旧停用历史擅自启用。",
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "rule_id": "LX0916-032",
+        "legacy_index": "032",
+        "name": "出院医嘱完整性",
+        "release_scope": "explicit_only",
+        "offline_result": "6/6",
+        "conclusion": "保留人工复核：带药适用性、随访及注意事项个性化、时间意义与真实全源覆盖仍无独立答案。",
+        "scope_status": "scope_excluded_by_user"
+      }
+    ],
+    "cases": [
+      {
+        "case_id": "DD-032",
+        "rule_id": "LX0916-028",
+        "scenario": "event_false",
+        "expected_status": "not_applicable",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "not_applicable",
+        "passed": true,
+        "reason_code": "trigger_event_not_present",
+        "finding": "未发现该规则要求的触发事件。",
+        "display_facts": {
+          "event_gate": "unplanned_reoperation",
+          "event_value": false,
+          "evaluation_window_mature": null,
+          "document_fact_key": "unplanned_reoperation_explanation"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-033",
+        "rule_id": "LX0916-028",
+        "scenario": "event_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "event_fact_unavailable",
+        "finding": "触发事件事实不完整，无法确认本规则是否适用。",
+        "display_facts": {
+          "event_gate": "unplanned_reoperation",
+          "event_value": null,
+          "evaluation_window_mature": null,
+          "document_fact_key": "unplanned_reoperation_explanation"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-034",
+        "rule_id": "LX0916-028",
+        "scenario": "document_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "semantic_fact_unavailable",
+        "finding": "缺少该文书的权威存在性或完整性事实，无法作出内容质量结论。",
+        "display_facts": {
+          "event_gate": "unplanned_reoperation",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "unplanned_reoperation_explanation"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-035",
+        "rule_id": "LX0916-028",
+        "scenario": "explicit_missing",
+        "expected_status": "non_compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_missing",
+        "finding": "触发事件已确认，但未找到非计划再次手术相关记录未说明上次手术情况或原因对应的必需文书。",
+        "display_facts": {
+          "event_gate": "unplanned_reoperation",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "unplanned_reoperation_explanation",
+          "document_presence": "missing",
+          "document_completeness": null,
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-036",
+        "rule_id": "LX0916-028",
+        "scenario": "explicit_incomplete",
+        "expected_status": "non_compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_incomplete",
+        "finding": "已确认触发事件，但非计划再次手术相关记录未说明上次手术情况或原因对应文书存在缺项或描述不清；完整性核验范围包括：该文书对应的必填内容。",
+        "display_facts": {
+          "event_gate": "unplanned_reoperation",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "unplanned_reoperation_explanation",
+          "document_presence": "present",
+          "document_completeness": "incomplete",
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-037",
+        "rule_id": "LX0916-028",
+        "scenario": "explicit_complete",
+        "expected_status": "compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "compliant",
+        "passed": true,
+        "reason_code": "required_document_complete",
+        "finding": "触发事件及对应文书完整性事实均满足规则要求。",
+        "display_facts": {
+          "event_gate": "unplanned_reoperation",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "unplanned_reoperation_explanation",
+          "document_presence": "present",
+          "document_completeness": "complete",
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-038",
+        "rule_id": "LX0916-029",
+        "scenario": "event_false",
+        "expected_status": "not_applicable",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "not_applicable",
+        "passed": true,
+        "reason_code": "trigger_event_not_present",
+        "finding": "未发现该规则要求的触发事件。",
+        "display_facts": {
+          "event_gate": "special_treatment",
+          "event_value": false,
+          "evaluation_window_mature": null,
+          "document_fact_key": "special_treatment_consent"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-039",
+        "rule_id": "LX0916-029",
+        "scenario": "event_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "event_fact_unavailable",
+        "finding": "触发事件事实不完整，无法确认本规则是否适用。",
+        "display_facts": {
+          "event_gate": "special_treatment",
+          "event_value": null,
+          "evaluation_window_mature": null,
+          "document_fact_key": "special_treatment_consent"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-040",
+        "rule_id": "LX0916-029",
+        "scenario": "document_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "semantic_fact_unavailable",
+        "finding": "缺少该文书的权威存在性或完整性事实，无法作出内容质量结论。",
+        "display_facts": {
+          "event_gate": "special_treatment",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "special_treatment_consent"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-041",
+        "rule_id": "LX0916-029",
+        "scenario": "explicit_missing",
+        "expected_status": "non_compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_missing",
+        "finding": "触发事件已确认，但未找到特殊诊疗、特殊用药、试验、高耗材或自费项目同意书不清对应的必需文书。",
+        "display_facts": {
+          "event_gate": "special_treatment",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "special_treatment_consent",
+          "document_presence": "missing",
+          "document_completeness": null,
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-042",
+        "rule_id": "LX0916-029",
+        "scenario": "explicit_incomplete",
+        "expected_status": "non_compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_incomplete",
+        "finding": "已确认触发事件，但特殊诊疗、特殊用药、试验、高耗材或自费项目同意书不清对应文书存在缺项或描述不清；完整性核验范围包括：该文书对应的必填内容。",
+        "display_facts": {
+          "event_gate": "special_treatment",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "special_treatment_consent",
+          "document_presence": "present",
+          "document_completeness": "incomplete",
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-043",
+        "rule_id": "LX0916-029",
+        "scenario": "explicit_complete",
+        "expected_status": "compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "compliant",
+        "passed": true,
+        "reason_code": "required_document_complete",
+        "finding": "触发事件及对应文书完整性事实均满足规则要求。",
+        "display_facts": {
+          "event_gate": "special_treatment",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "special_treatment_consent",
+          "document_presence": "present",
+          "document_completeness": "complete",
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-044",
+        "rule_id": "LX0916-030",
+        "scenario": "event_false",
+        "expected_status": "not_applicable",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "not_applicable",
+        "passed": true,
+        "reason_code": "trigger_event_not_present",
+        "finding": "未发现该规则要求的触发事件。",
+        "display_facts": {
+          "event_gate": "critical_or_serious_condition",
+          "event_value": false,
+          "evaluation_window_mature": null,
+          "document_fact_key": "critical_condition_notice"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-045",
+        "rule_id": "LX0916-030",
+        "scenario": "event_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "event_fact_unavailable",
+        "finding": "触发事件事实不完整，无法确认本规则是否适用。",
+        "display_facts": {
+          "event_gate": "critical_or_serious_condition",
+          "event_value": null,
+          "evaluation_window_mature": null,
+          "document_fact_key": "critical_condition_notice"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-046",
+        "rule_id": "LX0916-030",
+        "scenario": "document_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "semantic_fact_unavailable",
+        "finding": "缺少该文书的权威存在性或完整性事实，无法作出内容质量结论。",
+        "display_facts": {
+          "event_gate": "critical_or_serious_condition",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "critical_condition_notice"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-047",
+        "rule_id": "LX0916-030",
+        "scenario": "explicit_missing",
+        "expected_status": "non_compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_missing",
+        "finding": "触发事件已确认，但未找到病危（重）通知书缺项或描述不清对应的必需文书。",
+        "display_facts": {
+          "event_gate": "critical_or_serious_condition",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "critical_condition_notice",
+          "document_presence": "missing",
+          "document_completeness": null,
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-048",
+        "rule_id": "LX0916-030",
+        "scenario": "explicit_incomplete",
+        "expected_status": "non_compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_incomplete",
+        "finding": "已确认触发事件，但病危（重）通知书缺项或描述不清对应文书存在缺项或描述不清；完整性核验范围包括：该文书对应的必填内容。",
+        "display_facts": {
+          "event_gate": "critical_or_serious_condition",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "critical_condition_notice",
+          "document_presence": "present",
+          "document_completeness": "incomplete",
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-049",
+        "rule_id": "LX0916-030",
+        "scenario": "explicit_complete",
+        "expected_status": "compliant",
+        "clinical_basis": "事件及权威文书事实门控；本组只冻结结构化判定，不替代语义临床验收",
+        "actual_status": "compliant",
+        "passed": true,
+        "reason_code": "required_document_complete",
+        "finding": "触发事件及对应文书完整性事实均满足规则要求。",
+        "display_facts": {
+          "event_gate": "critical_or_serious_condition",
+          "event_value": true,
+          "evaluation_window_mature": null,
+          "document_fact_key": "critical_condition_notice",
+          "document_presence": "present",
+          "document_completeness": "complete",
+          "document_id": "SYN-D",
+          "source_type": "consent_form"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-050",
+        "rule_id": "LX0916-031",
+        "scenario": "inpatient",
+        "expected_status": "not_executed",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "not_executed",
+        "passed": true,
+        "reason_code": "evaluation_window_not_mature",
+        "finding": "患者仍处于普通住院阶段，尚未进入出院前检查时点。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": false,
+          "discharge_record_formed": false,
+          "discharge_window_ready": false,
+          "document_fact_key": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-051",
+        "rule_id": "LX0916-031",
+        "scenario": "window_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "discharge_context_unavailable",
+        "finding": "出院安排或出院记录形成状态不完整，无法确定检查时点。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": null,
+          "discharge_record_formed": null,
+          "discharge_window_ready": null,
+          "document_fact_key": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-052",
+        "rule_id": "LX0916-031",
+        "scenario": "document_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "semantic_fact_unavailable",
+        "finding": "已进入出院前检查时点，但缺少出院记录诊疗经过的权威事实。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-053",
+        "rule_id": "LX0916-031",
+        "scenario": "explicit_missing",
+        "expected_status": "non_compliant",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_missing",
+        "finding": "已进入出院前检查时点，但未找到出院记录诊疗经过。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_record",
+          "document_presence": "missing",
+          "document_completeness": null,
+          "document_id": "SYN-D",
+          "source_type": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-054",
+        "rule_id": "LX0916-031",
+        "scenario": "explicit_incomplete",
+        "expected_status": "non_compliant",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_incomplete",
+        "finding": "出院记录诊疗经过存在缺项或内容不完整。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_record",
+          "document_presence": "present",
+          "document_completeness": "incomplete",
+          "document_id": "SYN-D",
+          "source_type": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-055",
+        "rule_id": "LX0916-031",
+        "scenario": "explicit_complete",
+        "expected_status": "compliant",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "compliant",
+        "passed": true,
+        "reason_code": "required_document_complete",
+        "finding": "出院记录诊疗经过完整性事实满足规则要求。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_record",
+          "document_presence": "present",
+          "document_completeness": "complete",
+          "document_id": "SYN-D",
+          "source_type": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-056",
+        "rule_id": "LX0916-032",
+        "scenario": "inpatient",
+        "expected_status": "not_executed",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "not_executed",
+        "passed": true,
+        "reason_code": "evaluation_window_not_mature",
+        "finding": "患者仍处于普通住院阶段，尚未进入出院前检查时点。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": false,
+          "discharge_record_formed": false,
+          "discharge_window_ready": false,
+          "document_fact_key": "discharge_orders"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-057",
+        "rule_id": "LX0916-032",
+        "scenario": "window_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "discharge_context_unavailable",
+        "finding": "出院安排或出院记录形成状态不完整，无法确定检查时点。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": null,
+          "discharge_record_formed": null,
+          "discharge_window_ready": null,
+          "document_fact_key": "discharge_orders"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-058",
+        "rule_id": "LX0916-032",
+        "scenario": "document_unknown",
+        "expected_status": "data_quality_gap",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "data_quality_gap",
+        "passed": true,
+        "reason_code": "semantic_fact_unavailable",
+        "finding": "已进入出院前检查时点，但缺少出院医嘱的权威事实。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_orders"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-059",
+        "rule_id": "LX0916-032",
+        "scenario": "explicit_missing",
+        "expected_status": "non_compliant",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_missing",
+        "finding": "已进入出院前检查时点，但未找到出院医嘱。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_orders",
+          "document_presence": "missing",
+          "document_completeness": null,
+          "document_id": "SYN-D",
+          "source_type": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-060",
+        "rule_id": "LX0916-032",
+        "scenario": "explicit_incomplete",
+        "expected_status": "non_compliant",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "non_compliant",
+        "passed": true,
+        "reason_code": "required_document_incomplete",
+        "finding": "出院医嘱存在缺项或内容不完整。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_orders",
+          "document_presence": "present",
+          "document_completeness": "incomplete",
+          "document_id": "SYN-D",
+          "source_type": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-061",
+        "rule_id": "LX0916-032",
+        "scenario": "explicit_complete",
+        "expected_status": "compliant",
+        "clinical_basis": "出院安排/形成时点门控与内容事实区分；031显式范围、032继续人工复核",
+        "actual_status": "compliant",
+        "passed": true,
+        "reason_code": "required_document_complete",
+        "finding": "出院医嘱完整性事实满足规则要求。",
+        "display_facts": {
+          "discharge_gate": "discharge_arranged_or_record_formed",
+          "discharge_arranged": true,
+          "discharge_record_formed": false,
+          "discharge_window_ready": true,
+          "document_fact_key": "discharge_orders",
+          "document_presence": "present",
+          "document_completeness": "complete",
+          "document_id": "SYN-D",
+          "source_type": "discharge_record"
+        },
+        "stub_call_count": 0,
+        "scope_status": "scope_excluded_by_user"
+      }
+    ],
+    "supplemental_cases_detail": [
+      {
+        "case_id": "DD-S02",
+        "rule_id": "LX0916-029",
+        "scenario": "consent_form_source_gate",
+        "expected_fact_present": true,
+        "basis": "对应特殊项目同意书已读于consent_form来源，应可用于该项目同意书内容核验",
+        "actual_fact_present": false,
+        "passed": false,
+        "actual_document_facts": {},
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "case_id": "DD-S03",
+        "rule_id": "LX0916-030",
+        "scenario": "critical_notice_generic_consent_source_gate",
+        "expected_fact_present": true,
+        "basis": "病危通知书按正确标题已读于consent_form来源，应可用于通知书内容核验",
+        "actual_fact_present": false,
+        "passed": false,
+        "actual_document_facts": {},
+        "scope_status": "scope_excluded_by_user"
+      }
+    ],
+    "findings": [
+      {
+        "id": "DD-F03",
+        "priority": "P2",
+        "rule_ids": [
+          "LX0916-029",
+          "LX0916-030"
+        ],
+        "classification": "confirmed_source_restriction_pending_customer_source_confirmation",
+        "case_ids": [
+          "DD-S02",
+          "DD-S03"
+        ],
+        "summary": "两规则的选择器及文书事实白名单只允许daily_course_record，拒收consent_form中的对应专项文书。",
+        "evidence": "semantic_extractor.py:121-122, 259-260, 1015-1021；已读、未截断、ID绑定的合成对应文书事实被过滤为空。",
+        "required_followup": "只读确认真实文书归属后扩展有依据的来源或记录已证部署不适用；本轮禁止PG与原始病例，不能证明真实漏检比例。",
+        "scope_status": "scope_excluded_by_user"
+      },
+      {
+        "id": "DD-F04",
+        "priority": "P2",
+        "rule_ids": [
+          "LX0916-028",
+          "LX0916-029",
+          "LX0916-030",
+          "LX0916-031",
+          "LX0916-032"
+        ],
+        "classification": "clinical_semantic_acceptance_gap",
+        "summary": "这些文书沿用总体completeness，证据仅为来源ID及presence/completeness字段，不含具体缺项引文。",
+        "evidence": "semantic_extractor.py:576-630 与925-938、1040-1059；surgery_consent_rules.py:351-400及discharge_rules.py:198-244。",
+        "required_followup": "冻结各专项内容定义、对应原文/事件/签字关系及临床答案。032继续人工复核。",
+        "scope_status": "scope_excluded_by_user"
+      }
+    ]
+  },
+  "engineering_closures": [
+    {
+      "finding_id": "DD-F01",
+      "engineering_status": "closed_with_independent_frozen_checks",
+      "fix_commit": "58e29ffe9edc559bee552c734dc66ebed9ebf32c",
+      "independent_check_count": 39,
+      "independent_passed": 39,
+      "results_path": "F:\\MedQC-worktrees\\review-artifacts\\dd-f01-closure\\independent-fixed-58e29-results.json",
+      "results_sha256": "2ce1c41cd2ad0276ff25f66172c6b2b5dc7d99488e754276bec35beb087c65fc",
+      "frozen_sha256": "ba15b3e8b125c725a8ac8c973959ef2ad9d121a6fb36d06020c39e69177656f4",
+      "clinical_acceptance_complete": false,
+      "baseline_original_counterexample_preserved": true,
+      "test_slot_released": true
+    }
+  ]
+}

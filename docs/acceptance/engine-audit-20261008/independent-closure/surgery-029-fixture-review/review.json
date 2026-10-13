@@ -1,0 +1,132 @@
+{
+  "schema_version": "surgery-029-static-fixture-review-v1",
+  "scope": "029 fixture diagnosis and explicit family tuple; no production fix",
+  "source_commit": "62cbbc240e6a072795220ef3cd91dd49b230eb19",
+  "root_source_commit": "fac4ef67c0f68da1625f419ea5dddb47f38aa78b",
+  "source_checks": {
+    "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py": {
+      "ledger_blob_sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "root_blob_sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "blobs_equal": true,
+      "matches_preparation_manifest_sha256": true
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/surgery_event_association.py": {
+      "ledger_blob_sha256": "64956e8e52278bcf5e27c71e20275573af39f4a619e49a7caf5ae36dbd8c582f",
+      "root_blob_sha256": "64956e8e52278bcf5e27c71e20275573af39f4a619e49a7caf5ae36dbd8c582f",
+      "blobs_equal": true,
+      "matches_preparation_manifest_sha256": true
+    },
+    "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py": {
+      "ledger_blob_sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "root_blob_sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "blobs_equal": true,
+      "matches_preparation_manifest_sha256": true
+    },
+    "apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_document_freeze.py": {
+      "ledger_blob_sha256": "ec3531c09732d0bc021b6acc9b757fff680271865379e23ccfa81e6753d7fc00",
+      "root_blob_sha256": "ec3531c09732d0bc021b6acc9b757fff680271865379e23ccfa81e6753d7fc00",
+      "blobs_equal": true,
+      "matches_preparation_manifest_sha256": true
+    }
+  },
+  "input_artifact_sha256": {
+    "preparation.md": "9068f0ca755a3d8e096436ac93f48d43246d6891d01df64e64dee3359064ed91",
+    "freeze029-original-input.json": "47e0fadadada5e25bf328e9367d70b2fdc7784ea8460e625fe65299675fbb46e",
+    "short-check-expected.json": "28aca2cc908775b32224448d61e0fa698387a03dc6f608cf65f7220d8862d312",
+    "strict-short-check.txt": "2b804500101115e1a89f30e559433480897660d22a6153d090c2d305075b8fd3",
+    "short-check-results.json": "cd93902e94b79e9195cf7cd0318c0c8569280c6c7ba88abc681f4af72fbee127",
+    "test_surgery_029_contract_controls.py": "94e52706bda402782587569745ace8800f3437b3f4bb6d904e812747dca59e35",
+    "original-exact-node.txt": "e85d8388fb502a4dd795e8e2ec26f2a60aba2a096953c5fb7c248bb87f3d0a87"
+  },
+  "independent_tests_run": 0,
+  "production_modified": false,
+  "shared_tests_modified": false,
+  "pg_connections": 0,
+  "dotenv_reads": 0,
+  "real_model_calls": 0,
+  "patient_records_read": 0,
+  "diagnosis": "fixture_source_schema_mismatch_confirmed_static; no production regression established by this frozen input",
+  "original_C_red_preserved": true,
+  "existing_short_check_observation": {
+    "collected": 6,
+    "passed": 5,
+    "failed": 1,
+    "run_by_this_reviewer": false,
+    "independent_green_evidence": false
+  },
+  "causal_chain": [
+    {
+      "source": "source_evidence_reader.py:208-224, 1569-1585",
+      "fact": "MR批准字段仅surgery_begin_datetime/end_datetime，不接受正式记录*_time别名；SQL要求MR可读surgical_level+begin_datetime。"
+    },
+    {
+      "source": "database/models/cdm.py:254-277; source_evidence_reader.py:983-998",
+      "fact": "MR ORM DateTime无timezone=True，reader只接受datetime且tzinfo=None；原aware *_time字段既错字段也错MR传输类型。"
+    },
+    {
+      "source": "source_evidence_reader.py:948-975; surgery_event_association.py:776-812",
+      "fact": "正式记录UTC08/09经Asia/Shanghai转为naive16/17；MR墙钟16/17因此同绝对时刻。不能把UTC08/09直接去tz成naive08/09。"
+    },
+    {
+      "source": "surgery_event_association.py:264-299",
+      "fact": "三级MR是qualified候选，无权威时间且无同surgery_id可信副本时不能忽略，阻断为association_failed。"
+    },
+    {
+      "source": "native_surgery_document_execution.py:2056-2095",
+      "fact": "未知候选不证明全病例唯一台次；普通小结正文不能替代可靠对应关系，保持gap。"
+    }
+  ],
+  "historical_contracts": {
+    "mr_naive_datetime_contract": "92ee14e3897, 2026-07-17 (git blame lines994-997)",
+    "qualified_unknown_mr_blocker": "f6f91778ae9, 2026-09-13 (git blame lines289-299)"
+  },
+  "test_only_recommendation": {
+    "allowed_in_principle": true,
+    "implementation_authorization_owner": "root must dispatch test-only change; this reviewer makes none",
+    "MR_changes_only": [
+      "preserve document_id mr-surgery-1 and use independent surgery_id mr-surgery-1",
+      "replace MR surgery_begin_time/end_time with surgery_begin_datetime/end_datetime",
+      "convert original aware absolute instants via Asia/Shanghai then remove timezone (UTC08/09 -> naive16/17)"
+    ],
+    "must_preserve": [
+      "formal surgery row and absolute timestamps",
+      "ordinary presurg summary original text; no new name label",
+      "original compliant/requirement_satisfied medical expectation",
+      "exact original display_facts/fact_ref_coordinates/evidence/findings assertions",
+      "separate source identity namespaces; no fabricated cross-source surgery_id match"
+    ],
+    "original_invalid_case": "keep original frozen JSON and original C-red log immutable; separately add malformed qualified MR input expected data_gap/association_failed as source-contract negative protection",
+    "not_allowed": [
+      "ignore qualified untimed MR rows",
+      "add production MR aliases or weaken source contract",
+      "change original medical C to gap to erase red history",
+      "weaken evidence/refs assertions or change expected facts from production output"
+    ]
+  },
+  "closure_blocker": "existing correct-MR short control asserts status/reason/call count only; does not establish original full frozen facts/refs/evidence equality. An authorized future owner must run the corrected exact full node and separate negative before declaring test-contract closure.",
+  "family_tuple": {
+    "diagnosis": "explicit static catalogue test drift, independent of029 clinical association",
+    "explicit_missing_ids": [
+      "LX0609-04-01-04",
+      "LX0609-04-01-05"
+    ],
+    "legacy_indices": [
+      "031",
+      "032"
+    ],
+    "expected_final_tuple": [
+      "LX0609-04-01-01",
+      "LX0609-11-02-01",
+      "LX0609-11-02-02",
+      "LX0609-04-04-01",
+      "LX0609-04-04-02",
+      "LX0609-04-04-03",
+      "LX0609-04-01-02",
+      "LX0609-04-01-04",
+      "LX0609-04-01-05"
+    ],
+    "catalogue_proof": "native_surgery_document_execution.py:53-63; rule_master_v1 entries active/customer_confirmed, SC-081/SC-085; additions present before62 and unchanged atfac",
+    "allowed_test_only_adaptation": "append exactly two literal IDs to old expected tuple; retain all7 original literals/order and aggregator ownership assertion. Do not set expectation dynamically from SURGERY_DOCUMENT_RULE_IDS."
+  },
+  "unclosed_other_scope": "029 multiple-order coverage and030 event ownership remain separate; MR schema fixture repair does not close them."
+}

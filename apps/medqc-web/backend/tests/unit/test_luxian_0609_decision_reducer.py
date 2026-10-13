@@ -220,11 +220,11 @@ def test_all_48_dimension_combinations_are_explicitly_accepted_or_rejected(
         (
             _decision(
                 applicability=ApplicabilityState.UNKNOWN,
-                evidence_state=EvidenceState.CONFLICT,
+                evidence_state=EvidenceState.DATA_GAP,
                 qc_direction=QcDirection.UNKNOWN,
                 reason_code="diagnosis_scope_uncertain",
             ),
-            CustomerFinalState.EVALUATION_UNKNOWN,
+            CustomerFinalState.DATA_GAP,
         ),
         (
             _decision(

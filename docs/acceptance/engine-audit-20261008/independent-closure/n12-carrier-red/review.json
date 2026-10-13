@@ -1,0 +1,395 @@
+{
+  "schema_version": "n12-carrier-boundary-review-v1",
+  "fixed_sha": "ce1d0771a1674073f3dbb4f019dfb2a4e40af1cc",
+  "rule_id": "LX0609-04-04-02",
+  "review_decision": "confirmed; reopen N12 input carrier boundary subitem",
+  "priority": "P1",
+  "scope": "same-root carrier impact only; existing N12 direct semantic checks not rerun",
+  "static_reachability": {
+    "execution.py": [
+      375,
+      453,
+      468,
+      808,
+      812
+    ],
+    "executor_registry.py": [
+      591,
+      593,
+      597
+    ],
+    "native_surgery_document_execution.py": [
+      1097,
+      1113,
+      1116,
+      2452,
+      2455
+    ],
+    "anesthesia_visit_fact_extraction.py": [
+      134,
+      136,
+      150,
+      155,
+      160
+    ],
+    "llm_prompt_privacy.py": [
+      61,
+      77,
+      152,
+      154,
+      418,
+      421
+    ]
+  },
+  "source_bindings": [
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py",
+      "blob": "06f33a4a16de41a61cf903eeac863878dd4d2d9e",
+      "sha256": "d3246420d34d83ca7332bb8bb8918047c7d8a6cdcfae32fdf2d355d68b7ad840",
+      "frozen_file": "anesthesia_visit_fact_extraction.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+      "blob": "50968e90d7e8060df0166214ca4d021437f63045",
+      "sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+      "frozen_file": "llm_prompt_privacy.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py",
+      "blob": "b8a9d4f6e5e29460a8390558d4dcdbfe06ac37fb",
+      "sha256": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a",
+      "frozen_file": "native_preop_content_execution.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/rescue_record_completeness.py",
+      "blob": "39c6978cbdc78a455ed6bc595a8050d0eb6ab604",
+      "sha256": "a72a1f3cb9817726408490257ec1e1379c717aad5caccf29e2678d02bfac7b7e",
+      "frozen_file": "rescue_record_completeness.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "blob": "f1badd4545ee85111b906aad49ff4dc6137d9cc4",
+      "sha256": "d0bb0a8020cbf1ca19201b8ad94e85f1690d8ec101a4793cb2676fa68c3ff1d7",
+      "frozen_file": "execution.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
+      "blob": "08981328b506360a90e46f4e81971c8dd735a23c",
+      "sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "frozen_file": "native_surgery_document_execution.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py",
+      "blob": "f18833263508d6784ea7cde5d151e26ce0a1ab91",
+      "sha256": "0e709779ff744398ea67e2a12190d7499abdd99c474634eb44817455b47b4c91",
+      "frozen_file": "executor_registry.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_controlled_facts.py",
+      "blob": "2a6601bc2cb66a2af71231516a584247cc5b80e5",
+      "sha256": "d9e48177b03c2f61b693df6d9711eee949ee4d44f24e3d03e06ee7c037a853c0",
+      "frozen_file": "test_n12_anesthesia_visit_controlled_facts.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_round2_document_boundaries.py",
+      "blob": "c5f295837ab69994f58a92e8f1aee418090097aa",
+      "sha256": "a34fb6c910aedb66eda344cd1d99c827eb7b9e59740c10a99454498fbc4e5ff3",
+      "frozen_file": "test_luxian_0609_round2_document_boundaries.py"
+    }
+  ],
+  "fixture_provenance": {
+    "tc02_fixed_sha": "196d330606285602b0b606a5b9c8ab229a15c907",
+    "tc02_repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_tc02_performed_event_contract.py",
+    "tc02_test_blob": "77d4bc4e080f941c2ae8dc72901bd40c87c4eea2",
+    "original_tc02_report": "F:/MedQC-worktrees/review-artifacts/tc02-review-prep/fixed-219b-review.json",
+    "original_tc02_fixed_sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+    "prefix_origin": "only synthetic labels/newline structure; no transfusion medical body reused",
+    "n12_medical_origin": "fixed _visits original body and GOLD_QUOTES literal only"
+  },
+  "first_execution": {
+    "case_count": 10,
+    "expectation_matches": 4,
+    "confirmed_mismatch_cases": 6,
+    "support_errors": 0,
+    "delegate_INPUT_JSON_valid_cases": 10,
+    "private_value_absent_cases": 10,
+    "synthetic_direct_capture_count": 10,
+    "synthetic_formal_capture_count": 10,
+    "real_model_calls": 0,
+    "source_hashes_unchanged": true,
+    "expectations_unchanged": true,
+    "runner_sha256": "406304d9dae3b01553e44a2fcfda355424c9cd749a525cd4592a92eb535107c1",
+    "expectations_sha256": "a54bcfbedf728c81699fcbedfe4386a1b4cb8cc133e55854235fc26f4bf3e3d4",
+    "capture_sha256": "08045168cfccaeb3f1618c750e62803345c3c7d3f8b2fbe95530a7aa651aeaa6",
+    "log_sha256": "384afad7da661d56a89d457304519cbe905b0314cf08edfbb6f7c84878cfaae7",
+    "results": [
+      {
+        "case_id": "preane_surveil_record-none",
+        "prefix_kind": "none",
+        "matches_frozen_expectation": true,
+        "mismatches": [],
+        "parse_error": null,
+        "missing_body_quotes": [],
+        "direct_span_keys": [
+          "d1:s1"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "preane_surveil_record-address",
+        "prefix_kind": "address",
+        "matches_frozen_expectation": false,
+        "mismatches": [
+          "formal_body_equals_direct_helper_view",
+          "formal_spans_equal_direct_helper_view",
+          "all_medical_quotes_retained"
+        ],
+        "parse_error": null,
+        "missing_body_quotes": [
+          "ASA II级"
+        ],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "preane_surveil_record-unit",
+        "prefix_kind": "unit",
+        "matches_frozen_expectation": false,
+        "mismatches": [
+          "formal_body_equals_direct_helper_view",
+          "formal_spans_equal_direct_helper_view",
+          "all_medical_quotes_retained"
+        ],
+        "parse_error": null,
+        "missing_body_quotes": [
+          "ASA II级"
+        ],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "preane_surveil_record-phone",
+        "prefix_kind": "phone",
+        "matches_frozen_expectation": true,
+        "mismatches": [],
+        "parse_error": null,
+        "missing_body_quotes": [],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "preane_surveil_record-original-address",
+        "prefix_kind": "original-address",
+        "matches_frozen_expectation": false,
+        "mismatches": [
+          "formal_body_equals_direct_helper_view",
+          "formal_spans_equal_direct_helper_view",
+          "all_medical_quotes_retained"
+        ],
+        "parse_error": null,
+        "missing_body_quotes": [
+          "ASA II级"
+        ],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "postane_surveil_record-none",
+        "prefix_kind": "none",
+        "matches_frozen_expectation": true,
+        "mismatches": [],
+        "parse_error": null,
+        "missing_body_quotes": [],
+        "direct_span_keys": [
+          "d1:s1"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "postane_surveil_record-address",
+        "prefix_kind": "address",
+        "matches_frozen_expectation": false,
+        "mismatches": [
+          "formal_body_equals_direct_helper_view",
+          "formal_spans_equal_direct_helper_view",
+          "all_medical_quotes_retained"
+        ],
+        "parse_error": null,
+        "missing_body_quotes": [
+          "神志清醒"
+        ],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "postane_surveil_record-unit",
+        "prefix_kind": "unit",
+        "matches_frozen_expectation": false,
+        "mismatches": [
+          "formal_body_equals_direct_helper_view",
+          "formal_spans_equal_direct_helper_view",
+          "all_medical_quotes_retained"
+        ],
+        "parse_error": null,
+        "missing_body_quotes": [
+          "神志清醒"
+        ],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "postane_surveil_record-phone",
+        "prefix_kind": "phone",
+        "matches_frozen_expectation": true,
+        "mismatches": [],
+        "parse_error": null,
+        "missing_body_quotes": [],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      },
+      {
+        "case_id": "postane_surveil_record-original-address",
+        "prefix_kind": "original-address",
+        "matches_frozen_expectation": false,
+        "mismatches": [
+          "formal_body_equals_direct_helper_view",
+          "formal_spans_equal_direct_helper_view",
+          "all_medical_quotes_retained"
+        ],
+        "parse_error": null,
+        "missing_body_quotes": [
+          "神志清醒"
+        ],
+        "direct_span_keys": [
+          "d1:s1",
+          "d1:s2",
+          "d1:s3"
+        ],
+        "formal_span_keys": [
+          "d1:s1"
+        ],
+        "direct_helper_state": "ready",
+        "formal_helper_state": "ready",
+        "fake_response_policy": "unknown atoms only; no semantic extraction judgment"
+      }
+    ]
+  },
+  "cause": "N12 redacts multiline body, then json.dumps serializes body/spans with escaped newline; formal wrapper redacts full serialized prompt again; address/work-unit patterns treat escaped newline as value text and consume first clinical phrase and span structure.",
+  "observed_damage": [
+    "Previsit ASA II-level quote removed",
+    "Postvisit consciousness-clear quote removed",
+    "Body and spans differ from helper validation view",
+    "Three original span keys collapse to one in six damaged cases"
+  ],
+  "negative_claims": [
+    "These fixtures remain valid JSON; this report does not assert invalid JSON for N12.",
+    "Unknown fake atoms prove only carrier mechanics, not final clinical state.",
+    "Known synthetic label values absent in all cases is not general privacy certification."
+  ],
+  "old_43_direct_fake_evidence": {
+    "retained": true,
+    "covers_this_boundary": false,
+    "why": "FrozenFactClient is passed directly by _run; formal wrapper not part of that route. It validates direct INPUT_JSON, not the actual wrapper delegate view.",
+    "scope_not_closed_by_old_result": "The original N12 43 direct-fake evidence remains valid within its original coverage; formal wrapper carrier coverage was never established."
+  },
+  "closure_requirements": [
+    "Use one privacy-checked N12 body/span view for actual transport and parser validation; retain formal known-identity fail-closed checks.",
+    "Frozen original pre/post medical bodies, address/unit/newline fixtures and no-label/phone controls preserve every medical quote and same body/span coordinates through the actual formal wrapper.",
+    "Keep whole-document absent/unknown, cross-document quote/span and original one-call/token limits; do not weaken expectations or remove wrapper to force green.",
+    "Report engineering carrier closure separately from pending real-model/clinical-input verification."
+  ],
+  "prohibitions_honored": [
+    "No production/shared-test edit",
+    "No original freeze edit",
+    "No env/PG/clinical private reads",
+    "No network/model calls",
+    "One authorized lightweight execution only; slot released"
+  ],
+  "runtime_limit": "exact fixed production AST; only three relative dependency imports omitted and their verbatim stdlib helper symbols injected; no full application execution",
+  "evidence_files": [
+    "expectations-frozen.json",
+    "capture_probe.py",
+    "first-run.log",
+    "first-capture.json",
+    "review.md",
+    "review.json"
+  ],
+  "finding_id": "N12-PV01"
+}

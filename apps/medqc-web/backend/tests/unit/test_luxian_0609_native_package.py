@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from tests.luxian_0609_identity_test_support import published_rule_ids
 
+import json
+from collections import Counter
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +23,133 @@ from app.services.luxian_0609.native_package import (
     resolve_selected_customer_rule_ids,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
+
+
+_DATA_PATH = Path(__file__).resolve().parents[2] / "app/data"
+
+
+def _raw_master_rules():
+    return json.loads((_DATA_PATH / "luxian_0609_rule_master_v1.json").read_text(encoding="utf-8"))["rules"]
+
+
+def _raw_catalog_rules():
+    return [
+        *json.loads((_DATA_PATH / "luxian_0609_rules_v1.json").read_text(encoding="utf-8")),
+        *json.loads((_DATA_PATH / "luxian_0609_phase1_rules_extension_v1.json").read_text(encoding="utf-8")),
+    ]
+
+
+# d897689ca^ 的原 84 项有序映射，保留累计 125 依赖及逐项身份，不能只提高总数。
+_PRE_DISCHARGE_COMPATIBILITY_DEPENDENCIES = (
+    ('LX0609-01-01-01', ('SC-002',)),
+    ('LX0609-01-02-01', ('CL-081', 'SC-021')),
+    ('LX0609-04-02-01', ('LX-026', 'SC-096')),
+    ('LX0609-09-01-01', ('SC-054',)),
+    ('LX0609-02-01-01', ('SC-048',)),
+    ('LX0609-02-01-02', ('SC-049', 'CL-080')),
+    ('LX0609-02-01-03', ('LXE-18',)),
+    ('LX0609-02-01-04', ('SC-051', 'CL-231')),
+    ('LX0609-02-01-05', ('SC-051', 'CL-231')),
+    ('LX0609-06-01-02', ('LXE-23',)),
+    ('LX0609-06-01-04', ('LXE-23', 'SC-114')),
+    ('LX0609-06-01-05', ('LXE-23',)),
+    ('LX0609-06-02-03', ('SC-037', 'SC-099', 'SC-114')),
+    ('LX0609-06-03-03', ('LXE-24',)),
+    ('LX0609-06-03-04', ('LXE-24', 'LX-031')),
+    ('LX0609-12-01-01', ('CL-273',)),
+    ('LX0609-12-01-02', ('CL-275', 'LXE-21')),
+    ('LX0609-01-01-02', ('SC-008', 'LX-001', 'CL-068')),
+    ('LX0609-06-02-02', ('SC-037', 'SC-099')),
+    ('LX0609-03-01-01', ('LX-017', 'CL-250')),
+    ('LX0609-03-01-02', ('SC-068', 'LX-015')),
+    ('LX0609-03-01-03', ('SC-069',)),
+    ('LX0609-03-01-04', ('CL-248', 'CL-250', 'CL-071')),
+    ('LX0609-04-02-03', ('SC-099',)),
+    ('LX0609-04-02-04', ('SC-100', 'SC-101')),
+    ('LX0609-05-02-01', ('SC-034', 'SC-146')),
+    ('LX0609-08-01-04', ('SC-116', 'SC-124')),
+    ('LX0609-05-01-01', ('SC-044', 'LX-012')),
+    ('LX0609-04-01-01', ('CL-181', 'SC-081')),
+    ('LX0609-04-02-02', ('LX-025', 'SC-095')),
+    ('LX0609-04-02-05', ('LX-027', 'CL-173', 'SC-098')),
+    ('LX0609-04-03-01', ('SC-102', 'LXE-33')),
+    ('LX0609-11-01-01', ('SC-087', 'LXE-31')),
+    ('LX0609-11-02-01', ('LX-022', 'SC-090')),
+    ('LX0609-11-02-02', ('SC-090', 'LX-022')),
+    ('LX0609-04-04-01', ('LX-020',)),
+    ('LX0609-04-04-02', ('LX-020', 'SC-090')),
+    ('LX0609-04-04-03', ('SC-090',)),
+    ('LX0609-04-01-02', ('LX-019', 'SC-082')),
+    ('LX0609-04-01-03', ('SC-083', 'CL-108')),
+    ('LX0609-11-03-01', ('SC-133', 'LXE-52')),
+    ('LX0609-11-03-02', ('SC-134', 'SC-133')),
+    ('LX0609-07-01-01', ('SC-073', 'SC-138')),
+    ('LX0609-07-01-02', ('SC-074', 'LX-018')),
+    ('LX0609-07-02-01', ('SC-074', 'LX-018')),
+    ('LX0609-07-02-02', ('SC-074', 'LX-018')),
+    ('LX0609-07-03-01', ('CL-255', 'SC-074')),
+    ('LX0609-07-04-01', ('CL-256', 'CL-208', 'SC-074')),
+    ('LX0609-07-04-02', ('SC-146',)),
+    ('LX0609-03-02-01', ('LX0609-03-02-01',)),
+    ('LX0609-09-02-01', ('LX0609-09-02-01',)),
+    ('LX0609-06-04-01', ('LX0609-06-04-01',)),
+    ('LX0609-06-04-02', ('LX0609-06-04-02',)),
+    ('LX0609-05-01-02', ('LX0609-05-01-02',)),
+    ('LX0609-05-01-03', ('LX0609-05-01-03',)),
+    ('LX0609-05-01-04', ('LX0609-05-01-04',)),
+    ('LX0609-05-01-05', ('LX0609-05-01-05',)),
+    ('LX0609-05-01-06', ('LX0609-05-01-06',)),
+    ('LX0609-05-03-01', ('LX0609-05-03-01',)),
+    ('LX0609-04-02-06', ('LX0609-04-02-06',)),
+    ('LX0609-08-01-01', ('LX0609-08-01-01',)),
+    ('LX0609-08-01-02', ('LX0609-08-01-02',)),
+    ('LX0609-08-01-03', ('LX0609-08-01-03',)),
+    ('LX0609-04-05-01', ('LX0609-04-05-01',)),
+    ('LX0609-04-05-02', ('LX0609-04-05-02',)),
+    ('LX0609-04-05-03', ('LX0609-04-05-03',)),
+    ('LX0609-08-02-01', ('LX0609-08-02-01',)),
+    ('LX0609-08-02-02', ('LX0609-08-02-02',)),
+    ('LX0609-04-02-07', ('LX0609-04-02-07',)),
+    ('LX0609-07-01-03', ('LX0609-07-01-03',)),
+    ('LX0609-10-01-01', ('LX0609-10-01-01',)),
+    ('LX0609-10-02-01', ('LX0609-10-02-01',)),
+    ('LX0609-10-02-02', ('LX0609-10-02-02',)),
+    ('LX0609-12-02-01', ('LX0609-12-02-01',)),
+    ('LX0609-10-03-01', ('LX0609-10-03-01',)),
+    ('LX0609-04-02-08', ('LX0609-04-02-08',)),
+    ('LX0609-01-02-02', ('LX0609-01-02-02',)),
+    ('LX0609-04-01-04', ('LX0609-04-01-04',)),
+    ('LX0609-04-01-05', ('LX0609-04-01-05',)),
+    ('LX0609-06-01-01', ('LX0609-06-01-01',)),
+    ('LX0609-06-01-03', ('LX0609-06-01-03',)),
+    ('LX0609-06-03-02', ('LX0609-06-03-02',)),
+    ('LX0609-06-02-01', ('LX0609-06-02-01',)),
+    ('LX0609-09-01-02', ('LX0609-09-01-02',)),
+)
+
+
+def _assert_full_catalog_plan_partition(plan, *, compatibility_exception: str) -> None:
+    raw_active = tuple(raw for raw in _raw_master_rules() if raw["implementation_status"] == "active")
+    expected_selected = tuple(raw["rule_id"] for raw in raw_active)
+    expected_pending = tuple(
+        raw["rule_id"] for raw in raw_active
+        if raw.get("phase_status", "phase_1_target") != "phase_1_target"
+    )
+    expected_executable = tuple(rule_id for rule_id in expected_selected if rule_id not in expected_pending)
+    expected_native = tuple(rule_id for rule_id in expected_executable if rule_id != compatibility_exception)
+    sync_ids = set(plan.native_sync_rule_ids)
+    async_ids = set(plan.native_async_rule_ids)
+    assert plan.selected_rule_ids == expected_selected
+    assert plan.not_executed_rule_ids == expected_pending
+    assert plan.executable_rule_ids == expected_executable
+    assert sync_ids.isdisjoint(async_ids)
+    assert tuple(rule_id for rule_id in expected_selected if rule_id in sync_ids | async_ids) == expected_native
+    assert sync_ids | async_ids == set(expected_native)
+    assert tuple(rule_id for rule_id in expected_selected if rule_id in sync_ids) == plan.native_sync_rule_ids
+    assert tuple(rule_id for rule_id in expected_selected if rule_id in async_ids) == plan.native_async_rule_ids
+    assert set(expected_native).isdisjoint(expected_pending)
+    assert set(expected_native).isdisjoint({compatibility_exception})
+    assert set(expected_native) | set(expected_pending) | {compatibility_exception} == set(expected_selected)
 
 
 @pytest.mark.unit
@@ -53,16 +183,34 @@ def test_compatibility_rule_still_requires_a_legacy_rule_mapping():
 
 
 @pytest.mark.unit
-def test_dependency_inventory_covers_all_84_execution_catalog_rules_and_eight_families():
+def test_dependency_inventory_covers_raw_active_catalog_and_preserves_frozen_dependencies():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
 
-    assert len(inventory) == 84
-    assert tuple(item.rule_id for item in inventory) == tuple(
-        str(item["rule_id"]) for item in load_luxian_0609_rules()
-    )
+    expected_ids = tuple(raw["rule_id"] for raw in _raw_master_rules() if raw["implementation_status"] == "active")
+    assert expected_ids
+    assert len(set(expected_ids)) == len(expected_ids)
+    assert tuple(item.rule_id for item in inventory) == expected_ids
+    assert tuple(str(item["rule_id"]) for item in load_luxian_0609_rules()) == expected_ids
+    raw_wrappers = _raw_catalog_rules()
+    assert len({raw["rule_id"] for raw in raw_wrappers}) == len(raw_wrappers)
+    assert {raw["rule_id"] for raw in raw_wrappers} == set(expected_ids)
+    wrappers_by_id = {raw["rule_id"]: raw for raw in raw_wrappers}
+    family_members = [rule_id for family in RULE_FAMILY_DEFINITIONS for rule_id in family["rule_ids"]]
+    assert Counter(family_members) == Counter(expected_ids)
+    for item in inventory:
+        raw = wrappers_by_id[item.rule_id]
+        owners = [family for family in RULE_FAMILY_DEFINITIONS if item.rule_id in family["rule_ids"]]
+        assert len(owners) == 1
+        assert (item.family_key, item.family_name) == (owners[0]["key"], owners[0]["name"])
+        assert item.compatibility_rule_ids == tuple(dict.fromkeys(raw.get("mapped_rule_ids", ()))), item.rule_id
+        assert item.rule_version == raw["rule_version"], item.rule_id
+        assert item.applicable_documents == tuple(raw["applicable_documents"]), item.rule_id
+        assert item.data_dependencies == tuple(raw["data_dependencies"]), item.rule_id
+        assert item.dependency_type == raw["dependency_type"], item.rule_id
+        assert item.executor_type == raw["executor_type"], item.rule_id
     assert {item.family_key for item in inventory} == {
         "basic_timeliness",
         "course_quality",
@@ -73,7 +221,12 @@ def test_dependency_inventory_covers_all_84_execution_catalog_rules_and_eight_fa
         "tumor_pathology",
         "extended_document",
     }
-    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 125
+    frozen_ids = {rule_id for rule_id, _dependencies in _PRE_DISCHARGE_COMPATIBILITY_DEPENDENCIES}
+    assert tuple((item.rule_id, item.compatibility_rule_ids) for item in inventory if item.rule_id in frozen_ids) == _PRE_DISCHARGE_COMPATIBILITY_DEPENDENCIES
+    assert sum(len(item.compatibility_rule_ids) for item in inventory if item.rule_id in frozen_ids) == 125
+    assert tuple((item.rule_id, item.compatibility_rule_ids) for item in inventory if item.rule_id not in frozen_ids) == (
+        ("LX0609-08-01-05", ("LX0609-08-01-05",)),
+    )
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
 
@@ -131,6 +284,7 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-05-01-06",
         "LX0609-05-03-01",
         "LX0609-08-01-03",
+        "LX0609-08-01-05",
         "LX0609-07-01-03",
         "LX0609-10-03-01",
         "LX0609-04-02-08",
@@ -401,9 +555,7 @@ def test_mdt_and_extended_document_gates_are_independent(
     selected = (
         "LX0609-04-01-03",
         "LX0609-03-02-01",
-        "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
     )
 
     plan = build_luxian_0609_package_plan_from_settings(
@@ -419,11 +571,7 @@ def test_mdt_and_extended_document_gates_are_independent(
     )
 
     assert plan.native_async_rule_ids == expected_native
-    assert plan.not_executed_rule_ids == (
-        "LX0609-05-01-04",
-        "LX0609-05-03-01",
-        "LX0609-10-03-01",
-    )
+    assert plan.not_executed_rule_ids == ("LX0609-05-03-01",)
     assert plan.compatibility_rule_ids == tuple(
         rule_id
         for rule_id in ("LX0609-04-01-03", "LX0609-03-02-01")
@@ -483,8 +631,7 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 73
-    assert len(plan.not_executed_rule_ids) == 10
+    _assert_full_catalog_plan_partition(plan, compatibility_exception="LX0609-03-01-04")
     assert plan.compatibility_rule_ids == ("LX0609-03-01-04",)
     assert plan.compatibility_execution_rule_ids == (
         "CL-248",
@@ -518,8 +665,7 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
         native_surgery_document_029_enabled=False,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 73
-    assert len(plan.not_executed_rule_ids) == 10
+    _assert_full_catalog_plan_partition(plan, compatibility_exception="LX0609-04-01-01")
     assert plan.compatibility_rule_ids == ("LX0609-04-01-01",)
     assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
 
@@ -700,11 +846,8 @@ def test_public_package_entry_expands_only_inside_the_package():
     "rule_id",
     (
         "LX0609-04-02-04",
-        "LX0609-05-01-01",
         "LX0609-07-04-02",
-        "LX0609-05-01-04",
         "LX0609-05-03-01",
-        "LX0609-10-03-01",
     ),
 )
 def test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids(

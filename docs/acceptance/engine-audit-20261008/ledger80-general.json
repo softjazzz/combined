@@ -1,0 +1,851 @@
+{
+  "schema_version": "ledger80-general.v1",
+  "target_head": "7d92984a6",
+  "owner": "/root/resume_review",
+  "method": "仅按现有审查索引、冻结历史overlay和后续closure/integration/resumption文档归类，不重审生产代码、不跑测试/模型；A>B>C>D；旧claim不自动作为当前缺陷。",
+  "scope": "admission-history 9 + rescue-remaining 15；remaining-audit-evidence排除scope_catalog_only。",
+  "class_labels": {
+    "A": "确认缺陷待处理",
+    "B": "受改动影响需复验",
+    "C": "证据或合同待补",
+    "D": "可继承既有有限证据"
+  },
+  "summary": {
+    "D": 18,
+    "C": 5,
+    "B": 1
+  },
+  "common_gaps": {
+    "reason": "最终候选正式创建→执行→发布→Canonical/Store→新实例/API→浏览器/历史/导出、客户环境及独立医学签认尚缺整链证据；这些共通缺口不单独把每条判C。",
+    "evidence": [
+      {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/resumption-reconciliation.md",
+        "section": "共通验收缺口"
+      },
+      {
+        "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/integration-progress.md",
+        "section": "RR-D02/RR-M01后续集成及正式链限制"
+      }
+    ],
+    "new_pass_claim": false
+  },
+  "classification_uncertainties": [
+    "五知情同意规则customer_excluded按冻结范围继承，无重启/合同待办而归D；排除不算医学通过。",
+    "抢救内容仅报告泛化假阴性，未绑定明确未闭反例，不归A；acceptance_only待验收归C。",
+    "018/077缺该规则当前动态执行及具体原子关系/关联样本，归C；其余已有动态边界的规则不因一般真实样本不足统归C。"
+  ],
+  "rules": [
+    {
+      "rule_id": "LX0609-01-01-01",
+      "name": "入院记录：入院后24小时内是否完成",
+      "primary_class": "D",
+      "reason": "继承当前组24小时整点及+1秒的原生→归约→Finalizer零模型边界证据；未发现具体未闭反例或规则受影响重验事项。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/0"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/0"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-01-01-02",
+      "name": "主诉能导出第一诊断：主诉书写不规范（1.只写症状不写诊断，2.>20字）或不能导出第一诊断。",
+      "primary_class": "C",
+      "reason": "本组仅有静态抽取/归约职责审查，未形成该规则当前替身或真实执行证据；明确缺诊断替代主诉例外及原子关系完整覆盖样本，不能由长度检查证明诊断方向正确。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/7"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/17"
+        }
+      ],
+      "next_action": "固定例外/正常/不相关/未知的独立预期与完整来源，补该规则抽取及归约证据；正式链另列。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "诊断替代主诉的规范例外与原子事实完整覆盖尚须真实模型和临床签认；当前全链保存回读未验"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-01-02-01",
+      "name": "首次病程：入院后 8 小时内无首次病程记录",
+      "primary_class": "D",
+      "reason": "继承当前组8小时整点及+1秒的原生→归约→Finalizer零模型边界证据；旧历史SHA不移植为当前整规则通过。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/1"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/1"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-01-02-02",
+      "name": "首次病程记录：鉴别诊断未与第一诊断相关联",
+      "primary_class": "C",
+      "reason": "本组只静态审查，未形成该规则当前替身或真实送模证据；跨系统合理关联、明显无关及多文书业务键冲突缺独立绑定样本。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/8"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/76"
+        }
+      ],
+      "next_action": "补同一临床问题的跨系统正例、无关反例及业务键冲突资料，固定独立预期后验证抽取/引用对应。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "真实跨系统合理关联、明显无关、多文书业务键冲突样本及临床预期不足"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-02-01-01",
+      "name": "上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。",
+      "primary_class": "D",
+      "reason": "继承当前组48小时整点及+1秒的原生→归约→Finalizer证据；没有本条特定新缺陷/变更复验任务。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/2"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/4"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-02-01-02",
+      "name": "上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。",
+      "primary_class": "D",
+      "reason": "继承当前组72小时整点及+1秒时限证据；含糊最高职称真实抽取仍是有限证据边界，未绑定新失败或批准修复。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/3"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/5"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "真实当前版本原始字段/完成时间含义与正式保存/页面同源未验",
+          "最高级别含糊职称抽取需真实模型"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-02-01-03",
+      "name": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+      "primary_class": "D",
+      "reason": "继承72小时精确边界与C-SECOND既有修复；多区间及缺时容量下界真实证据不足不变成新确认缺陷。",
+      "issue_ids": [
+        "C-SECOND"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/4"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/6"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "历史有限修复：C-SECOND"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "缺时容量下界、多区间真实全源病例与正式保存回读未验"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-02-01-04",
+      "name": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录；",
+      "primary_class": "D",
+      "reason": "继承完整空触发不适用和C-SEVERITY-SAME-TIME同刻停止/重开工程修复；旧版本变化声明已由后续修复记录限定，未发现具体当前受影响待办。",
+      "issue_ids": [
+        "C-SEVERITY-SAME-TIME"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/5"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/7"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "历史有限修复：C-SEVERITY-SAME-TIME"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "病重起止重开真实样本不足；本轮未复现全部阳性自然日分支"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-02-01-05",
+      "name": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+      "primary_class": "D",
+      "reason": "继承完整空触发不适用和同刻停止/重开工程修复；当前已有病情变化实现，不能沿旧计划称未实现；真实变化关联未验仍保留边界。",
+      "issue_ids": [
+        "C-SEVERITY-SAME-TIME"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/admission-history.json",
+          "json_pointer": "/rules/6"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/8"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "历史有限修复：C-SEVERITY-SAME-TIME"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": [
+          "真实变化事件与检验/病程多源对应未验；阳性每日覆盖、变化误抽均需独立样本"
+        ]
+      }
+    },
+    {
+      "rule_id": "LX0609-09-01-01",
+      "name": "抢救记录：抢救结束后6小时内是否完成",
+      "primary_class": "D",
+      "reason": "继承同份抢救记录结束/完成时间关联及6小时含秒边界保护；缺真实多事件金标是证据限度，没有本条明确新反例。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/0"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/3"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "既有脱敏历史只证明结束时间可解析和离线等价；无临床金标，未验证真实多事件全面关联。"
+      }
+    },
+    {
+      "rule_id": "LX0609-09-01-02",
+      "name": "抢救记录：内容完整性",
+      "primary_class": "C",
+      "reason": "冻结范围为acceptance_only、撤出默认；六字段工程保护与R01回放可有限继承，内容验收及独立临床预期未完成。报告提否定词假阴性但未绑定明确未闭反例，本轮不升级为A。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/14"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/84"
+        }
+      ],
+      "next_action": "在独立内容验收授权下补六字段正/缺/未知临床预期和否定句边界的精确反例；未验收前保持显式范围。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "acceptance_only",
+        "customer_excluded": false,
+        "default_executes": false,
+        "existing_evidence_limits": "只读脱敏历史R01为唯一真实抢救例，原响应回放无独立临床金标；保守否定词筛查的病情描述假阴性已知，泛化未确认。"
+      }
+    },
+    {
+      "rule_id": "LX0609-09-02-01",
+      "name": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+      "primary_class": "C",
+      "reason": "RR-D02未知完成时间被过滤的缺陷已集成闭项；剩余RR-D01是评价终点与材料可见性合同争议，旧离线行为不直接等于已批准缺陷。",
+      "issue_ids": [
+        "rescue-remaining:RR-D01",
+        "rescue-remaining:RR-D02"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/8"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/50"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "json_pointer": "/issues/21"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "json_pointer": "/issues/22"
+        }
+      ],
+      "next_action": "先批准评价终点是否兼作文书可见截止的合同，保留未来讨论原反例；不得自行改变原医学预期。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "后续已闭：rescue-remaining:RR-D02"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "历史30例死亡/死亡讨论专表零不证明适用性；两探针为合成业务预期，终点排除及未知文书有效性仍需独立业务确认。"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-01-01",
+      "name": "交接班记录：经治医师变更时无交接班记录或未按时完成",
+      "primary_class": "D",
+      "reason": "继承变更事件/24小时窗口与匹配引用保护及C-GAP-CONTRACT限定成果；历史专表空不算阳性适用通过，也未构成确认缺陷。",
+      "issue_ids": [
+        "C-GAP-CONTRACT"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/9"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/70"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "历史有限修复：C-GAP-CONTRACT"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "历史30例交/接班专表为空，未完整审查事件和签名时间线，未覆盖适用真实病例。"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-02-01",
+      "name": "转科记录：转科病人24小时内未完成转入、转出记录",
+      "primary_class": "D",
+      "reason": "继承正式转科医嘱触发和双向24小时保护；旧计划暂不转科T01误报已消退，不列作当前A。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/10"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/71"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "脱敏历史两真实多事件仅4/4资料不足；不能证明多事件业务完备。所有同义计划/否定边界未穷尽。"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-02-02",
+      "name": "转科记录：有转科医嘱无转入、转出记录",
+      "primary_class": "D",
+      "reason": "继承转科医嘱双向存在性保护；T02计划暂不转科旧反例已消退；真实多事件资料不足不等于当前缺陷。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/11"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/72"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "同072真实证据只证明资料不足，未形成临床金标。"
+      }
+    },
+    {
+      "rule_id": "LX0609-10-03-01",
+      "name": "有创操作记录：有创操作医嘱无有创操作记录",
+      "primary_class": "C",
+      "reason": "冻结范围为pending_definition，有创操作目录未冻结；正式分区not_executed/空证据不算医学通过，低层075测试不能证明正式启用。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/13"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/74"
+        }
+      ],
+      "next_action": "先冻结有创操作目录和触发/匹配业务合同，再另行授权启用；保持暂停出口。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "pending_definition",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": false,
+        "existing_evidence_limits": "有创操作目录未冻结，客户业务验收未完成；本轮不新增主链旁路审查。"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-01-01",
+      "name": "手术知情同意书：无手术知情同意书(有手术记录）",
+      "primary_class": "D",
+      "reason": "本轮仅继承customer_excluded范围约束证据；旧组存在性/字段保护是历史有限信息，无具体未定合同或批准重新启用任务，不支持当前医学合格结论。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/3"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/32"
+        }
+      ],
+      "next_action": "维持冻结排除范围，不作为医学合格交付；重新启用须另行授权和专项验收。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "customer_excluded；原组报告default已被冻结范围取代",
+        "本轮D仅继承范围约束，不支持医学合格"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": true,
+        "default_executes": false,
+        "existing_evidence_limits": "本轮未验证真实同意书/紧急授权例外、多手术逐事件临床正确率，合成门禁通过不代表上线批准。"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-02-01",
+      "name": "麻醉知情同意书：无麻醉知情同意书（有麻醉记录）",
+      "primary_class": "D",
+      "reason": "本轮仅继承customer_excluded范围约束证据；旧组存在性/字段保护是历史有限信息，无具体未定合同或批准重新启用任务，不支持当前医学合格结论。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/4"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/33"
+        }
+      ],
+      "next_action": "维持冻结排除范围，不作为医学合格交付；重新启用须另行授权和专项验收。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "customer_excluded；原组报告default已被冻结范围取代",
+        "本轮D仅继承范围约束，不支持医学合格"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": true,
+        "default_executes": false,
+        "existing_evidence_limits": "当前只证明受控来源和类型判定；紧急授权例外、同次住院多次麻醉对应关系缺独立真实证据。"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-02-02",
+      "name": "麻醉知情同意书：麻醉知情同意书填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "primary_class": "D",
+      "reason": "本轮仅继承customer_excluded范围约束证据；旧组存在性/字段保护是历史有限信息，无具体未定合同或批准重新启用任务，不支持当前医学合格结论。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/5"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/34"
+        }
+      ],
+      "next_action": "维持冻结排除范围，不作为医学合格交付；重新启用须另行授权和专项验收。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "customer_excluded；原组报告default已被冻结范围取代",
+        "本轮D仅继承范围约束，不支持医学合格"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": true,
+        "default_executes": false,
+        "existing_evidence_limits": "合法代理人签署等授权语义、实际病例和多事件未临床确认。"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-03-01",
+      "name": "输血知情同意书：无输血知情同意书；",
+      "primary_class": "D",
+      "reason": "本轮仅继承customer_excluded范围约束证据；旧组存在性/字段保护是历史有限信息，无具体未定合同或批准重新启用任务，不支持当前医学合格结论。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/6"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/40"
+        }
+      ],
+      "next_action": "维持冻结排除范围，不作为医学合格交付；重新启用须另行授权和专项验收。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "customer_excluded；原组报告default已被冻结范围取代",
+        "本轮D仅继承范围约束，不支持医学合格"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": true,
+        "default_executes": false,
+        "existing_evidence_limits": "只读10月7脱敏门控修复报告；未重验真实输血、授权例外或保存/API/浏览器。"
+      }
+    },
+    {
+      "rule_id": "LX0609-11-03-02",
+      "name": "输血知情同意书：输血知情同意书填写或签名不完整；",
+      "primary_class": "D",
+      "reason": "本轮仅继承customer_excluded范围约束证据；旧组存在性/字段保护是历史有限信息，无具体未定合同或批准重新启用任务，不支持当前医学合格结论。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/7"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/41"
+        }
+      ],
+      "next_action": "维持冻结排除范围，不作为医学合格交付；重新启用须另行授权和专项验收。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "customer_excluded；原组报告default已被冻结范围取代",
+        "本轮D仅继承范围约束，不支持医学合格"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": true,
+        "default_executes": false,
+        "existing_evidence_limits": "本轮未形成合法代理人、否定/复杂书写及多次输血同意关系真实金标。"
+      }
+    },
+    {
+      "rule_id": "LX0609-12-01-01",
+      "name": "不合理复制病历：不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同",
+      "primary_class": "D",
+      "reason": "继承完全同文、包含关系非完全复制、缺段资料不足零模型保护；无具体未闭缺陷或受影响复验指向。",
+      "issue_ids": [],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/1"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/15"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "生产正文/结构化段映射真实覆盖及临床对复制业务答案未确认。"
+      }
+    },
+    {
+      "rule_id": "LX0609-12-01-02",
+      "name": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
+      "primary_class": "D",
+      "reason": "继承相似候选与单次模板复核保护及C-GAP-CONTRACT有限修复；70%采用现行业务≥70%基线，旧标题不能当未闭反例。",
+      "issue_ids": [
+        "C-GAP-CONTRACT"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/2"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/16"
+        }
+      ],
+      "next_action": "保留该条已定位的有限证据与正常保护；没有新A/B/C专项任务，未来正式验收沿共通计划补证。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "历史有限修复：C-GAP-CONTRACT"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "门槛≥70%按现行业务基线，旧标题“大于70%”不能作为新反例；缺独立真实高/低相似及模板金标。"
+      }
+    },
+    {
+      "rule_id": "LX0609-12-02-01",
+      "name": "病程记录：修正或补充诊断时未记录理由及诊断依据",
+      "primary_class": "B",
+      "reason": "RR-M01权限/计量漂移已集成闭项；PROMPT-074仍明确要求当前Prompt真实输入输出复验，旧响应及合法替身不足以证明变更后语义。",
+      "issue_ids": [
+        "PROMPT-074",
+        "rescue-remaining:RR-M01"
+      ],
+      "latest_evidence": [
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/rescue-remaining.json",
+          "json_pointer": "/rules/12"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/next-batch/coverage-progress-current/overlay.json",
+          "json_pointer": "/rules/73"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "json_pointer": "/issues/8"
+        },
+        {
+          "path": "F:/MedQC-worktrees/qc-integration-20261008/docs/acceptance/engine-audit-20261008/closure-issues.json",
+          "json_pointer": "/issues/23"
+        }
+      ],
+      "next_action": "沿PROMPT-074固定变更后完整输入/响应与理由、依据同文书独立预期，复验正常保护及未知/失败分支。",
+      "secondary_flags": [
+        "既有证据有限，不是整规则/真实医学通过",
+        "共通正式链缺口另列",
+        "本轮未执行测试/模型/注册器",
+        "后续已闭：rescue-remaining:RR-M01"
+      ],
+      "scope_note": {
+        "authority": "冻结T0台账及1958ae3bb历史overlay范围继承；本轮未实时重查注册器/执行范围",
+        "phase_status": "phase_1_target",
+        "release_scope": "default",
+        "customer_excluded": false,
+        "default_executes": true,
+        "existing_evidence_limits": "当前只确认权限/计量合同漂移，不推断真实模型稳定性；结构化声明兼容路径及真实正文未新增审查。"
+      }
+    }
+  ]
+}

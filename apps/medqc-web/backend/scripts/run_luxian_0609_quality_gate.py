@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,6 +95,54 @@ _PR_NO_MODEL_GATES = (
         ),
     ),
 )
+# 扩展回归：前三个门之外的全部 LX0609 单元测试，以及与会诊回放、冻结诊断复原、
+# LLM 客户端相关的单元测试。按文件名自动收录，新增 0609 测试无需手工登记。
+_EXTENDED_EXTRA_TEST_FILES = (
+    "tests/unit/test_verify_consultation_family_acceptance.py",
+    "tests/unit/test_qc_diagnostic_session_restore.py",
+    "tests/unit/test_qc_diagnostic_session_redaction.py",
+)
+_EXTENDED_EXTRA_TEST_GLOBS = ("test_n10_*.py", "test_qc_llm_client*.py")
+
+
+def _extended_regression_files() -> tuple[str, ...]:
+    gated = {arg for gate in _PR_NO_MODEL_GATES for arg in gate.args if arg.endswith(".py")}
+    unit_dir = BACKEND_ROOT / "tests" / "unit"
+    discovered = [
+        f"tests/unit/{path.name}"
+        for pattern in ("test_luxian_0609*.py", *_EXTENDED_EXTRA_TEST_GLOBS)
+        for path in sorted(unit_dir.glob(pattern))
+    ]
+    return tuple(
+        dict.fromkeys(
+            path
+            for path in (*discovered, *_EXTENDED_EXTRA_TEST_FILES)
+            if path not in gated and (BACKEND_ROOT / path).is_file()
+        )
+    )
+
+
+def _parallel_args() -> tuple[str, ...]:
+    """安装了 pytest-xdist 时并行执行；未安装时串行，结果口径不变。"""
+
+    return ("-n", "auto") if importlib.util.find_spec("xdist") is not None else ()
+
+
+_PR_NO_MODEL_GATES = (
+    *_PR_NO_MODEL_GATES,
+    GateSpec(
+        name="extended_regression",
+        args=(
+            *_PYTEST_PREFIX,
+            *_parallel_args(),
+            *_extended_regression_files(),
+            # 接口用例依赖上层 tests/conftest.py 的 client fixture，与 rule_contract 门一致排除。
+            "-k",
+            "not endpoint",
+        ),
+        timeout_seconds=3600,
+    ),
+)
 _ACCEPTED_GOLDEN_GATES = (
     GateSpec(
         name="accepted_golden",
@@ -137,6 +187,20 @@ def _pytest_count(pattern: str, output: str) -> int:
     return sum(int(value) for value in matches)
 
 
+def gate_environment(base: dict[str, str], *, database_dir: str) -> dict[str, str]:
+    """门禁子进程环境：固定哈希种子，数据库强制指向临时 SQLite。
+
+    零模型门禁不得连接任何真实库；导入 app.main 等模块时又要求配置 DATABASE_URL，
+    因此总是覆盖为门禁专用临时库。JWT_SECRET 未配置时使用测试值。
+    """
+
+    env = {**base, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0"}
+    env["DATABASE_URL"] = "sqlite:///" + Path(database_dir, "lx0609-gate.db").as_posix()
+    env.setdefault("JWT_SECRET", "lx0609-quality-gate-test-secret-0123456789")
+    env.setdefault("ENV", "development")
+    return env
+
+
 def run_gate_subprocess(
     gate: GateSpec,
     *,
@@ -145,11 +209,12 @@ def run_gate_subprocess(
     """隔离运行一个门禁；原始输出只用于本地计数，不进入返回对象。"""
 
     started = time.perf_counter()
+    database_dir = tempfile.TemporaryDirectory(prefix="lx0609-gate-")
     try:
         completed = process_runner(
             [sys.executable, *gate.args],
             cwd=BACKEND_ROOT,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            env=gate_environment(dict(os.environ), database_dir=database_dir.name),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -169,6 +234,8 @@ def run_gate_subprocess(
             duration_ms=max(0, int((time.perf_counter() - started) * 1000)),
             environment_unavailable=True,
         )
+    finally:
+        database_dir.cleanup()
 
     output = f"{getattr(completed, 'stdout', '')}\n{getattr(completed, 'stderr', '')}"
     passed_tests = _pytest_count(r"(\d+)[ \t]+passed", output)

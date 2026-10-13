@@ -102,3 +102,135 @@ def test_wrapper_keeps_none_and_is_idempotent():
     delegate = _CaptureClient()
     wrapped = wrap_luxian_0609_llm_client(delegate)
     assert wrap_luxian_0609_llm_client(wrapped) is wrapped
+
+
+@pytest.mark.parametrize("body", [
+    "现住址：某镇测试街道12号\n14:00悬浮红细胞2U输注完毕。",
+    "工作单位：测试单位甲\n输注完毕。",
+])
+@pytest.mark.parametrize("pre_redacted", [False, True])
+def test_json_embedded_labelled_address_survives_wrapper_redaction(body, pre_redacted):
+    """抽取器以 JSON 承载正文，发送包装器再对整段 prompt 脱敏：不能越过转义换行吞掉 JSON。"""
+    import json
+
+    sent_body = redact_luxian_0609_patient_privacy(body) if pre_redacted else body
+    prompt = "INPUT_JSON=" + json.dumps({"documents": [{"body": sent_body}]}, ensure_ascii=False)
+    redacted = redact_luxian_0609_patient_privacy(prompt)
+    payload = json.loads(redacted.removeprefix("INPUT_JSON="))
+    assert payload["documents"][0]["body"] == redact_luxian_0609_patient_privacy(body)
+    assert "某镇测试街道12号" not in redacted and "测试单位甲" not in redacted
+    assert redact_luxian_0609_patient_privacy(redacted) == redacted
+
+
+def test_known_ascii_identity_after_json_escape_is_still_rejected():
+    """正文以 JSON 嵌入 prompt 时“\n”紧贴身份值，不能因 token 边界判断而漏检。"""
+    import json
+
+    from app.services.luxian_0609.llm_prompt_privacy import PatientPrivacyViolation, assert_no_known_identity
+
+    prompt = "INPUT_JSON=" + json.dumps({"body": "正文\nSYNTHETIC_ID_901"}, ensure_ascii=False)
+    with pytest.raises(PatientPrivacyViolation):
+        assert_no_known_identity(prompt, ["SYNTHETIC_ID_901"])
+    assert_no_known_identity("130mg 1.5 Patient", ["1", "P"])
+
+
+class _FlakyDelegate:
+    def __init__(self, errors):
+        self.errors = list(errors)
+        self.prompts = []
+
+    async def generate(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        if self.errors:
+            raise self.errors.pop(0)
+        return {"content": "ok"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    __import__("httpx").ReadTimeout("timed out"),
+    __import__("httpx").ConnectError("refused"),
+    TimeoutError(),
+    RuntimeError("upstream_http_error upstream_http_status=503 upstream_error_summary=upstream_response_error"),
+    RuntimeError("upstream_http_error upstream_http_status=429 upstream_error_summary=rate_limit"),
+])
+async def test_transient_transport_error_is_retried(monkeypatch, error):
+    """用户口径（2026-10-12）：网络/上游临时错误最多重试 2 次；连续失败 2 次后第 3 次成功。"""
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([error, error])
+    result = await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert result == {"content": "ok"} and len(delegate.prompts) == 3
+
+
+@pytest.mark.asyncio
+async def test_transient_transport_error_fails_after_two_retries(monkeypatch):
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([TimeoutError(), TimeoutError(), TimeoutError(), TimeoutError()])
+    with pytest.raises(TimeoutError):
+        await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert len(delegate.prompts) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    ValueError("bad argument"),
+    RuntimeError("upstream_http_error upstream_http_status=400 upstream_error_summary=invalid_request"),
+    RuntimeError("upstream_http_error upstream_http_status=4290 upstream_error_summary=x"),
+    RuntimeError("dry run: outbound request intercepted after privacy gate"),
+])
+async def test_deterministic_errors_are_not_retried(monkeypatch, error):
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([error])
+    with pytest.raises(type(error)):
+        await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert len(delegate.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_deterministic_error_during_retry_stops_immediately(monkeypatch):
+    from app.services.luxian_0609 import llm_prompt_privacy as module
+
+    monkeypatch.setattr(module, "TRANSPORT_RETRY_DELAY_SECONDS", 0)
+    delegate = _FlakyDelegate([TimeoutError(), ValueError("bad argument")])
+    with pytest.raises(ValueError):
+        await module.wrap_luxian_0609_llm_client(delegate).generate("提示")
+    assert len(delegate.prompts) == 2
+
+
+class _TemperatureAwareDelegate:
+    def __init__(self):
+        self.kwargs = []
+
+    async def generate(self, prompt, *, max_completion_tokens=None, temperature=None):
+        self.kwargs.append({"max_completion_tokens": max_completion_tokens, "temperature": temperature})
+        return {"content": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_0609_extraction_uses_temperature_zero_when_client_supports_it():
+    """用户口径（2026-10-11）：0609 抽取固定温度 0。"""
+    delegate = _TemperatureAwareDelegate()
+    await wrap_luxian_0609_llm_client(delegate).generate("提示", max_completion_tokens=10)
+    assert delegate.kwargs == [{"max_completion_tokens": 10, "temperature": 0.0}]
+
+
+@pytest.mark.asyncio
+async def test_0609_temperature_is_not_forced_into_unknown_clients():
+    client = _CaptureClient()
+    result = await wrap_luxian_0609_llm_client(client).generate("提示", max_completion_tokens=10)
+    assert result["kwargs"] == {"max_completion_tokens": 10}
+
+
+def test_shared_client_temperature_override_is_validated_and_optional():
+    import inspect
+
+    from app.services.qc_llm_client import SichuanQCLLMClient
+
+    parameter = inspect.signature(SichuanQCLLMClient.generate).parameters["temperature"]
+    assert parameter.default is None

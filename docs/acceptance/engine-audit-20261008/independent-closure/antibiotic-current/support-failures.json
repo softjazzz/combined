@@ -1,0 +1,12 @@
+[
+  {
+    "attempt": 1,
+    "exit_code": 1,
+    "case_observations": 0,
+    "stage": "asyncpg import -> platform.uname -> subprocess -> os.open(os.devnull, O_RDWR)",
+    "exception": "AssertionError: ANTIBIOTIC_WRITE_SCOPE_DENIED",
+    "classification": "fixture guard blocked standard Windows nul sink; not product failure",
+    "correction": "Root-recommended prewarm standard-library platform.uname()/machine before guard; no sink-device exception retained. All source and non-artifact file writes remain denied",
+    "external_database_or_network_connection": false
+  }
+]

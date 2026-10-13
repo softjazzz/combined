@@ -10,18 +10,24 @@ from typing import Any, Mapping, Sequence
 from ..decision_model import CriterionResult, CriterionStatus
 
 
+# 仅扩展已有死亡时间标签的时间值语法，捕获完整 token 后交解析器校验。
+_DEATH_TIME_VALUE = (
+    r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+|[Tt])"
+    r"\d{1,2}(?::\d{1,2}(?::\d{1,2}(?:[.,]\d+)?)?"
+    r"|时\d{1,2}分(?:\d{1,2}(?:[.,]\d+)?秒)?)"
+    r"(?:Z|[+-]\d{2}(?::?\d{2})?)?"
+    r"(?![\dA-Za-z_:+-]|[.,](?=[\dA-Za-z_]))"
+)
 _LABELED_TIME_PATTERNS = (
+    re.compile(r"死亡(?:时间|时刻|日期)\s*[:：]\s*(?P<value>" + _DEATH_TIME_VALUE + r")"),
+    # “于〈日期时刻〉……死亡”在同一句内（不跨句号/分号），如“于X因感染性休克死亡”
+    # “于X心跳呼吸停止，经抢救无效宣告临床死亡”；入院、转入等时刻不算死亡时间。
     re.compile(
-        r"死亡时间\s*[:：]\s*"
-        r"(?P<value>\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?"
-        r"\s+\d{1,2}(?::\d{1,2}(?::\d{1,2})?|时\d{1,2}分(?:\d{1,2}秒)?))"
-    ),
-    re.compile(
-        r"于\s*(?P<value>\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?"
-        r"\s+\d{1,2}(?::\d{1,2}(?::\d{1,2})?|时\d{1,2}分(?:\d{1,2}秒)?))"
-        r"\s*(?:宣告|宣布)?临床死亡"
+        r"于\s*(?P<value>" + _DEATH_TIME_VALUE + r")"
+        r"(?P<tail>[^。；;！!？?\n]{0,40}?)死亡"
     ),
 )
+_NON_DEATH_EVENT_PATTERN = re.compile(r"入院|转入|转出|就诊|手术|出院")
 
 
 @dataclass(frozen=True)
@@ -48,28 +54,41 @@ def _parse_time(value: Any) -> datetime | None:
         .replace("分", ":")
         .replace("秒", "")
         .replace("/", "-")
-        .replace(".", "-")
         .strip()
     )
+    # 只归一化日期段点号；保留秒的小数点和原有时区信息。
+    normalized = re.sub(r"^(\d{4})\.(\d{1,2})\.(\d{1,2})", r"\1-\2-\3", normalized)
     normalized = re.sub(r"\s+", " ", normalized)
     if normalized.endswith(":"):
         normalized = normalized[:-1]
+    # 日期不含具体死亡时刻；显式 00:00 仍是有效午夜，不能按时间值排除。
+    if re.search(r"[ Tt]\d{1,2}:\d{1,2}", normalized) is None:
+        return None
     try:
-        return datetime.fromisoformat(normalized)
+        return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def death_time_from_body(row: Mapping[str, Any]) -> datetime | None:
+    """死亡记录正文中明确记载的死亡日期和时刻。"""
+
+    body = _clean(row.get("record_content") or row.get("content"))
+    for pattern in _LABELED_TIME_PATTERNS:
+        for match in pattern.finditer(body):
+            tail = match.groupdict().get("tail") or ""
+            if _NON_DEATH_EVENT_PATTERN.search(tail):
+                continue
+            if parsed := _parse_time(match.group("value")):
+                return parsed
+    return None
 
 
 def _death_time(row: Mapping[str, Any]) -> datetime | None:
     for field in ("death_datetime", "death_time"):
         if parsed := _parse_time(row.get(field)):
             return parsed
-    body = _clean(row.get("record_content") or row.get("content"))
-    for pattern in _LABELED_TIME_PATTERNS:
-        match = pattern.search(body)
-        if match and (parsed := _parse_time(match.group("value"))):
-            return parsed
-    return None
+    return death_time_from_body(row)
 
 
 def _criterion(

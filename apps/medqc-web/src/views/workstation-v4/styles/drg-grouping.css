@@ -1,0 +1,46 @@
+/* v7.1：继承工作台 Token。 */
+
+.drg-grouping-tab {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.drg-primary-card,
+.drg-glass-card {
+  border-radius: var(--mq-radius-card);
+}
+
+.drg-primary-card {
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--mq-brand-600) 16%, transparent);
+}
+
+.drg-glass-card,
+.drg-grouping-tab :deep(.dark\:bg-slate-800),
+.drg-grouping-tab :deep(.dark\:bg-slate-700\/50),
+.drg-grouping-tab :deep(.dark\:bg-slate-700\/30) {
+  border-color: var(--mq-border) !important;
+  background: var(--mq-glass-bg-strong) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px var(--mq-border),
+    0 2px 8px var(--mq-border) !important;
+}
+
+.drg-grouping-tab :deep(.dark\:text-white),
+.drg-grouping-tab :deep(.dark\:text-slate-200),
+.drg-grouping-tab :deep(.text-slate-800) {
+  color: var(--mq-text-primary) !important;
+}
+
+.drg-grouping-tab :deep(.dark\:text-slate-400),
+.drg-grouping-tab :deep(.text-slate-500),
+.drg-grouping-tab :deep(.text-slate-400) {
+  color: var(--mq-text-secondary) !important;
+}
+
+.drg-grouping-tab :deep(.text-blue-500) {
+  color: var(--mq-brand-600) !important;
+}

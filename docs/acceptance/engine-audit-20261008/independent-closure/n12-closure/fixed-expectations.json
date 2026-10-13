@@ -1,0 +1,1729 @@
+{
+  "fixed_commit": "08aed59db3ed9bf08316fc792a757a3ee65d992b",
+  "parent_commit": "1b973859d1f95c099745c8af7500c3e937c05772",
+  "executed": false,
+  "method": "independent synthetic atomic facts, complete fixed native implementation; no support reason monkeypatch",
+  "quotes": {
+    "preane_surveil_record": {
+      "asa_level": "ASA II级",
+      "airway_assessment": "气道评估正常",
+      "fasting_status": "禁食禁饮已核对",
+      "anesthesia_history": "否认麻醉史",
+      "risk_discussion": "已完成麻醉风险告知",
+      "anesthetist_signature": "测试医师"
+    },
+    "postane_surveil_record": {
+      "consciousness_status": "神志清醒",
+      "respiratory_status": "呼吸平稳",
+      "circulatory_status": "循环稳定",
+      "complication_assessment": "无麻醉并发症",
+      "anesthetist_signature": "测试医师"
+    }
+  },
+  "contract": {
+    "rule_id": "LX0609-04-04-02",
+    "contract_version": "v3",
+    "decision_authority": "program_then_optional_llm",
+    "max_llm_calls_per_rule": 1,
+    "prompt_version": "lx0609-anesthesia-visit-facts-v1"
+  },
+  "cases": [
+    {
+      "id": "NORMAL",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {
+        "persist": true
+      }
+    },
+    {
+      "id": "LABEL-consciousness_status",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "术后意识状态：；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "non_compliant",
+      "calls": 1,
+      "reason": "requirement_violated",
+      "options": {
+        "absent": [
+          [
+            "postane_surveil_record",
+            "consciousness_status"
+          ]
+        ],
+        "missing": {
+          "postanesthesia_visit": [
+            "consciousness_status"
+          ]
+        },
+        "persist": true
+      }
+    },
+    {
+      "id": "LABEL-respiratory_status",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；术后呼吸情况：；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "non_compliant",
+      "calls": 1,
+      "reason": "requirement_violated",
+      "options": {
+        "absent": [
+          [
+            "postane_surveil_record",
+            "respiratory_status"
+          ]
+        ],
+        "missing": {
+          "postanesthesia_visit": [
+            "respiratory_status"
+          ]
+        },
+        "persist": false
+      }
+    },
+    {
+      "id": "LABEL-complication_assessment",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；术后并发症情况：。"
+          }
+        ]
+      },
+      "state": "non_compliant",
+      "calls": 1,
+      "reason": "requirement_violated",
+      "options": {
+        "absent": [
+          [
+            "postane_surveil_record",
+            "complication_assessment"
+          ]
+        ],
+        "missing": {
+          "postanesthesia_visit": [
+            "complication_assessment"
+          ]
+        },
+        "persist": false
+      }
+    },
+    {
+      "id": "LABEL-airway_assessment",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；Mallampati气道分级：；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "non_compliant",
+      "calls": 1,
+      "reason": "requirement_violated",
+      "options": {
+        "absent": [
+          [
+            "preane_surveil_record",
+            "airway_assessment"
+          ]
+        ],
+        "missing": {
+          "preanesthesia_visit": [
+            "airway_assessment"
+          ]
+        },
+        "persist": false
+      }
+    },
+    {
+      "id": "ADJACENT-0",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒心率：；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {}
+    },
+    {
+      "id": "ADJACENT-1",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒后续项目：；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {}
+    },
+    {
+      "id": "ADJACENT-2",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒心率：___；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {}
+    },
+    {
+      "id": "ADJACENT-3",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒心率：80次/分；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {}
+    },
+    {
+      "id": "MULTI-COMPLETE",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A-1",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A-2",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {}
+    },
+    {
+      "id": "MULTI-PARTIAL",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A-1",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A-2",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "non_compliant",
+      "calls": 1,
+      "reason": "requirement_violated",
+      "options": {
+        "absent_by_index": {
+          "0": [
+            "airway_assessment"
+          ],
+          "1": [
+            "fasting_status"
+          ]
+        },
+        "missing": {
+          "preanesthesia_visit": [
+            "airway_assessment",
+            "fasting_status"
+          ]
+        }
+      }
+    },
+    {
+      "id": "MULTI-EVENT-different",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A-1",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A-2",
+            "application_id": "B",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "association_failed",
+      "options": {}
+    },
+    {
+      "id": "MULTI-EVENT-unknown",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A-1",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A-2",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "association_failed",
+      "options": {}
+    },
+    {
+      "id": "MULTI-UNKNOWN",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A-1",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A-2",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "unknown_by_index": {
+          "1": [
+            "airway_assessment"
+          ]
+        }
+      }
+    },
+    {
+      "id": "SAME-DOC-False",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {
+        "all_material_refs": true,
+        "prompt_docs": 2
+      }
+    },
+    {
+      "id": "SAME-DOC-True",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "record_content": "ASA II级；气道评估正常；",
+            "ASA_level": "II级"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "anesthetist_sign": "测试医师",
+            "record_content": "禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "compliant",
+      "calls": 1,
+      "reason": "requirement_satisfied",
+      "options": {
+        "all_material_refs": true,
+        "prompt_docs": 2
+      }
+    },
+    {
+      "id": "UNKNOWN",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "unknown": [
+          [
+            "postane_surveil_record",
+            "consciousness_status"
+          ]
+        ],
+        "persist": true
+      }
+    },
+    {
+      "id": "ABSENT-AND-UNKNOWN",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "unknown": [
+          [
+            "postane_surveil_record",
+            "consciousness_status"
+          ]
+        ],
+        "absent": [
+          [
+            "preane_surveil_record",
+            "airway_assessment"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "INVALID-transport",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "transport"
+      }
+    },
+    {
+      "id": "INVALID-bad_schema",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "bad_schema"
+      }
+    },
+    {
+      "id": "INVALID-duplicate_doc",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "duplicate_doc"
+      }
+    },
+    {
+      "id": "INVALID-missing_field",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "missing_field"
+      }
+    },
+    {
+      "id": "INVALID-extra_field",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "extra_field"
+      }
+    },
+    {
+      "id": "INVALID-cross_document_quote",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "cross_document_quote"
+      }
+    },
+    {
+      "id": "INVALID-cross_document_span",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "cross_document_span"
+      }
+    },
+    {
+      "id": "INVALID-wrong_absent_scope",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "wrong_absent_scope"
+      }
+    },
+    {
+      "id": "INVALID-wrong_coordinate",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "wrong_coordinate"
+      }
+    },
+    {
+      "id": "INVALID-duplicate_json_key",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "duplicate_json_key"
+      }
+    },
+    {
+      "id": "INVALID-finish_length",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 1,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "mode": "finish_length"
+      }
+    },
+    {
+      "id": "NO-CLIENT",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "semantic_extraction_unresolved",
+      "options": {
+        "no_client": true
+      }
+    },
+    {
+      "id": "SOURCE-unavailable",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "source_unavailable",
+      "options": {
+        "source_mode": "unavailable"
+      }
+    },
+    {
+      "id": "SOURCE-truncated",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "source_unavailable",
+      "options": {
+        "source_mode": "truncated"
+      }
+    },
+    {
+      "id": "BODY-SCOPE-record_content_truncated",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+            "record_content_truncated": true
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "source_truncated",
+      "options": {}
+    },
+    {
+      "id": "BODY-SCOPE-record_content_complete",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+            "record_content_complete": false
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "source_readiness_unproven",
+      "options": {}
+    },
+    {
+      "id": "BODY-TYPE-None",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": null
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "source_readiness_unproven",
+      "options": {}
+    },
+    {
+      "id": "BODY-TYPE-123",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": 123
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "source_readiness_unproven",
+      "options": {}
+    },
+    {
+      "id": "LIMIT-9-RAW-SAME-DOC",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "candidate_scope_incomplete",
+      "options": {}
+    },
+    {
+      "id": "LIMIT-SINGLE-6001",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "candidate_scope_incomplete",
+      "options": {}
+    },
+    {
+      "id": "LIMIT-TOTAL-12001",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A-1",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。"
+          },
+          {
+            "document_id": "pre-A-2",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "candidate_scope_incomplete",
+      "options": {}
+    },
+    {
+      "id": "LIMIT-GROUP-6001",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。"
+          },
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................."
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。"
+          }
+        ]
+      },
+      "state": "data_gap",
+      "calls": 0,
+      "reason": "candidate_scope_incomplete",
+      "options": {}
+    },
+    {
+      "id": "STRUCTURAL-BLANK",
+      "rows": {
+        "anesthesia_record": [
+          {
+            "document_id": "ane-A",
+            "application_id": "A",
+            "anesthesia_method": "全身麻醉",
+            "record_content": "麻醉诱导完成，气管插管顺利，术毕苏醒拔管。"
+          }
+        ],
+        "preane_surveil_record": [
+          {
+            "document_id": "pre-A",
+            "application_id": "A",
+            "record_time": "2026-07-01 07:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": "",
+            "ASA_level": "II级"
+          }
+        ],
+        "postane_surveil_record": [
+          {
+            "document_id": "post-A",
+            "application_id": "A",
+            "record_time": "2026-07-02 08:00:00",
+            "anesthetist_sign": "测试医师",
+            "record_content": ""
+          }
+        ]
+      },
+      "state": "non_compliant",
+      "calls": 0,
+      "reason": "requirement_violated",
+      "options": {
+        "asa_not_missing": true
+      }
+    }
+  ],
+  "sqlite": {
+    "states": [
+      "compliant",
+      "non_compliant",
+      "data_gap"
+    ],
+    "write_commit_dispose_then_new_engine_new_store": true,
+    "compare": [
+      "status",
+      "reason_code",
+      "customer_display_facts",
+      "suggestion",
+      "evidence"
+    ]
+  },
+  "semantic_gap_message": "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
+  "semantic_gap_suggestion": "请复核现有访视正文或重试质控；不要据此补写或改写记录。",
+  "limits": "no real model/PG/env/patient; old25 NoModel protections not passed; N10 open"
+}

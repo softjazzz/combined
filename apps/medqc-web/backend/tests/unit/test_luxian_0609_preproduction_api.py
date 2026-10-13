@@ -420,7 +420,9 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
     ]
     assert payload["metrics"]["customer_rule_count"] == 5
     assert payload["metrics"]["legacy_projection_count"] == 0
-    assert payload["metrics"]["llm_call_count"] == 1
+    # 1 次主抽取 + 06-01-02 检查前原因核对、06-01-05 异常分析核对各 1 次；
+    # 替身只回答主抽取，两步核对按设计回退主抽取结论。
+    assert payload["metrics"]["llm_call_count"] == 3
     rendered = repr(payload) + caplog.text
     for private_marker in (
         "institute-safe-coordinate",

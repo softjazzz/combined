@@ -95,30 +95,6 @@ async def test_extracts_per_document_reason_and_basis_with_one_call_and_usage():
 
 
 @pytest.mark.asyncio
-async def test_prompt_contains_abstract_missing_and_grounded_present_examples():
-    client = _Client(_payload(_item()))
-
-    result = await extract_diagnosis_change_documentation((_document(),), client)
-
-    assert result.state == "ready"
-    prompt = client.calls[0][0]
-    assert "患者病情稳定，复查未见异常，继续对症治疗，修正诊断：A、B。" in prompt
-    assert (
-        '"reason_state":"missing","reason_quote":"",'
-        '"basis_state":"missing","basis_quote":""'
-    ) in prompt
-    assert (
-        "综上所述，结合反复发作症状、辅助检查及专科会诊意见，"
-        "今日修正诊断：A。A：具体症状、检查、会诊和鉴别依据。"
-    ) in prompt
-    assert '"reason_state":"present"' in prompt
-    assert "无法提供通过上述关系校验的连续quote时" in prompt
-    assert "不能仍将对应state报告为present" in prompt
-    assert "CT提示X，建议治疗；继续其他治疗。补充诊断：X。" in prompt
-    assert "basis_quote必须连续覆盖该阳性结论到补充诊断marker" in prompt
-
-
-@pytest.mark.asyncio
 async def test_accepts_basis_quote_that_contains_marker_and_clinical_basis_signal():
     text = "结合影像表现，影像提示脑梗死，补充诊断：脑梗死。"
     client = _Client(_payload(_item(
@@ -131,116 +107,6 @@ async def test_accepts_basis_quote_that_contains_marker_and_clinical_basis_signa
     )
 
     assert result.state == "ready"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("reason_quote", "basis_quote"),
-    (
-        ("患者目前病情稳定", "双肺呼吸音清，未闻及干湿性啰音"),
-        ("复查未见明显异常", "血常规及生化检验未见明显异常"),
-        ("治疗上保肝补液", "血常规及生化检验未见明显异常"),
-    ),
-)
-async def test_rejects_c07_marker_preceding_unrelated_condition_and_test_quotes(
-    reason_quote, basis_quote
-):
-    text = (
-        "患者目前病情稳定。复查未见明显异常。治疗上保肝补液。"
-        "双肺呼吸音清，未闻及干湿性啰音。血常规及生化检验未见明显异常。"
-        "修正诊断：继发性癫痫。医师签名。"
-    )
-    client = _Client(_payload(_item(
-        reason_quote=reason_quote,
-        basis_quote=basis_quote,
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_normalizes_ungrounded_reason_to_missing_when_document_has_no_candidate():
-    text = "患者病情稳定，修正诊断为继发性癫痫。诊断依据：动态脑电异常。"
-    client = _Client(_payload(_item(
-        reason_quote="患者病情稳定，修正诊断为继发性癫痫",
-        basis_quote="诊断依据：动态脑电异常",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "ready"
-    assert result.assertions[0].reason_state == "missing"
-    assert result.assertions[0].reason_quote == ""
-
-
-@pytest.mark.asyncio
-async def test_rejects_isolated_premarker_basis_even_when_reason_is_grounded():
-    text = (
-        "MRI提示异常。综上所述，结合神经内科会诊意见，"
-        "修正诊断为症状性癫痫。"
-    )
-    client = _Client(_payload(_item(
-        reason_quote="综上所述，结合神经内科会诊意见，修正诊断为症状性癫痫",
-        basis_quote="MRI提示异常",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-
-
-@pytest.mark.asyncio
-async def test_normalizes_reason_borrowed_from_previous_treatment_sentence():
-    text = (
-        "胸部CT提示支气管扩张伴感染。"
-        "因腹痛减轻，故今嘱继续对症治疗。"
-        "补充诊断：支气管扩张伴感染。"
-    )
-    client = _Client(_payload(_item(
-        reason_quote=text.removesuffix("。"),
-        basis_quote=text.removesuffix("。"),
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "ready"
-    assert result.assertions[0].reason_state == "missing"
-    assert result.assertions[0].reason_quote == ""
-    assert result.assertions[0].basis_state == "present"
-
-
-@pytest.mark.asyncio
-async def test_wrong_reason_quote_remains_technical_when_document_has_valid_candidate():
-    text = (
-        "患者病情稳定，补充诊断：A。"
-        "结合影像提示的新发现，故补充诊断：B。"
-    )
-    client = _Client(_payload(_item(
-        reason_quote="患者病情稳定，补充诊断：A",
-        basis_state="missing",
-        basis_quote="",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
 
 
 @pytest.mark.asyncio
@@ -270,150 +136,12 @@ async def test_accepts_c01_shape_as_missing_reason_with_cross_marker_positive_ba
 
 
 @pytest.mark.asyncio
-async def test_expands_isolated_c01_ct_basis_to_uniquely_related_marker():
-    text = (
-        "胸部CT报告进一步支持感染，胸部CT提示双肺支扩伴感染。"
-        "继续其他治疗，暂不考虑手术。补充诊断：支气管扩张伴感染。"
-    )
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote="胸部CT提示双肺支扩伴感染",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "ready"
-    assert result.assertions[0].reason_state == "missing"
-    assert result.assertions[0].basis_state == "present"
-    assert result.assertions[0].basis_quote == (
-        "胸部CT提示双肺支扩伴感染。继续其他治疗，暂不考虑手术。"
-        "补充诊断：支气管扩张伴感染"
-    )
-
-
-@pytest.mark.asyncio
-async def test_rejects_isolated_basis_without_diagnosis_term_overlap():
-    text = "胸部CT提示肺炎。补充诊断：高血压。"
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote="胸部CT提示肺炎",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-
-
-@pytest.mark.asyncio
-async def test_rejects_generic_infection_overlap_with_longer_compound_diagnosis():
-    text = "胸部CT提示肺部感染。补充诊断：支气管扩张伴感染。"
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote="胸部CT提示肺部感染",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-
-
-@pytest.mark.asyncio
-async def test_accepts_identical_standalone_two_character_diagnosis():
-    text = "影像提示肺炎。补充诊断：肺炎。"
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote="影像提示肺炎",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "ready"
-    assert result.assertions[0].basis_quote == "影像提示肺炎。补充诊断：肺炎"
-
-
-@pytest.mark.asyncio
-async def test_rejects_isolated_basis_with_multiple_related_following_markers():
-    text = (
-        "胸部CT提示肺部感染。补充诊断：肺部感染。"
-        "稍后补充诊断：重症肺部感染。"
-    )
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote="胸部CT提示肺部感染",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-
-
-@pytest.mark.asyncio
-async def test_rejects_isolated_negated_basis_before_marker():
-    text = "胸部CT未提示肺部感染。补充诊断：肺部感染。"
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote="胸部CT未提示肺部感染",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-
-
-@pytest.mark.asyncio
 async def test_rejects_nonverbatim_isolated_basis_before_marker():
     text = "胸部CT提示肺部感染。补充诊断：肺部感染。"
     client = _Client(_payload(_item(
         reason_state="missing",
         reason_quote="",
         basis_quote="CT明确证实肺部感染",
-    )))
-
-    result = await extract_diagnosis_change_documentation(
-        (_document(text=text),), client
-    )
-
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "conclusion",
-    (
-        "胸部CT未提示支气管扩张",
-        "胸部CT未见明显异常",
-        "结合胸部CT不考虑支气管扩张",
-    ),
-)
-async def test_rejects_cross_marker_basis_with_negated_diagnostic_conclusion(conclusion):
-    text = f"{conclusion}。补充诊断：支气管扩张伴感染。"
-    client = _Client(_payload(_item(
-        reason_state="missing",
-        reason_quote="",
-        basis_quote=text.removesuffix("。"),
     )))
 
     result = await extract_diagnosis_change_documentation(
@@ -476,8 +204,9 @@ async def test_invalid_mapping_enum_or_ungrounded_quote_is_technical_without_ret
 
     assert result.state == "technical_error"
     assert result.reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
+    # 协议违规重试 1 次后仍违规才拒收（用户口径 2026-10-11）。
+    assert result.llm_call_count == 2
+    assert len(client.calls) == 2
 
 
 @pytest.mark.asyncio
@@ -491,3 +220,78 @@ async def test_transport_failure_is_technical_without_retry():
     assert result.llm_call_count == 1
     assert result.total_tokens == 0
     assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_prompt_defines_semantics_and_verbatim_quotes_without_relationship_heuristics():
+    client = _Client(_payload(_item()))
+
+    result = await extract_diagnosis_change_documentation((_document(),), client)
+
+    assert result.state == "ready"
+    prompt = client.calls[0][0]
+    assert "逐字复制，保留编号、空白和标点" in prompt
+    assert "不得删改、拼接或省略" in prompt
+    assert "仅罗列检查结果后直接写修正/补充诊断" in prompt
+    assert "changed_diagnosis" in prompt
+    assert SCHEMA_VERSION in prompt
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text,reason_quote,basis_quote", [
+    # 真实模型验证中被旧关键词复核误改判的写法：语义由模型负责，程序只核验逐字原文。
+    ("根据神经内科会诊意见，修正诊断：短暂性脑缺血发作。诊断依据：1.反复发作一侧肢体无力；2.头颅MRI未见新发梗死灶。",
+     "根据神经内科会诊意见，修正诊断：短暂性脑缺血发作",
+     "诊断依据：1.反复发作一侧肢体无力；2.头颅MRI未见新发梗死灶。"),
+    ("经腹部增强CT示阑尾增粗伴周围渗出，麦氏点压痛反跳痛阳性，故修正诊断为：急性阑尾炎。",
+     "经腹部增强CT示阑尾增粗伴周围渗出，麦氏点压痛反跳痛阳性，故修正诊断为：急性阑尾炎",
+     "经腹部增强CT示阑尾增粗伴周围渗出，麦氏点压痛反跳痛阳性"),
+])
+async def test_verbatim_semantic_quotes_are_accepted_without_keyword_relationship_checks(
+    text, reason_quote, basis_quote
+):
+    client = _Client(_payload(_item(reason_quote=reason_quote, basis_quote=basis_quote)))
+    result = await extract_diagnosis_change_documentation((_document(text=text),), client)
+    assert result.state == "ready"
+    assert (result.assertions[0].reason_state, result.assertions[0].basis_state) == ("present", "present")
+
+
+@pytest.mark.asyncio
+async def test_changed_diagnosis_context_is_sent_with_redacted_text():
+    document = DiagnosisChangeDocumentInput(
+        local_doc_id="doc_01", source_type="daily_course_record",
+        text="结合痰培养结果，考虑细菌性肺炎。诊断依据：痰培养提示肺炎克雷伯菌。",
+        changed_diagnosis="细菌性肺炎",
+    )
+    client = _Client(_payload(_item(reason_quote="结合痰培养结果，考虑细菌性肺炎", basis_quote="痰培养提示肺炎克雷伯菌")))
+    result = await extract_diagnosis_change_documentation((document,), client)
+    assert result.state == "ready"
+    sent = json.loads(client.calls[0][0][client.calls[0][0].rindex("\n") + 1:])
+    assert sent[0]["changed_diagnosis"] == "细菌性肺炎"
+
+
+class _FlakyClient(_Client):
+    def __init__(self, first, second):
+        super().__init__(first)
+        self.second = second
+
+    async def generate(self, prompt, **kwargs):
+        response = await super().generate(prompt, **kwargs)
+        self.payload = self.second
+        return response
+
+
+@pytest.mark.asyncio
+async def test_spliced_quote_is_retried_once_and_second_valid_answer_is_used():
+    """0910 真实形态：把两段不相邻原文拼成一句引用；重试 1 次后合规即采用（用户口径 2026-10-11）。"""
+    client = _FlakyClient(
+        _payload(_item(reason_quote="综上所述，今日修正诊断为症状性癫痫")),
+        _payload(_item()),
+    )
+
+    result = await extract_diagnosis_change_documentation((_document(),), client)
+
+    assert result.state == "ready"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 180
+    assert len(client.calls) == 2

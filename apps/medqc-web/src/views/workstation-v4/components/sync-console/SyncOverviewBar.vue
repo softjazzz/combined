@@ -2,16 +2,10 @@
   <div class="sync-overview">
     <div class="overview-header">
       <div>
-        <h1 class="overview-title">
-          数据对接控制台
-        </h1>
+        <h1 class="overview-title">数据对接控制台</h1>
         <div class="overview-meta">
-          <a-tag color="blue">
-            Workstation V4
-          </a-tag>
-          <a-tag :color="envTagColor">
-            环境：{{ envLabel }}
-          </a-tag>
+          <a-tag color="blue"> Workstation V4 </a-tag>
+          <a-tag :color="envTagColor"> 环境：{{ envLabel }} </a-tag>
           <span class="dot">·</span>
           <span>来源：真实接口</span>
         </div>
@@ -24,20 +18,12 @@
           :disabled="true"
         />
         <a-tooltip :title="isReadonly ? '仅 admin 可执行' : '测试远端 PG + 本地 PG'">
-          <a-button
-            :loading="state.isTestingAll"
-            :disabled="isReadonly"
-            @click="handleTestAll"
-          >
+          <a-button :loading="state.isTestingAll" :disabled="isReadonly" @click="handleTestAll">
             测试全连接
           </a-button>
         </a-tooltip>
         <a-tooltip :title="isReadonly ? '仅 admin 可执行' : '执行前预检，不落库'">
-          <a-button
-            :loading="state.isPreflighting"
-            :disabled="isReadonly"
-            @click="handlePreflight"
-          >
+          <a-button :loading="state.isPreflighting" :disabled="isReadonly" @click="handlePreflight">
             试运行
           </a-button>
         </a-tooltip>
@@ -59,60 +45,31 @@
         <span class="health-title">连接健康度</span>
         <span class="health-value">{{ healthPercent }}%</span>
       </div>
-      <a-progress
-        :percent="healthPercent"
-        :show-info="false"
-        :stroke-color="healthColor"
-      />
-      <div
-        class="health-right"
-        :style="{ color: healthColor }"
-      >
+      <a-progress :percent="healthPercent" :show-info="false" :stroke-color="healthColor" />
+      <div class="health-right" :style="{ color: healthColor }">
         {{ healthLabel }}
       </div>
     </div>
 
     <div class="stats-grid">
-      <a-card
-        size="small"
-        class="stat-card"
-      >
-        <div class="stat-label">
-          连接状态
-        </div>
-        <div class="stat-value">
-          {{ connectedCountDisplay }} / {{ totalSources }}
-        </div>
+      <a-card size="small" class="stat-card">
+        <div class="stat-label">连接状态</div>
+        <div class="stat-value">{{ connectedCountDisplay }} / {{ totalSources }}</div>
       </a-card>
-      <a-card
-        size="small"
-        class="stat-card"
-      >
-        <div class="stat-label">
-          上次同步
-        </div>
+      <a-card size="small" class="stat-card">
+        <div class="stat-label">上次同步</div>
         <div class="stat-value time">
           {{ formattedLastSyncTime }}
         </div>
       </a-card>
-      <a-card
-        size="small"
-        class="stat-card"
-      >
-        <div class="stat-label">
-          待处理
-        </div>
+      <a-card size="small" class="stat-card">
+        <div class="stat-label">待处理</div>
         <div class="stat-value">
           {{ state.stats.pendingRecords.toLocaleString() }}
         </div>
       </a-card>
-      <a-card
-        size="small"
-        class="stat-card danger"
-      >
-        <div class="stat-label">
-          异常
-        </div>
+      <a-card size="small" class="stat-card danger">
+        <div class="stat-label">异常</div>
         <div class="stat-value">
           {{ state.stats.failedRecords }}
         </div>
@@ -122,10 +79,13 @@
 </template>
 
 <script setup lang="ts">
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed } from 'vue'
-import { Modal, message } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { useDataSync } from '../../composables/useDataSync'
+
+const workstationConfirmation = useWorkstationConfirmation()
 
 const { state, isReadonly, hasPreflightPass, testAllConnections, runPreflight, executeSync } =
   useDataSync()
@@ -251,7 +211,7 @@ const handleExecute = async () => {
 
     if (messages.length > 0) {
       const confirmed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
+        workstationConfirmation.confirm({
           title: '执行前确认',
           content: messages.join(' '),
           okText: '继续执行',

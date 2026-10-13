@@ -700,7 +700,7 @@ def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None
             "non_compliant",
             {
                 "failure_kind": "pretransfusion_assessment_incomplete",
-                "performed_transfusion_confirmed": True,
+                "transfusion_order_present": True,
                 "checked_fields": [
                     "indication",
                     "laboratory_indicator",
@@ -918,7 +918,7 @@ def test_native_and_phase_results_never_enter_legacy_display_rejudgment(
 def test_046_preserves_controlled_per_record_missing_counts() -> None:
     facts = {
         "failure_kind": "transfusion_course_record_incomplete",
-        "performed_transfusion_confirmed": True,
+        "transfusion_order_present": True,
         "record_count": 3,
         "incomplete_record_count": 2,
         "checked_fields": [
@@ -4330,11 +4330,11 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "performed_anesthesia_confirmed": True,
                 "missing_fields_by_visit": {
                     "preanesthesia_visit": [
-                        "airway_assessment",
-                        "risk_discussion",
+                        "relevant_examinations",
+                        "precautions",
                         "PRIVATE_FIELD",
                     ],
-                    "postanesthesia_visit": ["respiratory_status"],
+                    "postanesthesia_visit": ["recovery_status"],
                     "PRIVATE_VISIT": ["record_time"],
                 },
                 "raw_visit_text": "PRIVATE_VISIT_TEXT",
@@ -4344,10 +4344,10 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "performed_anesthesia_confirmed": True,
                 "missing_fields_by_visit": {
                     "preanesthesia_visit": [
-                        "airway_assessment",
-                        "risk_discussion",
+                        "relevant_examinations",
+                        "precautions",
                     ],
-                    "postanesthesia_visit": ["respiratory_status"],
+                    "postanesthesia_visit": ["recovery_status"],
                 },
             },
         ),
@@ -5577,7 +5577,7 @@ def test_exam_lab_evidence_comes_only_from_reduced_fact_refs(
 def test_native_045_display_facts_do_not_restore_legacy_evidence_projection():
     raw_facts = {
         "verification_kind": "transfusion_course_record_present",
-        "performed_transfusion_confirmed": True,
+        "transfusion_order_present": True,
         "checked_sources": ["bloodtrans_record", "daily_course_record"],
         "record_count": 2,
         "source_document_ids": ["bloodtrans-045-1", "bloodtrans-045-2"],

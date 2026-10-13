@@ -1,0 +1,1536 @@
+{
+  "audit_id": "surgery029030-current-source-preparation-v1",
+  "stage": "prepared_not_executed",
+  "fixed_responsibility_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+  "observed_head_at_preparation": "ce1d0771a1674073f3dbb4f019dfb2a4e40af1cc",
+  "source_diff_e5f_to_observed_head": "5 known TC02 paths; 029/030 executors and mappings still exact e5f; shared finalizer/renderer changes reviewed below",
+  "approved_execution_head": "2f44aa44e86251acda81383e1b2bd84423008451",
+  "tree": "F:\\MedQC-worktrees\\qc-integration-20261008",
+  "authoritative_identities": [
+    {
+      "pointer": "/rules/28",
+      "entry": {
+        "rule_id": "LX0609-04-01-01",
+        "source_document": "术前小结",
+        "qc_point": "有手术医嘱但无术前小结",
+        "implementation_status": "active",
+        "policy_sources": [
+          "customer_confirmed"
+        ],
+        "policy_summary": "当前按客户已确认的《术前小结》质控点执行；新增或变更口径须单独验收。"
+      },
+      "legacy_id": "LX0609-029"
+    },
+    {
+      "pointer": "/rules/29",
+      "entry": {
+        "rule_id": "LX0609-04-02-02",
+        "source_document": "手术记录",
+        "qc_point": "有手术医嘱但无手术记录",
+        "implementation_status": "active",
+        "policy_sources": [
+          "customer_confirmed"
+        ],
+        "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
+      },
+      "legacy_id": "LX0609-030"
+    }
+  ],
+  "sources": [
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/__init__.py",
+      "sha256": "274befcae0ab066b0c19390e5ec8285b183c940bbcd19eabccc86d2c9753fbc3",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py",
+      "sha256": "d3246420d34d83ca7332bb8bb8918047c7d8a6cdcfae32fdf2d355d68b7ad840",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/antimicrobial_result_mapping.py",
+      "sha256": "690b83f2b578f11dc25401d6277d0533d26abe0ead987cc13c3a2a3188b469df",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_customer_projection.py",
+      "sha256": "7bfd7c99b9d71154fb5724831527ba58eda8ebafbd243ca87a072b44de470672",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_facts.py",
+      "sha256": "3b72a97f44064d6d21c01635c2733204c0b2ca5bbe64987621b064238b7b779b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "sha256": "13a49bfd1e48bd21e82967a5bd41e3e56180c0b4ad4b13d7fa89adcbe8e6a190",
+      "role": "public result mapping contract",
+      "blob_commit": "35909964a36289d64a381301865b0a407e97184d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_020_relation_contract.py",
+      "sha256": "ea6c7c1b577270e337f32d84ecfe0df122685407fb26da931b53df3acbddb96d",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_customer_projection.py",
+      "sha256": "0b1076de255db5846d16f898d3e4d9f02762c1b79425a6bdb7a7abdfd07f35b3",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_decision_evidence.py",
+      "sha256": "55a58fbeff7a50608179b0d6fab91e420bbb2d29754c20ac3f1ffefe0dbe87a7",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_fact_contract.py",
+      "sha256": "143f890221d4b38a63df983bbd810d1e482261554f0df7eaedcca52fde50d500",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_opinion_freeze.py",
+      "sha256": "5d8cbcccdaad0024cbd10c6028ea84f66ade8ca5a2d7c0bc4f7d8a8c12b3ca85",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/continuity_evidence_selection.py",
+      "sha256": "e6be32ff8a109e7c3d1380c796fab4fc3fde6f489100652b26f1d07777017de7",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/continuity_result_mapping.py",
+      "sha256": "7e21cde62910528e97cffe833a9e5ce26217e1197e0320ebcdc39ba00b19a0ec",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/__init__.py",
+      "sha256": "a18880381e3051c2bf798bd2c45affb2f4460c7e8a7a620a543595213cb898c3",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_007.py",
+      "sha256": "4fc0395fae910f334980b4edb214621c5a0f2341ac688a2586321b727d3e5b23",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_018.py",
+      "sha256": "5523ffdb69f81e460ec8fe7cb167ebabe7051a563492ad96d388e7396d836293",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_077.py",
+      "sha256": "1f849f629c9f454145dc273116c1cb00666e7da04b3b6bd0721e2186c1e5ca2e",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_008_009.py",
+      "sha256": "2faa3c759e786f86409866f5938f0f543e69ab2c8ec842baf2b87d2024d0d0af",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_016_017.py",
+      "sha256": "b87472a2feb3c692ae38ad1802194988343b01422c837288cd4ed7e70cadf4db",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/shared.py",
+      "sha256": "09333473e69e59de6aacb54b2da14f07f2891311c4690a7e3b0f0654ba51bf15",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality_result_mapping.py",
+      "sha256": "9e3ba792f6eb37839e3ba73b8f5bda26cba7798b3ae4579f7e025025dafa49c5",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/critical_value_result_mapping.py",
+      "sha256": "8a62a1f5194117f317cc09ebea7dfd2972dbb93758473d9d613f4cfe9cc1d3bc",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/ct_order_course_consistency.py",
+      "sha256": "ac5c2d0d7f0b0593314d12d1ee5ab7c5464afa30ef0d85aa937d9388bc78f183",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_evidence_enrichment.py",
+      "sha256": "d18a11c6cb22c987238b850140f0cd2f05ea73d3609e6db05f5d97e391607599",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_remediation.py",
+      "sha256": "5ba54e2c0567b95715e49d6da2e35c810b2108527905a2a9bce16b94d0ca5bfb",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+      "sha256": "6364f39e5d57c102d85960ae5dc1a5fd96837e4a0123d0755d8c0bd311a0ee88",
+      "role": "controlled facts -> finding",
+      "blob_commit": "35909964a36289d64a381301865b0a407e97184d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c",
+      "role": "AST static family definitions only",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/death_document_result_mapping.py",
+      "sha256": "a5a87c9b78639029d38daea3c996eea282e495c1f4d67e46b083843d84f45df5",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_binding.py",
+      "sha256": "897ec218c45e6eccea60ab92c9d3bb7c1b0ab9dbed222d5cab64dc8a70f3abcb",
+      "role": "source/material ref binding",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_model.py",
+      "sha256": "43ad743b4e4094aabbb676bd74def8c071d9ca37437d0def6b4a32003bc86fae",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_reducer.py",
+      "sha256": "84d30a75e31c6c5063e8d1181e470a40bad9fd0f02bb888d7ecf6e092feb0fd4",
+      "role": "native dimensions -> public six-state",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/deterministic_gate.py",
+      "sha256": "e28cec4ad2fe9fc0b09fc32fa31b340ade6e797eab7b72d97aed0ad68d49f4b7",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
+      "sha256": "62a97d2f51b9ed79adbfab8943a86028bfddcc0b0bd417a7d319d39634abdf38",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+      "sha256": "79d33291885b7375c0474f3cd3f3eea9efc32dfcaa884b2c6c0c5da55864923e",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/engine.py",
+      "sha256": "7b823d742585a5648bbe54b02ed92f2f2a6883af731147558112e6e754cfbf8d",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evaluation_horizon.py",
+      "sha256": "752f42886e05becfa4f7964f10e95ecaa4a8b9af6341a235cc367f62da8a06de",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_material.py",
+      "sha256": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot.py",
+      "sha256": "a534207dafe48f4cc4a4306316515f47dd567d87576840871c5e7b8a7bc1bedd",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot_provider.py",
+      "sha256": "d0bdd012b26742fd85a777ed0ea5001c89d71c64204e125b7956926a7ed9c3d9",
+      "role": "synthetic row reader -> actual snapshot/materials",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_course_time.py",
+      "sha256": "c6aa81414713015f8af468410c0730c8b8260ef9c1b581379d86caf4fc7ac26f",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_event_recovery.py",
+      "sha256": "25e526816e1504eed835378dcad13d5d0cc170122f4dbbf58960433b45cd4f31",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+      "sha256": "ac9e5dee95c00d65e87deb907ea8b922fe7392bfe263cd496f4add72c9ca97b5",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_result_mapping.py",
+      "sha256": "6a2d05130c009cce9327f217b5976af6d7c5efb5af0632785a590daaf42eee7d",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_window.py",
+      "sha256": "b62572ec9d04cd3d52ee7f998781abeb81299a47e7c0b3e396be0fe8c0c38a6e",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_order_linkage.py",
+      "sha256": "8020255542be6db8d219de106748280373eb12adbb5adcf58b23750850d46401",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "sha256": "d0bb0a8020cbf1ca19201b8ad94e85f1690d8ec101a4793cb2676fa68c3ff1d7",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution_contract.py",
+      "sha256": "566fd4552a36775be6a5a44eb0e9d80a89eb511b90f193a46eca8878d5453113",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py",
+      "sha256": "0e709779ff744398ea67e2a12190d7499abdd99c474634eb44817455b47b4c91",
+      "role": "029 family extra material sources",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/__init__.py",
+      "sha256": "909b9529f9b9f5db7ee3a0993c46cde2ef12025fdb169511b773251b00bfb6e7",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/antimicrobial_action_extraction.py",
+      "sha256": "e75d4e23eb616100d45af979c2de9bf940f03374772fb12a20536772da4c9b9f",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/consultation_timeliness.py",
+      "sha256": "eb29ce5554eca52bc01a71f6206e17d4ec60333a8e9c9c9c16a982accf3295c0",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py",
+      "sha256": "1d18fffff8ec0802004dd668f462b9cb41e562a8460d1d6beeec663ff356ca79",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/diagnosis_change_extraction.py",
+      "sha256": "eb6f67e2fa4cc9f028a0740a1acbb16deab052ec0f822287c9b869cbd9b7e853",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/difficult_case_trigger.py",
+      "sha256": "0874fc4865386393fdd5b435e2e343a9cdd73429eeae26f5cb6af1d1f9daba62",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_approval_extraction.py",
+      "sha256": "8ac47003c3e18873e906e28e11e7db51aec7ff8aeddc30ef21da0a9e09fc455b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py",
+      "sha256": "568032eff813c98fd678442de476f1cbf62b29b617205d732828d14890393306",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_content.py",
+      "sha256": "8d88c37a9a8314a855cf0e2bdb64a363c9e1c357feb2bcd98dba598649d52290",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_stages.py",
+      "sha256": "ff3d1dfdf3ebfcc7a28190275f2d8defb3a6efff44e678dc363212818df32f29",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_documentation.py",
+      "sha256": "5f423f29b2e4ac3bca1c42388d12dc6c5593fbacd135f72ab5fc05997a56805c",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_medication_extraction.py",
+      "sha256": "2b191f6cb529cb52e1023e5a34b9013cadcfd4bb9797c1c010897f3a4ee905ff",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/physician_handoff.py",
+      "sha256": "b45b6d42c656b914f04c55c638864299a12691cc3b9f08666840d1e9d8964d4b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/rule_076.py",
+      "sha256": "43a27394890f536b1261cece32c4507303c40477a50ca3a26cb9cf9f39681e37",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/shared.py",
+      "sha256": "bc46b0d7f3a1aec581dec6caaf9f7eb7f043c9158133832128062cfe769bd69b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfer_documentation.py",
+      "sha256": "77df9c66a7179d3b2c80dbc3b23059c203f61a82d8e1fec27d704fcacf8fc829",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document_critical_value.py",
+      "sha256": "957d86b873c9683c6ae3a9822d9a2c47357734a7693bc3c7d7eafac9e06a9835",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/fact_coverage.py",
+      "sha256": "225bcd062cf0df416248b7a0a7d4deaca62a3d9ea138881fd6eb2b37472f3c6b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/fact_schema.py",
+      "sha256": "bc5629f1bef3b6d5296cc7909b6a5f6540328bc68d713347d6259b5814fe3486",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py",
+      "sha256": "89ff208f6e68ce4b055d43221baa0027618e7a8c01634be80ce5f09ea6c54e96",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/imaging_report_scope.py",
+      "sha256": "33c4b37a33737d6a709977645cd9813c9eb181932178faaba4c1179958e55d95",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/impact_scope.py",
+      "sha256": "2061f71b757d1febfb8441bc69a0feba02c5f2fc0a13d8f67023d295a28c0c8e",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/implant_information_shadow.py",
+      "sha256": "5b160f6b91f0130ad529c730f611b9987caa930c9b0c06a7b1125e563eab72dd",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/input_builder.py",
+      "sha256": "bcb69180ae2fc57412a80771dc4b02a1a46881e1b1ff37c7ea5a8395af388c01",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/legacy_fact_adapter.py",
+      "sha256": "cc199e9a5db9bca9a56b624e9ae2c76294005c271a8b7ec67d69c6b801032a85",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+      "sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/malignancy_fact.py",
+      "sha256": "fe5aa2918d5f76660acd71102da06b9a89602c4a499c0c6728a6a91b17d0d1f9",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+      "sha256": "5cc9f4fb5f1adcc603154fe6b9bedbb54d55ebca7d4c8700cc2e3b0fc4e171ec",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_episode_execution.py",
+      "sha256": "73a51b5d720e0c89cddbc7dc29b7efa451295b039099594b887b07a478519cdc",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_execution.py",
+      "sha256": "7c911fcf7aa73cd3143589e0c7dce684d6adb3bc10e89b2f7f23944c323b6d2c",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_course_quality_execution.py",
+      "sha256": "9e2d89255576bd00feea216ddb7e1f83875ff17d6f993ec21460c752e50a9940",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py",
+      "sha256": "a1e8dbee770fe1376d0ab71d7fd9bd7eb1a328ba6a1ba4e190979e0fa7125979",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_execution.py",
+      "sha256": "8edf38acf87fd0279000af412ae2d13de722b165cee7219c7e900888e8007e2e",
+      "role": "030 typed presence/trigger/fact refs:614-753; no candidate global coverage override",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "sha256": "72789f8b6953e55bdfe2e276fce052ec80428bd2ac742ffa3662b2432265e442",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "35909964a36289d64a381301865b0a407e97184d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_mdt_execution.py",
+      "sha256": "42cff55f0c600808fb5173dce8af55fb51f78ea87a7b2bd74b72d60276bb93f7",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+      "sha256": "b1709f4a107d30a714fdd7a4a78a2edc94fde27bc8868c98f23eddc6fee1b319",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py",
+      "sha256": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
+      "sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "role": "029 _typed_029_outcome:1943; any nonempty summary path:2101",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_gate_execution.py",
+      "sha256": "f7ff9644a3c9509970efaa2dac42138a27d32ed628f04fddedbfaa488da301f6",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+      "sha256": "bdc7dfd538fa8b13cfa434804835d73777d9f25cd1b08e9bdc6a02d51edaf652",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_treatment_order_consistency.py",
+      "sha256": "8b338df8c107388ed2d08f67c2e9c7b52bd61cae170270d475911e16fbe36228",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "sha256": "3e2299951c92f9835da0787f8c24fc5ef49b51a39b350429d654351411890264",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pathology_report_completeness.py",
+      "sha256": "8e8a67d6158a3821fc5890aad6387f1c0bc974e3cef576a16c57c20c3dbbdc34",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+      "sha256": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/planner.py",
+      "sha256": "3fac23dba1b0aa398f017db9b71aa75b05ce7e4dcf8025e4a78b76cb9f1bb3f0",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/postoperative_result_mapping.py",
+      "sha256": "822dd16406726fc9e92f877df10b4dba92db760bc9ecf4cba689a95e5dff195a",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/preproduction_bundle_reader.py",
+      "sha256": "09e09eac345d57b68b864c6ae47499be4d5dd56a0545da2a1d73c1d9e443980b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/preproduction_runner.py",
+      "sha256": "2dfa42e8bf93f4edf0e99fe2f4ad8e23f3b2f7afa423cc016a432831f7324f14",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pretransfusion_assessment.py",
+      "sha256": "b385dbe4d9ba4be1daaaaa181057be4195d0cb0d60311584a19d89e34e95e73f",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py",
+      "sha256": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
+      "sha256": "ae01b8abadb2281fffa8e21c663afcd544c17c3eb86cb1f5e9a7c47f4f59a207",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/programmatic_rules.py",
+      "sha256": "082eca62c70d351d8125cef751c12aa6004e9f3130a8816c4ae94078d5446e88",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/record_result_read_model.py",
+      "sha256": "3eb18d35868e9a523414141e7380ab3abb3c60cd116ad0aa245321042f60b17d",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/remediation_draft.py",
+      "sha256": "1aa4c2b20cad09bc429dd7f0bb4b5ece51b614c40c73dcc8dde9c6d69e9fa888",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rescue_record_completeness.py",
+      "sha256": "a72a1f3cb9817726408490257ec1e1379c717aad5caccf29e2678d02bfac7b7e",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/result_aggregator.py",
+      "sha256": "b68c849481a8f8685948c1485294e2bc6d40d85a831cb0cd3c198a2496ab8e17",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rule_contracts.py",
+      "sha256": "b540f4d8dab09c135d31079720d771e9b92b50172f57e47586748e70e8ead297",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rule_decision_settings.py",
+      "sha256": "274cc014101c0af065113301d69efd945b6467550a006ea21e75943d1c4efef8",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_assembler.py",
+      "sha256": "d65c79e1fb58359dd5b6470c4064e6942fd57cd64d0425fdf0688fb3cff3cdfc",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_hook.py",
+      "sha256": "cba70ad370f7d8c6e11501da20ca9a17143ea5888529bd5e79569b2ece93c8f9",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_input_provider.py",
+      "sha256": "a73508cedb5e4818cade67f7ce716cb04663a2be9fcdc699749aec7fd821591d",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_audit_summary.py",
+      "sha256": "7944ddcb29be5a187bc6b32f720b7ebbd9a12e8024ea69afa64b2c488b333c79",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_execution.py",
+      "sha256": "53a9494d522d533e0c6def6440f5a0474e6086b54a5fac84a127012ebb74a675",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_fact_bundle.py",
+      "sha256": "05d82e42d34a8877fd8fbeb15d4a7048077c1c2cc3786bfb4a4f70e25bf1710d",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py",
+      "sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "role": "MR authoritative datetime whitelist:208; no MR application_id/document_id",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_gap_contract.py",
+      "sha256": "b386295a317df8d9560d6d986741a8ce48954295905cc8b6684267887fa9f0e5",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest.py",
+      "sha256": "98dcf8162f3b412c0d6b5ac646161c9c77c357a949433d98f5512e205339ecdb",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest_builder.py",
+      "sha256": "bbcf938806bc48cd2374b2b53bacc1b72845aef619fde83d0c3dbad112899478",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+      "sha256": "2c562562a8035b2fada29c823c0cfebaf9fd6cec74529036225008917364e01e",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_applicability.py",
+      "sha256": "a493ef1c9376c993c27dc1a2e1f31b5da833804b562b9156cd37f65dfd59e809",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_document_result_mapping.py",
+      "sha256": "bd3f183d426b8e15db0f7bb71aa01315c2eeb5e0af72429538917806a5913f8e",
+      "role": "029 public facts contract",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_event_association.py",
+      "sha256": "64956e8e52278bcf5e27c71e20275573af39f4a619e49a7caf5ae36dbd8c582f",
+      "role": "name parser:151; performed event association:236",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_gate_result_mapping.py",
+      "sha256": "0c54f2ea434c0ec0fe5c221ff8995541ca6eb6082afdd61dd7cf7e0a605e4008",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_mdt_result_mapping.py",
+      "sha256": "0336a92f9dbe99bd3833e6d43a6b28ba36469fe2d91e402ee7175ce3ba988c38",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_presence_result_mapping.py",
+      "sha256": "d39cc5f74fdc673e8071abe5a69c437800dc96afd8e6aade2f13c8a755e0eb30",
+      "role": "030 public facts contract",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_procedure_catalog.py",
+      "sha256": "eac2428d0436d94c34415f51ab8d8396ec5019d988498585fb2c1d2eff7b865b",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_text_fact_contract.py",
+      "sha256": "85b4edad1c19f4cb6ada7d87c291dece55c00ce1f971e274ec89eeb7d41137ca",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py",
+      "sha256": "34a01a5c68e03370e53b170311caff83ba9d91220fb9f3ef9b371b46cb1f65a3",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "35909964a36289d64a381301865b0a407e97184d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+      "sha256": "98110d373955a81a189c32d41302f1c649bb6923dd432e2404dd944337f47e4f",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
+      "sha256": "1ef1640e9dc194a328df6c934b0ea519c56df65f82031ad8376cb97b9278d7f5",
+      "role": "transitive luxian_0609 import source pin",
+      "blob_commit": "e5f5696f559b4571b0d2a7d339d0d65485f8344b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py",
+      "blob_commit": "35909964a36289d64a381301865b0a407e97184d",
+      "sha256": "565677134bf214c5446e3a27621a075603665842bad86a8c14c930edb8870c93",
+      "role": "070-only added source, outside 029/030 responsibility; pin current transitive import superset"
+    }
+  ],
+  "responsibility_role_files": {
+    "native_surgery_document_execution.py": "029 _typed_029_outcome:1943; any nonempty summary path:2101",
+    "native_execution.py": "030 typed presence/trigger/fact refs:614-753; no candidate global coverage override",
+    "surgery_event_association.py": "name parser:151; performed event association:236",
+    "surgery_presence_result_mapping.py": "030 public facts contract",
+    "surgery_document_result_mapping.py": "029 public facts contract",
+    "source_evidence_reader.py": "MR authoritative datetime whitelist:208; no MR application_id/document_id",
+    "evidence_snapshot_provider.py": "synthetic row reader -> actual snapshot/materials",
+    "executor_registry.py": "029 family extra material sources",
+    "decision_binding.py": "source/material ref binding",
+    "decision_reducer.py": "native dimensions -> public six-state",
+    "canonical_result_finalizer.py": "public result mapping contract",
+    "customer_renderer.py": "controlled facts -> finding",
+    "customer_rule_package.py": "AST static family definitions only"
+  },
+  "original_expectation_sha256": "1a4dfef87332d51b2a01dac408fbe39975fca0f465cff2e538d2076584d01332",
+  "provenance": [
+    {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\next-triage\\fixed-actuals.json",
+      "sha256": "d149c07e1bbd28f75ed510ffe687f490ee3b6c1ed16124a8a99f5a2af133adae"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\next-triage\\candidate-actuals.json",
+      "sha256": "4ceeea7f1e5b02b65a6b07068d7ab9f36ec438430bb96d9d1704fb1539794d5d"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\next-triage\\actuals.py",
+      "sha256": "da09622c014821b59771c3e206895039ce3276ace7e3454eae4dcdc61d27f61c"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\next-triage\\triage.md",
+      "sha256": "461d0532b10d9512e8ddd402806571491687dc36aae8b324e39dc06423e089f1"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\next-triage\\fixed-versions.json",
+      "sha256": "66461e47b514825fed282e190719d6cdea22ea6a263a87498f58975a5b0e8b89"
+    },
+    {
+      "path": "F:\\MedQC-worktrees\\review-artifacts\\next-triage\\candidate-versions.json",
+      "sha256": "f7c287c6460bb4e0f0f4ed94b246acc9170e6d7f4f8b2b2825dc04f323c22e92"
+    }
+  ],
+  "historical_fixed_commit": "760c308b37178e008af021b116d026f4cdc39352",
+  "candidate_commit": null,
+  "candidate_is_integrated": false,
+  "runtime_layer": "synthetic row reader -> real snapshot/materials -> current native executor -> Binding/Reducer -> Finalizer; no HTTP/Store/DB",
+  "substitutions": [
+    "app.core.settings get_settings blocked",
+    "app.database.connection engine=None / DB_SCHEMA_MODE legacy",
+    "app.services.bundles.assembly engine=None",
+    "customer_rule_package AST literal RULE_FAMILY_DEFINITIONS only"
+  ],
+  "planned_case_ids": [
+    "029_two_orders_two_summaries",
+    "030_orderB_own_record"
+  ],
+  "test_runs": 0,
+  "await_serial_slot": true,
+  "serial_slot_authorization": "root granted run04 two original cases after N12 released; docs HEAD2f44, production359099/e5f target paths",
+  "baseline_sources_e5f": [
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/__init__.py",
+      "sha256": "274befcae0ab066b0c19390e5ec8285b183c940bbcd19eabccc86d2c9753fbc3",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py",
+      "sha256": "d3246420d34d83ca7332bb8bb8918047c7d8a6cdcfae32fdf2d355d68b7ad840",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/antimicrobial_result_mapping.py",
+      "sha256": "690b83f2b578f11dc25401d6277d0533d26abe0ead987cc13c3a2a3188b469df",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_customer_projection.py",
+      "sha256": "7bfd7c99b9d71154fb5724831527ba58eda8ebafbd243ca87a072b44de470672",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/basic_timeliness_facts.py",
+      "sha256": "3b72a97f44064d6d21c01635c2733204c0b2ca5bbe64987621b064238b7b779b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "sha256": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa",
+      "role": "public result mapping contract"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_020_relation_contract.py",
+      "sha256": "ea6c7c1b577270e337f32d84ecfe0df122685407fb26da931b53df3acbddb96d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_customer_projection.py",
+      "sha256": "0b1076de255db5846d16f898d3e4d9f02762c1b79425a6bdb7a7abdfd07f35b3",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_decision_evidence.py",
+      "sha256": "55a58fbeff7a50608179b0d6fab91e420bbb2d29754c20ac3f1ffefe0dbe87a7",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_fact_contract.py",
+      "sha256": "143f890221d4b38a63df983bbd810d1e482261554f0df7eaedcca52fde50d500",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/consultation_opinion_freeze.py",
+      "sha256": "5d8cbcccdaad0024cbd10c6028ea84f66ade8ca5a2d7c0bc4f7d8a8c12b3ca85",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/continuity_evidence_selection.py",
+      "sha256": "e6be32ff8a109e7c3d1380c796fab4fc3fde6f489100652b26f1d07777017de7",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/continuity_result_mapping.py",
+      "sha256": "7e21cde62910528e97cffe833a9e5ce26217e1197e0320ebcdc39ba00b19a0ec",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/__init__.py",
+      "sha256": "a18880381e3051c2bf798bd2c45affb2f4460c7e8a7a620a543595213cb898c3",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_007.py",
+      "sha256": "4fc0395fae910f334980b4edb214621c5a0f2341ac688a2586321b727d3e5b23",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_018.py",
+      "sha256": "5523ffdb69f81e460ec8fe7cb167ebabe7051a563492ad96d388e7396d836293",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rule_077.py",
+      "sha256": "1f849f629c9f454145dc273116c1cb00666e7da04b3b6bd0721e2186c1e5ca2e",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_008_009.py",
+      "sha256": "2faa3c759e786f86409866f5938f0f543e69ab2c8ec842baf2b87d2024d0d0af",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/rules_016_017.py",
+      "sha256": "b87472a2feb3c692ae38ad1802194988343b01422c837288cd4ed7e70cadf4db",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality/shared.py",
+      "sha256": "09333473e69e59de6aacb54b2da14f07f2891311c4690a7e3b0f0654ba51bf15",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/course_quality_result_mapping.py",
+      "sha256": "9e3ba792f6eb37839e3ba73b8f5bda26cba7798b3ae4579f7e025025dafa49c5",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/critical_value_result_mapping.py",
+      "sha256": "8a62a1f5194117f317cc09ebea7dfd2972dbb93758473d9d613f4cfe9cc1d3bc",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/ct_order_course_consistency.py",
+      "sha256": "ac5c2d0d7f0b0593314d12d1ee5ab7c5464afa30ef0d85aa937d9388bc78f183",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_evidence_enrichment.py",
+      "sha256": "d18a11c6cb22c987238b850140f0cd2f05ea73d3609e6db05f5d97e391607599",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_remediation.py",
+      "sha256": "5ba54e2c0567b95715e49d6da2e35c810b2108527905a2a9bce16b94d0ca5bfb",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+      "sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844",
+      "role": "controlled facts -> finding"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c",
+      "role": "AST static family definitions only"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/death_document_result_mapping.py",
+      "sha256": "a5a87c9b78639029d38daea3c996eea282e495c1f4d67e46b083843d84f45df5",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_binding.py",
+      "sha256": "897ec218c45e6eccea60ab92c9d3bb7c1b0ab9dbed222d5cab64dc8a70f3abcb",
+      "role": "source/material ref binding"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_model.py",
+      "sha256": "43ad743b4e4094aabbb676bd74def8c071d9ca37437d0def6b4a32003bc86fae",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_reducer.py",
+      "sha256": "84d30a75e31c6c5063e8d1181e470a40bad9fd0f02bb888d7ecf6e092feb0fd4",
+      "role": "native dimensions -> public six-state"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/deterministic_gate.py",
+      "sha256": "e28cec4ad2fe9fc0b09fc32fa31b340ade6e797eab7b72d97aed0ad68d49f4b7",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/difficult_case_result_mapping.py",
+      "sha256": "62a97d2f51b9ed79adbfab8943a86028bfddcc0b0bd417a7d319d39634abdf38",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/discharge_result_mapping.py",
+      "sha256": "79d33291885b7375c0474f3cd3f3eea9efc32dfcaa884b2c6c0c5da55864923e",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/engine.py",
+      "sha256": "7b823d742585a5648bbe54b02ed92f2f2a6883af731147558112e6e754cfbf8d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evaluation_horizon.py",
+      "sha256": "752f42886e05becfa4f7964f10e95ecaa4a8b9af6341a235cc367f62da8a06de",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_material.py",
+      "sha256": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot.py",
+      "sha256": "a534207dafe48f4cc4a4306316515f47dd567d87576840871c5e7b8a7bc1bedd",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot_provider.py",
+      "sha256": "d0bdd012b26742fd85a777ed0ea5001c89d71c64204e125b7956926a7ed9c3d9",
+      "role": "synthetic row reader -> actual snapshot/materials"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_course_time.py",
+      "sha256": "c6aa81414713015f8af468410c0730c8b8260ef9c1b581379d86caf4fc7ac26f",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_event_recovery.py",
+      "sha256": "25e526816e1504eed835378dcad13d5d0cc170122f4dbbf58960433b45cd4f31",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_fact_extraction.py",
+      "sha256": "ac9e5dee95c00d65e87deb907ea8b922fe7392bfe263cd496f4add72c9ca97b5",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_result_mapping.py",
+      "sha256": "6a2d05130c009cce9327f217b5976af6d7c5efb5af0632785a590daaf42eee7d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_lab_window.py",
+      "sha256": "b62572ec9d04cd3d52ee7f998781abeb81299a47e7c0b3e396be0fe8c0c38a6e",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/exam_order_linkage.py",
+      "sha256": "8020255542be6db8d219de106748280373eb12adbb5adcf58b23750850d46401",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "sha256": "d0bb0a8020cbf1ca19201b8ad94e85f1690d8ec101a4793cb2676fa68c3ff1d7",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/execution_contract.py",
+      "sha256": "566fd4552a36775be6a5a44eb0e9d80a89eb511b90f193a46eca8878d5453113",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py",
+      "sha256": "0e709779ff744398ea67e2a12190d7499abdd99c474634eb44817455b47b4c91",
+      "role": "029 family extra material sources"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/__init__.py",
+      "sha256": "909b9529f9b9f5db7ee3a0993c46cde2ef12025fdb169511b773251b00bfb6e7",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/antimicrobial_action_extraction.py",
+      "sha256": "e75d4e23eb616100d45af979c2de9bf940f03374772fb12a20536772da4c9b9f",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/consultation_timeliness.py",
+      "sha256": "eb29ce5554eca52bc01a71f6206e17d4ec60333a8e9c9c9c16a982accf3295c0",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/death_discussion.py",
+      "sha256": "1d18fffff8ec0802004dd668f462b9cb41e562a8460d1d6beeec663ff356ca79",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/diagnosis_change_extraction.py",
+      "sha256": "eb6f67e2fa4cc9f028a0740a1acbb16deab052ec0f822287c9b869cbd9b7e853",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/difficult_case_trigger.py",
+      "sha256": "0874fc4865386393fdd5b435e2e343a9cdd73429eeae26f5cb6af1d1f9daba62",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_approval_extraction.py",
+      "sha256": "8ac47003c3e18873e906e28e11e7db51aec7ff8aeddc30ef21da0a9e09fc455b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course.py",
+      "sha256": "568032eff813c98fd678442de476f1cbf62b29b617205d732828d14890393306",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_content.py",
+      "sha256": "8d88c37a9a8314a855cf0e2bdb64a363c9e1c357feb2bcd98dba598649d52290",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_course_stages.py",
+      "sha256": "ff3d1dfdf3ebfcc7a28190275f2d8defb3a6efff44e678dc363212818df32f29",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_documentation.py",
+      "sha256": "5f423f29b2e4ac3bca1c42388d12dc6c5593fbacd135f72ab5fc05997a56805c",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/discharge_medication_extraction.py",
+      "sha256": "2b191f6cb529cb52e1023e5a34b9013cadcfd4bb9797c1c010897f3a4ee905ff",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/physician_handoff.py",
+      "sha256": "b45b6d42c656b914f04c55c638864299a12691cc3b9f08666840d1e9d8964d4b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/rule_076.py",
+      "sha256": "43a27394890f536b1261cece32c4507303c40477a50ca3a26cb9cf9f39681e37",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/shared.py",
+      "sha256": "bc46b0d7f3a1aec581dec6caaf9f7eb7f043c9158133832128062cfe769bd69b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfer_documentation.py",
+      "sha256": "77df9c66a7179d3b2c80dbc3b23059c203f61a82d8e1fec27d704fcacf8fc829",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/extended_document_critical_value.py",
+      "sha256": "957d86b873c9683c6ae3a9822d9a2c47357734a7693bc3c7d7eafac9e06a9835",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/fact_coverage.py",
+      "sha256": "225bcd062cf0df416248b7a0a7d4deaca62a3d9ea138881fd6eb2b37472f3c6b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/fact_schema.py",
+      "sha256": "bc5629f1bef3b6d5296cc7909b6a5f6540328bc68d713347d6259b5814fe3486",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/handbook_exam_lab.py",
+      "sha256": "89ff208f6e68ce4b055d43221baa0027618e7a8c01634be80ce5f09ea6c54e96",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/imaging_report_scope.py",
+      "sha256": "33c4b37a33737d6a709977645cd9813c9eb181932178faaba4c1179958e55d95",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/impact_scope.py",
+      "sha256": "2061f71b757d1febfb8441bc69a0feba02c5f2fc0a13d8f67023d295a28c0c8e",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/implant_information_shadow.py",
+      "sha256": "5b160f6b91f0130ad529c730f611b9987caa930c9b0c06a7b1125e563eab72dd",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/input_builder.py",
+      "sha256": "bcb69180ae2fc57412a80771dc4b02a1a46881e1b1ff37c7ea5a8395af388c01",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/legacy_fact_adapter.py",
+      "sha256": "cc199e9a5db9bca9a56b624e9ae2c76294005c271a8b7ec67d69c6b801032a85",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+      "sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/malignancy_fact.py",
+      "sha256": "fe5aa2918d5f76660acd71102da06b9a89602c4a499c0c6728a6a91b17d0d1f9",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_basic_timeliness.py",
+      "sha256": "5cc9f4fb5f1adcc603154fe6b9bedbb54d55ebca7d4c8700cc2e3b0fc4e171ec",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_episode_execution.py",
+      "sha256": "73a51b5d720e0c89cddbc7dc29b7efa451295b039099594b887b07a478519cdc",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_consultation_execution.py",
+      "sha256": "7c911fcf7aa73cd3143589e0c7dce684d6adb3bc10e89b2f7f23944c323b6d2c",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_course_quality_execution.py",
+      "sha256": "9e2d89255576bd00feea216ddb7e1f83875ff17d6f993ec21460c752e50a9940",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_exam_lab_execution.py",
+      "sha256": "a1e8dbee770fe1376d0ab71d7fd9bd7eb1a328ba6a1ba4e190979e0fa7125979",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_execution.py",
+      "sha256": "8edf38acf87fd0279000af412ae2d13de722b165cee7219c7e900888e8007e2e",
+      "role": "030 typed presence/trigger/fact refs:614-753; no candidate global coverage override"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_mdt_execution.py",
+      "sha256": "42cff55f0c600808fb5173dce8af55fb51f78ea87a7b2bd74b72d60276bb93f7",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_package.py",
+      "sha256": "b1709f4a107d30a714fdd7a4a78a2edc94fde27bc8868c98f23eddc6fee1b319",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py",
+      "sha256": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
+      "sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "role": "029 _typed_029_outcome:1943; any nonempty summary path:2101"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_gate_execution.py",
+      "sha256": "f7ff9644a3c9509970efaa2dac42138a27d32ed628f04fddedbfaa488da301f6",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_transfusion_execution.py",
+      "sha256": "bdc7dfd538fa8b13cfa434804835d73777d9f25cd1b08e9bdc6a02d51edaf652",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_treatment_order_consistency.py",
+      "sha256": "8b338df8c107388ed2d08f67c2e9c7b52bd61cae170270d475911e16fbe36228",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_tumor_pathology_execution.py",
+      "sha256": "3e2299951c92f9835da0787f8c24fc5ef49b51a39b350429d654351411890264",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pathology_report_completeness.py",
+      "sha256": "8e8a67d6158a3821fc5890aad6387f1c0bc974e3cef576a16c57c20c3dbbdc34",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/phase_scope.py",
+      "sha256": "ac29fd99a9c33b601b031d8d57b56c17e2fab5f8c0c97fb823d6cd1889d23a8a",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/planner.py",
+      "sha256": "3fac23dba1b0aa398f017db9b71aa75b05ce7e4dcf8025e4a78b76cb9f1bb3f0",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/postoperative_result_mapping.py",
+      "sha256": "822dd16406726fc9e92f877df10b4dba92db760bc9ecf4cba689a95e5dff195a",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/preproduction_bundle_reader.py",
+      "sha256": "09e09eac345d57b68b864c6ae47499be4d5dd56a0545da2a1d73c1d9e443980b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/preproduction_runner.py",
+      "sha256": "2dfa42e8bf93f4edf0e99fe2f4ad8e23f3b2f7afa423cc016a432831f7324f14",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/pretransfusion_assessment.py",
+      "sha256": "b385dbe4d9ba4be1daaaaa181057be4195d0cb0d60311584a19d89e34e95e73f",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_identity_context.py",
+      "sha256": "0a76a9e6bcdb801a433a889b0ca08d597fcd5896ac24a65cd449a5ca97d3ce66",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/privacy_request_scope.py",
+      "sha256": "ae01b8abadb2281fffa8e21c663afcd544c17c3eb86cb1f5e9a7c47f4f59a207",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/programmatic_rules.py",
+      "sha256": "082eca62c70d351d8125cef751c12aa6004e9f3130a8816c4ae94078d5446e88",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/record_result_read_model.py",
+      "sha256": "3eb18d35868e9a523414141e7380ab3abb3c60cd116ad0aa245321042f60b17d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/remediation_draft.py",
+      "sha256": "1aa4c2b20cad09bc429dd7f0bb4b5ece51b614c40c73dcc8dde9c6d69e9fa888",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rescue_record_completeness.py",
+      "sha256": "a72a1f3cb9817726408490257ec1e1379c717aad5caccf29e2678d02bfac7b7e",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/result_aggregator.py",
+      "sha256": "b68c849481a8f8685948c1485294e2bc6d40d85a831cb0cd3c198a2496ab8e17",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rule_contracts.py",
+      "sha256": "b540f4d8dab09c135d31079720d771e9b92b50172f57e47586748e70e8ead297",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/rule_decision_settings.py",
+      "sha256": "274cc014101c0af065113301d69efd945b6467550a006ea21e75943d1c4efef8",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_assembler.py",
+      "sha256": "d65c79e1fb58359dd5b6470c4064e6942fd57cd64d0425fdf0688fb3cff3cdfc",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_hook.py",
+      "sha256": "cba70ad370f7d8c6e11501da20ca9a17143ea5888529bd5e79569b2ece93c8f9",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/runtime_shadow_input_provider.py",
+      "sha256": "a73508cedb5e4818cade67f7ce716cb04663a2be9fcdc699749aec7fd821591d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_audit_summary.py",
+      "sha256": "7944ddcb29be5a187bc6b32f720b7ebbd9a12e8024ea69afa64b2c488b333c79",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_execution.py",
+      "sha256": "53a9494d522d533e0c6def6440f5a0474e6086b54a5fac84a127012ebb74a675",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/shadow_fact_bundle.py",
+      "sha256": "05d82e42d34a8877fd8fbeb15d4a7048077c1c2cc3786bfb4a4f70e25bf1710d",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py",
+      "sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "role": "MR authoritative datetime whitelist:208; no MR application_id/document_id"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_gap_contract.py",
+      "sha256": "b386295a317df8d9560d6d986741a8ce48954295905cc8b6684267887fa9f0e5",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest.py",
+      "sha256": "98dcf8162f3b412c0d6b5ac646161c9c77c357a949433d98f5512e205339ecdb",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest_builder.py",
+      "sha256": "bbcf938806bc48cd2374b2b53bacc1b72845aef619fde83d0c3dbad112899478",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+      "sha256": "2c562562a8035b2fada29c823c0cfebaf9fd6cec74529036225008917364e01e",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_applicability.py",
+      "sha256": "a493ef1c9376c993c27dc1a2e1f31b5da833804b562b9156cd37f65dfd59e809",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_document_result_mapping.py",
+      "sha256": "bd3f183d426b8e15db0f7bb71aa01315c2eeb5e0af72429538917806a5913f8e",
+      "role": "029 public facts contract"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_event_association.py",
+      "sha256": "64956e8e52278bcf5e27c71e20275573af39f4a619e49a7caf5ae36dbd8c582f",
+      "role": "name parser:151; performed event association:236"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_gate_result_mapping.py",
+      "sha256": "0c54f2ea434c0ec0fe5c221ff8995541ca6eb6082afdd61dd7cf7e0a605e4008",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_mdt_result_mapping.py",
+      "sha256": "0336a92f9dbe99bd3833e6d43a6b28ba36469fe2d91e402ee7175ce3ba988c38",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_presence_result_mapping.py",
+      "sha256": "d39cc5f74fdc673e8071abe5a69c437800dc96afd8e6aade2f13c8a755e0eb30",
+      "role": "030 public facts contract"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_procedure_catalog.py",
+      "sha256": "eac2428d0436d94c34415f51ab8d8396ec5019d988498585fb2c1d2eff7b865b",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/surgery_text_fact_contract.py",
+      "sha256": "85b4edad1c19f4cb6ada7d87c291dece55c00ce1f971e274ec89eeb7d41137ca",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py",
+      "sha256": "b2306a2d9ce4de035c5b1ae654d740e6faf2b01cf7e6374f4fe1e61936b246ba",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/treatment_order_consistency_shadow.py",
+      "sha256": "98110d373955a81a189c32d41302f1c649bb6923dd432e2404dd944337f47e4f",
+      "role": "transitive luxian_0609 import source pin"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/tumor_pathology_result_mapping.py",
+      "sha256": "1ef1640e9dc194a328df6c934b0ea519c56df65f82031ad8376cb97b9278d7f5",
+      "role": "transitive luxian_0609 import source pin"
+    }
+  ],
+  "current_non_target_changes": [
+    "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/extended_document/transfusion_performance_extraction.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+    "apps/medqc-web/backend/app/services/luxian_0609/transfusion_result_mapping.py"
+  ],
+  "shared_change_review": {
+    "canonical_result_finalizer.py": "4 explanation keys scoped to rule070 and one branch guarded normalized_rule_id==LX0609-07-01-03; no029/030 path change",
+    "customer_renderer.py": "070-only explanation keys/tuples and transfusion-family branch; 029/030 finding/status paths unchanged",
+    "shared_sources_current_commit": "35909964a36289d64a381301865b0a407e97184d",
+    "shared_sources_are_byte_identical_to_e5f": false
+  },
+  "run03_support_failure": "SQLAlchemy import -> stdlib platform.machine cold cache -> Windows ver/devnull denied by guard; 0 cases",
+  "v4_pre_guard_metadata": "platform.machine cache only; no production import / database call; all subprocess denied after audit installation",
+  "support_reference_read_only": [
+    "root .tmp/culture-identity-integration/run_adapted45.py + offline_guard.py",
+    "review-artifacts/ct04-closure/probe-v1.py + root ct04-run.py"
+  ],
+  "v4_guard_hardening": "bytes paths fsdecode before path checks; forbid DB driver imports/sqlite open; all loaded actual app source paths in target; no I/O guard relaxation"
+}

@@ -1,0 +1,22 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.11, pytest-8.4.2, pluggy-1.6.0
+rootdir: F:\MedQC-worktrees\qc-integration-20261008\apps\medqc-web\backend
+configfile: pytest.ini
+asyncio: mode=strict
+collected 45 items
+
+. ............................................F
+
+================================== FAILURES ===================================
+_ test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite _
+..\..\..\..\review-artifacts\iml-evidence-current\frozen-tests\test_luxian_0609_culture_identified_organism.py:335: in test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite
+    assert new in prompt
+E   assert '�ͼ졢�����С������桢��Ⱦ���ܡ����������ñ����ԡ�015�����ѱ�������Ծ����۷������ٴ��������������ҩ��������ȫΪǰ�᣻����ȷ���������ҩ����������Ӧ���۶��������Խ���ķ�������������ͬһ�¼���ϸ�����/���ּ�����������д��ȷ���������������Ծ������������ѡ��������ע����������Ϊ�գ����ý��������д�����Ľ����Ϊunknown��negative�����忹��ҩ���Ƿ����ҩ������015�ж���Χ�ڡ�' in '��������0609��������ʵ��ȡ����ֻ�������������������������ʱ�䡢��ֱ�����ʿؽ��ۡ�\n���α���ǡ�ø�����Щ����ID��������©���ظ������ӻ������["LX0609-06-03-04"]��\nLX0609-06-01-02=CT/...06-03-04","applicability":"unknown","semantic_state":"unknown","positive_state":"unknown","course_doc_positions":[]}]}'
+        new        = '�ͼ졢�����С������桢��Ⱦ���ܡ����������ñ����ԡ�015�����ѱ�������Ծ����۷������ٴ��������������ҩ��������ȫΪǰ�᣻����ȷ���������ҩ����������Ӧ���۶��������Խ���ķ�������������ͬһ�¼���ϸ�����/���ּ�����������д��ȷ���������������Ծ������������ѡ��������ע����������Ϊ�գ����ý��������д�����Ľ����Ϊunknown��negative�����忹��ҩ���Ƿ����ҩ������015�ж���Χ�ڡ�'
+        old        = '�ͼ졢�����С������桢��Ⱦ���ܡ����������ñ����ԣ����Ե�ҩ������ʱ015Ϊunknown��'
+        projection = ExamLabTextProjection(document_count=2, course_document_count=0, imaging_event_count=0, culture_event_count=1)
+        prompt     = '��������0609��������ʵ��ȡ����ֻ�������������������������ʱ�䡢��ֱ�����ʿؽ��ۡ�\n���α���ǡ�ø�����Щ����ID��������©���ظ������ӻ������["LX0609-06-03-04"]��\nLX0609-06-01-02=CT/...06-03-04","applicability":"unknown","semantic_state":"unknown","positive_state":"unknown","course_doc_positions":[]}]}'
+- generated xml file: F:\MedQC-worktrees\review-artifacts\iml-evidence-current\current-synthetic.xml -
+=========================== short test summary info ===========================
+FAILED ::test_prompt_uses_identified_organism_policy_without_drug_sensitivity_prerequisite
+=================== 1 failed, 44 passed, 1 warning in 2.64s ===================

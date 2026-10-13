@@ -1,7 +1,8 @@
 """显式验收启动模式及本次入口所需的只读结构门禁。"""
 
 import sqlalchemy as sa
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.reflection import Inspector
 
 
 _REQUIRED_TABLES = {
@@ -38,6 +39,51 @@ _REQUIRED_PARENT_COLUMNS = {
     "family_name",
 }
 _PARENT_INDEX = "idx_custom_qc_batch_jobs_parent_job_id"
+_VISIT_COLUMNS = {
+    "institute_id", "patient_id", "visit_id", "scene_current", "policy_version",
+    "latest_mirror_success_time", "mirror_delay_base_minutes",
+    "sync_interval_minutes", "updated_at",
+}
+
+
+def validate_visit_index_schema(
+    connection: Connection, *, inspector: Inspector | None = None,
+) -> None:
+    """校验同一连接 search_path 实际解析的写入对象；不改变事务模式。"""
+    resolved = connection.execute(sa.text(
+        "SELECT c.oid AS table_oid, c.relname AS table_name, n.nspname AS schema_name "
+        "FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE c.oid=to_regclass('visit_index') AND c.relkind IN ('r', 'p')"
+    )).mappings().one_or_none()
+    if resolved is None:
+        raise RuntimeError("Missing acceptance table: visit_index (search_path)")
+    inspector = inspector if inspector is not None else sa.inspect(connection)
+    table, schema = resolved["table_name"], resolved["schema_name"]
+    columns = {column["name"] for column in inspector.get_columns(table, schema=schema)}
+    missing = _VISIT_COLUMNS - columns
+    if missing:
+        raise RuntimeError("Missing acceptance visit_index columns: " + ", ".join(sorted(missing)))
+    pk = inspector.get_pk_constraint(table, schema=schema).get("constrained_columns") or []
+    if len(pk) != 3 or set(pk) != {"institute_id", "patient_id", "visit_id"}:
+        raise RuntimeError("Invalid acceptance visit_index primary key")
+    # 直接读索引属性，避免反射遗漏 invalid 状态或将 INCLUDE 列算作键。
+    valid_index = connection.execute(sa.text("""
+        SELECT EXISTS (
+            SELECT 1 FROM pg_catalog.pg_index i
+            JOIN pg_catalog.pg_class ix ON ix.oid=i.indexrelid
+            JOIN pg_catalog.pg_attribute scene ON scene.attrelid=i.indrelid
+                AND scene.attname='scene_current' AND NOT scene.attisdropped
+            JOIN pg_catalog.pg_attribute updated ON updated.attrelid=i.indrelid
+                AND updated.attname='updated_at' AND NOT updated.attisdropped
+            WHERE i.indrelid=:table_oid AND ix.relname='idx_visit_index_scene_updated'
+                AND i.indisvalid AND i.indisready AND i.indpred IS NULL AND i.indexprs IS NULL
+                AND i.indnkeyatts=2
+                AND i.indkey[0]=scene.attnum AND i.indkey[1]=updated.attnum
+                AND (i.indoption[1] & 1)=1
+        )
+    """), {"table_oid": resolved["table_oid"]}).scalar()
+    if not valid_index:
+        raise RuntimeError("Missing or invalid acceptance visit_index index: idx_visit_index_scene_updated")
 
 
 def resolve_startup_mode(value: str | None, *, environment: str) -> str:
@@ -83,5 +129,6 @@ def validate_acceptance_schema(engine: Engine | None, *, schema_mode: str) -> No
                 for index in indexes
             ):
                 raise RuntimeError(f"Missing or invalid acceptance parent index: {_PARENT_INDEX}")
+            validate_visit_index_schema(connection, inspector=inspector)
         finally:
             connection.rollback()

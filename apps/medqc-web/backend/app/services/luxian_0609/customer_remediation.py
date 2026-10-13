@@ -31,6 +31,7 @@ _SAFE_NOTE = (
 # 每条正式规则均有一个完整的四段式整改模板。第三项保留现有规则建议的
 # 业务动作，前两项用于把“改什么、补什么”显式呈现给客户。
 _RULE_ACTIONS: dict[str, tuple[str, str, str]] = {
+    "LX0609-08-01-05": ("出院记录诊疗经过", "主要诊疗措施、病情演变、疗效转归及重要住院事件", "请根据实际诊疗事实补充缺失内容；重要手术、诊疗调整和病情变化应有具体概述，不得补造事件。"),
     "LX0609-01-01-01": ("入院记录", "入院记录及完成时间", "请补充入院记录，并确保在入院后24小时内完成。"),
     "LX0609-01-02-01": ("首次病程记录", "首次病程记录、病例特点及完成时间", "请补充首次病程记录，并确保在入院后8小时内完成。"),
     "LX0609-04-02-01": ("每台已实施手术的手术记录", "手术名称、术者、手术经过及完成时间", "请按每台已实施手术补充对应手术记录，并在手术结束后24小时内完成。"),
@@ -65,7 +66,7 @@ _RULE_ACTIONS: dict[str, tuple[str, str, str]] = {
     "LX0609-11-02-01": ("麻醉知情同意书", "麻醉方式、风险告知、替代方案及相关签名", "请补充并归档本次麻醉知情同意书，完成麻醉风险告知和相关签名。"),
     "LX0609-11-02-02": ("麻醉知情同意书缺项", "结果列出的告知内容、双方签名及签署时间", "请按结果列出的缺项补全麻醉知情同意书内容、双方签名及签署时间。"),
     "LX0609-04-04-01": ("麻醉术前及术后访视记录", "麻醉前风险评估、术后恢复情况和记录时间", "请补充本次麻醉的术前和术后访视记录，并分别记录评估结论及处理计划。"),
-    "LX0609-04-04-02": ("麻醉访视记录缺项", "结果列出的麻醉评估、患者状态、并发症和签名字段", "请按结果列出的缺项补全麻醉术前和术后访视记录。"),
+    "LX0609-04-04-02": ("麻醉访视记录缺项", "结果列出的术前评估、术后恢复、医嘱、24小时内访视和签名字段", "请按结果列出的缺项补全麻醉术前和术后访视记录。"),
     "LX0609-04-04-03": ("麻醉记录单", "麻醉方式、用药、生命体征及术中事件", "请补充本次麻醉记录单，并核对麻醉方式、用药、生命体征及术中事件记录。"),
     "LX0609-04-01-02": ("术前讨论记录", "手术指征、风险、方案、术者参加情况和讨论结论", "请补充术前讨论记录，写明手术指征、风险、方案并记录术者参加情况。"),
     "LX0609-04-01-03": ("四级手术术前多学科讨论记录", "参会科室、讨论意见、手术方案和讨论结论", "请补充本次四级手术的术前多学科讨论记录，并记录参会科室、讨论意见及手术方案。"),
@@ -83,6 +84,8 @@ _RULE_ACTIONS: dict[str, tuple[str, str, str]] = {
     "LX0609-06-04-02": ("PL/PH危急值报告后的处置记录", "危急值报告、患者评估、具体处置、复查结果和未处置原因", "请在危急值报告后补充患者评估、具体处置、复查结果及处理依据。"),
     "LX0609-05-01-02": ("抗菌药物医嘱及相关病程", "用药原因、方案调整动作、调整理由和依据", "请在病程中补充抗菌药物的使用原因、方案调整理由及相关依据。"),
     "LX0609-05-01-03": ("抗菌药物48至72小时效果评价", "疗效、检验变化、病原学结果和方案调整", "请在首次使用抗菌药物后48至72小时内记录疗效、检验变化和方案调整。"),
+    "LX0609-05-01-01": ("围术期预防用抗菌药物", "停药时间，或超过时限继续用药时的感染证据", "Ⅰ、Ⅱ类切口预防用药一般不超过24小时（Ⅰ类心脏手术不超过48小时）；确有感染需继续用药时，请在病程中记录感染证据并按治疗用药管理。"),
+    "LX0609-05-01-04": ("重点抗菌药物使用前病原学送检", "培养、药敏等病原学送检申请及送检时间", "请在联合使用重点抗菌药物前完成病原学送检，并在病程中记录送检情况。"),
     "LX0609-05-01-05": ("经验性抗菌药物用药病程", "经验用药理由、病情依据及无样本可采原因", "请在病程中记录经验使用抗菌药物的理由，或明确记录无样本可采原因。"),
     "LX0609-05-01-06": ("特殊级抗菌药物专家支持记录", "专家查房或会诊意见、用药依据和后续评价", "请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。"),
     "LX0609-04-02-06": ("死亡记录", "死亡时间、死亡过程、死亡原因和记录完成时间", "请补充并归档本次住院的死亡记录，写明死亡时间、过程和死亡原因。"),
@@ -99,6 +102,7 @@ _RULE_ACTIONS: dict[str, tuple[str, str, str]] = {
     "LX0609-10-01-01": ("经治医师变更的交班和接班记录", "每次变更对应的交班记录、接班记录、完成时间及未完成原因", "请在经治医师变更时完成交班记录，并在24小时内完成接班记录。"),
     "LX0609-10-02-01": ("转科医嘱后的转出和转入记录", "转科医嘱、转出记录、转入记录及完成时间", "请在转科医嘱后24小时内完成转出和转入记录。"),
     "LX0609-10-02-02": ("转科医嘱对应的转入、转出记录", "转科原因、转出交接、转入评估和两份记录的关联", "请为本次转科同时补齐转出记录和转入记录。"),
+    "LX0609-10-03-01": ("有创操作记录", "操作名称、时间、步骤、结果、患者情况、不良反应、注意事项及医师签名", "请在有创操作完成后即刻书写操作记录。"),
     "LX0609-12-02-01": ("每次诊断修正或补充记录", "修改理由、诊断依据、修改时间和修正后的诊断", "请对每次诊断修正或补充记录修改理由及诊断依据。"),
     "LX0609-04-02-08": ("死亡记录", "具体死亡日期和时刻", "请依据实际死亡事实，在死亡记录中补充具体死亡日期和时刻。"),
     "LX0609-01-02-02": ("首次病程记录中的鉴别诊断", "与第一诊断相关的疾病系统、解剖部位或临床问题依据", "请调整明显无关的鉴别诊断；如确需保留，应补充其与第一诊断的关联依据。"),
@@ -253,6 +257,60 @@ def _consultation_targets(facts: Mapping[str, Any] | None) -> tuple[str, str]:
     return target, "；".join(needs)
 
 
+# 06-01-05 修改建议（客户需求 2026-10-12）：按未计入病程的不足类别说明“错在哪、怎么改”。
+# 示范句为通用写法，不来自任何病历原文。
+_ANALYSIS_GAP_GUIDANCE: dict[str, tuple[str, str]] = {
+    "listing_only": (
+        "只罗列了报告结果，未写出该异常的临床意义及处置",
+        "在罗列结果后写明异常与病情的联系及处置，例如：“胸部CT示右肺下叶渗出，结合发热、咳嗽及白细胞升高，"
+        "考虑社区获得性肺炎，予抗感染治疗，3日后复查胸部CT。”",
+    ),
+    "conclusion_without_basis": (
+        "只写了诊断或排除结论，未写出得出结论的依据（影像所见、症状体征）",
+        "写明影像所见与症状体征如何支持或排除该诊断，例如：“颈椎MRI未见脊髓受压及髓内信号改变，且无四肢麻木无力，"
+        "故不考虑脊髓型颈椎病。”",
+    ),
+    "plan_without_basis": (
+        "只写了处置、会诊或检查计划，未写出依据（症状、体征、严重程度或手术指征）",
+        "写明异常与处置之间的依据，例如：“腰椎MRI示L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符，"
+        "保守治疗2周无效，具备手术指征，拟行手术。”",
+    ),
+}
+
+
+def _analysis_gap_action(facts: Mapping[str, Any] | None) -> tuple[str, str, str] | None:
+    """06-01-05：有未计入病程的不足类别时，给出具体病程、不足说明与示范写法。"""
+    if not isinstance(facts, Mapping):
+        return None
+    located: list[tuple[str, list[Mapping[str, Any]]]] = []
+    event_results = facts.get("event_results")
+    if isinstance(event_results, list) and event_results:
+        for item in event_results:
+            if isinstance(item, Mapping) and isinstance(item.get("analysis_gap_notes"), list):
+                report_time = item.get("report_time") or "待核实"
+                located.append((f"第{item.get('event_position')}次检查（报告时间 {report_time}）",
+                                item["analysis_gap_notes"]))
+    elif isinstance(facts.get("analysis_gap_notes"), list):
+        located.append(("", facts["analysis_gap_notes"]))
+    targets: list[str] = []
+    kinds: list[str] = []
+    for prefix, notes in located:
+        rows = [note for note in notes if isinstance(note, Mapping) and note.get("gap") in _ANALYSIS_GAP_GUIDANCE]
+        if not rows:
+            continue
+        times = "、".join(dict.fromkeys(str(note.get("record_time")) for note in rows))
+        targets.append(f"{prefix}记录时间 {times} 的病程")
+        kinds.extend(note["gap"] for note in rows)
+    kinds = list(dict.fromkeys(kinds))
+    if not targets or not kinds:
+        return None
+    return (
+        "；".join(targets),
+        "该病程" + "；".join(_ANALYSIS_GAP_GUIDANCE[kind][0] for kind in kinds) + "，因此未计为对阳性结果的分析",
+        "请在报告出具后24小时内的病程中补充分析。" + "".join(_ANALYSIS_GAP_GUIDANCE[kind][1] for kind in kinds),
+    )
+
+
 def _personalized_action(
     *,
     rule_id: str,
@@ -319,6 +377,10 @@ def build_customer_remediation_suggestion(
         )
         if personalized is not None:
             target, required = personalized
+        if normalized_rule_id == "LX0609-06-01-05":
+            gap_action = _analysis_gap_action(facts)
+            if gap_action is not None:
+                target, required, recommendation = gap_action
         return _structured_action(
             target=target,
             required=required,

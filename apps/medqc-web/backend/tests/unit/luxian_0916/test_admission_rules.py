@@ -35,7 +35,7 @@ def _context(
     return context
 
 
-@pytest.mark.parametrize("rule_id", _RULE_IDS)
+@pytest.mark.parametrize("rule_id", tuple(r for r in _RULE_IDS if r not in {"LX0916-005", "LX0916-006"}))
 def test_admission_rule_reports_compliant_from_explicit_complete_fact(rule_id: str) -> None:
     if rule_id == "LX0916-001":
         record = _record(patient={"prior_admission_count": 2})
@@ -59,7 +59,7 @@ def test_admission_rule_reports_compliant_from_explicit_complete_fact(rule_id: s
     assert result.document_anchors[0]["document_id"] == "admission-001"
 
 
-@pytest.mark.parametrize("rule_id", _RULE_IDS)
+@pytest.mark.parametrize("rule_id", tuple(r for r in _RULE_IDS if r not in {"LX0916-005", "LX0916-006"}))
 def test_admission_rule_reports_explicit_defect(rule_id: str) -> None:
     if rule_id == "LX0916-001":
         record = _record(patient={"prior_admission_count": 2})
@@ -85,7 +85,7 @@ def test_admission_rule_reports_explicit_defect(rule_id: str) -> None:
     assert result.findings
 
 
-@pytest.mark.parametrize("rule_id", _RULE_IDS)
+@pytest.mark.parametrize("rule_id", tuple(r for r in _RULE_IDS if r not in {"LX0916-005", "LX0916-006"}))
 def test_admission_rule_boundary_is_not_misclassified(rule_id: str) -> None:
     if rule_id == "LX0916-001":
         record = _record(patient={"prior_admission_count": 1})

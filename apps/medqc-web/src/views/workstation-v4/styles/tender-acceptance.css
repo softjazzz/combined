@@ -1,0 +1,152 @@
+/* v7.1：页面布局保留，视觉值引用公共 Token。 */
+.tender-acceptance-page {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+.acceptance-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+
+  transition:
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.acceptance-hero:hover,
+.clause-card:hover {
+  border-color: var(--mq-border-strong);
+  box-shadow:
+    0 2px 12px var(--mq-border-strong),
+    0 6px 22px var(--mq-border);
+  transform: none;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.acceptance-hero h1 {
+  margin: 0;
+}
+
+.acceptance-hero p {
+  margin: 10px 0 0;
+  color: var(--mq-text-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.summary-card {
+  min-width: 180px;
+
+  padding: 18px;
+}
+
+.summary-card span,
+.summary-card small {
+  display: block;
+  color: var(--mq-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.summary-card strong {
+  display: block;
+  color: var(--mq-brand-600);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 42px;
+}
+
+.clause-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.clause-card {
+  padding: 18px;
+  transition:
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.clause-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--mq-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clause-topline i {
+  border-radius: var(--mq-radius-tag);
+  font-style: normal;
+  padding: 4px 10px;
+}
+
+.status-implemented {
+  background: color-mix(in srgb, var(--mq-success-text) 10%, transparent);
+  color: var(--mq-success-text);
+}
+
+.status-partial {
+  background: color-mix(in srgb, var(--mq-brand-600) 8%, transparent);
+  color: var(--mq-brand-600);
+}
+
+.clause-card h2 {
+  margin: 14px 0 8px;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.clause-card p {
+  min-height: 48px;
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.entry-link {
+  display: inline-flex;
+  margin-top: 16px;
+  color: var(--mq-brand-600);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+@media (max-width: 1180px) {
+  .clause-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .acceptance-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .clause-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+:deep(.ant-btn) {
+  border-radius: var(--mq-radius-tag) !important;
+  min-height: var(--mq-control-height);
+}

@@ -1,0 +1,512 @@
+{
+  "schema_version": "n12-carrier-frozen-expectations-v1",
+  "phase": "prepared_not_run",
+  "fixed_sha": "ce1d0771a1674073f3dbb4f019dfb2a4e40af1cc",
+  "rule_id": "LX0609-04-04-02",
+  "scope": "N12 actual helper + formal wrapper captured synthetic input only; not medical/model acceptance",
+  "source_bindings": [
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/anesthesia_visit_fact_extraction.py",
+      "blob": "06f33a4a16de41a61cf903eeac863878dd4d2d9e",
+      "sha256": "d3246420d34d83ca7332bb8bb8918047c7d8a6cdcfae32fdf2d355d68b7ad840",
+      "frozen_file": "anesthesia_visit_fact_extraction.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/llm_prompt_privacy.py",
+      "blob": "50968e90d7e8060df0166214ca4d021437f63045",
+      "sha256": "e4cbf47d9971fad10fcefd04077528a1fde55f5281a65b1787d7e7852ee04219",
+      "frozen_file": "llm_prompt_privacy.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/native_preop_content_execution.py",
+      "blob": "b8a9d4f6e5e29460a8390558d4dcdbfe06ac37fb",
+      "sha256": "52992477e164296478aaac6b758054c19a4e1b7ade2d363fab0037d81fa6b02a",
+      "frozen_file": "native_preop_content_execution.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/rescue_record_completeness.py",
+      "blob": "39c6978cbdc78a455ed6bc595a8050d0eb6ab604",
+      "sha256": "a72a1f3cb9817726408490257ec1e1379c717aad5caccf29e2678d02bfac7b7e",
+      "frozen_file": "rescue_record_completeness.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/execution.py",
+      "blob": "f1badd4545ee85111b906aad49ff4dc6137d9cc4",
+      "sha256": "d0bb0a8020cbf1ca19201b8ad94e85f1690d8ec101a4793cb2676fa68c3ff1d7",
+      "frozen_file": "execution.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/native_surgery_document_execution.py",
+      "blob": "08981328b506360a90e46f4e81971c8dd735a23c",
+      "sha256": "f9c36830602af0539d093bdb342b5a814b850038a13c0a24ffd9cd0576e18e3c",
+      "frozen_file": "native_surgery_document_execution.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/app/services/luxian_0609/executor_registry.py",
+      "blob": "f18833263508d6784ea7cde5d151e26ce0a1ab91",
+      "sha256": "0e709779ff744398ea67e2a12190d7499abdd99c474634eb44817455b47b4c91",
+      "frozen_file": "executor_registry.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_n12_anesthesia_visit_controlled_facts.py",
+      "blob": "2a6601bc2cb66a2af71231516a584247cc5b80e5",
+      "sha256": "d9e48177b03c2f61b693df6d9711eee949ee4d44f24e3d03e06ee7c037a853c0",
+      "frozen_file": "test_n12_anesthesia_visit_controlled_facts.py"
+    },
+    {
+      "repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_round2_document_boundaries.py",
+      "blob": "c5f295837ab69994f58a92e8f1aee418090097aa",
+      "sha256": "a34fb6c910aedb66eda344cd1d99c827eb7b9e59740c10a99454498fbc4e5ff3",
+      "frozen_file": "test_luxian_0609_round2_document_boundaries.py"
+    }
+  ],
+  "fixture_provenance": {
+    "tc02_fixed_sha": "196d330606285602b0b606a5b9c8ab229a15c907",
+    "tc02_repo_path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_tc02_performed_event_contract.py",
+    "tc02_test_blob": "77d4bc4e080f941c2ae8dc72901bd40c87c4eea2",
+    "original_tc02_report": "F:/MedQC-worktrees/review-artifacts/tc02-review-prep/fixed-219b-review.json",
+    "original_tc02_fixed_sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+    "prefix_origin": "only synthetic labels/newline structure; no transfusion medical body reused",
+    "n12_medical_origin": "fixed _visits original body and GOLD_QUOTES literal only"
+  },
+  "case_count": 10,
+  "cases": [
+    {
+      "case_id": "preane_surveil_record-none",
+      "source_type": "preane_surveil_record",
+      "prefix_kind": "none",
+      "original_n12_body": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "synthetic_prefix": "",
+      "input_body": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "private_values": [],
+      "required_fields": [
+        "asa_level",
+        "airway_assessment",
+        "fasting_status",
+        "anesthesia_history",
+        "risk_discussion"
+      ],
+      "medical_quotes": [
+        "ASA II级",
+        "气道评估正常",
+        "禁食禁饮已核对",
+        "否认麻醉史",
+        "已完成麻醉风险告知"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "preane_surveil_record-address",
+      "source_type": "preane_surveil_record",
+      "prefix_kind": "address",
+      "original_n12_body": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "synthetic_prefix": "现住址：某镇测试街道12号\n",
+      "input_body": "现住址：某镇测试街道12号\nASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "private_values": [
+        "某镇测试街道12号"
+      ],
+      "required_fields": [
+        "asa_level",
+        "airway_assessment",
+        "fasting_status",
+        "anesthesia_history",
+        "risk_discussion"
+      ],
+      "medical_quotes": [
+        "ASA II级",
+        "气道评估正常",
+        "禁食禁饮已核对",
+        "否认麻醉史",
+        "已完成麻醉风险告知"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "preane_surveil_record-unit",
+      "source_type": "preane_surveil_record",
+      "prefix_kind": "unit",
+      "original_n12_body": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "synthetic_prefix": "工作单位：测试单位甲\n",
+      "input_body": "工作单位：测试单位甲\nASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "private_values": [
+        "测试单位甲"
+      ],
+      "required_fields": [
+        "asa_level",
+        "airway_assessment",
+        "fasting_status",
+        "anesthesia_history",
+        "risk_discussion"
+      ],
+      "medical_quotes": [
+        "ASA II级",
+        "气道评估正常",
+        "禁食禁饮已核对",
+        "否认麻醉史",
+        "已完成麻醉风险告知"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "preane_surveil_record-phone",
+      "source_type": "preane_surveil_record",
+      "prefix_kind": "phone",
+      "original_n12_body": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "synthetic_prefix": "联系电话：13800138000\n",
+      "input_body": "联系电话：13800138000\nASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "private_values": [
+        "13800138000"
+      ],
+      "required_fields": [
+        "asa_level",
+        "airway_assessment",
+        "fasting_status",
+        "anesthesia_history",
+        "risk_discussion"
+      ],
+      "medical_quotes": [
+        "ASA II级",
+        "气道评估正常",
+        "禁食禁饮已核对",
+        "否认麻醉史",
+        "已完成麻醉风险告知"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "preane_surveil_record-original-address",
+      "source_type": "preane_surveil_record",
+      "prefix_kind": "original-address",
+      "original_n12_body": "ASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "synthetic_prefix": "地址：合成街道\n",
+      "input_body": "地址：合成街道\nASA II级；气道评估正常；禁食禁饮已核对；否认麻醉史；已完成麻醉风险告知。",
+      "private_values": [
+        "合成街道"
+      ],
+      "required_fields": [
+        "asa_level",
+        "airway_assessment",
+        "fasting_status",
+        "anesthesia_history",
+        "risk_discussion"
+      ],
+      "medical_quotes": [
+        "ASA II级",
+        "气道评估正常",
+        "禁食禁饮已核对",
+        "否认麻醉史",
+        "已完成麻醉风险告知"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "postane_surveil_record-none",
+      "source_type": "postane_surveil_record",
+      "prefix_kind": "none",
+      "original_n12_body": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "synthetic_prefix": "",
+      "input_body": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "private_values": [],
+      "required_fields": [
+        "consciousness_status",
+        "respiratory_status",
+        "circulatory_status",
+        "complication_assessment"
+      ],
+      "medical_quotes": [
+        "神志清醒",
+        "呼吸平稳",
+        "循环稳定",
+        "无麻醉并发症"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "postane_surveil_record-address",
+      "source_type": "postane_surveil_record",
+      "prefix_kind": "address",
+      "original_n12_body": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "synthetic_prefix": "现住址：某镇测试街道12号\n",
+      "input_body": "现住址：某镇测试街道12号\n神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "private_values": [
+        "某镇测试街道12号"
+      ],
+      "required_fields": [
+        "consciousness_status",
+        "respiratory_status",
+        "circulatory_status",
+        "complication_assessment"
+      ],
+      "medical_quotes": [
+        "神志清醒",
+        "呼吸平稳",
+        "循环稳定",
+        "无麻醉并发症"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "postane_surveil_record-unit",
+      "source_type": "postane_surveil_record",
+      "prefix_kind": "unit",
+      "original_n12_body": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "synthetic_prefix": "工作单位：测试单位甲\n",
+      "input_body": "工作单位：测试单位甲\n神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "private_values": [
+        "测试单位甲"
+      ],
+      "required_fields": [
+        "consciousness_status",
+        "respiratory_status",
+        "circulatory_status",
+        "complication_assessment"
+      ],
+      "medical_quotes": [
+        "神志清醒",
+        "呼吸平稳",
+        "循环稳定",
+        "无麻醉并发症"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "postane_surveil_record-phone",
+      "source_type": "postane_surveil_record",
+      "prefix_kind": "phone",
+      "original_n12_body": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "synthetic_prefix": "联系电话：13800138000\n",
+      "input_body": "联系电话：13800138000\n神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "private_values": [
+        "13800138000"
+      ],
+      "required_fields": [
+        "consciousness_status",
+        "respiratory_status",
+        "circulatory_status",
+        "complication_assessment"
+      ],
+      "medical_quotes": [
+        "神志清醒",
+        "呼吸平稳",
+        "循环稳定",
+        "无麻醉并发症"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    },
+    {
+      "case_id": "postane_surveil_record-original-address",
+      "source_type": "postane_surveil_record",
+      "prefix_kind": "original-address",
+      "original_n12_body": "神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "synthetic_prefix": "地址：合成街道\n",
+      "input_body": "地址：合成街道\n神志清醒；呼吸平稳；循环稳定；无麻醉并发症。",
+      "private_values": [
+        "合成街道"
+      ],
+      "required_fields": [
+        "consciousness_status",
+        "respiratory_status",
+        "circulatory_status",
+        "complication_assessment"
+      ],
+      "medical_quotes": [
+        "神志清醒",
+        "呼吸平稳",
+        "循环稳定",
+        "无麻醉并发症"
+      ],
+      "expected": {
+        "direct_INPUT_JSON_valid": true,
+        "formal_delegate_INPUT_JSON_valid": true,
+        "formal_body_equals_direct_helper_view": true,
+        "formal_spans_equal_direct_helper_view": true,
+        "all_medical_quotes_retained": true,
+        "private_values_absent": true,
+        "body_is_exact_prefix_plus_original_n12_text": true
+      }
+    }
+  ],
+  "static_call_path": [
+    {
+      "path": "execution.py",
+      "lines": [
+        367,
+        375,
+        453,
+        468,
+        808,
+        812
+      ],
+      "meaning": "formal privacy client is injected into resource/native surgery document path"
+    },
+    {
+      "path": "native_surgery_document_execution.py",
+      "lines": [
+        2452,
+        2455,
+        1097,
+        1113,
+        1116
+      ],
+      "meaning": "N12 typed controlled outcome builds VisitDocument and invokes actual helper"
+    },
+    {
+      "path": "anesthesia_visit_fact_extraction.py",
+      "lines": [
+        135,
+        137,
+        150,
+        156
+      ],
+      "meaning": "redacted body/spans serialized into INPUT_JSON then generate"
+    },
+    {
+      "path": "llm_prompt_privacy.py",
+      "meaning": "formal generate redacts full serialized prompt again; address/unit boundary excludes real newline but not escaped newline"
+    }
+  ],
+  "registry_relevant_lines": [
+    {
+      "line": 111,
+      "text": "    \"surgery_document\","
+    },
+    {
+      "line": 292,
+      "text": "    llm_client: Any"
+    },
+    {
+      "line": 309,
+      "text": "    surgery_document: Callable[..., Any]"
+    },
+    {
+      "line": 423,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 445,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 469,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 495,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 521,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 548,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 574,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 591,
+      "text": "    async def surgery_document(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:"
+    },
+    {
+      "line": 593,
+      "text": "            functions.surgery_document("
+    },
+    {
+      "line": 597,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 609,
+      "text": "            executor_key=\"surgery_document\","
+    },
+    {
+      "line": 620,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 643,
+      "text": "                llm_client=resources.llm_client,"
+    },
+    {
+      "line": 668,
+      "text": "        \"surgery_document\": surgery_document,"
+    }
+  ],
+  "prior_43_direct_fake_boundary_coverage": "not established: N12 FrozenFactClient passed directly and reads INPUT_JSON; formal execution privacy carrier absent",
+  "no_probe_executed": true
+}

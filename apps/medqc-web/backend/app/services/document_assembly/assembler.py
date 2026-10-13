@@ -1296,24 +1296,46 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
             flags.append("record_content_placeholder")
     elif document_type == "presurg_discussion":
         assembled_text = _assemble_presurg_discussion_text(payload)
-        source_fields.append(
-            DocumentSourceField(
-                source_table=document_type,
-                source_field="presurg_discussion_template",
-                source_path=None,
-                used=bool(assembled_text),
-                raw_value_preview=assembled_text[:120],
+        # Keep actual source fields independently locatable. A synthesized template
+        # is not a source field and must not replace an explicitly referenced field.
+        for field_name, label in (
+            ("record_content", "正文"),
+            ("content", "正文"),
+            ("host_name", "主持人"),
+            ("host_summary", "主持人小结"),
+            ("discuss_staff", "参加讨论者"),
+            ("discuss_time", "讨论时间"),
+            ("record_time", "记录时间"),
+            ("discuss_place", "讨论地点"),
+        ):
+            raw_value = payload.get(field_name)
+            value = raw_value.strip() if isinstance(raw_value, str) else ""
+            if not value:
+                continue
+            source_fields.append(DocumentSourceField(
+                source_table=document_type, source_field=field_name,
+                source_path=None, used=True, raw_value_preview=value[:120],
+            ))
+            sections.append(AssembledSection(
+                section_key=field_name, section_label=label, text=value,
+                source_field=field_name, order_index=len(sections),
+            ))
+        # Legacy JSON/v2 content still belongs in the document display. Keep its
+        # assembled template only when direct string sections cannot show it; the
+        # evidence reader never treats this synthetic display section as a field.
+        if assembled_text and any(
+            (merged := _merge_field_text(payload, field_name))
+            and not any(merged in section.text for section in sections)
+            for field_name in (
+                "record_content", "host_summary", "discuss_staff", "host_name",
+                "discuss_place", "discuss_time", "record_time",
             )
-        )
-        sections.append(
-            AssembledSection(
-                section_key="presurg_discussion_template",
-                section_label="正文",
-                text=assembled_text,
-                source_field="presurg_discussion_template",
-                order_index=0,
-            )
-        )
+        ):
+            sections.append(AssembledSection(
+                section_key="presurg_discussion_template", section_label="正文",
+                text=assembled_text, source_field="presurg_discussion_template",
+                order_index=len(sections),
+            ))
     elif document_type in _MULTI_FIELD_RULES:
         texts: list[str] = []
         for index, spec in enumerate(_MULTI_FIELD_RULES[document_type]):

@@ -1,0 +1,46 @@
+{
+  "id": "TC-01-TR-044-MULTI-PREPARATION",
+  "scope": ["LX0609-07-01-01", "LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02", "LX0609-07-03-01"],
+  "excluded": ["0916", "whole transfusion directory re-audit", "TC03 repair", "070 closure certification"],
+  "root_sha": "e5f5696f559b4571b0d2a7d339d0d65485f8344b",
+  "tc02_readonly_candidate_sha": "219b13d5881e106a4780e0d9ba1f12620d7e3900",
+  "conclusion": "static preparation complete; TC02 v1 cannot directly close 043-047 or TR-044-MULTI",
+  "completion_level": "fixed-source common-helper trace, 6 historical TC01 synthetic cases bound, minimal integration differences and responsibilities prepared",
+  "executions": 0,
+  "production_edits": 0,
+  "shared_test_edits": 0,
+  "private_materials_opened": false,
+  "model_calls": 0,
+  "pg_access": 0,
+  "findings": [],
+  "defects": [],
+  "blockers": [],
+  "existing_open_issues": ["TC-01", "TR-044-MULTI"],
+  "tc01_existing_freeze": {
+    "source_sha": "7b894dc84491b7b72eb096de58fe61f772cc0080",
+    "source_equal_current_native": true,
+    "case_count": 6,
+    "ids": ["TF_PLAN", "TF_REFUSED", "TF_POSTPONED", "TF_CANCELLED", "TF_ACTUAL_NO_REACTION", "TF_PLAN_COMPLETE_FIELDS"],
+    "method": "original AST pure-function dependency closure; no new current full executor run",
+    "artifact": "tc01-original-cases.json"
+  },
+  "tr044_original_three": {
+    "nodes": "unknown",
+    "rows": "unknown",
+    "expected_manifest": "unknown",
+    "public_evidence": "2026-10-08-isolated-qc-integration.md:32 declares three baseline failures, D review excludes certification; registry confirms exact index unknown",
+    "policy": "No guessed or newly created cases relabeled as original three; db4bddb67 field/public contract closure remains preserved"
+  },
+  "integration_preconditions": [
+    {"id": "CALL-BUDGET", "detail": "043/047 program_only max0; 044/045/046 max1 with existing narrow calls; additional performance extraction requires explicit contract/version/accounting"},
+    {"id": "MULTIPLE-CLOCKS", "detail": "TC02 v1 makes >1 HH:MM unknown and requires sole event-time atom equal record_time; existing normal 045/046/047 multi-clock freeze must stay compliant"},
+    {"id": "MIXED-RECORDS", "detail": "Gate-only repair leaves plan/cancel/unknown records in rule evaluators when another MR/actual establishes applicability; clinical event view and consumed references needed"},
+    {"id": "EVENT-SCHEMA", "detail": "Document performed states/unconfirmed_record_count do not supply per-event applications, dose, end-time, evaluation or event counts"},
+    {"id": "ORIGINAL-044-MANIFEST", "detail": "Recover exact old three nodes/rows/expected before claiming their closure"}
+  ],
+  "state_preservation": "Specific original TC01 data_gap/present expectations unchanged. Legal semantic unknown, unavailable sources, invalid protocols and confirmed defects remain distinct; no universal unknown-to-data_gap completion.",
+  "artifact_dir": "F:/MedQC-worktrees/review-artifacts/transfusion-family-next",
+  "artifacts": ["review.md", "ownership.json", "manifest.json", "source-anchors.json", "tc01-original-cases.json", "original-tc01-probe.py", "original-treatment-consultation.md", "original-treatment-consultation.json"],
+  "closure_claimed": false,
+  "deployment_claimed": false
+}

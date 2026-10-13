@@ -95,6 +95,14 @@ def evaluate_death_discussion_timeliness(
     if selected_discussion is not None:
         discussion_time, _, discussion_row = selected_discussion
         hours = (discussion_time - death_time).total_seconds() / 3600
+        # 及时讨论足以证明七日内完成；仅晚讨论不能覆盖另一份真实正文的未知时间。
+        if hours > 168 and any(
+            _row_time(row) is None
+            and isinstance(row.get("record_content"), str)
+            and row["record_content"].strip()
+            for row in discussion_rows
+        ):
+            return DeathDiscussionOutcome("data_gap", "authoritative_time_missing")
         final_state = "compliant" if hours <= 168 else "non_compliant"
         reason_code = (
             "requirement_within_threshold"

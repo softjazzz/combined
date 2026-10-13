@@ -13,12 +13,103 @@ import math
 import re
 from typing import Any
 
+from .extended_document.discharge_diagnosis_equivalence import (
+    map_equivalent_diagnoses,
+    valid_equivalent_pairs,
+)
+from .extended_document.discharge_course_content import FIELDS, PUBLISHED_SOURCES, content_state
+from .extended_document.discharge_course_stages import valid_review
+
+
+def _safe_course_content(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """验证原样发布的原子状态和受控文本坐标，不重读材料或修补事实。"""
+    if raw.get("verification_kind") == "discharge_course_pending":
+        return dict(raw) if set(raw) == {"verification_kind", "state"} and isinstance(raw.get("state"), str) and raw.get("state") in {
+            "data_gap", "not_applicable",
+        } else None
+    expected_keys = {"verification_kind", "documents", "checks", "events"}
+    if "review" in raw:
+        expected_keys.add("review")
+    if set(raw) != expected_keys or raw.get("verification_kind") != "discharge_course_content":
+        return None
+    documents, checks, events = raw["documents"], raw["checks"], raw["events"]
+    if not all(isinstance(v, list) for v in (documents, checks, events)) or not 1 <= len(documents) <= 80 or len(events) > 1600:
+        return None
+    lookup = {}
+    for index, doc in enumerate(documents, 1):
+        expected = {"document_index", "source", "document_ref", "text_length"}
+        if isinstance(doc, dict) and doc.get("source") == "discharge_record_diagnosis":
+            expected.add("parent_document_index")
+            parent = doc.get("parent_document_index")
+            if type(parent) is not int or lookup.get(parent, {}).get("source") != "discharge_record":
+                return None
+        if (not isinstance(doc, dict) or set(doc) != expected
+                or type(doc["document_index"]) is not int or doc["document_index"] != index
+                or doc["source"] not in PUBLISHED_SOURCES or type(doc["text_length"]) is not int
+                or not 0 < doc["text_length"] <= 60000 or not isinstance(doc["document_ref"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", doc["document_ref"]) is None):
+            return None
+        lookup[index] = doc
+    discharge_ids = {i for i, d in lookup.items() if d["source"] == "discharge_record"}
+    if not discharge_ids:
+        return None
+
+    def valid_span(item: Mapping[str, Any], index: int) -> bool:
+        if not isinstance(item.get("state"), str) or item.get("state") not in {"present", "missing", "uncertain"}:
+            return False
+        start, end = item.get("start"), item.get("end")
+        return (type(start) is int and type(end) is int and 0 <= start < end <= lookup[index]["text_length"]
+                if item["state"] == "present" else start is None and end is None)
+
+    seen = set()
+    for check in checks:
+        if not isinstance(check, dict) or set(check) != {"document_index", "field", "state", "start", "end"}:
+            return None
+        index, field = check["document_index"], check["field"]
+        if (type(index) is not int or index not in discharge_ids or not isinstance(field, str)
+                or field not in FIELDS or (index, field) in seen or not valid_span(check, index)):
+            return None
+        seen.add((index, field))
+    if seen != {(i, f) for i in discharge_ids for f in FIELDS}:
+        return None
+    surgery_checked = set()
+    for event in events:
+        if not isinstance(event, dict) or set(event) != {"document_index", "kind", "start", "end", "matches"}:
+            return None
+        index = event["document_index"]
+        if (type(index) is not int or index not in lookup or index in discharge_ids
+                or lookup[index]["source"] == "discharge_record_diagnosis"
+                or not isinstance(event["kind"], str) or event["kind"] not in {"surgery", "test", "treatment", "change"}
+                or not valid_span({**event, "state": "present"}, index)
+                or not isinstance(event["matches"], list)):
+            return None
+        if event["kind"] == "surgery":
+            surgery_checked.add(index)
+        matched = set()
+        for match in event["matches"]:
+            if not isinstance(match, dict) or set(match) != {"document_index", "state", "start", "end"}:
+                return None
+            target = match["document_index"]
+            if type(target) is not int or target not in discharge_ids or target in matched or not valid_span(match, target):
+                return None
+            matched.add(target)
+        if matched != discharge_ids:
+            return None
+    review = raw.get("review")
+    if "review" in raw and not valid_review(review, lookup, checks, events):
+        return None
+    b_failed = isinstance(review, dict) and review["stages"]["B"] == "failed"
+    if not b_failed and not {i for i, d in lookup.items() if d["source"] == "surgery_record"} <= surgery_checked:
+        return None
+    return dict(raw)
+
 
 DISCHARGE_CUSTOMER_RULE_IDS = frozenset(
     {
         "LX0609-08-01-01",
         "LX0609-08-01-02",
         "LX0609-08-01-03",
+        "LX0609-08-01-05",
         "LX0609-08-02-01",
         "LX0609-08-02-02",
     }
@@ -214,13 +305,43 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _safe_main_diagnosis_check(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    keys = {"verification_kind", "authoritative_main", "written_main", "main_consistent"}
+    if "diagnosis_scope" in raw:
+        keys.add("diagnosis_scope")
+    if (
+        set(raw) != keys
+        or any(type(raw.get(key)) is not str or not raw[key].strip() for key in ("authoritative_main", "written_main"))
+        or type(raw.get("main_consistent")) is not bool
+        or (raw["authoritative_main"] == raw["written_main"] and raw["main_consistent"] is not True)
+    ):
+        return None
+    return dict(raw)
+
+
 def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "discharge_main_diagnosis_check":
+        if "diagnosis_scope" in raw and raw["diagnosis_scope"] != "death":
+            return None
+        return _safe_main_diagnosis_check(raw)
+    if "diagnosis_scope" in raw and (type(raw["diagnosis_scope"]) is not str or raw["diagnosis_scope"] not in {"death", "discharge"}):
+        return None
+    scope_gap_values = {"scope_conflict", "scope_unknown"}
+    if any(type(raw.get(key)) is str and raw[key] in scope_gap_values for key in ("authoritative_gap", "written_gap")):
+        if (raw.get("verification_kind") != "discharge_diagnosis_data_gap"
+                or type(raw.get("authoritative_gap")) is not str
+                or raw["authoritative_gap"] not in scope_gap_values
+                or raw.get("written_gap") is not None or "diagnosis_scope" in raw):
+            return None
     if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
         allowed = {"verification_kind", "authoritative_gap", "written_gap"}
+        if "diagnosis_scope" in raw:
+            allowed.add("diagnosis_scope")
         gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
         if (set(raw) != allowed or not any(gaps)
                 or any(value is not None and (not isinstance(value, str) or value not in {
-                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid"
+                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
+                    "equivalence_unresolved",
                 }) for value in gaps)):
             return None
         return dict(raw)
@@ -232,6 +353,8 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "written_diagnoses",
             "diagnoses_consistent",
             "order_comparable",
+            "diagnosis_scope",
+            "equivalent_pairs",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -242,12 +365,18 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     authoritative = _safe_text_list(raw.get("authoritative_diagnoses"), minimum=1)
     written = _safe_text_list(raw.get("written_diagnoses"), minimum=1)
     order_comparable = raw.get("order_comparable", True)
+    pairs = None
+    if authoritative is not None and written is not None and "equivalent_pairs" in raw:
+        pairs = valid_equivalent_pairs(raw["equivalent_pairs"], authoritative=authoritative, written=written)
+        if pairs is None:
+            return None
+    mapped = map_equivalent_diagnoses(written or [], pairs or [])
     if (
         authoritative is None
         or written is None
-        or raw["diagnoses_consistent"] != (authoritative == written)
+        or raw["diagnoses_consistent"] != (authoritative == mapped)
         or type(order_comparable) is not bool
-        or (not order_comparable and (raw["diagnoses_consistent"] or sorted(authoritative) == sorted(written)))
+        or (not order_comparable and (raw["diagnoses_consistent"] or sorted(authoritative) == sorted(mapped)))
     ):
         return None
     return {
@@ -256,6 +385,8 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "written_diagnoses": written,
         "diagnoses_consistent": raw["diagnoses_consistent"],
         **({"order_comparable": order_comparable} if "order_comparable" in raw else {}),
+        **({"diagnosis_scope": raw["diagnosis_scope"]} if "diagnosis_scope" in raw else {}),
+        **({"equivalent_pairs": pairs} if pairs is not None else {}),
     }
 
 
@@ -373,6 +504,7 @@ def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 "checked_source",
                 "approval_present",
                 "approval_path",
+                "window_course_count",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -404,6 +536,10 @@ def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             != "daily_course_record,senior_course_record"
             or approval_present is not False
             or "approval_path" in raw
+            or (
+                "window_course_count" in raw
+                and (type(raw["window_course_count"]) is not int or raw["window_course_count"] <= 0)
+            )
         ):
             return None
         kind_key = "failure_kind"
@@ -419,6 +555,10 @@ def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
     if "approval_path" in raw:
         facts["approval_path"] = raw["approval_path"]
+    if "window_course_count" in raw and kind == "senior_discharge_approval_missing":
+        facts["window_course_count"] = raw["window_course_count"]
+    elif "window_course_count" in raw:
+        return None
     return facts
 
 
@@ -430,6 +570,8 @@ def safe_discharge_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
+    if normalized == "LX0609-08-01-05":
+        return _safe_course_content(raw)
     if normalized == "LX0609-08-01-01":
         return _safe_061(raw)
     if normalized == "LX0609-08-01-02":
@@ -475,6 +617,8 @@ def validate_published_discharge_facts(
     if not isinstance(raw, dict) or any(type(key) is not str for key in raw):
         return None
     rid = str(rule_id or "").strip().upper()
+    if rid == "LX0609-08-01-05":
+        return _safe_course_content(raw)
     keys = set(raw)
     if rid == "LX0609-08-01-01":
         base = {"verification_kind", "discharge_time", "record_time", "threshold_hours", "actual_interval_hours"}
@@ -519,10 +663,24 @@ def validate_published_discharge_facts(
                     or any(item not in required for item in missing)):
                 return None
     elif rid == "LX0609-08-01-03":
-        if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
+        if "diagnosis_scope" in raw and (type(raw["diagnosis_scope"]) is not str or raw["diagnosis_scope"] not in {"death", "discharge"}):
+            return None
+        scope_keys = {"diagnosis_scope"} if "diagnosis_scope" in raw else set()
+        scope_gap_values = {"scope_conflict", "scope_unknown"}
+        if any(type(raw.get(key)) is str and raw[key] in scope_gap_values for key in ("authoritative_gap", "written_gap")):
+            if (raw.get("verification_kind") != "discharge_diagnosis_data_gap"
+                    or type(raw.get("authoritative_gap")) is not str
+                or raw["authoritative_gap"] not in scope_gap_values
+                    or raw.get("written_gap") is not None or "diagnosis_scope" in raw):
+                return None
+        if raw.get("verification_kind") == "discharge_main_diagnosis_check":
+            if _safe_main_diagnosis_check(raw) is None:
+                return None
+        elif raw.get("verification_kind") == "discharge_diagnosis_data_gap":
             gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
-            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid"}
-            if (keys != {"verification_kind", "authoritative_gap", "written_gap"}
+            allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
+                       "equivalence_unresolved"}
+            if (keys != {"verification_kind", "authoritative_gap", "written_gap"} | scope_keys
                     or not any(gaps)
                     or any(value is not None and (type(value) is not str or value not in allowed) for value in gaps)):
                 return None
@@ -532,11 +690,19 @@ def validate_published_discharge_facts(
             comparable = raw.get("order_comparable", True)
             consistent = raw.get("diagnoses_consistent")
             base = {"verification_kind", "authoritative_diagnoses", "written_diagnoses", "diagnoses_consistent"}
-            if (keys not in (base, base | {"order_comparable"})
+            pair_keys = {"equivalent_pairs"} if "equivalent_pairs" in raw else set()
+            pairs = (
+                valid_equivalent_pairs(raw["equivalent_pairs"], authoritative=authoritative, written=written)
+                if pair_keys and authoritative is not None and written is not None
+                else None
+            )
+            mapped = map_equivalent_diagnoses(written or [], pairs or [])
+            if (keys not in (base | scope_keys | pair_keys, base | {"order_comparable"} | scope_keys | pair_keys)
+                    or (pair_keys and pairs is None)
                     or raw.get("verification_kind") != "discharge_diagnosis_consistency_check"
                     or authoritative is None or written is None or type(consistent) is not bool
-                    or type(comparable) is not bool or consistent != (authoritative == written)
-                    or (not comparable and (consistent or sorted(authoritative) == sorted(written)))):
+                    or type(comparable) is not bool or consistent != (authoritative == mapped)
+                    or (not comparable and (consistent or sorted(authoritative) == sorted(mapped)))):
                 return None
     elif rid in {"LX0609-08-02-01", "LX0609-08-02-02"}:
         gap_kind = ("predischarge_course_time_missing" if rid == "LX0609-08-02-01"
@@ -569,9 +735,11 @@ def validate_published_discharge_facts(
                         or raw["approval_path"] not in {"automatic_discharge", "senior_approval"}):
                     return None
             elif raw.get("failure_kind") == "senior_discharge_approval_missing":
-                if (keys != base | {"failure_kind"}
+                count = raw.get("window_course_count")
+                if (keys not in (base | {"failure_kind"}, base | {"failure_kind", "window_course_count"})
                         or raw.get("checked_source") != "daily_course_record,senior_course_record"
-                        or raw["approval_present"] is not False):
+                        or raw["approval_present"] is not False
+                        or ("window_course_count" in raw and (type(count) is not int or count <= 0))):
                     return None
             else:
                 return None
@@ -588,16 +756,25 @@ def discharge_customer_fact_status_is_valid(
     if not is_discharge_customer_rule(rule_id):
         return True
     normalized_status = str(status or "").strip().lower()
+    if (str(rule_id or "").strip().upper() == "LX0609-08-01-03"
+            and isinstance(safe_facts, Mapping)
+            and safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap"
+            and safe_facts.get("authoritative_gap") in {"scope_conflict", "scope_unknown"}):
+        return normalized_status == "data_gap"
     if normalized_status == "technical_error":
         return True
     if not isinstance(safe_facts, Mapping):
         return False
     normalized = str(rule_id or "").strip().upper()
+    if normalized == "LX0609-08-01-05":
+        return normalized_status == (
+            safe_facts["state"] if safe_facts.get("verification_kind") == "discharge_course_pending"
+            else content_state(safe_facts)
+        )
     if normalized == "LX0609-08-01-01":
         return normalized_status == (
             "data_gap"
             if safe_facts.get("actual_interval_hours") is None
-            or safe_facts["actual_interval_hours"] < 0
             else "compliant"
             if safe_facts["actual_interval_hours"] <= 24
             else "non_compliant"
@@ -613,6 +790,8 @@ def discharge_customer_fact_status_is_valid(
     if normalized == "LX0609-08-01-03":
         if safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap":
             return normalized_status == "data_gap"
+        if safe_facts.get("verification_kind") == "discharge_main_diagnosis_check":
+            return normalized_status == ("compliant" if safe_facts.get("main_consistent") is True else "non_compliant")
         return normalized_status == (
             "compliant"
             if safe_facts.get("diagnoses_consistent") is True
@@ -624,7 +803,11 @@ def discharge_customer_fact_status_is_valid(
         )
     if normalized == "LX0609-08-02-02":
         return normalized_status == (
-            "compliant" if safe_facts.get("approval_present") is True else "data_gap"
+            "compliant"
+            if safe_facts.get("approval_present") is True
+            else "non_compliant"
+            if safe_facts.get("window_course_count")
+            else "data_gap"
         )
     return False
 

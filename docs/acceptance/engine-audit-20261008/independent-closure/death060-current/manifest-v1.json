@@ -1,0 +1,158 @@
+{
+  "audit_id": "060-current-responsibility-manifest-prepared-v1",
+  "stage": "prepared_not_executed",
+  "fixed_current_commit": "21f4a93e103a34002a1f9d36f9d895f226c0122f",
+  "tree": "F:/MedQC-worktrees/qc-integration-20261008",
+  "authoritative_identity": {
+    "master_path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+    "master_version": "2026-09-22-identity-v1",
+    "pointer": "/rules/59",
+    "entry": {
+      "rule_id": "LX0609-04-02-06",
+      "source_document": "死亡记录",
+      "qc_point": "死亡患者无死亡记录",
+      "implementation_status": "active",
+      "policy_sources": [
+        "customer_confirmed"
+      ],
+      "policy_summary": "当前按客户已确认的《死亡记录》质控点执行；新增或变更口径须单独验收。"
+    },
+    "master_has_legacy_field": false,
+    "legacy_id": "LX0609-060",
+    "legacy_source": "current surgery-anesthesia.json /rules/10 and catalog confirmed by root",
+    "test_canonical_id": "LX0609-04-02-06",
+    "identity_mismatch": false
+  },
+  "historical_evidence": {
+    "group_report": "docs/acceptance/engine-audit-20261008/surgery-anesthesia.json",
+    "group_pointer": "/rules/10",
+    "round2_report": "apps/medqc-web/docs/acceptance/2026-10-07-round2-surgery-documents-audit.md",
+    "reported_historical_baseline": "c3a87a4f820259bca37a01764522ea1f3f485a3c",
+    "historical_responsibility_source_sha256": null,
+    "historical_gap_retained": true,
+    "current_hash_is_historical_hash": false,
+    "private_input_opened": false,
+    "historical_real_six": "no death trigger only; no death-positive coverage",
+    "historical_synthetic_four": "037 scenarios not reassigned to060"
+  },
+  "responsibility_sources": [
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/native_extended_document_execution.py",
+      "role": "060 _death_context:789, shared terminal source/trigger gate:3224, presence branch:3311; _decision and actual source/document references",
+      "sha256": "69cbc294eaa9203b7878afcecbc219badc7304d7ac40a5e670346e7b69302f9d",
+      "git_blob": "da8501c33e64d65d674617a170a081be1ff5a534"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/death_document_result_mapping.py",
+      "role": "060 presence safe/public facts/status contract",
+      "sha256": "a5a87c9b78639029d38daea3c996eea282e495c1f4d67e46b083843d84f45df5",
+      "git_blob": "def59636dabe2241c4d3391b0eda87f58020e645"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_binding.py",
+      "role": "actual snapshot and material refs→binding/reduction",
+      "sha256": "897ec218c45e6eccea60ab92c9d3bb7c1b0ab9dbed222d5cab64dc8a70f3abcb",
+      "git_blob": "51126dc983df435e03e5d24011b0e78966c6baa4"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/decision_reducer.py",
+      "role": "CustomerFinalState/reason preservation",
+      "sha256": "84d30a75e31c6c5063e8d1181e470a40bad9fd0f02bb888d7ecf6e092feb0fd4",
+      "git_blob": "665a96d3a4a0eb1697e22ba16d728e75aa39fe96"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/canonical_result_finalizer.py",
+      "role": "death mapping conflict rejection and published boundary",
+      "sha256": "7c0110d40950a5c69ae2964f096d3ae863534ee62fe5f12f458c2ab922a893aa",
+      "git_blob": "1d3904a3003835d3d3d2f1a4cb35692e9bae76b2"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_renderer.py",
+      "role": "060 presence display:3064, trigger_absent_complete copy",
+      "sha256": "b752318f6f41d343f92cb15208bfea212b8204eb24effe5ac1ded256e1e22844",
+      "git_blob": "ecf9f11fa19cc1702035de8e030f8a0a6b1ffa0b"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_snapshot.py",
+      "role": "source readiness/completeness/snapshot references",
+      "sha256": "a534207dafe48f4cc4a4306316515f47dd567d87576840871c5e7b8a7bc1bedd",
+      "git_blob": "767a9e0a6aa3eac06d8d60d6b205bc43acf7df9d"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/evidence_material.py",
+      "role": "material document and source references",
+      "sha256": "44f305a43b7dfe71b2d6b45296b1bd5608401713db3f5be6ccd1cc36d7c524ec",
+      "git_blob": "1d676c1dee19e1f9d2030d26058dbc62ed477f73"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_registry.py",
+      "role": "060 actual primary and support source identity",
+      "sha256": "2c562562a8035b2fada29c823c0cfebaf9fd6cec74529036225008917364e01e",
+      "git_blob": "fe4460fef00a79597f19d8bb2b3d85fe76eab1ac"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_manifest.py",
+      "role": "QueryStatus source contract",
+      "sha256": "98dcf8162f3b412c0d6b5ac646161c9c77c357a949433d98f5512e205339ecdb",
+      "git_blob": "1592c930a86f63780b7bc50eb67c570a0cf95a35"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/source_evidence_reader.py",
+      "role": "SnapshotSourceRows only; no live reader invocation",
+      "sha256": "169d6c353ab1be52e64eeebd19343fff29bf09f0a13609e0095468b450636bb7",
+      "git_blob": "10960b66c9ce76c2b14992301b852ce8b48cfdfd"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/services/luxian_0609/customer_rule_package.py",
+      "role": "static family definitions; AST literal only to avoid config assembly",
+      "sha256": "e6b3458b41c1855755380bb03841d414c372d39c6d38cca1ae20c3f936119c2c",
+      "git_blob": "afc5b8329e49c349e3939add2566f93f5d3b1293"
+    },
+    {
+      "path": "apps/medqc-web/backend/app/data/luxian_0609_rule_master_v1.json",
+      "role": "authoritative business master entry",
+      "sha256": "9e20f4d79d11563f6c36c06a875665479c948103fe12c95f0169f8ffebc21e93",
+      "git_blob": "31fd1e9fe49ce4b68c58367ed25bd57e89e1bff4"
+    }
+  ],
+  "inherited_test_sources": [
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_native_extended_document_execution.py",
+      "sha256": "40d141a4bfef1d23484fe1beac81ea7a7377b863937aef6029a98e9eb44ae0fe",
+      "git_blob": "71cd01e5e02e460f9aab5c76953e56c967bb2a0f",
+      "kind": "existing synthetic input/expectation/source helper; no pytest imports executed"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_death_document_result_mapping.py",
+      "sha256": "d3c65e3d213d47be4145f590ec6632a93734aff5251715059c14ddb9569ea80c",
+      "git_blob": "4e8906584ac637625b25906480de47a8aaa234dc",
+      "kind": "existing synthetic input/expectation/source helper; no pytest imports executed"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_death_published_boundary.py",
+      "sha256": "b79e0dcac5a2801456937785dd10497563b9f6893bfbf4c3509790417d5b5ac4",
+      "git_blob": "6bf191baf4a67bb304e6268c25868e1c8d58fa9a",
+      "kind": "existing synthetic input/expectation/source helper; no pytest imports executed"
+    }
+  ],
+  "inherited_input_expectation_sha256": "9b9ddb3fbf272948d7b0d81b6bd6fcbec4daaa6011d4f955827a5e36fc8b2cb5",
+  "planned_nodes": {
+    "native": [
+      "test_death_rules_treat_complete_discharge_record_as_non_death",
+      "test_060_active_inpatient_with_complete_empty_death_source_is_not_applicable",
+      "test_060_death_patient_without_death_record_is_non_compliant",
+      "test_death_case_skips_ordinary_discharge_rules"
+    ],
+    "finalizer": [
+      "test_060_finalizer_rejects_presence_status_conflict"
+    ],
+    "published": [
+      "test_published_death_missing_facts_stay_missing[RULE_060,None/empty]",
+      "test_published_death_forms_read_exactly[RULE_060,count0/count1]",
+      "test_published_death_pollution_is_rejected[RULE_060,private_field/bool_count]"
+    ]
+  },
+  "planned_rule_scope": "single canonical060; existing shared-test rows preserved, per-rule expected060 component only",
+  "test_runs": 0,
+  "await_serial_slot": true
+}

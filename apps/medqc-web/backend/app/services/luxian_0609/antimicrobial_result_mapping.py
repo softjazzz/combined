@@ -202,8 +202,8 @@ def _safe_054(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    allowed_keys = _055_REQUIRED_KEYS | {"window_state"}
-    if frozenset(raw) not in {_055_REQUIRED_KEYS, allowed_keys}:
+    allowed_keys = _055_REQUIRED_KEYS | {"window_state", "evaluation_resolution"}
+    if not _055_REQUIRED_KEYS <= frozenset(raw) <= allowed_keys:
         return None
     antimicrobials = _controlled_names(raw.get("antimicrobials"))
     unmatched = _controlled_names(
@@ -229,6 +229,9 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or ("window_state" in raw and window_state not in _055_WINDOW_STATES)
     ):
         return None
+    resolution = raw.get("evaluation_resolution", "ready")
+    if not isinstance(resolution, str) or resolution not in {"ready", "unknown", "capacity_exceeded", "unavailable", "invalid", "time_unresolved"}:
+        return None
     events: list[dict[str, Any]] = []
     for raw_event in raw_events:
         event = _safe_055_event(raw_event, antimicrobials)
@@ -244,6 +247,8 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "association_ambiguous": association_ambiguous,
         "event_windows": events,
     }
+    if "evaluation_resolution" in raw:
+        facts["evaluation_resolution"] = resolution
     if "window_state" in raw:
         facts["window_state"] = window_state
     return facts
@@ -384,6 +389,11 @@ def antimicrobial_customer_fact_status_is_valid(
             and bool(unmatched)
         )
     if normalized_rule_id == "LX0609-05-01-03":
+        resolution = safe_facts.get("evaluation_resolution", "ready")
+        if resolution in {"unknown", "capacity_exceeded", "unavailable", "time_unresolved"}:
+            return normalized_status == "data_gap"
+        if resolution == "invalid":
+            return False
         unmatched = safe_facts.get("unmatched_antimicrobials")
         events = safe_facts.get("event_windows")
         intervals = safe_facts.get("evaluation_intervals")

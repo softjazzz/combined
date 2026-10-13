@@ -127,7 +127,8 @@ async def test_006_transport_failure_keeps_usage_lower_bound_but_marks_it_unknow
         selected_customer_rule_ids=selected,
     )
 
-    assert calls == 1
+    # 传输超时按 TRANSPORT_RETRY_ATTEMPTS=2 重试（2026-10-12）：共 3 次尝试。
+    assert calls == 3
     assert context.native_llm_call_count == 1
     assert context.native_total_tokens == 0
     assert context.native_usage_unknown_executor_keys == ("basic_timeliness",)
