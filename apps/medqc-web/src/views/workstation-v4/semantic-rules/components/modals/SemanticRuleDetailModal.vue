@@ -579,6 +579,15 @@ function formatPolicySource(value: string): string {
   line-height: 1.65;
 }
 
+.engine-steps {
+  list-style: decimal;
+}
+
+.engine-steps li::marker {
+  color: rgba(10, 108, 255, 0.7);
+  font-weight: 600;
+}
+
 .engine-outcomes {
   display: grid;
   gap: 4px;
