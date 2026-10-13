@@ -12,6 +12,7 @@ const DRILLDOWN_QUERY = {
   source: 'analytics',
   analytics_scope: 'final',
   analytics_rule_id: 'LX0609-06-01-05',
+  analytics_rule_name: '日常病程：上级医师查房分析内容',
   analytics_completed_from: '2026-10-01T00:00:00',
   analytics_completed_to: '2026-10-08T23:59:59',
   department: 'ICU',
@@ -22,6 +23,7 @@ describe('analyticsDrilldown', () => {
   it('从 URL 还原规则、范围、时间与科室（刷新后可恢复）', () => {
     expect(readAnalyticsDrilldown(DRILLDOWN_QUERY)).toEqual({
       ruleId: 'LX0609-06-01-05',
+      ruleName: '日常病程：上级医师查房分析内容',
       scope: 'final',
       completedFrom: '2026-10-01T00:00:00',
       completedTo: '2026-10-08T23:59:59',
@@ -60,22 +62,32 @@ describe('analyticsDrilldown', () => {
 })
 
 describe('AnalyticsDrilldownBar', () => {
-  it('明确展示规则筛选状态并提供返回与清除操作', async () => {
+  it('说明来源与命中数量，并提供返回统计与查看全部病历', async () => {
     const wrapper = mount(AnalyticsDrilldownBar, {
-      props: { drilldown: readAnalyticsDrilldown(DRILLDOWN_QUERY)! },
+      props: { drilldown: readAnalyticsDrilldown(DRILLDOWN_QUERY)!, total: 29 },
       global: { stubs: { 'a-button': { template: '<button><slot /></button>' } } },
     })
 
-    expect(wrapper.get('[data-testid="analytics-drilldown-rule"]').text()).toBe(
-      '规则 LX0609-06-01-05',
-    )
+    expect(wrapper.text()).toContain('来自统计分析')
+    expect(wrapper.get('[data-testid="analytics-drilldown-rule"]').text()).toBe('LX0609-06-01-05')
+    expect(wrapper.text()).toContain('日常病程：上级医师查房分析内容')
+    expect(wrapper.get('[data-testid="analytics-drilldown-desc"]').text()).toContain('共 29 份')
     expect(wrapper.text()).toContain('终末质控')
-    expect(wrapper.text()).toContain('ICU')
 
     const [back, clear] = wrapper.findAll('button')
+    expect(back.text()).toContain('返回统计分析')
+    expect(clear.text()).toContain('查看全部病历')
     await back.trigger('click')
     await clear.trigger('click')
     expect(wrapper.emitted('back')).toHaveLength(1)
     expect(wrapper.emitted('clear')).toHaveLength(1)
+  })
+
+  it('列表加载中不显示命中数量', () => {
+    const wrapper = mount(AnalyticsDrilldownBar, {
+      props: { drilldown: readAnalyticsDrilldown(DRILLDOWN_QUERY)!, total: null },
+      global: { stubs: { 'a-button': { template: '<button><slot /></button>' } } },
+    })
+    expect(wrapper.get('[data-testid="analytics-drilldown-desc"]').text()).not.toContain('共')
   })
 })

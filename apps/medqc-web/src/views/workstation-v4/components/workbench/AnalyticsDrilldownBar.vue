@@ -5,16 +5,19 @@
     data-testid="analytics-drilldown-bar"
   >
     <div class="analytics-drilldown__content">
-      <div class="analytics-drilldown__heading">
-        <strong>统计下钻</strong>
-        <span>当前列表仅显示统计分析中命中该条件的病历</span>
+      <span class="analytics-drilldown__source">来自统计分析 · 质控点下钻</span>
+      <div class="analytics-drilldown__title">
+        <strong data-testid="analytics-drilldown-rule">{{ drilldown.ruleId || '全部质控点' }}</strong>
+        <span v-if="drilldown.ruleName">{{ drilldown.ruleName }}</span>
       </div>
+      <p
+        class="analytics-drilldown__desc"
+        data-testid="analytics-drilldown-desc"
+      >
+        下方列表只显示{{ scopeLabel }}中命中该质控点的病历<template v-if="total !== null">，共
+          <b>{{ total }}</b> 份</template>。
+      </p>
       <div class="analytics-drilldown__chips">
-        <span
-          v-if="drilldown.ruleId"
-          class="analytics-drilldown__chip analytics-drilldown__chip--primary"
-          data-testid="analytics-drilldown-rule"
-        >规则 {{ drilldown.ruleId }}</span>
         <span class="analytics-drilldown__chip">{{ scopeLabel }}</span>
         <span
           v-if="drilldown.department"
@@ -32,17 +35,13 @@
     </div>
     <div class="analytics-drilldown__actions">
       <a-button
-        size="small"
+        type="primary"
         @click="emit('back')"
       >
-        返回统计
+        ← 返回统计分析
       </a-button>
-      <a-button
-        size="small"
-        type="link"
-        @click="emit('clear')"
-      >
-        清除下钻
+      <a-button @click="emit('clear')">
+        查看全部病历
       </a-button>
     </div>
   </section>
@@ -52,7 +51,9 @@
 import { computed } from 'vue'
 import { analyticsScopeLabel, type AnalyticsDrilldown } from '../../utils/analyticsDrilldown'
 
-const props = defineProps<{ drilldown: AnalyticsDrilldown }>()
+const props = withDefaults(defineProps<{ drilldown: AnalyticsDrilldown; total?: number | null }>(), {
+  total: null,
+})
 const emit = defineEmits<{ back: []; clear: [] }>()
 
 const scopeLabel = computed(() => analyticsScopeLabel(props.drilldown.scope))
@@ -69,37 +70,55 @@ const periodText = computed(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 20px;
-  padding: 12px 16px;
-  border: 1px solid rgba(10, 108, 255, 0.18);
-  border-radius: 10px;
-  background: rgba(10, 108, 255, 0.04);
+  gap: 14px 24px;
+  padding: 16px 20px;
+  border: 1px solid rgba(10, 108, 255, 0.24);
+  border-left: 4px solid #0a6cff;
+  border-radius: 12px;
+  background: rgba(10, 108, 255, 0.05);
   color: #1d1d1f;
 }
 
 .analytics-drilldown__content {
   display: flex;
   min-width: 0;
-  flex: 1 1 320px;
+  flex: 1 1 360px;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.analytics-drilldown__heading {
+.analytics-drilldown__source {
+  color: #0a6cff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.analytics-drilldown__title {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
 }
 
-.analytics-drilldown__heading strong {
-  font-size: 14px;
+.analytics-drilldown__title strong {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.analytics-drilldown__title span {
+  color: #334155;
+  font-size: 15px;
   font-weight: 600;
 }
 
-.analytics-drilldown__heading span {
-  color: #64748b;
-  font-size: 12px;
+.analytics-drilldown__desc {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.analytics-drilldown__desc b {
+  color: #0a6cff;
 }
 
 .analytics-drilldown__chips {
@@ -118,16 +137,11 @@ const periodText = computed(() => {
   white-space: nowrap;
 }
 
-.analytics-drilldown__chip--primary {
-  border-color: rgba(10, 108, 255, 0.3);
-  color: #0a6cff;
-  font-weight: 600;
-}
-
 .analytics-drilldown__actions {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 </style>

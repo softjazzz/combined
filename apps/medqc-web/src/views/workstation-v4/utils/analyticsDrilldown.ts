@@ -15,6 +15,8 @@ export const ANALYTICS_WORKLIST_PATH = '/workstation-v5/worklist'
 
 export interface AnalyticsDrilldown {
   ruleId: string
+  /** 仅用于展示，来自 analytics_rule_name，不发给后端 */
+  ruleName: string
   scope: string
   completedFrom: string
   completedTo: string
@@ -35,6 +37,7 @@ export function readAnalyticsDrilldown(query: LocationQuery): AnalyticsDrilldown
   if (!ANALYTICS_DRILLDOWN_KEYS.some((key) => queryText(query, key))) return null
   return {
     ruleId: queryText(query, 'analytics_rule_id'),
+    ruleName: queryText(query, 'analytics_rule_name'),
     scope: queryText(query, 'analytics_scope'),
     completedFrom: queryText(query, 'analytics_completed_from'),
     completedTo: queryText(query, 'analytics_completed_to'),
@@ -53,6 +56,7 @@ export function analyticsDrilldownSignature(query: LocationQuery): string {
 export function withoutAnalyticsDrilldown(query: LocationQuery): LocationQueryRaw {
   const next: LocationQueryRaw = { ...query }
   delete next.source
+  delete next.analytics_rule_name
   for (const key of ANALYTICS_DRILLDOWN_KEYS) delete next[key]
   return next
 }

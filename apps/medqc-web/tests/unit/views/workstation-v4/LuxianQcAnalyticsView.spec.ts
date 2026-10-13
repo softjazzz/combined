@@ -173,6 +173,7 @@ describe('LuxianQcAnalyticsView', () => {
         source: 'analytics',
         analytics_scope: 'final',
         analytics_rule_id: 'LX0609-06-01-02',
+        analytics_rule_name: '检查记录：CT/MRI',
       }),
     })
   })

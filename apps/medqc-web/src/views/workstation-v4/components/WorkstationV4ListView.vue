@@ -48,6 +48,16 @@
               </div>
             </div>
 
+            <!-- 统计下钻放在页面最上方，进入即可看出“这是统计分析的命中病历”而非普通病历池 -->
+            <AnalyticsDrilldownBar
+              v-if="analyticsDrilldown && !isStageQueueMode"
+              class="wv4-list__drilldown"
+              :drilldown="analyticsDrilldown"
+              :total="displayLoading ? null : displayServerTotal"
+              @back="emit('back-to-analytics')"
+              @clear="emit('clear-analytics-drilldown')"
+            />
+
             <div
               class="wv4-analysis-overview__controls wv4-record-pool-filter mq-card"
               :class="{ 'wv4-record-pool-filter--pool': !isStageQueueMode }"
@@ -343,22 +353,13 @@
                   <RecordPoolQcTaskHistory />
                 </template>
                 <template
-                  v-if="(recordPoolQcTask || analyticsDrilldown) && !isStageQueueMode"
+                  v-if="recordPoolQcTask && !isStageQueueMode"
                   #task-status
                 >
-                  <div class="wv4-list__task-status-stack">
-                    <AnalyticsDrilldownBar
-                      v-if="analyticsDrilldown"
-                      :drilldown="analyticsDrilldown"
-                      @back="emit('back-to-analytics')"
-                      @clear="emit('clear-analytics-drilldown')"
-                    />
-                    <RecordPoolQcTaskStatusBar
-                      v-if="recordPoolQcTask"
-                      :job="recordPoolQcTask"
-                      @dismiss="emit('dismiss-qc-task')"
-                    />
-                  </div>
+                  <RecordPoolQcTaskStatusBar
+                    :job="recordPoolQcTask"
+                    @dismiss="emit('dismiss-qc-task')"
+                  />
                 </template>
               </BatchTablePanel>
             </div>
@@ -562,13 +563,21 @@ const showInpatientSort = computed(
   () => props.hospFilter === 'inpatient' || props.syncScope === 'today_inpatient',
 )
 
-const overviewEyebrow = computed(() =>
-  props.isStageQueueMode ? '首页与结算清单 · 批量工作台' : '质控作业 · 全部病历',
-)
+const isAnalyticsDrilldown = computed(() => Boolean(props.analyticsDrilldown) && !props.isStageQueueMode)
 
-const overviewTitle = computed(() =>
-  isFrontpageGenerateStage.value ? props.stageMeta.pageTitle || '参考首页生成队列' : '病历池',
-)
+const overviewEyebrow = computed(() => {
+  if (props.isStageQueueMode) return '首页与结算清单 · 批量工作台'
+  return isAnalyticsDrilldown.value ? '统计分析 · 下钻结果' : '质控作业 · 全部病历'
+})
+
+const overviewTitle = computed(() => {
+  if (isFrontpageGenerateStage.value) return props.stageMeta.pageTitle || '参考首页生成队列'
+  if (isAnalyticsDrilldown.value) {
+    const ruleId = props.analyticsDrilldown?.ruleId
+    return ruleId ? `${ruleId} 命中病历` : '统计下钻病历'
+  }
+  return '病历池'
+})
 
 const overviewSubtitle = computed(() =>
   isFrontpageGenerateStage.value
@@ -650,9 +659,7 @@ const kpiCards = computed(() => [
 <style scoped>
 @import '../styles/record-pool-refined.css';
 
-.wv4-list__task-status-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.wv4-list__drilldown {
+  margin-bottom: 12px;
 }
 </style>
