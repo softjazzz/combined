@@ -161,6 +161,22 @@ describe('LuxianQcAnalyticsView', () => {
     })
   })
 
+  it('点击 Top 5 质控点下钻到病历池列表，而不是工作台首页', async () => {
+    const wrapper = mountView()
+    await flush()
+
+    await wrapper.get('[data-testid="analytics-rule-chart"] .rule-list button').trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/workstation-v5/worklist',
+      query: expect.objectContaining({
+        source: 'analytics',
+        analytics_scope: 'final',
+        analytics_rule_id: 'LX0609-06-01-02',
+      }),
+    })
+  })
+
   it('科室报告以科室条件请求同一Canonical统计，并显示返回全院入口', async () => {
     routeState.query = {
       view: 'department',

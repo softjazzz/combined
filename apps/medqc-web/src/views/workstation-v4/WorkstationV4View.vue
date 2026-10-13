@@ -35,6 +35,7 @@
         :display-server-total="displayServerTotal"
         :qc-summary="qcSummary"
         :record-pool-qc-task="recordPoolQcTask"
+        :analytics-drilldown="analyticsDrilldown"
         :load-error="loadError"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
@@ -52,6 +53,8 @@
         @batch-extract="handleBatchExtract"
         @filter-qc="handleFilterQc"
         @dismiss-qc-task="recordPoolQcTask = null"
+        @back-to-analytics="backToAnalytics"
+        @clear-analytics-drilldown="clearAnalyticsDrilldown"
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
@@ -411,6 +414,13 @@ import {
   resolveDocDisplayTitle,
   resolveDocGroupKey,
 } from './utils/documentDisplay'
+import {
+  ANALYTICS_STATS_PATH,
+  analyticsDrilldownSignature,
+  analyticsStatsQuery,
+  readAnalyticsDrilldown,
+  withoutAnalyticsDrilldown,
+} from './utils/analyticsDrilldown'
 import type {
   PatientRecord,
   DeptInfo,
@@ -2144,6 +2154,31 @@ useWorkstationRouteEffects({
   icdDrawerVisible,
   suggestionDrawerVisible,
 })
+
+// 统计分析下钻：筛选状态完全由 URL 承载，刷新、返回/前进都按 URL 还原并重新查询。
+const analyticsDrilldown = computed(() => readAnalyticsDrilldown(route.query))
+
+watch(
+  () => analyticsDrilldownSignature(route.query),
+  (signature, previous) => {
+    if (signature === previous) return
+    currentPage.value = 1
+    void fetchData(1)
+  },
+)
+
+function backToAnalytics() {
+  const drilldown = analyticsDrilldown.value
+  void router.push({
+    path: ANALYTICS_STATS_PATH,
+    query: drilldown ? analyticsStatsQuery(drilldown) : {},
+  })
+}
+
+function clearAnalyticsDrilldown() {
+  // 查询变化由上面的 watch 统一触发重新加载
+  void router.replace({ path: route.path, query: withoutAnalyticsDrilldown(route.query) })
+}
 
 onMounted(() => {
   void ensureExtractionSettingsLoaded()

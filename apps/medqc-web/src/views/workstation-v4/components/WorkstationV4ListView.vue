@@ -343,13 +343,22 @@
                   <RecordPoolQcTaskHistory />
                 </template>
                 <template
-                  v-if="recordPoolQcTask && !isStageQueueMode"
+                  v-if="(recordPoolQcTask || analyticsDrilldown) && !isStageQueueMode"
                   #task-status
                 >
-                  <RecordPoolQcTaskStatusBar
-                    :job="recordPoolQcTask"
-                    @dismiss="emit('dismiss-qc-task')"
-                  />
+                  <div class="wv4-list__task-status-stack">
+                    <AnalyticsDrilldownBar
+                      v-if="analyticsDrilldown"
+                      :drilldown="analyticsDrilldown"
+                      @back="emit('back-to-analytics')"
+                      @clear="emit('clear-analytics-drilldown')"
+                    />
+                    <RecordPoolQcTaskStatusBar
+                      v-if="recordPoolQcTask"
+                      :job="recordPoolQcTask"
+                      @dismiss="emit('dismiss-qc-task')"
+                    />
+                  </div>
                 </template>
               </BatchTablePanel>
             </div>
@@ -399,6 +408,8 @@ import {
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import RecordPoolQcTaskHistory from './workbench/RecordPoolQcTaskHistory.vue'
 import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
+import AnalyticsDrilldownBar from './workbench/AnalyticsDrilldownBar.vue'
+import type { AnalyticsDrilldown } from '../utils/analyticsDrilldown'
 import RecordPoolPreviewPanel from './workbench/RecordPoolPreviewPanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { SichuanBatchJob } from '../semantic-rules/types'
@@ -463,6 +474,7 @@ const props = defineProps<{
   displayServerTotal: number
   qcSummary: RecordPoolQcSummary
   recordPoolQcTask?: SichuanBatchJob | null
+  analyticsDrilldown?: AnalyticsDrilldown | null
   loadError: boolean
 }>()
 
@@ -483,6 +495,8 @@ const emit = defineEmits<{
   'batch-extract': [keys: string[]]
   'filter-qc': []
   'dismiss-qc-task': []
+  'back-to-analytics': []
+  'clear-analytics-drilldown': []
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
@@ -635,4 +649,10 @@ const kpiCards = computed(() => [
 
 <style scoped>
 @import '../styles/record-pool-refined.css';
+
+.wv4-list__task-status-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 </style>

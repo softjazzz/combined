@@ -68,6 +68,27 @@ describe('WorkstationV4HomeEntry', () => {
     expect(wrapper.findComponent({ name: 'BusinessAgentDrawer' }).exists()).toBe(false)
   })
 
+  it('旧的统计下钻链接（根路径 + 统计参数）直接进入病历列表', () => {
+    routeState.query = {
+      source: 'analytics',
+      analytics_scope: 'final',
+      analytics_rule_id: 'LX0609-06-01-05',
+    }
+
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(false)
+  })
+
+  it('只有 source=analytics 而无统计参数时仍展示首页', () => {
+    routeState.query = { source: 'analytics' }
+
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(true)
+  })
+
   it('带启动参数时进入工作台列表模式', () => {
     routeState.query = { stage: 'frontpage_generate' }
 

@@ -386,6 +386,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { ApiService } from '@/services/apiService'
+import { ANALYTICS_WORKLIST_PATH } from './utils/analyticsDrilldown'
 
 type Status =
   | 'non_compliant'
@@ -637,7 +638,8 @@ function returnToHospitalAnalytics() {
 }
 function drillDown(filters: { department?: string; rule_id?: string }) {
   void router.push({
-    path: '/workstation-v5',
+    // 下钻目标是病历池列表；工作台根路径是首页总览，不承载统计筛选
+    path: ANALYTICS_WORKLIST_PATH,
     query: {
       source: 'analytics',
       analytics_scope: 'final',
