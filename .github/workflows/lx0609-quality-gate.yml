@@ -6,7 +6,7 @@ name: LX0609 Quality Gate - medqc-web
 # 且其触发分支（main/develop）在本仓库远端不存在。
 on:
   pull_request:
-    branches: [master, push-fix-clean]
+    branches: [master, push-fix-clean, codex/business-agent-integration]
     paths:
       - 'apps/medqc-web/backend/**'
       - '.github/workflows/lx0609-quality-gate.yml'
