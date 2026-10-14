@@ -217,6 +217,35 @@ describe('RecordPoolQcTaskStatusBar', () => {
     vi.useRealTimers()
   })
 
+  it('持续读取失败达到上限后暂停轮询', async () => {
+    vi.useFakeTimers()
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: false,
+      status: 502,
+      message: '上游服务暂不可用',
+    })
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: {
+        job: job({ status: 'running' }),
+        pollIntervalMs: 500,
+      },
+      global: { stubs: { AProgress: true } },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(500 * 11)
+    await flushPromises()
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(12)
+    expect(wrapper.text()).toContain('已暂停自动刷新')
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(12)
+
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
   it('shows the real four-stage workflow and projected in-flight rule progress', async () => {
     mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,

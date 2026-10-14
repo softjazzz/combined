@@ -1769,10 +1769,107 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(4)
-    expect(message.error).toHaveBeenCalledWith(
-      expect.objectContaining({ content: expect.stringContaining('进度暂时读取失败，正在重试') }),
+    // 未附带任务状态的读取失败视为临时失败：静默重试，不中断轮询
+    expect(message.error).not.toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('已停止自动刷新') }),
     )
     expect(wrapper.text()).not.toContain('执行失败')
+  })
+
+  it('任务已结束但结果无法展示（409 + 已结束状态）时停止轮询并说明原因', async () => {
+    vi.useFakeTimers()
+    listManualSamplePools.mockResolvedValue({
+      success: true,
+      data: {
+        items: [buildPool({ latest_job_id: 'job-ended-409', latest_job_status: 'running' })],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    getSichuanWorkspaceBatchJob
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'job-ended-409',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控点验证',
+          scope: 'running',
+          status: 'running',
+          rule_set_key: 'luxian_0609_qc_v1',
+          created_at: '2026-10-13T02:43:20Z',
+        },
+      })
+      .mockResolvedValue({
+        success: false,
+        status: 409,
+        jobStatus: 'failed',
+        message: '历史质控结果交付合同不完整，无法安全展示',
+      })
+
+    await mountView()
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    const callsAfterStop = getSichuanWorkspaceBatchJob.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30000)
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob.mock.calls.length).toBe(callsAfterStop)
+    expect(message.error).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('已停止自动刷新') }),
+    )
+  })
+
+  it('任务仍在执行时的 409 继续重试，连续失败达到上限后暂停自动刷新', async () => {
+    vi.useFakeTimers()
+    listManualSamplePools.mockResolvedValue({
+      success: true,
+      data: {
+        items: [buildPool({ latest_job_id: 'job-running-409', latest_job_status: 'running' })],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    getSichuanWorkspaceBatchJob
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'job-running-409',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控点验证',
+          scope: 'running',
+          status: 'running',
+          rule_set_key: 'luxian_0609_qc_v1',
+          created_at: '2026-10-13T02:43:20Z',
+        },
+      })
+      .mockResolvedValue({
+        success: false,
+        status: 409,
+        jobStatus: 'running',
+        message: '批量质控 Canonical 结果不完整，无法安全展示',
+      })
+
+    await mountView()
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(5000 * 11)
+    await flushPromises()
+    expect(message.error).not.toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('已暂停自动刷新') }),
+    )
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    const callsAfterStop = getSichuanWorkspaceBatchJob.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30000)
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob.mock.calls.length).toBe(callsAfterStop)
+    expect(message.error).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('已暂停自动刷新') }),
+    )
   })
 
   it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {

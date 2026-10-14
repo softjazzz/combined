@@ -37,6 +37,15 @@
         </div>
       </div>
 
+      <a-alert
+        v-if="resultStale && !isTabEmpty"
+        type="info"
+        show-icon
+        class="qc-stale-alert"
+        data-testid="qc-result-stale"
+        message="首页内容已变更，当前结果可能已过期；点击“刷新”重新质控。"
+      />
+
       <div v-if="currentTab === 'coding' && !isTabEmpty" class="qc-coding-summary">
         <div class="qc-coding-summary__item">
           <span>基础编码校验</span>
@@ -291,6 +300,7 @@ const costQCLoading = ref(false)
 const formAnalyzed = ref(false)
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
+const resultStale = ref(false)
 
 const qcTabs = [
   {
@@ -911,6 +921,7 @@ async function runAllQC() {
 }
 
 function startCurrentTab() {
+  resultStale.value = false
   const tab = currentTab.value
   if (tab === 'form') runFormQC()
   else if (tab === 'coding') runCodingQC()
@@ -940,6 +951,7 @@ watch(
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
+    resultStale.value = false
     issues.value = []
     emit('issues-change', [])
   },
@@ -954,15 +966,23 @@ watch(
   { deep: true, immediate: true },
 )
 
+// 首页草稿读取或修改只提示结果可能过期，不自动发起质控：
+// 编码质控会调用大模型，必须由用户点击“开始分析/刷新”显式触发。
 watch(
   () => props.refreshSeed,
   () => {
-    if (props.frontpage) runAllQC()
+    if (formAnalyzed.value || codingAnalyzed.value || costAnalyzed.value) {
+      resultStale.value = true
+    }
   },
 )
 </script>
 
 <style scoped>
+.qc-stale-alert {
+  margin-bottom: 12px;
+}
+
 .qc-result-tab {
   min-height: 0;
   height: 100%;

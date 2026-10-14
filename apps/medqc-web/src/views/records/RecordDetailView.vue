@@ -71,7 +71,18 @@
         </div>
 
         <div
-          v-if="qcIssues.length === 0"
+          v-if="annotationUnavailable"
+          class="p-8 text-center text-gray-500"
+          data-testid="annotation-unavailable"
+        >
+          <ExclamationCircleOutlined class="text-3xl text-orange-400 mb-2" />
+          <p class="text-sm">
+            缺陷标注读取失败，暂不能确认是否存在质控问题
+          </p>
+        </div>
+
+        <div
+          v-else-if="qcIssues.length === 0"
           class="p-8 text-center text-gray-400"
         >
           <CheckCircleOutlined class="text-3xl text-green-400 mb-2" />
@@ -152,6 +163,7 @@ const recordId = route.params.id as string
 // 状态
 const showQCPanel = ref(true)
 const qcIssues = ref<DefectAnnotation[]>([])
+const annotationUnavailable = ref(false)
 const activeDefectId = ref<string | null>(null)
 const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
 
@@ -174,6 +186,7 @@ const severityText = (severity: string) => {
 // EMR 加载完成
 const handleEMRLoaded = (data: any) => {
   qcIssues.value = data?.defect_annotations || []
+  annotationUnavailable.value = data?.annotation_status === 'unavailable'
 }
 
 // 缺陷点击：从 EMRViewer 内部触发

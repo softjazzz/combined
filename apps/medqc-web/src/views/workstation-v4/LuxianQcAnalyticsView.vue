@@ -337,7 +337,7 @@
                   <p>问题聚焦</p>
                   <h2>质控点问题 Top 5</h2>
                 </div>
-                <span class="panel-note">点击查看对应病历</span>
+                <span class="panel-note">点击质控点，进入病历池查看命中病历</span>
               </header>
               <ol
                 v-if="ruleItems.length"
@@ -349,7 +349,8 @@
                 >
                   <button
                     type="button"
-                    @click="drillDown({ rule_id: item.rule_id })"
+                    :title="`查看命中 ${item.rule_id} 的病历`"
+                    @click="drillDown({ rule_id: item.rule_id, rule_name: item.rule_name })"
                   >
                     <span class="rule-rank">{{ index + 1 }}</span>
                     <span class="rule-copy">
@@ -386,6 +387,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { ApiService } from '@/services/apiService'
+import { ANALYTICS_WORKLIST_PATH } from './utils/analyticsDrilldown'
 
 type Status =
   | 'non_compliant'
@@ -635,9 +637,10 @@ function returnToHospitalAnalytics() {
     },
   })
 }
-function drillDown(filters: { department?: string; rule_id?: string }) {
+function drillDown(filters: { department?: string; rule_id?: string; rule_name?: string }) {
   void router.push({
-    path: '/workstation-v5',
+    // 下钻目标是病历池列表；工作台根路径是首页总览，不承载统计筛选
+    path: ANALYTICS_WORKLIST_PATH,
     query: {
       source: 'analytics',
       analytics_scope: 'final',
@@ -646,6 +649,8 @@ function drillDown(filters: { department?: string; rule_id?: string }) {
       analytics_completed_to: dateRange.value?.[1],
       analytics_job_id: jobId.value || undefined,
       analytics_rule_id: filters.rule_id,
+      // 仅供病历池展示下钻上下文，不参与后端筛选
+      analytics_rule_name: filters.rule_name || undefined,
     },
   })
 }

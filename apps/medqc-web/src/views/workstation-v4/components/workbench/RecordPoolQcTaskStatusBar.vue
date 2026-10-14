@@ -162,6 +162,10 @@ import {
 import type { SichuanBatchJob } from '../../semantic-rules/types'
 import { isBatchJobPollingActive } from '../../semantic-rules/utils/batchJobStatus'
 import {
+  decidePollReadFailure,
+  pollReadFailureMessage,
+} from '../../customer-sample-validation/batchJobPollReadPolicy'
+import {
   downloadBlob,
   normalizeBatchExportBlob,
 } from '../../customer-sample-validation/batchExport'
@@ -189,6 +193,7 @@ const resultReadError = ref('')
 const exporting = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let requestSequence = 0
+let consecutiveReadFailures = 0
 
 const DELIVERY_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
 
@@ -465,13 +470,25 @@ async function refreshJob(sequence: number) {
   if (result.success && result.data) {
     const wasCompleted = currentJob.value?.status === 'completed'
     currentJob.value = result.data
+    consecutiveReadFailures = 0
     pollError.value = false
     resultReadError.value = ''
     if (!wasCompleted && result.data.status === 'completed') emit('completed')
   } else {
-    if (result.message?.includes(DELIVERY_CONTRACT_ERROR)) {
+    consecutiveReadFailures += 1
+    const decision = decidePollReadFailure(
+      result.status,
+      consecutiveReadFailures,
+      result.jobStatus,
+    )
+    // 结果交付不完整等确定性失败（文案或 409/404 状态码）停止轮询，避免无限重复请求
+    if (result.message?.includes(DELIVERY_CONTRACT_ERROR) || decision !== 'retry') {
       pollError.value = false
-      resultReadError.value = result.message
+      const errorMessage = result.message || '任务结果暂无法展示'
+      resultReadError.value =
+        decision === 'stop_exhausted'
+          ? pollReadFailureMessage(decision, errorMessage)
+          : errorMessage
       clearPollTimer()
       return
     }
@@ -486,6 +503,7 @@ watch(
     requestSequence += 1
     clearPollTimer()
     currentJob.value = job
+    consecutiveReadFailures = 0
     pollError.value = false
     resultReadError.value = ''
     if (job && props.autoPoll && isBatchJobPollingActive(job)) void refreshJob(requestSequence)

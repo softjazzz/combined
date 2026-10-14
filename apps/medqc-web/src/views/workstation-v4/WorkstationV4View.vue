@@ -35,6 +35,7 @@
         :display-server-total="displayServerTotal"
         :qc-summary="qcSummary"
         :record-pool-qc-task="recordPoolQcTask"
+        :analytics-drilldown="analyticsDrilldown"
         :load-error="loadError"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
@@ -52,6 +53,8 @@
         @batch-extract="handleBatchExtract"
         @filter-qc="handleFilterQc"
         @dismiss-qc-task="recordPoolQcTask = null"
+        @back-to-analytics="backToAnalytics"
+        @clear-analytics-drilldown="clearAnalyticsDrilldown"
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
@@ -411,6 +414,13 @@ import {
   resolveDocDisplayTitle,
   resolveDocGroupKey,
 } from './utils/documentDisplay'
+import {
+  ANALYTICS_STATS_PATH,
+  analyticsDrilldownSignature,
+  analyticsStatsQuery,
+  readAnalyticsDrilldown,
+  withoutAnalyticsDrilldown,
+} from './utils/analyticsDrilldown'
 import type {
   PatientRecord,
   DeptInfo,
@@ -730,29 +740,26 @@ async function handleStageRecordAction(record: PatientRecord) {
     detailMainTab.value = 'records'
     return
   }
+  // 进入质控页只定位到对应面板并展示已有结果；新质控由用户点击“开始分析”触发。
   if (action === 'qc_coding') {
     detailMainTab.value = 'frontpage'
     assistPanelVisible.value = true
     assistTab.value = 'coding'
-    assistViewRef.value?.runCodingQC()
     return
   }
   if (action === 'qc_frontpage') {
     detailMainTab.value = 'frontpage'
     assistPanelVisible.value = true
     assistTab.value = 'form'
-    assistViewRef.value?.runFormQC()
     return
   }
   if (action === 'qc_settlement') {
     detailMainTab.value = 'settlement'
-    if (!isDischarged.value) {
-      message.warning('当前病历未出院，暂不可执行结算质控')
-      return
-    }
-    await runSettlementQc()
     assistPanelVisible.value = true
     assistTab.value = 'cost'
+    if (!isDischarged.value) {
+      message.warning('当前病历未出院，暂不可执行结算质控')
+    }
     return
   }
 }
@@ -2134,15 +2141,6 @@ useWorkstationRouteEffects({
   handleGenerateFrontpage: async () => {
     await Promise.resolve(handleGenerateFrontpage())
   },
-  runCodingQc: () => {
-    assistViewRef.value?.runCodingQC()
-  },
-  runFormQc: () => {
-    assistViewRef.value?.runFormQC()
-  },
-  isDischarged: isDischarged.value,
-  runSettlementQc,
-  getSettlementLoading: () => settlementLoading.value,
   showWarning: (msg) => {
     message.warning(msg)
   },
@@ -2156,6 +2154,31 @@ useWorkstationRouteEffects({
   icdDrawerVisible,
   suggestionDrawerVisible,
 })
+
+// 统计分析下钻：筛选状态完全由 URL 承载，刷新、返回/前进都按 URL 还原并重新查询。
+const analyticsDrilldown = computed(() => readAnalyticsDrilldown(route.query))
+
+watch(
+  () => analyticsDrilldownSignature(route.query),
+  (signature, previous) => {
+    if (signature === previous) return
+    currentPage.value = 1
+    void fetchData(1)
+  },
+)
+
+function backToAnalytics() {
+  const drilldown = analyticsDrilldown.value
+  void router.push({
+    path: ANALYTICS_STATS_PATH,
+    query: drilldown ? analyticsStatsQuery(drilldown) : {},
+  })
+}
+
+function clearAnalyticsDrilldown() {
+  // 查询变化由上面的 watch 统一触发重新加载
+  void router.replace({ path: route.path, query: withoutAnalyticsDrilldown(route.query) })
+}
 
 onMounted(() => {
   void ensureExtractionSettingsLoaded()

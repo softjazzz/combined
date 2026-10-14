@@ -21,11 +21,6 @@ interface HandleWorkstationLaunchParams {
   setAssistTab: (tab: 'coding' | 'form' | 'cost') => void
   nextTick: () => Promise<void>
   handleGenerateFrontpage: () => void
-  runCodingQc: () => void
-  runFormQc: () => void
-  isDischarged: boolean
-  runSettlementQc: () => Promise<void>
-  getSettlementLoading: () => boolean
   showWarning: (message: string) => void
 }
 
@@ -80,17 +75,6 @@ function findRecordForLaunch(allRecords: PatientRecord[], recordId: string): Pat
   return matched || null
 }
 
-async function waitForSettlementReady(
-  getSettlementLoading: () => boolean,
-  timeoutMs = 6000,
-): Promise<void> {
-  if (!getSettlementLoading()) return
-  const started = Date.now()
-  while (getSettlementLoading() && Date.now() - started < timeoutMs) {
-    await new Promise((resolve) => window.setTimeout(resolve, 120))
-  }
-}
-
 async function executeLaunchAction(
   ctx: WorkstationLaunchContext,
   record: PatientRecord,
@@ -111,12 +95,12 @@ async function executeLaunchAction(
     return
   }
 
+  // 质控类入口只定位到对应面板并展示已有结果，不自动发起质控（编码质控会调用大模型），
+  // 由用户在面板中点击“开始分析”显式触发。
   if (ctx.action === 'qc_coding') {
     params.setDetailMainTab('frontpage')
     params.setAssistPanelVisible(true)
     params.setAssistTab('coding')
-    await params.nextTick()
-    params.runCodingQc()
     return
   }
 
@@ -124,20 +108,11 @@ async function executeLaunchAction(
     params.setDetailMainTab('frontpage')
     params.setAssistPanelVisible(true)
     params.setAssistTab('form')
-    await params.nextTick()
-    params.runFormQc()
     return
   }
 
   if (ctx.action === 'qc_settlement') {
     params.setDetailMainTab('settlement')
-    await params.nextTick()
-    if (!params.isDischarged) {
-      params.showWarning('当前病历未出院，暂不可执行结算质控')
-      return
-    }
-    await waitForSettlementReady(params.getSettlementLoading)
-    await params.runSettlementQc()
     params.setAssistPanelVisible(true)
     params.setAssistTab('cost')
   }

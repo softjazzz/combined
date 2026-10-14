@@ -20,11 +20,6 @@ interface UseWorkstationRouteEffectsOptions {
   setAssistTab: (tab: 'coding' | 'form' | 'cost') => void
   nextTick: () => Promise<void>
   handleGenerateFrontpage: () => Promise<void>
-  runCodingQc: () => void
-  runFormQc: () => void
-  isDischarged: boolean
-  runSettlementQc: () => Promise<void>
-  getSettlementLoading: () => boolean
   showWarning: (message: string) => void
   activeDept: Ref<string>
   searchText: Ref<string>
@@ -53,11 +48,6 @@ export function useWorkstationRouteEffects(options: UseWorkstationRouteEffectsOp
     setAssistTab,
     nextTick,
     handleGenerateFrontpage,
-    runCodingQc,
-    runFormQc,
-    isDischarged,
-    runSettlementQc,
-    getSettlementLoading,
     showWarning,
     activeDept,
     searchText,
@@ -101,11 +91,6 @@ export function useWorkstationRouteEffects(options: UseWorkstationRouteEffectsOp
       setAssistTab,
       nextTick,
       handleGenerateFrontpage,
-      runCodingQc,
-      runFormQc,
-      isDischarged,
-      runSettlementQc,
-      getSettlementLoading,
       showWarning,
     })
   }

@@ -65,6 +65,7 @@ import {
   resolveEditableOrderTypeLabel,
 } from './editableCopyPresentation'
 import { buildBatchJobPresentation } from './batchJobPresentation'
+import { decidePollReadFailure, pollReadFailureMessage } from './batchJobPollReadPolicy'
 import { useCustomerSampleEditableCopyController } from './useCustomerSampleEditableCopyController'
 import { useCustomerSampleSyncPresentation } from './useCustomerSampleSyncPresentation'
 import { useCustomerSampleGuide } from './useCustomerSampleGuide'
@@ -113,7 +114,6 @@ import type {
 } from '@/views/workstation-v4/semantic-rules/types'
 import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
-const LEGACY_RESULT_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
 
 export function useCustomerSampleValidationController() {
   const workstationConfirmation = useWorkstationConfirmation()
@@ -275,8 +275,10 @@ export function useCustomerSampleValidationController() {
   let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
   let batchJobPollTick = 0
   let batchJobPollInFlight = false
+  let batchJobPollReadFailures = 0
   let batchJobDebugRequestId = 0
   let currentQcTaskPollTimer: ReturnType<typeof setInterval> | null = null
+  let currentQcTaskPollReadFailures = 0
   let luxianAggregatePollTimer: ReturnType<typeof setInterval> | null = null
   let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
   const primaryVisibleRefreshedSyncJobs = new Set<string>()
@@ -2412,13 +2414,26 @@ export function useCustomerSampleValidationController() {
     }
   }
 
-  function markBatchJobReadFailure(jobId: string, errorMessage?: string) {
-    const messageText = String(errorMessage || '获取质控任务失败').trim()
-    // 读取异常不代表后台执行终止；保留最后一次权威状态并继续轮询。
+  /**
+   * 处理轮询读取失败，返回是否应停止轮询。
+   * 临时失败保留最后一次权威状态并继续重试；确定性失败（如 409 结果交付不完整）
+   * 或连续失败达到上限时停止，避免对同一任务无限重复请求。
+   */
+  function handleBatchJobReadFailure(
+    jobId: string,
+    result: { message?: string; status?: number; jobStatus?: string },
+    consecutiveFailures: number,
+  ): boolean {
+    const decision = decidePollReadFailure(result.status, consecutiveFailures, result.jobStatus)
+    // 临时失败静默重试（沿用原行为），只在停止轮询时提示一次
+    if (decision === 'retry') return false
+    const messageText = String(result.message || '获取质控任务失败').trim()
     message.error({
       key: `task-read-${jobId}`,
-      content: `进度暂时读取失败，正在重试：${messageText}`,
+      content: pollReadFailureMessage(decision, messageText),
+      duration: 8,
     })
+    return true
   }
 
   async function trackCurrentQcTask(jobId: string, options: { showError?: boolean } = {}) {
@@ -2883,11 +2898,13 @@ export function useCustomerSampleValidationController() {
       batchJobPollTimer = null
     }
     batchJobPollTick = 0
+    batchJobPollReadFailures = 0
   }
 
   function startCurrentQcTaskPolling(jobId: string) {
     const normalizedJobId = String(jobId || '').trim()
     if (!normalizedJobId || currentQcTaskPollTimer) return
+    currentQcTaskPollReadFailures = 0
     currentQcTaskPollTimer = setInterval(async () => {
       if (batchResultOpen.value || luxianAggregateOpen.value) {
         stopCurrentQcTaskPolling()
@@ -2895,11 +2912,13 @@ export function useCustomerSampleValidationController() {
       }
       const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
       if (!result.success || !result.data) {
-        if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
-          markBatchJobReadFailure(normalizedJobId, result.message)
+        currentQcTaskPollReadFailures += 1
+        if (handleBatchJobReadFailure(normalizedJobId, result, currentQcTaskPollReadFailures)) {
+          stopCurrentQcTaskPolling()
         }
         return
       }
+      currentQcTaskPollReadFailures = 0
       currentQcTask.value = result.data
       if (!isBatchJobRunning(result.data)) {
         stopCurrentQcTaskPolling()
@@ -2992,11 +3011,13 @@ export function useCustomerSampleValidationController() {
         batchJobPollTick += 1
         const result = await getSichuanWorkspaceBatchJob(jobId)
         if (!result.success || !result.data) {
-          if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
-            markBatchJobReadFailure(jobId, result.message)
+          batchJobPollReadFailures += 1
+          if (handleBatchJobReadFailure(jobId, result, batchJobPollReadFailures)) {
+            stopBatchJobPolling()
           }
           return
         }
+        batchJobPollReadFailures = 0
         batchJobDetail.value = result.data
         updateCurrentQcTask(result.data)
         if (batchJobPollTick % 3 === 0 || !isBatchJobRunning(result.data)) {
