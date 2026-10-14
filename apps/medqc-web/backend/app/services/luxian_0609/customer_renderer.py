@@ -1969,6 +1969,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-03-01-01",
         "LX0609-03-01-02",
         "LX0609-03-01-03",
+        "LX0609-03-01-04",
         "LX0609-04-02-04",
         "LX0609-11-01-01",
         "LX0609-05-02-01",
@@ -2804,6 +2805,55 @@ def customer_finding_from_controlled_facts(
         else:
             return ""
         return f"已确认存在病理取材事件；已核对{checked_scope}，均未找到取材情况记录。"
+
+    if rule_id == "LX0609-03-01-04" and kind == "consultation_execution_quality_check":
+        recommendation_evidence = facts.get("recommendation_evidence")
+        if not isinstance(recommendation_evidence, list):
+            return ""
+        labels_by_state: dict[str, list[str]] = {
+            "specific": [],
+            "generic": [],
+            "missing": [],
+        }
+        for item in recommendation_evidence:
+            if (
+                not isinstance(item, Mapping)
+                or type(item.get("episode_index")) is not int
+                or not 1 <= item["episode_index"] <= 100
+                or type(item.get("recommendation_index")) is not int
+                or not 1 <= item["recommendation_index"] <= 100
+            ):
+                return ""
+            state = item.get("execution_state")
+            if state not in labels_by_state:
+                continue
+            labels_by_state[state].append(
+                f"第{item['episode_index']}次会诊的"
+                f"第{item['recommendation_index']}条建议"
+            )
+        if not labels_by_state["missing"] and not labels_by_state["generic"]:
+            return ""
+
+        finding_parts = [
+            f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；"
+            f"共核对{len(recommendation_evidence)}条建议。"
+        ]
+        if labels_by_state["missing"]:
+            finding_parts.append(
+                f"未找到执行证据：{'、'.join(labels_by_state['missing'])}。"
+                "未匹配到后续病程记录、上级医师查房记录、住院医嘱或相关检查、"
+                "检验、手术记录中与上述建议相符的执行记录。"
+            )
+        if labels_by_state["generic"]:
+            finding_parts.append(
+                f"执行记录不具体：{'、'.join(labels_by_state['generic'])}。"
+                "已找到后续记录，但未明确具体执行措施、执行结果或未执行原因。"
+            )
+        if labels_by_state["specific"]:
+            finding_parts.append(
+                f"其余{len(labels_by_state['specific'])}条建议已找到具体执行证据。"
+            )
+        return "".join(finding_parts)
 
     if rule_id == "LX0609-03-01-01":
         if kind == "consultation_execution_relation_check":
@@ -4545,6 +4595,14 @@ def render_luxian_0609_customer_result(
             decision.rule_id,
             (findings, evidence, suggestion),
         )
+        if decision.rule_id == "LX0609-03-01-04":
+            controlled_finding = customer_finding_from_controlled_facts(
+                rule_id=decision.rule_id,
+                facts=safe_customer_display_facts,
+            )
+            if controlled_finding:
+                findings = controlled_finding
+                evidence = controlled_finding
         if (
             decision.rule_id == "LX0609-04-02-02"
             and isinstance(safe_customer_display_facts, Mapping)
