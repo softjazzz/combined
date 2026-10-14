@@ -176,6 +176,20 @@
             未质控
           </option>
         </select>
+        <span
+          v-if="ruleFilter"
+          class="fpqc-toolbar__rule"
+          data-testid="fpqc-rule-filter"
+        >
+          {{ ruleFilter.rule_verdict === 'data_gap' ? '资料不足' : '命中规则' }}：<span class="mq-mono">{{ ruleFilter.rule_id }}</span>
+          {{ ruleFilter.rule_name }}
+          <button
+            type="button"
+            class="fpqc-toolbar__rule-clear"
+            aria-label="清除规则筛选"
+            @click="clearRuleFilter"
+          >×</button>
+        </span>
         <button
           type="submit"
           class="fpqc-toolbar__btn fpqc-toolbar__btn--primary"
@@ -289,6 +303,8 @@
       v-else
       :filters="scopeFilters"
       :refresh-key="analyticsRefreshKey"
+      @drill-rule="drillRule"
+      @drill-department="drillDepartment"
     />
 
     <!-- 质控当前筛选：页面内弹窗，跟随工作台主题（静态 Modal.confirm 拿不到嵌套主题） -->
@@ -315,7 +331,7 @@
         <div class="fpqc-confirm__copy">
           <h2>质控当前筛选范围</h2>
           <p>
-            对范围内已出院病历的首页重新质控，单次最多 <b>500</b> 份。等级、问题筛选不影响范围，不调用模型。
+            对范围内已出院病历的首页重新质控，单次最多 <b>500</b> 份。等级、问题和规则筛选不影响范围，不调用模型。
           </p>
         </div>
         <dl class="mq-soft fpqc-confirm__summary">
@@ -416,6 +432,8 @@ const summary = ref<FrontpageQcAnalytics['summary'] | null>(null)
 const selectedKeys = ref<string[]>([])
 const selectedRefs = ref<Record<string, FrontpageQcRef>>({})
 const confirmOpen = ref(false)
+/** 从结果分析下钻的规则筛选；与等级、问题筛选叠加，不影响“质控当前筛选”的范围 */
+const ruleFilter = ref<{ rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' } | null>(null)
 let listSeq = 0
 
 const { run, starting, cancelling, error: runError, start, cancel, resume, dismiss } =
@@ -465,7 +483,12 @@ async function loadList(targetPage = page.value) {
   loading.value = true
   loadError.value = ''
   try {
-    const data = await listFrontpageQcRecords({ ...applied, page: targetPage, page_size: pageSize.value })
+    const data = await listFrontpageQcRecords({
+      ...applied,
+      ...ruleQuery(),
+      page: targetPage,
+      page_size: pageSize.value,
+    })
     if (seq !== listSeq) return
     rows.value = data.items
     total.value = data.total
@@ -519,7 +542,35 @@ function clearSelection() {
   selectedRefs.value = {}
 }
 
+function ruleQuery() {
+  const rule = ruleFilter.value
+  return rule ? { rule_id: rule.rule_id, rule_verdict: rule.rule_verdict } : {}
+}
+
+function clearRuleFilter() {
+  ruleFilter.value = null
+  clearSelection()
+  void loadList(1)
+}
+
+function drillRule(rule: { rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' }) {
+  ruleFilter.value = rule
+  // 按规则只能看已质控病历；“未质控”与之冲突时清掉
+  if (draft.issue === 'unchecked') draft.issue = ''
+  if (applied.issue === 'unchecked') applied.issue = ''
+  activeView.value = 'records'
+  clearSelection()
+  void loadList(1)
+}
+
+function drillDepartment(department: string) {
+  draft.department = department
+  activeView.value = 'records'
+  applyFilters()
+}
+
 function applyFilters() {
+  if (ruleFilter.value && draft.issue === 'unchecked') ruleFilter.value = null
   Object.assign(applied, draft)
   clearSelection()
   void loadList(1)
@@ -529,6 +580,7 @@ function applyFilters() {
 
 function resetFilters() {
   Object.assign(draft, emptyFilters())
+  ruleFilter.value = null
   applyFilters()
 }
 
@@ -605,7 +657,10 @@ function exportSelected() {
 
 function exportFiltered() {
   const { issue, ...rest } = applied
-  void exportWith({ ...rest, issue: issue === 'unchecked' ? '' : issue }, '首页质控-当前筛选.xlsx')
+  void exportWith(
+    { ...rest, ...ruleQuery(), issue: issue === 'unchecked' ? '' : issue },
+    '首页质控-当前筛选.xlsx',
+  )
 }
 
 watch(activeView, (view) => {

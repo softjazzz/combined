@@ -218,6 +218,37 @@ def test_analytics_and_export(env):
     assert workbook["病历结果"]["A3"].value in {"C02", "C04"}
 
 
+def test_rule_drilldown_lists_and_exports_matching_records(env):
+    client, _store, _refs = env
+    client.post("/api/v1/frontpage-qc/runs", json={})
+    report = client.get("/api/v1/frontpage-qc/analytics").json()["data"]
+
+    hit = client.get("/api/v1/frontpage-qc/records", params={"rule_id": "C-H24"}).json()["data"]
+    assert hit["total"] == 1
+    assert hit["items"][0]["patient_name"] == "C02"
+    assert client.get("/api/v1/frontpage-qc/records", params={"rule_id": "C-P01"}).json()["data"]["total"] == 0
+
+    assert report["top_rules"][0]["rule_id"] == "C-H24"
+    gaps = client.get(
+        "/api/v1/frontpage-qc/records", params={"rule_id": "C-H24", "rule_verdict": "data_gap"}
+    ).json()["data"]
+    assert gaps["total"] == 0
+
+    response = client.post("/api/v1/frontpage-qc/records/export", json={"rule_id": "C-H24"})
+    assert response.status_code == 200
+    assert response.headers["x-export-total"] == "1"
+
+
+def test_rule_drilldown_rejects_unknown_rule_and_unchecked(env):
+    client, _store, _refs = env
+    assert client.get("/api/v1/frontpage-qc/records", params={"rule_id": "X-99"}).status_code == 422
+    assert (
+        client.get("/api/v1/frontpage-qc/records", params={"rule_id": "C-H24", "issue": "unchecked"}).status_code
+        == 422
+    )
+    assert client.post("/api/v1/frontpage-qc/records/export", json={"rule_id": "X-99"}).status_code == 422
+
+
 def test_export_without_results_is_rejected(env):
     client, _store, _refs = env
     assert client.post("/api/v1/frontpage-qc/records/export", json={}).status_code == 422

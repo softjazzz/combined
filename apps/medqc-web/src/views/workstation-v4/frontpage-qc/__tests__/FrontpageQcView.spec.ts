@@ -201,6 +201,41 @@ describe('FrontpageQcView', () => {
     wrapper.unmount()
   })
 
+  it('结果分析点击规则或科室，切回病历结果并按其筛选', async () => {
+    svc.getAnalytics.mockResolvedValue({
+      summary: { records: 1, avg_score: 88, grades: { excellent: 0, qualified: 1, unqualified: 0 }, issue_records: 1, hint_records: 0, data_gap_records: 0 },
+      indicators: [],
+      top_rules: [{ rule_id: 'C-H21', rule_name: '手术者', severity: 'deduct', group: '', section: '', records: 1, rate: 1 }],
+      top_hints: [],
+      top_data_gaps: [],
+      departments: [{ department: '内科', records: 1, avg_score: 88, excellent_rate: 0, issue_records: 1 }],
+    })
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="fpqc-view-analysis"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="fpqc-drill-rule"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="fpqc-record-table"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="fpqc-rule-filter"]').text()).toContain('C-H21')
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rule_id: 'C-H21', rule_verdict: 'fail', page: 1 }),
+    )
+
+    await wrapper.get('[aria-label="清除规则筛选"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="fpqc-rule-filter"]').exists()).toBe(false)
+    expect(svc.listRecords.mock.lastCall?.[0]).not.toHaveProperty('rule_id')
+
+    await wrapper.get('[data-testid="fpqc-view-analysis"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="fpqc-drill-department"]').trigger('click')
+    await flushPromises()
+    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ department: '内科', page: 1 }))
+  })
+
   it('标记误报必须填写原因', async () => {
     svc.review.mockResolvedValue({ ...finding, review_status: 'false_alarm', review_note: '已在病程中补记' })
     const wrapper = mount(FrontpageQcView)

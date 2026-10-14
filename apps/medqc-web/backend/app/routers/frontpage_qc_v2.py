@@ -36,6 +36,12 @@ ALLOWED_ROLES = frozenset({"admin", "super_admin", "qc_manager", "coder"})
 EXPORT_LIMIT = 5000
 STALLED_AFTER = timedelta(minutes=10)
 RESULT_ISSUE_FILTERS = ("fail", "hint", "data_gap", "clean")
+RULE_IDS = frozenset(rule.rule_id for rule in RULES)
+
+
+def _check_rule_id(rule_id: str) -> None:
+    if rule_id and rule_id not in RULE_IDS:
+        raise HTTPException(422, f"未知的首页质控规则：{rule_id}")
 
 
 async def require_frontpage_qc_user(current_user: Dict[str, Any] = Depends(require_product_activation)) -> Dict[str, Any]:
@@ -327,14 +333,19 @@ async def list_records(
     keyword: str = Query("", max_length=100),
     grade: Literal["", "excellent", "qualified", "unqualified"] = Query(""),
     issue: Literal["", "fail", "hint", "data_gap", "clean", "unchecked"] = Query(""),
+    rule_id: str = Query("", max_length=16),
+    rule_verdict: Literal["fail", "data_gap"] = Query("fail"),
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
     repository=Depends(get_record_repository),
 ):
+    _check_rule_id(rule_id)
+    if rule_id and issue == "unchecked":
+        raise HTTPException(422, "按规则筛选时只能查看已质控病历")
     try:
-        if grade or issue in RESULT_ISSUE_FILTERS:
+        if grade or issue in RESULT_ISSUE_FILTERS or rule_id:
             keys = None
             info: Dict[str, Dict[str, Any]] = {}
             if keyword:
@@ -347,6 +358,8 @@ async def list_records(
                 end_date=end_date,
                 grade=grade,
                 issue=issue if issue in RESULT_ISSUE_FILTERS else "",
+                rule_id=rule_id,
+                rule_verdict=rule_verdict,
                 record_keys=keys,
                 page=page,
                 page_size=page_size,
@@ -465,6 +478,8 @@ class ExportIn(BaseModel):
     keyword: str = Field(default="", max_length=100)
     grade: Literal["", "excellent", "qualified", "unqualified"] = ""
     issue: Literal["", "fail", "hint", "data_gap", "clean"] = ""
+    rule_id: str = Field(default="", max_length=16)
+    rule_verdict: Literal["fail", "data_gap"] = "fail"
 
 
 @router.post("/records/export")
@@ -474,6 +489,7 @@ async def export_records(
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
     repository=Depends(get_record_repository),
 ):
+    _check_rule_id(payload.rule_id)
     try:
         if payload.record_refs:
             refs = [CaseRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
@@ -496,9 +512,18 @@ async def export_records(
                 parts.append(f"关键词 {payload.keyword}")
             if payload.grade:
                 parts.append(f"等级 {GRADE_LABELS[payload.grade]}")
+            if payload.rule_id:
+                verdict = "资料不足" if payload.rule_verdict == "data_gap" else "命中"
+                parts.append(f"规则 {payload.rule_id} {verdict}")
             summary = "，".join(parts)
         results, total = store.query_latest(
-            grade=payload.grade, issue=payload.issue, record_keys=keys, page=1, page_size=EXPORT_LIMIT
+            grade=payload.grade,
+            issue=payload.issue,
+            rule_id=payload.rule_id,
+            rule_verdict=payload.rule_verdict,
+            record_keys=keys,
+            page=1,
+            page_size=EXPORT_LIMIT,
         )
         findings = store.latest_findings([r["id"] for r in results])
     except FrontpageQcStoreUnavailable as exc:

@@ -480,11 +480,17 @@ class FrontpageQcStore:
         end_date: str = "",
         grade: str = "",
         issue: str = "",
+        rule_id: str = "",
+        rule_verdict: str = "fail",
         record_keys: Optional[Sequence[str]] = None,
         page: int = 1,
         page_size: int = 50,
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """按已保存结果筛选（等级、问题类型），用于只看已质控病历的列表。"""
+        """按已保存结果筛选（等级、问题类型、命中规则），用于只看已质控病历的列表。
+
+        rule_id 用于从结果分析下钻：rule_verdict=fail 取该规则判为问题（含提示）的病历，
+        data_gap 取该规则资料不足的病历。
+        """
 
         def op(session):
             t = self.results
@@ -505,6 +511,13 @@ class FrontpageQcStore:
                 conditions.append(t.c.hint_count > 0)
             elif issue == "clean":
                 conditions.append(sa.and_(t.c.fail_count == 0, t.c.hint_count == 0, t.c.required_missing_count == 0))
+            if rule_id:
+                f = self.findings
+                conditions.append(
+                    sa.exists().where(
+                        sa.and_(f.c.result_id == t.c.id, f.c.rule_id == rule_id, f.c.verdict == rule_verdict)
+                    )
+                )
             if record_keys is not None:
                 conditions.append(t.c.record_key.in_(list(record_keys)))
             where = sa.and_(*conditions)

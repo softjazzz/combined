@@ -50,7 +50,7 @@
             扣分问题 Top {{ data.top_rules.length }}
           </h3>
           <p class="mq-card__desc">
-            按命中病历数排序，含必填缺项
+            按命中病历数排序，含必填缺项；点击查看对应病历
           </p>
           <ol
             v-if="data.top_rules.length"
@@ -60,11 +60,19 @@
               v-for="item in data.top_rules"
               :key="item.rule_id"
             >
-              <span class="fpqc-analysis__rank-name">
-                <span class="mq-mono">{{ item.rule_id }}</span> {{ item.rule_name }}
-              </span>
-              <span class="fpqc-analysis__bar"><span :style="{ width: barWidth(item.rate) }" /></span>
-              <strong>{{ item.records }} 份</strong>
+              <button
+                type="button"
+                class="fpqc-analysis__rank-row"
+                :title="`查看命中“${item.rule_name}”的病历`"
+                data-testid="fpqc-drill-rule"
+                @click="drillRule(item, 'fail')"
+              >
+                <span class="fpqc-analysis__rank-name">
+                  <span class="mq-mono">{{ item.rule_id }}</span> {{ item.rule_name }}
+                </span>
+                <span class="fpqc-analysis__bar"><span :style="{ width: barWidth(item.rate) }" /></span>
+                <strong>{{ item.records }} 份</strong>
+              </button>
             </li>
           </ol>
           <p
@@ -80,7 +88,7 @@
             科室排名
           </h3>
           <p class="mq-card__desc">
-            按平均分由低到高
+            按平均分由低到高；点击科室查看该科病历
           </p>
           <div class="fpqc-analysis__table-wrap">
             <table class="mq-table fpqc-analysis__table">
@@ -98,7 +106,16 @@
                   v-for="item in data.departments"
                   :key="item.department"
                 >
-                  <td>{{ item.department }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="fpqc-analysis__link"
+                      data-testid="fpqc-drill-department"
+                      @click="emit('drill-department', item.department)"
+                    >
+                      {{ item.department }}
+                    </button>
+                  </td>
                   <td>{{ item.records }}</td>
                   <td>{{ formatScore(item.avg_score) }}</td>
                   <td>{{ formatPercent(item.excellent_rate) }}</td>
@@ -124,9 +141,16 @@
               v-for="item in data.top_hints"
               :key="item.rule_id"
             >
-              <span class="fpqc-analysis__rank-name">{{ item.rule_name }}</span>
-              <span class="fpqc-analysis__bar fpqc-analysis__bar--hint"><span :style="{ width: barWidth(item.rate) }" /></span>
-              <strong>{{ item.records }} 份</strong>
+              <button
+                type="button"
+                class="fpqc-analysis__rank-row"
+                :title="`查看提示“${item.rule_name}”的病历`"
+                @click="drillRule(item, 'fail')"
+              >
+                <span class="fpqc-analysis__rank-name">{{ item.rule_name }}</span>
+                <span class="fpqc-analysis__bar fpqc-analysis__bar--hint"><span :style="{ width: barWidth(item.rate) }" /></span>
+                <strong>{{ item.records }} 份</strong>
+              </button>
             </li>
           </ol>
           <p
@@ -152,9 +176,16 @@
               v-for="item in data.top_data_gaps"
               :key="item.rule_id"
             >
-              <span class="fpqc-analysis__rank-name">{{ item.rule_name }}</span>
-              <span class="fpqc-analysis__bar fpqc-analysis__bar--gap"><span :style="{ width: barWidth(item.rate) }" /></span>
-              <strong>{{ item.records }} 份</strong>
+              <button
+                type="button"
+                class="fpqc-analysis__rank-row"
+                :title="`查看“${item.rule_name}”资料不足的病历`"
+                @click="drillRule(item, 'data_gap')"
+              >
+                <span class="fpqc-analysis__rank-name">{{ item.rule_name }}</span>
+                <span class="fpqc-analysis__bar fpqc-analysis__bar--gap"><span :style="{ width: barWidth(item.rate) }" /></span>
+                <strong>{{ item.records }} 份</strong>
+              </button>
             </li>
           </ol>
           <p
@@ -175,12 +206,21 @@ import { ref, watch } from 'vue'
 import {
   getFrontpageQcAnalytics,
   type FrontpageQcAnalytics,
+  type FrontpageQcRuleRank,
   type FrontpageQcScopeFilters,
 } from '@/services/frontpage-qc-v2-service'
 
 import { formatPercent, formatScore } from './presentation'
 
 const props = defineProps<{ filters: FrontpageQcScopeFilters; refreshKey: number }>()
+const emit = defineEmits<{
+  'drill-rule': [rule: { rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' }]
+  'drill-department': [department: string]
+}>()
+
+function drillRule(item: FrontpageQcRuleRank, verdict: 'fail' | 'data_gap') {
+  emit('drill-rule', { rule_id: item.rule_id, rule_name: item.rule_name, rule_verdict: verdict })
+}
 
 const data = ref<FrontpageQcAnalytics | null>(null)
 const loading = ref(false)

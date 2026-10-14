@@ -170,7 +170,13 @@ export interface FrontpageQcScopeFilters {
   keyword?: string
 }
 
-export interface FrontpageQcListQuery extends FrontpageQcScopeFilters {
+/** 从结果分析下钻：fail 取该规则判为问题（含提示）的病历，data_gap 取资料不足的病历 */
+export interface FrontpageQcRuleFilter {
+  rule_id?: string
+  rule_verdict?: 'fail' | 'data_gap'
+}
+
+export interface FrontpageQcListQuery extends FrontpageQcScopeFilters, FrontpageQcRuleFilter {
   grade?: FrontpageQcGrade | ''
   issue?: FrontpageQcIssueFilter
   page?: number
@@ -307,7 +313,9 @@ function readBlobText(blob: Blob): Promise<string> {
 }
 
 export async function exportFrontpageQcRecords(
-  body: { record_refs: FrontpageQcRef[] } | (FrontpageQcScopeFilters & { grade?: string; issue?: string }),
+  body:
+    | { record_refs: FrontpageQcRef[] }
+    | (FrontpageQcScopeFilters & FrontpageQcRuleFilter & { grade?: string; issue?: string }),
 ): Promise<Blob> {
   try {
     const response = await ApiService.postRaw<Blob>(`${BASE}/records/export`, body, {

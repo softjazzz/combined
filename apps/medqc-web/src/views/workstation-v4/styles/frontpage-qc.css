@@ -136,6 +136,47 @@ select.fpqc-toolbar__control {
   font-size: var(--mq-font-13);
 }
 
+/* 结果分析下钻带来的规则筛选 */
+.fpqc-toolbar__rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 360px;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fpqc-toolbar__rule-clear {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fpqc-toolbar__rule-clear:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 1px;
+}
+
 .fpqc-toolbar__btn {
   display: inline-flex;
   align-items: center;

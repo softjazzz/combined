@@ -131,6 +131,18 @@ def test_query_latest_filters(store):
     assert total == 1
     _, total = store.query_latest(record_keys=[_ref(1).as_key()])
     assert total == 1
+    failing_id = store.query_latest(issue="fail")[0][0]["id"]
+    rule = sorted({f["rule_id"] for f in store.latest_findings([failing_id]) if f["verdict"] == "fail"})[0]
+    items, total = store.query_latest(rule_id=rule)
+    assert total == 1 and items[0]["record_key"] == _ref(2).as_key()
+    _, total = store.query_latest(rule_id=rule, rule_verdict="data_gap")
+    assert total == 0
+    # 编码员本院不采集：空值判资料不足，可按资料不足下钻
+    store.save_outcome(run_id="r", outcome=_outcome(_ref(3), coder_sign=""), department="内科", discharge_date="2026-04-02")
+    items, total = store.query_latest(rule_id="C-H18", rule_verdict="data_gap")
+    assert total == 1 and items[0]["record_key"] == _ref(3).as_key()
+    _, total = store.query_latest(rule_id="C-H18")
+    assert total == 0
     assert set(store.latest_by_keys([_ref(1).as_key(), _ref(2).as_key(), "x"])) == {_ref(1).as_key(), _ref(2).as_key()}
 
 

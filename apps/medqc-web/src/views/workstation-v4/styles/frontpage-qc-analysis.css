@@ -81,18 +81,53 @@
 
 .fpqc-analysis__rank {
   display: grid;
-  gap: 10px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.fpqc-analysis__rank li {
+.fpqc-analysis__rank-row {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  margin: 0 -8px;
+  padding: 6px 8px;
+  box-sizing: content-box;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font: inherit;
   font-size: var(--mq-font-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fpqc-analysis__rank-row:hover {
+  background: rgba(10, 108, 255, 0.05);
+}
+
+.fpqc-analysis__rank-row:focus-visible,
+.fpqc-analysis__link:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.fpqc-analysis__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-brand-600);
+  font: inherit;
+  cursor: pointer;
+}
+
+.fpqc-analysis__link:hover {
+  color: var(--mq-brand-700);
+  text-decoration: underline;
 }
 
 .fpqc-analysis__rank-name {
