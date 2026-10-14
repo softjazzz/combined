@@ -914,7 +914,8 @@ def _datetime_format_rule(rule_id: str, label: str, field_key: str, score_item: 
         value = doc.get(field_key)
         if not v.has_content(value):
             return not_applicable("未填写，由完整性规则判断")
-        if v.parse_datetime(value) is None:
+        # 只填日期也能解析，但不满足“精确到分钟”；零点（00:00）照常通过，无法与真实零点区分
+        if v.parse_datetime(value) is None or not v.has_time_part(value):
             return failed(Detail(label, value, "日期时间，精确到分钟"))
         return passed()
 

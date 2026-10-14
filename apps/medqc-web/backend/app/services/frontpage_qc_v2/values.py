@@ -255,6 +255,15 @@ def parse_datetime(value: object) -> Optional[datetime]:
     return None
 
 
+def has_time_part(value: object) -> bool:
+    """原值是否带时分。datetime 对象视为带时分（00:00 可能是真实的零点）；纯日期文本或 date 对象不带。"""
+    if isinstance(value, datetime):
+        return True
+    if isinstance(value, date):
+        return False
+    return re.search(r"\d{1,2}:\d{2}", text_of(value)) is not None
+
+
 def parse_age_years(value: object) -> Optional[float]:
     """解析年龄：'45'、'45岁'、'3月'、'2月15天'、'10天' → 岁数。无法解析返回 None。"""
     text = text_of(value).replace(" ", "")
