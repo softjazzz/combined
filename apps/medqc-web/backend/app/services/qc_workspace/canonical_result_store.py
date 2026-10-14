@@ -193,13 +193,24 @@ def _validate_recommendation_evidence_facts(value: Any) -> None:
         raise ValueError("invalid recommendation evidence")
     seen: set[tuple[int, int]] = set()
     for expected_index, entry in enumerate(entries, start=1):
-        if not isinstance(entry, dict) or set(entry) != {
+        expected_keys = {
             "episode_index",
             "recommendation_index",
             "execution_state",
             "opinion_evidence",
             "execution_evidence",
-        }:
+        }
+        if not isinstance(entry, dict) or set(entry) not in (
+            expected_keys,
+            expected_keys | {"recommendation_text"},
+        ):
+            raise ValueError("invalid recommendation evidence")
+        recommendation_text = entry.get("recommendation_text")
+        if recommendation_text is not None and (
+            type(recommendation_text) is not str
+            or not recommendation_text.strip()
+            or len(recommendation_text) > 320
+        ):
             raise ValueError("invalid recommendation evidence")
         episode_index = entry.get("episode_index")
         recommendation_index = entry.get("recommendation_index")

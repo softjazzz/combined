@@ -376,6 +376,45 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
         envelope_item_from_rule_result(item)
 
 
+def test_canonical_projection_keeps_controlled_recommendation_text():
+    item = {
+        "rule_id": "LX0609-03-01-04",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": False,
+        "customer_display_facts": {
+            "verification_kind": "consultation_execution_quality_check",
+            "completed_opinion_episode_count": 1,
+            "recommendation_count": 1,
+            "specific_execution_count": 0,
+            "generic_execution_count": 0,
+            "missing_execution_count": 1,
+            "relation_state": "execution_missing_or_generic",
+            "recommendation_evidence": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "recommendation_text": "复查血常规",
+                    "execution_state": "missing",
+                    "opinion_evidence": [
+                        {
+                            "source_type": "consultation_record",
+                            "source_ref": "src_" + "a" * 24,
+                        }
+                    ],
+                    "execution_evidence": [],
+                }
+            ],
+        },
+    }
+
+    projected = envelope_item_from_rule_result(item)
+
+    assert projected["customer_display_facts"]["recommendation_evidence"][0][
+        "recommendation_text"
+    ] == "复查血常规"
+
+
 def test_native_display_facts_never_reproject_private_document_refs() -> None:
     facts = {
         "failure_kind": "level4_mdt_absent",
