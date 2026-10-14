@@ -159,7 +159,6 @@
         :pagination="pagination"
         row-key="rule_id"
         :custom-row="buildCustomRow"
-        :scroll="{ x: 980 }"
         :locale="{ emptyText: '暂无匹配规则' }"
         @change="handleTableChange"
       >
@@ -202,6 +201,24 @@
                 >
                   {{ record.name }}
                 </button>
+                <div class="rule-main-meta">
+                  <span
+                    v-if="record.release_scope"
+                    :class="record.release_scope === 'acceptance_only' ? 'mq-status mq-status--warning' : 'mq-status mq-status--success'"
+                  >
+                    {{ record.release_scope === 'acceptance_only' ? '待验收' : '已上线' }}
+                  </span>
+                  <span class="doc-type-pill">
+                    {{ getDocTypeZh((record.applicable_documents || [])[0] || '未知文书') }}
+                  </span>
+                  <span
+                    v-if="ruleSetKey === 'luxian_0609_qc_v1'"
+                    class="rule-execution-meta"
+                    :title="executionStatusHint(record as SemanticRuleItem)"
+                  >
+                    {{ executionStatus(record as SemanticRuleItem) }}
+                  </span>
+                </div>
               </div>
               <div class="rule-inline-actions">
                 <a-button
@@ -294,13 +311,16 @@ const emit = defineEmits<{
 /** 只有 LX0609 规则带目录发布范围；其他规则集不显示发布范围列与筛选 */
 const hasReleaseScope = computed(() => props.rules.some((rule) => Boolean(rule.release_scope)) || Boolean(props.releaseScope))
 const columns = computed(() => [
-  { title: '序号', key: 'index', width: 64, fixed: 'left' as const, align: 'center' as const },
-  { title: '编号', key: 'rule_id', width: 160, fixed: 'left' as const },
-  ...(hasReleaseScope.value ? [{ title: '发布范围', key: 'release_scope', width: 110 }] : []),
-  { title: '适用文书', key: 'applicable_documents', width: 150 },
+  { title: '序号', key: 'index', width: 56, align: 'center' as const, responsive: ['md'] },
+  { title: '编号', key: 'rule_id', width: 158 },
+  { title: '规则名称', key: 'name' },
+  ...(hasReleaseScope.value
+    ? [{ title: '发布范围', key: 'release_scope', width: 108, responsive: ['lg'] }]
+    : []),
+  { title: '适用文书', key: 'applicable_documents', width: 140, responsive: ['lg'] },
   ...(props.ruleSetKey === 'luxian_0609_qc_v1'
-    ? [{ title: '执行状态', key: 'execution_status', width: 120 }] : []),
-  { title: '规则名称', key: 'name', width: 760 },
+    ? [{ title: '执行状态', key: 'execution_status', width: 118, responsive: ['lg'] }]
+    : []),
 ])
 
 const executionSummary = computed(() => {

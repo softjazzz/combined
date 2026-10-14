@@ -1,9 +1,102 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildConsultationRecommendationPresentation,
   buildSingleRecordQcPresentation,
   recommendationEvidenceForSingleRecord,
 } from '../single-record-result-model'
+
+describe('consultation recommendation presentation', () => {
+  it('separates compared recommendations from undefined conditional recommendations', () => {
+    const presentation = buildConsultationRecommendationPresentation({
+      rule_id: 'LX0609-03-01-04',
+      customer_display_facts: {
+        recommendation_evidence: [
+          {
+            episode_index: 1,
+            recommendation_index: 1,
+            recommendation_text: '完善血脂检查',
+            execution_state: 'missing',
+          },
+          {
+            episode_index: 1,
+            recommendation_index: 2,
+            recommendation_text: '给予调脂治疗',
+            execution_state: 'generic',
+          },
+          {
+            episode_index: 2,
+            recommendation_index: 1,
+            recommendation_text: '复查血常规',
+            execution_state: 'specific',
+          },
+        ],
+        excluded_recommendations: [
+          {
+            episode_index: 1,
+            recommendation_text: '必要时完善TCD检查',
+            exclusion_reason: 'execution_condition_not_defined',
+          },
+        ],
+      },
+    })
+
+    expect(presentation).not.toBeNull()
+    expect(presentation?.comparedCount).toBe(3)
+    expect(presentation?.excludedCount).toBe(1)
+    expect(presentation?.rows).toMatchObject([
+      {
+        text: '完善血脂检查',
+        state: 'missing',
+        statusLabel: '未找到执行证据',
+      },
+      {
+        text: '给予调脂治疗',
+        state: 'generic',
+        statusLabel: '执行记录不具体',
+      },
+      {
+        text: '复查血常规',
+        state: 'specific',
+        statusLabel: '已找到具体执行证据',
+      },
+      {
+        text: '必要时完善TCD检查',
+        state: 'excluded',
+        statusLabel: '未纳入核对',
+      },
+    ])
+    expect(presentation?.checkedSources).toEqual([
+      '后续病程记录',
+      '上级医师查房记录',
+      '住院医嘱',
+      '相关检查、检验及手术记录',
+    ])
+  })
+
+  it('does not create the structured block for unrelated or incomplete facts', () => {
+    expect(
+      buildConsultationRecommendationPresentation({
+        rule_id: 'LX0609-03-01-03',
+        customer_display_facts: {},
+      }),
+    ).toBeNull()
+    expect(
+      buildConsultationRecommendationPresentation({
+        rule_id: 'LX0609-03-01-04',
+        customer_display_facts: {
+          excluded_recommendations: [
+            {
+              episode_index: 1,
+              recommendation_text: '必要时完善TCD检查',
+              exclusion_reason: 'uncontrolled_reason',
+            },
+          ],
+        },
+      }),
+    ).toBeNull()
+  })
+})
 
 describe('single-record recommendation evidence', () => {
   it('exposes signed nested refs with recommendation metadata', () => {

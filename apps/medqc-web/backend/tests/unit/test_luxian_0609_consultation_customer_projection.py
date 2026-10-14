@@ -251,6 +251,7 @@ def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evid
             {
                 "episode_index": 1,
                 "recommendation_index": 1,
+                "recommendation_text": "复查血常规",
                 "execution_state": "missing",
                 "opinion_refs": [],
                 "execution_refs": [],
@@ -275,9 +276,17 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
             {
                 "episode_index": 1,
                 "recommendation_index": 1,
+                "recommendation_text": "复查血常规",
                 "execution_state": "missing",
                 "opinion_refs": [],
                 "execution_refs": [],
+            }
+        ],
+        "excluded_recommendations": [
+            {
+                "episode_index": 1,
+                "recommendation_text": "必要时完善TCD检查",
+                "exclusion_reason": "execution_condition_not_defined",
             }
         ],
     }
@@ -290,6 +299,39 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
     assert facts["relation_state"] == "execution_missing_or_generic"
     assert facts["missing_execution_count"] == 1
     assert facts["recommendation_evidence"][0]["execution_state"] == "missing"
+    assert facts["recommendation_evidence"][0]["recommendation_text"] == "复查血常规"
+    assert facts["excluded_recommendations"] == [
+        {
+            "episode_index": 1,
+            "recommendation_text": "必要时完善TCD检查",
+            "exclusion_reason": "execution_condition_not_defined",
+        }
+    ]
+
+
+def test_023_projection_rejects_uncontrolled_exclusion_reason() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 0,
+        "recommendation_count": 0,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "not_triggered",
+        "source_document_ids": [],
+        "recommendation_evidence": [],
+        "excluded_recommendations": [
+            {
+                "episode_index": 1,
+                "recommendation_text": "必要时完善TCD检查",
+                "exclusion_reason": "other_reason",
+            }
+        ],
+    }
+
+    assert safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04", raw=raw
+    ) is None
 
 
 def test_023_projection_accepts_no_triggered_recommendation_set() -> None:
