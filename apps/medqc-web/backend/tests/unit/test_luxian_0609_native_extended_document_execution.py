@@ -5937,7 +5937,8 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
             },),
             "daily_course_record": (
                 {"record_time": "2026-06-01 12:00:00", "record_content": "患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"},
-                {"record_time": "2026-06-04 09:00:00", "record_content": "由于抗感染治疗有效、体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "万古霉素疗效评价：有效；安全性评价：未见药物不良反应。"},
             ),
             "consultation_record": ({
                 "record_time": "2026-06-01 09:00:00",
@@ -6774,7 +6775,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
             "daily_course_record": (
                 {
                     "record_time": evaluation_time,
-                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降，白细胞降低。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降，白细胞降低；安全性评价：未见药物不良反应。",
                 },
             ),
         },
@@ -6798,7 +6799,7 @@ async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() ->
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 08:00:00",
-                "record_content": "抗菌药物效果评价：抗感染治疗有效。",
+                "record_content": "抗菌药物效果评价：抗感染治疗有效；安全性评价：未见药物不良反应。",
             },),
         },
     )
@@ -6828,7 +6829,7 @@ async def test_055_excludes_skin_test_order_from_treatment_event_windows() -> No
             ),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
-                "record_content": "美罗培南疗效评价：抗感染治疗有效，体温下降。",
+                "record_content": "美罗培南疗效评价：抗感染治疗有效，体温下降；安全性评价：未见药物不良反应。",
             },),
         },
     )
@@ -7070,7 +7071,7 @@ async def test_055_one_order_row_with_two_drugs_requires_each_named_evaluation()
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
-                "record_content": "美罗培南疗效评价：抗感染治疗有效。",
+                "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
             },),
         },
     )
@@ -7099,7 +7100,7 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
                 },
                 {
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞下降。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞下降；安全性评价：未见药物不良反应。",
                 },
                 {
                     "record_time": "2026-06-04 12:00:00",
@@ -7194,6 +7195,157 @@ async def test_055_non_antimicrobial_treatment_effect_is_not_antibiotic_evaluati
 
 
 @pytest.mark.asyncio
+async def test_055_effect_present_but_safety_absent_is_non_compliant() -> None:
+    """完整抽取确认疗效存在但安全性缺失时，055 必须判为不合规。"""
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；未记录用药安全性评价。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["unmatched_effect_antimicrobials"] == []
+    assert facts["unmatched_safety_antimicrobials"] == ["美罗培南"]
+
+
+@pytest.mark.asyncio
+async def test_055_safety_present_but_effect_absent_is_non_compliant() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南安全性评价：未见药物不良反应；未记录疗效评价。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["unmatched_effect_antimicrobials"] == ["美罗培南"]
+    assert facts["unmatched_safety_antimicrobials"] == []
+
+
+@pytest.mark.asyncio
+async def test_055_effect_and_safety_both_in_window_are_compliant() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["effect_evaluation_intervals"] == [48.0]
+    assert facts["safety_evaluation_intervals"] == [48.0]
+
+
+@pytest.mark.asyncio
+async def test_055_unresolved_safety_attribution_remains_data_gap() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；该药安全性评价归属不明确。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "semantic_extraction_unresolved"
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["evaluation_resolution"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_055_known_dual_evaluation_is_not_overridden_by_other_unknown_candidate() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
+                },
+                {
+                    "record_time": "2026-06-03 12:00:00",
+                    "record_content": "美罗培南安全性评价归属不明确。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
+async def test_055_known_dual_evaluations_are_not_overridden_by_extra_regimen() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": (
+                {
+                    "generic_name": "美罗培南",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+                {
+                    "generic_name": "万古霉素",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
+                },
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "万古霉素疗效评价：有效；安全性评价：未见药物不良反应。",
+                },
+                {
+                    "record_time": "2026-06-03 12:00:00",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效；安全性评价：未见药物不良反应。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
 async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant() -> None:
     """疗效不佳并拟调整方案属于真实的疗效评价，不能被误删。"""
     _, reduced = await _evaluate(
@@ -7205,7 +7357,7 @@ async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant(
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
-                "record_content": "抗感染治疗效果不佳，拟调整方案。",
+                "record_content": "抗感染治疗效果不佳，拟调整方案；安全性评价未见药物不良反应。",
             },),
         },
     )
@@ -7244,7 +7396,7 @@ async def test_055_timed_in_window_evaluation_remains_compliant_with_untimed_can
             "daily_course_record": (
                 {
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "抗感染治疗有效，继续原方案。",
+                    "record_content": "抗感染治疗有效，继续原方案；安全性评价未见药物不良反应。",
                 },
                 {"record_content": "抗感染治疗效果不佳，拟调整方案。"},
             ),
@@ -8786,7 +8938,7 @@ async def test_055_fact_refs_only_include_matched_start_order_and_window_evaluat
                     "document_id": "COURSE-055-MATCH",
                     "related_order_id": "ORDER-055-M",
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "美罗培南抗感染治疗效果评价：有效。",
+                    "record_content": "美罗培南抗感染治疗效果评价：有效；安全性评价未见药物不良反应。",
                 },
                 {
                     "document_id": "COURSE-055-OTHER",

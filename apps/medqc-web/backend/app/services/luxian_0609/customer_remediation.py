@@ -377,6 +377,20 @@ def build_customer_remediation_suggestion(
         )
         if personalized is not None:
             target, required = personalized
+        if normalized_rule_id == "LX0609-05-01-03" and isinstance(facts, Mapping):
+            missing_dimensions = [
+                label for key, label in (
+                    ("unmatched_effect_antimicrobials", "疗效评价"),
+                    ("unmatched_safety_antimicrobials", "安全性评价"),
+                ) if facts.get(key)
+            ]
+            if missing_dimensions:
+                target = "结果中指出的抗菌药物48至72小时评价记录"
+                required = "、".join(missing_dimensions)
+                recommendation = (
+                    f"请核对结果指出的药物和缺项，依据实际诊疗情况完善{required}，"
+                    "已记录的内容无需重复补写；不得补造评价或倒签。"
+                )
         if normalized_rule_id == "LX0609-06-01-05":
             gap_action = _analysis_gap_action(facts)
             if gap_action is not None:
@@ -411,6 +425,13 @@ def build_customer_remediation_suggestion(
         gap_action = _DATA_GAP_ACTIONS.get(normalized_rule_id)
         if gap_action is not None:
             target, required, recommendation = gap_action
+            if (
+                normalized_rule_id == "LX0609-05-01-03" and isinstance(facts, Mapping)
+                and "unmatched_safety_antimicrobials" in facts
+            ):
+                target = "抗菌药物48至72小时疗效和安全性评价的核对资料"
+                required = "用药起始时间、疗效与安全性评价记录及对应药物"
+                recommendation = "请核对评价记录与药物及时间窗口的对应关系后重新评估；未确认缺失前无需补写病历。"
         else:
             target = f"{action[0]}的核对资料" if action else "本质控点所需核对资料"
             required = "完整可读取的文书、权威时间及必要关联字段"

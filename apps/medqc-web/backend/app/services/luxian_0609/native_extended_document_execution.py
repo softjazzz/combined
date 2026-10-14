@@ -1960,6 +1960,18 @@ def _title_round_physician_tokens(
     # 不从正文、科室或查房标记后的附注反向推断术者。
     if _TITLE_ROUND_ROLE_DESCRIPTION_PATTERN.search(title_header):
         return frozenset()
+    # 0910 源库的上级医师病程标题会将当前术者写成“姓名+主刀医师”，
+    # “主刀”是角色而非姓名的一部分。只在标题开头、联合查房或明确标点边界后
+    # 接受完整候选姓名，避免把较长姓名的尾部误认作当前术者。
+    explicit_primary_surgeons = {
+        candidate
+        for candidate in candidate_tokens
+        if re.search(
+            rf"(?:^|联合|[，,、；;（）()]){re.escape(candidate)}主刀医师",
+            title_header,
+            flags=re.IGNORECASE,
+        )
+    }
     # 按职称分段提取完整姓名，不能用术者姓名去匹配另一姓名的后缀。
     identities = set()
     for match in re.finditer(
@@ -1968,6 +1980,7 @@ def _title_round_physician_tokens(
     ):
         identity = match.group(1).strip()
         # 仅剥离有明确边界的联合查房/科室前缀；其余整段保留，不能猜姓名。
+        identity = re.sub(r"^联合", "", identity)
         identity = re.sub(
             r"^(?:联合)?(?:神经疾病中心|神经外科|神经内科|心胸外科|"
             r"普通外科|普外科|骨科|眼科|耳鼻喉科|妇产科|儿科|泌尿外科)",
@@ -1975,7 +1988,9 @@ def _title_round_physician_tokens(
             identity,
         )
         identities.add(_normalized_physician_token(identity))
-    return frozenset(identities.intersection(candidate_tokens))
+    return frozenset(
+        identities.intersection(candidate_tokens) | explicit_primary_surgeons
+    )
 
 
 def _actual_surgery_begin_time(
@@ -2938,8 +2953,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                         final_state = reason_code = ""
                 # 先由程序确定窗口，再完整抽取各目标药的评价；不以结果词筛正文。
                 effect_rows_by_name: dict[str, list[Mapping[str, Any]]] = {}
+                safety_rows_by_name: dict[str, list[Mapping[str, Any]]] = {}
+                unknown_effect_rows_by_name: dict[str, list[Mapping[str, Any]]] = {}
+                unknown_safety_rows_by_name: dict[str, list[Mapping[str, Any]]] = {}
+                unassigned_effect_rows: list[Mapping[str, Any]] = []
+                unassigned_safety_rows: list[Mapping[str, Any]] = []
                 evaluation_resolution = "ready"
-                unassigned_regimen = False
                 if not final_state and mature_events:
                     targets = tuple(dict.fromkeys(name for _, name, _ in mature_events))
                     antimicrobial_effect_extraction = await extract_antimicrobial_effects(
@@ -2962,30 +2981,43 @@ async def execute_luxian_0609_native_extended_document_rules(
                         for assertion in extraction.assertions:
                             row = course_rows[assertion.row_index]
                             name = targets[assertion.target_index]
-                            if assertion.state == "present":
-                                effect_rows_by_name.setdefault(name, []).append(row)
-                            elif assertion.state == "regimen":
-                                if len(order_events) == 1:
-                                    effect_rows_by_name.setdefault(name, []).append(row)
-                                else:
-                                    unassigned_regimen = True
-                            elif assertion.state == "unknown":
-                                # 窗外未知不能阻止已成熟事件的窗内评价；缺时仍不可排除。
-                                value = _row_time(row)
-                                if value is None or any(
-                                    event_name == name and 48 <= (value - start).total_seconds() / 3600 <= 72
-                                    for _, event_name, start in mature_events
-                                ):
-                                    final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
-                                    evaluation_resolution = "unknown"
-                ambiguous_evaluation = unassigned_regimen or any(
+                            for state, rows_by_name, unknown_rows_by_name, unassigned_rows in (
+                                (
+                                    assertion.effect_state,
+                                    effect_rows_by_name,
+                                    unknown_effect_rows_by_name,
+                                    unassigned_effect_rows,
+                                ),
+                                (
+                                    assertion.safety_state,
+                                    safety_rows_by_name,
+                                    unknown_safety_rows_by_name,
+                                    unassigned_safety_rows,
+                                ),
+                            ):
+                                if state == "present":
+                                    rows_by_name.setdefault(name, []).append(row)
+                                elif state == "regimen":
+                                    if len(order_events) == 1:
+                                        rows_by_name.setdefault(name, []).append(row)
+                                    elif row not in unassigned_rows:
+                                        unassigned_rows.append(row)
+                                elif state == "unknown":
+                                    unknown_rows_by_name.setdefault(name, []).append(row)
+                ambiguous_evaluation = any(
                     not _linked_order_id(row)
                     and sum(name == event_name for _, event_name, _ in order_events) > 1
-                    for name, rows in effect_rows_by_name.items() for row in rows
+                    for rows_by_name in (effect_rows_by_name, safety_rows_by_name)
+                    for name, rows in rows_by_name.items() for row in rows
                 )
-                intervals: list[float] = []
+                effect_intervals: list[float] = []
+                safety_intervals: list[float] = []
+                unmatched_effect_names: list[str] = []
+                unmatched_safety_names: list[str] = []
                 unmatched_names: list[str] = []
                 has_untimed_match = False
+                has_unresolved_unknown = False
+                has_unassigned_regimen = False
                 if final_state in {"data_gap", "technical_error"}:
                     pass
                 elif ambiguous_evaluation:
@@ -2993,29 +3025,82 @@ async def execute_luxian_0609_native_extended_document_rules(
                 else:
                     for order, name, start in mature_events:
                         order_id = _clean(order.get("order_id"))
-                        matching_rows = tuple(
-                            row for row in effect_rows_by_name.get(name, ())
-                            if not _linked_order_id(row)
-                            or (bool(order_id) and _linked_order_id(row) == order_id)
-                        )
-                        event_intervals = [
-                            (value - start).total_seconds() / 3600
-                            for row in matching_rows
-                            if (value := _row_time(row)) is not None and value >= start
-                        ]
-                        selected_antimicrobial_evidence_rows.extend(
-                            row
-                            for row in matching_rows
-                            if (value := _row_time(row)) is not None
-                            and 48 <= (value - start).total_seconds() / 3600 <= 72
-                        )
-                        intervals.extend(event_intervals)
-                        if not any(48 <= value <= 72 for value in event_intervals):
-                            unmatched_names.append(name)
-                            has_untimed_match = has_untimed_match or any(
-                                _row_time(row) is None for row in matching_rows
+                        for (
+                            rows_by_name,
+                            unknown_rows_by_name,
+                            unassigned_rows,
+                            dimension_intervals,
+                            unmatched_names,
+                        ) in (
+                            (
+                                effect_rows_by_name,
+                                unknown_effect_rows_by_name,
+                                unassigned_effect_rows,
+                                effect_intervals,
+                                unmatched_effect_names,
+                            ),
+                            (
+                                safety_rows_by_name,
+                                unknown_safety_rows_by_name,
+                                unassigned_safety_rows,
+                                safety_intervals,
+                                unmatched_safety_names,
+                            ),
+                        ):
+                            matching_rows = tuple(
+                                row for row in rows_by_name.get(name, ())
+                                if not _linked_order_id(row)
+                                or (bool(order_id) and _linked_order_id(row) == order_id)
                             )
-                    if not unmatched_names:
+                            event_intervals = [
+                                (value - start).total_seconds() / 3600
+                                for row in matching_rows
+                                if (value := _row_time(row)) is not None and value >= start
+                            ]
+                            selected_antimicrobial_evidence_rows.extend(
+                                row
+                                for row in matching_rows
+                                if (value := _row_time(row)) is not None
+                                and 48 <= (value - start).total_seconds() / 3600 <= 72
+                            )
+                            dimension_intervals.extend(event_intervals)
+                            if not any(48 <= value <= 72 for value in event_intervals):
+                                matching_unknown_rows = tuple(
+                                    row for row in unknown_rows_by_name.get(name, ())
+                                    if not _linked_order_id(row)
+                                    or (bool(order_id) and _linked_order_id(row) == order_id)
+                                )
+                                unknown_is_relevant = any(
+                                    (value := _row_time(row)) is None
+                                    or 48 <= (value - start).total_seconds() / 3600 <= 72
+                                    for row in matching_unknown_rows
+                                )
+                                unassigned_is_relevant = any(
+                                    (value := _row_time(row)) is None
+                                    or 48 <= (value - start).total_seconds() / 3600 <= 72
+                                    for row in unassigned_rows
+                                )
+                                if unknown_is_relevant:
+                                    has_unresolved_unknown = True
+                                elif unassigned_is_relevant:
+                                    has_unassigned_regimen = True
+                                else:
+                                    unmatched_names.append(name)
+                                    has_untimed_match = has_untimed_match or any(
+                                        _row_time(row) is None for row in matching_rows
+                                    )
+                    unmatched_names = list(dict.fromkeys(
+                        (*unmatched_effect_names, *unmatched_safety_names)
+                    ))
+                    if has_unresolved_unknown:
+                        final_state, reason_code = (
+                            "data_gap", "semantic_extraction_unresolved"
+                        )
+                        evaluation_resolution = "unknown"
+                    elif has_unassigned_regimen:
+                        final_state, reason_code = "data_gap", "association_failed"
+                        ambiguous_evaluation = True
+                    elif not unmatched_names:
                         if immature_states:
                             final_state = "not_applicable"
                             reason_code = (
@@ -3042,8 +3127,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                         name for _, name, _ in order_events
                     )),
                     "window_hours": [48, 72],
-                    "evaluation_intervals": [round(value, 2) for value in intervals],
-                    "unmatched_antimicrobials": list(dict.fromkeys(unmatched_names)),
+                    "evaluation_intervals": [round(value, 2) for value in effect_intervals],
+                    "effect_evaluation_intervals": [round(value, 2) for value in effect_intervals],
+                    "safety_evaluation_intervals": [round(value, 2) for value in safety_intervals],
+                    "unmatched_antimicrobials": unmatched_names,
+                    "unmatched_effect_antimicrobials": list(dict.fromkeys(unmatched_effect_names)),
+                    "unmatched_safety_antimicrobials": list(dict.fromkeys(unmatched_safety_names)),
                     "association_ambiguous": ambiguous_evaluation,
                     "event_windows": event_windows,
                 }

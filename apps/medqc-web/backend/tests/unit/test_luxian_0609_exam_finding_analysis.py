@@ -1,4 +1,4 @@
-"""012 分析要素核对（用户口径 2026-10-12）：单句归类，罗列后下诊断不算分析，照抄报告的引文不算分析。"""
+"""012 分析要素核对：按同一病程的连续语义归类，罗列后下诊断仍不算分析。"""
 
 import json
 
@@ -84,8 +84,8 @@ async def test_linked_finding_with_verbatim_quote_counts_as_analysis():
 
 
 @pytest.mark.asyncio
-async def test_differential_naming_this_exam_site_is_attributed_by_linked_order():
-    """真实样本：“结合颈椎MRI故不考虑该诊断”只指向检查本身；检查名称仅在关联医嘱上。"""
+async def test_differential_naming_only_exam_site_without_finding_is_not_analysis():
+    """用户口径：只写“结合某 MRI 故不考虑”而未写所见，即使模型误归类也不算分析。"""
     from dataclasses import replace
 
     from app.services.luxian_0609.exam_lab_fact_extraction import events_for_family as _events
@@ -96,14 +96,45 @@ async def test_differential_naming_this_exam_site_is_attributed_by_linked_order(
     ref = _report_ref(projection)
     answer = _answer(ref, "targeted_differential", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
     outcome = await check_exam_finding_analysis(projection, _Client([answer]))
-    assert outcome.analysed_refs == {1: (ref,)}
-    # 非鉴别类（如把“结合腰椎MRI可诊断”误归为异常联系）不能靠部位对应放行。
+    assert outcome.analysed_refs == {1: ()}
+    # 非鉴别类同样不能靠部位对应放行。
     misfiled = _answer(ref, "finding_linked", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
     assert (await check_exam_finding_analysis(projection, _Client([misfiled]))).analysed_refs == {1: ()}
     event = replace(event, order_names=("MRI左膝关节平扫",))
     projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
     outcome = await check_exam_finding_analysis(projection, _Client([answer]))
     assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_prompt_preserves_same_course_multisentence_basis_chain_with_positive_and_negative_examples():
+    """C19/C24 形状：同病程跨句写症状体征、影像、承接判断与处置时必须整体核对。"""
+    course = (
+        "患者腰痛伴右下肢放射痛，L4/5右侧压痛。"
+        "腰椎MRI示L4/5椎间盘右侧椎间孔型突出并椎间孔狭窄。"
+        "结合患者病史、查体及辅助检查结果分析，考虑腰椎间盘突出症。"
+        "治疗后疼痛减轻，继续当前治疗。"
+    )
+    projection = _projection(course)
+    ref = _report_ref(projection)
+    quote = course[: course.index("治疗后")]
+    client = _Client([_answer(ref, "finding_linked", quote)])
+
+    outcome = await check_exam_finding_analysis(projection, client)
+
+    assert outcome.analysed_refs == {1: (ref,)}
+    prompt = client.prompts[0]
+    assert "核对整份病程的上下文" in prompt
+    assert "连续多句或同一逻辑段" in prompt
+    assert "不超过200字" in prompt
+    assert "症状/体征→影像所见→明确承接→诊断判断或处置" in prompt
+    for protected_negative in (
+        "L4/5椎间盘突出，拟行手术",
+        "排除L1椎体压缩性骨折",
+        "请胸外科会诊评估结节性质",
+        "结合颈椎MRI故不考虑该诊断",
+    ):
+        assert protected_negative in prompt
 
 
 @pytest.mark.asyncio

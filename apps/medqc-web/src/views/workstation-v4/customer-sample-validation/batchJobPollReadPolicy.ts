@@ -21,6 +21,20 @@ const ACTIVE_JOB_STATUSES = new Set([
 ])
 
 export type PollReadFailureDecision = 'retry' | 'stop_terminal' | 'stop_exhausted'
+export type TerminalBatchJobStatus = 'completed' | 'failed' | 'canceled'
+
+export function resolveTerminalBatchJobStatus(
+  jobStatus?: string,
+): TerminalBatchJobStatus | undefined {
+  const normalized = String(jobStatus || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'cancelled') return 'canceled'
+  if (normalized === 'completed' || normalized === 'failed' || normalized === 'canceled') {
+    return normalized
+  }
+  return undefined
+}
 
 export function decidePollReadFailure(
   httpStatus: number | undefined,
@@ -28,7 +42,9 @@ export function decidePollReadFailure(
   jobStatus?: string,
 ): PollReadFailureDecision {
   if (typeof httpStatus === 'number' && MISSING_JOB_STATUSES.has(httpStatus)) return 'stop_terminal'
-  const normalizedJobStatus = String(jobStatus || '').trim().toLowerCase()
+  const normalizedJobStatus = String(jobStatus || '')
+    .trim()
+    .toLowerCase()
   if (httpStatus === 409 && normalizedJobStatus && !ACTIVE_JOB_STATUSES.has(normalizedJobStatus)) {
     return 'stop_terminal'
   }

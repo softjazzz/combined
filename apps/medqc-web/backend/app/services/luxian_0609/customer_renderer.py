@@ -3380,27 +3380,49 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-05-01-03" and kind == "antimicrobial_effect_evaluation_check":
+        separate_dimensions = "unmatched_safety_antimicrobials" in facts
+        evaluation_label = "疗效和安全性评价" if separate_dimensions else "疗效评价"
         resolution = facts.get("evaluation_resolution")
         if resolution == "time_unresolved":
-            return "治疗起始、病程或评价截止时间缺失或冲突，暂不能核对48～72小时疗效评价窗口。"
+            return f"治疗起始、病程或评价截止时间缺失或冲突，暂不能核对48～72小时{evaluation_label}窗口。"
         if resolution == "unknown":
-            return "目标抗菌药的疗效评价语义或归属尚无法确认，暂不能判断评价是否完成。"
+            return f"目标抗菌药的{evaluation_label}语义或归属尚无法确认，暂不能判断评价是否完成。"
         if resolution == "capacity_exceeded":
-            return "完整病程材料超出本次疗效事实抽取预算，尚未完成核对。"
+            return f"完整病程材料超出本次{evaluation_label}事实抽取预算，尚未完成核对。"
         if resolution == "unavailable":
-            return "病程正文缺失或不可读，暂不能核对抗菌药疗效评价。"
+            return f"病程正文缺失或不可读，暂不能核对抗菌药{evaluation_label}。"
         if resolution == "invalid":
-            return "疗效事实抽取未取得有效响应，暂不能完成核对。"
+            return f"{evaluation_label}事实抽取未取得有效响应，暂不能完成核对。"
         medicines = joined("antimicrobials")
         intervals = joined("evaluation_intervals")
         unmatched = joined("unmatched_antimicrobials")
         window_state = facts.get("window_state")
+        window_label = evaluation_label if separate_dimensions else "效果评价"
         if window_state == "evaluation_window_not_started":
-            return f"已核对抗菌药物 {medicines}；尚未进入48～72小时效果评价窗口。"
+            return f"已核对抗菌药物 {medicines}；尚未进入48～72小时{window_label}窗口。"
         if window_state == "evaluation_window_not_mature":
-            return f"已核对抗菌药物 {medicines}；效果评价窗口尚未结束。"
+            return f"已核对抗菌药物 {medicines}；{window_label}窗口尚未结束。"
         if facts.get("association_ambiguous") is True:
-            return f"已核对抗菌药物 {medicines}；现有效果评价未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"
+            return f"已核对抗菌药物 {medicines}；现有{window_label}未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"
+        if separate_dimensions:
+            missing = []
+            for key, label in (
+                ("unmatched_effect_antimicrobials", "疗效评价"),
+                ("unmatched_safety_antimicrobials", "安全性评价"),
+            ):
+                names = joined(key)
+                if names:
+                    missing.append(f"{names} 缺少{label}")
+            if missing:
+                return (
+                    f"已核对抗菌药物 {medicines} 计划开始/启用后48～72小时内的评价记录；"
+                    + "；".join(missing) + "。"
+                )
+            return (
+                f"已核对抗菌药物 {medicines}；疗效评价距计划开始/启用 "
+                f"{joined('effect_evaluation_intervals')} 小时，安全性评价距计划开始/启用 "
+                f"{joined('safety_evaluation_intervals')} 小时，要求两项均在48～72小时内完成。"
+            )
         if unmatched:
             return f"已核对抗菌药物 {medicines}；其中 {unmatched} 未找到计划开始/启用后 48～72 小时内的效果评价记录。"
         if not intervals:
@@ -4093,8 +4115,27 @@ def _emit_safe_trace(
         return
 
 
-def not_applicable_customer_message(*, rule_id: str, reason_code: str) -> tuple[str, str, str]:
+def not_applicable_customer_message(
+    *, rule_id: str, reason_code: str, facts: Mapping[str, Any] | None = None,
+) -> tuple[str, str, str]:
     """查询既有不适用文案；离线诊断无需因此加载目录背后的执行/资料组件。"""
+    if (
+        rule_id == "LX0609-06-01-05"
+        and reason_code == "trigger_absent_complete"
+        and isinstance(facts, Mapping)
+        and facts.get("verification_kind") == "exam_lab_requirement_checked"
+    ):
+        # 同一不适用原因也用于已有报告但没有本规则需分析的阳性结果。
+        # 只解释执行器已确认的事实，不重新判定阳性或业务状态。
+        event_finding = customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
+        if event_finding:
+            return event_finding, "已逐次核对CT/MRI报告及各次检查的适用情况。", "本项不适用，无需据此补写分析记录。"
+        if facts.get("report_time") and facts.get("positive_state") in {"negative", "not_relevant"}:
+            return (
+                "已核对CT/MRI报告，未检出需分析的阳性结果，本项不适用。",
+                "已核对CT/MRI报告；本次判定未发现属于本规则分析范围的阳性结果。",
+                "本项不适用，无需据此补写分析记录。",
+            )
     return _RULE_NOT_APPLICABLE_MESSAGES.get(
         (rule_id, reason_code), _CUSTOMER_MESSAGES[CustomerFinalState.NOT_APPLICABLE],
     )
@@ -4678,6 +4719,7 @@ def render_luxian_0609_customer_result(
     elif decision.final_state is CustomerFinalState.NOT_APPLICABLE:
         findings, evidence, suggestion = not_applicable_customer_message(
             rule_id=decision.rule_id, reason_code=decision.reason_code,
+            facts=safe_customer_display_facts,
         )
     elif decision.final_state is CustomerFinalState.EVALUATION_UNKNOWN:
         findings, evidence, suggestion = _RULE_UNCERTAIN_MESSAGES.get(

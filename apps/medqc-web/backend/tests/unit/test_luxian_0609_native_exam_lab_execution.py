@@ -438,6 +438,63 @@ class _StrictSchemaClient(_Client):
         return await super().generate(prompt, **kwargs)
 
 
+class _SameCourseBasisClient(_Client):
+    """按输入合同作答，用于证明公共入口确实把同病程完整上下文交给专项核验。"""
+
+    def __init__(self, quote: str) -> None:
+        super().__init__([])
+        self.quote = quote
+
+    async def generate(self, prompt: str, **kwargs) -> dict:
+        self.prompts.append(prompt)
+        self.call_options.append(dict(kwargs))
+        if "EVENTS_JSON=" not in prompt:
+            output = {
+                "schema_version": "lx0609-exam-lab-text-facts-v4",
+                "facts": [
+                    {
+                        "rule_id": "LX0609-06-01-05",
+                        "event_position": 1,
+                        "applicability": "not_applicable",
+                        "semantic_state": "absent",
+                        "positive_state": "negative",
+                        "course_doc_positions": [],
+                    },
+                    {
+                        "rule_id": "LX0609-06-01-05",
+                        "event_position": 2,
+                        "applicability": "applicable",
+                        "semantic_state": "absent",
+                        "positive_state": "positive",
+                        "course_doc_positions": [],
+                    },
+                ],
+            }
+        else:
+            events = json.loads(prompt.split("EVENTS_JSON=", 1)[1])
+            course_ref = events[0]["course_docs"][0]["course_doc_ref"]
+            event_position = events[0]["event_position"]
+            if "核对整份病程的上下文" in prompt and "连续多句或同一逻辑段" in prompt:
+                kind, quote, span = "finding_linked", self.quote, "L4/5椎间盘右侧椎间孔型突出"
+            else:
+                kind, quote, span = "diagnosis_only", "目前考虑诊断：腰椎间盘突出症", ""
+            output = {
+                "schema_version": "lx0609-exam-finding-analysis-v3",
+                "docs": [{
+                    "event_position": event_position,
+                    "course_doc_ref": course_ref,
+                    "quote_type": kind,
+                    "quote": quote,
+                    "report_span": span,
+                }],
+            }
+        return {
+            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(output, ensure_ascii=False)}}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+            "_api_time": 0.2,
+        }
+
+
 def _fact_response(
     rule_ids: tuple[str, ...],
     *,
@@ -3260,6 +3317,78 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     }
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
+
+
+@pytest.mark.asyncio
+async def test_012_public_entry_accepts_same_course_multisentence_basis_chain(monkeypatch):
+    """C19/C24 脱敏形状：公共入口保留同病程上下文，专项核验后应归为已分析。"""
+    from app.services.luxian_0609.exam_finding_relevance import FindingRelevanceOutcome
+
+    async def fixed_relevance(projection, llm_client):
+        return FindingRelevanceOutcome("ready", {1: "negative", 2: "positive"})
+
+    monkeypatch.setattr(exam_lab, "classify_exam_finding_relevance", fixed_relevance)
+    quote = (
+        "腰椎MRI示L4/5椎间盘右侧椎间孔型突出并椎间孔狭窄。"
+        "结合患者病史、查体及辅助检查结果分析，目前考虑诊断：腰椎间盘突出症。"
+    )
+    course = (
+        "患者腰痛伴右下肢放射痛，L4/5右侧压痛。"
+        f"{quote}"
+        "治疗后腰部及下肢疼痛减轻，治疗有效，继续当前治疗。"
+    )
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "document_id": "mri-report-negative",
+                "exam_name": "胸椎MRI平扫",
+                "report_time": "2026-04-25 12:00:00",
+                "exam_conclusion": "胸椎MRI平扫未见异常。",
+            },
+            {
+                "document_id": "mri-report-linked",
+                "exam_name": "腰椎MRI平扫",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "阳性：L4/5椎间盘右侧椎间孔型突出并椎间孔狭窄。",
+            },
+        ),
+        course_rows=({
+            "document_id": "course-linked",
+            "record_time": "2026-04-26 13:00:00",
+            "record_content": course,
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
+    )
+    client = _SameCourseBasisClient(quote)
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-06-01-05",),
+        wrapper_rules=[_wrapper("LX0609-06-01-05")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-06-01-05",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-06-01-05",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert reduced[0].final_state.value == "compliant", (
+        result.llm_call_count,
+        result.total_tokens,
+        len(client.prompts),
+        dict(result.customer_display_facts),
+    )
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 220
+    assert len(client.prompts) == 2
+    assert "核对整份病程的上下文" in client.prompts[1]
 
 
 @pytest.mark.asyncio

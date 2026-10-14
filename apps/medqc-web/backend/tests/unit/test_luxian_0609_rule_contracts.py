@@ -296,7 +296,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     effect_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-05-01-03")
     assert (effect_contract.contract_version, effect_contract.decision_authority,
             effect_contract.max_llm_calls_per_rule, effect_contract.prompt_version) == (
-                "v2", "program_then_optional_llm", 1, "lx0609-antimicrobial-effect-facts-v1")
+                "v2", "program_then_optional_llm", 1, "lx0609-antimicrobial-effect-safety-facts-v2")
     visit_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-04-04-02")
     assert (visit_contract.contract_version, visit_contract.decision_authority, visit_contract.max_llm_calls_per_rule, visit_contract.prompt_version) == ("v3", "program_then_optional_llm", 1, "lx0609-anesthesia-visit-facts-v2")
     for rule in ("LX0609-04-05-02", "LX0609-08-02-01"):

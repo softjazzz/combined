@@ -1,12 +1,14 @@
 /* eslint-disable vue/one-component-per-file */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleValidationView.vue'
 
 let latestBatchResultDrawerProps: Record<string, unknown> | null = null
 let latestRecordResultComparisonDrawerProps: Record<string, unknown> | null = null
 const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
+
+enableAutoUnmount(afterEach)
 
 const {
   message,
@@ -1781,7 +1783,7 @@ describe('CustomerSampleValidationView', () => {
     listManualSamplePools.mockResolvedValue({
       success: true,
       data: {
-        items: [buildPool({ latest_job_id: 'job-ended-409', latest_job_status: 'running' })],
+        items: [buildPool({ latest_job_id: 'job-1', latest_job_status: 'running' })],
         total: 1,
         page: 1,
         page_size: 50,
@@ -1791,7 +1793,7 @@ describe('CustomerSampleValidationView', () => {
       .mockResolvedValueOnce({
         success: true,
         data: {
-          id: 'job-ended-409',
+          id: 'job-1',
           rule_code: 'LX0609',
           rule_name: '泸县0609质控点验证',
           scope: 'running',
@@ -1807,8 +1809,10 @@ describe('CustomerSampleValidationView', () => {
         message: '历史质控结果交付合同不完整，无法安全展示',
       })
 
-    await mountView()
+    const wrapper = await mountView()
     await flushPromises()
+    const statusBar = wrapper.find('[data-testid="customer-sample-qc-task-status"]')
+    expect(statusBar.text()).toContain('执行中')
     await vi.advanceTimersByTimeAsync(5000)
     await flushPromises()
     const callsAfterStop = getSichuanWorkspaceBatchJob.mock.calls.length
@@ -1819,6 +1823,12 @@ describe('CustomerSampleValidationView', () => {
     expect(message.error).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining('已停止自动刷新') }),
     )
+    expect(
+      (wrapper.vm as unknown as { currentQcTask?: { id?: string; status?: string } }).currentQcTask,
+    ).toMatchObject({ id: 'job-1', status: 'failed' })
+    const settledStatusBar = wrapper.find('[data-testid="customer-sample-qc-task-status"]')
+    expect(settledStatusBar.text()).toContain('失败')
+    expect(settledStatusBar.text()).not.toContain('执行中')
   })
 
   it('任务仍在执行时的 409 继续重试，连续失败达到上限后暂停自动刷新', async () => {

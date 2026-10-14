@@ -65,7 +65,11 @@ import {
   resolveEditableOrderTypeLabel,
 } from './editableCopyPresentation'
 import { buildBatchJobPresentation } from './batchJobPresentation'
-import { decidePollReadFailure, pollReadFailureMessage } from './batchJobPollReadPolicy'
+import {
+  decidePollReadFailure,
+  pollReadFailureMessage,
+  resolveTerminalBatchJobStatus,
+} from './batchJobPollReadPolicy'
 import { useCustomerSampleEditableCopyController } from './useCustomerSampleEditableCopyController'
 import { useCustomerSampleSyncPresentation } from './useCustomerSampleSyncPresentation'
 import { useCustomerSampleGuide } from './useCustomerSampleGuide'
@@ -113,7 +117,6 @@ import type {
   SichuanBatchJobStatus,
 } from '@/views/workstation-v4/semantic-rules/types'
 import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
-
 
 export function useCustomerSampleValidationController() {
   const workstationConfirmation = useWorkstationConfirmation()
@@ -2414,6 +2417,31 @@ export function useCustomerSampleValidationController() {
     }
   }
 
+  function applyTerminalBatchJobStatus(jobId: string, jobStatus?: string): boolean {
+    const terminalStatus = resolveTerminalBatchJobStatus(jobStatus)
+    if (!terminalStatus) return false
+
+    if (currentQcTask.value?.id === jobId) {
+      currentQcTask.value = { ...currentQcTask.value, status: terminalStatus }
+    }
+    if (batchJobDetail.value?.id === jobId) {
+      batchJobDetail.value = { ...batchJobDetail.value, status: terminalStatus }
+    }
+    let updatedPool: ManualSamplePool | undefined
+    pools.value = pools.value.map((pool) => {
+      if (pool.latest_job_id !== jobId) return pool
+      updatedPool = { ...pool, latest_job_status: terminalStatus }
+      return updatedPool
+    })
+    if (selectedPool.value?.latest_job_id === jobId) {
+      selectedPool.value = updatedPool || {
+        ...selectedPool.value,
+        latest_job_status: terminalStatus,
+      }
+    }
+    return true
+  }
+
   /**
    * 处理轮询读取失败，返回是否应停止轮询。
    * 临时失败保留最后一次权威状态并继续重试；确定性失败（如 409 结果交付不完整）
@@ -2450,7 +2478,9 @@ export function useCustomerSampleValidationController() {
     try {
       const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
       if (!result.success || !result.data) {
-        currentQcTask.value = null
+        if (!applyTerminalBatchJobStatus(normalizedJobId, result.jobStatus)) {
+          currentQcTask.value = null
+        }
         if (options.showError) {
           message.error(result.message || '获取当前质控任务失败')
         }
@@ -2912,6 +2942,7 @@ export function useCustomerSampleValidationController() {
       }
       const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
       if (!result.success || !result.data) {
+        applyTerminalBatchJobStatus(normalizedJobId, result.jobStatus)
         currentQcTaskPollReadFailures += 1
         if (handleBatchJobReadFailure(normalizedJobId, result, currentQcTaskPollReadFailures)) {
           stopCurrentQcTaskPolling()
@@ -3011,6 +3042,7 @@ export function useCustomerSampleValidationController() {
         batchJobPollTick += 1
         const result = await getSichuanWorkspaceBatchJob(jobId)
         if (!result.success || !result.data) {
+          applyTerminalBatchJobStatus(jobId, result.jobStatus)
           batchJobPollReadFailures += 1
           if (handleBatchJobReadFailure(jobId, result, batchJobPollReadFailures)) {
             stopBatchJobPolling()
