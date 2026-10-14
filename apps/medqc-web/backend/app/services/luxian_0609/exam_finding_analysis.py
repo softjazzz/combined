@@ -7,7 +7,8 @@ v4 让模型选择本份病程和本次报告的原文片段编号，不再自�
 按原文位置去重排序，合并相邻片段以保留原文，跨段片段各自独立核对；禁止外部编号。分析仍由
 模型按整份病程判断，程序保留报告异常关联、总计 200 字上限及六字照抄门槛。
 
-核对最多尝试两次。末次有未核到的文书时，已证实分析的事件可以确定；全数核到且都不算分析
+核对最多尝试两次，已完整核验的事件保留结果，仅重试其余事件。
+末次有未核到的文书时，已证实分析的事件可以确定；全数核到且都不算分析
 才固定为未分析；其余事件沿用主抽取判断（用户确认的取舍），不能把协议失败直接当成缺分析。
 未分析事件的修改建议只保存文书引用与受控不足类别，渲染后按记录时间点名，不向客户事实加入原文。
 """
@@ -175,15 +176,23 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "同一部位也不等于同一异常：膝部半月板损伤的诊断依据不能证明膝关节骨性关节炎已被分析。"
         "‘目前诊断’后的‘诊断依据’只解释该处列出的诊断，不解释检查列表中的全部异常。"
         "鉴别段仅介绍某病的典型症状、再说不能排除合并，而未把本例具体所见与该病联系起来，也不算针对报告异常的分析。"
-        "按顺序完成每份病程的核对：先找该异常对应的实际症状/体征，再找具体影像所见，再找明确承接及判断或处置。"
+        "按顺序完成每份病程的核对：先找具体影像所见及对应依据，再找针对该问题的判断或处置。"
+        "依据可以是相关症状体征、严重程度，也可以是明确写出的该异常对处置的影响，不要求每种依据同时出现。"
+        "用户确认（2026-10-14）：‘CT提示感染，故暂不考虑手术并请相关科室会诊’已明确感染与暂缓手术的因果联系，"
+        "归management_linked、basis_relation=same_finding，basis_fragment_ids选择作为暂缓手术原因的感染所见；"
+        "不要求再补感染症状或严重程度。这与只写异常后拟行某处置、或只写会诊目的是不同的。"
+        "同份病程对同一问题已记录呼吸困难、呼吸音降低、CT肺压缩约45%及胸腔引流计划，依据和处置完整，"
+        "同样归management_linked、basis_relation=same_finding；basis_fragment_ids选择症状体征或压缩程度，"
+        "不能因缺少‘结合’‘因此’等承接词就拒收。仍须确认这些依据和处置针对同一异常，不能跨问题借用。"
         "这些内容在同一份记录不同段落但明确属于同一问题时仍构成依据链；不能只读影像与诊断相邻的两句就判无依据。"
         "诊断依据写‘腰背部外伤史、局部触痛、活动受限，结合MRI可诊断’有具体依据；"
         "同份病程先记局部疼痛、压痛和相关体征，再列具体影像，后写‘结合患者症状体征及辅助检查，指出目前诊断’，也是有依据的分析。"
         "只有全文确实没有具体依据时，才可把‘结合病史辅助检查，考虑某诊断’判为diagnosis_only。"
         "必须核对整份病程的上下文：同一份病程可以用连续多句或同一逻辑段共同写出症状/体征、影像所见、"
-        "明确承接、诊断判断及处置，不能把这些内容拆成互不相关的单句。"
+        "诊断判断及处置，不能把这些内容拆成互不相关的单句；上下文完整表达同一问题的联系即可，不强求固定承接句。"
         "对每个事件的每份course_docs，先填写basis_fragment_ids：只选与本次异常直接相关、实际作为判断或处置依据的原文片段，"
-        "如对应症状体征、严重程度、手术指征、影像具体特征或既往对比。仅命名异常、罗列报告、表达会诊目的或拟行处置不是依据；"
+        "如对应症状体征、严重程度、手术指征、影像具体特征、既往对比，或明确作为暂缓/改变处置原因的异常所见。"
+        "仅命名异常、罗列报告、表达会诊目的或拟行处置不是依据；"
         "其他部位的症状体征也不能充当本次异常的依据。确无依据时此数组必须为空，不得借用结论或处置填满。"
         "例如病程记录膝痛压痛及膝部MRI判断，同时另写‘胸部CT提示肺小结节，请胸外科会诊评估结节性质’，"
         "膝部分析可成立，但肺结节没有会诊依据，肺部事件basis_fragment_ids=[]且quote_type=generic_plan。"
@@ -196,7 +205,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "该依据相对腰椎间盘膨出同样是different_finding。即使quote_type已归入分析类别，也须独立填写此关系。"
         "同一份病程有明确依据链才归算分析类别。对每个事件的每份course_docs，阅读全部fragments，"
         "选择本份病程内的编号，可跨段选择，根据整份病程上下文归类quote_type。"
-        "只选择一组最短且完整的证明：一处影像所见、一处相关症状或体征、一处承接判断；不要罗列所有症状、所有影像异常或重复依据。"
+        "只选择一组最短且完整的证明：影像所见、实际依据和对应判断或处置；不要罗列所有症状、所有影像异常或重复依据。"
         "先逐项估算所选片段text总字数，超过200字就删除重复、无关或非必要的片段，保留最短完整证明。"
         "程序分别核对每段原文；不要输出或改写原文。先阅读同份病程全部内容，再核对完整依据链，不要求这些内容在相邻片段。\n"
         "完整正例：同份病程先写“患者腰痛伴右下肢放射痛，L4/5右侧压痛”，再写“腰椎MRI示L4/5右侧椎间孔型突出并"
@@ -268,6 +277,7 @@ def _parse(
     reports: Mapping[int, str],
     *,
     allow_partial: bool = False,
+    complete_events_only: bool = False,
     lead_sites: Mapping[int, tuple[str, ...]] | None = None,
 ) -> tuple[dict[int, tuple[str, ...]], dict[int, tuple[tuple[str, str], ...]]]:
     choices = response.get("choices")
@@ -282,11 +292,12 @@ def _parse(
             or payload["schema_version"] != SCHEMA_VERSION or not isinstance(payload["docs"], list)):
         raise ValueError("invalid response schema")
     seen: set[tuple[int, str]] = set()
+    evidence_error: ValueError | None = None
     analysed: dict[int, list[str]] = {position: [] for position in expected}
     gaps: dict[int, list[tuple[str, str]]] = {position: [] for position in expected}
     # 只对应一次检查的病程：不算分析的引文未填报告片段时，仍可按该次检查给修改建议。
     event_count_by_ref: dict[str, int] = {}
-    for refs in expected.values():
+    for _, refs in _targets(projection).values():
         for candidate in refs:
             event_count_by_ref[candidate] = event_count_by_ref.get(candidate, 0) + 1
     for item in payload["docs"]:
@@ -348,13 +359,16 @@ def _parse(
                 elif attributed:
                     # 归为分析但去掉照抄部分后不剩实质内容：按其所属类别给修改建议。
                     gaps[position].append((ref, _REJECTED_ANALYSIS_GAPS[kind]))
-        except ValueError:
-            # 末次尝试：单份病程引文核验不过只视为未核到，该事件按部分覆盖处理，不连累整步。
+        except ValueError as error:
+            # 单份病程引文核验不过只视为未核到，不连累同批已完整核验的事件。
             if not allow_partial:
                 raise
+            evidence_error = evidence_error or error
             seen.discard(key)
 
     if not seen:
+        if evidence_error is not None:
+            raise evidence_error
         raise ValueError("invalid doc coverage")
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
     if not allow_partial and len(complete) != len(expected):
@@ -363,7 +377,7 @@ def _parse(
     # 其余事件不固定，单独沿用主抽取判断，不连累同批其他事件。
     decided = {
         position: tuple(refs) for position, refs in analysed.items()
-        if refs or position in complete
+        if position in complete or (refs and not complete_events_only)
     }
     gap_refs = {
         position: tuple(gaps[position][:MAX_GAP_NOTES_PER_EVENT])
@@ -404,6 +418,9 @@ async def check_exam_finding_analysis(
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     attempt_prompt = prompt
+    pending_expected = dict(model_expected)
+    analysed: dict[int, tuple[str, ...]] = {}
+    gap_refs: dict[int, tuple[tuple[str, str], ...]] = {}
     started = perf_counter()
     for attempt in range(PROTOCOL_ATTEMPTS):
         calls += 1
@@ -413,6 +430,8 @@ async def check_exam_finding_analysis(
                 **structured_output_kwargs(llm_client),
             )
         except Exception:
+            if analysed:
+                break
             return FindingAnalysisOutcome("failed", {}, calls, prompt_tokens, completion_tokens, total_tokens,
                                           api_time or perf_counter() - started)
         try:
@@ -421,14 +440,26 @@ async def check_exam_finding_analysis(
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
-            analysed, gap_refs = _parse(
-                response, projection, model_expected,
-                allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS,
-                reports={position: model_targets[position][0] for position in model_expected},
+            updates, new_gaps = _parse(
+                response, projection, pending_expected,
+                allow_partial=True, complete_events_only=attempt + 1 < PROTOCOL_ATTEMPTS,
+                reports={position: model_targets[position][0] for position in pending_expected},
                 lead_sites=_report_lead_sites(projection))
-            break
+            analysed.update(updates)
+            gap_refs.update(new_gaps)
+            pending_expected = {position: refs for position, refs in pending_expected.items() if position not in updates}
+            if not pending_expected or attempt + 1 == PROTOCOL_ATTEMPTS:
+                break
+            # 已完整核验的检查不再交给重试改写；未完整核验的检查仍保留原有第二次机会。
+            prompt = _prompt(projection, {position: model_targets[position] for position in pending_expected})
+            attempt_prompt = prompt.replace(
+                "\nEVENTS_JSON=", "\n仅复核以下尚未完整核验的检查：补齐每份病程，report_fragment_id只选当前事件"
+                "的报告片段，course_fragment_ids和basis_fragment_ids只选本份病程的片段，"
+                "两组原文合计不超过200字。\nEVENTS_JSON=", 1)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
+                if analysed:
+                    break
                 return FindingAnalysisOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                               total_tokens, api_time or perf_counter() - started)
             hint = _RETRY_HINTS.get(str(error), "每个事件的每份病程必须且仅输出一次，字段取规定值")

@@ -5,6 +5,8 @@ import json
 import pytest
 
 from app.services.luxian_0609.exam_finding_analysis import check_exam_finding_analysis
+from app.services.luxian_0609.exam_finding_relevance import apply_relevance_hints
+from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
 from test_luxian_0609_exam_finding_analysis import LINKED, _projection, _report_ref
 
 
@@ -132,3 +134,61 @@ async def test_analysis_label_cannot_override_unrelated_or_unresolved_basis(rela
     assert result.state == state
     assert result.analysed_refs == ({1: ()} if state == "ready" else {})
     assert client.calls == (1 if state == "ready" else 2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("report, course", [
+    ("双肺支气管扩张伴感染。", "CT提示双肺支气管扩张伴感染，故暂不考虑手术，拟请呼吸内科会诊协助诊治。"),
+    ("左侧气胸，肺组织压缩约35%。", "患者呼吸困难，左肺呼吸音降低。CT示左侧气胸，肺组织压缩约35%。计划行左侧胸腔闭式引流术。"),
+])
+async def test_confirmed_causal_or_same_problem_evidence_is_accepted_without_extra_requirements(report, course):
+    """用户确认：已有因果联系无需额外症状；同一问题的完整依据链无需固定承接词。"""
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": ({"exam_id": "EX-1", "exam_name": "胸部CT平扫",
+                         "report_time": "2026-08-18 13:30:00", "exam_conclusion": report},),
+        "daily_course_record": ({"record_time": "2026-08-18 15:00:00", "record_content": course},),
+    }), {1: "positive"})
+    result = await check_exam_finding_analysis(projection, SelectionClient())
+    assert result.state == "ready" and result.analysed_refs == {1: (_report_ref(projection),)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_fails", [False, True])
+async def test_retry_keeps_fully_checked_event_and_only_rechecks_unresolved_event(retry_fails):
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": tuple({"exam_id": f"EX-{i}", "exam_name": name,
+                              "report_time": "2026-08-18 13:30:00", "exam_conclusion": report}
+                             for i, name, report in [(1, "胸部CT", "肺小结节。"), (2, "腰椎MRI", "椎间盘突出。")]),
+        "daily_course_record": ({"record_time": "2026-08-18 15:00:00", "record_content": "肺小结节。椎间盘突出。"},),
+    }), {1: "positive", 2: "positive"})
+
+    class Client:
+        def __init__(self):
+            self.events = []
+
+        async def generate(self, prompt, **kwargs):
+            events = json.loads(prompt.split("EVENTS_JSON=", 1)[1])
+            self.events.append([event["event_position"] for event in events])
+            if len(self.events) == 2 and retry_fails:
+                raise RuntimeError("synthetic failure")
+            docs = []
+            for event in events:
+                for doc in event["course_docs"]:
+                    invalid = len(self.events) == 1 and event["event_position"] == 2
+                    shared_note_gap = len(self.events) == 2
+                    docs.append({"event_position": event["event_position"], "course_doc_ref": doc["course_doc_ref"],
+                                 "quote_type": "listing_only" if shared_note_gap else "none",
+                                 "basis_relation": "none", "basis_fragment_ids": [],
+                                 "course_fragment_ids": (["unknown-fragment"] if invalid else
+                                                         [doc["fragments"][0]["id"]] if shared_note_gap else []),
+                                 "report_fragment_id": ""})
+            return {"content": json.dumps({"schema_version": "lx0609-exam-finding-analysis-v4", "docs": docs}),
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+
+    client = Client()
+    result = await check_exam_finding_analysis(projection, client)
+    assert client.events == [[1, 2], [2]]
+    assert result.state == "ready"
+    assert result.analysed_refs == ({1: ()} if retry_fails else {1: (), 2: ()})
+    # 重试虽只剩一次检查，共用病程仍对应两次检查；无报告片段时不能据此点名修改建议。
+    assert result.gap_refs == {}
