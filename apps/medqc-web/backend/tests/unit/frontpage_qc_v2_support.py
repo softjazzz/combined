@@ -178,3 +178,39 @@ def make_raw(
 
 def make_doc(**kwargs: Any) -> FrontpageDoc:
     return build_frontpage_doc(make_raw(**kwargs))
+
+
+# ---------- SQLite 合成 CDM 表 ----------
+
+
+def create_text_table(session: Any, table: str, rows: List[Dict[str, Any]], key_columns: tuple = ()) -> None:
+    """按行字段建全 TEXT 列的表并插入，模拟 CDM 视图；不连接业务库。"""
+    from sqlalchemy import text
+
+    columns = sorted({key for row in rows for key in row} | {"institute_id", "patient_id", "visit_id"} | set(key_columns))
+    session.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}" ({", ".join(f"{c} TEXT" for c in columns)})'))
+    for row in rows:
+        session.execute(
+            text(f'INSERT INTO "{table}" ({", ".join(row)}) VALUES ({", ".join(":" + k for k in row)})'),
+            row,
+        )
+
+
+def seed_cdm_frontpages(session: Any, refs: List[FrontpageRef], *, broken: Optional[set] = None) -> None:
+    """为每个 ref 写入一份合规首页；broken 中的 ref 写入缺离院方式的首页。"""
+    mr_rows, diag_rows, surg_rows, cost_rows = [], [], [], []
+    for ref in refs:
+        keys = {"institute_id": ref.institute_id, "patient_id": ref.patient_id, "visit_id": ref.visit_id}
+        mr = {**compliant_mr(), **keys}
+        if broken and ref in broken:
+            mr["leaving_hospital_way"] = ""
+        mr_rows.append(mr)
+        diag_rows += [{**row, **keys, "diagnosis_id": f"{ref.visit_id}-{row['diagnosis_id']}"} for row in compliant_diagnoses()]
+        surg_rows.append({**surgery_row(1), **keys})
+        cost_rows.append({**compliant_cost(), **keys})
+    create_text_table(session, "mr", mr_rows)
+    create_text_table(session, "mr_diagnosis", diag_rows, ("diagnosis_type", "is_deleted"))
+    create_text_table(session, "diagnosis", [], ("diagnosis_type",))
+    create_text_table(session, "mr_surgery", surg_rows, ("surgery_id",))
+    create_text_table(session, "mr_cost", cost_rows, ("total_cost",))
+    session.commit()
