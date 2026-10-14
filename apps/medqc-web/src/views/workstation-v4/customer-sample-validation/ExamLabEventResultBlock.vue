@@ -32,6 +32,21 @@
           >{{ event.statusLabel }}</span>
         </div>
         <p>{{ event.description }}</p>
+        <div
+          v-if="event.reportResultTexts.length"
+          class="exam-event-report-result"
+          :class="`is-${event.tone}`"
+        >
+          <strong>{{ event.reportResultLabel }}</strong>
+          <ul>
+            <li
+              v-for="(text, index) in event.reportResultTexts"
+              :key="`${event.eventPosition}-${index}`"
+            >
+              {{ text }}
+            </li>
+          </ul>
+        </div>
       </article>
     </div>
     <details
@@ -56,6 +71,21 @@
             >{{ event.statusLabel }}</span>
           </div>
           <p>{{ event.description }}</p>
+          <div
+            v-if="event.reportResultTexts.length"
+            class="exam-event-report-result"
+            :class="`is-${event.tone}`"
+          >
+            <strong>{{ event.reportResultLabel }}</strong>
+            <ul>
+              <li
+                v-for="(text, index) in event.reportResultTexts"
+                :key="`${event.eventPosition}-${index}`"
+              >
+                {{ text }}
+              </li>
+            </ul>
+          </div>
         </article>
       </div>
     </details>
@@ -259,6 +289,45 @@ const otherSummary = computed(() => {
   font-size: 13px;
   font-weight: 400;
   line-height: 21px;
+}
+
+.exam-event-report-result {
+  display: grid;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(100, 116, 139, 0.3);
+  border-radius: 0 6px 6px 0;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.exam-event-report-result.is-danger {
+  border-left-color: rgba(198, 40, 40, 0.62);
+  background: rgba(239, 68, 68, 0.045);
+}
+
+.exam-event-report-result.is-success {
+  border-left-color: rgba(8, 116, 67, 0.52);
+}
+
+.exam-event-report-result strong {
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.exam-event-report-result ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.exam-event-report-result li {
+  color: #344256;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 @container (max-width: 560px) {

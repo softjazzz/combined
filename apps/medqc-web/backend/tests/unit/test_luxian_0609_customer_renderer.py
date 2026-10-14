@@ -2461,6 +2461,19 @@ def test_012_multi_event_window_not_mature_and_negative_copies_are_distinct() ->
     assert window_facts == negative_facts
 
 
+def test_012_multi_event_finding_names_the_report_result_being_checked() -> None:
+    facts = _multi_event_analysis_facts(second_event_positive_state="negative")
+    facts["event_results"][0]["report_result_texts"] = [
+        "L4/5 椎间盘突出，椎管狭窄。"
+    ]
+
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-06-01-05", facts=facts
+    )
+
+    assert "对应报告结果：L4/5 椎间盘突出，椎管狭窄。" in finding
+
+
 @pytest.mark.parametrize("positive_state", ["unknown", "not_relevant", None])
 def test_012_multi_event_unconfirmed_positive_state_uses_neutral_copy(
     positive_state,

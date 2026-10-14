@@ -2669,6 +2669,14 @@ def customer_finding_from_controlled_facts(
     if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}:
         subject = "CT/MRI" if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"} else "细菌培养"
         analysis_rule = rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
+
+        def report_result_note(source: Mapping[str, Any]) -> str:
+            values = source.get("report_result_texts")
+            if rule_id != "LX0609-06-01-05" or not isinstance(values, list):
+                return ""
+            texts = [str(value) for value in values if isinstance(value, str) and value]
+            return f"；对应报告结果：{'；'.join(texts)}" if texts else ""
+
         event_results = facts.get("event_results")
         if isinstance(event_results, list) and len(event_results) > 1:
             requirement_label = "阳性结果分析或处置" if analysis_rule else "报告结果记录"
@@ -2741,7 +2749,9 @@ def customer_finding_from_controlled_facts(
                     )
                 else:
                     return ""
-                details.append(f"{index}）报告时间 {report_time}：{conclusion}")
+                details.append(
+                    f"{index}）报告时间 {report_time}：{conclusion}{report_result_note(item)}"
+                )
             return f"共核对{len(details)}次{subject}检查：" + "；".join(details) + "。"
         report_time = facts.get("report_time")
         response_count = facts.get("response_record_count")
@@ -2758,7 +2768,8 @@ def customer_finding_from_controlled_facts(
                 late_label = "阳性结果已分析或处置" if analysis_rule else "报告结果已记录"
                 return (
                     f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                    f"{late_label}但超过 24 小时：最早相关病程时间 {response_time}，间隔 {interval:g} 小时。"
+                    f"{late_label}但超过 24 小时：最早相关病程时间 {response_time}，间隔 {interval:g} 小时"
+                    f"{report_result_note(facts)}。"
                 )
             if isinstance(response_count, int) and response_count > 0:
                 timing = (
@@ -2773,12 +2784,13 @@ def customer_finding_from_controlled_facts(
                 )
                 return (
                     f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                    f"找到 {response_count} 份报告后相关病程{timing}，{missing_content}。"
+                    f"找到 {response_count} 份报告后相关病程{timing}，{missing_content}"
+                    f"{report_result_note(facts)}。"
                 )
             requirement = "阳性结果分析记录" if analysis_rule else "报告结果记录"
             return (
                 f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                f"未找到报告后 24 小时内的{requirement}。"
+                f"未找到报告后 24 小时内的{requirement}{report_result_note(facts)}。"
             )
 
     if rule_id == "LX0609-06-02-03" and kind == "pathology_result_documentation_check":

@@ -1764,6 +1764,7 @@ def _display_facts_for_text_outcome(
         for key in (
             "report_time",
             "positive_state",
+            "report_result_texts",
             "response_record_count",
             "response_record_time",
             "interval_hours",

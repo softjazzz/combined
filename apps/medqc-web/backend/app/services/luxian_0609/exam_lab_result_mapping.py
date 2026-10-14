@@ -122,6 +122,28 @@ def _safe_conflict_times(value: Any) -> list[str] | None:
 _ANALYSIS_GAP_KEY = "analysis_gap_notes"
 ANALYSIS_GAP_KINDS = frozenset({"listing_only", "conclusion_without_basis", "plan_without_basis"})
 
+_REPORT_RESULT_TEXTS_KEY = "report_result_texts"
+
+
+def _safe_report_result_texts(value: Any) -> list[str] | None:
+    """06-01-05 客户可见的 CT/MRI 报告结果：仅允许短文本列表。"""
+
+    if not isinstance(value, list) or not 1 <= len(value) <= 8:
+        return None
+    texts: list[str] = []
+    total_chars = 0
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        text = _clean(item)
+        if not text or len(text) > 500 or text != item:
+            return None
+        total_chars += len(text)
+        if total_chars > 2000:
+            return None
+        texts.append(text)
+    return texts
+
 
 def _safe_analysis_gap_notes(value: Any) -> list[dict[str, str]] | None:
     """06-01-05 修改建议：最多 8 条，只含固定格式的病程记录时间与受控不足类别。"""
@@ -354,6 +376,7 @@ def safe_exam_lab_customer_display_facts(
         allowed_event_keys.add(_CONFLICT_TIMES_KEY)
     if normalized_rule_id == "LX0609-06-01-05":
         allowed_event_keys.add(_ANALYSIS_GAP_KEY)
+        allowed_event_keys.add(_REPORT_RESULT_TEXTS_KEY)
     if not set(raw).issubset(allowed_event_keys):
         return None
     source_document_ids = raw.get("source_document_ids")
@@ -481,6 +504,11 @@ def safe_exam_lab_customer_display_facts(
         if gap_notes is None:
             return None
         facts[_ANALYSIS_GAP_KEY] = gap_notes
+    if _REPORT_RESULT_TEXTS_KEY in raw:
+        report_result_texts = _safe_report_result_texts(raw[_REPORT_RESULT_TEXTS_KEY])
+        if report_result_texts is None or positive_state != "positive":
+            return None
+        facts[_REPORT_RESULT_TEXTS_KEY] = report_result_texts
     event_count = raw.get("event_count")
     event_position = raw.get("event_position")
     if event_count is not None or event_position is not None:
@@ -516,6 +544,7 @@ def safe_exam_lab_customer_display_facts(
             allowed_event_keys.add(_CONFLICT_TIMES_KEY)
         if normalized_rule_id == "LX0609-06-01-05":
             allowed_event_keys.add(_ANALYSIS_GAP_KEY)
+            allowed_event_keys.add(_REPORT_RESULT_TEXTS_KEY)
         safe_event_results: list[dict[str, Any]] = []
         # 顺序合同（2026-09-12 收口）：事实的**语义**由 event_position 决定，物理顺序
         # 不是合同的一部分。此前用 enumerate 下标与 event_position 做相等比对，会把
@@ -607,6 +636,11 @@ def safe_exam_lab_customer_display_facts(
                 if gap_notes is None:
                     return None
                 safe_item[_ANALYSIS_GAP_KEY] = gap_notes
+            if _REPORT_RESULT_TEXTS_KEY in item:
+                report_result_texts = _safe_report_result_texts(item[_REPORT_RESULT_TEXTS_KEY])
+                if report_result_texts is None or event_positive_state != "positive":
+                    return None
+                safe_item[_REPORT_RESULT_TEXTS_KEY] = report_result_texts
             safe_event_results.append(safe_item)
         if (
             verification_kind == "exam_lab_event_review_incomplete"
@@ -844,7 +878,7 @@ def build_text_outcome_display_facts(
     event_source_document_refs: Sequence[Mapping[str, str]] = (),
     include_data_gap: bool = False,
 ) -> Mapping[str, Any] | None:
-    """输出报告事件、响应病程和24小时计算事实，不暴露正文。"""
+    """输出报告事件、响应病程和24小时计算事实；仅公开报告结果，不公开病程正文。"""
 
     if (
         rule_id not in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
@@ -926,6 +960,22 @@ def build_text_outcome_display_facts(
         )),
         "event_position": fact.event_position,
     }
+    if rule_id == "LX0609-06-01-05" and fact.positive_state == "positive":
+        report_result_texts: list[str] = []
+        total_chars = 0
+        for raw_text in event.report_result_texts:
+            text = _clean(raw_text)
+            if not text or text in report_result_texts:
+                continue
+            remaining = 2000 - total_chars
+            if remaining <= 0 or len(report_result_texts) >= 8:
+                break
+            text = text[: min(500, remaining)].strip()
+            if text:
+                report_result_texts.append(text)
+                total_chars += len(text)
+        if report_result_texts:
+            facts[_REPORT_RESULT_TEXTS_KEY] = report_result_texts
     if status != "data_gap":
         facts["applicable"] = status != "not_applicable"
     # 对报告后病程规则，向客户明确“查找范围”，而不是把内部 source key

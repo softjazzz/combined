@@ -23,6 +23,7 @@ from app.services.luxian_0609.exam_lab_fact_extraction import (
     build_exam_lab_text_projection,
 )
 from app.services.luxian_0609.exam_lab_result_mapping import (
+    build_text_outcome_display_facts,
     safe_exam_lab_customer_display_facts,
 )
 
@@ -159,6 +160,92 @@ def test_contract_still_rejects_unknown_extra_key() -> None:
     display["event_results"][0]["unexpected_key"] = "x"
 
     assert safe_exam_lab_customer_display_facts(rule_id="LX0609-06-01-05", raw=display) is None
+
+
+def test_positive_ct_event_carries_report_results_into_customer_facts() -> None:
+    """012 应告诉客户具体核对的是报告中的什么结果，不只给分析记录条数。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "腰椎MRI平扫",
+                    "report_time": "2026-04-01 12:00:00",
+                    "exam_conclusion": "L4/5 椎间盘突出，椎管狭窄。",
+                },
+            ),
+        }
+    )
+    fact = ExamLabEventFact(
+        rule_id="LX0609-06-01-05",
+        applicability="applicable",
+        semantic_state="absent",
+        positive_state="positive",
+        course_doc_refs=(),
+        evidence_refs=(),
+    )
+
+    display = build_text_outcome_display_facts(
+        rule_id="LX0609-06-01-05",
+        status="non_compliant",
+        fact=fact,
+        projection=projection,
+    )
+
+    assert display is not None
+    assert display["report_result_texts"] == ["L4/5 椎间盘突出，椎管狭窄。"]
+    safe = safe_exam_lab_customer_display_facts(
+        rule_id="LX0609-06-01-05", raw=display
+    )
+    assert safe is not None
+    assert safe["report_result_texts"] == ["L4/5 椎间盘突出，椎管狭窄。"]
+
+
+def test_customer_report_results_prefer_conclusion_over_description_and_recommendation() -> None:
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "胸部CT平扫",
+                    "report_time": "2026-04-01 12:00:00",
+                    "description": "影像所见较长描述。",
+                    "exam_conclusion": "右肺上叶结节。",
+                    "recommendation": "建议随诊复查。",
+                },
+            ),
+        }
+    )
+
+    assert projection.imaging_event is not None
+    assert projection.imaging_event.report_result_texts == ("右肺上叶结节。",)
+
+
+def test_report_results_are_rejected_for_negative_or_other_rule_facts() -> None:
+    base = {
+        "verification_kind": "exam_lab_requirement_checked",
+        "subject": "ct_mri",
+        "requirement": "positive_result_analysis_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "positive_state": "negative",
+        "threshold_hours": 24,
+        "response_record_count": 0,
+        "report_result_texts": ["不应公开为阳性结果。"],
+    }
+
+    assert safe_exam_lab_customer_display_facts(
+        rule_id="LX0609-06-01-05", raw=base
+    ) is None
+    assert safe_exam_lab_customer_display_facts(
+        rule_id="LX0609-06-01-04",
+        raw={
+            **base,
+            "requirement": "result_recording_within_24h",
+            "positive_state": "not_relevant",
+        },
+    ) is None
 
 
 def _top_level(facts: dict[str, Any]) -> dict[str, Any]:
