@@ -14,6 +14,7 @@ import {
   createFrontpageQcRun,
   exportFrontpageQcRecords,
   FrontpageQcRequestError,
+  getFrontpageQcFilters,
   isFrontpageQcRunActive,
   listFrontpageQcRecords,
   reviewFrontpageQcFinding,
@@ -28,6 +29,15 @@ function httpError(status: number, data: unknown) {
 describe('frontpage-qc-v2-service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('筛选项支持默认参数和数据范围查询，保留本院标识', async () => {
+    const data = { departments: ['内科'], date_bounds: {}, home_institute: 'H-HOME' }
+    getRaw.mockResolvedValue({ data: { success: true, data } })
+    expect(await getFrontpageQcFilters()).toEqual(data)
+    expect(getRaw).toHaveBeenLastCalledWith('/api/v1/frontpage-qc/filters', {})
+    expect(await getFrontpageQcFilters({ data_scope: 'all' })).toEqual(data)
+    expect(getRaw).toHaveBeenLastCalledWith('/api/v1/frontpage-qc/filters', { data_scope: 'all' })
   })
 
   it('列表查询去掉空参数并解出 data', async () => {

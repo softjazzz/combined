@@ -13,6 +13,34 @@
       </div>
       <div class="mq-page-head__actions">
         <nav
+          v-if="homeInstitute"
+          class="mq-segmented mq-segmented--sm"
+          aria-label="数据范围"
+        >
+          <button
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': applied.data_scope === 'home' }"
+            :aria-pressed="applied.data_scope === 'home'"
+            :disabled="scopeChanging"
+            data-testid="fpqc-scope-home"
+            @click="changeDataScope('home')"
+          >
+            本院病历
+          </button>
+          <button
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': applied.data_scope === 'all' }"
+            :aria-pressed="applied.data_scope === 'all'"
+            :disabled="scopeChanging"
+            data-testid="fpqc-scope-all"
+            @click="changeDataScope('all')"
+          >
+            含测试数据
+          </button>
+        </nav>
+        <nav
           class="mq-segmented"
           aria-label="首页质控视图"
         >
@@ -193,14 +221,14 @@
         <button
           type="submit"
           class="fpqc-toolbar__btn fpqc-toolbar__btn--primary"
-          :disabled="loading"
+          :disabled="loading || scopeChanging"
         >
           查询
         </button>
         <button
           type="button"
           class="fpqc-toolbar__btn"
-          :disabled="loading"
+          :disabled="loading || scopeChanging"
           @click="resetFilters"
         >
           重置
@@ -228,7 +256,7 @@
         <button
           type="button"
           class="fpqc-toolbar__btn"
-          :disabled="loading"
+          :disabled="loading || scopeChanging"
           @click="refreshAll"
         >
           刷新
@@ -281,7 +309,7 @@
             :current="page"
             :page-size="pageSize"
             :total="total"
-            :disabled="loading"
+            :disabled="loading || scopeChanging"
             :page-size-options="['15', '30', '50', '100']"
             :locale="{ items_per_page: '条/页', jump_to: '跳至', page: '页' }"
             show-size-changer
@@ -335,6 +363,10 @@
           </p>
         </div>
         <dl class="mq-soft fpqc-confirm__summary">
+          <div v-if="homeInstitute">
+            <dt>数据范围</dt>
+            <dd>{{ applied.data_scope === 'all' ? '含测试数据' : '本院病历' }}</dd>
+          </div>
           <div>
             <dt>科室</dt>
             <dd>{{ applied.department || '全部科室' }}</dd>
@@ -383,6 +415,7 @@ import {
   isFrontpageQcRunActive,
   listFrontpageQcRecords,
   type FrontpageQcAnalytics,
+  type FrontpageQcDataScope,
   type FrontpageQcGrade,
   type FrontpageQcIssueFilter,
   type FrontpageQcRecordItem,
@@ -405,6 +438,7 @@ interface FilterState extends Required<FrontpageQcScopeFilters> {
 }
 
 const emptyFilters = (): FilterState => ({
+  data_scope: 'home',
   keyword: '',
   department: '',
   start_date: '',
@@ -417,6 +451,8 @@ const activeView = ref<'records' | 'analysis'>('records')
 const draft = reactive<FilterState>(emptyFilters())
 const applied = reactive<FilterState>(emptyFilters())
 const departments = ref<string[]>([])
+const homeInstitute = ref('')
+const scopeChanging = ref(false)
 const rows = ref<FrontpageQcRecordItem[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -435,6 +471,7 @@ const confirmOpen = ref(false)
 /** 从结果分析下钻的规则筛选；与等级、问题筛选叠加，不影响“质控当前筛选”的范围 */
 const ruleFilter = ref<{ rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' } | null>(null)
 let listSeq = 0
+let summarySeq = 0
 
 const { run, starting, cancelling, error: runError, start, cancel, resume, dismiss } =
   useFrontpageQcRun(handleRunFinished)
@@ -442,6 +479,7 @@ const { run, starting, cancelling, error: runError, start, cancel, resume, dismi
 const runBusy = computed(() => starting.value || isFrontpageQcRunActive(run.value))
 const activeRow = computed(() => rows.value.find((row) => row.record_key === activeKey.value) ?? null)
 const scopeFilters = computed<FrontpageQcScopeFilters>(() => ({
+  data_scope: applied.data_scope,
   department: applied.department,
   start_date: applied.start_date,
   end_date: applied.end_date,
@@ -508,10 +546,43 @@ async function loadList(targetPage = page.value) {
 }
 
 async function loadSummary() {
+  const seq = ++summarySeq
   try {
-    summary.value = (await getFrontpageQcAnalytics(scopeFilters.value)).summary
+    const data = await getFrontpageQcAnalytics(scopeFilters.value)
+    if (seq === summarySeq) summary.value = data.summary
   } catch {
-    summary.value = null
+    if (seq === summarySeq) summary.value = null
+  }
+}
+
+async function loadFilterOptions() {
+  try {
+    const data = await getFrontpageQcFilters({ data_scope: applied.data_scope })
+    departments.value = data.departments
+    homeInstitute.value = data.home_institute
+    if (!departments.value.includes(draft.department)) draft.department = ''
+    if (!departments.value.includes(applied.department)) applied.department = ''
+  } catch {
+    departments.value = []
+    notice.value = '读取筛选项失败，请重试'
+  }
+}
+
+async function changeDataScope(scope: FrontpageQcDataScope) {
+  if (scopeChanging.value || scope === applied.data_scope) return
+  scopeChanging.value = true
+  draft.data_scope = scope
+  applied.data_scope = scope
+  clearSelection()
+  // 使旧范围的在途请求失效，避免切换期间回填旧结果。
+  listSeq += 1
+  summarySeq += 1
+  try {
+    await loadFilterOptions()
+    await Promise.all([loadList(1), loadSummary()])
+    analyticsRefreshKey.value += 1
+  } finally {
+    scopeChanging.value = false
   }
 }
 
@@ -578,9 +649,20 @@ function applyFilters() {
   analyticsRefreshKey.value += 1
 }
 
-function resetFilters() {
+async function resetFilters() {
+  if (scopeChanging.value) return
+  const scopeChanged = applied.data_scope !== 'home'
   Object.assign(draft, emptyFilters())
+  Object.assign(applied, draft)
   ruleFilter.value = null
+  clearSelection()
+  if (scopeChanged) {
+    scopeChanging.value = true
+    listSeq += 1
+    summarySeq += 1
+    await loadFilterOptions()
+    scopeChanging.value = false
+  }
   applyFilters()
 }
 
@@ -620,6 +702,7 @@ function runFiltered() {
   confirmOpen.value = false
   notice.value = ''
   void start({
+    data_scope: applied.data_scope,
     department: applied.department,
     start_date: applied.start_date,
     end_date: applied.end_date,
@@ -671,11 +754,7 @@ onMounted(async () => {
   void resume()
   void loadSummary()
   await loadList(1)
-  try {
-    departments.value = (await getFrontpageQcFilters()).departments
-  } catch {
-    departments.value = []
-  }
+  await loadFilterOptions()
 })
 </script>
 

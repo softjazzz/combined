@@ -4,6 +4,7 @@
  */
 import { ApiService } from '@/services/apiService'
 
+export type FrontpageQcDataScope = 'home' | 'all'
 export type FrontpageQcGrade = 'excellent' | 'qualified' | 'unqualified'
 export type FrontpageQcIssueFilter = '' | 'fail' | 'hint' | 'data_gap' | 'clean' | 'unchecked'
 export type FrontpageQcRunStatus =
@@ -164,6 +165,7 @@ export interface FrontpageQcAnalytics {
 }
 
 export interface FrontpageQcScopeFilters {
+  data_scope?: FrontpageQcDataScope
   department?: string
   start_date?: string
   end_date?: string
@@ -253,8 +255,10 @@ async function post<T>(url: string, body: unknown, fallback: string): Promise<T>
   }
 }
 
-export function getFrontpageQcFilters() {
-  return get<{ departments: string[] }>(`${BASE}/filters`, {}, '读取筛选项失败')
+export function getFrontpageQcFilters(params: { data_scope?: FrontpageQcDataScope } = {}) {
+  return get<{ departments: string[]; date_bounds: Record<string, unknown>; home_institute: string }>(
+    `${BASE}/filters`, { ...params }, '读取筛选项失败',
+  )
 }
 
 export function listFrontpageQcRecords(query: FrontpageQcListQuery) {

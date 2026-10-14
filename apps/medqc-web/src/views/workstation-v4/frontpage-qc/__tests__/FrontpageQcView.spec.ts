@@ -14,6 +14,7 @@ const svc = {
   getFilters: vi.fn(),
   getAnalytics: vi.fn(),
   createRun: vi.fn(),
+  exportRecords: vi.fn(),
   listActive: vi.fn(),
   review: vi.fn(),
 }
@@ -26,6 +27,7 @@ vi.mock('@/services/frontpage-qc-v2-service', async (importOriginal) => {
     getFrontpageQcFilters: (...a: unknown[]) => svc.getFilters(...a),
     getFrontpageQcAnalytics: (...a: unknown[]) => svc.getAnalytics(...a),
     createFrontpageQcRun: (...a: unknown[]) => svc.createRun(...a),
+    exportFrontpageQcRecords: (...a: unknown[]) => svc.exportRecords(...a),
     listActiveFrontpageQcRuns: (...a: unknown[]) => svc.listActive(...a),
     reviewFrontpageQcFinding: (...a: unknown[]) => svc.review(...a),
   }
@@ -40,6 +42,8 @@ vi.mock('ant-design-vue', () => ({
   Pagination: { name: 'Pagination', template: '<nav />' },
   message: { error: vi.fn(), success: vi.fn() },
 }))
+
+vi.mock('../../customer-sample-validation/batchExport', () => ({ downloadBlob: vi.fn() }))
 
 import FrontpageQcView from '../FrontpageQcView.vue'
 
@@ -122,7 +126,8 @@ describe('FrontpageQcView', () => {
     svc.getRecord.mockImplementation(async (ref: { visit_id: string }) =>
       detailFor(rows.find((row) => row.visit_id === ref.visit_id)!),
     )
-    svc.getFilters.mockResolvedValue({ departments: ['内科'] })
+    svc.getFilters.mockResolvedValue({ departments: ['内科'], home_institute: '' })
+    svc.exportRecords.mockResolvedValue(new Blob())
     svc.getAnalytics.mockResolvedValue({
       summary: { records: 1, avg_score: 88, grades: { excellent: 0, qualified: 1, unqualified: 0 }, issue_records: 1, hint_records: 0, data_gap_records: 0 },
       indicators: [],
@@ -132,6 +137,88 @@ describe('FrontpageQcView', () => {
       departments: [],
     })
     svc.listActive.mockResolvedValue({ items: [] })
+  })
+
+  it('无法识别本院时隐藏范围切换，仍按本院默认范围加载', async () => {
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+    expect(wrapper.find('[aria-label="数据范围"]').exists()).toBe(false)
+    expect(svc.listRecords).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'home' }))
+    expect(wrapper.findAll('[data-testid="fpqc-record-row"]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('识别本院时显示范围切换，首次列表和指标使用本院范围', async () => {
+    svc.getFilters.mockResolvedValue({ departments: ['内科'], home_institute: 'H-HOME' })
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="fpqc-scope-home"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="fpqc-scope-all"]').attributes('aria-pressed')).toBe('false')
+    expect(svc.getFilters).toHaveBeenCalledWith({ data_scope: 'home' })
+    expect(svc.listRecords.mock.calls[0][0]).toMatchObject({ data_scope: 'home', page: 1 })
+    expect(svc.getAnalytics).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'home' }))
+    wrapper.unmount()
+  })
+
+  it('切换范围立即刷新科室、清空失效科室和勾选，并回到第一页', async () => {
+    svc.getFilters.mockResolvedValueOnce({ departments: ['内科'], home_institute: 'H-HOME' })
+      .mockResolvedValue({ departments: ['外科'], home_institute: 'H-HOME' })
+    svc.listRecords.mockImplementation(async (query: { page: number }) => ({
+      items: rows, total: 30, page: query.page, page_size: 15,
+    }))
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+    await wrapper.get('[aria-label="科室筛选"]').setValue('内科')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    wrapper.findComponent({ name: 'Pagination' }).vm.$emit('change', 2, 15)
+    await flushPromises()
+    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    await wrapper.findAll('[data-testid="fpqc-record-row"] input[type="checkbox"]')[0].setValue(true)
+    await wrapper.get('[data-testid="fpqc-scope-all"]').trigger('click')
+    await flushPromises()
+    expect(svc.getFilters).toHaveBeenLastCalledWith({ data_scope: 'all' })
+    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ data_scope: 'all', department: '', page: 1 }))
+    expect(wrapper.get('[aria-label="科室筛选"]').element).toHaveProperty('value', '')
+    expect(wrapper.get('[aria-label="科室筛选"]').text()).toContain('外科')
+    expect(wrapper.get('[data-testid="fpqc-run-selected"]').attributes('disabled')).toBeDefined()
+    expect(svc.getAnalytics).toHaveBeenLastCalledWith(expect.objectContaining({ data_scope: 'all', department: '' }))
+    await wrapper.findAll('button').find((b) => b.text() === '重置')!.trigger('click')
+    await flushPromises()
+    expect(svc.getFilters).toHaveBeenLastCalledWith({ data_scope: 'home' })
+    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ data_scope: 'home', page: 1 }))
+    expect(wrapper.get('[data-testid="fpqc-scope-home"]').attributes('aria-pressed')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('含测试数据范围用于分析、导出和按筛选质控，并显示确认摘要与任务标题', async () => {
+    svc.getFilters.mockResolvedValue({ departments: ['内科'], home_institute: 'H-HOME' })
+    svc.createRun.mockResolvedValue({
+      id: 'run-all', status: 'completed', filters: { data_scope: 'all' },
+      total_records: 2, processed_records: 2, success_count: 2, failed_count: 0,
+      issue_records: 0, failed_records: [],
+    })
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+    await wrapper.get('[data-testid="fpqc-view-analysis"]').trigger('click')
+    await flushPromises()
+    svc.getAnalytics.mockClear()
+    await wrapper.get('[data-testid="fpqc-scope-all"]').trigger('click')
+    await flushPromises()
+    // 顶部指标和已打开的分析面板都重新统计。
+    expect(svc.getAnalytics.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(svc.getAnalytics.mock.calls.every(([filters]) => filters.data_scope === 'all')).toBe(true)
+    await wrapper.get('[data-testid="fpqc-export-filtered"]').trigger('click')
+    await flushPromises()
+    expect(svc.exportRecords).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'all' }))
+    await wrapper.get('[data-testid="fpqc-run-filtered"]').trigger('click')
+    expect(wrapper.get('dl.fpqc-confirm__summary').text()).toContain('数据范围')
+    expect(wrapper.get('dl.fpqc-confirm__summary').text()).toContain('含测试数据')
+    await wrapper.get('[data-testid="fpqc-confirm-ok"]').trigger('click')
+    await flushPromises()
+    expect(svc.createRun).toHaveBeenCalledWith({ data_scope: 'all', department: '', start_date: '', end_date: '', keyword: '' })
+    expect(wrapper.get('[data-testid="fpqc-run-bar"]').text()).toContain('含测试数据')
+    wrapper.unmount()
   })
 
   it('加载列表并预览第一份的问题', async () => {
@@ -196,7 +283,7 @@ describe('FrontpageQcView', () => {
     await wrapper.get('[data-testid="fpqc-confirm-ok"]').trigger('click')
     await flushPromises()
 
-    expect(svc.createRun).toHaveBeenCalledWith({ department: '', start_date: '', end_date: '', keyword: '' })
+    expect(svc.createRun).toHaveBeenCalledWith({ data_scope: 'home', department: '', start_date: '', end_date: '', keyword: '' })
     expect(wrapper.find('[data-testid="fpqc-confirm"]').exists()).toBe(false)
     wrapper.unmount()
   })

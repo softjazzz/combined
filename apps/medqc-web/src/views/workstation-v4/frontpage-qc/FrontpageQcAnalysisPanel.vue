@@ -246,7 +246,7 @@ async function load() {
 }
 
 watch(
-  () => [props.filters.department, props.filters.start_date, props.filters.end_date, props.refreshKey],
+  () => [props.filters.data_scope, props.filters.department, props.filters.start_date, props.filters.end_date, props.refreshKey],
   () => {
     void load()
   },

@@ -92,6 +92,7 @@ const title = computed(() => {
   const filters = props.run?.filters ?? {}
   if (filters.mode === 'selected') return `首页质控 · 所选 ${props.run?.total_records ?? 0} 份`
   const parts = [String(filters.department || '') || '全部科室']
+  if (filters.data_scope === 'all') parts.push('含测试数据')
   if (filters.start_date || filters.end_date) {
     parts.push(`出院 ${filters.start_date || '不限'} 至 ${filters.end_date || '不限'}`)
   }
