@@ -4,239 +4,313 @@
     data-testid="consultation-recommendation-summary"
   >
     <header class="consultation-summary-header">
-      <div>
+      <div class="consultation-summary-heading">
         <h4>逐条建议核对</h4>
-        <p>建议原文、执行证据状态和未纳入原因分别展示</p>
+        <p>展示建议原文及对应的执行证据核对结果</p>
       </div>
-      <div
+      <p
         class="consultation-summary-counts"
         aria-label="会诊建议核对统计"
       >
-        <span>纳入核对 {{ presentation.comparedCount }}</span>
-        <span
-          v-if="presentation.excludedCount"
-          class="is-muted"
-        >
-          未纳入 {{ presentation.excludedCount }}
+        <strong>{{ presentation.comparedCount }}</strong> 条纳入核对
+        <span v-if="presentation.excludedCount">
+          · {{ presentation.excludedCount }} 条不纳入
         </span>
-      </div>
+      </p>
     </header>
 
-    <div class="consultation-recommendation-list">
-      <article
-        v-for="row in presentation.rows"
+    <section
+      v-if="comparedRows.length"
+      class="consultation-compared"
+      aria-labelledby="consultation-compared-title"
+    >
+      <h5 id="consultation-compared-title">
+        纳入缺陷核对
+      </h5>
+      <ol class="consultation-recommendation-list">
+        <li
+          v-for="(row, index) in comparedRows"
+          :key="row.key"
+          class="consultation-recommendation-row"
+          data-testid="consultation-recommendation-row"
+        >
+          <span
+            class="consultation-recommendation-index"
+            aria-hidden="true"
+          >
+            {{ index + 1 }}
+          </span>
+          <div class="consultation-recommendation-content">
+            <div class="consultation-recommendation-head">
+              <span class="consultation-recommendation-position">
+                第{{ row.episodeIndex }}次会诊<span v-if="row.recommendationIndex">
+                  · 第{{ row.recommendationIndex }}条建议</span>
+              </span>
+              <span
+                class="mq-status consultation-recommendation-status"
+                :class="{
+                  'mq-status--success': row.state === 'specific',
+                  'mq-status--warning':
+                    row.state === 'generic' || row.state === 'unknown',
+                  'mq-status--danger': row.state === 'missing',
+                }"
+              >
+                {{ row.statusLabel }}
+              </span>
+            </div>
+            <p class="consultation-recommendation-text">
+              {{ row.text }}
+            </p>
+            <p class="consultation-recommendation-detail">
+              {{ row.detail }}
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section
+      v-if="excludedRows.length"
+      class="consultation-excluded mq-soft"
+      aria-labelledby="consultation-excluded-title"
+    >
+      <div class="consultation-excluded-heading">
+        <h5 id="consultation-excluded-title">
+          不作为缺陷依据
+        </h5>
+        <span>{{ excludedRows.length }} 条</span>
+      </div>
+      <p class="consultation-excluded-intro">
+        条件是否成立无法从现有记录确认，因此不参与执行证据对比。
+      </p>
+      <div
+        v-for="row in excludedRows"
         :key="row.key"
-        class="consultation-recommendation-row"
-        :class="`is-${row.state}`"
+        class="consultation-excluded-row"
         data-testid="consultation-recommendation-row"
       >
-        <div class="consultation-recommendation-head">
-          <span class="consultation-recommendation-position">
-            第{{ row.episodeIndex }}次会诊<span v-if="row.recommendationIndex">
-              · 第{{ row.recommendationIndex }}条建议</span>
-          </span>
-          <span
-            class="consultation-recommendation-status"
-            :class="`is-${row.state}`"
-          >
-            {{ row.statusLabel }}
-          </span>
-        </div>
+        <span class="consultation-recommendation-position">
+          第{{ row.episodeIndex }}次会诊<span v-if="row.recommendationIndex">
+            · 第{{ row.recommendationIndex }}条建议</span>
+        </span>
         <p class="consultation-recommendation-text">
           {{ row.text }}
         </p>
         <p class="consultation-recommendation-detail">
           {{ row.detail }}
         </p>
-      </article>
-    </div>
+      </div>
+    </section>
 
     <footer class="consultation-checked-sources">
-      <strong>已核对范围</strong>
+      <strong>本次已核对</strong>
       <span>{{ presentation.checkedSources.join('、') }}</span>
     </footer>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import type { ConsultationRecommendationPresentation } from './single-record-result-model'
 
-defineProps<{
+const props = defineProps<{
   presentation: ConsultationRecommendationPresentation
 }>()
+
+const comparedRows = computed(() =>
+  props.presentation.rows.filter((row) => row.state !== 'excluded'),
+)
+const excludedRows = computed(() =>
+  props.presentation.rows.filter((row) => row.state === 'excluded'),
+)
 </script>
 
 <style scoped>
 .consultation-summary {
-  margin: 0 14px 12px;
-  overflow: hidden;
-  border: 1px solid rgba(76, 94, 118, 0.14);
-  border-radius: 10px;
-  background: #f8fafc;
+  margin: 0 var(--mq-space-4) var(--mq-space-4);
+  padding: var(--mq-space-4) var(--mq-space-5) var(--mq-space-3);
+  border-top: 1px solid var(--mq-border);
 }
 
 .consultation-summary-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(18, 38, 63, 0.07);
-  background: rgba(255, 255, 255, 0.92);
+  gap: var(--mq-space-4);
+  margin-bottom: var(--mq-space-4);
 }
 
-.consultation-summary-header h4,
-.consultation-summary-header p,
+.consultation-summary-heading h4,
+.consultation-summary-heading p,
+.consultation-summary-counts,
+.consultation-compared h5,
+.consultation-excluded h5,
+.consultation-excluded p,
 .consultation-recommendation-row p {
   margin: 0;
 }
 
-.consultation-summary-header h4 {
-  color: #344256;
-  font-size: 13px;
+.consultation-summary-heading h4 {
+  color: var(--mq-text-primary);
+  font-size: 14px;
   font-weight: 600;
-  line-height: 19px;
+  line-height: 20px;
 }
 
-.consultation-summary-header p {
+.consultation-summary-heading p {
   margin-top: 2px;
-  color: rgba(20, 42, 68, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
 
 .consultation-summary-counts {
-  display: flex;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 5px;
-}
-
-.consultation-summary-counts span {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.08);
-  color: #315b9a;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 20px;
   white-space: nowrap;
 }
 
-.consultation-summary-counts span.is-muted {
-  background: rgba(71, 85, 105, 0.08);
-  color: #64748b;
+.consultation-summary-counts strong {
+  color: var(--mq-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.consultation-compared h5,
+.consultation-excluded h5 {
+  color: var(--mq-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
 }
 
 .consultation-recommendation-list {
-  display: grid;
+  margin: var(--mq-space-2) 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .consultation-recommendation-row {
   display: grid;
-  gap: 4px;
-  padding: 11px 12px 11px 15px;
-  border-top: 1px solid rgba(18, 38, 63, 0.06);
-  border-left: 3px solid #cbd5e1;
-  background: rgba(255, 255, 255, 0.72);
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--mq-space-3);
+  padding: var(--mq-space-3) 0;
+  border-bottom: 1px solid var(--mq-border);
 }
 
-.consultation-recommendation-row:first-child {
-  border-top: 0;
+.consultation-recommendation-row:last-child {
+  border-bottom: 0;
 }
 
-.consultation-recommendation-row.is-specific {
-  border-left-color: #22a06b;
+.consultation-recommendation-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--mq-bg-muted);
+  color: var(--mq-text-secondary);
+  font-family: var(--mq-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.consultation-recommendation-row.is-generic,
-.consultation-recommendation-row.is-unknown {
-  border-left-color: #d99b24;
-}
-
-.consultation-recommendation-row.is-missing {
-  border-left-color: #d64545;
-}
-
-.consultation-recommendation-row.is-excluded {
-  border-left-color: #94a3b8;
-  background: rgba(241, 245, 249, 0.8);
+.consultation-recommendation-content {
+  min-width: 0;
 }
 
 .consultation-recommendation-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--mq-space-3);
 }
 
 .consultation-recommendation-position {
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
 
 .consultation-recommendation-status {
   flex-shrink: 0;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(71, 85, 105, 0.08);
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.consultation-recommendation-status.is-specific {
-  background: rgba(16, 185, 129, 0.1);
-  color: #087443;
-}
-
-.consultation-recommendation-status.is-generic,
-.consultation-recommendation-status.is-unknown {
-  background: rgba(245, 158, 11, 0.11);
-  color: #946000;
-}
-
-.consultation-recommendation-status.is-missing {
-  background: rgba(239, 68, 68, 0.09);
-  color: #c62828;
 }
 
 .consultation-recommendation-text {
-  color: #253246;
+  margin-top: var(--mq-space-1) !important;
+  color: var(--mq-text-primary);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 20px;
 }
 
 .consultation-recommendation-detail {
-  color: rgba(29, 29, 31, 0.6);
+  margin-top: var(--mq-space-1) !important;
+  color: var(--mq-text-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.consultation-excluded {
+  margin-top: var(--mq-space-3);
+  padding: var(--mq-space-3) var(--mq-space-4);
+}
+
+.consultation-excluded-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mq-space-3);
+}
+
+.consultation-excluded-heading span,
+.consultation-excluded-intro {
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.consultation-excluded-intro {
+  margin-top: 2px !important;
+}
+
+.consultation-excluded-row {
+  margin-top: var(--mq-space-3);
+  padding-top: var(--mq-space-3);
+  border-top: 1px solid var(--mq-border);
 }
 
 .consultation-checked-sources {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  padding: 9px 12px;
-  border-top: 1px solid rgba(18, 38, 63, 0.07);
-  background: rgba(241, 245, 249, 0.72);
+  gap: var(--mq-space-2);
+  margin-top: var(--mq-space-4);
+  padding-top: var(--mq-space-3);
+  border-top: 1px solid var(--mq-border);
   font-size: 12px;
   line-height: 18px;
 }
 
 .consultation-checked-sources strong {
-  color: #475569;
+  color: var(--mq-text-secondary);
   font-weight: 600;
 }
 
 .consultation-checked-sources span {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 @container (max-width: 560px) {
+  .consultation-summary {
+    padding-inline: var(--mq-space-3);
+  }
+
   .consultation-summary-header,
   .consultation-recommendation-head {
     align-items: flex-start;
@@ -244,7 +318,7 @@ defineProps<{
   }
 
   .consultation-summary-counts {
-    justify-content: flex-start;
+    white-space: normal;
   }
 
   .consultation-checked-sources {
