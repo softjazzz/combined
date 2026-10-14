@@ -24,18 +24,25 @@
     </p>
 
     <template v-else-if="data">
-      <div class="fpqc-analysis__indicators">
-        <article
+      <section
+        class="mq-card fpqc-analysis__indicators"
+        aria-label="首页质控指标"
+      >
+        <div
           v-for="item in data.indicators"
           :key="item.key"
-          class="mq-card fpqc-analysis__indicator"
+          class="fpqc-analysis__indicator"
           data-testid="fpqc-indicator"
         >
-          <span>{{ item.label }}</span>
+          <span class="fpqc-analysis__indicator-label">{{ item.label }}</span>
           <strong>{{ formatPercent(item.rate) }}</strong>
+          <span
+            class="fpqc-analysis__indicator-bar"
+            aria-hidden="true"
+          ><span :style="{ width: `${Math.round((item.rate ?? 0) * 100)}%` }" /></span>
           <small>{{ item.numerator }} / {{ item.denominator }} 份</small>
-        </article>
-      </div>
+        </div>
+      </section>
 
       <div class="fpqc-analysis__grid">
         <article class="mq-card mq-card--padded fpqc-analysis__card">
@@ -207,132 +214,4 @@ watch(
 )
 </script>
 
-<style scoped>
-.fpqc-analysis {
-  display: grid;
-  gap: 16px;
-}
-
-.fpqc-analysis__placeholder {
-  margin: 48px 0;
-  color: var(--mq-text-tertiary);
-  text-align: center;
-}
-
-.fpqc-analysis__placeholder--danger {
-  color: var(--mq-danger-text);
-}
-
-.fpqc-analysis__indicators {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.fpqc-analysis__indicator {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px 20px;
-}
-
-.fpqc-analysis__indicator span {
-  color: var(--mq-text-secondary);
-  font-size: var(--mq-font-13);
-}
-
-.fpqc-analysis__indicator strong {
-  font-family: var(--mq-font-display);
-  font-size: 26px;
-  line-height: 1.1;
-}
-
-.fpqc-analysis__indicator small {
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-}
-
-.fpqc-analysis__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
-  gap: 16px;
-}
-
-.fpqc-analysis__card {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  min-width: 0;
-}
-
-.fpqc-analysis__rank {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.fpqc-analysis__rank li {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--mq-font-13);
-}
-
-.fpqc-analysis__rank-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fpqc-analysis__rank strong {
-  white-space: nowrap;
-}
-
-.fpqc-analysis__bar {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--mq-bg-muted);
-}
-
-.fpqc-analysis__bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--mq-danger-icon);
-}
-
-.fpqc-analysis__bar--hint span {
-  background: var(--mq-info-icon);
-}
-
-.fpqc-analysis__bar--gap span {
-  background: var(--mq-warning-icon);
-}
-
-.fpqc-analysis__table-wrap {
-  max-height: 360px;
-  overflow: auto;
-}
-
-.fpqc-analysis__table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--mq-bg-surface);
-}
-
-.fpqc-analysis__table td,
-.fpqc-analysis__table th {
-  white-space: nowrap;
-}
-
-.fpqc-analysis__none {
-  margin: 0;
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-13);
-}
-</style>
+<style scoped src="../styles/frontpage-qc-analysis.css"></style>

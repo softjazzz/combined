@@ -1,0 +1,165 @@
+/* 首页质控（新）· 结果分析（v7.1 概览型分析双栏） */
+.fpqc-analysis {
+  display: grid;
+  gap: 16px;
+}
+
+.fpqc-analysis__placeholder {
+  margin: 48px 0;
+  color: var(--mq-text-tertiary);
+  text-align: center;
+}
+
+.fpqc-analysis__placeholder--danger {
+  color: var(--mq-danger-text);
+}
+
+/* 指标：一张玻璃卡四格，数值 + 比例条（v7.1 指标卡） */
+.fpqc-analysis__indicators {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.fpqc-analysis__indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px 22px;
+}
+
+.fpqc-analysis__indicator + .fpqc-analysis__indicator {
+  border-left: 0.5px solid var(--mq-border);
+}
+
+.fpqc-analysis__indicator-label {
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.fpqc-analysis__indicator strong {
+  font-family: var(--mq-font-display);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fpqc-analysis__indicator-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mq-bg-muted);
+}
+
+.fpqc-analysis__indicator-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mq-brand-gradient);
+}
+
+.fpqc-analysis__indicator small {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.fpqc-analysis__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+}
+
+.fpqc-analysis__card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.fpqc-analysis__rank {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fpqc-analysis__rank li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--mq-font-13);
+}
+
+.fpqc-analysis__rank-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fpqc-analysis__rank strong {
+  white-space: nowrap;
+}
+
+.fpqc-analysis__bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mq-bg-muted);
+}
+
+.fpqc-analysis__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mq-danger-icon);
+}
+
+.fpqc-analysis__bar--hint span {
+  background: var(--mq-info-icon);
+}
+
+.fpqc-analysis__bar--gap span {
+  background: var(--mq-warning-icon);
+}
+
+.fpqc-analysis__table-wrap {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.fpqc-analysis__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mq-bg-surface);
+}
+
+.fpqc-analysis__table td,
+.fpqc-analysis__table th {
+  white-space: nowrap;
+}
+
+.fpqc-analysis__none {
+  margin: 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+@media (max-width: 1280px) {
+  .fpqc-analysis__indicators {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fpqc-analysis__indicator:nth-child(3) {
+    border-left: 0;
+  }
+
+  .fpqc-analysis__indicator:nth-child(n + 3) {
+    border-top: 0.5px solid var(--mq-border);
+  }
+}

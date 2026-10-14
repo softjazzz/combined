@@ -31,7 +31,12 @@ vi.mock('@/services/frontpage-qc-v2-service', async (importOriginal) => {
   }
 })
 vi.mock('ant-design-vue', () => ({
-  Modal: { confirm: vi.fn() },
+  Modal: {
+    name: 'Modal',
+    props: ['open'],
+    emits: ['cancel'],
+    template: '<div v-if="open" class="modal-stub"><slot /></div>',
+  },
   Pagination: { name: 'Pagination', template: '<nav />' },
   message: { error: vi.fn(), success: vi.fn() },
 }))
@@ -166,6 +171,34 @@ describe('FrontpageQcView', () => {
       record_refs: [{ institute_id: 'H-TEST', patient_id: 'P-C02', visit_id: 'C02' }],
     })
     expect(wrapper.text()).toContain('首页质控完成：1 份已出结果')
+  })
+
+  it('质控当前筛选先在页面内确认，确认后按当前科室与日期范围提交', async () => {
+    svc.createRun.mockResolvedValue({
+      id: 'run-2',
+      status: 'running',
+      filters: { department: '' },
+      total_records: 2,
+      processed_records: 0,
+      success_count: 0,
+      failed_count: 0,
+      issue_records: 0,
+      failed_records: [],
+    })
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="fpqc-confirm"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="fpqc-run-filtered"]').trigger('click')
+    expect(wrapper.get('[data-testid="fpqc-confirm"]').text()).toContain('全部科室')
+    expect(svc.createRun).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="fpqc-confirm-ok"]').trigger('click')
+    await flushPromises()
+
+    expect(svc.createRun).toHaveBeenCalledWith({ department: '', start_date: '', end_date: '', keyword: '' })
+    expect(wrapper.find('[data-testid="fpqc-confirm"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('标记误报必须填写原因', async () => {
