@@ -529,6 +529,7 @@ class RecordRepository:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
+        institute_id: Optional[str] = None,
     ):
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
@@ -590,6 +591,9 @@ class RecordRepository:
             MedicalRecordFrontpage.visit_id.is_not(None),
             MedicalRecordFrontpage.visit_id != "",
         )
+        # 可选：只取指定机构的病历（如首页质控默认只看本院、排除测试数据）；不传时行为不变
+        if _safe_text(institute_id):
+            query = query.filter(MedicalRecordFrontpage.institute_id == _safe_text(institute_id))
 
         if scope_value == "final":
             query = query.filter(discharge_dt_expr.is_not(None))
@@ -715,6 +719,7 @@ class RecordRepository:
         keyword: Optional[str],
         page: int,
         page_size: int,
+        institute_id: Optional[str] = None,
     ) -> WorkspaceListResult:
         session = self._session_factory()
         try:
@@ -727,6 +732,7 @@ class RecordRepository:
                 start_date=start_date,
                 end_date=end_date,
                 keyword=keyword,
+                institute_id=institute_id,
             )
             total = int(query.count())
             rows = (
@@ -748,6 +754,7 @@ class RecordRepository:
         *,
         scope: str,
         department: Optional[str],
+        institute_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         session = self._session_factory()
         try:
@@ -764,6 +771,7 @@ class RecordRepository:
                 start_date=None,
                 end_date=None,
                 keyword=None,
+                institute_id=institute_id,
             )
             dept_query = base_query.with_entities(dept_expr.label("department")).filter(
                 dept_expr.is_not(None), dept_expr != ""
@@ -821,6 +829,7 @@ class RecordRepository:
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
+        institute_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         session = self._session_factory()
         try:
@@ -836,6 +845,7 @@ class RecordRepository:
                 record_ids=record_ids,
                 record_refs=record_refs,
                 sync_scope=sync_scope,
+                institute_id=institute_id,
             )
             rows = query.order_by(
                 desc(MedicalRecordFrontpage.discharge_datetime),

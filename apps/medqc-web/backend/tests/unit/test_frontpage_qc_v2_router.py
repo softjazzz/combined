@@ -51,8 +51,10 @@ class FakeRepository:
             for index, ref in enumerate(refs)
         ]
 
-    def _filter(self, department=None, start_date=None, end_date=None, keyword=None, record_refs=None):
+    def _filter(self, department=None, start_date=None, end_date=None, keyword=None, record_refs=None, institute_id=None):
         items = self.records
+        if institute_id:
+            items = [r for r in items if r["institute_id"] == institute_id]
         if record_refs:
             wanted = {tuple(ref) for ref in normalize_case_refs(record_refs)}
             items = [r for r in items if (r["institute_id"], r["patient_id"], r["visit_id"]) in wanted]
@@ -66,28 +68,38 @@ class FakeRepository:
             items = [r for r in items if keyword in r["patient_id"]]
         return list(items)
 
-    def collect_records(self, *, scope, department, doctor, date_field, start_date, end_date, keyword, record_refs=None, **_):
+    def collect_records(
+        self, *, scope, department, doctor, date_field, start_date, end_date, keyword, record_refs=None, institute_id=None, **_
+    ):
         assert scope == "final"
-        return self._filter(department, start_date, end_date, keyword, record_refs)
+        return self._filter(department, start_date, end_date, keyword, record_refs, institute_id)
 
-    def list_records(self, *, scope, department, doctor, date_field, start_date, end_date, keyword, page, page_size):
-        items = self._filter(department, start_date, end_date, keyword)
+    def list_records(
+        self, *, scope, department, doctor, date_field, start_date, end_date, keyword, page, page_size, institute_id=None
+    ):
+        items = self._filter(department, start_date, end_date, keyword, institute_id=institute_id)
         return _Listing(items[(page - 1) * page_size: page * page_size], len(items), page, page_size)
 
-    def get_record_filters(self, *, scope, department):
-        return {"departments": ["内科", "外科"], "date_bounds": {}}
+    def get_record_filters(self, *, scope, department, institute_id=None):
+        return {"departments": sorted({r["department"] for r in self._filter(institute_id=institute_id)}), "date_bounds": {}}
 
 
-@pytest.fixture()
-def env(tmp_path, monkeypatch):
+TEST_REF = FrontpageRef("SYN-TEST", "C90", "C90-V1")
+
+
+def _build_env(tmp_path, monkeypatch, *, home_institute="", extra_refs=()):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'api.sqlite'}")
     factory = sessionmaker(bind=engine)
     refs = [_ref(n) for n in range(1, 5)]
     with factory() as session:
-        seed_cdm_frontpages(session, refs, broken={_ref(2)})
+        seed_cdm_frontpages(session, refs + list(extra_refs), broken={_ref(2)})
     store = FrontpageQcStore(factory)
     store.create_all(engine)
-    repository = FakeRepository(refs)
+    repository = FakeRepository(refs + list(extra_refs))
+    if extra_refs:
+        # 测试机构的病历放到单独科室，便于断言科室下拉
+        for record in repository.records[len(refs):]:
+            record["department"] = "测试科室"
 
     monkeypatch.setattr(api, "_cdm_session_factory", lambda: factory)
     monkeypatch.setattr(api, "submit_detached_task", lambda _name, func, *args, **kwargs: func(*args, **kwargs))
@@ -97,6 +109,23 @@ def env(tmp_path, monkeypatch):
     app.dependency_overrides[api.require_frontpage_qc_user] = lambda: USER
     app.dependency_overrides[api.get_frontpage_qc_store] = lambda: store
     app.dependency_overrides[api.get_record_repository] = lambda: repository
+    app.dependency_overrides[api.get_home_institute] = lambda: home_institute
+    return app, engine, store, refs
+
+
+@pytest.fixture()
+def env(tmp_path, monkeypatch):
+    """不区分本院与测试数据（未配置本院机构），既有用例的计数口径。"""
+    app, engine, store, refs = _build_env(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        yield client, store, refs
+    engine.dispose()
+
+
+@pytest.fixture()
+def env_mixed(tmp_path, monkeypatch):
+    """4 份本院（INST-SYN）+ 1 份测试机构病历，本院机构已配置。"""
+    app, engine, store, refs = _build_env(tmp_path, monkeypatch, home_institute="INST-SYN", extra_refs=[TEST_REF])
     with TestClient(app) as client:
         yield client, store, refs
     engine.dispose()
@@ -249,6 +278,53 @@ def test_rule_drilldown_rejects_unknown_rule_and_unchecked(env):
     assert client.post("/api/v1/frontpage-qc/records/export", json={"rule_id": "X-99"}).status_code == 422
 
 
+def test_home_scope_hides_test_institute_by_default(env_mixed):
+    client, _store, _refs = env_mixed
+    filters = client.get("/api/v1/frontpage-qc/filters").json()["data"]
+    assert filters["home_institute"] == "INST-SYN"
+    assert "测试科室" not in filters["departments"]
+    all_filters = client.get("/api/v1/frontpage-qc/filters", params={"data_scope": "all"}).json()["data"]
+    assert "测试科室" in all_filters["departments"]
+
+    assert client.get("/api/v1/frontpage-qc/records").json()["data"]["total"] == 4
+    assert client.get("/api/v1/frontpage-qc/records", params={"data_scope": "all"}).json()["data"]["total"] == 5
+
+    run = client.post("/api/v1/frontpage-qc/runs", json={}).json()["data"]
+    assert run["total_records"] == 4
+    assert run["filters"]["data_scope"] == "home"
+
+    report = client.get("/api/v1/frontpage-qc/analytics").json()["data"]
+    assert report["summary"]["records"] == 4
+
+
+def test_all_scope_includes_test_institute_in_runs_results_and_export(env_mixed):
+    client, _store, _refs = env_mixed
+    run = client.post("/api/v1/frontpage-qc/runs", json={"data_scope": "all"}).json()["data"]
+    assert run["total_records"] == 5
+
+    assert client.get("/api/v1/frontpage-qc/records", params={"issue": "fail"}).json()["data"]["total"] == 1
+    home = client.get("/api/v1/frontpage-qc/analytics").json()["data"]["summary"]["records"]
+    everything = client.get("/api/v1/frontpage-qc/analytics", params={"data_scope": "all"}).json()["data"]
+    assert (home, everything["summary"]["records"]) == (4, 5)
+
+    assert client.post("/api/v1/frontpage-qc/records/export", json={}).headers["x-export-total"] == "4"
+    assert client.post("/api/v1/frontpage-qc/records/export", json={"data_scope": "all"}).headers["x-export-total"] == "5"
+
+
+def test_selected_test_record_is_not_filtered_out(env_mixed):
+    client, _store, _refs = env_mixed
+    run = client.post("/api/v1/frontpage-qc/runs", json={"record_refs": [_ref_payload(TEST_REF)]}).json()["data"]
+    assert run["total_records"] == 1
+    finished = client.get(f"/api/v1/frontpage-qc/runs/{run['id']}").json()["data"]
+    assert finished["success_count"] == 1
+
+
+def test_unconfigured_home_institute_does_not_filter(env):
+    client, _store, _refs = env
+    assert client.get("/api/v1/frontpage-qc/filters").json()["data"]["home_institute"] == ""
+    assert client.get("/api/v1/frontpage-qc/records").json()["data"]["total"] == 4
+
+
 def test_export_without_results_is_rejected(env):
     client, _store, _refs = env
     assert client.post("/api/v1/frontpage-qc/records/export", json={}).status_code == 422
@@ -269,6 +345,7 @@ def test_store_unavailable_returns_503(tmp_path, monkeypatch):
     app.include_router(api.router)
     app.dependency_overrides[api.require_frontpage_qc_user] = lambda: USER
     app.dependency_overrides[api.get_frontpage_qc_store] = lambda: FrontpageQcStore(sessionmaker(bind=engine))
+    app.dependency_overrides[api.get_home_institute] = lambda: ""
     with TestClient(app) as client:
         response = client.get("/api/v1/frontpage-qc/analytics")
     assert response.status_code == 503

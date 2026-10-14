@@ -75,6 +75,49 @@ def get_record_repository():
     return RecordRepository(session_factory=_cdm_session_factory())
 
 
+_HOME_INSTITUTE_TTL = timedelta(minutes=5)
+_home_institute_cache: Dict[str, Any] = {"value": None, "at": None}
+
+
+def get_home_institute() -> str:
+    """本院机构：同步配置的 default_institute_id，且病历池里确有该机构的病历。
+
+    未配置或配置值没有对应病历（例如沿用默认 LOCAL-HOSPITAL）时返回空串，表示不区分本院与测试数据，
+    避免按一个不存在的机构过滤后把真实病历全部藏掉。
+    """
+    now = datetime.now(timezone.utc)
+    cached_at = _home_institute_cache["at"]
+    if cached_at is not None and now - cached_at < _HOME_INSTITUTE_TTL:
+        return _home_institute_cache["value"] or ""
+    value = ""
+    try:
+        from app.services.etl_sync import load_db_config
+
+        configured = str(load_db_config().get("default_institute_id") or "").strip()
+        if configured:
+            probe = get_record_repository().list_records(
+                scope="final",
+                department=None,
+                doctor=None,
+                date_field="discharge",
+                start_date=None,
+                end_date=None,
+                keyword=None,
+                page=1,
+                page_size=1,
+                institute_id=configured,
+            )
+            value = configured if probe.total > 0 else ""
+    except Exception:  # noqa: BLE001 - 配置或病历池不可用时退回不区分，不影响页面其他功能
+        value = ""
+    _home_institute_cache.update(value=value, at=now)
+    return value
+
+
+def _scope_institute(data_scope: str, home_institute: str) -> str:
+    return home_institute if data_scope == "home" else ""
+
+
 def _unavailable(exc: Exception) -> HTTPException:
     return HTTPException(503, str(exc) or "首页质控存储不可用")
 
@@ -106,7 +149,17 @@ def _record_public(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _collect(repository, *, department: str = "", start_date: str = "", end_date: str = "", keyword: str = "", refs=None) -> List[Dict[str, Any]]:
+def _collect(
+    repository,
+    *,
+    department: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    keyword: str = "",
+    refs=None,
+    institute_id: str = "",
+) -> List[Dict[str, Any]]:
+    # 显式勾选的病历不按机构过滤：用户点名要看的病历照常返回
     return repository.collect_records(
         scope="final",
         department=department or None,
@@ -116,6 +169,7 @@ def _collect(repository, *, department: str = "", start_date: str = "", end_date
         end_date=end_date or None,
         keyword=keyword or None,
         record_refs=refs,
+        institute_id=None if refs else (institute_id or None),
     )
 
 
@@ -194,6 +248,7 @@ class RunCreate(BaseModel):
     start_date: str = Field(default="", max_length=10)
     end_date: str = Field(default="", max_length=10)
     keyword: str = Field(default="", max_length=100)
+    data_scope: Literal["home", "all"] = "home"
 
 
 @router.post("/runs")
@@ -203,6 +258,7 @@ async def create_run(
     user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
     repository=Depends(get_record_repository),
+    home_institute: str = Depends(get_home_institute),
 ):
     uid = _user_id(user)
     try:
@@ -229,6 +285,7 @@ async def create_run(
                 start_date=payload.start_date,
                 end_date=payload.end_date,
                 keyword=payload.keyword,
+                institute_id=_scope_institute(payload.data_scope, home_institute),
             )
             filters = {
                 "mode": "filtered",
@@ -236,6 +293,7 @@ async def create_run(
                 "start_date": payload.start_date,
                 "end_date": payload.end_date,
                 "keyword": payload.keyword,
+                "data_scope": payload.data_scope if home_institute else "all",
             }
         refs = refs_from_records(records)
         if not refs:
@@ -317,11 +375,23 @@ async def cancel_run(
 @router.get("/filters")
 async def get_filters(
     request: Request,
+    data_scope: Literal["home", "all"] = Query("home"),
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     repository=Depends(get_record_repository),
+    home_institute: str = Depends(get_home_institute),
 ):
-    filters = repository.get_record_filters(scope="final", department=None)
-    return _ok(request, {"departments": filters.get("departments", []), "date_bounds": filters.get("date_bounds", {})})
+    filters = repository.get_record_filters(
+        scope="final", department=None, institute_id=_scope_institute(data_scope, home_institute) or None
+    )
+    return _ok(
+        request,
+        {
+            "departments": filters.get("departments", []),
+            "date_bounds": filters.get("date_bounds", {}),
+            # 为空表示无法区分本院与测试数据，前端不显示“本院 / 全部”切换
+            "home_institute": home_institute,
+        },
+    )
 
 
 @router.get("/records")
@@ -335,12 +405,15 @@ async def list_records(
     issue: Literal["", "fail", "hint", "data_gap", "clean", "unchecked"] = Query(""),
     rule_id: str = Query("", max_length=16),
     rule_verdict: Literal["fail", "data_gap"] = Query("fail"),
+    data_scope: Literal["home", "all"] = Query("home"),
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
     repository=Depends(get_record_repository),
+    home_institute: str = Depends(get_home_institute),
 ):
+    institute = _scope_institute(data_scope, home_institute)
     _check_rule_id(rule_id)
     if rule_id and issue == "unchecked":
         raise HTTPException(422, "按规则筛选时只能查看已质控病历")
@@ -349,7 +422,14 @@ async def list_records(
             keys = None
             info: Dict[str, Dict[str, Any]] = {}
             if keyword:
-                matched = _collect(repository, department=department, start_date=start_date, end_date=end_date, keyword=keyword)
+                matched = _collect(
+                    repository,
+                    department=department,
+                    start_date=start_date,
+                    end_date=end_date,
+                    keyword=keyword,
+                    institute_id=institute,
+                )
                 info = {_record_key(item): _record_public(item) for item in matched}
                 keys = list(info)
             results, total = store.query_latest(
@@ -360,6 +440,7 @@ async def list_records(
                 issue=issue if issue in RESULT_ISSUE_FILTERS else "",
                 rule_id=rule_id,
                 rule_verdict=rule_verdict,
+                institute_id=institute,
                 record_keys=keys,
                 page=page,
                 page_size=page_size,
@@ -373,7 +454,14 @@ async def list_records(
                 for r in results
             ]
         elif issue == "unchecked":
-            records = _collect(repository, department=department, start_date=start_date, end_date=end_date, keyword=keyword)
+            records = _collect(
+                repository,
+                department=department,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                institute_id=institute,
+            )
             latest = store.latest_by_keys([_record_key(item) for item in records])
             pending = [item for item in records if _record_key(item) not in latest]
             total = len(pending)
@@ -390,6 +478,7 @@ async def list_records(
                 keyword=keyword or None,
                 page=page,
                 page_size=page_size,
+                institute_id=institute or None,
             )
             latest = store.latest_by_keys([_record_key(item) for item in listing.items])
             total = listing.total
@@ -459,11 +548,18 @@ async def analytics(
     department: str = Query("", max_length=100),
     start_date: str = Query("", max_length=10),
     end_date: str = Query("", max_length=10),
+    data_scope: Literal["home", "all"] = Query("home"),
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
+    home_institute: str = Depends(get_home_institute),
 ):
     try:
-        rows = store.latest_rows_for_analytics(department=department, start_date=start_date, end_date=end_date)
+        rows = store.latest_rows_for_analytics(
+            department=department,
+            start_date=start_date,
+            end_date=end_date,
+            institute_id=_scope_institute(data_scope, home_institute),
+        )
     except FrontpageQcStoreUnavailable as exc:
         raise _unavailable(exc) from exc
     return _ok(request, build_analytics(rows))
@@ -480,6 +576,7 @@ class ExportIn(BaseModel):
     issue: Literal["", "fail", "hint", "data_gap", "clean"] = ""
     rule_id: str = Field(default="", max_length=16)
     rule_verdict: Literal["fail", "data_gap"] = "fail"
+    data_scope: Literal["home", "all"] = "home"
 
 
 @router.post("/records/export")
@@ -488,6 +585,7 @@ async def export_records(
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
     repository=Depends(get_record_repository),
+    home_institute: str = Depends(get_home_institute),
 ):
     _check_rule_id(payload.rule_id)
     try:
@@ -503,9 +601,12 @@ async def export_records(
                 start_date=payload.start_date,
                 end_date=payload.end_date,
                 keyword=payload.keyword,
+                institute_id=_scope_institute(payload.data_scope, home_institute),
             )
             keys = [_record_key(item) for item in records]
             parts = [payload.department or "全部科室"]
+            if home_institute and payload.data_scope == "all":
+                parts.append("含测试数据")
             if payload.start_date or payload.end_date:
                 parts.append(f"出院 {payload.start_date or '不限'} 至 {payload.end_date or '不限'}")
             if payload.keyword:

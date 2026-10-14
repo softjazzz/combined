@@ -482,6 +482,7 @@ class FrontpageQcStore:
         issue: str = "",
         rule_id: str = "",
         rule_verdict: str = "fail",
+        institute_id: str = "",
         record_keys: Optional[Sequence[str]] = None,
         page: int = 1,
         page_size: int = 50,
@@ -511,6 +512,8 @@ class FrontpageQcStore:
                 conditions.append(t.c.hint_count > 0)
             elif issue == "clean":
                 conditions.append(sa.and_(t.c.fail_count == 0, t.c.hint_count == 0, t.c.required_missing_count == 0))
+            if institute_id:
+                conditions.append(t.c.institute_id == institute_id)
             if rule_id:
                 f = self.findings
                 conditions.append(
@@ -534,11 +537,13 @@ class FrontpageQcStore:
         return self._guard(op)
 
     def latest_rows_for_analytics(
-        self, *, department: str = "", start_date: str = "", end_date: str = ""
+        self, *, department: str = "", start_date: str = "", end_date: str = "", institute_id: str = ""
     ) -> List[Dict[str, Any]]:
         def op(session):
             t = self.results
             conditions = [t.c.is_latest.is_(True)]
+            if institute_id:
+                conditions.append(t.c.institute_id == institute_id)
             if department:
                 conditions.append(t.c.department == department)
             if start_date:
