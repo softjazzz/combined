@@ -113,6 +113,8 @@ class ExamLabSingleEvent:
     relevance_fixed: bool = False
     # 经 order_id/exam_id 显式关联的 CT/MRI 医嘱名称（客户检查主记录常不带名称；仅供 012 引文归属核验）。
     order_names: tuple[str, ...] = ()
+    # 客户展示优先使用报告结论/印象/异常征象；这些字段缺失时才退回结果/描述。
+    report_result_texts: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
         return (
@@ -839,6 +841,30 @@ def build_exam_lab_text_projection(
             for row in rows
             for field in result_fields
         )
+        preferred_report_result_fields = (
+            "exam_impression",
+            "exam_conclusion",
+            "impression",
+            "conclusion",
+            "abnormal_sign",
+        )
+        fallback_report_result_fields = ("exam_result", "result", "description")
+        preferred_report_results = tuple(
+            dict.fromkeys(
+                _clean(row.get(field))
+                for row in rows
+                for field in preferred_report_result_fields
+                if _clean(row.get(field))
+            )
+        )
+        fallback_report_results = tuple(
+            dict.fromkeys(
+                _clean(row.get(field))
+                for row in rows
+                for field in fallback_report_result_fields
+                if _clean(row.get(field))
+            )
+        )
         structured_organism_results = tuple(
             _clean(row.get("result"))
             for row in rows
@@ -941,6 +967,7 @@ def build_exam_lab_text_projection(
             identity_text=identity_text,
             result_texts=tuple(_clean(row.get(field)) for row in rows
                                for field in result_fields if _clean(row.get(field))),
+            report_result_texts=preferred_report_results or fallback_report_results,
             guidance_only=(
                 family == "exam"
                 and not identity_conflict

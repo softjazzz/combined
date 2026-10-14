@@ -184,7 +184,7 @@
               </span>
             </span>
             <span
-              v-else
+              v-else-if="!consultationRecommendationPresentation(item)"
               class="rule-conclusion-block"
               :class="{
                 'is-text-expanded': expandedTextKey === item.key || expandedKey === item.key,
@@ -196,6 +196,13 @@
             </span>
           </span>
         </button>
+
+        <ConsultationRecommendationSummary
+          v-if="
+            isDocumentGroupExpandedForItem(item.key) && consultationRecommendationPresentation(item)
+          "
+          :presentation="consultationRecommendationPresentation(item)!"
+        />
 
         <ExamLabEventResultBlock
           v-if="
@@ -534,12 +541,14 @@ import type {
   SaveQcResultFeedbackInput,
 } from '@/api/qc-result-feedback-demo'
 import CriterionResultBlock from './CriterionResultBlock.vue'
+import ConsultationRecommendationSummary from './ConsultationRecommendationSummary.vue'
 import ExamLabEventResultBlock from './ExamLabEventResultBlock.vue'
 import TimelinessResultBlock from './TimelinessResultBlock.vue'
 import QcRemediationSuggestion from '@/views/workstation-v4/components/qc/QcRemediationSuggestion.vue'
 import { buildExamLabEventPresentation } from './examLabEventPresentation'
 import { customerFactValueLabel } from './customerFactValuePresentation'
 import {
+  buildConsultationRecommendationPresentation,
   buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
@@ -757,6 +766,10 @@ function examLabEventPresentation(item: SingleRecordQcResultItem) {
   return buildExamLabEventPresentation(item)
 }
 
+function consultationRecommendationPresentation(item: SingleRecordQcResultItem) {
+  return buildConsultationRecommendationPresentation(item)
+}
+
 function resultHeadline(item: SingleRecordQcResultViewItem) {
   const examHeadline = examLabEventPresentation(item)?.headline
   if (examHeadline) return examHeadline
@@ -781,6 +794,7 @@ function resultHeadline(item: SingleRecordQcResultViewItem) {
 }
 
 function needsTextExpansion(item: SingleRecordQcResultViewItem) {
+  if (consultationRecommendationPresentation(item)) return false
   const text = resultHeadline(item)
   return text.length > 60 || text.includes('\n')
 }
@@ -792,6 +806,13 @@ function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
   if (examLabEventPresentation(item)) {
     displayedKeys.add('report_time')
     displayedKeys.add('response_record_count')
+  }
+  if (consultationRecommendationPresentation(item)) {
+    displayedKeys.add('completed_opinion_episode_count')
+    displayedKeys.add('recommendation_count')
+    displayedKeys.add('specific_execution_count')
+    displayedKeys.add('generic_execution_count')
+    displayedKeys.add('missing_execution_count')
   }
   return displayFactRows(item).filter((row) => !displayedKeys.has(row.key))
 }

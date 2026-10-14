@@ -275,6 +275,131 @@ function text(value: unknown): string {
   return String(value || '').trim()
 }
 
+export type ConsultationRecommendationState =
+  | 'specific'
+  | 'generic'
+  | 'missing'
+  | 'unknown'
+  | 'excluded'
+
+export interface ConsultationRecommendationRow {
+  key: string
+  episodeIndex: number
+  recommendationIndex?: number
+  text: string
+  state: ConsultationRecommendationState
+  statusLabel: string
+  detail: string
+}
+
+export interface ConsultationRecommendationPresentation {
+  comparedCount: number
+  excludedCount: number
+  rows: ConsultationRecommendationRow[]
+  checkedSources: string[]
+}
+
+const CONSULTATION_EXECUTION_STATE_PRESENTATION: Record<
+  Exclude<ConsultationRecommendationState, 'excluded'>,
+  { statusLabel: string; detail: string }
+> = {
+  specific: {
+    statusLabel: '已找到具体执行证据',
+    detail: '已匹配到具体执行措施、结果或未执行原因',
+  },
+  generic: {
+    statusLabel: '执行记录不具体',
+    detail: '已找到后续记录，但缺少具体措施、结果或未执行原因',
+  },
+  missing: {
+    statusLabel: '未找到执行证据',
+    detail: '未在已核对的后续记录中匹配到相符执行记录',
+  },
+  unknown: {
+    statusLabel: '资料待核实',
+    detail: '本条建议的执行情况尚未形成可靠结论',
+  },
+}
+
+const CONSULTATION_EXECUTION_SOURCES = [
+  '后续病程记录',
+  '上级医师查房记录',
+  '住院医嘱',
+  '相关检查、检验及手术记录',
+]
+
+function positiveInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+}
+
+export function buildConsultationRecommendationPresentation(
+  item: Pick<SingleRecordQcResultItem, 'rule_id' | 'customer_display_facts'>,
+): ConsultationRecommendationPresentation | null {
+  if (text(item.rule_id).toUpperCase() !== 'LX0609-03-01-04') return null
+  const facts = item.customer_display_facts
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return null
+
+  const rows: ConsultationRecommendationRow[] = []
+  const evidence = (facts as Record<string, unknown>).recommendation_evidence
+  if (Array.isArray(evidence)) {
+    for (const entry of evidence) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const record = entry as Record<string, unknown>
+      const episodeIndex = positiveInteger(record.episode_index)
+      const recommendationIndex = positiveInteger(record.recommendation_index)
+      const recommendationText = text(record.recommendation_text)
+      const state = text(record.execution_state) as Exclude<
+        ConsultationRecommendationState,
+        'excluded'
+      >
+      const statePresentation = CONSULTATION_EXECUTION_STATE_PRESENTATION[state]
+      if (!episodeIndex || !recommendationIndex || !recommendationText || !statePresentation)
+        continue
+      rows.push({
+        key: `compared-${episodeIndex}-${recommendationIndex}`,
+        episodeIndex,
+        recommendationIndex,
+        text: recommendationText,
+        state,
+        ...statePresentation,
+      })
+    }
+  }
+
+  const comparedCount = rows.length
+  const excluded = (facts as Record<string, unknown>).excluded_recommendations
+  if (Array.isArray(excluded)) {
+    for (const [index, entry] of excluded.entries()) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const record = entry as Record<string, unknown>
+      const episodeIndex = positiveInteger(record.episode_index)
+      const recommendationText = text(record.recommendation_text)
+      if (
+        !episodeIndex ||
+        !recommendationText ||
+        record.exclusion_reason !== 'execution_condition_not_defined'
+      )
+        continue
+      rows.push({
+        key: `excluded-${episodeIndex}-${index}`,
+        episodeIndex,
+        text: recommendationText,
+        state: 'excluded',
+        statusLabel: '未纳入核对',
+        detail: '建议未说明何时达到执行条件，不能据未找到记录判定未落实',
+      })
+    }
+  }
+
+  if (!rows.length) return null
+  return {
+    comparedCount,
+    excludedCount: rows.length - comparedCount,
+    rows,
+    checkedSources: [...CONSULTATION_EXECUTION_SOURCES],
+  }
+}
+
 export function toSingleRecordQcResultViewItem(
   item: SingleRecordQcResultItem,
   index: number,

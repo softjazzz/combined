@@ -177,6 +177,38 @@ describe('LX0609-06-01-05/LX0609-06-03-04 逐次检查其余分支口径保持�
     })
   })
 
+  it('non_compliant 展示本次未分析的具体 CT/MRI 报告结果', () => {
+    const presentation = buildExamLabEventPresentation(
+      buildItem([
+        {
+          ...buildRow('non_compliant', 'positive', 0),
+          report_result_texts: ['L4/5 椎间盘突出，椎管狭窄。'],
+        },
+      ]),
+    )
+
+    expect(presentation?.events[0]).toMatchObject({
+      statusLabel: '未完成分析',
+      description: '下列 CT/MRI 阳性结果未在 24 小时内找到临床分析记录',
+      reportResultLabel: '未分析的 CT/MRI 阳性结果',
+      reportResultTexts: ['L4/5 椎间盘突出，椎管狭窄。'],
+    })
+  })
+
+  it('报告结果明细只对 CT/MRI 阳性分析事件开放', () => {
+    const event = {
+      ...buildRow('non_compliant', 'positive', 0),
+      report_result_texts: ['阳性报告结果。'],
+    }
+
+    expect(buildExamLabEventPresentation(buildItem([event], 'LX0609-06-03-04'))).toBeNull()
+    expect(
+      buildExamLabEventPresentation(
+        buildItem([{ ...event, positive_state: 'negative' }], 'LX0609-06-01-05'),
+      ),
+    ).toBeNull()
+  })
+
   it('compliant 保持既有 success / 已完成分析 文案并带分析记录条数', () => {
     const presentation = buildExamLabEventPresentation(
       buildItem([buildRow('compliant', 'positive', 3)]),

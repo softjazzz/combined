@@ -1309,7 +1309,12 @@ describe('SingleRecordQcResultPanel', () => {
       positive_state: positiveState,
       response_record_count: 0,
       applicable: positiveState === 'positive',
-      ...(positiveState === 'positive' ? { requirement_met: false } : {}),
+      ...(positiveState === 'positive'
+        ? {
+            requirement_met: false,
+            report_result_texts: ['右肺上叶结节，边缘毛糙。'],
+          }
+        : {}),
     }))
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
@@ -1355,6 +1360,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(rows[0]?.text()).toContain('2026-07-08 17:55:17')
     expect(rows[0]?.text()).toContain('阳性结果')
     expect(rows[0]?.text()).toContain('未完成分析')
+    expect(rows[0]?.text()).toContain('未分析的 CT/MRI 阳性结果')
+    expect(rows[0]?.text()).toContain('右肺上叶结节，边缘毛糙。')
     const more = wrapper.get('[data-testid="exam-event-more"]')
     expect(more.attributes('open')).toBeUndefined()
     expect(more.get('summary').text()).toBe('另有 5 次：不适用 5')

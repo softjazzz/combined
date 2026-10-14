@@ -1007,6 +1007,93 @@ def test_surviving_consultation_rule_keeps_structured_action() -> None:
     assert "请在会诊意见执行记录中补充具体执行措施" in result["suggestion"]
 
 
+def _023_facts(*states: str) -> dict:
+    return {
+        "verification_kind": "consultation_execution_quality_check",
+        "recommendation_evidence": [
+            {
+                "episode_index": 1 if index < 3 else 2,
+                "recommendation_index": index,
+                "recommendation_text": f"具体建议{index}",
+                "execution_state": state,
+            }
+            for index, state in enumerate(states, start=1)
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("state", "expected", "unexpected"),
+    (
+        (
+            "missing",
+            "未找到执行证据：第1次会诊的第1条建议“具体建议1”",
+            "执行记录不具体",
+        ),
+        (
+            "generic",
+            "执行记录不具体：第1次会诊的第1条建议“具体建议1”",
+            "未找到执行证据",
+        ),
+    ),
+)
+def test_023_finding_distinguishes_missing_and_generic_execution(
+    state: str, expected: str, unexpected: str
+) -> None:
+    result = render_luxian_0609_customer_result(
+        decision=_defect_decision("LX0609-03-01-04"),
+        safe_customer_display_facts=_023_facts(state),
+    )
+
+    assert expected in result["findings"]
+    assert unexpected not in result["findings"]
+    if state == "missing":
+        assert "住院医嘱或相关检查、检验、手术记录" in result["findings"]
+    else:
+        assert "未明确具体执行措施、执行结果或未执行原因" in result["findings"]
+
+
+def test_023_mixed_execution_lists_missing_and_generic_gaps_separately() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-03-01-04",
+        facts=_023_facts("specific", "generic", "missing"),
+    )
+
+    assert "未找到执行证据：第2次会诊的第3条建议“具体建议3”" in finding
+    assert "执行记录不具体：第1次会诊的第2条建议“具体建议2”" in finding
+    assert "其余1条建议已找到具体执行证据" in finding
+    assert "缺少执行证据或执行记录不具体" not in finding
+
+
+def test_023_finding_lists_conditional_recommendation_outside_comparison() -> None:
+    facts = _023_facts("missing")
+    facts["excluded_recommendations"] = [
+        {
+            "episode_index": 1,
+            "recommendation_text": "必要时完善TCD检查",
+            "exclusion_reason": "execution_condition_not_defined",
+        }
+    ]
+
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-03-01-04",
+        facts=facts,
+    )
+
+    assert "未纳入执行证据核对：第1次会诊建议“必要时完善TCD检查”" in finding
+    assert "上述建议未说明何时达到执行条件" in finding
+    assert "不能据未找到记录判定未落实" in finding
+
+
+def test_023_precise_defect_finding_does_not_override_non_defect_states() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-03-01-04",
+        facts=_023_facts("specific"),
+    )
+
+    assert finding == ""
+
+
 DEFINED_RULE_IDS = tuple(
     contract.rule_id
     for contract in load_luxian_0609_rule_contracts()
@@ -2372,6 +2459,19 @@ def test_012_multi_event_window_not_mature_and_negative_copies_are_distinct() ->
     assert window_facts["event_results"][1].pop("positive_state") == "positive"
     assert negative_facts["event_results"][1].pop("positive_state") == "negative"
     assert window_facts == negative_facts
+
+
+def test_012_multi_event_finding_names_the_report_result_being_checked() -> None:
+    facts = _multi_event_analysis_facts(second_event_positive_state="negative")
+    facts["event_results"][0]["report_result_texts"] = [
+        "L4/5 椎间盘突出，椎管狭窄。"
+    ]
+
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-06-01-05", facts=facts
+    )
+
+    assert "对应报告结果：L4/5 椎间盘突出，椎管狭窄。" in finding
 
 
 @pytest.mark.parametrize("positive_state", ["unknown", "not_relevant", None])

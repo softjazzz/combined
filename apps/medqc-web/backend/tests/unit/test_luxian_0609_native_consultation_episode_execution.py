@@ -2835,6 +2835,10 @@ def _scope_test_completed_recommendations(
         ("test", "复查血常规", True),
         ("test", "复查肝功能", True),
         ("test", "建议完善血脂，必要时完善TCD", True),
+        ("test", "必要时完善TCD检查", False),
+        ("test", "如有必要时复查血常规", False),
+        ("medication", "酌情给予降压药", False),
+        ("test", "视情况复查头颅CT", False),
         # 冻结 22 例中随访范围边界：A-E/F/G/I 应排除，H 保留。
         pytest.param(
             "monitoring",
@@ -2903,6 +2907,30 @@ def test_completed_recommendations_exclude_non_order_execution_scope(
     assert bool(completed) is included
 
 
+def test_conditional_recommendation_uses_source_quote_when_normalized_action_drops_condition():
+    recommendation = episode._Recommendation(
+        "consultation_record-1#r1",
+        "test",
+        "必要时完善TCD检查",
+        "完善TCD检查",
+        "consultation_record-1",
+    )
+
+    assert episode._has_ambiguous_execution_condition(recommendation) is True
+
+
+def test_explicit_source_condition_is_not_excluded_by_ambiguous_normalized_action():
+    recommendation = episode._Recommendation(
+        "consultation_record-1#r1",
+        "transfer",
+        "家属强烈要求时建议上级医院",
+        "必要时转上级医院",
+        "consultation_record-1",
+    )
+
+    assert episode._has_ambiguous_execution_condition(recommendation) is False
+
+
 def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope():
     recommendations = (
         episode._Recommendation(
@@ -2926,6 +2954,13 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
             "复查血常规",
             "consultation_record-1",
         ),
+        episode._Recommendation(
+            "consultation_record-1#r4",
+            "test",
+            "必要时完善TCD检查",
+            "必要时完善TCD检查",
+            "consultation_record-1",
+        ),
     )
     model_episode = episode._Episode(
         "consultation_record-1",
@@ -2940,10 +2975,15 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
     documents = ({
         "ref": "consultation_record-1",
         "time": "2026-07-20 08:00:00",
-        "text": "会诊意见：建议动态随访；调整降压药；复查血常规",
+        "text": "会诊意见：建议动态随访；调整降压药；复查血常规；必要时完善TCD检查",
         "document_id": "CONSULT-1",
     },)
     completed = episode._completed_recommendations(
+        (model_episode,),
+        documents,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+    )
+    excluded = episode._excluded_conditional_recommendations(
         (model_episode,),
         documents,
         stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
@@ -2983,6 +3023,7 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
         assessments=assessment_rows,
         documents=documents,
         candidates=candidates,
+        excluded_recommendations=excluded,
     )
 
     assert [item.recommendation.action_type for item in completed] == [
@@ -2996,6 +3037,16 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
     assert facts["recommendation_count"] == 2
     assert facts["missing_execution_count"] == 2
     assert len(facts["recommendation_evidence"]) == 2
+    assert [
+        item["recommendation_text"] for item in facts["recommendation_evidence"]
+    ] == ["调整降压药", "复查血常规"]
+    assert facts["excluded_recommendations"] == [
+        {
+            "episode_index": 1,
+            "recommendation_text": "必要时完善TCD检查",
+            "exclusion_reason": "execution_condition_not_defined",
+        }
+    ]
 
 
 @pytest.mark.asyncio
