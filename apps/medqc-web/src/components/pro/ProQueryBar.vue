@@ -1,11 +1,11 @@
 <template>
   <div
-    class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+    class="pro-query-bar px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
   >
-    <div class="flex items-center gap-3 flex-1 min-w-0">
+    <div class="pro-query-bar__filters flex items-center gap-3 flex-1 min-w-0">
       <slot name="filters" />
     </div>
-    <div class="flex items-center gap-3">
+    <div class="pro-query-bar__actions flex items-center gap-3">
       <slot name="actions" />
     </div>
   </div>
