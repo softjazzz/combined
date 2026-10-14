@@ -1014,6 +1014,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'frontpage-qc',
+        name: 'WorkstationV5FrontpageQc',
+        component: () => import('@/views/workstation-v4/frontpage-qc/FrontpageQcView.vue'),
+        meta: { title: '首页质控（新）', permission: ['admin', 'super_admin', 'qc_manager', 'coder'] },
+      },
+      {
         path: 'qc-feedback-demo',
         name: 'WorkstationV4QcFeedbackDemo',
         component: () => import('@/views/workstation-v4/QcResultFeedbackDemoListView.vue'),

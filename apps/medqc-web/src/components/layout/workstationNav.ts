@@ -175,6 +175,14 @@ export const WORKSTATION_NAV: NavGroup[] = [
         match: matchStage('frontpage_qc'),
       },
       {
+        // 首页质控 V2：与旧入口并行，验收通过后替换旧入口
+        key: 'frontpage-qc-v2',
+        iconName: 'fp_qc',
+        label: '首页质控（新）',
+        to: { path: p('/frontpage-qc') },
+        match: matchPrefix(p('/frontpage-qc')),
+      },
+      {
         key: 'stage-settlement-qc',
         iconName: 'settlement',
         label: '结算清单质控',

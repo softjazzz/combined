@@ -21,6 +21,7 @@ describe('workstationNav 选中项', () => {
     [route(B, { record_id: 'r1' }), 'worklist'],
     [route(`${B}/worklist`, { stage: 'frontpage_generate' }), 'stage-frontpage-generate'],
     [route(B, { stage: 'frontpage_qc' }), 'stage-frontpage-qc'],
+    [route(`${B}/frontpage-qc`), 'frontpage-qc-v2'],
     [route(`${B}/worklist`, { stage: 'settlement_qc' }), 'stage-settlement-qc'],
     [route(`${B}/rules`, { tab: 'semantic', ruleSetKey: 'luxian_0609_qc_v1' }), 'rules'],
     [route(`${B}/rules/custom-workspace`), 'custom-rules'],
@@ -134,8 +135,9 @@ describe('workstationNav 可见性', () => {
         resolvePermission,
       }),
     )
-    // 18 个原有入口 + 规则验收
-    expect(visible).toHaveLength(19)
+    // 18 个原有入口 + 规则验收 + 首页质控（新）
+    expect(visible).toHaveLength(20)
+    expect(visible).toContain('frontpage-qc-v2')
     expect(visible).toContain('rule-validation')
   })
 })
