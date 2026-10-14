@@ -251,6 +251,7 @@ def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evid
             {
                 "episode_index": 1,
                 "recommendation_index": 1,
+                "recommendation_text": "复查血常规",
                 "execution_state": "missing",
                 "opinion_refs": [],
                 "execution_refs": [],
@@ -275,6 +276,7 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
             {
                 "episode_index": 1,
                 "recommendation_index": 1,
+                "recommendation_text": "复查血常规",
                 "execution_state": "missing",
                 "opinion_refs": [],
                 "execution_refs": [],
@@ -290,6 +292,7 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
     assert facts["relation_state"] == "execution_missing_or_generic"
     assert facts["missing_execution_count"] == 1
     assert facts["recommendation_evidence"][0]["execution_state"] == "missing"
+    assert facts["recommendation_evidence"][0]["recommendation_text"] == "复查血常规"
 
 
 def test_023_projection_accepts_no_triggered_recommendation_set() -> None:

@@ -42,6 +42,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.shared import _parse_datetime
+from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     SourceEvidenceQueryError,
@@ -2590,6 +2591,9 @@ def _consultation_execution_display_facts(
                 {
                     "episode_index": episode_indexes[item.episode_ref],
                     "recommendation_index": recommendation_index,
+                    "recommendation_text": redact_luxian_0609_patient_privacy(
+                        _clean(item.recommendation.normalized_action)
+                    ),
                     "execution_state": execution_state,
                     "opinion_refs": opinion_evidence,
                     # 客户事实合同每组最多接收 8 条引用。这里只裁剪展示引用；

@@ -1014,6 +1014,7 @@ def _023_facts(*states: str) -> dict:
             {
                 "episode_index": 1 if index < 3 else 2,
                 "recommendation_index": index,
+                "recommendation_text": f"具体建议{index}",
                 "execution_state": state,
             }
             for index, state in enumerate(states, start=1)
@@ -1026,12 +1027,12 @@ def _023_facts(*states: str) -> dict:
     (
         (
             "missing",
-            "未找到执行证据：第1次会诊的第1条建议",
+            "未找到执行证据：第1次会诊的第1条建议“具体建议1”",
             "执行记录不具体",
         ),
         (
             "generic",
-            "执行记录不具体：第1次会诊的第1条建议",
+            "执行记录不具体：第1次会诊的第1条建议“具体建议1”",
             "未找到执行证据",
         ),
     ),
@@ -1058,8 +1059,8 @@ def test_023_mixed_execution_lists_missing_and_generic_gaps_separately() -> None
         facts=_023_facts("specific", "generic", "missing"),
     )
 
-    assert "未找到执行证据：第2次会诊的第3条建议" in finding
-    assert "执行记录不具体：第1次会诊的第2条建议" in finding
+    assert "未找到执行证据：第2次会诊的第3条建议“具体建议3”" in finding
+    assert "执行记录不具体：第1次会诊的第2条建议“具体建议2”" in finding
     assert "其余1条建议已找到具体执行证据" in finding
     assert "缺少执行证据或执行记录不具体" not in finding
 

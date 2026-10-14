@@ -2827,10 +2827,14 @@ def customer_finding_from_controlled_facts(
             state = item.get("execution_state")
             if state not in labels_by_state:
                 continue
-            labels_by_state[state].append(
+            label = (
                 f"第{item['episode_index']}次会诊的"
                 f"第{item['recommendation_index']}条建议"
             )
+            recommendation_text = item.get("recommendation_text")
+            if isinstance(recommendation_text, str) and recommendation_text.strip():
+                label += f"“{recommendation_text.strip()}”"
+            labels_by_state[state].append(label)
         if not labels_by_state["missing"] and not labels_by_state["generic"]:
             return ""
 

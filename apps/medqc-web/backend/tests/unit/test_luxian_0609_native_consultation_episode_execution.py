@@ -2996,6 +2996,9 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
     assert facts["recommendation_count"] == 2
     assert facts["missing_execution_count"] == 2
     assert len(facts["recommendation_evidence"]) == 2
+    assert [
+        item["recommendation_text"] for item in facts["recommendation_evidence"]
+    ] == ["调整降压药", "复查血常规"]
 
 
 @pytest.mark.asyncio

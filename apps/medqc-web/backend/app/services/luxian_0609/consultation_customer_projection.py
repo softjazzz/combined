@@ -325,6 +325,9 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
                     "execution_refs",
                 }
                 opinion_key, execution_key = "opinion_refs", "execution_refs"
+            recommendation_text = item.get("recommendation_text")
+            if recommendation_text is not None:
+                expected_item_keys.add("recommendation_text")
             episode_index = item.get("episode_index")
             recommendation_index = item.get("recommendation_index")
             if (
@@ -334,6 +337,14 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
                 or type(recommendation_index) is not int
                 or recommendation_index != expected_index
                 or item.get("execution_state") not in {"specific", "generic", "missing", "unknown"}
+                or (
+                    recommendation_text is not None
+                    and (
+                        not isinstance(recommendation_text, str)
+                        or not recommendation_text.strip()
+                        or len(recommendation_text) > 320
+                    )
+                )
                 or (recommendation_results is not None
                     and item["execution_state"]
                     != recommendation_results[expected_index - 1]["execution_state"])
@@ -353,15 +364,16 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
             if opinion_evidence is None or execution_evidence is None:
                 return None
             seen_indexes.add((episode_index, recommendation_index))
-            safe_recommendation_evidence.append(
-                {
-                    "episode_index": episode_index,
-                    "recommendation_index": recommendation_index,
-                    "execution_state": item["execution_state"],
-                    "opinion_evidence": opinion_evidence,
-                    "execution_evidence": execution_evidence,
-                }
-            )
+            safe_item = {
+                "episode_index": episode_index,
+                "recommendation_index": recommendation_index,
+                "execution_state": item["execution_state"],
+                "opinion_evidence": opinion_evidence,
+                "execution_evidence": execution_evidence,
+            }
+            if recommendation_text is not None:
+                safe_item["recommendation_text"] = recommendation_text.strip()
+            safe_recommendation_evidence.append(safe_item)
         if any(
             raw[f"{state}_execution_count"]
             != sum(
@@ -508,12 +520,17 @@ def _published_recommendation_evidence(raw: dict[str, Any]) -> bool:
         return False
     expected = {"episode_index", "recommendation_index", "execution_state", "opinion_evidence", "execution_evidence"}
     for index, item in enumerate(evidence, start=1):
-        if (type(item) is not dict or set(item) != expected
+        if (type(item) is not dict or set(item) not in (expected, expected | {"recommendation_text"})
                 or type(item["episode_index"]) is not int
                 or not 1 <= item["episode_index"] <= raw["completed_opinion_episode_count"]
                 or type(item["recommendation_index"]) is not int or item["recommendation_index"] != index
                 or type(item["execution_state"]) is not str
-                or item["execution_state"] not in {"specific", "generic", "missing", "unknown"}):
+                or item["execution_state"] not in {"specific", "generic", "missing", "unknown"}
+                or ("recommendation_text" in item and (
+                    type(item["recommendation_text"]) is not str
+                    or not item["recommendation_text"].strip()
+                    or len(item["recommendation_text"]) > 320
+                ))):
             return False
         if ("recommendation_results" in raw
                 and item["execution_state"] != raw["recommendation_results"][index - 1]["execution_state"]):
