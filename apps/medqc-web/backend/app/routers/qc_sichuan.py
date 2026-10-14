@@ -114,6 +114,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/qc/sichuan", tags=["qc-sichuan"])
 
+# 任务详情返回 409 时附带的任务状态响应头（需在 CORS expose_headers 中暴露）
+BATCH_JOB_STATUS_HEADER = "X-Batch-Job-Status"
+
 
 @router.get("/surgery-procedure-catalog")
 async def surgery_procedure_catalog(
@@ -2400,6 +2403,23 @@ async def list_workspace_batch_jobs(
     )
 
 
+def _batch_job_status_for_header(job: Dict[str, Any]) -> str:
+    """任务状态响应头取值：失败但自动补跑仍在进行时报告 retrying，避免前端误判已结束。"""
+
+    status = str(job.get("status") or "").strip().lower() or "unknown"
+    if status != "failed":
+        return status
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    retry = summary.get("automatic_failed_rule_retry")
+    if (
+        isinstance(retry, dict)
+        and retry.get("should_retry") is True
+        and str(retry.get("status") or "").strip().lower() in {"queued", "running"}
+    ):
+        return "retrying"
+    return status
+
+
 @router.get("/workspace/batch-jobs/{job_id}")
 async def get_workspace_batch_job(
     request: Request,
@@ -2423,23 +2443,35 @@ async def get_workspace_batch_job(
         shared_read = job is not None
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    job_status = _batch_job_status_for_header(job)
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
-    if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
-        job = await run_in_threadpool(
-            _hydrate_luxian_canonical_batch_job_or_409,
-            workspace=workspace,
-            job=job,
-        )
-    if shared_read:
-        if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
-            response_data = _project_luxian_0916_shared_job(job)
+    try:
+        if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+            job = await run_in_threadpool(
+                _hydrate_luxian_canonical_batch_job_or_409,
+                workspace=workspace,
+                job=job,
+            )
+        if shared_read:
+            if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
+                response_data = _project_luxian_0916_shared_job(job)
+            else:
+                response_data = {
+                    **await run_in_threadpool(_project_customer_safe_batch_job_or_409, job),
+                    "read_only": True,
+                }
         else:
-            response_data = {
-                **await run_in_threadpool(_project_customer_safe_batch_job_or_409, job),
-                "read_only": True,
-            }
-    else:
-        response_data = await run_in_threadpool(_workspace_batch_response_item, job)
+            response_data = await run_in_threadpool(_workspace_batch_response_item, job)
+    except HTTPException as exc:
+        if exc.status_code != 409:
+            raise
+        # 结果无法安全展示时附带任务状态（只加响应头，响应体不变）：
+        # 前端据此区分“仍在执行、稍后可读”与“已结束、结果不会再变”，避免对已结束任务无限轮询。
+        raise HTTPException(
+            status_code=409,
+            detail=exc.detail,
+            headers={**(exc.headers or {}), BATCH_JOB_STATUS_HEADER: job_status},
+        ) from exc
     return success_response(
         data=response_data,
         message="获取四川规则批量任务详情成功",

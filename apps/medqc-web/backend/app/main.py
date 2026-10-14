@@ -139,6 +139,8 @@ def create_app() -> FastAPI:
         allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
+        # 任务详情 409 时附带任务状态，跨域部署下前端也需能读取
+        expose_headers=["X-Batch-Job-Status"],
     )
 
     # API Version middleware (with backward compatibility)

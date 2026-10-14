@@ -747,3 +747,72 @@ def test_current_canonical_admission_facts_are_not_repaired_on_read(fault: str) 
         })
     assert exc_info.value.status_code == 409
     assert item.get("customer_display_facts") == (None if fault == "missing" else facts)
+
+
+@pytest.mark.asyncio
+async def test_batch_detail_409_carries_terminal_job_status_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 已结束任务的结果无法安全展示：409 附带任务状态，前端据此停止轮询而不是无限重试
+    workspace = _WorkspaceReviewStub(
+        {
+            "id": "job-lx-ended",
+            "draft_id": "sichuan-rule-library",
+            "status": "completed",
+            "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        }
+    )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sichuan.get_workspace_batch_job(
+            _request(), "job-lx-ended", current_user={"id": "u-1"}
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "批量质控 Canonical 结果不完整，无法安全展示"
+    assert exc_info.value.headers == {qc_sichuan.BATCH_JOB_STATUS_HEADER: "completed"}
+
+
+@pytest.mark.asyncio
+async def test_batch_detail_409_reports_retrying_while_failed_rules_auto_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _WorkspaceReviewStub(
+        {
+            "id": "job-lx-retrying",
+            "draft_id": "sichuan-rule-library",
+            "status": "failed",
+            "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+            "summary": {
+                "execution_status": "partial_failed",
+                "automatic_failed_rule_retry": {"should_retry": True, "status": "running"},
+            },
+        }
+    )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sichuan.get_workspace_batch_job(
+            _request(), "job-lx-retrying", current_user={"id": "u-1"}
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.headers == {qc_sichuan.BATCH_JOB_STATUS_HEADER: "retrying"}
+
+
+def test_batch_job_status_header_reports_failed_once_auto_retry_finished() -> None:
+    job = {
+        "status": "failed",
+        "summary": {"automatic_failed_rule_retry": {"should_retry": False, "status": "exhausted"}},
+    }
+    assert qc_sichuan._batch_job_status_for_header(job) == "failed"
+    assert qc_sichuan._batch_job_status_for_header({"status": ""}) == "unknown"
+
+
+def test_cors_exposes_batch_job_status_header() -> None:
+    from app.main import create_app
+
+    app = create_app()
+    cors = next(m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware")
+    assert qc_sichuan.BATCH_JOB_STATUS_HEADER in cors.kwargs["expose_headers"]

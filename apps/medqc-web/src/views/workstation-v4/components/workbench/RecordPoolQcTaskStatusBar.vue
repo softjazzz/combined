@@ -161,6 +161,7 @@ import {
 } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '../../semantic-rules/types'
 import { isBatchJobPollingActive } from '../../semantic-rules/utils/batchJobStatus'
+import { decidePollReadFailure } from '../../customer-sample-validation/batchJobPollReadPolicy'
 import {
   downloadBlob,
   normalizeBatchExportBlob,
@@ -469,9 +470,13 @@ async function refreshJob(sequence: number) {
     resultReadError.value = ''
     if (!wasCompleted && result.data.status === 'completed') emit('completed')
   } else {
-    if (result.message?.includes(DELIVERY_CONTRACT_ERROR)) {
+    // 结果交付不完整等确定性失败（文案或 409/404 状态码）停止轮询，避免无限重复请求
+    if (
+      result.message?.includes(DELIVERY_CONTRACT_ERROR) ||
+      decidePollReadFailure(result.status, 0, result.jobStatus) === 'stop_terminal'
+    ) {
       pollError.value = false
-      resultReadError.value = result.message
+      resultReadError.value = result.message || '任务结果暂无法展示'
       clearPollTimer()
       return
     }
