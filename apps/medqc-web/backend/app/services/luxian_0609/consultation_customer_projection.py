@@ -207,7 +207,11 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
         expected_keys.remove("source_document_ids")
     if rule_id == "LX0609-03-01-01" and "recommendation_results" in raw:
         expected_keys.add("recommendation_results")
-    allowed_internal_keys = {"source_document_refs", "recommendation_evidence"}
+    allowed_internal_keys = {
+        "source_document_refs",
+        "recommendation_evidence",
+        "excluded_recommendations",
+    }
     count_keys = (
         "completed_opinion_episode_count",
         "recommendation_count",
@@ -384,6 +388,36 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
         ):
             return None
         safe_facts["recommendation_evidence"] = safe_recommendation_evidence
+    raw_excluded_recommendations = raw.get("excluded_recommendations")
+    if raw_excluded_recommendations is not None:
+        if (
+            rule_id != "LX0609-03-01-04"
+            or not isinstance(raw_excluded_recommendations, list)
+            or len(raw_excluded_recommendations) > 96
+        ):
+            return None
+        safe_excluded_recommendations: list[dict[str, Any]] = []
+        for item in raw_excluded_recommendations:
+            if (
+                not isinstance(item, Mapping)
+                or set(item)
+                != {"episode_index", "recommendation_text", "exclusion_reason"}
+                or type(item.get("episode_index")) is not int
+                or not 1 <= item["episode_index"] <= raw["completed_opinion_episode_count"]
+                or not isinstance(item.get("recommendation_text"), str)
+                or not item["recommendation_text"].strip()
+                or len(item["recommendation_text"]) > 320
+                or item.get("exclusion_reason") != "execution_condition_not_defined"
+            ):
+                return None
+            safe_excluded_recommendations.append(
+                {
+                    "episode_index": item["episode_index"],
+                    "recommendation_text": item["recommendation_text"].strip(),
+                    "exclusion_reason": item["exclusion_reason"],
+                }
+            )
+        safe_facts["excluded_recommendations"] = safe_excluded_recommendations
     return safe_facts
 
 
@@ -546,13 +580,37 @@ def _published_recommendation_evidence(raw: dict[str, Any]) -> bool:
                for state in ("specific", "generic", "missing"))
 
 
+def _published_excluded_recommendations(raw: dict[str, Any]) -> bool:
+    excluded = raw["excluded_recommendations"]
+    return (
+        type(excluded) is list
+        and len(excluded) <= 96
+        and all(
+            type(item) is dict
+            and set(item)
+            == {"episode_index", "recommendation_text", "exclusion_reason"}
+            and type(item["episode_index"]) is int
+            and 1 <= item["episode_index"] <= raw["completed_opinion_episode_count"]
+            and type(item["recommendation_text"]) is str
+            and bool(item["recommendation_text"].strip())
+            and len(item["recommendation_text"]) <= 320
+            and item["exclusion_reason"] == "execution_condition_not_defined"
+            for item in excluded
+        )
+    )
+
+
 def _published_execution_facts(rule_id: str, raw: dict[str, Any]) -> bool:
     if rule_id not in {"LX0609-03-01-01", "LX0609-03-01-04"}:
         return False
     is_023 = rule_id == "LX0609-03-01-04"
     base = {"verification_kind", "completed_opinion_episode_count", "recommendation_count",
             "specific_execution_count", "generic_execution_count", "missing_execution_count", "relation_state"}
-    optional = {"recommendation_evidence"} if is_023 else {"recommendation_evidence", "recommendation_results"}
+    optional = (
+        {"recommendation_evidence", "excluded_recommendations"}
+        if is_023
+        else {"recommendation_evidence", "recommendation_results"}
+    )
     kind = "consultation_execution_quality_check" if is_023 else "consultation_execution_relation_check"
     states = ({"specific_execution", "execution_missing_or_generic", "not_triggered",
                "generic_or_copied_execution", "execution_record_absent", "source_incomplete",
@@ -566,7 +624,9 @@ def _published_execution_facts(rule_id: str, raw: dict[str, Any]) -> bool:
                 "generic_execution_count", "missing_execution_count"))):
         return False
     return (("recommendation_results" not in raw or _published_recommendation_results(raw))
-            and ("recommendation_evidence" not in raw or _published_recommendation_evidence(raw)))
+            and ("recommendation_evidence" not in raw or _published_recommendation_evidence(raw))
+            and ("excluded_recommendations" not in raw
+                 or _published_excluded_recommendations(raw)))
 
 
 def validate_published_consultation_facts(*, rule_id: str, raw: Any) -> dict[str, Any] | None:

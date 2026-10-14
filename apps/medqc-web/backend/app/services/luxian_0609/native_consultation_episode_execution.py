@@ -190,6 +190,9 @@ _FOLLOW_UP_INTERVAL_PATTERN = re.compile(
     r"\s*[-~至]\s*)?(?:\d+|[一二两三四五六七八九十]+)?"
     r"\s*(?:年|个?月|季度))"
 )
+_AMBIGUOUS_CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
+    r"^(?:建议|可)?\s*(?:必要时|如有必要(?:时)?|酌情|视情况)"
+)
 _EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
     r"(?:会诊目的|申请.{0,12}会诊).{0,80}"
     r"(?:评估.{0,24}(?:适应证|病情|方案)|明确.{0,24}(?:诊断|原因|方案)|"
@@ -706,6 +709,8 @@ def _clean(value: Any) -> str:
 def _is_out_of_execution_check_scope(recommendation: "_Recommendation") -> bool:
     """识别不要求通过住院医嘱核对执行情况的会诊建议。"""
 
+    if _has_ambiguous_execution_condition(recommendation):
+        return True
     if _clean(recommendation.action_type).lower() == "monitoring":
         return True
     source_quote = _clean(recommendation.source_quote)
@@ -715,6 +720,18 @@ def _is_out_of_execution_check_scope(recommendation: "_Recommendation") -> bool:
         _FOLLOW_UP_SCOPE_PATTERN.search(source_quote)
         or _FOLLOW_UP_INTERVAL_PATTERN.search(source_quote)
         or _PURE_FOLLOW_UP_PATTERN.fullmatch(source_quote)
+    )
+
+
+def _has_ambiguous_execution_condition(recommendation: "_Recommendation") -> bool:
+    """条件未定义的建议不能据“未执行”形成缺陷。"""
+
+    # 以会诊建议原文为准，避免模型在 normalized_action 中丢失条件词，
+    # 也避免把原文中条件明确的建议错误概括成“必要时”后再排除。
+    source_quote = _clean(recommendation.source_quote)
+    return bool(
+        source_quote
+        and _AMBIGUOUS_CONDITIONAL_RECOMMENDATION_PATTERN.match(source_quote)
     )
 
 
@@ -2297,6 +2314,7 @@ def _consultation_execution_display_facts(
     assessments: Sequence[_ExecutionAssessment] | None,
     documents: Sequence[Mapping[str, str]],
     candidates: Sequence[_CandidateDocument] = (),
+    excluded_recommendations: Sequence[_CompletedRecommendation] = (),
 ) -> Mapping[str, Any]:
     """解释020的关联结果或023的执行质量结果。"""
 
@@ -2606,6 +2624,17 @@ def _consultation_execution_display_facts(
         if rule_id == "LX0609-03-01-01":
             facts["recommendation_results"] = recommendation_results
         facts["recommendation_evidence"] = recommendation_evidence[:96]
+        if rule_id == "LX0609-03-01-04" and excluded_recommendations:
+            facts["excluded_recommendations"] = [
+                {
+                    "episode_index": episode_indexes[item.episode_ref],
+                    "recommendation_text": redact_luxian_0609_patient_privacy(
+                        _clean(item.recommendation.normalized_action)
+                    ),
+                    "exclusion_reason": "execution_condition_not_defined",
+                }
+                for item in excluded_recommendations[:96]
+            ]
     return facts
 
 
@@ -2648,6 +2677,51 @@ def _completed_recommendations(
     if len(completed) > _MAX_TOTAL_RECOMMENDATIONS:
         raise _SourceGap()
     return tuple(completed)
+
+
+def _excluded_conditional_recommendations(
+    episodes: Sequence[_Episode],
+    documents: Sequence[Mapping[str, str]],
+    *,
+    stay_window: _StayWindow | None,
+) -> tuple[_CompletedRecommendation, ...]:
+    """返回因执行条件不明确而不进入 023 证据核对的建议。"""
+
+    by_ref = {str(item["ref"]): item for item in documents}
+    excluded: list[_CompletedRecommendation] = []
+    for item in episodes:
+        if (
+            item.opinion_state != "clear"
+            or item.confidence != "high"
+            or not item.recommendations
+        ):
+            continue
+        members = [by_ref.get(ref) for ref in item.opinion_refs]
+        if any(member is None for member in members):
+            raise _SemanticInvalid()
+        observed_times = [
+            _parse_observed_time(member.get("time"))
+            for member in members
+            if member is not None
+        ]
+        if not observed_times or any(value is None for value in observed_times):
+            raise _SourceGap()
+        if stay_window is None or any(
+            not stay_window.contains(value)
+            for value in observed_times
+            if value is not None
+        ):
+            raise _SourceGap()
+        opinion_time = max(
+            (value for value in observed_times if value is not None),
+            key=lambda value: value.value,
+        )
+        excluded.extend(
+            _CompletedRecommendation(item.episode_ref, recommendation, opinion_time)
+            for recommendation in item.recommendations
+            if _has_ambiguous_execution_condition(recommendation)
+        )
+    return tuple(excluded[:_MAX_TOTAL_RECOMMENDATIONS])
 
 
 def _prompt_alias_by_ref(
@@ -4245,6 +4319,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     context_only_candidate_present = False
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
+    excluded_conditional_recommendations: tuple[_CompletedRecommendation, ...] = ()
     embedded_decision_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -4258,12 +4333,21 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     documents,
                     stay_window=execution_stay_window,
                 )
+                excluded_conditional_recommendations = (
+                    _excluded_conditional_recommendations(
+                        episodes,
+                        documents,
+                        stay_window=execution_stay_window,
+                    )
+                )
             except _SourceGap:
                 completed_recommendations = ()
+                excluded_conditional_recommendations = ()
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = ("data_gap", "linkage_unresolved")
             except _SemanticInvalid:
                 completed_recommendations = ()
+                excluded_conditional_recommendations = ()
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = ("technical_error", "model_invalid_output")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
@@ -4913,6 +4997,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         if execution_candidate_projection is not None
                         else ()
                     ),
+                    excluded_recommendations=excluded_conditional_recommendations,
                 ),
             )
         )

@@ -1065,6 +1065,26 @@ def test_023_mixed_execution_lists_missing_and_generic_gaps_separately() -> None
     assert "缺少执行证据或执行记录不具体" not in finding
 
 
+def test_023_finding_lists_conditional_recommendation_outside_comparison() -> None:
+    facts = _023_facts("missing")
+    facts["excluded_recommendations"] = [
+        {
+            "episode_index": 1,
+            "recommendation_text": "必要时完善TCD检查",
+            "exclusion_reason": "execution_condition_not_defined",
+        }
+    ]
+
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-03-01-04",
+        facts=facts,
+    )
+
+    assert "未纳入执行证据核对：第1次会诊建议“必要时完善TCD检查”" in finding
+    assert "上述建议未说明何时达到执行条件" in finding
+    assert "不能据未找到记录判定未落实" in finding
+
+
 def test_023_precise_defect_finding_does_not_override_non_defect_states() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-03-01-04",

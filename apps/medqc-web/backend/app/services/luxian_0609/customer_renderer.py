@@ -2810,6 +2810,9 @@ def customer_finding_from_controlled_facts(
         recommendation_evidence = facts.get("recommendation_evidence")
         if not isinstance(recommendation_evidence, list):
             return ""
+        excluded_recommendations = facts.get("excluded_recommendations", [])
+        if not isinstance(excluded_recommendations, list):
+            return ""
         labels_by_state: dict[str, list[str]] = {
             "specific": [],
             "generic": [],
@@ -2842,6 +2845,25 @@ def customer_finding_from_controlled_facts(
             f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；"
             f"共核对{len(recommendation_evidence)}条建议。"
         ]
+        if excluded_recommendations:
+            excluded_labels: list[str] = []
+            for item in excluded_recommendations:
+                if (
+                    not isinstance(item, Mapping)
+                    or type(item.get("episode_index")) is not int
+                    or not isinstance(item.get("recommendation_text"), str)
+                    or item.get("exclusion_reason")
+                    != "execution_condition_not_defined"
+                ):
+                    return ""
+                excluded_labels.append(
+                    f"第{item['episode_index']}次会诊建议"
+                    f"“{item['recommendation_text'].strip()}”"
+                )
+            finding_parts.append(
+                f"未纳入执行证据核对：{'、'.join(excluded_labels)}。"
+                "上述建议未说明何时达到执行条件，不能据未找到记录判定未落实。"
+            )
         if labels_by_state["missing"]:
             finding_parts.append(
                 f"未找到执行证据：{'、'.join(labels_by_state['missing'])}。"
