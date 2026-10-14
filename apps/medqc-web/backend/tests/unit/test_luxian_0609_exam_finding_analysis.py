@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from finding_selection_test_support import selection_answer
 
 from app.services.luxian_0609.exam_finding_analysis import (
     SCHEMA_VERSION,
@@ -43,6 +44,7 @@ class _Client:
     async def generate(self, prompt, **kwargs):
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
+        output = selection_answer(output, prompt)
         content = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
         return {"choices": [{"finish_reason": "stop", "message": {"content": content}}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
@@ -151,7 +153,7 @@ async def test_quote_about_another_exam_does_not_count_for_this_event():
         _answer(ref, "none"),
     ])
     outcome = await check_exam_finding_analysis(projection, client)
-    assert outcome.llm_call_count == 2 and "report_span必须逐字摘自" in client.prompts[1]
+    assert outcome.llm_call_count == 2 and "report_fragment_id只选当前事件" in client.prompts[1]
     assert outcome.analysed_refs == {1: ()}
 
 

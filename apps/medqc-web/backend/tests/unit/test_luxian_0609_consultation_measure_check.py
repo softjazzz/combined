@@ -64,15 +64,15 @@ UNEXECUTED = ("关节松动术", "偏瘫肢体综合训练")
 def _measures(alias, *, include_missing=True, bad=None, generic=()):
     items = [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "电针",
-         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针"},
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针", "executed_action": "电针", "action_relation": "matched"},
         {"recommendation_ref": "consultation_record-1#r1", "measure": "头皮针",
-         "evidence_ref": alias["inpat_nondrug_order-2"], "quote": "头皮针"},
+         "evidence_ref": alias["inpat_nondrug_order-2"], "quote": "头皮针", "executed_action": "头皮针", "action_relation": "matched"},
         {"recommendation_ref": "consultation_record-1#r1", "measure": "低频",
-         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗"},
+         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗", "executed_action": "低频脉冲治疗", "action_relation": "matched"},
     ]
     if include_missing:
         items += [{"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-                   "evidence_ref": "", "quote": ""} for measure in UNEXECUTED]
+                   "evidence_ref": "", "quote": "", "executed_action": "", "action_relation": "not_found"} for measure in UNEXECUTED]
     if bad == "measure":
         items[0]["measure"] = "针刺疗法"
     elif bad == "scope":
@@ -105,11 +105,31 @@ async def test_unexecuted_measure_turns_compliant_into_non_compliant():
     assert gap == ("data_gap", "candidate_scope_incomplete")
 
 
+@pytest.mark.asyncio
+async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution():
+    from dataclasses import replace
+    completed, candidates, allowed, aliases = _setup(("动态心电图检查",))
+    recommendation = replace(completed[0].recommendation, source_quote="关节松动术", normalized_action="关节松动术")
+    completed = (replace(completed[0], recommendation=recommendation),)
+    answer = {"schema_version": "lx0609-consultation-measure-check-v3", "generic": [], "measures": [{
+        "recommendation_ref": recommendation.recommendation_ref, "measure": "关节松动术",
+        "evidence_ref": aliases[candidates[0].ref], "quote": "动态心电图检查",
+        "executed_action": "动态心电图检查", "action_relation": "unrelated",
+    }]}
+    result = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed,
+        alias_by_ref=aliases, llm_client=_Client([answer, answer]),
+    )
+    assert result.state == "ready"
+    assert result.missing_measures == {recommendation.recommendation_ref: ("关节松动术",)}
+    assert _final(result) == ("non_compliant", "requirement_violated")
+
+
 def _fully_evidenced(alias):
     answer = _measures(alias, include_missing=False)
     answer["measures"] += [
         {"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure}
+         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure, "executed_action": measure, "action_relation": "matched"}
         for index, measure in enumerate(UNEXECUTED, start=4)
     ]
     return answer
@@ -247,9 +267,34 @@ async def test_purpose_clause_in_recommendation_is_not_an_omission():
     alias = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "红光照射",
-         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗"}]}
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗", "executed_action": "红光治疗", "action_relation": "matched"}]}
     client = _Client([answer])
     outcome = await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias, llm_client=client)
     assert outcome.state == "ready" and outcome.llm_call_count == 1 and not outcome.has_missing
     assert "以促进伤口愈合" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action,relation", [("虚构的动作", "matched"), ("电针", "uncertain")])
+async def test_invalid_or_uncertain_action_never_keeps_compliant(action, relation):
+    _, _, _, alias = _setup(FULL_ORDERS)
+    answer = _fully_evidenced(alias)
+    answer["measures"][0].update(executed_action=action, action_relation=relation)
+    result = await _check(_Client([answer, answer]), FULL_ORDERS)
+    assert result.state == "failed" and result.llm_call_count == 2
+    assert _final(result) == ("data_gap", "semantic_extraction_unresolved")
+
+
+@pytest.mark.asyncio
+async def test_combined_procedures_cannot_share_one_action_as_full_execution():
+    _, _, _, alias = _setup()
+    bad = _measures(alias)
+    bad["measures"] = [dict(bad["measures"][0], measure=RECOMMENDATION)]
+    client = _Client([bad, _measures(alias)])
+    result = await _check(client)
+    assert result.state == "ready" and result.llm_call_count == 2
+    assert result.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
+    assert "逐项拆开" in client.prompts[1]
+    failed = await _check(_Client([bad, bad]))
+    assert _final(failed) == ("data_gap", "semantic_extraction_unresolved")

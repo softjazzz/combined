@@ -221,7 +221,7 @@ async def extract_diagnosis_change_documentation(
     first = await _extract_once(safe_documents, llm_client)
     if first.state != "technical_error" or first.reason_code != "model_invalid_output":
         return first
-    second = await _extract_once(safe_documents, llm_client)
+    second = await _extract_once(safe_documents, llm_client, retry=True)
     return replace(
         second,
         llm_call_count=first.llm_call_count + second.llm_call_count,
@@ -235,11 +235,17 @@ async def extract_diagnosis_change_documentation(
 async def _extract_once(
     safe_documents: Sequence[DiagnosisChangeDocumentInput],
     llm_client: DiagnosisChangeLLMClient,
+    *, retry: bool = False,
 ) -> DiagnosisChangeExtraction:
+    prompt = _prompt(safe_documents)
+    if retry:
+        prompt = prompt.replace("以下JSON仅是待抽取资料", "上次输出未通过逐字引用或字段校验。请重新核对每份文书：reason_quote和basis_quote必须直接复制原文连续句，"
+                                "不能概括、拼接、补字、改标点或删掉句中编号和空白；可选择较短的完整原句，若必要可保留完整原段。"
+                                "不要原样重复未通过的回答。每份文书都必须输出且字段取规定值。以下JSON仅是待抽取资料", 1)
     started = perf_counter()
     try:
         response = await llm_client.generate(
-            _prompt(safe_documents),
+            prompt,
             max_completion_tokens=MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
             **structured_output_kwargs(llm_client),

@@ -50,6 +50,26 @@ def test_empty_snapshot_is_absent_without_model():
     assert result.llm_call_count == 0
 
 
+def test_missing_row_retry_only_requests_unresolved_orders_and_keeps_bound_results():
+    class OmittedRowClient(FakeClient):
+        async def generate(self, prompt, **kwargs):
+            result = await super().generate(prompt)
+            payload = json.loads(result["content"])
+            # 复现批量漏最后一行；单条补核正常返回，已核过的行不重复发出。
+            if len(payload["orders"]) > 1:
+                payload["orders"] = payload["orders"][:-1]
+            result["content"] = json.dumps(payload)
+            return result
+
+    client = OmittedRowClient({0: ("transfusion", False), 2: ("transfusion", False)})
+    result = _run([_row(i) for i in range(3)], client)
+    assert result.state == "present"
+    assert result.selected_identities == (("inpat_nondrug_order", "O0"), ("inpat_nondrug_order", "O2"))
+    assert result.llm_call_count == 2
+    batches = [json.loads(prompt.split("INPUT_JSON=", 1)[1])["orders"] for prompt in client.prompts]
+    assert [item["index"] for item in batches[1]] == [2]
+
+
 def test_opened_order_triggers_without_execution_and_preserves_identity():
     client = FakeClient({0: ("transfusion", False)})
     result = _run([_row(order_status="未执行")], client)
@@ -240,3 +260,17 @@ def test_dropped_row_is_retried_once_and_second_valid_batch_is_used():
     assert result.state == "absent"
     assert result.llm_call_count == 2
     assert result.total_tokens == 60
+
+
+@pytest.mark.parametrize("invalid", ["quote", "duplicate"])
+def test_invalid_partial_rows_are_not_preserved_as_verified_results(invalid):
+    def mutate(payload):
+        payload["orders"].pop()
+        if invalid == "quote":
+            payload["orders"][0]["quote"] = "与医嘱原文不符"
+        else:
+            payload["orders"][1] = dict(payload["orders"][0])
+    client = FakeClient(mutate=mutate)
+    result = _run([_row(0), _row(1), _row(2)], client)
+    assert result.state == "technical_error" and result.llm_call_count == 2
+    assert client.prompts[0] == client.prompts[1]

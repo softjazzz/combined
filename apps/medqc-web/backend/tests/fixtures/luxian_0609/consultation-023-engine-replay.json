@@ -25,12 +25,8 @@
         "record_content": "遵会诊意见，已复查血常规。"
       }
     ],
-    "inpat_registration": [
-      {"admission_datetime": "2026-07-01 08:00:00"}
-    ],
-    "current_visit_discharge_horizon": [
-      {"discharge_datetime": "2026-07-03 08:00:00"}
-    ]
+    "inpat_registration": [{ "admission_datetime": "2026-07-01 08:00:00" }],
+    "current_visit_discharge_horizon": [{ "discharge_datetime": "2026-07-03 08:00:00" }]
   },
   "responses": [
     {
@@ -58,7 +54,7 @@
         "non_target_refs": [],
         "unresolved_refs": []
       },
-      "usage": {"prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22},
+      "usage": { "prompt_tokens": 17, "completion_tokens": 5, "total_tokens": 22 },
       "api_time": 0.01
     },
     {
@@ -76,9 +72,26 @@
           }
         ]
       },
-      "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
+      "usage": { "prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16 },
       "api_time": 0.01
     },
-    {"payload": {"schema_version": "lx0609-consultation-measure-check-v2", "measures": [{"recommendation_ref": "consultation_record-1#r1", "measure": "复查血常规", "evidence_ref": "daily_course_record-1", "quote": "已复查血常规"}], "generic": []}, "usage": {"prompt_tokens": 10, "completion_tokens": 3, "total_tokens": 13}, "api_time": 0.01}
+    {
+      "payload": {
+        "schema_version": "lx0609-consultation-measure-check-v3",
+        "measures": [
+          {
+            "recommendation_ref": "consultation_record-1#r1",
+            "measure": "复查血常规",
+            "evidence_ref": "daily_course_record-1",
+            "quote": "已复查血常规",
+            "executed_action": "复查血常规",
+            "action_relation": "matched"
+          }
+        ],
+        "generic": []
+      },
+      "usage": { "prompt_tokens": 10, "completion_tokens": 3, "total_tokens": 13 },
+      "api_time": 0.01
+    }
   ]
 }

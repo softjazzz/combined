@@ -129,6 +129,12 @@ def _prompt(batch: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+class _IncompleteCoverage(ValueError):
+    def __init__(self, resolved: list[tuple[int, str, bool | None]], missing: set[int]):
+        super().__init__("incomplete row coverage")
+        self.resolved, self.missing = resolved, missing
+
+
 def _classifications(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) -> list[tuple[int, str, bool | None]]:
     choices = response.get("choices")
     if choices is not None:
@@ -145,7 +151,7 @@ def _classifications(response: Mapping[str, Any], batch: Sequence[Mapping[str, A
         raise ValueError("invalid response schema")
     expected = {row["index"]: row["name"] for row in batch}
     orders = payload["orders"]
-    if not isinstance(orders, list) or len(orders) != len(expected):
+    if not isinstance(orders, list):
         raise ValueError("incomplete row coverage")
     seen: set[int] = set()
     result = []
@@ -162,6 +168,9 @@ def _classifications(response: Mapping[str, Any], batch: Sequence[Mapping[str, A
             raise ValueError("invalid cancellation state")
         seen.add(index)
         result.append((index, classification, cancelled))
+    if seen != set(expected):
+        # 已出现的行全部通过身份、逐字与状态校验后，才允许只补核缺行。
+        raise _IncompleteCoverage(result, set(expected) - seen)
     return result
 
 
@@ -200,13 +209,15 @@ async def classify_transfusion_orders(
     selected: set[int] = set()
     unresolved = False
     for batch in _batches(inputs):
+        pending = batch
+        resolved_rows: list[tuple[int, str, bool | None]] = []
         # 用户口径（2026-10-11）：协议违规（漏行、引用不符等）可确定识别，重试 1 次；仍违规才拒收。
         for attempt in range(PROTOCOL_ATTEMPTS):
             started = perf_counter()
             calls += 1
             try:
                 # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
-                response = await llm_client.generate(_prompt(batch), **structured_output_kwargs(llm_client))
+                response = await llm_client.generate(_prompt(pending), **structured_output_kwargs(llm_client))
             except Exception:
                 api_time += perf_counter() - started
                 return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_transport_error")
@@ -216,11 +227,14 @@ async def classify_transfusion_orders(
                 completion_tokens += usage[1]
                 total_tokens += usage[2]
                 api_time += usage[3] or perf_counter() - started
-                resolved = _classifications(response, batch)
+                resolved = resolved_rows + _classifications(response, pending)
                 break
-            except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
                 if attempt + 1 == PROTOCOL_ATTEMPTS:
                     return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
+                if isinstance(error, _IncompleteCoverage):
+                    resolved_rows.extend(error.resolved)
+                    pending = [row for row in pending if row["index"] in error.missing]
         for index, classification, cancelled in resolved:
             if cancelled is True:
                 continue

@@ -240,3 +240,17 @@ def test_protocol_violation_is_retried_once_and_second_valid_answer_is_used():
     assert result.state == "ready"
     assert result.llm_call_count == 2
     assert result.total_tokens == 48
+
+
+def test_repeated_problem_mention_retry_explains_which_binding_must_be_unique():
+    body = "患者诉右下肢肿胀。查体右下肢肿胀，病因待查。"
+    class CorrectingClient(Client):
+        async def generate(self, prompt, **kwargs):
+            problem = "患者诉右下肢肿胀" if "problem_quote在quote内必须唯一" in prompt else "右下肢肿胀"
+            self.documents = [dict(row_index=0, coverage="complete", assertions=[claim(body, problem)])]
+            return await super().generate(prompt, **kwargs)
+    client = CorrectingClient()
+    result = run(client, [{"content": body}])
+    assert result.state == "ready" and result.llm_call_count == 2
+    fact = result.documents[0].assertions[0]
+    assert body[fact.problem_start:fact.problem_end] == "患者诉右下肢肿胀"

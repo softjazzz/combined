@@ -295,3 +295,17 @@ async def test_spliced_quote_is_retried_once_and_second_valid_answer_is_used():
     assert result.llm_call_count == 2
     assert result.total_tokens == 180
     assert len(client.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_rejects_rewritten_quote_and_requests_original_sentence():
+    class CorrectingClient(_Client):
+        async def generate(self, prompt, **kwargs):
+            self.payload = _payload(_item(reason_quote="不是文书原话"))
+            if "上次输出未通过逐字引用或字段校验" in prompt:
+                self.payload = _payload(_item())
+            return await super().generate(prompt, **kwargs)
+    client = CorrectingClient()
+    result = await extract_diagnosis_change_documentation([_document()], client)
+    assert result.state == "ready" and result.llm_call_count == 2
+    assert len(client.calls) == 2

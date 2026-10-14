@@ -479,7 +479,7 @@ class _SameCourseBasisClient(_Client):
             else:
                 kind, quote, span = "diagnosis_only", "目前考虑诊断：腰椎间盘突出症", ""
             output = {
-                "schema_version": "lx0609-exam-finding-analysis-v3",
+                "schema_version": "lx0609-exam-finding-analysis-v4",
                 "docs": [{
                     "event_position": event_position,
                     "course_doc_ref": course_ref,
@@ -488,6 +488,8 @@ class _SameCourseBasisClient(_Client):
                     "report_span": span,
                 }],
             }
+            from finding_selection_test_support import selection_answer
+            output = selection_answer(output, prompt)
         return {
             "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(output, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
@@ -6900,7 +6902,8 @@ def test_exam_prompt_carries_2026_10_11_reason_incidental_and_differential_polic
 
 
 @pytest.mark.asyncio
-async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch):
+@pytest.mark.parametrize("ct_record_present", [True, False])
+async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch, ct_record_present):
     """06-01-01 与 06-01-05 的前置语义读取互不依赖，不能串成关键路径。"""
 
     from app.services.luxian_0609.exam_finding_relevance import (
@@ -6943,8 +6946,8 @@ async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch):
                             {
                                 "event_position": 1,
                                 "order_position": 1,
-                                "record_state": "consistent_description",
-                                "clause_ids": ["C1"],
+                                "record_state": "consistent_description" if ct_record_present else "absent",
+                                "clause_ids": ["C1"] if ct_record_present else [],
                             }
                         ],
                         "unmatched_current_clause_ids": [],
@@ -6970,6 +6973,7 @@ async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch):
         exam_rows=(
             {
                 "exam_id": "EXAM-1",
+                "document_id": "REPORT-DOC-1",
                 "order_id": "ORDER-1",
                 "exam_name": "胸部CT",
                 "exam_time": "2026-04-26 08:00:00",
@@ -7018,3 +7022,15 @@ async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch):
         "LX0609-06-01-01",
         "LX0609-06-01-05",
     ]
+
+
+    if not ct_record_present:
+        # 联合运行时不得混入其他规则的文书字段，否则专用结果被 finalizer 拒收。
+        from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_executor_customer_display_facts
+        facts = dict(result.customer_display_facts)["LX0609-06-01-01"]
+        finalized, _ = finalize_luxian_0609_executor_customer_display_facts(
+            result={"rule_id": "LX0609-06-01-01", "status": "non_compliant", "reason_code": "requirement_violated"},
+            raw_facts=facts,
+        )
+        assert finalized["status"] == "non_compliant"
+        assert "source_document_ids" not in facts

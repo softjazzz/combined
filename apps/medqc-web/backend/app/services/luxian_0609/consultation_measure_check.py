@@ -10,7 +10,8 @@
 none。Python 核验：措施须逐字见于建议原文；证据须在允许范围内且引文逐字见于该候选。
 任一措施无证据即缺项。拆分规则：一个检查、治疗、操作、会诊、转科各算一项；一张中药方
 （含加减）算一项，药材与剂量不单列；“注意休息”“密切观察”“必要时…”等笼统嘱咐不算措施。
-模型只给拆分与证据，不下质控结论。
+模型只给拆分与证据，不下质控结论。v3 另抽取证据中的实际动作及其与建议的关系；
+无关动作不能证明落实，不确定关系仍重试后判资料不足。非药物措施的顿号并列项必须逐项核对。
 
 复核反例（2026-10-12）：建议列 5 项措施、证据只有前 3 项，模型只拆出前 3 项时程序仍判合规。
 故模型须把建议中的笼统嘱咐另列在 generic，程序核验覆盖：从建议原文中去掉全部措施与笼统嘱咐、
@@ -34,7 +35,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from .transfusion_order_trigger import _json_response_object, _usage
 
-SCHEMA_VERSION = "lx0609-consultation-measure-check-v2"
+SCHEMA_VERSION = "lx0609-consultation-measure-check-v3"
 PROTOCOL_ATTEMPTS = 2
 MAX_MEASURE_CHARS = 40
 MAX_QUOTE_CHARS = 80
@@ -138,12 +139,20 @@ def _prompt(
         "一个检查、治疗、操作、会诊、转科各算一项；一张中药方（含加减）算一项，药材与剂量不单列；"
         "“注意休息”“密切观察”“必要时…”“对症处理”等笼统嘱咐，以及目的、理由、用法等说明（如“以促进伤口愈合”）"
         "不算措施，不放进measures，而是把其原话逐字放进generic（每项不超过40字）。recommendation_text中的每项内容都必须出现在measures或generic中，"
-        "不能遗漏任何一项措施，即使它没有执行证据。"
+        "不能遗漏任何一项措施，即使它没有执行证据。非药物措施中的顿号并列项必须分别输出，禁止把整串建议作为一项、只用其中一个动作证明整串已执行。"
         "每项措施只能在该建议的candidates中找执行证据：医嘱（inpat_*_order）开立了该措施，或病程写明已实施该措施"
         "（只写建议、拟、计划不算已实施）。找到时evidence_ref填候选ref，quote为该候选原文中证明执行的连续原文"
         "（逐字摘录，不超过80字）；找不到时evidence_ref与quote均为空字符串。"
+        "找到候选后先逐字摘出它实际开立或实施的动作executed_action（不超过40字，必须在quote内），"
+        "再比较该动作与measure，action_relation只取matched/unrelated/uncertain/not_found。"
+        "matched要求动作相同或可明确确认是同一措施的同义表达；只有同患者、时间相近、科室相关或候选有真实医嘱均不够。"
+        "例如关节松动或肌力训练建议，出院处置、心电监测医嘱是unrelated，不能作为康复实施证据；"
+        "低频脉冲治疗与明确相同方式的电刺激治疗可按上下文判断为matched，不能仅按字面不相同就否认。"
+        "明确无关填unrelated；动作关系不清填uncertain；未找到候选填not_found且executed_action也为空。"
+        "建议仅写上位概念（如康复理疗）时，具体康复动作（如电针或低频脉冲治疗）可支持该概括建议，填matched；"
+        "建议明确列出关节松动术、肌力训练等独立动作时，电针只支持电针，不能替代其余动作。"
         f"严格JSON根对象只含schema_version、measures和generic，schema_version={SCHEMA_VERSION}；measures每项只含"
-        "recommendation_ref、measure、evidence_ref、quote；generic每项只含recommendation_ref、text，没有笼统嘱咐时为空数组；"
+        "recommendation_ref、measure、evidence_ref、quote、executed_action、action_relation；generic每项只含recommendation_ref、text，没有笼统嘱咐时为空数组；"
         "每条建议至少输出一项措施。\n"
         "RECOMMENDATIONS_JSON=" + json.dumps(recommendations, ensure_ascii=False, separators=(",", ":"))
     )
@@ -170,6 +179,7 @@ def _parse(
         raise ValueError("invalid response schema")
     texts = {item.recommendation.recommendation_ref: _normalize(_recommendation_text(item.recommendation))
              for item in completed}
+    action_types = {item.recommendation.recommendation_ref: item.recommendation.action_type for item in completed}
     missing: dict[str, list[str]] = {ref: [] for ref in texts}
     counts: dict[str, int] = {ref: 0 for ref in texts}
     seen: set[tuple[str, str]] = set()
@@ -187,16 +197,22 @@ def _parse(
         if len(covered[ref]) > MAX_GENERIC_PER_RECOMMENDATION:
             raise ValueError("too many generic items")
     for item in payload["measures"]:
-        if not isinstance(item, dict) or set(item) != {"recommendation_ref", "measure", "evidence_ref", "quote"}:
+        if not isinstance(item, dict) or set(item) != {
+            "recommendation_ref", "measure", "evidence_ref", "quote", "executed_action", "action_relation",
+        }:
             raise ValueError("invalid measure schema")
         ref, measure = item["recommendation_ref"], item["measure"]
         evidence, quote = item["evidence_ref"], item["quote"]
-        if ref not in texts or not all(isinstance(value, str) for value in (measure, evidence, quote)):
+        action, relation = item["executed_action"], item["action_relation"]
+        if (ref not in texts or not all(isinstance(value, str) for value in (measure, evidence, quote, action, relation))
+                or relation not in {"matched", "unrelated", "uncertain", "not_found"}):
             raise ValueError("invalid measure identity")
         normalized_measure = _normalize(measure)
         if (not normalized_measure or len(measure) > MAX_MEASURE_CHARS
                 or normalized_measure not in texts[ref]):
             raise ValueError("measure not in recommendation")
+        if action_types[ref] != "medication" and "、" in measure:
+            raise ValueError("multiple actions in one measure")
         if (ref, normalized_measure) in seen:
             continue
         seen.add((ref, normalized_measure))
@@ -205,7 +221,7 @@ def _parse(
         if counts[ref] > MAX_MEASURES_PER_RECOMMENDATION:
             raise ValueError("too many measures")
         if not evidence.strip():
-            if quote.strip():
+            if quote.strip() or action.strip() or relation != "not_found":
                 raise ValueError("quote without evidence")
             missing[ref].append(measure)
             continue
@@ -216,6 +232,12 @@ def _parse(
         if (not normalized_quote or len(quote) > MAX_QUOTE_CHARS
                 or normalized_quote not in _normalize(candidates_by_ref[internal].text)):
             raise ValueError("quote not in candidate")
+        if not _normalize(action) or len(action) > MAX_MEASURE_CHARS or _normalize(action) not in normalized_quote:
+            raise ValueError("action not in evidence")
+        if relation in {"uncertain", "not_found"}:
+            raise ValueError("action relation unresolved")
+        if relation == "unrelated":
+            missing[ref].append(measure)
     if any(count == 0 for count in counts.values()):
         raise ValueError("recommendation without measure")
     result = {ref: tuple(values) for ref, values in missing.items()}
@@ -230,12 +252,15 @@ def _parse(
 
 
 _RETRY_HINTS = {
+    "multiple actions in one measure": "非药物措施中的顿号并列项必须逐项拆开，每项分别寻找执行证据，禁止用一项证据覆盖整串建议",
     "measure not in recommendation": "measure必须逐字摘自对应recommendation_text",
     "evidence out of scope": "evidence_ref只能取该建议candidates中的ref",
     "quote not in candidate": "quote必须逐字摘自evidence_ref对应候选原文",
     "quote without evidence": "evidence_ref为空时quote也必须为空字符串",
     "recommendation without measure": "每条建议至少输出一项措施",
     "generic not in recommendation": "generic的text必须逐字摘自对应recommendation_text",
+    "action not in evidence": "executed_action必须是quote中实际记录的动作原话，不得把建议动作改写进去",
+    "action relation unresolved": "核对实际动作是否支持建议措施；无关为unrelated，确无证据为not_found，仍不确定保留uncertain",
 }
 
 

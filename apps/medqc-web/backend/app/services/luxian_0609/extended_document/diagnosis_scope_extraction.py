@@ -88,6 +88,9 @@ def _prompt(bodies: Sequence[str]) -> str:
         "每个assertion仅scope、diagnosis_state、polarity、temporal_scope、association、quote、problem_quote。"
         "scope为diagnosis（整体诊断、疾病诊断及已明确疾病对应的病因/性质仍未明确问题）、"
         "treatment_plan（治疗方案）、local_problem（不能确认属于诊断/治疗方案的局部待查）、unknown。"
+        "只抽取正文实际表达的诊断/方案明确性，不能把仍有症状、体征异常、拟复查或继续治疗自动推断为诊断尚未明确。"
+        "例如‘局部肿胀，远端感觉可，症状改善，继续治疗并复查血常规’未表达诊断/方案不明确，不因此新增unresolved。"
+        "‘肿胀病因待查’则明确表达了未解决的问题，应保留；两者不能混同。"
         "某一疾病名称已明确不证明其病因或性质已明确；若正文明确该疾病诊断问题仍待明确，"
         "独立保留diagnosis范围未明确事实。仅有局部症状待查、无法确认其诊断范围时保留local_problem。"
         "diagnosis_state为explicit（明确/已解决）、unresolved（诊断尚未明确）、"
@@ -178,7 +181,10 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
             start = _unique_position(originals[row], quote)
             problem_start = None
             if association == "explicit":
-                problem_start = start + _unique_position(quote, problem)
+                try:
+                    problem_start = start + _unique_position(quote, problem)
+                except ValueError as error:
+                    raise ValueError("problem not uniquely grounded") from error
             elif problem:
                 raise ValueError("unproven problem identity")
             identity = (scope, state, polarity, temporal, association, quote, problem)
@@ -197,7 +203,7 @@ async def extract_diagnosis_scope(
     documents: Sequence[Mapping[str, Any]], llm_client: DiagnosisScopeClient | None,
     *, max_prompt_bytes: int, max_completion_tokens: int,
 ) -> DiagnosisScopeResult:
-    """显式单次批量预算；来源容量与模型容量分开，不截断、分批、重试。"""
+    """显式单批预算；不截断、不分批，协议违规最多重试一次。"""
     if type(max_prompt_bytes) is not int or max_prompt_bytes <= 0 or type(max_completion_tokens) is not int or max_completion_tokens <= 0:
         return DiagnosisScopeResult("data_gap", reason_code="candidate_scope_incomplete")
     try:
@@ -215,11 +221,12 @@ async def extract_diagnosis_scope(
     # 用户口径（2026-10-11）：协议违规可确定识别，重试 1 次；仍违规才拒收。
     calls = 0
     totals = [0, 0, 0, 0.0]
+    attempt_prompt = prompt
     for attempt in range(PROTOCOL_ATTEMPTS):
         started = perf_counter()
         calls += 1
         try:
-            response = await llm_client.generate(prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False,
+            response = await llm_client.generate(attempt_prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False,
                                                  **structured_output_kwargs(llm_client))
         except Exception:
             return DiagnosisScopeResult("technical_error", (), calls, *totals[:3], totals[3] + perf_counter() - started,
@@ -236,9 +243,14 @@ async def extract_diagnosis_scope(
             if parsed[2] != parsed[0] + parsed[1] or parsed[1] > max_completion_tokens:
                 raise ValueError("invalid usage total or budget")
             facts = _parse(response, originals, bodies)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return DiagnosisScopeResult("technical_error", (), calls, *totals, reason_code="model_invalid_output")
+            hint = {
+                "problem not uniquely grounded": "problem_quote在quote内必须唯一；当前引文重复提及同一问题，请缩短quote到保留明确性语义的唯一原文句，或扩展problem_quote的相邻原话以唯一定位。不得原样重复上次回答、改写或任取第一个位置",
+                "quote not uniquely grounded": "quote必须逐字且唯一见于对应正文；重复时补充相邻上下文，不得拼接或改写",
+            }.get(str(error), "请逐项检查完整覆盖、字段枚举和逐字引用，修正后重新输出完整JSON")
+            attempt_prompt = prompt.replace("\nINPUT_JSON=", f"\n上次校验失败：{hint}。\nINPUT_JSON=", 1)
             continue
         return DiagnosisScopeResult("ready", facts, calls, *totals)
     raise AssertionError("unreachable")

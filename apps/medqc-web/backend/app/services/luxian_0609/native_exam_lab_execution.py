@@ -2004,7 +2004,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
         display_facts: Mapping[str, Any] | None = None,
     ) -> None:
         assert evidence_snapshot is not None
-        if status == "non_compliant" and not source_document_ids:
+        # CT 医嘱一致性已通过 order_results 的引用位置定位；不能混入其他规则的旧文书字段。
+        if status == "non_compliant" and not source_document_ids and rule_id != CT_CONSISTENCY_RULE:
             fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
             source_document_ids = _target_source_document_ids(
                 display_rows_by_source,
