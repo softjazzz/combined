@@ -66,8 +66,10 @@ def test_rule_attestations_use_authoritative_executable_phase_scope():
         _WITHHELD_RULE_IDS | _CUSTOMER_EXCLUDED_RULE_IDS
     )
     assert set(executor_types) == set(rule_ids)
-    assert sum(item == "program" for item in executor_types.values()) == 39
-    assert sum(item == "llm" for item in executor_types.values()) == 33
+    # 006按客户口径改为纯程序判定，其余规则执行类型不变。
+    assert sum(item == "program" for item in executor_types.values()) == 40
+    assert sum(item == "llm" for item in executor_types.values()) == 32
+    assert executor_types["LX0609-02-01-02"] == "program"
 
 
 @pytest.mark.parametrize(
@@ -277,8 +279,8 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
     """锁定当前可执行规则的权威契约分类。"""
 
     rows = candidate["rows"]
-    assert len(_DETERMINISTIC_RULE_IDS) == 39
-    assert len(_SEMANTIC_RULE_IDS) == 33
+    assert len(_DETERMINISTIC_RULE_IDS) == 40
+    assert len(_SEMANTIC_RULE_IDS) == 32
     assert len(rows) == 20 * len(_RULE_IDS)
     decision_kinds = [row["decision_kind"] for row in rows]
     assert decision_kinds.count("deterministic") == (

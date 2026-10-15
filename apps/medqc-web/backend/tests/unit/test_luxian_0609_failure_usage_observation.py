@@ -84,7 +84,7 @@ async def test_failed_family_without_envelope_does_not_claim_observed_zero_usage
 
 
 @pytest.mark.asyncio
-async def test_006_transport_failure_keeps_usage_lower_bound_but_marks_it_unknown(
+async def test_006_standard_round_does_not_call_unavailable_identity_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     selected = ("LX0609-02-01-02",)
@@ -127,14 +127,15 @@ async def test_006_transport_failure_keeps_usage_lower_bound_but_marks_it_unknow
         selected_customer_rule_ids=selected,
     )
 
-    # 传输超时按 TRANSPORT_RETRY_ATTEMPTS=2 重试（2026-10-12）：共 3 次尝试。
-    assert calls == 3
-    assert context.native_llm_call_count == 1
+    # 客户确认标准上级查房文书直接证明身份；模型故障不应介入或污染用量。
+    assert calls == 0
+    assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
-    assert context.native_usage_unknown_executor_keys == ("basic_timeliness",)
+    assert context.native_usage_unknown_executor_keys == ()
     published = execution_module.aggregate_luxian_0609_orchestrated_results(
         orchestrated={"results": []}, context=context, visit_id="V",
         model_name="synthetic", evidence_payload=None,
     )
-    assert published["luxian_0609_usage_observation_complete"] is False
-    assert published["luxian_0609_usage_unknown_executor_keys"] == ["basic_timeliness"]
+    assert published["luxian_0609_usage_observation_complete"] is True
+    assert published.get("luxian_0609_usage_unknown_executor_keys", []) == []
+    assert published["results"][0]["status"] == "compliant"

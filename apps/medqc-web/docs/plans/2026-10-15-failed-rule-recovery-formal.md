@@ -1,5 +1,7 @@
 # 05-01-03 与 03-01-04 失败恢复正式修复
 
+后续已完成本机真实快照三轮复验与受控漏项验证，并收尾旧测试断言及稀疏检出文件问题：完整零模型门禁 10,250 项全部通过。详见[后续真实复验记录](2026-10-15-failed-rule-recovery-real-validation.md)。下文保留首次修复阶段的验证结果和当时边界。
+
 ## 范围与实现
 
 在 `C:\medqc-agent-merge` 的 `codex/business-agent-integration` 落地已验收的 [POC](2026-10-15-failed-rule-recovery-poc.md)，基线为 `613f55a58`。本轮没有构建交付包、更新客户机或调用真实模型。
