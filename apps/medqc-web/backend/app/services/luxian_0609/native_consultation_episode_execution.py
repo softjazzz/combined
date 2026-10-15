@@ -246,9 +246,9 @@ _PLANNED_ONLY_TRACE_PATTERN = re.compile(
     r"(?:行|予以|给予|完善|复查|实施|治疗|检查|检验|手术|操作|随访|处理)"
 )
 _EXECUTION_TRACE_BOUNDARY_PROMPT = (
-    "会诊记录时间是文书记录时间，不必然是实际会诊发生时间；同日医嘱可能先开立、后记录会诊。"
-    "对已提供的同日医嘱，不得仅因早于会诊记录几分钟就否认；仍须核对本次建议与具体治疗动作是否相符，"
-    "无关医嘱、仅同日或仅同科室均不能证明执行。"
+    "会诊执行记录是事后总结，文书记录时间不代表实际会诊发生时间，医嘱可先开立、隔日再补写记录。"
+    "对已提供的本次住院医嘱，不得仅因早于执行记录时间或日期就否认；仍须核对本次建议与具体治疗动作是否相符，"
+    "并结合原文确认对应本次建议，既往治疗、无关医嘱、仅同次住院或仅同科室均不能证明执行。"
     "‘遵会诊意见 + 明确具体动作’属于specific_trace；只有未写任何具体动作的裸句"
     "‘遵会诊意见执行’才属于generic_trace。"
     "execution_record_state只评价所选病程写法是否具体，不评价整条建议是否全部落实；"
@@ -2817,13 +2817,13 @@ def _execution_prompt(
                 continue
             if embedded_same_episode:
                 include = True
+            elif candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
+                # 医嘱已受本次住院窗口约束；执行记录是总结，不能用其书写时间作医嘱下限。
+                include = True
             elif candidate.observed_time.day > item.opinion_time.day:
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:
                 include = False
-            elif candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
-                # 同日医嘱可能先于会诊文书补记；时间只决定候选，动作关系仍须核验。
-                include = True
             elif candidate.observed_time.precise and item.opinion_time.precise:
                 include = candidate.observed_time.value > item.opinion_time.value
             else:

@@ -4739,10 +4739,10 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
 
 
 @pytest.mark.asyncio
-async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
+async def test_023_order_before_execution_record_is_checked_for_action_relation(
     monkeypatch,
 ):
-    """会诊前医嘱不是会诊后的执行证据，023判未落实且不发起二阶段调用。"""
+    """医嘱早于执行文书仍须核对动作，不能仅据文书时间直接判未落实。"""
 
     source_rows = _no_course_source_rows(
         consultation_text="会诊意见：建议加强抗感染治疗。",
@@ -4772,17 +4772,35 @@ async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
         source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == [
-        "non_compliant",
-        "non_compliant",
-    ]
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
+    assert result.llm_call_count == 3
+    assert "头孢哌酮舒巴坦" in client.prompts[1]
+
+
+def test_023_order_candidates_remain_inside_current_stay_when_documentation_is_later(monkeypatch):
+    rows = _no_course_source_rows(
+        consultation_text="会诊意见：中药贴敷。", source_key="inpat_nondrug_order", source_rows=[
+            {"order_name": text, "prescribed_datetime": time}
+            for text, time in (("入院前治疗", "2026-06-30 12:00:00"),
+                               ("本次住院治疗", "2026-07-19 12:00:00"),
+                               ("评价时点后治疗", "2026-08-01 12:00:00"))])
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    projection = episode._candidate_documents(
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        evidence_materials=None, evidence_snapshot=None,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+        keep_all_order_candidates=True)
+    orders = [candidate.text for candidate in projection.candidates
+              if candidate.source_key == "inpat_nondrug_order"]
+    assert orders == ["本次住院治疗"]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("order_time", ["2026-07-20 15:56:46", "2026-07-20 15:55:22"])
-async def test_023_same_day_order_before_documentation_reaches_execution_check(monkeypatch, order_time):
+@pytest.mark.parametrize("order_time", [
+    "2026-07-20 15:56:46", "2026-07-20 15:55:22", "2026-07-19 15:56:46", "2026-07-17 15:55:22",
+])
+async def test_023_order_before_documentation_reaches_execution_check(monkeypatch, order_time):
     rows = _no_course_source_rows(
         consultation_text="会诊意见：中药贴敷天突、双肺俞。处理：遵照执行。",
         source_key="inpat_nondrug_order", source_rows=[{
