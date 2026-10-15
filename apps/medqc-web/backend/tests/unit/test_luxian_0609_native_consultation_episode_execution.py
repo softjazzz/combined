@@ -5070,6 +5070,42 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("missing_culture", [False, True])
+async def test_clinical_non_execution_decision_in_same_opinion_is_available_per_recommendation(monkeypatch, missing_culture):
+    """本次会诊内的临床不执行反馈须可核对，但不能替其他建议兜底。"""
+    ref = "consultation_record-1"
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows(
+        "会诊意见：完善血气分析、肺功能、痰培养。现无气紧症状，暂不考虑血气分析、肺功能检查。",
+        action_suffix=False,
+    )
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: source_rows.get(source_key, []))
+    client = _SequentialClient(
+        _payload(episodes=[_episode(ref, [ref], application="absent", recommendations=[
+            {"recommendation_ref": f"{ref}#r{index}", "source_quote": text,
+             "normalized_action": text, "action_type": "test"}
+            for index, text in enumerate(("血气分析", "肺功能", "痰培养") if missing_culture else ("血气分析", "肺功能"), 1)
+        ])]),
+        {"executions": [
+            {"recommendation_ref": f"{ref}#r{index}", "execution_state": "absent",
+             "structured_action_refs": [], "execution_quotes": [], "confidence": "high",
+             "execution_record_state": "specific_trace" if index < 3 else "no_trace",
+             "trace_refs": [ref] if index < 3 else [],
+             "recommendation_coverage_state": "complete" if index < 3 else "no_trace",
+             "coverage_confidence": "high", "uncovered_source_quotes": []}
+            for index in ((1, 2, 3) if missing_culture else (1, 2))
+        ]},
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+    assert result.results[0]["status"] == ("non_compliant" if missing_culture else "compliant")
+    assert "现无气紧症状" in client.prompts[1]
+    assert "暂不考虑血气分析" in client.prompts[1]
+
+
+@pytest.mark.asyncio
 async def test_023_rechecks_high_generic_label_that_conflicts_with_concrete_action_trace(
     monkeypatch,
 ):

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -20,6 +21,71 @@ RECOMMENDATION = "电针、头皮针、低频、关节松动术、偏瘫肢体�
 BASE_ORDERS = ("电针；治疗", "头皮针；治疗", "低频脉冲治疗(功能性电刺激治疗)；治疗")
 # 后两项措施各自的执行医嘱：正常合规用例不能共用电刺激治疗的引文。
 FULL_ORDERS = (*BASE_ORDERS, "关节松动术；治疗", "偏瘫肢体综合训练；治疗")
+
+
+def test_specific_order_proves_execution_even_when_course_only_says_follow_advice():
+    completed, _, _, _ = _setup(("中药敷贴",))
+    completed = (replace(completed[0], recommendation=replace(
+        completed[0].recommendation, source_quote="中药贴敷", normalized_action="中药贴敷")),)
+    assessment = episode._ExecutionAssessment(
+        completed[0].recommendation.recommendation_ref, "linked_specific", ("inpat_nondrug_order-1",),
+        "high", (), "generic_trace", ("daily_course_record-1",), ("daily_course_record-1",))
+    assert episode._execution_quality_outcome(
+        assessments=(assessment,), completed_recommendations=completed,
+        source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
+
+
+async def _check_clinical_decision(text, candidate_text, measures, generic=()):
+    completed, candidates, _, _ = _setup((candidate_text,))
+    recommendation = replace(completed[0].recommendation, action_type="test",
+                             source_quote=text, normalized_action=text)
+    completed = (replace(completed[0], recommendation=recommendation),)
+    candidates = (replace(candidates[0], source_key="daily_course_record"),)
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    aliases = episode._prompt_alias_by_ref(candidates, allowed)
+    answer = {"schema_version": SCHEMA_VERSION, "generic": [
+        {"recommendation_ref": recommendation.recommendation_ref, "text": value} for value in generic
+    ], "measures": [dict(recommendation_ref=recommendation.recommendation_ref,
+                         evidence_ref=("" if measure["action_relation"] == "not_found" else aliases[candidates[0].ref]),
+                         **measure) for measure in measures]}
+    client = _Client([answer, answer])
+    result = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=aliases, llm_client=client)
+    return result, client
+
+
+@pytest.mark.asyncio
+async def test_reasoned_non_execution_is_not_missing_but_other_actions_still_checked():
+    text = "完善血气分析、肺功能、痰培养"
+    quote = "现无气紧症状，暂不考虑血气分析、肺功能检查"
+    measures = [dict(measure=measure, quote=quote, executed_action=measure,
+                     action_relation="reasoned_non_execution", non_execution_reason="现无气紧症状")
+                for measure in ("血气分析", "肺功能")]
+    measures.append(dict(measure="痰培养", quote="", executed_action="", action_relation="not_found"))
+    # 未执行项不允许借用另一项的证据。
+    result, _ = await _check_clinical_decision(text, quote, measures)
+    assert result.state == "ready"
+    assert result.missing_measures == {"consultation_record-1#r1": ("痰培养",)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["", "存在禁忌证"])
+async def test_non_execution_without_grounded_reason_is_not_accepted(reason):
+    result, _ = await _check_clinical_decision("完善血气分析", "暂不考虑血气分析", [dict(
+        measure="血气分析", quote="暂不考虑血气分析", executed_action="血气分析",
+        action_relation="reasoned_non_execution", non_execution_reason=reason)])
+    assert result.state == "failed"
+
+
+@pytest.mark.asyncio
+async def test_topical_treatment_locations_are_not_independent_actions():
+    text = "中药贴敷天突、双肺俞清热化痰止咳"
+    result, client = await _check_clinical_decision(text, "中药敷贴", [dict(
+        measure="中药贴敷", quote="中药敷贴", executed_action="中药敷贴", action_relation="matched")],
+        generic=("天突", "双肺俞清热化痰止咳"))
+    assert result.state == "ready" and not result.has_missing
+    assert "中药贴敷与中药敷贴" in client.prompts[0]
+    assert "施治部位" in client.prompts[0]
 
 
 def _setup(orders=BASE_ORDERS):
@@ -111,7 +177,7 @@ async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution(
     completed, candidates, allowed, aliases = _setup(("动态心电图检查",))
     recommendation = replace(completed[0].recommendation, source_quote="关节松动术", normalized_action="关节松动术")
     completed = (replace(completed[0], recommendation=recommendation),)
-    answer = {"schema_version": "lx0609-consultation-measure-check-v3", "generic": [], "measures": [{
+    answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [{
         "recommendation_ref": recommendation.recommendation_ref, "measure": "关节松动术",
         "evidence_ref": aliases[candidates[0].ref], "quote": "动态心电图检查",
         "executed_action": "动态心电图检查", "action_relation": "unrelated",

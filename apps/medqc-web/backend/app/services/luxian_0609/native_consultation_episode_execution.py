@@ -257,9 +257,19 @@ _EXECUTION_TRACE_BOUNDARY_PROMPT = (
     "病程明确写明某条建议不执行、暂缓或停用，并说明具体原因（如检验异常、禁忌证、患者或家属拒绝）时，"
     "已记录该建议的执行情况，判specific_trace且recommendation_coverage_state=complete；"
     "只写暂不执行、未写原因的判generic_trace。"
+    "例如现无气紧症状，暂不考虑血气分析、肺功能检查，已给出这两项不执行的临床原因；"
+    "两项均视为已说明执行情况，不列为未落实，但痰培养、用药等其余建议仍须分别核对。"
     "‘余治疗方案同前’‘继续当前治疗’不得自动关联到本次新会诊建议；"
     "同一病程未明确写出该建议对应动作时按no_trace判断。"
 )
+_RECOMMENDATION_ACTION_BOUNDARY_PROMPT = (
+    "区分治疗动作与施治部位、穴位、剂量和治疗目的：中药贴敷天突、双肺俞清热化痰止咳，"
+    "是一项中药贴敷治疗，不能把天突、双肺俞或清热化痰止咳提取为独立建议；"
+    "中药贴敷与医嘱中药敷贴是同一动作的同义表达。"
+    "会诊医师的诊断不是待执行动作；原科室在意见之后写出的遵照执行、已予治疗、"
+    "暂不考虑某项检查是执行反馈，不得混入会诊医师的建议清单。"
+)
+_EMBEDDED_CLINICAL_DECISION_PATTERN = re.compile(r"暂不考虑|暂缓(?:检查|治疗|执行)|不予(?:检查|治疗)")
 _EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(
     r"(?:(?:已|经).{0,8})?(?:与)?(?:患者(?:家属)?|家属).{0,8}(?:沟通|告知|说明)"
 )
@@ -1567,6 +1577,7 @@ def _compact_document_prompt(
         "明确的病情判断、处理方向或随访安排也属于opinion_state=clear；"
         "opinion_state与recommendations相互独立，不得因为recommendations为空就把opinion_state降为vague；"
         "只有纯请会诊、协助诊治、遵会诊意见而没有具体内容时才为vague。"
+        + _RECOMMENDATION_ACTION_BOUNDARY_PROMPT +
         "recommendations仅用于ordinary且意见clear、confidence=high的可执行建议；不得把诊断、风险描述、"
         "既往史或泛化继续治疗当建议。建议身份由Python按数组顺序生成，禁止输出recommendation_ref；action_type只能是"
         "medication/test/procedure/transfer/monitoring/other；source_quote优先返回该文书的连续支持原句，最长240字；"
@@ -1648,6 +1659,7 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "每个episode还必须给出application_refs、opinion_refs和recommendations，三者只能引用本episode.member_refs；"
         "申请或意见为clear时对应refs不得为空。"
         "recommendations仅用于普通会诊中意见明确且高置信的可执行建议；每项必须是意见原文中的具体行动，"
+        + _RECOMMENDATION_ACTION_BOUNDARY_PROMPT +
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
         "medication/test/procedure/transfer/monitoring/other。每项必须返回opinion_ref、source_quote和normalized_action："
@@ -2934,8 +2946,8 @@ def _execution_prompt(
         "第二步可辅助判断结构化医嘱/操作候选是否与该建议存在动作对应关系，"
         "但结构化匹配不是020或023的合规硬条件。"
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
-        "同一会诊文书仅可关联该文书自身意见中的建议；只有文书在建议后又明确记载已沟通、"
-        "患者或家属拒绝/暂缓执行及具体原因，才属于specific_trace；建议原文本身绝不是执行。"
+        "同一会诊文书仅可关联该文书自身意见中的建议；文书在建议之后记录临床评估后暂不执行及具体原因，"
+        "或已沟通且患者/家属拒绝执行及具体原因，属于specific_trace；建议原文本身绝不是执行。"
         "execution_state只描述结构化动作匹配：linked_specific=结构化候选明确落实同一条建议，"
         "linked_vague=结构化候选仅笼统相关，absent=无结构化动作匹配，unknown=无法判断。"
         "daily_course_record和senior_course_record只允许进入trace_refs，不能进入structured_action_refs；"
@@ -3516,6 +3528,10 @@ def _execution_quality_outcome(
             for ref in item.execution_refs
             if ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
         )
+        # 具体医嘱已独立证明该项实施，不能因病程只写“遵照执行”抹去执行证据。
+        # 未落实的其余措施仍由逐项核验处理；病程痕迹完整性仍由 020 单独评价。
+        if order_refs and item.execution_state == "linked_specific":
+            continue
         if (
             item.execution_record_state in {"generic_trace", "copied_opinion"}
             and item.trace_refs
@@ -4386,7 +4402,13 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         _clean(documents_by_ref[ref].get("text")),
                         _clean(documents_by_ref[ref].get("document_id")),
                     )
-                    for ref in embedded_decision_refs
+                    # 只增加候选，不按文书级关键词把所有建议强制判为已落实。
+                    for ref in sorted(embedded_decision_refs | frozenset(
+                        ref for event in episodes for ref in event.opinion_refs
+                        if _EMBEDDED_CLINICAL_DECISION_PATTERN.search(
+                            _clean(documents_by_ref.get(ref, {}).get("text"))
+                        )
+                    ))
                     if (
                         observed_time := _parse_observed_time(
                             documents_by_ref[ref].get("time")

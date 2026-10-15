@@ -85,7 +85,7 @@
     },
     {
       "payload": {
-        "schema_version": "lx0609-consultation-measure-check-v3",
+        "schema_version": "lx0609-consultation-measure-check-v4",
         "measures": [
           {
             "recommendation_ref": "consultation_record-1#r1",
