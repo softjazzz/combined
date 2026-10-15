@@ -17,6 +17,7 @@ import time
 
 
 RULES = {"LX0609-05-01-03", "LX0609-03-01-04", "LX0609-02-01-02"}
+FOLLOWUP_RULES = RULES - {"LX0609-03-01-04"}
 DEFAULT_JOB = "39248038-b961-418f-8ae3-bcdb9ebffed3"
 STATES = {"compliant", "non_compliant", "not_applicable", "data_gap",
           "technical_error", "evaluation_unknown"}
@@ -74,12 +75,41 @@ def select_pairs(failures):
     return pairs
 
 
+def validation_detail(filename, function, values):
+    """仅从两个已定位的校验点计算数量和布尔值，绝不导出原始局部变量。"""
+    if filename.endswith("/antimicrobial_effect_extraction.py") and function == "_assertions":
+        if not all(key in values for key in ("items", "bodies", "targets")):
+            return None
+        items, bodies, targets = (values[k] for k in ("items", "bodies", "targets"))
+        return {"check": "antimicrobial_coverage", "items_is_list": isinstance(items, list),
+                "document_count": len(bodies), "target_count": len(targets),
+                "expected_count": len(bodies) * len(targets),
+                "actual_count": len(items) if isinstance(items, list) else None}
+    if filename.endswith("/native_basic_timeliness.py") and function == "_parse_semantic_round_roles":
+        keys = ("physician_name", "physician_title", "evidence_quote", "candidate", "allowed_titles", "role")
+        if not all(key in values for key in keys):
+            return None
+        name, title, quote, candidate, allowed, role = (values[k] for k in keys)
+        return {"check": "semantic_round_evidence",
+                "name_length": len(name), "quote_length": len(quote),
+                "checks": {
+                    "name_present": bool(name), "name_length_le_40": len(name) <= 40,
+                    "title_allowed_for_role": title in allowed.get(role, set()),
+                    "quote_present": bool(quote), "quote_length_le_240": len(quote) <= 240,
+                    "quote_in_source": quote in candidate.body,
+                    "name_in_quote": name in quote, "title_in_quote": title in quote,
+                    "name_in_source": name in candidate.body, "title_in_source": title in candidate.body,
+                }}
+    return None
+
+
 class ExceptionLocations:
-    """只保留代码位置和异常类；不读取异常消息、局部变量或源码行。"""
+    """保留代码位置、异常类及白名单诊断数值，不输出异常文字或原文。"""
 
     def __init__(self, backend):
         self.prefix = str(Path(backend).resolve()).replace("\\", "/").lower() + "/"
         self.events = Counter()
+        self.validation_details = []
 
     def trace(self, frame, event, arg):
         filename = frame.f_code.co_filename.replace("\\", "/")
@@ -102,6 +132,15 @@ class ExceptionLocations:
                    frame.f_code.co_name, name, status)
             if key in self.events or len(self.events) < 300:
                 self.events[key] += 1
+            if (type(error) is ValueError
+                    and error.args in (("incomplete coverage",), ("invalid semantic round evidence",))
+                    and len(self.validation_details) < 100):
+                try:
+                    detail = validation_detail(filename, frame.f_code.co_name, frame.f_locals)
+                except Exception:
+                    detail = None
+                if detail is not None:
+                    self.validation_details.append({"line": frame.f_lineno, **detail})
         return self.trace
 
     def rows(self):
@@ -204,7 +243,10 @@ async def diagnose(args, emit):
     emit({"event": "scope", "pairs": len(pairs), "database_readonly": True,
           "source": "current_persisted_bundle", "outer_retries": 0,
           "commit": commit if re.fullmatch(r"[0-9a-f]{40}", commit) else "unknown"})
-    for index, (coordinates, rule) in enumerate(pairs, 1):
+    selected_pairs = [(index, coordinates, rule) for index, (coordinates, rule) in enumerate(pairs, 1)
+                      if not getattr(args, "remaining_only", False) or rule in FOLLOWUP_RULES]
+    emit({"event": "diagnostic_version", "version": 2, "selected_pairs": len(selected_pairs)})
+    for index, coordinates, rule in selected_pairs:
         alias = f"C{index:02d}"
         locations = ExceptionLocations(backend)
         http_events.events.clear()
@@ -279,9 +321,10 @@ async def diagnose(args, emit):
         emit({"event": "finished", "case": alias, "rule": rule,
               "seconds": round(time.monotonic() - started, 2), "calls": calls,
               "http_attempts": list(http_events.events.values()),
+              "validation_details": locations.validation_details,
               "exception_locations": locations.rows(), **outcome})
     engine.dispose()
-    emit({"event": "done", "pairs": 3, "clinical_results_saved": False})
+    emit({"event": "done", "pairs": len(selected_pairs), "clinical_results_saved": False})
 
 
 def main():
@@ -289,6 +332,7 @@ def main():
     parser.add_argument("--backend", required=True)
     parser.add_argument("--job", default=DEFAULT_JOB)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--remaining-only", action="store_true", help="Only diagnose the two reproduced failures")
     args = parser.parse_args()
     # 应用日志/print 可能含原文；整个旁路仅输出自行构造的元数据。
     logging.disable(sys.maxsize)

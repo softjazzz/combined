@@ -15,3 +15,18 @@ py -3.10 "D:\medqc\diagnose_failed_rule_pairs.py" `
 ```
 
 本地验证：12 项合成单元测试通过（精确配对、异常吞掉后的定位、脱敏、只读连接设置、三项编排及单项异常后继续），Ruff、编码检查、前端 ESLint 通过。未运行真实模型、未连接客户库，未运行前端全量测试和类型检查（没有前端变更）。客户机实测结果待收集，不代表三项错误已修复。
+
+## 第二轮：计数与校验条件
+
+客户机首轮实际诊断已返回：05-01-03 在 `_assertions` 的覆盖数量校验失败；02-01-02 两次均在 `_parse_semantic_round_roles` 的证据校验失败；03-01-04 本次正常返回不合规。四次 HTTP 调用全部成功，均正常结束。隐私检查中的 JSONDecodeError 是被捕获的内部探测，不是此次模型解析失败的直接证据。
+
+脚本 v2 增加 `--remaining-only`，保留原配对别名，仅执行 05-01-03 和 02-01-02。在上述两个受控 ValueError 点读取所需局部变量，仅导出列表类型、文书数、药物数、预期/实际条目数，以及证据核验布尔条件和长度，不导出原始变量、姓名、职称或引文。输出位置为 `validation_details`。其余代码位置不提取局部变量。
+
+```powershell
+py -3.10 "D:\medqc\diagnose_failed_rule_pairs.py" `
+    --backend "D:\medqc\medqc-web-customer-R26.2\backend" `
+    --remaining-only `
+    --output "D:\medqc\failed-pairs-diagnostic-v2.jsonl"
+```
+
+第二轮本地合成测试 28 项通过，包括每个证据谓词、计数隐私检查、精确异常点采集及双配对编排；Ruff、编码检查通过，ESLint 无错误（1361 项既有警告）。没有本地真实模型调用。客户机第二轮诊断待运行。

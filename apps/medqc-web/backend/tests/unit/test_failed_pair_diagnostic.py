@@ -96,7 +96,8 @@ def test_http_event_sink_drops_every_non_metadata_field():
 
 
 @pytest.mark.parametrize("fail_first", [False, True])
-def test_orchestration_runs_exact_three_pairs_without_persisting(monkeypatch, tmp_path, fail_first):
+@pytest.mark.parametrize("remaining_only", [False, True])
+def test_orchestration_runs_exact_pairs_without_persisting(monkeypatch, tmp_path, fail_first, remaining_only):
     import dotenv
     from sqlalchemy import event
     from app.database import connection
@@ -157,11 +158,67 @@ def test_orchestration_runs_exact_three_pairs_without_persisting(monkeypatch, tm
     monkeypatch.setattr(llm_observability, "_DEFAULT_RECORDER", llm_observability._DEFAULT_RECORDER)
     original_path = list(sys.path)
     try:
-        asyncio.run(diagnostic.diagnose(SimpleNamespace(backend=tmp_path, job="synthetic-job"), output.append))
+        asyncio.run(diagnostic.diagnose(SimpleNamespace(backend=tmp_path, job="synthetic-job", remaining_only=remaining_only), output.append))
     finally:
         sys.path[:] = original_path
-    assert executed == [(r["patient_id"], [r["rule_id"]]) for r in rows]
+    selected = [r for r in rows if not remaining_only or r["rule_id"] in diagnostic.FOLLOWUP_RULES]
+    assert executed == [(r["patient_id"], [r["rule_id"]]) for r in selected]
     assert len(statements) == 1 and statements[0].strip().startswith("SELECT")
-    assert len([v for v in output if v["event"] == "finished"]) == 3
-    assert output[-1] == {"event": "done", "pairs": 3, "clinical_results_saved": False}
+    assert len([v for v in output if v["event"] == "finished"]) == len(selected)
+    assert output[-1] == {"event": "done", "pairs": len(selected), "clinical_results_saved": False}
     assert "SECRET" not in json.dumps(output)
+
+
+@pytest.mark.parametrize("items,actual,is_list", [([], 0, True), ([{"quote": "SECRET"}], 1, True), ({"quote": "SECRET"}, None, False)])
+def test_coverage_diagnostic_only_exports_counts(items, actual, is_list):
+    result = diagnostic.validation_detail("app/antimicrobial_effect_extraction.py", "_assertions", {
+        "items": items, "bodies": ["SECRET", "SECRET"], "targets": ["SECRET"]})
+    assert result == {"check": "antimicrobial_coverage", "items_is_list": is_list,
+                      "document_count": 2, "target_count": 1, "expected_count": 2, "actual_count": actual}
+    assert "SECRET" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("change,failed_check", [
+    ({"physician_name": ""}, "name_present"),
+    ({"physician_name": "N" * 41}, "name_length_le_40"),
+    ({"physician_title": "unknown"}, "title_allowed_for_role"),
+    ({"evidence_quote": ""}, "quote_present"),
+    ({"evidence_quote": "X" * 241}, "quote_length_le_240"),
+    ({"candidate": SimpleNamespace(body="other")}, "quote_in_source"),
+    ({"physician_name": "other"}, "name_in_quote"),
+    ({"physician_title": "other"}, "title_in_quote"),
+])
+def test_semantic_checks_identify_each_predicate_without_original_text(change, failed_check):
+    values = {"physician_name": "SECRET_NAME", "physician_title": "SECRET_TITLE",
+              "evidence_quote": "SECRET_NAME SECRET_TITLE", "candidate": SimpleNamespace(body="SECRET_NAME SECRET_TITLE"),
+              "allowed_titles": {"senior": {"SECRET_TITLE"}}, "role": "senior"}
+    values.update(change)
+    result = diagnostic.validation_detail("app/native_basic_timeliness.py", "_parse_semantic_round_roles", values)
+    assert result["checks"][failed_check] is False
+    assert all(type(value) is bool for value in result["checks"].values())
+    assert "SECRET" not in json.dumps(result)
+
+
+def test_diagnostic_does_not_inspect_unrelated_functions():
+    assert diagnostic.validation_detail("app/other.py", "_assertions", {"items": "SECRET"}) is None
+
+
+@pytest.mark.parametrize("message,expected_details", [("incomplete coverage", 1), ("SECRET unrelated failure", 0)])
+def test_trace_collects_counts_only_at_known_coverage_failure(tmp_path, message, expected_details):
+    namespace = {}
+    filename = tmp_path / "app/services/luxian_0609/extended_document/antimicrobial_effect_extraction.py"
+    exec(compile("def _assertions(items, bodies, targets, message):\n raise ValueError(message)\n",
+                 str(filename), "exec"), namespace)
+    collector = diagnostic.ExceptionLocations(tmp_path)
+    previous = sys.gettrace()
+    try:
+        sys.settrace(collector.trace)
+        with pytest.raises(ValueError):
+            namespace["_assertions"]([], ["SECRET"], ["SECRET"], message)
+    finally:
+        sys.settrace(previous)
+    assert len(collector.validation_details) == expected_details
+    if expected_details:
+        assert collector.validation_details[0]["expected_count"] == 1
+        assert collector.validation_details[0]["actual_count"] == 0
+    assert "SECRET" not in json.dumps(collector.rows() + collector.validation_details)
