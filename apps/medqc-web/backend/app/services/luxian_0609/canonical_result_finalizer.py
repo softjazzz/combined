@@ -549,6 +549,18 @@ def validate_luxian_0609_published_customer_display_facts(
             rule_id=normalized_rule_id, raw=raw, status=status, reason_code=reason_code,
         )
         if not valid:
+            import logging
+            from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
+
+            # 仅记录受控分类，不输出事实内容、病历身份或原文；保持原异常合同。
+            known_reasons = frozenset().union(*ALLOWED_REASON_CODES_BY_FINAL_STATE.values())
+            logging.getLogger(__name__).error(
+                "LX0609_COURSE_CONTRACT rule=%s status=%s reason=%s facts=%s",
+                normalized_rule_id,
+                status if status in CANONICAL_RESULT_STATUSES else "invalid",
+                reason_code if reason_code in known_reasons else "unrecognized",
+                "missing" if raw is None else "empty" if raw == {} else "present",
+            )
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     from .consultation_customer_projection import (
