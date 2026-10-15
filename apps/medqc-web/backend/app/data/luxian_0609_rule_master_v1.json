@@ -51,7 +51,7 @@
       "qc_point": "入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《上级医生查房记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "客户确认补充口径：标准上级医师查房文书本身证明查房身份，不再额外要求姓名、具体职称或二者同段引文；仍核对入院后72小时时限。"
     },
     {
       "rule_id": "LX0609-02-01-03",

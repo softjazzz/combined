@@ -314,7 +314,7 @@ def test_missing_llm_and_unknown_atoms_are_data_gap():
     assert _state(result) == "data_gap"
 
 
-def test_old_006_retries_and_usage_are_unchanged_when_new_rule_runs():
+def test_006_no_longer_uses_model_while_rescue_calls_and_usage_are_preserved():
     session = _session([_row()], extra={
         "inpat_registration": [{"admission_datetime": "2026-07-15 13:48:49"}],
         "senior_course_record": [{"document_id": "round", "document_title": "上级医师查房记录",
@@ -331,20 +331,16 @@ def test_old_006_retries_and_usage_are_unchanged_when_new_rule_runs():
             if "lx0609-006-round-role-v1" not in prompt:
                 return await super().generate(prompt, **kwargs)
             self.round_calls += 1
-            if self.round_calls == 1:
-                return {"content": "invalid", "usage": {"prompt_tokens": 20, "completion_tokens": 2}}
-            return {"content": json.dumps({"schema_version": "lx0609-006-round-role-v1", "documents": [{
-                "position": 1, "role": "senior", "physician_name": "测试甲", "physician_title": "主任医师",
-                "evidence_quote": "今日测试甲主任医师联合相关专业医师查房",
-            }]}, ensure_ascii=False), "usage": {"prompt_tokens": 20, "completion_tokens": 8}}
+            raise AssertionError("006不再调用模型确认标准上级查房身份")
 
     baseline_llm = MixedLLM()
     baseline = _execute(session, baseline_llm, rules=(ROUND,))
     llm = MixedLLM()
     result = _execute(session, llm, rules=(ROUND, RULE))
-    assert llm.round_calls == baseline_llm.round_calls == 2
-    assert result.llm_call_count == 3
-    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (140, 30, 170)
+    assert llm.round_calls == baseline_llm.round_calls == 0
+    assert getattr(baseline, "llm_call_count", 0) == 0
+    assert result.llm_call_count == 1
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (100, 20, 120)
     assert next(item for item in result.decisions if item.rule_id == ROUND) == baseline.decisions[0]
     assert dict(result.customer_display_facts)[ROUND] == dict(baseline.customer_display_facts)[ROUND]
     assert result.planned_rule_ids == tuple(

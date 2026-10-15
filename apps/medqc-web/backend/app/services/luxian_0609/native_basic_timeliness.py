@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from inspect import isawaitable
-import json
 import re
-import time
 from typing import Any, Awaitable, Mapping, Protocol, Sequence
 
 from .basic_timeliness_facts import (
@@ -116,10 +114,6 @@ _ADMISSION_RECORD_PLACEHOLDERS = frozenset(
         "none",
     }
 )
-_ROUND_BODY_FIELDS = ("record_content", "content", "assembled_text", "raw_text")
-_MAX_SEMANTIC_ROUND_CANDIDATES = 8
-_MAX_SEMANTIC_ROUND_BODY_CHARS = 1800
-_ROUND_ROLE_SCHEMA_VERSION = "lx0609-006-round-role-v1"
 _TYPED_RULE_IDS = (
     "LX0609-01-01-01",
     "LX0609-01-02-01",
@@ -174,242 +168,6 @@ class NativeBasicTimelinessExecutionResult(NativeExecutionResult):
     usage_observation_complete: bool = True
 
 
-@dataclass(frozen=True)
-class _SemanticRoundCandidate:
-    row: Mapping[str, Any]
-    title: str
-    record_time: str
-    body: str
-
-
-def _clean_text(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "")).strip()
-
-
-def _semantic_round_candidates(
-    materials: Luxian0609EvidenceMaterialStore,
-) -> tuple[_SemanticRoundCandidate, ...]:
-    candidates: list[_SemanticRoundCandidate] = []
-    for source_key in ("daily_course_record", "senior_course_record"):
-        for row in materials.rows(source_key):
-            if not isinstance(row, Mapping) or not is_generic_upper_physician_round(
-                row,
-                source_key=source_key,
-            ):
-                continue
-            if (
-                classify_course_round_role(row, source_key=source_key)
-                is CourseRoundRole.SENIOR
-            ):
-                continue
-            body = next(
-                (
-                    text
-                    for field in _ROUND_BODY_FIELDS
-                    if (text := _clean_text(row.get(field)))
-                ),
-                "",
-            )
-            candidates.append(
-                _SemanticRoundCandidate(
-                    row=row,
-                    title=_clean_text(
-                        row.get("document_title") or row.get("title")
-                    ),
-                    record_time=_clean_text(
-                        row.get("record_time")
-                        or row.get("record_datetime")
-                        or row.get("submit_time")
-                        or row.get("submit_datetime")
-                    ),
-                    body=body[:_MAX_SEMANTIC_ROUND_BODY_CHARS],
-                )
-            )
-    return tuple(candidates)
-
-
-def _semantic_round_prompt(
-    candidates: Sequence[_SemanticRoundCandidate],
-) -> str:
-    documents = [
-        {
-            "position": position,
-            "document_title": candidate.title,
-            "record_time": candidate.record_time,
-            "body": candidate.body,
-        }
-        for position, candidate in enumerate(candidates, start=1)
-    ]
-    return (
-        "你只提取上级医师查房文书中实际参与本次查房者的职称事实，不判断质控结果。"
-        "不得把会诊、邀请、既往诊疗或计划中的医师职称当成本次查房职称。"
-        "只返回严格JSON，不要Markdown。schema_version固定为"
-        f"{_ROUND_ROLE_SCHEMA_VERSION}。documents必须逐项返回position、role、"
-        "physician_name、physician_title、evidence_quote。role只能是senior、"
-        "attending_or_above、unclear；senior仅限副主任医师或主任医师，"
-        "attending_or_above仅限主治医师。确认时evidence_quote必须逐字来自同一正文，"
-        "并同时包含姓名和职称；无法确认时其余三个字段均为null。输入："
-        + json.dumps(documents, ensure_ascii=False, separators=(",", ":"))
-    )
-
-
-def _response_text(response: Mapping[str, Any]) -> str:
-    raw = response.get("content") or response.get("text")
-    if not raw:
-        choices = response.get("choices")
-        if (
-            isinstance(choices, Sequence)
-            and not isinstance(choices, (str, bytes))
-            and choices
-        ):
-            first = choices[0]
-            if isinstance(first, Mapping):
-                message = first.get("message")
-                if isinstance(message, Mapping):
-                    raw = message.get("content")
-    raw = raw or ""
-    return raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
-
-
-def _semantic_round_response_format(candidate_count: int) -> dict[str, Any]:
-    """为支持方提供严格结构；事件身份和原文引用仍由本地校验器复核。"""
-
-    nullable_string = {"type": ["string", "null"]}
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "lx0609_006_round_role",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "schema_version": {
-                        "type": "string",
-                        "const": _ROUND_ROLE_SCHEMA_VERSION,
-                    },
-                    "documents": {
-                        "type": "array",
-                        "minItems": candidate_count,
-                        "maxItems": candidate_count,
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "position": {
-                                    "type": "integer",
-                                    "minimum": 1,
-                                    "maximum": candidate_count,
-                                },
-                                "role": {
-                                    "type": "string",
-                                    "enum": ["senior", "attending_or_above", "unclear"],
-                                },
-                                "physician_name": nullable_string,
-                                "physician_title": nullable_string,
-                                "evidence_quote": nullable_string,
-                            },
-                            "required": [
-                                "position",
-                                "role",
-                                "physician_name",
-                                "physician_title",
-                                "evidence_quote",
-                            ],
-                        },
-                    },
-                },
-                "required": ["schema_version", "documents"],
-            },
-        },
-    }
-
-
-def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
-    usage = response.get("usage")
-    usage = usage if isinstance(usage, Mapping) else {}
-    prompt = int(usage.get("prompt_tokens") or 0)
-    completion = int(usage.get("completion_tokens") or 0)
-    total = int(usage.get("total_tokens") or prompt + completion)
-    elapsed = float(
-        response.get("response_time") or response.get("_api_time") or 0.0
-    )
-    return prompt, completion, total, elapsed
-
-
-def _parse_semantic_round_roles(
-    response: Mapping[str, Any],
-    candidates: Sequence[_SemanticRoundCandidate],
-) -> tuple[dict[int, CourseRoundRole], frozenset[int]]:
-    payload = json.loads(_response_text(response))
-    if not isinstance(payload, dict) or set(payload) != {"schema_version", "documents"}:
-        raise ValueError("invalid semantic round payload")
-    if payload.get("schema_version") != _ROUND_ROLE_SCHEMA_VERSION:
-        raise ValueError("invalid semantic round schema")
-    raw_documents = payload.get("documents")
-    if not isinstance(raw_documents, list) or len(raw_documents) != len(candidates):
-        raise ValueError("invalid semantic round documents")
-    roles: dict[int, CourseRoundRole] = {}
-    unresolved: set[int] = set()
-    seen_positions: set[int] = set()
-    expected_keys = {
-        "position",
-        "role",
-        "physician_name",
-        "physician_title",
-        "evidence_quote",
-    }
-    for item in raw_documents:
-        if not isinstance(item, dict) or set(item) != expected_keys:
-            raise ValueError("invalid semantic round item")
-        position = item.get("position")
-        if (
-            isinstance(position, bool)
-            or not isinstance(position, int)
-            or not 1 <= position <= len(candidates)
-            or position in seen_positions
-        ):
-            raise ValueError("invalid semantic round position")
-        seen_positions.add(position)
-        candidate = candidates[position - 1]
-        row_id = id(candidate.row)
-        role = item.get("role")
-        if role == "unclear":
-            if any(
-                item.get(field) not in (None, "")
-                for field in ("physician_name", "physician_title", "evidence_quote")
-            ):
-                raise ValueError("invalid unclear semantic round evidence")
-            unresolved.add(row_id)
-            continue
-        allowed_titles = {
-            "senior": {"副主任医师", "主任医师"},
-            "attending_or_above": {"主治医师"},
-        }
-        if role not in allowed_titles:
-            raise ValueError("invalid semantic round role")
-        physician_name = _clean_text(item.get("physician_name"))
-        physician_title = _clean_text(item.get("physician_title"))
-        evidence_quote = _clean_text(item.get("evidence_quote"))
-        if (
-            not physician_name
-            or len(physician_name) > 40
-            or physician_title not in allowed_titles[role]
-            or not evidence_quote
-            or len(evidence_quote) > 240
-            or evidence_quote not in candidate.body
-            or physician_name not in evidence_quote
-            or physician_title not in evidence_quote
-        ):
-            raise ValueError("invalid semantic round evidence")
-        roles[row_id] = (
-            CourseRoundRole.SENIOR
-            if role == "senior"
-            else CourseRoundRole.ATTENDING_OR_ABOVE
-        )
-    if seen_positions != set(range(1, len(candidates) + 1)):
-        raise ValueError("incomplete semantic round positions")
-    return roles, frozenset(unresolved)
 def _is_substantive_first_course_text(value: Any) -> bool:
     if not isinstance(value, str):
         return False
@@ -564,9 +322,6 @@ def _typed_basic_decisions(
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
     customer_display_facts: list[tuple[str, Mapping[str, Any]]] | None = None,
-    semantic_round_roles: Mapping[int, CourseRoundRole] | None = None,
-    semantic_round_unresolved: frozenset[int] = frozenset(),
-    semantic_round_body_missing: frozenset[int] = frozenset(),
 ) -> tuple[RuleDecision, ...]:
     """001/005/006 共用一次入院锚点，只做权威字段时间计算。"""
 
@@ -1623,7 +1378,6 @@ def _typed_basic_decisions(
         qualifying_events: list[tuple[datetime, str | None, str, Mapping[str, Any]]] = []
         qualifying_missing_time = False
         ambiguous_round = False
-        semantic_round_unknown = False
         horizon_datetime_for_filter: datetime | None = None
         horizon_date_for_filter: date | None = None
         if rule_id == "LX0609-02-01-02":
@@ -1662,23 +1416,14 @@ def _typed_basic_decisions(
                 and event_time.date() > horizon_date_for_filter
             ):
                 continue
-            row_id = id(event.row)
-            role = (
-                semantic_round_roles.get(
-                    row_id,
-                    classify_course_round_role(event.row, source_key=source_key),
-                )
-                if semantic_round_roles is not None
-                else classify_course_round_role(event.row, source_key=source_key)
+            role = classify_course_round_role(event.row, source_key=source_key)
+            # 客户确认：标准上级医师查房文书已能证明本次查房身份，
+            # 006 不再要求正文额外提供姓名和具体职称。
+            customer_upper_round = (
+                rule_id == "LX0609-02-01-02"
+                and is_generic_upper_physician_round(event.row, source_key=source_key)
             )
-            if rule_id == "LX0609-02-01-02":
-                if row_id in semantic_round_body_missing:
-                    ambiguous_round = True
-                    continue
-                if row_id in semantic_round_unresolved:
-                    semantic_round_unknown = True
-                    continue
-            if qualifies(role):
+            if qualifies(role) or customer_upper_round:
                 parsed = event_time
                 if parsed is None:
                     qualifying_missing_time = True
@@ -1740,7 +1485,7 @@ def _typed_basic_decisions(
                     source_label=(
                         "主治医师及以上首次查房记录"
                         if rule_id == "LX0609-02-01-01"
-                        else "副主任医师或主任医师首次查房记录"
+                        else "上级医师首次查房记录"
                     ),
                     state="within",
                     threshold_hours=48 if rule_id == "LX0609-02-01-01" else 72,
@@ -1803,7 +1548,7 @@ def _typed_basic_decisions(
                     source_label=(
                         "主治医师及以上首次查房记录"
                         if rule_id == "LX0609-02-01-01"
-                        else "副主任医师或主任医师首次查房记录"
+                        else "上级医师首次查房记录"
                     ),
                     state="late",
                     threshold_hours=48 if rule_id == "LX0609-02-01-01" else 72,
@@ -1813,10 +1558,6 @@ def _typed_basic_decisions(
                     source_document_id=source_document_id,
                 ),
             )
-        elif semantic_round_unknown:
-            # 模型已成功确认正文没有可核验的姓名+职称事实，属于来源字段不足；
-            # 调用或解析失败在外层另行收敛为 technical_error，不能混用本分支。
-            decisions.append(gap(rule_id, "required_field_missing"))
         elif ambiguous_round:
             decisions.append(gap(rule_id, "required_field_missing"))
         else:
@@ -1850,7 +1591,7 @@ def _typed_basic_decisions(
                     source_label=(
                         "主治医师及以上首次查房记录"
                         if rule_id == "LX0609-02-01-01"
-                        else "副主任医师或主任医师首次查房记录"
+                        else "上级医师首次查房记录"
                     ),
                     state="missing",
                     threshold_hours=48 if rule_id == "LX0609-02-01-01" else 72,
@@ -1872,11 +1613,8 @@ def _execute_luxian_0609_native_basic_timeliness(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
     decision_rule_ids: Sequence[str] = (),
-    semantic_round_roles: Mapping[int, CourseRoundRole] | None = None,
-    semantic_round_unresolved: frozenset[int] = frozenset(),
-    semantic_round_body_missing: frozenset[int] = frozenset(),
 ) -> NativeExecutionResult:
-    """一次执行所选基础时限点；语义事实由调用方预先校验后注入。"""
+    """一次执行所选基础时限点；上级查房身份由标准文书类型直接确认。"""
 
     requested = tuple(dict.fromkeys(
         str(rule_id or "").strip().upper()
@@ -1915,9 +1653,6 @@ def _execute_luxian_0609_native_basic_timeliness(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
                 customer_display_facts=typed_customer_display_facts,
-                semantic_round_roles=semantic_round_roles,
-                semantic_round_unresolved=semantic_round_unresolved,
-                semantic_round_body_missing=semantic_round_body_missing,
             )
             if typed_selected
             and evidence_snapshot is not None
@@ -2057,7 +1792,7 @@ def _execute_luxian_0609_native_basic_timeliness(
     )
 
 
-def _with_semantic_usage(
+def _with_usage(
     result: NativeExecutionResult,
     *,
     llm_call_count: int = 1,
@@ -2083,251 +1818,6 @@ def _with_semantic_usage(
     )
 
 
-def _with_006_semantic_failure(
-    result: NativeExecutionResult,
-    *,
-    reason_code: str,
-    llm_call_count: int,
-    prompt_tokens: int,
-    completion_tokens: int,
-    total_tokens: int,
-    api_time: float,
-    usage_observation_complete: bool = True,
-) -> NativeBasicTimelinessExecutionResult:
-    """只把 006 的模型基础设施失败改成技术失败，保留同批其他规则。"""
-
-    failed = replace(
-        result,
-        decisions=tuple(
-            replace(
-                decision,
-                applicability=ApplicabilityState.ERROR,
-                evidence_state=EvidenceState.TECHNICAL_ERROR,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code=reason_code,
-                confidence=None,
-            )
-            if decision.rule_id == "LX0609-02-01-02"
-            else decision
-            for decision in result.decisions
-        ),
-    )
-    return _with_semantic_usage(
-        failed,
-        llm_call_count=llm_call_count,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens,
-        api_time=api_time,
-        usage_observation_complete=usage_observation_complete,
-    )
-
-
-def _execute_basic_timeliness_with_semantic_rounds(
-    *,
-    rule_ids: Sequence[str],
-    evidence_payload: dict[str, Any] | None,
-    institute_id: str = "",
-    patient_id: str = "",
-    visit_id: str = "",
-    source_schema: str | None = None,
-    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
-    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
-    decision_rule_ids: Sequence[str] = (),
-    llm_client: BasicTimelinessLLMClient | None = None,
-) -> NativeExecutionResult | Awaitable[NativeBasicTimelinessExecutionResult]:
-    """执行基础时限规则；仅006的通用上级医师文书允许一次受控语义提取。"""
-
-    typed_requested = {
-        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
-    }
-    if "LX0609-02-01-02" not in typed_requested or evidence_materials is None:
-        return _execute_luxian_0609_native_basic_timeliness(
-            rule_ids=rule_ids,
-            evidence_payload=evidence_payload,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            source_schema=source_schema,
-            evidence_snapshot=evidence_snapshot,
-            evidence_materials=evidence_materials,
-            decision_rule_ids=decision_rule_ids,
-        )
-    try:
-        candidates = _semantic_round_candidates(evidence_materials)
-    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, ValueError):
-        candidates = ()
-    if not candidates:
-        return _execute_luxian_0609_native_basic_timeliness(
-            rule_ids=rule_ids,
-            evidence_payload=evidence_payload,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            source_schema=source_schema,
-            evidence_snapshot=evidence_snapshot,
-            evidence_materials=evidence_materials,
-            decision_rule_ids=decision_rule_ids,
-        )
-
-    with_body = tuple(candidate for candidate in candidates if candidate.body)
-    body_missing = frozenset(id(candidate.row) for candidate in candidates if not candidate.body)
-    initially_unresolved = frozenset(id(candidate.row) for candidate in with_body)
-    baseline = _execute_luxian_0609_native_basic_timeliness(
-        rule_ids=rule_ids,
-        evidence_payload=evidence_payload,
-        institute_id=institute_id,
-        patient_id=patient_id,
-        visit_id=visit_id,
-        source_schema=source_schema,
-        evidence_snapshot=evidence_snapshot,
-        evidence_materials=evidence_materials,
-        decision_rule_ids=decision_rule_ids,
-        semantic_round_unresolved=initially_unresolved,
-        semantic_round_body_missing=body_missing,
-    )
-    senior_decision = next(
-        (item for item in baseline.decisions if item.rule_id == "LX0609-02-01-02"),
-        None,
-    )
-    if (
-        senior_decision is not None
-        and (
-            senior_decision.qc_direction is QcDirection.SATISFIED
-            or senior_decision.reason_code == "evaluation_window_not_mature"
-        )
-    ):
-        return baseline
-    if not with_body:
-        return baseline
-    if llm_client is None or not callable(getattr(llm_client, "generate", None)):
-        return _with_006_semantic_failure(
-            baseline,
-            reason_code="model_transport_error",
-            llm_call_count=0,
-            prompt_tokens=0,
-            completion_tokens=0,
-            total_tokens=0,
-            api_time=0.0,
-        )
-    if len(with_body) > _MAX_SEMANTIC_ROUND_CANDIDATES:
-        scoped_gap = replace(
-            baseline,
-            decisions=tuple(
-                replace(
-                    decision,
-                    applicability=ApplicabilityState.APPLICABLE,
-                    evidence_state=EvidenceState.DATA_GAP,
-                    qc_direction=QcDirection.UNKNOWN,
-                    reason_code="candidate_scope_incomplete",
-                    confidence=None,
-                )
-                if decision.rule_id == "LX0609-02-01-02"
-                else decision
-                for decision in baseline.decisions
-            ),
-        )
-        return scoped_gap
-
-    async def resolve_semantic_rounds() -> NativeBasicTimelinessExecutionResult:
-        started = time.perf_counter()
-        prompt_tokens = completion_tokens = total_tokens = 0
-        api_time = 0.0
-        call_count = 0
-        prompt = _semantic_round_prompt(with_body)
-        supports_strict_schema = getattr(
-            llm_client, "supports_strict_json_schema", None
-        )
-        try:
-            strict_schema_enabled = bool(
-                supports_strict_schema()
-                if callable(supports_strict_schema)
-                else False
-            )
-        except Exception:
-            strict_schema_enabled = False
-        generate_kwargs: dict[str, Any] = {}
-        if strict_schema_enabled:
-            generate_kwargs = {
-                "response_format": _semantic_round_response_format(len(with_body)),
-                "enable_thinking": False,
-                "max_completion_tokens": 2048,
-                "allow_length_retry": False,
-            }
-
-        roles: dict[int, CourseRoundRole] | None = None
-        unresolved = frozenset()
-        for attempt_index in range(2):
-            call_count += 1
-            try:
-                response = await llm_client.generate(prompt, **generate_kwargs)
-            except Exception:
-                return _with_006_semantic_failure(
-                    baseline,
-                    reason_code="model_transport_error",
-                    llm_call_count=call_count,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=total_tokens,
-                    api_time=max(api_time, time.perf_counter() - started),
-                    usage_observation_complete=False,
-                )
-            next_prompt, next_completion, next_total, next_api_time = _usage(response)
-            prompt_tokens += next_prompt
-            completion_tokens += next_completion
-            total_tokens += next_total
-            api_time += next_api_time
-            try:
-                roles, unresolved = _parse_semantic_round_roles(response, with_body)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                if attempt_index == 0:
-                    continue
-                return _with_006_semantic_failure(
-                    baseline,
-                    reason_code="model_parse_error",
-                    llm_call_count=call_count,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=total_tokens,
-                    api_time=max(api_time, time.perf_counter() - started),
-                )
-            break
-        if roles is None:
-            return _with_006_semantic_failure(
-                baseline,
-                reason_code="model_parse_error",
-                llm_call_count=call_count,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                api_time=max(api_time, time.perf_counter() - started),
-            )
-        resolved = _execute_luxian_0609_native_basic_timeliness(
-            rule_ids=rule_ids,
-            evidence_payload=evidence_payload,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            source_schema=source_schema,
-            evidence_snapshot=evidence_snapshot,
-            evidence_materials=evidence_materials,
-            decision_rule_ids=decision_rule_ids,
-            semantic_round_roles=roles,
-            semantic_round_unresolved=unresolved,
-            semantic_round_body_missing=body_missing,
-        )
-        return _with_semantic_usage(
-            resolved,
-            llm_call_count=call_count,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            api_time=api_time or (time.perf_counter() - started),
-        )
-
-    return resolve_semantic_rounds()
-
-
 def execute_luxian_0609_native_basic_timeliness(
     *,
     rule_ids: Sequence[str],
@@ -2341,19 +1831,18 @@ def execute_luxian_0609_native_basic_timeliness(
     decision_rule_ids: Sequence[str] = (),
     llm_client: BasicTimelinessLLMClient | None = None,
 ) -> NativeExecutionResult | Awaitable[NativeBasicTimelinessExecutionResult]:
-    """按同一证据会话装配抢救内容检查，保留既有时效及006语义调用链。"""
+    """按同一证据会话装配基础时限与抢救内容检查。"""
     requested = tuple(dict.fromkeys(
         str(value or "").strip().upper()
         for value in rule_ids
         if str(value or "").strip()
     ))
-    legacy = _execute_basic_timeliness_with_semantic_rounds(
+    legacy = _execute_luxian_0609_native_basic_timeliness(
         rule_ids=tuple(value for value in requested if value != RESCUE_COMPLETENESS_RULE_ID),
         evidence_payload=evidence_payload, institute_id=institute_id,
         patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
         evidence_snapshot=evidence_snapshot, evidence_materials=evidence_materials,
         decision_rule_ids=tuple(value for value in decision_rule_ids if str(value).strip().upper() != RESCUE_COMPLETENESS_RULE_ID),
-        llm_client=llm_client,
     )
     if RESCUE_COMPLETENESS_RULE_ID not in requested:
         return legacy
@@ -2375,7 +1864,7 @@ def execute_luxian_0609_native_basic_timeliness(
             execution_fingerprint=old.execution_fingerprint,
             terminal_reason_code=old.terminal_reason_code,
         )
-        return _with_semantic_usage(
+        return _with_usage(
             combined,
             llm_call_count=getattr(old, "llm_call_count", 0) + getattr(new, "llm_call_count", 0),
             prompt_tokens=getattr(old, "prompt_tokens", 0) + getattr(new, "prompt_tokens", 0),

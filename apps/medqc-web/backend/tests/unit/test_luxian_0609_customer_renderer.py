@@ -3294,11 +3294,11 @@ def test_006_missing_first_senior_round_renders_specific_finding() -> None:
             "target_document": "senior_course_record",
             "timeliness_state": "missing",
             "threshold_hours": 72,
-            "source_label": "副主任医师或主任医师首次查房记录",
+            "source_label": "上级医师首次查房记录",
             "anchor_time": "2025-08-26 09:14:42",
         },
     )
-    assert finding == "未找到副主任医师或主任医师首次查房记录（入院时间 2025-08-26 09:14:42；要求入院后 72 小时内完成）。"
+    assert finding == "未找到上级医师首次查房记录（入院时间 2025-08-26 09:14:42；要求入院后 72 小时内完成）。"
 
 
 def test_008_severity_course_gap_renders_specific_finding() -> None:

@@ -106,8 +106,8 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert basic_senior_round.family_key == "basic_timeliness"
     assert basic_senior_round.executor_key == "basic_timeliness"
     assert basic_senior_round.execution_mode == "native_sync"
-    assert basic_senior_round.decision_authority == "program_then_optional_llm"
-    assert basic_senior_round.max_llm_calls_per_rule == 1
+    assert basic_senior_round.decision_authority == "program_only"
+    assert basic_senior_round.max_llm_calls_per_rule == 0
 
     repeated_course = contracts["LX0609-12-01-02"]
     assert repeated_course.contract_version == "v7"
@@ -240,6 +240,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     }
 
     assert program_only == {
+        "LX0609-02-01-02",
         "LX0609-01-01-01",
         "LX0609-01-02-01",
         "LX0609-04-02-01",
