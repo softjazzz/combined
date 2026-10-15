@@ -173,16 +173,24 @@ def test_luxian_0609_batch_detail_ignores_stale_internal_rule_results_after_cano
     assert projected["items"][0]["rule_id"] == "LX0609-01-01-01"
 
 
-def test_luxian_0609_partial_failed_detail_uses_available_canonical_records() -> None:
+@pytest.mark.parametrize("failed_rule", ["LX0609-01-01-01", "LX0609-02-01-03", "LX0609-03-01-04", "LX0609-06-01-01"])
+def test_luxian_0609_partial_failed_detail_uses_available_canonical_records(failed_rule) -> None:
     canonical_item = _canonical_item(
         rule_id="LX0609-01-01-01",
-        status="non_compliant",
-        reason_code="requirement_not_satisfied",
+        status="compliant",
+        reason_code="requirement_satisfied",
+        customer_display_facts=_admission_facts(),
     )
     raw_job = {
         "id": "job-canonical",
         "status": "failed",
         "rule_set_key": "luxian_0609_qc_v1",
+        "failed_records": [{
+            "rule_id": failed_rule,
+            "record_id": "synthetic-failed-visit",
+            "reason_code": "execution_failed",
+            "error": "不得进入客户输出的失败原文",
+        }],
         "items": [{"rule_id": "LX0609-01-01-01", "status": "technical_error"}],
         "rule_results": [{"rule_id": "LX0609-01-01-01", "items": []}],
         "summary": {
@@ -199,6 +207,12 @@ def test_luxian_0609_partial_failed_detail_uses_available_canonical_records() ->
     assert hydrated["items"] == [canonical_item]
     assert hydrated["rule_results"] == []
     assert "rule_results" not in hydrated["summary"]
+    projected = qc_sichuan._workspace_batch_response_item(hydrated)
+    assert projected["items"][0]["rule_id"] == canonical_item["rule_id"]
+    assert projected["failed_records"][0]["status"] == "technical_error"
+    assert projected["failed_records"][0]["rule_id"] == failed_rule
+    assert "不得进入客户输出" not in str(projected)
+    assert "synthetic-failed-visit" not in str(projected)
 
 def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
     response = qc_sichuan._workspace_batch_response_item(

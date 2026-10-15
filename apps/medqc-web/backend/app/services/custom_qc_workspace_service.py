@@ -549,6 +549,20 @@ def _single_record_model_analysis(item: Dict[str, Any]) -> str:
     """保留规则执行器提供的医学分析，不在展示层二次概括或推断。"""
 
     return _safe_text(item.get("model_analysis") or item.get("medical_analysis"))[:8000]
+
+
+def _customer_record_ref(item: Dict[str, Any], *, hmac_key: str) -> str:
+    """结果与失败清单共用病例引用，不为生成引用校验临床结论。"""
+    existing_ref = _safe_text(item.get("record_ref"))
+    if re.fullmatch(r"rec_[0-9a-f]{24}", existing_ref):
+        return existing_ref
+    material = "|".join(
+        _safe_text(item.get(key))
+        for key in ("institute_id", "patient_id", "visit_id", "record_id", "mr_no")
+    )
+    return _keyed_ref("rec", material, hmac_key=hmac_key)
+
+
 def project_customer_safe_result_item(
     item: Dict[str, Any],
     *,
@@ -563,16 +577,7 @@ def project_customer_safe_result_item(
         or raw.get("rule_id")
         or raw.get("rule_code")
     ).upper()
-    record_material = "|".join(
-        _safe_text(raw.get(key))
-        for key in ("institute_id", "patient_id", "visit_id", "record_id", "mr_no")
-    )
-    existing_record_ref = _safe_text(raw.get("record_ref"))
-    record_ref = (
-        existing_record_ref
-        if re.fullmatch(r"rec_[0-9a-f]{24}", existing_record_ref)
-        else _keyed_ref("rec", record_material, hmac_key=hmac_key)
-    )
+    record_ref = _customer_record_ref(raw, hmac_key=hmac_key)
     is_luxian = rule_id.startswith("LX0609-")
     # 客户安全 DTO 可能再次进入列表投影/导出；二次投影仍须校验状态与公开事实。
     is_current_luxian_result = (
@@ -1250,14 +1255,7 @@ def project_customer_safe_batch_job(
     ]
     failed_records = [
         {
-            "record_ref": project_customer_safe_result_item(
-                {
-                    **item,
-                    "status": "technical_error",
-                    "reason_code": "record_execution_failed",
-                },
-                hmac_key=hmac_key,
-            )["record_ref"],
+            "record_ref": _customer_record_ref(item, hmac_key=hmac_key),
             "status": "technical_error",
             "reason_code": "record_execution_failed",
             "rule_id": _safe_text(item.get("rule_id")).upper()

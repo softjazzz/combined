@@ -13,6 +13,8 @@ from app.routers import qc_sichuan
 from app.services.case_identity import CaseRef
 from app.services.qc_workspace.partial_record_delivery import select_complete_record_items
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
 
 @pytest.fixture
 def storage(monkeypatch):
