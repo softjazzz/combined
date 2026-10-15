@@ -587,7 +587,7 @@ def _published_017(raw: dict[str, Any]) -> bool:
 def validate_published_course_quality_facts(
     *, rule_id: str, raw: Any, status: str = "", reason_code: str = "",
 ) -> tuple[bool, dict[str, Any] | None]:
-    """返回合同是否有效及原值；仅明确的无触发终态可缺少独立 facts。"""
+    """返回合同是否有效及原值；仅明确的无触发或资料缺口终态可缺少 facts。"""
     normalized = str(rule_id or "").strip().upper()
     # 007 执行器在观察窗尚未成熟时直接短路，尚无病程区间事实可发布。
     # 仅接受这一明确终态；其他状态和原因仍执行原事实合同。
@@ -596,6 +596,15 @@ def validate_published_course_quality_facts(
         and (raw is None or raw == {})
         and status == "not_applicable"
         and reason_code == "evaluation_window_not_mature"
+    ):
+        return True, None
+    # 007 在截止时间仅精确到日期等边界下无法形成确定的区间事实。
+    # 保留执行器的资料不足状态与缺时原因；确定结论及非空 facts 仍严格校验。
+    if (
+        normalized == "LX0609-02-01-03"
+        and (raw is None or raw == {})
+        and status == "data_gap"
+        and reason_code == "authoritative_time_missing"
     ):
         return True, None
     # 016 的目标段落不可读时没有可发布的相似度；仅接受已知资料不足终态。
