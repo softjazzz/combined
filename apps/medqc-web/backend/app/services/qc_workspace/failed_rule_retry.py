@@ -15,6 +15,24 @@ _FAILED_RULE_AUTO_RETRY_DELAYS_SECONDS = (0.0, 1.0, 3.0)
 _FAILED_RULE_AUTO_RETRY_PHASES = frozenset({"result_status", "result_missing"})
 
 
+def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
+    rule = str(failure.get("rule_id") or failure.get("rule_code") or "").strip().upper()
+    reason = str(failure.get("reason_code") or "")
+    if rule == "LX0609-05-01-03" and reason in {
+        "model_invalid_output", "model_parse_error", "model_transport_error", "model_timeout",
+        "model_rate_limited", "model_upstream_error", "model_http_error",
+        "model_configuration_error", "execution_program_error",
+    }:
+        # 055已在一次规则执行内消费最多两次抽取预算，不再整条自动重跑。
+        return False
+    if rule == "LX0609-03-01-04" and reason in {
+        "model_invalid_output", "model_parse_error", "model_http_error",
+        "model_configuration_error", "execution_program_error",
+    }:
+        return False
+    return True
+
+
 def build_failed_rule_auto_retry_plan(
     *,
     summary: Mapping[str, Any],
@@ -41,6 +59,8 @@ def build_failed_rule_auto_retry_plan(
         not in _FAILED_RULE_AUTO_RETRY_PHASES
         for failure in failures
     ):
+        return {**base, "status": "not_retryable", "should_retry": False}
+    if not any(_automatic_retryable_failure(failure) for failure in failures):
         return {**base, "status": "not_retryable", "should_retry": False}
     if current_attempt >= FAILED_RULE_AUTO_RETRY_MAX_ATTEMPTS:
         return {**base, "status": "exhausted", "should_retry": False}
@@ -71,7 +91,7 @@ def _ordered_unique(values: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
 
-def build_failed_rule_retry_scope(job: Mapping[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+def build_failed_rule_retry_scope(job: Mapping[str, Any], *, automatic_only: bool = False) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
     """为叶子任务生成精确补跑范围，并补齐旧失败项缺失的三坐标。"""
 
     summary = job.get("summary") if isinstance(job.get("summary"), Mapping) else {}
@@ -132,11 +152,15 @@ def build_failed_rule_retry_scope(job: Mapping[str, Any]) -> tuple[dict[str, Any
                 "rule_id": rule_id,
             }
         )
+        if automatic_only and not _automatic_retryable_failure(raw_failure):
+            continue
         if failure_ref not in retry_refs:
             retry_refs.append(failure_ref)
         retry_rule_ids.append(rule_id)
         retry_record_rule_map.setdefault(failure_ref.as_key(), []).append(rule_id)
 
+    if not retry_refs:
+        return None
     previous_scope = filters.get(FAILED_RULE_RETRY_FILTER_KEY)
     previous_attempt = (
         int(previous_scope.get("attempt") or 0)
@@ -157,7 +181,7 @@ def build_failed_rule_retry_scope(job: Mapping[str, Any]) -> tuple[dict[str, Any
                 record_key: _ordered_unique(rule_ids)
                 for record_key, rule_ids in retry_record_rule_map.items()
             },
-            "pending_count": len(normalized_failures),
+            "pending_count": sum(len(values) for values in retry_record_rule_map.values()),
         },
         normalized_failures,
     )

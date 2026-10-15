@@ -558,6 +558,44 @@ def test_055_binds_evaluation_horizon_for_antimicrobial_effect_window() -> None:
     assert "evaluation_context.horizon" in sources
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("repair_succeeds", [True, False])
+async def test_055_recovery_runs_through_native_decision_chain_and_counts_both_calls(repair_succeeds):
+    body = "美罗培南疗效评价：抗感染治疗有效；安全性评价：未见药物不良反应。"
+
+    class PairClient:
+        def __init__(self):
+            self.inputs = []
+
+        async def generate(self, prompt, **kwargs):
+            data = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])
+            self.inputs.append(data)
+            facts = []
+            for pair in data["requested_pairs"]:
+                positive = pair["row_index"] == 0
+                facts.append({**pair, "effect_state": "present" if positive else "absent",
+                              "safety_state": "present" if positive else "absent",
+                              "quote": body if positive else "", "target_quote": "美罗培南" if positive else ""})
+            if len(self.inputs) == 1:
+                facts.pop()
+            elif not repair_succeeds:
+                facts = []
+            return {"finish_reason": "stop", "content": json.dumps({
+                "schema_version": "lx0609-antimicrobial-effect-safety-facts-v2", "assertions": facts}),
+                "usage": {"prompt_tokens": 11, "completion_tokens": 13, "total_tokens": 24}}
+
+    client = PairClient()
+    execution, decision = await _evaluate("LX0609-05-01-03", {
+        "inpat_drug_order": ({"generic_name": "美罗培南", "planned_start_datetime": "2026-06-01 10:00:00"},),
+        "daily_course_record": ({"document_id": "synthetic-evaluation", "record_time": "2026-06-03 10:00:00", "record_content": body},
+                                {"document_id": "synthetic-other", "record_time": "2026-06-03 12:00:00", "record_content": "日常巡视无新变化。"}),
+    }, llm_client=client)
+    assert execution.llm_call_count == 2
+    assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (22, 26, 48)
+    assert client.inputs[1]["requested_pairs"] == [{"row_index": 1, "target_index": 0}]
+    assert decision.final_state is (CustomerFinalState.COMPLIANT if repair_succeeds else CustomerFinalState.TECHNICAL_ERROR)
+
+
 def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-10-01-01",))
 

@@ -179,14 +179,18 @@ class FrozenAntimicrobialEffectClient:
     async def generate(self, prompt, **kwargs):
         self.calls.append((prompt, kwargs))
         try:
-            assert len(self.calls) == 1, "055应为单次完整抽取"
+            assert len(self.calls) <= 2, "055最多首轮抽取和一次定向补查"
             assert kwargs["allow_length_retry"] is False
             assert kwargs["max_completion_tokens"] == 16384
             inputs = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])
+            requested = {(item["row_index"], item["target_index"])
+                         for item in inputs["requested_pairs"]}
             assertions = []
             for document in inputs["documents"]:
                 labels = self.facts[document["content"]]
                 for target in inputs["targets"]:
+                    if (document["row_index"], target["target_index"]) not in requested:
+                        continue
                     fact = labels[None] if None in labels else labels[target["name"]]
                     (effect_state, effect_quote, effect_target_quote,
                      safety_state, safety_quote, safety_target_quote) = fact

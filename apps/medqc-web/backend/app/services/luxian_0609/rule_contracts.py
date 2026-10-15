@@ -194,7 +194,7 @@ class Luxian0609RuleContract:
             if self.decision_authority == "program_only"
             else 2
             # 03-02-01、12-02-01：协议违规重试 1 次（用户口径 2026-10-11）。
-            if self.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01"}
+            if self.rule_id in {"LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03"}
             else 1
         )
         if self.max_llm_calls_per_rule != expected_calls:

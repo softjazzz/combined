@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import httpx
 
 import pytest
 
@@ -89,6 +90,54 @@ def test_complete_cartesian_coverage_is_sorted():
     assert [(a.row_index, a.target_index) for a in result.assertions] == [(0, 0), (0, 1), (1, 0), (1, 1)]
 
 
+class RecoveringClient(Client):
+    def __init__(self, *, never_complete=False, overwrite=False):
+        super().__init__({(0, 0): fact(("present", BODY, TARGET))})
+        self.never_complete = never_complete
+        self.overwrite = overwrite
+
+    async def generate(self, prompt, **kwargs):
+        response = await super().generate(prompt, **kwargs)
+        payload = json.loads(response["content"])
+        if len(self.calls) == 1:
+            payload["assertions"].pop()
+        else:
+            payload["assertions"] = ([] if self.never_complete else [dict(
+                row_index=1, target_index=1, effect_state="absent", safety_state="absent",
+                quote="", target_quote="")])
+            if self.overwrite:
+                payload["assertions"].insert(0, dict(row_index=0, target_index=0,
+                    effect_state="absent", safety_state="absent", quote="", target_quote=""))
+        response["content"] = json.dumps(payload, ensure_ascii=False)
+        return response
+
+
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_repairs_only_missing_pair_without_changing_valid_first_facts(overwrite):
+    client = RecoveringClient(overwrite=overwrite)
+    result = run(client, [{"content": BODY}, {"content": "无相关评价。"}], [TARGET, "头孢曲松"])
+    assert result.state == "ready"
+    assert result.llm_call_count == 2
+    assert result.assertions[0].effect_state == "present"
+    assert result.assertions[0].quote == BODY
+    retry_input = json.loads(client.calls[1][0].split("\nINPUT_JSON=", 1)[1])
+    assert retry_input["requested_pairs"] == [{"row_index": 1, "target_index": 1}]
+    assert retry_input["documents"] == [{"row_index": 1, "content": "无相关评价。"}]
+    assert retry_input["targets"] == [{"target_index": 1, "name": "头孢曲松"}]
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (22, 26, 48)
+
+
+def test_unrecovered_missing_pair_preserves_valid_facts_and_never_becomes_absent():
+    result = run(RecoveringClient(never_complete=True),
+                 [{"content": BODY}, {"content": "无相关评价。"}], [TARGET, "头孢曲松"])
+    assert result.state == "technical_error"
+    assert result.llm_call_count == 2
+    assert result.reason_code == "model_invalid_output"
+    assert len(result.assertions) == 3
+    assert result.unresolved_pairs == ((1, 1),)
+    assert (1, 1) not in {(a.row_index, a.target_index) for a in result.assertions}
+
+
 @pytest.mark.parametrize("mutation", [
     lambda p: p["assertions"].clear(),
     lambda p: p["assertions"].append(p["assertions"][0]),
@@ -104,8 +153,8 @@ def test_strict_schema_and_coverage_fail_without_partial_facts(mutation):
     assert result.state == "technical_error"
     assert result.reason_code == "model_invalid_output"
     assert result.assertions == ()
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 24
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 48
 
 
 @pytest.mark.parametrize("dimension_fact", [
@@ -132,7 +181,7 @@ def test_cross_document_quote_and_duplicate_pairs_are_rejected():
 def test_only_stop_completion_is_accepted(finish):
     client = Client(finish=finish)
     assert run(client).reason_code == "model_invalid_output"
-    assert len(client.calls) == 1
+    assert len(client.calls) == 2
 
 
 def test_whole_json_fence_allowed_but_explanation_and_duplicate_json_keys_rejected():
@@ -196,8 +245,17 @@ def test_no_client_and_transport_failure_are_technical_errors():
             raise RuntimeError("transport")
 
     result = run(Broken())
-    assert result.reason_code == "model_transport_error"
+    assert result.reason_code == "execution_program_error"
     assert result.llm_call_count == 1
+
+
+def test_transient_timeout_retries_once_and_preserves_correct_reason():
+    class Timeout:
+        async def generate(self, prompt, **kwargs):
+            raise httpx.ReadTimeout("SYNTHETIC_SECRET")
+    result = run(Timeout())
+    assert result.reason_code == "model_timeout"
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.parametrize("usage", [{"prompt_tokens": True}, {"completion_tokens": -1}, {"total_tokens": 1.2}])

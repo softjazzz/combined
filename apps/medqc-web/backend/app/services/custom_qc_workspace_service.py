@@ -4495,6 +4495,10 @@ class CustomQCWorkspaceService:
             total_records = int(current.get("total_records") or 0)
             now = _now_utc()
             retry_scope_result = build_failed_rule_retry_scope(current)
+            if automatic and retry_scope_result is not None:
+                retry_scope_result = build_failed_rule_retry_scope(current, automatic_only=True)
+                if retry_scope_result is None:
+                    return None
             if retry_scope_result is not None:
                 retry_scope, normalized_failures = retry_scope_result
                 if formal_0609 and not set(retry_scope["rule_ids"]).issubset(

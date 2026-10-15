@@ -3932,7 +3932,12 @@ async def run_sichuan_workspace_batch_job(
                     "retry_recovered_count": max(
                         0,
                         int(failed_rule_retry_scope.get("pending_count") or 0)
-                        - len(all_failed_records),
+                        - sum(
+                            str(failure.get("rule_id") or "") in
+                            (failed_rule_retry_scope.get("record_rule_map") or {}).get(
+                                CaseRef.from_mapping(failure).as_key(), ())
+                            for failure in all_failed_records
+                        ),
                     ),
                     "last_retry_performance_profile": performance_profile,
                     "performance_profile": retry_base_summary.get("performance_profile")

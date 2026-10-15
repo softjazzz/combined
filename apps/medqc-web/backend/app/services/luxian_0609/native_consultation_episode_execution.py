@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import Enum
-import httpx
 import json
 import logging
 from pathlib import Path
@@ -43,6 +42,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.shared import _parse_datetime
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .model_failure import classify_model_failure, log_model_failure
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     SourceEvidenceQueryError,
@@ -337,37 +337,7 @@ def _is_explicit_opinion_only_document(document: Mapping[str, str]) -> bool:
 def _is_retryable_execution_transport_failure(error: Exception) -> bool:
     """仅识别第二阶段可安全重试一次的瞬时上游失败。"""
 
-    if isinstance(error, (httpx.TransportError, httpx.TimeoutException)):
-        return True
-    status_match = re.search(r"\bupstream_http_status=(\d{3})\b", str(error))
-    if status_match is None:
-        return False
-    return 500 <= int(status_match.group(1)) <= 599
-
-
-def _stage_two_failure_kind(error: Exception) -> str:
-    """将二阶段模型异常收敛为安全枚举，绝不将原始异常写入日志。"""
-
-    if isinstance(error, httpx.TimeoutException):
-        return "timeout"
-    status_match = re.search(r"\bupstream_http_status=(\d{3})\b", str(error))
-    if status_match is not None:
-        status_code = int(status_match.group(1))
-        if status_code == 429:
-            return "upstream_429"
-        if 500 <= status_code <= 599:
-            return "upstream_5xx"
-    if isinstance(error, httpx.TransportError):
-        return "http_transport"
-    normalized = str(error).lower()
-    if any(marker in normalized for marker in (
-        "not configured",
-        "configuration",
-        "missing api key",
-        "missing endpoint",
-    )):
-        return "configuration"
-    return "unclassified"
+    return classify_model_failure(error)[2]
 
 
 def _stage_two_exception_module(error: Exception) -> str:
@@ -396,6 +366,13 @@ def _stage_two_exception_origin(error: Exception) -> str:
     ):
         return "unknown"
     return f"{module_basename}:{function_name}"
+
+
+def _exception_line(error: Exception) -> int:
+    trace = error.__traceback__
+    while trace is not None and trace.tb_next is not None:
+        trace = trace.tb_next
+    return trace.tb_lineno if trace is not None else 0
 
 
 @dataclass(frozen=True)
@@ -4239,37 +4216,41 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         else ()
     )
     if llm_client is None:
-        return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
-    calls = 1
+        return _finish(selected=selected, status="technical_error", reason_code="model_configuration_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    calls = 0
     prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     # 第一阶段事实按病例版本冻结：同一份会诊文书集合只由模型抽取一次，
     # 后续运行直接复用，保证 020/023 的判定对象（建议条数/原文/编号）稳定。
     frozen = None
-    if not opinion_freeze_rebuild:
-        frozen = load_opinion_payload(
-            visit_id=visit_id, documents=documents, store_dir=opinion_freeze_dir
-        )
-    freeze_state = frozen.state if frozen is not None else ""
-    if frozen is not None:
-        calls = 0
+    phase = "opinion_load"
     try:
+        if not opinion_freeze_rebuild:
+            frozen = load_opinion_payload(
+                visit_id=visit_id, documents=documents, store_dir=opinion_freeze_dir
+            )
+        freeze_state = frozen.state if frozen is not None else ""
         if frozen is not None:
             payload = dict(frozen.payload)
         else:
             started = time.perf_counter()
+            phase = "call"
+            calls += 1
             response = await llm_client.generate(_prompt(documents))
+            phase = "validate"
             if not isinstance(response, Mapping):
                 raise _SemanticInvalid()
             prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
             api_time = response_time or (time.perf_counter() - started)
             payload = dict(_payload(response))
+        phase = "validate"
         episodes = _parse(payload, documents)
         if frozen is None:
             # 不可逐字落地的事实不得冻结：否则伪造摘录会被长期复用，
             # 且逐建议执行核对与客户证据定位都建立在摘录可复现之上。
             if not _episode_recommendations_are_grounded(episodes, documents):
                 raise _SemanticInvalid()
+            phase = "opinion_freeze"
             freeze_state = save_opinion_payload(
                 visit_id=visit_id,
                 documents=documents,
@@ -4286,7 +4267,9 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticUnresolved:
         return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
-    except _SemanticInvalid:
+    except _SemanticInvalid as error:
+        logger.warning("consultation_stage_one_invalid stage=%s kind=%s exception_line=%s",
+                       phase, error.kind.value, _exception_line(error))
         invalid_statuses = {
             rule_id: ("technical_error", "model_invalid_output")
             for rule_id in selected
@@ -4302,8 +4285,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             evidence_snapshot=evidence_snapshot,
             decision_rule_ids=typed,
         )
-    except Exception:
-        return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", calls=calls, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    except Exception as error:
+        if phase == "call":
+            api_time += time.perf_counter() - started
+        log_model_failure(logger, rule="LX0609-03-01-04", stage=phase, error=error)
+        reason = classify_model_failure(error, stage=phase)[1]
+        return _finish(selected=selected, status="technical_error", reason_code=reason, calls=calls,
+                       prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                       total_tokens=total_tokens, api_time=api_time,
+                       evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     statuses: dict[str, tuple[str, str]] = {
         rule_id: _outcome(rule_id, episodes)
         for rule_id in selected
@@ -4552,6 +4542,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         exhausted_missing_refs: set[str] = set()
                         calls += 1
                         retry_attempted = False
+                        stage_two_phase = "call"
                         try:
                             started = time.perf_counter()
                             try:
@@ -4569,6 +4560,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     api_time += time.perf_counter() - retry_started
                                     raise
                                 started = retry_started
+                            stage_two_phase = "validate"
                             if not isinstance(response, Mapping):
                                 raise _SemanticInvalid()
                             next_prompt, next_completion, next_total, response_time = _usage(response)
@@ -4596,6 +4588,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     calls += 1
                                     retry_attempted = True
                                     semantic_retry_started = time.perf_counter()
+                                    stage_two_phase = "call"
                                     try:
                                         semantic_retry_response = (
                                             await llm_client.generate(second_prompt)
@@ -4606,6 +4599,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                             - semantic_retry_started
                                         )
                                         raise
+                                    stage_two_phase = "validate"
                                     if not isinstance(
                                         semantic_retry_response, Mapping
                                     ):
@@ -4659,12 +4653,14 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     missing_started = time.perf_counter()
                                     missing_time_recorded = False
                                     try:
+                                        stage_two_phase = "call"
                                         missing_response = await llm_client.generate(
                                             missing_prompt
                                         )
                                         missing_elapsed = (
                                             time.perf_counter() - missing_started
                                         )
+                                        stage_two_phase = "validate"
                                         if not isinstance(missing_response, Mapping):
                                             api_time += missing_elapsed
                                             missing_time_recorded = True
@@ -4695,11 +4691,16 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                             completed_missing_assessments = (
                                                 retry_incomplete.parsed
                                             )
-                                    except Exception:
+                                    except Exception as error:
                                         if not missing_time_recorded:
                                             api_time += (
                                                 time.perf_counter() - missing_started
                                             )
+                                        if isinstance(error, _SemanticInvalid):
+                                            logger.warning("consultation_missing_repair_invalid kind=%s exception_line=%s",
+                                                           error.kind.value, _exception_line(error))
+                                        else:
+                                            log_model_failure(logger, rule="LX0609-03-01-04", stage=stage_two_phase, error=error)
                                 assessment_by_ref = {
                                     item.recommendation_ref: item
                                     for item in (
@@ -4825,15 +4826,19 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             logger.warning(
                                 "consultation_stage_two_failed "
                                 "stage_two_failure_kind=%s retry_attempted=%s "
-                                "exception_type=%s exception_module=%s exception_origin=%s",
-                                _stage_two_failure_kind(error),
+                                "exception_type=%s exception_module=%s exception_origin=%s stage=%s exception_line=%s",
+                                classify_model_failure(error, stage=stage_two_phase)[0],
                                 retry_attempted,
                                 type(error).__name__,
                                 _stage_two_exception_module(error),
                                 _stage_two_exception_origin(error),
+                                stage_two_phase,
+                                _exception_line(error),
                             )
                             for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = ("technical_error", "model_transport_error")
+                                statuses[rule_id] = (
+                                    "technical_error", classify_model_failure(error, stage=stage_two_phase)[1],
+                                )
             else:
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = _execution_outcome(

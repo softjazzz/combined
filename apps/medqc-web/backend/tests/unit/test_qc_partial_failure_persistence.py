@@ -473,6 +473,47 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
     assert json.loads(row["failed_records_json"])[0]["record_key"] == '["test-i","test-p","test-v"]'
 
 
+def test_automatic_retry_skips_terminal_pair_without_losing_it_or_successful_items(storage):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    terminal = {**failures[0], "rule_id": "LX0609-05-01-03", "reason_code": "model_invalid_output"}
+    transient = {**failures[0], "rule_id": "LX0609-03-01-04", "reason_code": "model_timeout"}
+    summary.update(failed_rule_count=2, failed_rule_ids=[terminal["rule_id"], transient["rule_id"]])
+    with engine.begin() as conn:
+        filters = json.loads(conn.execute(sa.select(table.c.filters_json)).scalar_one())
+        filters["rule_ids"] = [items[0]["rule_id"], terminal["rule_id"], transient["rule_id"]]
+        conn.execute(table.update().values(filters_json=json.dumps(filters)))
+    service.complete_batch_job(job_id="partial-job", summary=summary, items=items,
+                               failed_records=[terminal, transient])
+    with engine.connect() as conn:
+        expected = conn.execute(sa.select(table.c.filters_json)).scalar_one()
+    retried = service.retry_batch_job(job_id="partial-job", created_by="tester", automatic=True,
+                                     expected_attempt_filters_json=expected)
+    assert retried["filters"]["failed_rule_retry"]["rule_ids"] == [transient["rule_id"]]
+    assert retried["filters"]["failed_rule_retry"]["pending_count"] == 1
+    assert len(retried["failed_records"]) == 2
+    assert retried["items"][0]["rule_id"] == items[0]["rule_id"]
+
+
+def test_automatic_terminal_retry_does_not_fall_back_to_full_batch(storage):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    failure = {**failures[0], "rule_id": "LX0609-03-01-04", "reason_code": "execution_program_error"}
+    with engine.begin() as conn:
+        filters = json.loads(conn.execute(sa.select(table.c.filters_json)).scalar_one())
+        filters["rule_ids"] = [items[0]["rule_id"], failure["rule_id"]]
+        conn.execute(table.update().values(filters_json=json.dumps(filters)))
+    summary.update(failed_rule_ids=[failure["rule_id"]])
+    service.complete_batch_job(job_id="partial-job", summary=summary, items=items, failed_records=[failure])
+    with engine.connect() as conn:
+        expected = conn.execute(sa.select(table.c.filters_json)).scalar_one()
+    assert service.retry_batch_job(job_id="partial-job", created_by="tester", automatic=True,
+                                    expected_attempt_filters_json=expected) is None
+    current = service.get_batch_job(job_id="partial-job", created_by="tester")
+    assert current["status"] == "failed"
+    assert current["items"][0]["rule_id"] == items[0]["rule_id"]
+
+
 @pytest.mark.asyncio
 async def test_retry_route_returns_customer_safe_partial_result(storage, monkeypatch):
     service, _, _ = storage

@@ -297,7 +297,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     effect_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-05-01-03")
     assert (effect_contract.contract_version, effect_contract.decision_authority,
             effect_contract.max_llm_calls_per_rule, effect_contract.prompt_version) == (
-                "v2", "program_then_optional_llm", 1, "lx0609-antimicrobial-effect-safety-facts-v2")
+                "v3", "program_then_optional_llm", 2, "lx0609-antimicrobial-effect-pair-repair-v1")
     visit_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-04-04-02")
     assert (visit_contract.contract_version, visit_contract.decision_authority, visit_contract.max_llm_calls_per_rule, visit_contract.prompt_version) == ("v3", "program_then_optional_llm", 1, "lx0609-anesthesia-visit-facts-v2")
     for rule in ("LX0609-04-05-02", "LX0609-08-02-01"):
@@ -395,7 +395,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
         == (2 if contract.rule_id in {
-            "LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01",
+            "LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03",
         } else 1)
         and bool(contract.prompt_version)
         for contract in contracts

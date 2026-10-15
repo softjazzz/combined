@@ -4039,7 +4039,7 @@ async def test_parse_failure_and_model_failure_are_technical(monkeypatch):
         llm_client=_BrokenClient(),
     )
     assert broken.results[0]["status"] == "technical_error"
-    assert broken.results[0]["metadata"]["reason_code"] == "model_transport_error"
+    assert broken.results[0]["metadata"]["reason_code"] == "execution_program_error"
     assert "MODEL_SECRET" not in repr(broken)
 
 
@@ -6658,7 +6658,7 @@ async def test_020_023_missing_llm_client_is_technical_error():
         "technical_error", "technical_error",
     ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
-        "model_transport_error", "model_transport_error",
+        "model_configuration_error", "model_configuration_error",
     ]
     assert result.llm_call_count == 0
 
@@ -6976,10 +6976,11 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
             "httpx",
         ),
         (
-            (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),),
+            (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),
+             RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET")),
             "upstream_429",
-            False,
-            2,
+            True,
+            3,
             "RuntimeError",
             "builtins",
         ),
@@ -6993,7 +6994,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (ValueError("UNCLASSIFIED_SECRET"),),
-            "unclassified",
+            "program_error",
             False,
             2,
             "ValueError",
@@ -7001,7 +7002,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (_ExternalStageFailure("EXTERNAL_MODULE_SECRET"),),
-            "unclassified",
+            "program_error",
             False,
             2,
             "_ExternalStageFailure",
@@ -7047,7 +7048,8 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
         f"stage_two_failure_kind={expected_kind} retry_attempted={retry_attempted} "
         f"exception_type={expected_exception_type} "
         f"exception_module={expected_exception_module} "
-        "exception_origin=test_luxian_0609_native_consultation_episode_execution:generate"
+        "exception_origin=test_luxian_0609_native_consultation_episode_execution:generate "
+        f"stage=call exception_line={episode._exception_line(stage_two_errors[-1])}"
     ]
     logged = "\n".join(warning_messages)
     assert "STAGE_TWO_TIMEOUT_SECRET" not in logged
@@ -7067,9 +7069,9 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_identity_contract_failure
     })
     for second_stage_response, expected_status, expected_reason in (
         (
-            RuntimeError("upstream_http_error upstream_http_status=429"),
+            RuntimeError("upstream_http_error upstream_http_status=401"),
             "technical_error",
-            "model_transport_error",
+            "model_http_error",
         ),
         (
             _execution({
