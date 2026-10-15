@@ -598,15 +598,6 @@ def validate_published_course_quality_facts(
         and reason_code == "evaluation_window_not_mature"
     ):
         return True, None
-    # 007 在截止时间仅精确到日期等边界下无法形成确定的区间事实。
-    # 保留执行器的资料不足状态与缺时原因；确定结论及非空 facts 仍严格校验。
-    if (
-        normalized == "LX0609-02-01-03"
-        and (raw is None or raw == {})
-        and status == "data_gap"
-        and reason_code == "authoritative_time_missing"
-    ):
-        return True, None
     # 016 的目标段落不可读时没有可发布的相似度；仅接受已知资料不足终态。
     # 确定结论及非空残缺 facts 仍须通过原比较事实合同。
     if (

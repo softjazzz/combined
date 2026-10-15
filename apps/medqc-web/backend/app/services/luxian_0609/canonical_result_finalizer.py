@@ -495,6 +495,14 @@ def validate_luxian_0609_published_customer_display_facts(
 
     normalized_rule_id = str(rule_id or "").strip().upper()
     if raw is None or raw == {}:
+        from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
+
+        # 展示明细是可选字段。非问题结果沿用执行器的状态、原因和说明，
+        # 不因缺少明细阻断整批保存；非空事实及确定问题仍执行原合同。
+        if normalized_rule_id.startswith("LX0609-") and status in {
+            "compliant", "not_applicable", "data_gap",
+        } and reason_code in ALLOWED_REASON_CODES_BY_FINAL_STATE[status]:
+            return None
         if status == "not_executed" and reason_code == "policy_definition_pending":
             from .phase_scope import get_luxian_0609_phase_scope
 

@@ -5,8 +5,6 @@ from datetime import datetime
 from functools import lru_cache
 from types import SimpleNamespace
 
-import pytest
-
 import app.services.custom_qc_workspace_service as workspace
 import app.services.qc_workspace.canonical_result_store as canonical
 from tests.luxian_0609_published_result_support import published_lx0609_items
@@ -77,13 +75,15 @@ def test_save_ignores_deprecated_text_seal_field(monkeypatch):
     assert with_deprecated == plain
 
 
-def test_save_rejects_published_result_missing_rule_facts(monkeypatch):
+def test_save_accepts_compliant_result_without_optional_rule_facts(monkeypatch):
     monkeypatch.setattr(canonical, 'get_settings', lambda: SimpleNamespace(JWT_SECRET='synthetic-key'))
     broken = item()
     assert broken['customer_display_facts']
     broken['customer_display_facts'] = None
-    with pytest.raises(ValueError, match='客户结果解释合同不完整'):
-        write(monkeypatch, [broken])
+    saved = write(monkeypatch, [broken])[0]['items'][0]
+    assert saved['status'] == broken['status'] == 'compliant'
+    assert saved['reason_code'] == broken['reason_code']
+    assert not saved.get('customer_display_facts')
 
 
 def test_next_save_sees_new_key_and_same_operation_keeps_one_key(monkeypatch):

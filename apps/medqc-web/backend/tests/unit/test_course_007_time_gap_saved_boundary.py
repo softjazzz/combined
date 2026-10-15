@@ -23,13 +23,19 @@ RULE = "LX0609-02-01-03"
 @pytest.mark.parametrize("day,status,reason", [
     ("2026-01-01", "not_applicable", "evaluation_window_not_mature"),
     ("2026-01-04", "data_gap", "authoritative_time_missing"),
+    ("2026-01-03", "compliant", "requirement_within_threshold"),
 ])
 async def test_no_course_result_survives_native_to_saved_roundtrip(day, status, reason):
     # 没有病程：入院当天尚未成熟；第 3 天仅知截止日期，不能精确判断 72 小时。
+    rows = {"inpat_registration": ({"document_id": "admission-synthetic",
+                                     "admission_datetime": "2026-01-01 08:00:00"},)}
+    if status == "compliant":
+        rows["daily_course_record"] = ({
+            "document_id": "course-synthetic", "record_time": "2026-01-02 08:00:00",
+            "record_content": "今日查房，继续观察。",
+        },)
     _, _, _, item = await _run_chain(
-        RULE,
-        {"inpat_registration": ({"document_id": "admission-synthetic",
-                                  "admission_datetime": "2026-01-01 08:00:00"},)},
+        RULE, rows,
         evaluation_as_of_date=day,
     )
     assert item["status"] == status
@@ -72,12 +78,10 @@ def test_customer_reported_time_gap_accepts_absent_facts(facts):
 
 @pytest.mark.parametrize("rule,status,reason,facts", [
     (RULE, "non_compliant", "authoritative_time_missing", None),
-    (RULE, "compliant", "authoritative_time_missing", None),
-    (RULE, "data_gap", "unknown_reason", None),
     (RULE, "data_gap", "authoritative_time_missing", {"medical_text": "合成敏感正文"}),
-    ("LX0609-02-01-04", "data_gap", "authoritative_time_missing", None),
+    ("LX0609-02-01-04", "non_compliant", "requirement_violated", None),
 ])
-def test_exception_does_not_accept_defects_other_rules_or_nonempty_invalid_facts(rule, status, reason, facts):
+def test_defects_and_nonempty_invalid_facts_still_require_validation(rule, status, reason, facts):
     with pytest.raises(ValueError, match="解释合同不完整"):
         safe_customer_display_facts({
             "rule_id": rule, "status": status, "reason_code": reason,

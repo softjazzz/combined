@@ -85,18 +85,26 @@ def test_native_binding_published_sqlite_read_accepts_legal_absent_facts(rule_id
 
 
 @pytest.mark.parametrize("rule_id,status,reason_code", [
-    (RULE_004, "compliant", "requirement_within_threshold"),
     (RULE_004, "non_compliant", "requirement_violated"),
-    (RULE_004, "data_gap", "rescue_record_missing_after_trigger"),
     (RULE_004, "not_applicable", "source_unavailable"),
-    ("LX0609-09-01-02", "data_gap", "source_unavailable"),
-    ("LX0609-01-01-01", "not_applicable", "trigger_absent_complete"),
 ])
 def test_damaged_absent_facts_remain_rejected(rule_id, status, reason_code):
     with pytest.raises(ValueError, match="解释合同不完整"):
         safe_customer_display_facts(
             {"status": status, "reason_code": reason_code}, rule_id=rule_id,
         )
+
+
+@pytest.mark.parametrize("rule_id,status,reason_code", [
+    (RULE_004, "compliant", "requirement_within_threshold"),
+    (RULE_004, "data_gap", "rescue_record_missing_after_trigger"),
+    ("LX0609-09-01-02", "data_gap", "source_unavailable"),
+    ("LX0609-01-01-01", "not_applicable", "trigger_absent_complete"),
+])
+def test_non_problem_results_do_not_require_optional_facts(rule_id, status, reason_code):
+    assert safe_customer_display_facts(
+        {"status": status, "reason_code": reason_code}, rule_id=rule_id,
+    ) == {}
 
 
 def test_legal_absence_does_not_allow_polluted_facts_or_contextless_read():

@@ -96,10 +96,10 @@ def test_course_contract_failure_logs_safe_context_without_changing_error(caplog
     with pytest.raises(ValueError) as caught:
         validate_luxian_0609_published_customer_display_facts(
             rule_id="LX0609-12-01-01", raw=raw,
-            status="data_gap", reason_code="source_unavailable",
+            status="non_compliant", reason_code="requirement_violated",
         )
     assert str(caught.value) == "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
-    assert "LX0609_COURSE_CONTRACT rule=LX0609-12-01-01 status=data_gap reason=source_unavailable" in caplog.text
+    assert "LX0609_COURSE_CONTRACT rule=LX0609-12-01-01 status=non_compliant reason=requirement_violated" in caplog.text
     assert f"facts={fact_state}" in caplog.text
     assert "private_probe" not in caplog.text
     assert "不可输出的测试正文" not in caplog.text
