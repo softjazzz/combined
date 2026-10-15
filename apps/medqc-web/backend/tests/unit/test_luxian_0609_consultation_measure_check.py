@@ -35,6 +35,23 @@ def test_specific_order_proves_execution_even_when_course_only_says_follow_advic
         source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
 
 
+def test_same_day_orders_before_documentation_are_candidates_but_earlier_courses_are_not():
+    completed, _, _, _ = _setup()
+    completed = (replace(completed[0], opinion_time=episode._ObservedTime(datetime(2026, 7, 20, 15, 59), True)),)
+    candidates = tuple(episode._CandidateDocument(
+        ref, source, episode._ObservedTime(time, True), text)
+        for ref, source, time, text in (
+            ("inpat_nondrug_order-1", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 56, 46), "中药贴敷"),
+            ("inpat_nondrug_order-2", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 55, 22), "中药贴敷"),
+            ("inpat_nondrug_order-3", "inpat_nondrug_order", datetime(2026, 7, 19, 15, 59), "中药贴敷"),
+            ("daily_course_record-1", "daily_course_record", datetime(2026, 7, 20, 15, 55), "遵照执行"),
+            ("inpat_nondrug_order-4", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 59), "中药贴敷"),
+        ))
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset({
+        "inpat_nondrug_order-1", "inpat_nondrug_order-2", "inpat_nondrug_order-4"})
+
+
 async def _check_clinical_decision(text, candidate_text, measures, generic=()):
     completed, candidates, _, _ = _setup((candidate_text,))
     recommendation = replace(completed[0].recommendation, action_type="test",

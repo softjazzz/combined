@@ -4781,6 +4781,26 @@ async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("order_time", ["2026-07-20 15:56:46", "2026-07-20 15:55:22"])
+async def test_023_same_day_order_before_documentation_reaches_execution_check(monkeypatch, order_time):
+    rows = _no_course_source_rows(
+        consultation_text="会诊意见：中药贴敷天突、双肺俞。处理：遵照执行。",
+        source_key="inpat_nondrug_order", source_rows=[{
+            "order_id": "SYNTHETIC-ORDER", "order_name": "中药贴敷", "prescribed_datetime": order_time}])
+    rows["consultation_record"][0]["record_time"] = "2026-07-20 15:59:00"
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(action_type="procedure", source_quote="中药贴敷"),
+        candidate_ref="inpat_nondrug_order-1", candidate_text="中药贴敷")
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+    assert result.results[0]["status"] == "compliant"
+    assert any("中药贴敷" in text for text in _stage_two_candidate_texts(client.prompts[1]))
+
+
+@pytest.mark.asyncio
 async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
     monkeypatch,
 ):

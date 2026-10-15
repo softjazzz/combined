@@ -246,6 +246,9 @@ _PLANNED_ONLY_TRACE_PATTERN = re.compile(
     r"(?:行|予以|给予|完善|复查|实施|治疗|检查|检验|手术|操作|随访|处理)"
 )
 _EXECUTION_TRACE_BOUNDARY_PROMPT = (
+    "会诊记录时间是文书记录时间，不必然是实际会诊发生时间；同日医嘱可能先开立、后记录会诊。"
+    "对已提供的同日医嘱，不得仅因早于会诊记录几分钟就否认；仍须核对本次建议与具体治疗动作是否相符，"
+    "无关医嘱、仅同日或仅同科室均不能证明执行。"
     "‘遵会诊意见 + 明确具体动作’属于specific_trace；只有未写任何具体动作的裸句"
     "‘遵会诊意见执行’才属于generic_trace。"
     "execution_record_state只评价所选病程写法是否具体，不评价整条建议是否全部落实；"
@@ -2818,6 +2821,9 @@ def _execution_prompt(
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:
                 include = False
+            elif candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
+                # 同日医嘱可能先于会诊文书补记；时间只决定候选，动作关系仍须核验。
+                include = True
             elif candidate.observed_time.precise and item.opinion_time.precise:
                 include = candidate.observed_time.value > item.opinion_time.value
             else:
@@ -2829,7 +2835,7 @@ def _execution_prompt(
                 included.append(candidate)
         # 医嘱是高频结构化事件，但源级前 N 条截断只反映源表自然顺序，会漏掉
         # 会诊后的真实执行医嘱。限额改到逐建议时序过滤之后：每个医嘱来源按
-        # （时间, 原候选顺序）稳定排序，只保留距该建议最近的后置候选。
+        # （距记录时间的绝对间隔, 原候选顺序）稳定排序，保留最近的候选。
         order_candidates_by_source: dict[str, list[_CandidateDocument]] = {}
         for candidate in included:
             if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
@@ -2843,7 +2849,7 @@ def _execution_prompt(
                 for candidate in sorted(
                     per_source,
                     key=lambda candidate: (
-                        candidate.observed_time.value,
+                        abs(candidate.observed_time.value - item.opinion_time.value),
                         candidate_rank[candidate.ref],
                     ),
                 )[:_MAX_ORDER_CANDIDATES_PER_SOURCE]
