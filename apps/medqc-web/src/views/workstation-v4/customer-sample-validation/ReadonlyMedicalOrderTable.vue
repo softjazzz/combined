@@ -1,8 +1,5 @@
 <template>
-  <section
-    class="readonly-medical-order-table"
-    data-testid="readonly-medical-order-table"
-  >
+  <section class="readonly-medical-order-table" data-testid="readonly-medical-order-table">
     <div class="editable-copy-order-type-switch">
       <button
         type="button"
@@ -18,6 +15,14 @@
       >
         临时医嘱
       </button>
+    </div>
+    <div
+      v-if="hasIncompleteOrders"
+      class="mq-soft readonly-medical-order-notice"
+      role="alert"
+      data-testid="readonly-medical-order-incomplete"
+    >
+      医嘱超过查看上限，当前列表未完整，不得据此判断医嘱缺失。
     </div>
     <div class="editable-copy-order-table-wrap">
       <table class="editable-copy-order-table">
@@ -70,10 +75,7 @@
             </td>
           </tr>
           <tr v-if="!visibleRows.length">
-            <td
-              colspan="11"
-              class="editable-copy-order-empty"
-            >
+            <td colspan="11" class="editable-copy-order-empty">
               暂无{{ activeType === 'long' ? '长期医嘱' : '临时医嘱' }}
             </td>
           </tr>
@@ -113,6 +115,9 @@ const orderDocuments = computed(() =>
     .filter((document) => isMedicalOrderDocument(document))
     .slice()
     .sort(compareMedicalOrderByTimeDesc),
+)
+const hasIncompleteOrders = computed(() =>
+  orderDocuments.value.some((document) => document.projection_incomplete === true),
 )
 const rows = computed(() => orderDocuments.value.map((document) => buildMedicalOrderRow(document)))
 const activeType = ref<MedicalOrderTypeKey>('temporary')
@@ -186,6 +191,14 @@ watch(
 
 .editable-copy-order-type-switch button.is-active::before {
   border: 5px solid #0a6cff;
+}
+
+.readonly-medical-order-notice {
+  margin: 12px 16px;
+  padding: 12px 16px;
+  color: var(--mq-warning-text);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .editable-copy-order-table-wrap {
