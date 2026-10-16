@@ -779,7 +779,7 @@
     "dependency_type": "单文书语义事实",
     "executor_type": "llm_fact",
     "rule_version": "2026-10-15",
-    "prompt_version": "consultation-disposition-record-v1",
+    "prompt_version": "consultation-disposition-record-v3",
     "mapped_rule_ids": ["LX0609-03-01-05"],
     "primary_execution_rule_id": "LX0609-03-01-05"
   }
