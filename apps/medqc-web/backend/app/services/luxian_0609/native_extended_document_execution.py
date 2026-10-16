@@ -847,11 +847,11 @@ def _death_context(
         is not None
     }
     if not explicit_death_times:
-        # 结构化死亡时间缺失时，取死亡记录正文明确记载的死亡日期和时刻。
+        # 正文死亡时间也统一到医院时区，与结构化时间及讨论时间保持一致。
         explicit_death_times = {
             candidate
             for row in death_rows
-            if (candidate := death_time_from_body(row)) is not None
+            if (candidate := _parse_datetime(death_time_from_body(row))) is not None
         }
     if len(explicit_death_times) > 1:
         return "conflict", None

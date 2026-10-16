@@ -281,11 +281,20 @@ _GLOBAL_COLUMN_ALIASES: Dict[str, Tuple[str, ...]] = {
     "settle_datetime": ("settle_datetime", "settle_time", "settlement_time"),
 }
 
-# 部分手术相关源表以结构化章节保存正文。CDM 当前只保留通用文书列和
+# 部分文书源表以结构化章节保存正文。CDM 当前只保留通用文书列和
 # record_content；若同步时不组装正文，这些章节会在列过滤阶段被静默丢弃。
-# 术前小结的结构化章节与叙述正文互补，必须合并保留；其他文书仍仅在正文
-# 为空时回填。字段顺序必须稳定，便于展示、质控和真实病例回放。
+# 结构化章节与叙述正文互补，按稳定顺序合并保留；空字段不生成章节，
+# 便于展示、质控和真实病例回放。
 _STRUCTURED_DOCUMENT_CONTENT_FIELDS: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
+    # 客户死亡记录的 record_content 常为空，正文在这些独立字段中；
+    # 必须在目标列过滤之前合并保存，死亡时间不能用文书完成时间代替。
+    "death_record": (
+        ("入院时间", ("admission_datetime", "admission_time")),
+        ("入院情况", ("admission_condition",)),
+        ("诊疗经过", ("treatment_course",)),
+        ("死亡时间", ("death_datetime", "death_time")),
+        ("死亡原因", ("death_reason",)),
+    ),
     "presurg_summary": (
         ("术前诊断", ("preoperative_diagnosis", "preop_diagnosis", "surgery_diagnosis", "diagnosis")),
         ("简要病情", ("condition_summary",)),
