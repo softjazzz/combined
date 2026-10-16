@@ -3173,6 +3173,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         complete = any(value <= first_order for value in specimen_times)
                         final_state = "compliant" if complete else "non_compliant"
                         reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                        display.append((rule_id, {
+                            "verification_kind": "key_antimicrobial_specimen_check",
+                            "key_drug_count": len(key_drugs),
+                            "specimen_before_first_order": complete,
+                        }))
             elif rule_id == "LX0609-05-01-05":
                 empiric_contexts, association_ambiguous = (
                     _empiric_antimicrobial_event_contexts(

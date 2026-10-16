@@ -3852,6 +3852,15 @@ def _decision(
     else:
         dimensions = (ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR, QcDirection.UNKNOWN)
     applicability, evidence_state, direction = dimensions
+    if status == "technical_error":
+        # 模型诊断码保留在兼容结果；typed 决策只映射已知分类，不放行未知码。
+        reason_code = {
+            "model_rate_limited": "model_transport_error",
+            "model_upstream_error": "model_transport_error",
+            "model_http_error": "executor_exception",
+            "model_configuration_error": "executor_exception",
+            "execution_program_error": "executor_exception",
+        }.get(reason_code, reason_code)
     return RuleDecision(
         rule_id=rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -5127,6 +5136,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
             evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot))
         outcome = await check_disposition_record(documents=documents, llm_client=llm_client)
+        # 计数来自已核验的文书条目；一份文书可能映射到多个材料引用。
+        unspecific_document_count = len(outcome.fact_refs)
         if DISPOSITION_RECORD_RULE_ID in typed and outcome.fact_refs:
             from .consultation_decision_evidence import material_refs_for_internal_refs
 
@@ -5150,7 +5161,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         results=old.results + new.results,
         planned_rule_ids=old.planned_rule_ids + new.planned_rule_ids,
         decisions=old.decisions + new.decisions,
-        customer_display_facts=old.customer_display_facts + new.customer_display_facts,
+        customer_display_facts=old.customer_display_facts + new.customer_display_facts + (
+            ((DISPOSITION_RECORD_RULE_ID, {
+                "failure_kind": "consultation_disposition_unspecific",
+                "unspecific_document_count": unspecific_document_count,
+            }),) if outcome.status == "non_compliant" else ()
+        ),
         diagnostic_semantic_snapshot=old.diagnostic_semantic_snapshot,
         llm_call_count=old.llm_call_count + new.llm_call_count,
         prompt_tokens=old.prompt_tokens + new.prompt_tokens,

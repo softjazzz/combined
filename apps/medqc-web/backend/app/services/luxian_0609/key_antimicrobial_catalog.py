@@ -55,3 +55,15 @@ def key_antimicrobials_in_order(row: Mapping[str, Any]) -> tuple[str, ...]:
         return ()
     text = " ".join(str(row.get(field) or "") for field in _NAME_FIELDS)
     return tuple(name for name, _category, pattern in KEY_ANTIMICROBIALS if pattern.search(text))
+
+
+def safe_specimen_display_facts(raw: Any) -> dict[str, Any] | None:
+    """重点药物送检检查的受控计数和时间关系，不接受自由文本。"""
+    if (not isinstance(raw, Mapping)
+        or set(raw) != {"verification_kind", "key_drug_count", "specimen_before_first_order"}
+        or raw.get("verification_kind") != "key_antimicrobial_specimen_check"
+        or type(raw.get("key_drug_count")) is not int
+        or not 2 <= raw["key_drug_count"] <= len(KEY_ANTIMICROBIALS)
+        or type(raw.get("specimen_before_first_order")) is not bool):
+        return None
+    return dict(raw)

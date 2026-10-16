@@ -11096,3 +11096,38 @@ def _056_rows(*orders, culture_time=None):
 async def test_056_counts_distinct_key_antimicrobials_from_hospital_list(orders, culture_time, expected) -> None:
     _result, reduced = await _evaluate("LX0609-05-01-04", _056_rows(*orders, culture_time=culture_time))
     assert reduced.final_state is expected
+
+
+@pytest.mark.asyncio
+async def test_056_defect_explanation_allows_partial_task_save_and_retry():
+    from app.services.qc_workspace.execution_failure import validate_failed_task_items
+    from app.services.qc_workspace.failed_rule_retry import build_failed_rule_auto_retry_plan
+
+    rule = "LX0609-05-01-04"
+    outcome, reduced = await _evaluate(rule, _056_rows(
+        ("注射用美罗培南", "2026-06-01 10:00:00"),
+        ("利奈唑胺注射液", "2026-06-02 10:00:00"),
+    ))
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    result = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced,
+        raw_customer_display_facts=dict(outcome.customer_display_facts).get(rule),
+        evidence_snapshot=None, evidence_materials=None,
+    )
+    result.update(institute_id="I", patient_id="P", visit_id="V")
+    failures = [{"rule_id": "LX0609-03-01-04", "reason_code": "model_transport_error", "error_phase": "result_status"}]
+    summary = {"execution_status": "partial_failed", "completed_rule_count": 1, "failed_rule_count": 1}
+    validate_failed_task_items(summary, [result], failures)
+    assert result["customer_display_facts"]["key_drug_count"] == 2
+    assert result["customer_display_facts"]["specimen_before_first_order"] is False
+    assert build_failed_rule_auto_retry_plan(summary=summary, failures=failures)["should_retry"] is True
+
+
+@pytest.mark.parametrize(("count", "before", "status"), [(True, False, "non_compliant"), (1, False, "non_compliant"), (2, True, "non_compliant"), (2, False, "compliant")])
+def test_056_explanation_rejects_invalid_counts_and_status_conflicts(count, before, status):
+    from app.services.luxian_0609.canonical_result_finalizer import validate_luxian_0609_published_customer_display_facts
+    with pytest.raises(ValueError):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id="LX0609-05-01-04", status=status, reason_code="requirement_violated",
+            raw={"verification_kind": "key_antimicrobial_specimen_check", "key_drug_count": count, "specimen_before_first_order": before},
+        )

@@ -587,6 +587,16 @@ async def test_new_rule_binds_record_evidence_and_renders_independent_customer_r
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    result = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced[0],
+        raw_customer_display_facts=dict(outcome.customer_display_facts).get(record.RULE_ID),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    if not tamper_reference:
+        from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
+        facts, _ = validated_customer_explanation(result, rule_id=record.RULE_ID, status=result["status"])
+        assert facts["unspecific_document_count"] == 1
     result = render_luxian_0609_customer_result(decision=reduced[0])
     assert source_keys == ["consultation_record"]
     assert result["status"] == (
@@ -604,3 +614,16 @@ async def test_new_rule_binds_record_evidence_and_renders_independent_customer_r
         )
         is None
     )
+
+
+@pytest.mark.parametrize("raw", [
+    {"failure_kind": "consultation_disposition_unspecific", "unspecific_document_count": True},
+    {"failure_kind": "consultation_disposition_unspecific", "unspecific_document_count": 0},
+    {"failure_kind": "consultation_disposition_unspecific", "unspecific_document_count": 1, "patient_name": "合成患者"},
+])
+def test_disposition_explanation_rejects_invalid_counts_and_extra_fields(raw):
+    from app.services.luxian_0609.canonical_result_finalizer import validate_luxian_0609_published_customer_display_facts
+    with pytest.raises(ValueError):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id=record.RULE_ID, raw=raw, status="non_compliant", reason_code="requirement_violated",
+        )

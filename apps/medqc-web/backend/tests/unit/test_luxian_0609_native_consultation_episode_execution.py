@@ -9389,3 +9389,57 @@ def test_planned_only_course_trace_keeps_independent_structured_execution():
         source_incomplete_keys=frozenset(),
     ) == ("compliant", "requirement_satisfied")
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("error", "expected_reason"), [
+    (ValueError("identity context unavailable"), "executor_exception"),
+    (RuntimeError("upstream_http_status=429"), "model_transport_error"),
+    (RuntimeError("upstream_http_status=503"), "model_transport_error"),
+    (RuntimeError("upstream_http_status=401"), "executor_exception"),
+    (RuntimeError("client not configured"), "executor_exception"),
+])
+async def test_typed_consultation_call_failure_keeps_valid_technical_decision(error, expected_reason):
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("会诊文书")),
+    })
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04", "LX0609-03-01-05"),
+        decision_rule_ids=("LX0609-03-01-04", "LX0609-03-01-05"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        llm_client=_PlannedStageClient(error, error),
+    )
+    assert len(result.decisions) == 2
+    assert result.decisions[0].evidence_state is episode.EvidenceState.TECHNICAL_ERROR
+    assert result.decisions[0].reason_code == expected_reason
+    assert "identity context unavailable" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_consultation_stage_two_privacy_failure_is_legal_and_not_retried():
+    from app.services.luxian_0609.llm_prompt_privacy import PatientPrivacyViolation
+    from app.services.qc_workspace.failed_rule_retry import build_failed_rule_auto_retry_plan
+
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        PatientPrivacyViolation("Patient identity remains in model request"),
+    )
+    outcome = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), decision_rule_ids=("LX0609-03-01-04",),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    decision = outcome.decisions[0]
+    assert decision.evidence_state is episode.EvidenceState.TECHNICAL_ERROR
+    assert decision.reason_code == "executor_exception"
+    assert len(client.prompts) == 2
+    plan = build_failed_rule_auto_retry_plan(
+        summary={"execution_status": "failed"},
+        failures=[{"rule_id": decision.rule_id, "reason_code": decision.reason_code, "error_phase": "result_status"}],
+    )
+    assert plan["should_retry"] is False

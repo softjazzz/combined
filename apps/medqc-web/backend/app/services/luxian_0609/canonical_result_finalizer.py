@@ -225,6 +225,13 @@ def validate_luxian_0609_executor_customer_display_facts(
 
     contains_private_identifier = _contains_private_customer_fact_identifier
 
+    if rule_id == "LX0609-03-01-05":
+        from .consultation_disposition_record import safe_disposition_display_facts
+        return safe_disposition_display_facts(raw)
+    if rule_id == "LX0609-05-01-04":
+        from .key_antimicrobial_catalog import safe_specimen_display_facts
+        return safe_specimen_display_facts(raw)
+
     # 规则族的受控字段合同仍由其执行器侧投影器拥有；Finalizer 只提供
     # 一个统一接收边界，避免聚合层重新解释客户事实。
     from .basic_timeliness_customer_projection import (
@@ -494,6 +501,18 @@ def validate_luxian_0609_published_customer_display_facts(
     """校验已发布的公开事实；已隔离规则不再进入执行器内部事实投影。"""
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id in {"LX0609-03-01-05", "LX0609-05-01-04"} and raw:
+        validated = validate_luxian_0609_executor_customer_display_facts(
+            rule_id=normalized_rule_id, raw=raw,
+        )
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        expected_status = "non_compliant"
+        if normalized_rule_id == "LX0609-05-01-04" and validated["specimen_before_first_order"]:
+            expected_status = "compliant"
+        if status and status != expected_status:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if raw is None or raw == {}:
         from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
 

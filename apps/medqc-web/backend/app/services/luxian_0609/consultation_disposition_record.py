@@ -442,3 +442,14 @@ async def check_disposition_record(
         total_tokens=totals[2],
         api_time=elapsed,
     )
+
+
+def safe_disposition_display_facts(raw: Any) -> dict[str, Any] | None:
+    """只发布已核验的不具体处置文书数量，不携带原文或身份。"""
+    if (not isinstance(raw, Mapping)
+        or set(raw) != {"failure_kind", "unspecific_document_count"}
+        or raw.get("failure_kind") != "consultation_disposition_unspecific"
+        or type(raw.get("unspecific_document_count")) is not int
+        or not 1 <= raw["unspecific_document_count"] <= 10000):
+        return None
+    return dict(raw)

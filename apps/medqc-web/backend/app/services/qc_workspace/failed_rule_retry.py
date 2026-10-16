@@ -26,6 +26,7 @@ def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
         # 055已在一次规则执行内消费最多两次抽取预算，不再整条自动重跑。
         return False
     if rule == "LX0609-03-01-04" and reason in {
+        "executor_exception",
         "model_invalid_output", "model_parse_error", "model_http_error",
         "model_configuration_error", "execution_program_error",
     }:
