@@ -149,3 +149,89 @@ def test_default_endpoint_keeps_saved_path(route_client, monkeypatch):
     assert response.json()["data"]["empty_reason"] == "saved-marker"
     saved.assert_called_once()
     current.assert_not_called()
+
+
+@pytest.fixture
+def local_order_data(local_data):
+    rows, reads, _ = local_data
+    # 模拟数据库按请求上限返回，不能让未截断的替身掩盖少取一行的问题。
+    reads.side_effect = lambda **kw: deepcopy(rows.get(kw["table"], [])[:kw["limit"]])
+
+    def populate(counts):
+        for table, count in counts.items():
+            rows[table] = [
+                {
+                    **IDENTITY,
+                    "order_id": f"{table}-{index}",
+                    "order_name": f"合成测试医嘱{index}",
+                    "start_time": "2026-02-02 11:00:00",
+                }
+                for index in range(count)
+            ]
+
+    return populate, reads
+
+
+def test_current_orders_include_all_rows_within_relaxed_limits(local_order_data):
+    populate, reads = local_order_data
+    counts = {"inpat_drug_order": 788, "inpat_nondrug_order": 2156}
+    populate(counts)
+
+    documents = current_view.load_current_documents(**IDENTITY)["documents"]
+
+    for table, count in counts.items():
+        orders = [doc for doc in documents if doc["doc_type"] == table]
+        assert len(orders) == count
+        assert all(doc["projection_incomplete"] is False for doc in orders)
+        assert all(not doc["projection_notice"] for doc in orders)
+        assert [call.kwargs["limit"] for call in reads.call_args_list
+                if call.kwargs["table"] == table] == [5001]
+
+
+@pytest.mark.parametrize("table", ["inpat_drug_order", "inpat_nondrug_order"])
+def test_current_orders_over_relaxed_limit_mark_incomplete(local_order_data, table):
+    populate, reads = local_order_data
+    populate({table: 5001})
+
+    documents = current_view.load_current_documents(**IDENTITY)["documents"]
+    orders = [doc for doc in documents if doc["doc_type"] == table]
+
+    assert len(orders) == 5000
+    assert all(doc["projection_incomplete"] is True for doc in orders)
+    assert all(doc["projection_notice"].strip() for doc in orders)
+    assert [call.kwargs["limit"] for call in reads.call_args_list
+            if call.kwargs["table"] == table] == [5001]
+
+
+def test_domain_orders_keep_default_projection_limits(local_order_data):
+    populate, reads = local_order_data
+    populate({"inpat_drug_order": 788, "inpat_nondrug_order": 2156})
+
+    # 质控调用不传 projection_limits，继续使用原来的展示上限。
+    bundle = assembly.assemble_domain_bundle(execution_domain="course", **IDENTITY)
+
+    for table, limit in {"inpat_drug_order": 700, "inpat_nondrug_order": 1500}.items():
+        assert len(bundle["structured_context"]["documents"][table]) == limit
+        orders = [doc for doc in bundle["source_documents"] if doc["source_table"] == table]
+        assert len(orders) == limit
+        assert all(doc["projection_incomplete"] is True for doc in orders)
+        assert all(doc["projection_notice"].strip() for doc in orders)
+        assert [call.kwargs["limit"] for call in reads.call_args_list
+                if call.kwargs["table"] == table] == [limit + 1]
+
+
+def test_current_orders_without_relaxed_limits_reproduce_truncation(local_order_data, monkeypatch):
+    populate, reads = local_order_data
+    populate({"inpat_drug_order": 788, "inpat_nondrug_order": 2156})
+    # 反例：移除当前查看专用上限，必须真实复现 700/1500 条截断。
+    monkeypatch.setattr(current_view, "CURRENT_VIEW_PROJECTION_LIMITS", {})
+
+    documents = current_view.load_current_documents(**IDENTITY)["documents"]
+
+    for table, limit in {"inpat_drug_order": 700, "inpat_nondrug_order": 1500}.items():
+        orders = [doc for doc in documents if doc["doc_type"] == table]
+        assert len(orders) == limit
+        assert all(doc["projection_incomplete"] is True for doc in orders)
+        assert all(doc["projection_notice"].strip() for doc in orders)
+        assert [call.kwargs["limit"] for call in reads.call_args_list
+                if call.kwargs["table"] == table] == [limit + 1]
