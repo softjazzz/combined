@@ -211,6 +211,35 @@ def test_feedback_cannot_become_a_consultant_recommendation():
     )
 
 
+def test_concrete_medication_plan_and_reasoned_refusal_are_dispositions():
+    advice = "建议药物甲纠正贫血、药物乙补铁"
+    feedback = "患者使用药物乙后腹泻，暂不使用，拟加用药物甲纠正贫血治疗"
+    docs = documents(advice + "，" + feedback + "，续观。")
+    assert (
+        parse(
+            docs,
+            advice,
+            feedback,
+            item("药物甲纠正贫血", "拟加用药物甲纠正贫血治疗", "planned"),
+            item("药物乙补铁", "患者使用药物乙后腹泻，暂不使用", "declined"),
+        )[0]
+        == "compliant"
+    )
+
+
+def test_consultants_medication_plan_without_department_response_is_not_disposed():
+    advice = "会诊意见：建议拟加用药物甲纠正贫血治疗"
+    assert (
+        parse(
+            documents(advice),
+            advice,
+            "",
+            item("拟加用药物甲纠正贫血治疗", "", "missing"),
+        )[0]
+        == "non_compliant"
+    )
+
+
 @pytest.mark.parametrize(
     "bad",
     [
