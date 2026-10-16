@@ -1406,7 +1406,7 @@ class PathologyExamReport(AuditMixin, Base):
 
     pathology_id = Column(String(100), comment="病理号")
     specimen_name = Column(String(100), comment="标本名称")
-    eye_findings = Column(String(100), comment="肉眼观察所见")
+    eye_findings = Column(Text, comment="肉眼观察所见")
     microscope_findings = Column(String(100), comment="镜下所见")
     diagnosis = Column(Text, comment="病理诊断")  # HIS额外增加的字段
     report_status = Column(String(100), comment="报告状态")
