@@ -19,6 +19,7 @@ import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
 from .consultation_measure_check import apply_measure_check, check_consultation_measures
+from .consultation_disposition_record import RULE_ID as DISPOSITION_RECORD_RULE_ID, check_disposition_record
 from .consultation_decision_evidence import (
     bind_document_material_rows,
     is_material_binding_error,
@@ -60,12 +61,14 @@ CONSULTATION_EPISODE_RULE_IDS = (
     "LX0609-03-01-02",
     "LX0609-03-01-03",
     "LX0609-03-01-04",
+    DISPOSITION_RECORD_RULE_ID,
 )
 # 020/023 都依赖第二阶段的“会诊意见—后续执行”语义关联，尚未达到包级
 # 原生派发验收门槛；第一阶段客户包只允许 021/022 进入原生会诊批次。
 PACKAGE_NATIVE_CONSULTATION_RULE_IDS = (
     "LX0609-03-01-02",
     "LX0609-03-01-03",
+    DISPOSITION_RECORD_RULE_ID,
 )
 EXECUTOR_KEY = "consultation_quality"
 _SOURCE_KEY = "consultation_record"
@@ -4099,7 +4102,7 @@ def _finish_explicit_statuses(
     )
 
 
-async def execute_luxian_0609_native_consultation_episode_rules(
+async def _execute_consultation_episode_rules(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
@@ -5093,3 +5096,63 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         total_tokens=total_tokens, api_time=api_time,
     )
+
+
+async def execute_luxian_0609_native_consultation_episode_rules(
+    *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
+    source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (), opinion_freeze_dir: str | Path | None = None,
+    opinion_freeze_rebuild: bool = False,
+) -> NativeConsultationEpisodeExecutionResult:
+    """原会诊执行证据与新增处置书写质量分别执行，结论不互相替代。"""
+    requested = {str(value or "").strip().upper() for value in rule_ids}
+    typed = {str(value or "").strip().upper() for value in decision_rule_ids}
+    if not typed.issubset(requested.intersection(CONSULTATION_EPISODE_RULE_IDS)):
+        raise ValueError("unsupported typed consultation episode scope")
+    shared = dict(institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+                  source_schema=source_schema, llm_client=llm_client, evidence_materials=evidence_materials,
+                  evidence_snapshot=evidence_snapshot)
+    old = await _execute_consultation_episode_rules(
+        rule_ids=tuple(requested - {DISPOSITION_RECORD_RULE_ID}),
+        decision_rule_ids=tuple(typed - {DISPOSITION_RECORD_RULE_ID}),
+        opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild, **shared)
+    if DISPOSITION_RECORD_RULE_ID not in requested:
+        return old
+    from .consultation_disposition_record import DispositionRecordOutcome
+
+    try:
+        documents = _documents(_read_rows(
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
+            evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot))
+        outcome = await check_disposition_record(documents=documents, llm_client=llm_client)
+        if DISPOSITION_RECORD_RULE_ID in typed and outcome.fact_refs:
+            from .consultation_decision_evidence import material_refs_for_internal_refs
+
+            try:
+                outcome = replace(outcome, fact_refs=material_refs_for_internal_refs(
+                    documents=documents, candidates=(), internal_refs=outcome.fact_refs))
+            except ValueError:
+                outcome = replace(outcome, status="technical_error", reason="snapshot_mismatch", fact_refs=())
+    except _SourceGap:
+        outcome = DispositionRecordOutcome("data_gap", "source_unavailable")
+    except _SourceTechnical:
+        outcome = DispositionRecordOutcome("technical_error", "source_query_error")
+    new = _finish(
+        selected=(DISPOSITION_RECORD_RULE_ID,), status=outcome.status, reason_code=outcome.reason,
+        evidence_snapshot=evidence_snapshot,
+        decision_rule_ids=frozenset(typed.intersection({DISPOSITION_RECORD_RULE_ID})),
+        fact_refs_by_rule={DISPOSITION_RECORD_RULE_ID: outcome.fact_refs},
+        calls=outcome.llm_call_count, prompt_tokens=outcome.prompt_tokens,
+        completion_tokens=outcome.completion_tokens, total_tokens=outcome.total_tokens, api_time=outcome.api_time)
+    return NativeConsultationEpisodeExecutionResult(
+        results=old.results + new.results,
+        planned_rule_ids=old.planned_rule_ids + new.planned_rule_ids,
+        decisions=old.decisions + new.decisions,
+        customer_display_facts=old.customer_display_facts + new.customer_display_facts,
+        diagnostic_semantic_snapshot=old.diagnostic_semantic_snapshot,
+        llm_call_count=old.llm_call_count + new.llm_call_count,
+        prompt_tokens=old.prompt_tokens + new.prompt_tokens,
+        completion_tokens=old.completion_tokens + new.completion_tokens,
+        total_tokens=old.total_tokens + new.total_tokens, api_time=old.api_time + new.api_time)

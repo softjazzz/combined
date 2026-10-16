@@ -725,6 +725,14 @@
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "逐份核对诊疗措施、病情演变、疗效及转归；重要住院事件按院方口径（2026-10-11）由程序从结构化来源（实际手术、已回报病理、输血、抢救、转科、危急值）确定，转科按正式转科医嘱逐次确定、无转科医嘱时以转入/转出记录为准；模型只核对出院记录是否提及；源缺口不报临床缺陷。"
+    },
+    {
+      "rule_id": "LX0609-03-01-05",
+      "source_document": "会诊执行记录",
+      "qc_point": "未逐项具体记录会诊意见的处置情况，或仅写遵照执行",
+      "implementation_status": "active",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户确认：从会诊执行记录正文引用的意见逐项核对本科室书面处置；仅写遵照执行不算。具体处理、明确安排或注明原因的不采纳可计入；不以医嘱或实际执行证据替代书写质量。"
     }
   ]
 }

@@ -71,6 +71,7 @@ _CONSULTATION_FAMILY_RULE_IDS = frozenset(
         "LX0609-03-01-02",
         "LX0609-03-01-03",
         "LX0609-03-01-04",
+        "LX0609-03-01-05",
     }
 )
 

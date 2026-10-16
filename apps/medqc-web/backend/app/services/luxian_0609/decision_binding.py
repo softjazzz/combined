@@ -129,6 +129,7 @@ def _requires_evidence_ref(decision: RuleDecision) -> bool:
             "LX0609-03-01-02",
             "LX0609-03-01-03",
             "LX0609-03-01-04",
+            "LX0609-03-01-05",
         }
         and
         decision.applicability is ApplicabilityState.NOT_APPLICABLE
