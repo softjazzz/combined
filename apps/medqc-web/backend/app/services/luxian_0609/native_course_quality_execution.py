@@ -28,7 +28,6 @@ from .course_quality.rule_018 import (
     _lx018_primary_diagnosis_available,
     _lx018_primary_diagnosis_resolution,
     _lx018_prompt,
-    _lx018_semantic_criterion_result,
     _lx018_unknown_semantic_result,
     _parse_lx018_diagnostic_rationale_code,  # noqa: F401 (legacy test helper)
 )
@@ -260,6 +259,20 @@ def _context(
                 ("admission_primary_diagnosis", {}, diagnosis_text)
             )
         admission_rows = [item for item in context_rows if item[0] == "admission_record"]
+        # 正文为空时 row_text 会退到主诉；独立现病史字段仍是本次入院材料，
+        # 必须保留，才能核实未标侧别的第一诊断所对应的实际病灶。
+        enriched_admission_rows = []
+        for source_key, row, content in admission_rows:
+            complaint = _clean(row.get("chief_complaint"))
+            history = _clean(row.get("history_of_present_illness"))
+            if history and history not in content:
+                # 主诉放在最前，避免长现病史裁剪后反而丢失主诉。
+                prefix = f"主诉：{complaint}\n" if complaint else ""
+                content = f"{prefix}现病史：{history}\n{content}"
+            elif complaint and complaint not in content:
+                content = f"主诉：{complaint}\n{content}"
+            enriched_admission_rows.append((source_key, row, content))
+        admission_rows = enriched_admission_rows
         diagnosis_rows = [
             item for item in context_rows if item[0] in _LX018_DIAGNOSIS_SOURCES
         ]
