@@ -37,6 +37,7 @@ from .source_evidence_reader import (
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
+from .surgery_record_coverage import definitely_uncovered_surgery_rows, surgery_event_time
 from .prophylactic_antimicrobial_duration import (
     SurgeryEventInput as _ProphylaxisSurgeryEvent,
     evaluate_prophylactic_antimicrobial_duration,
@@ -1074,6 +1075,38 @@ def _typed_003_decision(
             return decision("technical_error", "snapshot_mismatch")
 
     mr_rows = support_rows["mr_surgery"]
+    # 先核对正式记录覆盖。已有一份记录或另一台时间缺失，均不能遮蔽已证实的缺失。
+    missing_rows = definitely_uncovered_surgery_rows(mr_rows, surgery_rows)
+    horizon_rows = support_rows["evaluation_context.horizon"]
+    if missing_rows and len(horizon_rows) == 1:
+        try:
+            horizon_date = datetime.fromisoformat(str(horizon_rows[0]["horizon_date"])).date()
+            horizon_value = horizon_rows[0].get("horizon_datetime")
+            horizon_time = datetime.fromisoformat(str(horizon_value)) if horizon_value else None
+        except (KeyError, TypeError, ValueError):
+            horizon_date, horizon_time = None, None
+        for row in missing_rows:
+            end = surgery_event_time(row, end=True)
+            begin = surgery_event_time(row)
+            mature = False
+            if end is not None and horizon_date is not None:
+                mature = (
+                    horizon_time.tzinfo is None and horizon_time - end >= timedelta(hours=24)
+                    if horizon_time is not None
+                    else horizon_date > (end + timedelta(hours=24)).date()
+                )
+            elif begin is not None and horizon_date is not None:
+                # 无结束时间时不计算精确时差；仅在事件日后完整跨过24小时再报缺失。
+                mature = horizon_date > begin.date() + timedelta(days=1)
+            if mature:
+                reference = _material_document_ref_for_row(
+                    materials=materials, snapshot=snapshot,
+                    source_key="mr_surgery", selected_row=row,
+                )
+                return decision(
+                    "non_compliant", "required_document_missing",
+                    selected_document_refs=(reference,) if reference else (),
+                )
     if not surgery_rows:
         qualified_mr_rows = tuple(
             row for row in mr_rows if _qualified_traditional_surgery_present((row,))

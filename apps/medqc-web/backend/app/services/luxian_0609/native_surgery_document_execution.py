@@ -646,7 +646,7 @@ def _qualified_traditional_surgery_present(
 
 _PERSON_SPLIT_PATTERN = re.compile(r"[\s、,，;；/|]+")
 _PERSON_ROLE_PATTERN = re.compile(
-    r"^(?:术者|主刀|主持人|记录人|参加人员|讨论人员|医师|医生)\s*[:：]?\s*"
+    r"^(?:科主任|科副主任|术者|主刀|主持人|记录人|参加人员|讨论人员|医师|医生)\s*[:：]?\s*"
 )
 _PERSON_ROLE_SUFFIX_PATTERN = re.compile(
     r"[（(]\s*(?:术者|主刀|主持人|记录人|医师|医生|主任|副主任)\s*[)）]$"
@@ -691,7 +691,7 @@ def _person_names(value: Any) -> set[str]:
     for raw_name in _PERSON_SPLIT_PATTERN.split(text):
         name = _PERSON_ROLE_PATTERN.sub("", raw_name).strip(" :：()（）[]【】")
         name = _PERSON_ROLE_SUFFIX_PATTERN.sub("", name).strip()
-        name = _PERSON_TITLE_SUFFIX_PATTERN.sub("", name).strip(" :：()（）[]【】")
+        name = _PERSON_TITLE_SUFFIX_PATTERN.sub("", name.rstrip("。.")).strip(" :：()（）[]【】")
         if name and name not in _NON_PERSON_VALUES:
             names.add(name)
     return names
