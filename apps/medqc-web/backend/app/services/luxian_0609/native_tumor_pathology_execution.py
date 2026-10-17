@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import json
+import logging
 import re
+import sys
 from typing import Any, Mapping, Protocol, Sequence
 
 from .evidence_material import (
@@ -44,6 +46,9 @@ from .pathology_report_completeness import (
     evaluate_pathology_report_completeness,
 )
 
+
+
+logger = logging.getLogger(__name__)
 
 TUMOR_PATHOLOGY_RULE_IDS = (
     "LX0609-06-02-03",
@@ -1961,6 +1966,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         display_facts: Mapping[str, Any] | None = None,
         fact_refs: Sequence[str] = (),
     ) -> None:
+        if status == "technical_error":
+            # 诊断日志：只记规则、原因码、是否类型化与出错代码行，不含病历或模型内容。
+            logger.warning(
+                "LX0609 肿瘤病理族技术错误: rule_id=%s reason_code=%s typed=%s call_line=%s",
+                rule_id, reason_code, rule_id in typed_requested, sys._getframe(1).f_lineno,
+            )
         outcome = _TumorRuleOutcome(
             rule_id=rule_id,
             status=status,

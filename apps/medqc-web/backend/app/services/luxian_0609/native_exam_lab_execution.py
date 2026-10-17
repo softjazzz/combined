@@ -9,6 +9,7 @@ from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
 import json
 import logging
+import sys
 import re
 from typing import Any, Mapping, Protocol, Sequence, cast
 
@@ -1912,6 +1913,11 @@ def _strong_semantic_fact(
 
 
 def _result(rule_id: str, status: str, reason_code: str, *, executor_type: str) -> dict[str, Any]:
+    if status == "technical_error":
+        logger.warning(
+            "LX0609 检查检验族技术错误: rule_id=%s reason_code=%s typed=False call_line=%s",
+            rule_id, reason_code, sys._getframe(1).f_lineno,
+        )
     item = build_luxian_0609_native_result(
         rule_id=rule_id,
         final_state=status,
@@ -2005,6 +2011,12 @@ async def execute_luxian_0609_native_exam_lab_rules(
         display_facts: Mapping[str, Any] | None = None,
     ) -> None:
         assert evidence_snapshot is not None
+        if status == "technical_error":
+            # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
+            logger.warning(
+                "LX0609 检查检验族技术错误: rule_id=%s reason_code=%s typed=True call_line=%s",
+                rule_id, reason_code, sys._getframe(1).f_lineno,
+            )
         # CT 医嘱一致性已通过 order_results 的引用位置定位；不能混入其他规则的旧文书字段。
         if status == "non_compliant" and not source_document_ids and rule_id != CT_CONSISTENCY_RULE:
             fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"

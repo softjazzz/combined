@@ -6283,7 +6283,8 @@ async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkey
     assert result.total_tokens == 220
     assert result.parse_failure_kinds == ("not_json",)
     assert "Bearer_secret_13800138000" not in repr(result)
-    messages = [record.getMessage() for record in caplog.records]
+    # 族出口另有技术错误诊断日志（不含内容）；这里只比对解析失败日志本身。
+    messages = [record.getMessage() for record in caplog.records if record.getMessage().startswith("exam_lab_")]
     assert messages == [
         "exam_lab_fact_parse_failed parse_failure_kind=not_json",
         "exam_lab_fact_parse_failed parse_failure_kind=not_json; retrying once",
@@ -6332,7 +6333,8 @@ async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeyp
     ]
     assert result.llm_call_count == 2
     assert result.parse_failure_kinds == ("value",)
-    assert [record.getMessage() for record in caplog.records] == [
+    # 族出口另有技术错误诊断日志（不含内容）；这里只比对解析失败日志本身。
+    assert [record.getMessage() for record in caplog.records if record.getMessage().startswith("exam_lab_")] == [
         "exam_lab_fact_parse_failed parse_failure_kind=value",
         "exam_lab_fact_parse_failed parse_failure_kind=value; retrying once",
         "exam_lab_fact_retry_failed",
