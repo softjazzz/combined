@@ -183,7 +183,9 @@ _PATHOLOGY_RESULT_MISSING_PATTERN = re.compile(
 _PATHOLOGY_SAMPLING_MISSING_PATTERN = re.compile(
     r"(?:未记录.{0,12}(?:病理)?(?:取材|送检)|(?:病理)?(?:取材|送检).{0,12}未记录)"
 )
-_CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"(?:化疗|抗肿瘤)")
+# ATC 皮肤抗感染分类中的“化疗药物”不表示肿瘤化疗；非肿瘤类别
+# 不能仅凭包含该词触发。独立化疗分类及明确抗肿瘤分类仍保留。
+_CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"抗肿瘤|(?:^|[\s/、,，;；>])化疗(?:药物|药)?(?:$|[\s/、,，;；>])")
 _CHEMO_ORDER_VOID_STATUSES = frozenset({"取消", "撤销", "作废"})
 _CHEMO_ORDER_PENDING_STATUSES = frozenset({"拟执行"})
 _CHEMOTHERAPY_RELATIVE_DATE_PATTERN = re.compile(r"(?:今日|当日)")

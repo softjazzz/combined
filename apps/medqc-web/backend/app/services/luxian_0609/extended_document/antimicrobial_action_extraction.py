@@ -60,6 +60,9 @@ ANTIMICROBIALS = SPECIAL_ANTIMICROBIALS + (
     "阿米卡星", "阿奇霉素", "莫西沙星", "左氧氟沙星", "环丙沙星",
     "甲硝唑", "替硝唑", "奥硝唑", "克林霉素", "氟康唑",
 )
+_SHORT_ADMINISTER_PATTERN = re.compile(
+    r"(?<![给不未])予(?!以)(?=\s*(?:" + "|".join(map(re.escape, ANTIMICROBIALS)) + r"))"
+)
 ANTIMICROBIAL_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
 _ACTION_STRONG_BOUNDARY_PATTERN = re.compile(r"[。；;！!？?\r\n]+")
 _ACTION_WEAK_BOUNDARY_PATTERN = re.compile(r"[，,]+")
@@ -116,6 +119,7 @@ def _row_text(row: Mapping[str, Any]) -> str:
         _clean(row.get(key))
         for key in (
             "record_content", "document_title", "order_name", "generic_name",
+            "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
             "item_code", "item_name", "item_abbreviation", "result", "result_flag",
             "abnormal_flag", "diagnosis_name", "labtest_subject", "specimen",
         )
@@ -308,7 +312,7 @@ def _text_spans(text: str, boundary: re.Pattern[str]) -> tuple[tuple[int, int], 
 
 
 def _has_action_marker(text: str) -> bool:
-    return any(
+    return bool(_SHORT_ADMINISTER_PATTERN.search(text)) or any(
         action.value in text
         for action in AntimicrobialAction
         if action is not AntimicrobialAction.RECOMMEND
@@ -419,7 +423,11 @@ def _high_confidence_action_in_candidate(
         and action.value in prefix
     )
     if not matches:
-        return None
+        return (
+            AntimicrobialAction.GIVE
+            if _SHORT_ADMINISTER_PATTERN.search(candidate_text[:target_index + len(antimicrobial)])
+            else None
+        )
     action_index, action = max(matches)
     if target_index - action_index > 80:
         return None
@@ -461,7 +469,8 @@ def _action_inputs(
 
 def _action_in_quote(quote: str) -> AntimicrobialAction | None:
     return next(
-        (action for action in AntimicrobialAction if action.value in quote), None
+        (action for action in AntimicrobialAction if action.value in quote),
+        AntimicrobialAction.GIVE if _SHORT_ADMINISTER_PATTERN.search(quote) else None,
     )
 
 
@@ -611,7 +620,7 @@ def _parse(
             or not quote.strip()
             or quote not in candidate.text
             or candidate.antimicrobial.casefold() not in quote.casefold()
-            or _ACTION_PATTERN.search(quote) is None
+            or (_ACTION_PATTERN.search(quote) is None and not _SHORT_ADMINISTER_PATTERN.search(quote))
         ):
             raise ValueError("unverified action quote")
         else:

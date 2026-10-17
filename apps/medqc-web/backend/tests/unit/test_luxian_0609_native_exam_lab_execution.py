@@ -2448,8 +2448,8 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
                     "record_content": "已行头颅CT检查。",
                 },
             ),
-            "non_compliant",
-            "exam_report_missing",
+            "data_gap",
+            "required_field_missing",
         ),
         (
             (
@@ -2501,7 +2501,7 @@ async def test_010_public_native_uses_order_exam_report_contract(
     expected_state,
     expected_failure_kind,
 ):
-    """010按省手册顺序核对病程—医嘱、报告完整和检查前原因。"""
+    """010 保留关联缺口，缺报告不能代替检查前原因的临床判据。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2519,7 +2519,11 @@ async def test_010_public_native_uses_order_exam_report_contract(
     expected_reason_code = {
         "compliant": "requirement_satisfied",
         "non_compliant": "requirement_violated",
-        "data_gap": "association_failed",
+        "data_gap": (
+            "required_field_missing"
+            if expected_failure_kind == "required_field_missing"
+            else "association_failed"
+        ),
     }[expected_state]
     assert decision.reason_code == expected_reason_code
     assert canonical["status"] == expected_state
@@ -2529,6 +2533,10 @@ async def test_010_public_native_uses_order_exam_report_contract(
         assert "LX0609-06-01-02" not in dict(result.customer_display_facts)
         assert "customer_display_facts" not in canonical
         assert "customer_evidence" not in canonical
+    elif expected_failure_kind == "required_field_missing":
+        facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
+        assert facts["failure_kind"] == "exam_order_contract_data_gap"
+        assert canonical["status"] == "data_gap"
     elif expected_state in {"non_compliant", "data_gap"}:
         facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
         assert facts["failure_kind"] == expected_failure_kind

@@ -1,0 +1,246 @@
+"""1016 抗菌药与检查族回归；全部使用合成资料。"""
+
+import pytest
+
+from test_luxian_0609_native_extended_document_execution import (
+    _AntimicrobialActionClient,
+    _056_rows,
+    _evaluate,
+)
+from test_luxian_0609_native_tumor_pathology_execution import (
+    _chemo_discharge_material_session,
+    _payload,
+    _wrapper,
+)
+from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
+from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+from test_luxian_0609_native_exam_lab_execution import _run_010_public_native
+
+
+@pytest.mark.asyncio
+async def test_topical_antibiotic_class_does_not_trigger_tumor_chemotherapy():
+    rule = "LX0609-05-02-01"
+    session = _chemo_discharge_material_session(chemotherapy_orders=({
+        "generic_name": "合成外用抗菌乳膏",
+        "drug_type": "皮肤病用抗生素和化疗药物",
+        "drug_apply_method": "外用",
+    },))
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=(rule,), wrapper_rules=[_wrapper(rule)], evidence_payload=_payload(),
+        institute_id="safe-institute", patient_id="safe-patient", visit_id="safe-visit",
+        source_schema=None, llm_client=None, evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials, decision_rule_ids=(rule,),
+    )
+    assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_key_drug_specimen_identity_links_detail_to_master_time():
+    rows = _056_rows(
+        ("注射用美罗培南", "2026-06-02 10:00:00"),
+        ("利奈唑胺注射液", "2026-06-03 10:00:00"),
+    )
+    rows["labtest_master"] = ({
+        "test_id": "synthetic-lab", "labtest_subject": "微生物检验",
+        "request_datetime": "2026-06-01 09:00:00",
+    },)
+    rows["labtest_item_report"] = ({
+        "test_id": "synthetic-lab", "lab_item_name": "细菌培养及药敏",
+    },)
+    _, reduced = await _evaluate("LX0609-05-01-04", rows)
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body_field", ["record_content", "treatment_plan"])
+@pytest.mark.parametrize("action", ["予以", "予"])
+async def test_first_course_named_antimicrobial_action_requires_reason(body_field, action):
+    _, reduced = await _evaluate("LX0609-05-01-02", {
+        "inpat_drug_order": ({"generic_name": "左氧氟沙星"},),
+        "first_course_record": ({
+            "document_id": "synthetic-first",
+            "record_time": "2026-06-01 10:00:00",
+            body_field: f"考虑感染，{action}左氧氟沙星抗感染治疗。",
+        },),
+    }, llm_client=_AntimicrobialActionClient())
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_infection_department_senior_consultant_can_support_named_drug():
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": ({"generic_name": "美罗培南",
+                              "planned_start_datetime": "2026-06-02 10:00:00"},),
+        "consultation_record": ({
+            "record_time": "2026-06-01 10:00:00",
+            "record_content": "感染科合成专家副主任医师会诊意见：感染指标升高，建议予以美罗培南加强抗感染。",
+        },),
+    })
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_pre_exam_reason_does_not_publish_missing_report_as_clinical_defect(monkeypatch):
+    _, decision, _, _ = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=({"exam_id": "synthetic-exam", "order_id": "synthetic-order",
+                    "exam_name": "头颅CT", "exam_time": "2026-06-02 10:00:00"},),
+        order_rows=({"order_id": "synthetic-order", "order_name": "头颅CT",
+                     "prescribed_datetime": "2026-06-02 09:00:00"},),
+        course_rows=({"record_time": "2026-06-02 08:00:00",
+                      "record_content": "因头痛予以头颅CT明确病因。"},),
+    )
+    assert decision.final_state.value == "data_gap"
+
+
+def test_ct_department_formal_report_without_order_is_association_gap():
+    from app.services.luxian_0609.handbook_exam_lab import build_handbook_ledger
+    from app.services.luxian_0609.ct_order_course_consistency import (
+        build_ct_review_input, evaluate_ct_review,
+    )
+
+    # 使用检查族的完整同会话夹具，专门覆盖名称为空、科室明确的已实施事件。
+    from test_luxian_0609_handbook_exam_lab import _session
+    snapshot, materials = _session(rows={
+        "exam_master": ({"exam_id": "synthetic-exam", "performed_dept": "CT室",
+                         "report_time": "2026-06-02 10:00:00"},),
+        "exam_item_report": ({"exam_id": "synthetic-exam", "impression": "右肺结节。",
+                              "report_time": "2026-06-02 10:00:00"},),
+    })
+    ledger = build_handbook_ledger(rule_ids=("LX0609-06-01-03",), snapshot=snapshot, materials=materials)
+    assert len(ledger.events["exam"]) == 1
+    review = build_ct_review_input(ledger=ledger, snapshot=snapshot, materials=materials)
+    assert evaluate_ct_review(review).status == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_actual_infection_treatment_without_pathogen_basis_is_empiric():
+    _, reduced = await _evaluate("LX0609-05-01-05", {
+        "inpat_drug_order": ({"generic_name": "左氧氟沙星",
+                              "planned_start_datetime": "2026-06-01 10:00:00"},),
+        "first_course_record": ({
+            "document_id": "synthetic-first",
+            "record_time": "2026-06-01 11:00:00",
+            "record_content": "考虑感染，已给予左氧氟沙星抗感染治疗，另予运动预防静脉血栓。",
+        },),
+    })
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_loaded_reports_with_projection_budget_gap_are_not_missing_sources(monkeypatch):
+    from test_luxian_0609_native_exam_lab_execution import _typed_session, _wrapper
+    from app.services.luxian_0609.native_exam_lab_execution import execute_luxian_0609_native_exam_lab_rules
+
+    rule = "LX0609-06-01-04"
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({"exam_id": "synthetic-exam", "exam_type": "CT",
+                    "report_time": "2026-06-02 10:00:00"},),
+        exam_report_rows=({"exam_id": "synthetic-exam", "exam_type": "CT",
+                           "report_time": "2026-06-02 10:00:00", "impression": "右肺结节。"},),
+        course_rows=tuple({"document_id": f"synthetic-{index}",
+                           "record_time": "2026-06-02 11:00:00",
+                           "record_content": "合成病程内容。" * 260} for index in range(25)),
+    )
+    result = await execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(rule,), wrapper_rules=[_wrapper(rule)], evidence_payload=None,
+        evidence_snapshot=snapshot, evidence_materials=materials,
+        decision_rule_ids=(rule,), llm_client=object(),
+    )
+    assert reduce_luxian_0609_rule_decision(result.decisions[0]).reason_code == "source_truncated"
+
+
+@pytest.mark.asyncio
+async def test_report_comparison_with_date_and_exam_header_is_still_listing():
+    from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
+    from app.services.luxian_0609.exam_finding_relevance import apply_relevance_hints
+    from app.services.luxian_0609.exam_finding_analysis import check_exam_finding_analysis
+    from test_luxian_0609_exam_finding_analysis import _Client, _answer
+
+    report = "右肺下叶少许炎症，较前病灶减少，建议随诊复查。"
+    course = "2026-06-02 胸部螺旋CT平扫：" + report
+    projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
+        "exam_master": ({"exam_id": "synthetic-exam", "exam_name": "胸部CT",
+                         "report_time": "2026-06-02 10:00:00", "impression": report},),
+        "daily_course_record": ({"record_time": "2026-06-02 11:00:00", "record_content": course},),
+    }), {1: "positive"})
+    ref = next(iter(projection.course_times))
+    outcome = await check_exam_finding_analysis(projection, _Client([
+        _answer(ref, "prior_comparison", course, span="右肺下叶少许炎症"),
+    ]))
+    assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("detail_name,test_id", [
+    ("肿瘤细胞核酸检测", "synthetic-lab"),
+    ("细菌培养及药敏", "unrelated-lab"),
+])
+async def test_non_pathogen_or_unlinked_detail_does_not_prove_specimen(detail_name, test_id):
+    rows = _056_rows(("注射用美罗培南", "2026-06-02 10:00:00"),
+                     ("利奈唑胺注射液", "2026-06-03 10:00:00"))
+    rows["labtest_master"] = ({"test_id": "synthetic-lab",
+                               "request_datetime": "2026-06-01 09:00:00"},)
+    rows["labtest_item_report"] = ({"test_id": test_id, "lab_item_name": detail_name},)
+    _, reduced = await _evaluate("LX0609-05-01-04", rows)
+    assert reduced.final_state.value == "non_compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", [
+    "拟给予左氧氟沙星抗感染治疗。",
+    "已给予左氧氟沙星预防感染。",
+    "根据药敏已给予左氧氟沙星抗感染治疗。",
+])
+async def test_new_empiric_trigger_excludes_plan_prophylaxis_and_targeted_use(text):
+    _, reduced = await _evaluate("LX0609-05-01-05", {
+        "inpat_drug_order": ({"generic_name": "左氧氟沙星",
+                              "planned_start_datetime": "2026-06-01 10:00:00"},),
+        "first_course_record": ({"record_time": "2026-06-01 11:00:00",
+                                  "record_content": text},),
+    })
+    assert reduced.final_state.value == "not_applicable"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", [
+    "发热伴黄痰，有抗生素使用指征",
+    "结合发热与新发渗出影考虑肺部感染",
+    "发热伴咳黄痰，诊断为社区获得性肺炎",
+])
+async def test_empiric_reason_can_document_concrete_antibiotic_indication(reason):
+    _, reduced = await _evaluate("LX0609-05-01-05", {
+        "inpat_drug_order": ({"generic_name": "左氧氟沙星",
+                              "planned_start_datetime": "2026-06-01 10:00:00"},),
+        "first_course_record": ({"record_time": "2026-06-01 11:00:00",
+                                  "treatment_plan": reason + "，已给予左氧氟沙星抗感染。"},),
+    })
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_later_ambiguous_expert_support_cannot_hide_unsupported_first_use():
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (
+            {"generic_name": "美罗培南", "planned_start_datetime": "2026-06-01 10:00:00"},
+            {"generic_name": "美罗培南", "planned_start_datetime": "2026-06-03 10:00:00"},
+        ),
+        "consultation_record": ({"record_time": "2026-06-02 10:00:00",
+                                  "record_content": "感染科合成专家副主任医师会诊意见：建议予以美罗培南抗感染。"},),
+    })
+    assert reduced.final_state.value == "non_compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("future_start", ["2026-06-05 10:00:00", None])
+async def test_future_same_drug_order_cannot_hide_documented_initial_empiric_use(future_start):
+    _, reduced = await _evaluate("LX0609-05-01-05", {
+        "inpat_drug_order": (
+            {"generic_name": "左氧氟沙星", "planned_start_datetime": "2026-06-01 10:00:00"},
+            {"generic_name": "左氧氟沙星", "planned_start_datetime": future_start},
+        ),
+        "first_course_record": ({"record_time": "2026-06-01 11:00:00",
+                                  "record_content": "考虑感染，已给予左氧氟沙星抗感染。"},),
+    })
+    assert reduced.final_state.value == ("compliant" if future_start else "not_applicable")

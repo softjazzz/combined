@@ -778,7 +778,8 @@ def _order_exam_structure_outcome(
             exam.get("report_time") or exam.get("report_datetime")
         ) is not None
         if not has_report and not has_master_report_time:
-            return _ExamLabOutcome("LX0609-06-01-02", "non_compliant", "exam_report_missing")
+            # 本点核对检查前原因；报告资料缺失不证明原因未书写。
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "required_field_missing")
     # 未关联医嘱缺键不遮蔽完整实际事件已证明的缺报告；无确定缺陷时仍保留缺口。
     if missing_order_id:
         return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
@@ -2227,6 +2228,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     )
                     typed_processed.add("LX0609-06-01-02")
                     eligible_rule_ids.remove("LX0609-06-01-02")
+            projection_gap_reason = "exam_lab_projection_unavailable"
             try:
                 horizon_observation = next(
                     (
@@ -2247,7 +2249,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         else None
                     ),
                 )
-            except ValueError:
+            except ValueError as error:
+                if str(error) == "exam lab text projection truncated":
+                    # 来源已经成功物化；内部投影预算耗尽不等于数据源未接入。
+                    projection_gap_reason = "course_projection_incomplete"
                 projection = None
             if projection is not None:
                 semantic_rule_ids: list[str] = []
@@ -2510,7 +2515,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 projection is None or not projection.context or llm_client is None
             ):
                 status = "technical_error" if llm_client is None else "data_gap"
-                reason = "exam_lab_llm_failure" if llm_client is None else "exam_lab_projection_unavailable"
+                reason = "exam_lab_llm_failure" if llm_client is None else projection_gap_reason
                 for rule_id in eligible_rule_ids:
                     emit_typed(rule_id, status, reason)
                     typed_processed.add(rule_id)

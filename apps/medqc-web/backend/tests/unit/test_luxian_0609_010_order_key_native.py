@@ -20,10 +20,8 @@ async def test_unidentified_order_preserves_proven_defect_or_gap(monkeypatch, re
         exam_rows=({"order_id": "O1", "exam_id": "E1", "exam_type": "CT"},),
         exam_report_rows=({"exam_id": "E1"},) if has_report else (),
     )
-    assert canonical["status"] == ("data_gap" if has_report else "non_compliant")
-    assert decision.reason_code == ("association_failed" if has_report else "requirement_violated")
+    assert canonical["status"] == "data_gap"
+    assert decision.reason_code == ("association_failed" if has_report else "required_field_missing")
     assert canonical["reason_code"] == decision.reason_code
     assert not client.prompts
     assert result.llm_call_count == 0
-    if not has_report:
-        assert canonical["customer_display_facts"]["failure_kind"] == "exam_report_missing"
