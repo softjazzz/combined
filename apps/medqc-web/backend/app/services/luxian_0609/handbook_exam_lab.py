@@ -100,7 +100,12 @@ def target_name(family: str, value: str) -> bool:
 
 
 def _names(row: Mapping[str, Any]) -> str:
-    return " ".join(dict.fromkeys(clean(row.get(field)) for field in _NAME_FIELDS if clean(row.get(field))))
+    names = " ".join(dict.fromkeys(clean(row.get(field)) for field in _NAME_FIELDS if clean(row.get(field))))
+    # 仅缺名称时使用明确模态科室；普通放射科/影像科不能推定 CT/MRI。
+    department = clean(row.get("performed_dept"))
+    if not names and re.fullmatch(r"(?:CT|MRI|MR|磁共振|核磁共振)(?:检查)?室", department, re.I):
+        return "MRI" if department.upper().startswith("MR") else department
+    return names
 
 
 def _identity_state(family: str, value: str) -> str:

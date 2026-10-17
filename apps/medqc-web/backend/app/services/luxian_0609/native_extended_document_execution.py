@@ -234,6 +234,8 @@ _TARGETED_ANTIMICROBIAL_MARKERS = (
 _EMPIRIC_REASON_MARKERS = (
     "重症感染", "覆盖耐药菌", "感染证据", "感染可能", "疑似感染",
     "考虑感染", "因感染", "感染指标升高", "无样可采",
+    "有抗生素使用指征", "有抗菌药物使用指征",
+    "肺部感染", "社区获得性肺炎",
 )
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
@@ -1091,6 +1093,7 @@ def _material_text(row: Mapping[str, Any]) -> str:
         _clean(row.get(key))
         for key in (
             "record_content", "document_title", "order_name", "generic_name",
+            "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
             "item_code", "item_name", "item_abbreviation", "result",
             "result_flag", "abnormal_flag", "diagnosis_name", "labtest_subject",
             "specimen",
@@ -1111,7 +1114,7 @@ def _has_performed_antimicrobial_administration(
     target = "|".join(re.escape(name) for name in names)
     action = re.compile(
         r"已给予|已使用|已启用|已输注|实际给予|实际使用"
-        + (rf"|(?:已予以|予以|已予|给予)(?=\s*(?:{target}))" if target else "")
+        + (rf"|(?:已予以|予以|已予|给予|(?<![给不未])予)(?=\s*(?:{target}))" if target else "")
     )
     for clause in re.split(r"[，,。；;！!？?\n]", text):
         for match in action.finditer(clause):
@@ -1252,7 +1255,15 @@ def _is_special_antimicrobial_expert_support(row: Mapping[str, Any]) -> bool:
 
     text = _material_text(row)
     return (
-        _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
+        (
+            _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
+            or (
+                re.search(r"感染科[^。；;\n]{0,24}(?:副主任医师|主任医师)会诊意见", text)
+                and _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
+                and re.search(r"(?:建议|同意|予以|给予).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
+                and not re.search(r"(?:不同意|不建议|暂不|拒绝).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
+            )
+        )
         and not _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN.search(text)
     )
 
@@ -1411,10 +1422,24 @@ def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
     return True
 
 
+def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
+    """病原学项目身份只取检验名称，不把任意核酸检测等同于病原学。"""
+    text = " ".join(_clean(row.get(field)) for field in (
+        "labtest_subject", "lab_item_name", "item_name", "record_content",
+    ))
+    return bool(
+        re.search(r"培养|药敏|病原", text)
+        or re.search(r"(?:病毒|细菌|真菌|支原体|衣原体|结核|HBV|HCV|HIV).{0,20}(?:核酸|DNA|RNA)", text, re.I)
+    )
+
+
 def _empiric_antimicrobial_event_contexts(
     *,
     antimicrobial_orders: Sequence[Mapping[str, Any]],
     candidate_rows: Sequence[Mapping[str, Any]],
+    lab_master_rows: Sequence[Mapping[str, Any]] = (),
+    lab_item_rows: Sequence[Mapping[str, Any]] = (),
+    pathogen_sources_complete: bool = False,
 ) -> tuple[tuple[tuple[Mapping[str, Any], _AntimicrobialOrderEvent], ...], bool]:
     """返回可唯一关联的经验用药事件；无法归属具体医嘱时由调用方交付资料缺口。"""
 
@@ -1422,10 +1447,30 @@ def _empiric_antimicrobial_event_contexts(
     contexts: list[tuple[Mapping[str, Any], _AntimicrobialOrderEvent]] = []
     association_ambiguous = False
     for row in candidate_rows:
-        if not _is_explicit_empiric_antimicrobial_use(row):
+        explicit = _is_explicit_empiric_antimicrobial_use(row)
+        text = _material_text(row)
+        names = _antimicrobial_names_in(row)
+        treatment_clauses = tuple(
+            clause for clause in re.split(r"[，,。；;\n]", text)
+            if re.search(r"抗感染|抗菌治疗", clause)
+            and not re.search(r"预防|围术期", clause)
+            and _has_performed_antimicrobial_administration(clause, names)
+        )
+        treatment_names = tuple(dict.fromkeys(
+            name for clause in treatment_clauses
+            for name in _antimicrobial_names_in({"record_content": clause})
+        ))
+        # 无“经验性”字样时，只接受有时间的本次已实施、明确治疗感染的
+        # 具体用药叙述；计划医嘱和预防用药不进入新增路径。
+        inferred_candidate = (
+            bool(treatment_names) and _row_time(row) is not None
+            and not re.search(r"根据.{0,12}(?:培养|药敏)|依据.{0,12}(?:培养|药敏)", text)
+            and not any(marker in text for marker in _TARGETED_ANTIMICROBIAL_MARKERS)
+        )
+        if not explicit and not inferred_candidate:
             continue
         linked_order_id = _linked_order_id(row)
-        mentioned_names = _antimicrobial_names_in(row)
+        mentioned_names = _antimicrobial_names_in(row) if explicit else treatment_names
         if linked_order_id:
             candidates = tuple(
                 event
@@ -1442,9 +1487,50 @@ def _empiric_antimicrobial_event_contexts(
             candidates = order_events
         else:
             candidates = ()
+        if not explicit and len(candidates) > 1:
+            # 本次已实施叙述不能归属尚未启用的未来医嘱；只在排除未来项后
+            # 恰好剩一个事件时继续，多个既有疗程仍不猜测归属。
+            document_time = _row_time(row)
+            candidates = tuple(
+                event for event in candidates
+                if document_time is not None
+                and any(
+                    (start := _antimicrobial_start_datetime(order)) is None
+                    or start <= document_time
+                    for order in event.orders
+                )
+            )
         if len(candidates) != 1:
-            association_ambiguous = True
+            # 新增路径只修可确定的漏识别；同名多医嘱的实际疗程归属仍属
+            # 待定边界，不借本次扩展改写原有适用性结论。
+            association_ambiguous = association_ambiguous or explicit
             continue
+        if not explicit:
+            start = min((value for order in candidates[0].orders
+                         if (value := _antimicrobial_start_datetime(order)) is not None), default=None)
+            if not pathogen_sources_complete or start is None:
+                association_ambiguous = True
+                continue
+            # 只在完整检验来源中核对启用时已可获得的病原学结果；未知报告
+            # 时间不能当作“尚无结果”，已有结果时不推断为经验治疗。
+            pathogen_ids = {
+                _clean(item.get("test_id")) for item in (*lab_master_rows, *lab_item_rows)
+                if _clean(item.get("test_id")) and _is_pathogen_lab(item)
+            }
+            reports = tuple(item for item in (*lab_master_rows, *lab_item_rows)
+                            if _clean(item.get("test_id")) in pathogen_ids)
+            prior_basis = False
+            unknown_basis_time = False
+            for report in reports:
+                moment = _parse_datetime(report.get("report_datetime") or report.get("report_time"))
+                has_result = bool(_clean(report.get("result")))
+                prior_basis = prior_basis or (moment is not None and moment <= start)
+                unknown_basis_time = unknown_basis_time or (has_result and moment is None)
+            if prior_basis:
+                continue
+            if unknown_basis_time:
+                association_ambiguous = True
+                continue
         contexts.append((row, candidates[0]))
     return tuple(contexts), association_ambiguous
 
@@ -1502,6 +1588,7 @@ def _antimicrobial_document_refs(
 
     allowed_sources = (
         "inpat_drug_order",
+        "first_course_record",
         "daily_course_record",
         "senior_course_record",
         "consultation_record",
@@ -2461,7 +2548,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     first_course_rows, first_course_error = (
         _source_rows(evidence_materials, "first_course_record")
-        if "LX0609-10-03-01" in selected
+        if set(selected).intersection({"LX0609-10-03-01", "LX0609-05-01-02", "LX0609-05-01-05"})
         else ((), "")
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
@@ -2790,13 +2877,19 @@ async def execute_luxian_0609_native_extended_document_rules(
                 if rule_id == "LX0609-05-01-03"
                 else antimicrobial_orders
             )
-            course_rows = (*daily_rows, *senior_rows)
+            course_rows = (
+                (*first_course_rows, *daily_rows, *senior_rows)
+                if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}
+                else (*daily_rows, *senior_rows)
+            )
             selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = list(
                 excluded_antimicrobial_evidence
             )
             source_error = drug_order_error or (
                 "" if rule_id == "LX0609-05-01-06" else daily_error or senior_error
             )
+            if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}:
+                source_error = source_error or first_course_error
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif rule_id == "LX0609-05-01-02":
@@ -3160,10 +3253,21 @@ async def execute_luxian_0609_native_extended_document_rules(
                         is not None
                     )
                     first_order = min(special_order_times, default=None)
+                    # 项目身份常在明细、申请/采样时间在主表；只用同一 test_id
+                    # 关联，不能把其他检验的时间借给病原学项目。
+                    pathogen_test_ids = {
+                        _clean(row.get("test_id"))
+                        for row in lab_item_rows
+                        if _clean(row.get("test_id"))
+                        and _is_pathogen_lab(row)
+                    }
                     specimen_times = tuple(
                         value
                         for row in lab_master_rows
-                        if _has_any_text((row,), ("培养", "药敏", "病原"))
+                        if (
+                            _is_pathogen_lab(row)
+                            or _clean(row.get("test_id")) in pathogen_test_ids
+                        )
                         and (value := _parse_datetime(row.get("request_datetime") or row.get("sample_datetime")))
                         is not None
                     )
@@ -3183,6 +3287,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     _empiric_antimicrobial_event_contexts(
                         antimicrobial_orders=antimicrobial_orders,
                         candidate_rows=(*antimicrobial_orders, *course_rows),
+                        lab_master_rows=lab_master_rows,
+                        lab_item_rows=lab_item_rows,
+                        pathogen_sources_complete=not (lab_master_error or lab_item_error),
                     )
                 )
                 if association_ambiguous:
@@ -3247,6 +3354,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
                 ambiguous_support = len(special_events) > 1 and any(
                     not _linked_order_id(row)
+                    # 晚于首个启用事件的支持无论归属哪条续开医嘱，都不能
+                    # 补足首个事件；不能用无关的归属歧义遮蔽已确定的缺陷。
+                    and (
+                        (support_time := _lx0609_058_row_time(row)) is None
+                        or first_order_time is None
+                        or support_time <= first_order_time
+                    )
                     and (
                         not (mentioned := _antimicrobial_names_in(row))
                         or any(
