@@ -1957,6 +1957,9 @@ def _course_has_transfusion_effect(text: str) -> bool:
         r"较前[^。；;\n]{0,8}(?:上升|升高|提升|下降|降低|改善|无明显变化)", text, re.I,
     ):
         return True
+    # 写明输血结束后紧接的评价（如“输血结束，复查血红蛋白改善”）与专用记录同口径。
+    if _transfusion_record_has_effect(text):
+        return True
     return bool(re.search(
         r"(?:输血|输注|输毕)(?:结束)?后|(?:输血|输注)(?:治疗)?(?:效果|疗效|评价|评估)", text,
     )) and _has_clinical_posttransfusion_evaluation(text)

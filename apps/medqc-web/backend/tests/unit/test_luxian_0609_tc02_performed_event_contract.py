@@ -12,6 +12,7 @@ from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_060
 from app.services.luxian_0609.evidence_material import build_material_document_refs
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows, build_luxian_0609_evidence_read_session
 from app.services.luxian_0609.executor_registry import resolve_legacy_executor_material_source_keys
+from app.services.luxian_0609.source_registry import resolve_luxian_0609_decision_support_source_keys
 
 RULE = "LX0609-07-01-03"
 SCHEMA_VERSION = "lx0609-transfusion-performance-v2"
@@ -607,12 +608,15 @@ async def test_tc02_known_mr_keeps_evaluated_registration_and_lab_refs(state, re
         selected_rule_ids=(RULE,), institute_id="synthetic-I", patient_id="synthetic-P", visit_id="synthetic-V",
         source_schema=None, created_at="2026-10-08T10:00:00+08:00", row_reader=read,
         additional_source_keys=resolve_legacy_executor_material_source_keys(("extended_document",), selected_rule_ids=(RULE,)))
+    # 07-01-03 的判定来源含入院记录锚点及实施确认用的病程/医嘱；
+    # 已注册且实际读取的来源即使为空，也以快照观察摘要入账。
+    consulted = set(resolve_luxian_0609_decision_support_source_keys((RULE,)))
     source_refs = {observation.snapshot_ref.removeprefix("sha256:")
                    for observation in expected_session.snapshot.observations
-                   if observation.source_key in case["rows"]}
-    assert len(source_refs) == 4
+                   if observation.source_key in case["rows"] or observation.source_key in consulted}
+    assert len(source_refs) == 9
     expected |= source_refs
-    assert len(expected) == 16
+    assert len(expected) == 21
     assert set(execution.decisions[0].fact_refs) == expected
     assert final["status"] == ("compliant" if state == "cancel" else "data_gap")
     assert execution.llm_call_count == len(client.calls) == 1

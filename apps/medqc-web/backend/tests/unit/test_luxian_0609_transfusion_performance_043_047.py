@@ -226,7 +226,8 @@ async def test_short_actual_record_passes_gate_without_length_threshold() -> Non
     )
 
     _assert_layers(result, "data_gap", "required_field_missing")
-    assert result["client"].protocol_calls == 1
+    # 门控 1 次 + 结构化输血时间缺失时从专用记录正文抽取实际开始时刻 1 次。
+    assert result["client"].protocol_calls == 2
 
 
 @pytest.mark.asyncio
