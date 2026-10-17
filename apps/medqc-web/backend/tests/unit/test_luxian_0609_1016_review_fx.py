@@ -261,3 +261,29 @@ def test_exam_lab_default_facts_cap_source_document_ids_to_public_limit(rule_id)
                                         reason_code="exam_lab_text_fact", source_document_ids=ids)
     assert facts["source_document_ids"] == ids[:8]
     assert safe_exam_lab_customer_display_facts(rule_id=rule_id, raw=facts) is not None
+
+
+_OPINION_SOURCE = "合成会诊示：考虑结肠炎。患者目前症状好转，继续原治疗，建议完善结肠镜检查。医生签名："
+
+
+def _opinion_response(opinion_quotes, feedback_quotes=()):
+    from app.services.luxian_0609.consultation_disposition_record import SCHEMA_VERSION
+    payload = {"schema_version": SCHEMA_VERSION + "-opinions", "documents": [
+        {"ref": "d1", "scope": "ordinary", "suggestion_state": "present",
+         "opinion_quotes": list(opinion_quotes), "feedback_quotes": list(feedback_quotes)}]}
+    return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
+
+
+def test_spliced_opinion_quote_is_split_into_verbatim_segments():
+    """模型跳过中间回应、把前后两段意见拼成一条时，按原文还原为两条逐字连续引文。"""
+    from app.services.luxian_0609.consultation_disposition_record import parse_opinions
+    out = parse_opinions(_opinion_response(["考虑结肠炎。建议完善结肠镜检查。"]), [{"ref": "d1", "text": _OPINION_SOURCE}])
+    assert out["d1"]["opinion_quotes"] == ["考虑结肠炎。", "建议完善结肠镜检查。"]
+
+
+@pytest.mark.parametrize("quote", ["考虑结肠炎。建议加做胃镜检查。", "考虑结肠炎。建议"])
+def test_opinion_quote_with_text_not_in_source_still_fails(quote):
+    """含原文没有的文字或拆出过短片段时仍判无效，不放宽逐字引文合同。"""
+    from app.services.luxian_0609.consultation_disposition_record import parse_opinions
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        parse_opinions(_opinion_response([quote]), [{"ref": "d1", "text": _OPINION_SOURCE}])

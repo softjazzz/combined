@@ -46,6 +46,57 @@ def _normalized(value: str) -> str:
     return re.sub(r"\s+", "", value)
 
 
+_MIN_SPLIT_SEGMENT_CHARS = 4
+
+
+def _split_into_source_segments(quote: str, source: str) -> list[str] | None:
+    """把模型拼接的引文按原文顺序拆回若干逐字连续片段；无法完整拆分时返回 None。
+
+    模型偶尔把被其他文字隔开的两段意见拼成一条引文（中间跳过本科室回应）。
+    每段都从原文逐字截取、按位置递增且不少于 4 字，不接受原文没有的任何文字，
+    只把一条拼接引文还原为多条连续引文，引文须逐字来自原文的合同不变。
+    """
+
+    positions = [index for index, char in enumerate(source) if not char.isspace()]
+    compact_source = "".join(source[index] for index in positions)
+    compact_quote = _normalized(quote)
+    if not compact_quote or not compact_source:
+        return None
+    segments: list[str] = []
+    quote_at = source_at = 0
+    while quote_at < len(compact_quote):
+        best_start, best_length = -1, 0
+        # 在已用位置之后寻找能匹配的最长前缀，保证片段顺序与原文一致。
+        for length in range(len(compact_quote) - quote_at, _MIN_SPLIT_SEGMENT_CHARS - 1, -1):
+            found = compact_source.find(compact_quote[quote_at:quote_at + length], source_at)
+            if found >= 0:
+                best_start, best_length = found, length
+                break
+        if best_length < _MIN_SPLIT_SEGMENT_CHARS:
+            return None
+        start, end = positions[best_start], positions[best_start + best_length - 1] + 1
+        segments.append(source[start:end])
+        quote_at += best_length
+        source_at = best_start + best_length
+    return segments if len(segments) > 1 else None
+
+
+def _restore_contiguous_quotes(quotes: Any, source: str) -> Any:
+    """仅对不在原文中的拼接引文尝试拆分；其他输入原样返回交由原校验处理。"""
+
+    if not isinstance(quotes, list):
+        return quotes
+    restored: list[Any] = []
+    for quote in quotes:
+        if isinstance(quote, str) and quote and _normalized(quote) not in _normalized(source):
+            segments = _split_into_source_segments(quote, source)
+            if segments is not None:
+                restored.extend(segments)
+                continue
+        restored.append(quote)
+    return restored
+
+
 def _grounded(quote: str, source: str) -> bool:
     return bool(
         quote and len(quote) <= 240 and _normalized(quote) in _normalized(source)
@@ -374,7 +425,8 @@ def parse_opinions(
         ):
             raise ValueError("invalid opinion identity")
         for key, limit in (("opinion_quotes", 4000), ("feedback_quotes", 2400)):
-            quotes = item[key]
+            quotes = _restore_contiguous_quotes(item[key], sources.get(ref, ""))
+            item = {**item, key: quotes}
             if (
                 not isinstance(quotes, list)
                 or len(quotes) > 8
