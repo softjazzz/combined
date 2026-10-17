@@ -51,6 +51,7 @@ from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
 )
+from .structured_output import structured_output_kwargs
 
 
 logger = logging.getLogger(__name__)
@@ -4270,7 +4271,7 @@ async def _execute_consultation_episode_rules(
             started = time.perf_counter()
             phase = "call"
             calls += 1
-            response = await llm_client.generate(_prompt(documents))
+            response = await llm_client.generate(_prompt(documents), **structured_output_kwargs(llm_client))
             phase = "validate"
             if not isinstance(response, Mapping):
                 raise _SemanticInvalid()

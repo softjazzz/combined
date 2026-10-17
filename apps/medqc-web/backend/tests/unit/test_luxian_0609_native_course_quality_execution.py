@@ -5568,7 +5568,7 @@ def test_017_copy_review_excerpt_keeps_head_and_tail_within_budget():
         ], usage={"prompt_tokens": -1, "completion_tokens": 8, "total_tokens": 7}), "negative_usage"),
         (_copy_review_response([
             {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage={"prompt_tokens": 4097, "completion_tokens": 8, "total_tokens": 4105}), "prompt_limit"),
+        ], usage={"prompt_tokens": 8193, "completion_tokens": 8, "total_tokens": 8201}), "prompt_limit"),
         (_copy_review_response([
             {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
         ], usage={"prompt_tokens": 40, "completion_tokens": 8, "total_tokens": 49}), "total_mismatch"),
@@ -5642,6 +5642,30 @@ async def test_017_semantic_review_verdict_is_mapped_by_python_once(
     assert len(client.calls) == 1
     assert '"pair_ref":"P02"' in client.calls[0]["prompt"]
     assert "PRIVATE-" not in client.calls[0]["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_017_valid_multi_document_response_accepts_measured_input_usage(monkeypatch):
+    template = "患者病情稳定生命体征平稳继续观察病情" * 10
+    rows = [_row(template + "今日腹痛缓解。"), _row(template + "今日高热感染进展。", "2026-06-02 09:00:00")]
+    monkeypatch.setattr(course, "read_luxian_0609_native_source_rows",
+                        lambda **kw: rows if kw["source_key"] == "daily_course_record" else [])
+
+    class MeasuredClient(_CopyReviewClient):
+        async def generate(self, prompt, **kwargs):
+            response = await super().generate(prompt, **kwargs)
+            response["usage"] = {"prompt_tokens": 4978, "completion_tokens": 381, "total_tokens": 5359}
+            return response
+
+    client = MeasuredClient("template_only")
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
+        evidence_payload=_payload(documents={}), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+    )
+    assert result.results[0]["status"] == "compliant"
+    assert result.total_tokens == 5359
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio

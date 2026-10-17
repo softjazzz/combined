@@ -45,9 +45,10 @@ _PATIENT_INTRO = re.compile(
     rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
 )
 _DEMOGRAPHIC_NAME = re.compile(
-    rf"(?P<label>(?:(?<=^)|(?<=[\n\r；;。]))[ \t]*)"
+    rf"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:]))[ \t]*"
+    rf"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|男|女|\d{{1,3}}[ \t]*岁|年龄))",
+    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|(?:老年|中年|青年|成年|幼年)[男女]性|男|女|\d{{1,3}}[ \t]*岁|年龄))",
     flags=re.MULTILINE,
 )
 _CONTACT_NAME = re.compile(

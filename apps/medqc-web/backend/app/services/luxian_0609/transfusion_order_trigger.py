@@ -208,7 +208,16 @@ async def classify_transfusion_orders(
     api_time = 0.0
     selected: set[int] = set()
     unresolved = False
-    for batch in _batches(inputs):
+    # 同名重复开立只在全部模型输入字段一致时共享语义事实；仍保留每条医嘱的身份。
+    # 不跨病例缓存，也不按关键词筛掉阴性候选，取消状态/类别不同的医嘱分别核验。
+    representatives: dict[str, dict[str, Any]] = {}
+    equivalent_indices: dict[int, list[int]] = {}
+    for item in inputs:
+        key = json.dumps({field: value for field, value in item.items() if field != "index"},
+                         ensure_ascii=False, sort_keys=True)
+        representative = representatives.setdefault(key, item)
+        equivalent_indices.setdefault(representative["index"], []).append(item["index"])
+    for batch in _batches(list(representatives.values())):
         pending = batch
         resolved_rows: list[tuple[int, str, bool | None]] = []
         # 用户口径（2026-10-11）：协议违规（漏行、引用不符等）可确定识别，重试 1 次；仍违规才拒收。
@@ -239,7 +248,7 @@ async def classify_transfusion_orders(
             if cancelled is True:
                 continue
             if classification == "transfusion" and cancelled is False:
-                selected.add(index)
+                selected.update(equivalent_indices[index])
             elif classification == "unknown" or (classification == "transfusion" and cancelled is None):
                 unresolved = True
     state = "present" if selected else "data_gap" if unresolved else "absent"

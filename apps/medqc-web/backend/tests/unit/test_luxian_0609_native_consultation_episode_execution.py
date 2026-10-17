@@ -1412,6 +1412,27 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_opinion_extraction_disables_thinking_for_capable_client(monkeypatch, tmp_path):
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("申请会诊", "专科会诊意见"))
+
+    class StructuredClient(_Client):
+        def supports_strict_json_schema(self):
+            return True
+
+        async def generate(self, prompt, **kwargs):
+            assert kwargs == {"enable_thinking": False}
+            return await super().generate(prompt)
+
+    client = StructuredClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1", "consultation_record-2"])]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path,
+    )
+    assert result.results[0]["status"] == "compliant"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchanged(
     monkeypatch,
 ):
