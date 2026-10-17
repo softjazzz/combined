@@ -37,7 +37,8 @@ class DiagnosisEquivalenceResult:
     reason_code: str = ""
 
 
-_NUMBERED_ITEM = re.compile(r"(?:^|(?<=\s)|(?<=[^\d]))(\d{1,2})[.、．]\s*")
+# 编号后的分隔符兼容“1.”“1、”“1．”及“1，”“1,”（院方 2026-10-17：仅缺分隔符、内容与顺序一致判合规）。
+_NUMBERED_ITEM = re.compile(r"(?:^|(?<=\s)|(?<=[^\d]))(\d{1,2})[.、．，,]\s*")
 
 
 def split_numbered_diagnoses(names: Sequence[str]) -> list[str]:

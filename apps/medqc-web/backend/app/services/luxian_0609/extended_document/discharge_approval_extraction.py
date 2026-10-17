@@ -107,6 +107,8 @@ def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
         "不要输出role或role_quote；角色由文书来源和经原文验证的完整quote确定。"
         "opinion只允许approved/conditional/patient_request/denied/unknown。"
         "approved仅用于上级医师已经明确同意、准许或批准出院；"
+        "上级医师查房明确作出出院安排（如病情好转，拟明日带药出院、今日出院、办理出院），"
+        "且未附加尚未满足的前提，也属于approved：出院日期本身不是条件。"
         "conditional用于出院仍取决于尚未完成或尚未证实满足的未来事件或状态，"
         "例如若、如、明日无特殊、完成治疗或复查后再办理、可考虑；"
         "不得根据时间流逝、实际已出院或其他文书推定条件已经满足。"

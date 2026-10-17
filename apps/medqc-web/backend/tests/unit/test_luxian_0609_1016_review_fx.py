@@ -287,3 +287,44 @@ def test_opinion_quote_with_text_not_in_source_still_fails(quote):
     from app.services.luxian_0609.consultation_disposition_record import parse_opinions
     with pytest.raises(ValueError, match="role quotes not grounded"):
         parse_opinions(_opinion_response([quote]), [{"ref": "d1", "text": _OPINION_SOURCE}])
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("1，急性阑尾炎伴局限性腹膜炎2，腹腔积液", ["急性阑尾炎伴局限性腹膜炎", "腹腔积液"]),
+    ("1,肺炎2,高血压", ["肺炎", "高血压"]),
+    ("1.高血压3级2.2型糖尿病", ["高血压3级", "2型糖尿病"]),
+    ("2型糖尿病，3级高血压", ["2型糖尿病，3级高血压"]),
+    ("肋骨骨折(2,3肋)", ["肋骨骨折(2,3肋)"]),
+])
+def test_numbered_diagnoses_split_accepts_comma_numbering(text, expected):
+    """出院记录诊断以“1，A2，B”编号罗列时也按条拆分（院方 2026-10-17：仅缺分隔符、内容与顺序一致判合规）。"""
+    from app.services.luxian_0609.extended_document.discharge_diagnosis_equivalence import split_numbered_diagnoses
+    assert split_numbered_diagnoses([text]) == expected
+
+
+def test_discharge_approval_prompt_treats_senior_discharge_plan_as_approved():
+    """上级医师查房明确出院安排且无未满足前提视为同意出院（院方 2026-10-17，C16）。"""
+    from app.services.luxian_0609.extended_document.discharge_approval_extraction import _prompt
+    text = _prompt([])
+    assert "拟明日带药出院" in text and "出院日期本身不是条件" in text
+
+
+def test_diagnosis_change_prompt_scopes_basis_to_new_or_changed_items():
+    """修正诊断写成完整清单时只要求新增或改变的诊断有依据（C01）。"""
+    from app.services.luxian_0609.extended_document.diagnosis_change_extraction import _prompt
+    text = _prompt([])
+    assert "清单中沿用原有诊断的条目不要求逐条记录依据" in text
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("经治疗后患者病情好转，拟明日带药出院，门诊随访治疗", True),
+    ("拟于今日出院", True),
+    ("拟办理出院", False),
+    ("考虑于今日出院", False),
+    ("拟明日复查血常规后出院", False),
+    ("若稳定再建议出院", False),
+])
+def test_dated_senior_discharge_plan_counts_as_confirmed_approval(text, expected):
+    """写明日期的出院安排视为同意出院；未写日期、考虑或带未满足前提的仍不算（院方 2026-10-17）。"""
+    from app.services.luxian_0609.native_extended_document_execution import _has_confirmed_discharge_approval
+    assert _has_confirmed_discharge_approval(text) is expected
