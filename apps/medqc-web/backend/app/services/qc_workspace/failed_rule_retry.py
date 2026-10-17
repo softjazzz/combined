@@ -25,6 +25,8 @@ _DETERMINISTIC_FAILURE_REASON_CODES = frozenset({
     "family_result_extra",
     "family_result_order_mismatch",
     "family_result_scope_mismatch",
+    # 候选材料超出单次抽取规模上限（如 03-01-04 会诊措施逐项核对），由输入规模决定，重跑结果不变。
+    "candidate_scope_incomplete",
 })
 # 模型输出不合格式：结构化抽取按温度 0 调用，同样输入重跑得到同样输出（第四轮 3 次补跑 19 条
 # 未恢复）。不自动补跑；超时、网络、限流等偶发错误仍自动补跑，人工定向重跑不受影响。

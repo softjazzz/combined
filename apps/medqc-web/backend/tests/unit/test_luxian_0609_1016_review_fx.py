@@ -130,3 +130,16 @@ def test_output_format_failure_is_not_auto_retried(reason):
 def test_transient_model_failure_is_still_auto_retried(reason):
     """超时、网络、限流等偶发错误仍自动补跑。"""
     assert _automatic_retryable_failure({"rule_id": "LX0609-08-01-04", "reason_code": reason})
+
+
+def test_candidate_scope_incomplete_is_not_auto_retried():
+    """候选范围超限由输入规模决定（03-01-04 存疑项），不自动补跑。"""
+    assert not _automatic_retryable_failure({"rule_id": "LX0609-03-01-04", "reason_code": "candidate_scope_incomplete"})
+
+
+@pytest.mark.parametrize("example", ["急性意识障碍对脑出血", "呼吸困难对心力衰竭", "头昏、乏力伴心累、气促对缺铁性贫血",
+                                     "头痛、头晕对脑梗死"])
+def test_018_prompt_states_symptom_grading_examples(example):
+    """01-01-02 提示词写明器官系统方向与全身性非特异症状的划分示例。"""
+    from app.services.luxian_0609.course_quality.rule_018 import _lx018_prompt
+    assert example in _lx018_prompt(context="")
