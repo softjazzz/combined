@@ -13,6 +13,13 @@ from app.services.luxian_0609.extended_document.diagnosis_scope_extraction impor
 BODY = "目前发热病因仍不明确。"
 
 
+def test_scope_prompt_distinguishes_routine_effect_review_from_unresolved_plan():
+    prompt = _prompt(["感染诊断明确，复查血象评估抗生素效果；影像建议结合职业史。"])
+    assert "疗效评估不等于治疗方案未明确" in prompt
+    assert "结合临床、职业史或随诊复查" in prompt
+    assert "待检查结果指导后续诊疗" in prompt
+
+
 def claim(quote=BODY, problem="发热病因", **changes):
     result = dict(scope="diagnosis", diagnosis_state="unresolved", polarity="affirmed",
                   temporal_scope="current", association="explicit", quote=quote, problem_quote=problem)

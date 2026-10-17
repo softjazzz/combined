@@ -20,7 +20,7 @@ _KINDS = frozenset(
 )
 _SPECIFIC = frozenset({"performed", "planned", "declined"})
 _GENERIC = re.compile(
-    r"^(?:以上|均|已|予以|予|现|其余|余|全部|一律|处理|治疗|继续|遵照|遵嘱|遵医嘱|遵会诊意见|遵意见|执行|按会诊意见|按意见|落实|办理|照办|同前|上述治疗|当前治疗|方案|康复理疗|康复治疗|对症|[，,。；;：:！!\s])+$"
+    r"^(?:以上|均|已|予以|予|现|其余|余|全部|一律|处理|治疗|继续|遵执|遵照|遵嘱|遵医嘱|遵会诊意见|遵意见|执行|按会诊意见|按意见|落实|办理|照办|同前|上述治疗|当前治疗|方案|康复理疗|康复治疗|对症|[，,。；;：:！!\s])+$"
 )
 _GENERIC_REMAINDER = re.compile(
     r"(?:其余|其他|余下|余)(?:建议|意见|处理|治疗)?(?:均|已|予以|予)?(?:遵嘱|遵照|遵医嘱|遵会诊意见|按会诊意见|按建议)"
@@ -135,6 +135,47 @@ def _in_quotes(quote: str, sources: Sequence[str]) -> bool:
 
 
 def parse_facts(
+    response: Mapping[str, Any],
+    documents: Sequence[Mapping[str, str]],
+    roles: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, tuple[str, ...]]:
+    """身份和覆盖仍整批严格校验；独立文书失败不能覆盖已核验的缺陷。"""
+    payload = _payload(response)
+    if (not isinstance(payload, dict)
+        or set(payload) != {"schema_version", "documents"}
+        or payload["schema_version"] != SCHEMA_VERSION
+        or not isinstance(payload["documents"], list)):
+        raise ValueError("invalid response schema")
+    expected = {document["ref"]: document for document in documents}
+    items = payload["documents"]
+    if (not all(isinstance(item, dict) and isinstance(item.get("ref"), str) for item in items)
+        or len(items) != len(expected)
+        or {item["ref"] for item in items} != set(expected)):
+        raise ValueError("incomplete document coverage")
+    outcomes = []
+    invalid = False
+    for item in items:
+        ref = item["ref"]
+        try:
+            outcomes.append(_parse_document_facts(
+                {"content": json.dumps({"schema_version": SCHEMA_VERSION, "documents": [item]})},
+                (expected[ref],), {ref: roles[ref]},
+            ))
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            invalid = True
+    defects = tuple(dict.fromkeys(ref for status, _, refs in outcomes if status == "non_compliant" for ref in refs))
+    if defects:
+        return "non_compliant", "requirement_violated", defects
+    if invalid:
+        raise ValueError("invalid document facts")
+    for state, reason in (("data_gap", "semantic_extraction_unresolved"), ("compliant", "requirement_satisfied")):
+        refs = tuple(dict.fromkeys(ref for status, _, refs in outcomes if status == state for ref in refs))
+        if any(status == state for status, _, _ in outcomes):
+            return state, reason, refs
+    return "not_applicable", "trigger_absent_complete", ()
+
+
+def _parse_document_facts(
     response: Mapping[str, Any],
     documents: Sequence[Mapping[str, str]],
     roles: Mapping[str, Mapping[str, Any]],
@@ -368,6 +409,20 @@ async def check_disposition_record(
     totals = [0, 0, 0]
     elapsed = 0.0
     frozen: dict[str, Mapping[str, Any]] = {}
+
+    def extraction_failure(calls: int, reason: str) -> DispositionRecordOutcome:
+        # 第一阶段角色和引文已严格核验；纯笼统回应无需再靠动作抽取证明。
+        refs = tuple(ref for ref, role in frozen.items()
+                     if role["scope"] == "ordinary" and role["suggestion_state"] == "present"
+                     and role["feedback_quotes"] and all(
+                         _GENERIC.fullmatch(_normalized(quote))
+                         for quote in role["feedback_quotes"]))
+        return DispositionRecordOutcome(
+            "non_compliant" if refs else "technical_error",
+            "requirement_violated" if refs else reason,
+            refs, calls, *totals, elapsed,
+        )
+
     for attempt in range(2):
         started = perf_counter()
         try:
@@ -380,15 +435,8 @@ async def check_disposition_record(
                 **options,
             )
         except Exception:
-            return DispositionRecordOutcome(
-                "data_gap",
-                "semantic_extraction_unresolved",
-                llm_call_count=attempt + 1,
-                prompt_tokens=totals[0],
-                completion_tokens=totals[1],
-                total_tokens=totals[2],
-                api_time=elapsed + perf_counter() - started,
-            )
+            elapsed += perf_counter() - started
+            return extraction_failure(attempt + 1, "model_transport_error")
         elapsed += perf_counter() - started
         try:
             usage = _usage(response)
@@ -425,14 +473,7 @@ async def check_disposition_record(
             status, reason, refs = parse_facts(response, documents, frozen)
             return DispositionRecordOutcome(status, reason, refs, 2, *totals, elapsed)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError):
-            return DispositionRecordOutcome(
-                "data_gap",
-                "semantic_extraction_unresolved",
-                (),
-                attempt + 1,
-                *totals,
-                elapsed,
-            )
+            return extraction_failure(attempt + 1, "model_invalid_output")
     return DispositionRecordOutcome(
         "data_gap",
         "semantic_extraction_unresolved",

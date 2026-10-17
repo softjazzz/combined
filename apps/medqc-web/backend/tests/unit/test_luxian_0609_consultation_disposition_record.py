@@ -79,6 +79,39 @@ class Client:
         return answer
 
 
+@pytest.mark.asyncio
+async def test_verified_generic_disposition_survives_action_extraction_failure():
+    docs = documents("建议给予合成治疗。以上已遵嘱执行。")
+    client = Client(opinions("建议给予合成治疗", "以上已遵嘱执行"), RuntimeError("模拟抽取失败"))
+    outcome = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert outcome.status == "non_compliant"
+    assert outcome.fact_refs == ("consultation_record-1",)
+
+
+@pytest.mark.asyncio
+async def test_transport_failure_does_not_claim_patient_material_is_missing():
+    outcome = await record.check_disposition_record(
+        documents=documents("建议给予合成治疗。"), llm_client=Client(RuntimeError("模拟网络失败")),
+    )
+    assert (outcome.status, outcome.reason) == ("technical_error", "model_transport_error")
+
+
+def test_valid_document_defect_survives_other_document_invalid_action_schema():
+    docs = documents("建议给予合成治疗。遵照执行。")
+    docs.append({"ref": "consultation_record-2", "text": "建议复查合成检查。"})
+    roles = record.parse_opinions(opinions("建议给予合成治疗", "遵照执行"), docs[:1])
+    roles["consultation_record-2"] = {
+        "ref": "consultation_record-2", "scope": "ordinary", "suggestion_state": "present",
+        "opinion_quotes": ["建议复查合成检查"], "feedback_quotes": [],
+    }
+    payload = json.loads(response(item("给予合成治疗", "遵照执行", "generic"))["content"])
+    payload["documents"].append({"ref": "consultation_record-2", "medications": [],
+                                 "examinations": [{}], "therapies": [], "other_actions": []})
+    assert record.parse_facts({"content": json.dumps(payload)}, docs, roles) == (
+        "non_compliant", "requirement_violated", ("consultation_record-1",),
+    )
+
+
 def parse(docs, opinion, feedback, *items, scope="ordinary", state="present"):
     frozen = record.parse_opinions(opinions(opinion, feedback, scope, state), docs)
     return record.parse_facts(response(*items), docs, frozen)
@@ -95,6 +128,13 @@ def test_bare_following_advice_does_not_count(feedback):
         )[0]
         == "non_compliant"
     )
+
+
+def test_short_generic_acknowledgement_cannot_be_upgraded_by_referent():
+    docs = documents("建议继续合成药物。遵执。")
+    assert parse(docs, "建议继续合成药物", "遵执", item(
+        "建议继续合成药物", "遵执", "generic", "建议继续合成药物",
+    ))[0] == "non_compliant"
 
 
 def test_each_action_requires_its_own_disposition():
@@ -344,15 +384,17 @@ async def test_two_stages_remain_bounded_and_do_not_send_internal_identity():
         documents=docs,
         llm_client=Client(opinions("建议完善痰培养"), {"content": "bad"}),
     )
-    assert broken.status == "data_gap" and broken.llm_call_count == 2
+    assert broken.status == "technical_error" and broken.llm_call_count == 2
+    assert broken.reason == "model_invalid_output"
 
 
 @pytest.mark.asyncio
-async def test_first_stage_invalid_output_is_unresolved():
+async def test_first_stage_invalid_output_is_technical_error():
     result = await record.check_disposition_record(
         documents=documents("建议完善痰培养。"), llm_client=Client({"content": "bad"})
     )
-    assert result.status == "data_gap" and result.llm_call_count == 1
+    assert result.status == "technical_error" and result.llm_call_count == 1
+    assert result.reason == "model_invalid_output"
 
 
 @pytest.mark.asyncio

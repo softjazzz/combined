@@ -2821,9 +2821,6 @@ def _execution_prompt(
                 continue
             if embedded_same_episode:
                 include = True
-            elif candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
-                # 医嘱已受本次住院窗口约束；执行记录是总结，不能用其书写时间作医嘱下限。
-                include = True
             elif candidate.observed_time.day > item.opinion_time.day:
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:

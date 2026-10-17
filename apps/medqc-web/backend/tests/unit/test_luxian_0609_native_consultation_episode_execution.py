@@ -4760,10 +4760,10 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
 
 
 @pytest.mark.asyncio
-async def test_023_order_before_execution_record_is_checked_for_action_relation(
+async def test_023_order_before_consultation_cannot_prove_execution(
     monkeypatch,
 ):
-    """医嘱早于执行文书仍须核对动作，不能仅据文书时间直接判未落实。"""
+    """按会诊后时间边界，会诊前医嘱不能单独证明后续落实。"""
 
     source_rows = _no_course_source_rows(
         consultation_text="会诊意见：建议加强抗感染治疗。",
@@ -4793,9 +4793,8 @@ async def test_023_order_before_execution_record_is_checked_for_action_relation(
         source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
-    assert result.llm_call_count == 3
-    assert "头孢哌酮舒巴坦" in client.prompts[1]
+    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert result.llm_call_count == 1
 
 
 def test_023_order_candidates_remain_inside_current_stay_when_documentation_is_later(monkeypatch):
@@ -4821,7 +4820,7 @@ def test_023_order_candidates_remain_inside_current_stay_when_documentation_is_l
 @pytest.mark.parametrize("order_time", [
     "2026-07-20 15:56:46", "2026-07-20 15:55:22", "2026-07-19 15:56:46", "2026-07-17 15:55:22",
 ])
-async def test_023_order_before_documentation_reaches_execution_check(monkeypatch, order_time):
+async def test_023_order_before_consultation_is_excluded_from_execution_check(monkeypatch, order_time):
     rows = _no_course_source_rows(
         consultation_text="会诊意见：中药贴敷天突、双肺俞。处理：遵照执行。",
         source_key="inpat_nondrug_order", source_rows=[{
@@ -4835,8 +4834,8 @@ async def test_023_order_before_documentation_reaches_execution_check(monkeypatc
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client)
-    assert result.results[0]["status"] == "compliant"
-    assert any("中药贴敷" in text for text in _stage_two_candidate_texts(client.prompts[1]))
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -9464,3 +9463,36 @@ async def test_typed_consultation_stage_two_privacy_failure_is_legal_and_not_ret
         failures=[{"rule_id": decision.rule_id, "reason_code": decision.reason_code, "error_phase": "result_status"}],
     )
     assert plan["should_retry"] is False
+
+
+@pytest.mark.parametrize("source,action_type", [("inpat_drug_order", "medication"), ("inpat_nondrug_order", "procedure")])
+def test_execution_orders_must_follow_consultation_time(source, action_type):
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", action_type, "合成建议", "合成建议", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"{source}-{index}", source,
+        episode._ObservedTime(datetime(2026, 7, 20, hour), True), "合成治疗医嘱",
+    ) for index, hour in enumerate((9, 10, 11), 1))
+    prompt, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert allowed["r1"] == frozenset({f"{source}-3"})
+    payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    assert len(payload["candidate_documents"]) == 1
+
+
+def test_order_candidate_budget_excludes_pre_consultation_orders_before_limiting():
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "procedure", "给予合成气压治疗", "气压治疗", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+    ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"inpat_nondrug_order-{index}", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2026, 7, 20, 7 if index < 25 else 9, index), True),
+        "合成其他处置" if index < 25 else "气压治疗费",
+    ) for index in range(26))
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert "inpat_nondrug_order-25" in allowed["r1"]
+    assert allowed["r1"] == frozenset({"inpat_nondrug_order-25"})
