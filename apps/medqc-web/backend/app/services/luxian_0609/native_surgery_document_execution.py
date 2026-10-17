@@ -98,6 +98,11 @@ _TYPED_RULE_SOURCE_KEYS = {
     "LX0609-04-01-05": ("presurg_discussion", "surgery_record"),
 }
 
+# 技术错误原因码原样保留；其余（快照或绑定异常）归为 snapshot_mismatch。
+_PASSTHROUGH_TECHNICAL_REASONS = frozenset({
+    "source_query_error", "model_transport_error", "model_timeout", "model_invalid_output",
+    "privacy_guard_blocked", "execution_program_error",
+})
 _ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-11-02-01", "LX0609-11-02-02"})
 _ANESTHESIA_VISIT_RULE_IDS = frozenset({"LX0609-04-04-01", "LX0609-04-04-02"})
 _ANESTHESIA_RECORD_RULE_IDS = frozenset({"LX0609-04-04-03"})
@@ -300,8 +305,8 @@ def _typed_decision_from_outcome(
             EvidenceState.TECHNICAL_ERROR,
             QcDirection.UNKNOWN,
             (
-                "source_query_error"
-                if outcome.reason_code == "source_query_error"
+                outcome.reason_code
+                if outcome.reason_code in _PASSTHROUGH_TECHNICAL_REASONS
                 else "snapshot_mismatch"
             ),
         )
@@ -1254,6 +1259,8 @@ async def _typed_037_controlled_outcome(
     documents = grouped
     extraction = await extract_anesthesia_visit_facts(documents, llm_client)
     metrics = (extraction.llm_call_count, extraction.prompt_tokens, extraction.completion_tokens, extraction.total_tokens, extraction.api_time)
+    if extraction.state == "technical_error":
+        return _SurgeryDocumentOutcome(outcome.rule_id, "technical_error", extraction.reason_code, "llm"), *metrics
     if extraction.state != "ready":
         return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", extraction.reason_code, "llm" if extraction.llm_call_count else "program"), *metrics
     states_by_ref = {doc.document_ref: {**reliable[doc.document_ref], **extraction.fields.get(doc.document_ref, {})} for doc in documents}

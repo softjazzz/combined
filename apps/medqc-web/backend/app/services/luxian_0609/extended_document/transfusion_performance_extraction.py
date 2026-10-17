@@ -15,7 +15,7 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure, redact_luxian_0609_patient_privacy
 from ..native_preop_content_execution import _usage
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object
@@ -32,6 +32,11 @@ _CLOCK_PATTERN = re.compile(
     r"(?P<hour>\d{1,2})\s*(?::|：|时|点)\s*(?P<minute>\d{1,2})\s*分?(?:\s*(?::|：)\s*(?P<second>\d{1,2})\s*秒?)?"
 )
 _DATE_PATTERN = re.compile(r"(?:(?P<year>\d{4})\s*[年/.-]\s*)?(?P<month>\d{1,2})\s*[月/.-]\s*(?P<day>\d{1,2})\s*日?")
+# 模型调用本身失败（无客户端、调用异常、输出不合合同）的原因码；不代表病历缺资料。
+TECHNICAL_FAILURE_REASONS = frozenset({
+    "model_transport_error", "model_timeout", "model_invalid_output",
+    "privacy_guard_blocked", "execution_program_error",
+})
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,11 @@ class PerformanceExtraction:
     event_times: tuple[datetime | None, ...] = ()
     # 模型原文引用仅在本次内部校验使用，不发布或记录原始响应。
     assertions: tuple[Mapping[str, Any], ...] = field(default=(), repr=False)
+
+    @property
+    def technical_failure(self) -> bool:
+        """模型调用失败：调用方须交付技术错误，不能当作资料不足要求医院补写记录。"""
+        return self.reason_code in TECHNICAL_FAILURE_REASONS
 
 
 def _grounded(quote: Any, doc: Mapping[str, Any]) -> str:
@@ -163,7 +173,7 @@ async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm
     if any(not isinstance(row.get("record_content"), str) or not row["record_content"].strip() for row in rows):
         return PerformanceExtraction(unknown, "source_readiness_unproven", event_times=no_times)
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
-        return PerformanceExtraction(unknown, "semantic_extraction_unresolved", event_times=no_times)
+        return PerformanceExtraction(unknown, "model_transport_error", event_times=no_times)
     documents = []
     for index, row in enumerate(rows, 1):
         parsed_time = _parse_datetime(row.get("record_time"))
@@ -181,14 +191,14 @@ async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm
             _prompt(documents), max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
             **structured_output_kwargs(llm_client),
         )
-    except Exception:
-        return PerformanceExtraction(unknown, "semantic_extraction_unresolved", llm_call_count=1,
+    except Exception as error:
+        return PerformanceExtraction(unknown, classify_luxian_0609_llm_call_failure(error), llm_call_count=1,
                                      api_time=perf_counter() - started, event_times=no_times)
     try:
         usage = _usage(response)
         states, event_times, assertions = _parsed(response, documents)
     except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError):
-        return PerformanceExtraction(unknown, "semantic_extraction_unresolved", llm_call_count=1,
+        return PerformanceExtraction(unknown, "model_invalid_output", llm_call_count=1,
             prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
             api_time=perf_counter() - started, event_times=no_times)
     return PerformanceExtraction(states, "positive_assertion_not_explicit" if "unknown" in states else "",

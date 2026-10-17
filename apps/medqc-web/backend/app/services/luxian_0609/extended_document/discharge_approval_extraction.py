@@ -10,7 +10,10 @@ from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 
 from ...llm_observability import safe_status_for_exception
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    classify_luxian_0609_llm_call_failure,
+    redact_luxian_0609_patient_privacy,
+)
 
 
 SCHEMA_VERSION = "lx0609_discharge_approval_v3"
@@ -236,7 +239,7 @@ async def extract_discharge_approval(
         is_timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
         return DischargeApprovalExtraction(
             "technical_error",
-            "model_timeout" if is_timeout else "model_transport_error",
+            "model_timeout" if is_timeout else classify_luxian_0609_llm_call_failure(error),
             llm_call_count=1,
             api_time=perf_counter() - started,
         )

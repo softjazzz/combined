@@ -3760,7 +3760,9 @@ async def execute_luxian_0609_native_extended_document_rules(
             performed_time_missing = False
             if transfusion_source_error:
                 final_state, reason_code = "data_gap", transfusion_source_error
-            elif transfusion_course_extraction is not None and transfusion_course_extraction.state in {"data_gap", "technical_error"}:
+            elif transfusion_course_extraction is not None and transfusion_course_extraction.state == "technical_error":
+                final_state, reason_code = "technical_error", transfusion_course_extraction.reason_code or "model_invalid_output"
+            elif transfusion_course_extraction is not None and transfusion_course_extraction.state == "data_gap":
                 final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
             elif not mr_bloodtrans_rows and not performance_rows:
                 final_state, reason_code = (
@@ -3792,7 +3794,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         unconfirmed_record_count += 1
                         performed_time_missing = performed_time_missing or state == "performed"
                 actual_transfusion_rows = (*mr_bloodtrans_rows, *confirmed_records)
-                if not actual_transfusion_rows:
+                extraction_failed = transfusion_performance_extraction.technical_failure
+                if extraction_failed and not mr_bloodtrans_rows:
+                    # 实施抽取的模型调用失败不代表病历资料缺失，不能要求医院补写实施事实。
+                    final_state, reason_code = "technical_error", extraction_reason
+                elif not actual_transfusion_rows:
                     final_state = "data_gap"
                     reason_code = (
                         "authoritative_time_missing" if performed_time_missing
@@ -3826,10 +3832,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "transfusion_time_unavailable": "authoritative_time_missing",
                         "admission_time_unavailable": "authoritative_time_missing",
                         "pretransfusion_item_contract_unavailable": "source_unavailable",
+                        "pretransfusion_lab_results_absent": "source_unavailable",
                         "pretransfusion_tests_outside_current_stay": "requirement_violated",
                         "source_query_error": "source_query_error",
                     }.get(detail_reason, "required_field_missing")
-                    if final_state == "compliant" and unconfirmed_record_count:
+                    if final_state == "compliant" and unconfirmed_record_count and extraction_failed:
+                        # 结构化输注已可核对，但其余记录因模型失败未核实实施，不能确认合规；
+                        # 不合规结论只依赖已确认事件，照常保留。
+                        final_state, reason_code, facts = "technical_error", extraction_reason, None
+                    elif final_state == "compliant" and unconfirmed_record_count:
                         final_state = "data_gap"
                         reason_code = "authoritative_time_missing" if performed_time_missing else extraction_reason or "positive_assertion_not_explicit"
                         facts = None

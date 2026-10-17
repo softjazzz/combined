@@ -895,8 +895,9 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
         "LX0609-06-01-02",
     ]
     assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-04-01-01"]
-    assert context.reduced_decisions[0].final_state.value == "technical_error"
-    assert context.reduced_decisions[0].reason_code == "decision_contract_violation"
+    # 族输出逐点校验：范围外的多余决策被丢弃，不再连带范围内已形成的合法结论。
+    assert context.reduced_decisions[0].final_state.value == "compliant"
+    assert context.reduced_decisions[0].reason_code == "requirement_satisfied"
     assert context.native_llm_call_count == 1
     assert context.native_total_tokens == 15
     assert [

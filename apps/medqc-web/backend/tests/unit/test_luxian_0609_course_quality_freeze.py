@@ -415,6 +415,7 @@ async def test_course_quality_freezes_lx018_semantic_stub_prompt_usage_and_canon
     client = _StubClient(
         {
             "chief_signal_kind": "localized_symptom_or_sign",
+            "chief_complaint_signals": ["反复胸痛"],
             "anatomic_relation": "not_applicable",
             "laterality_relation": "not_applicable",
             "symptom_relation": "supports",
@@ -545,6 +546,7 @@ async def test_lx018_atomic_facts_disable_thinking_for_capable_client() -> None:
     client = _StructuredStubClient(
         {
             "chief_signal_kind": "localized_symptom_or_sign",
+            "chief_complaint_signals": ["反复胸痛"],
             "anatomic_relation": "not_applicable",
             "laterality_relation": "not_applicable",
             "symptom_relation": "supports",

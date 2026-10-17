@@ -986,7 +986,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
     assert states == {
         "LX0609-11-03-01": "non_compliant",
         "LX0609-11-03-02": "not_applicable",
-        "LX0609-07-01-01": "non_compliant",
+        "LX0609-07-01-01": "data_gap",
         "LX0609-07-01-02": "non_compliant",
         "LX0609-07-04-01": "not_applicable",
         "LX0609-07-04-02": "data_gap",
@@ -1088,7 +1088,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
-    ] == ["non_compliant", "not_applicable", "non_compliant", "not_applicable", "data_gap"]
+    ] == ["non_compliant", "not_applicable", "data_gap", "not_applicable", "data_gap"]
     assert result.llm_call_count == _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1389,9 +1389,10 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
     )
 
     assert result.results[0]["status"] == "data_gap"
+    # 截断与来源未接入区分开，客户看到的是“资料不完整”。
     assert (
         result.results[0]["metadata"]["reason_code"]
-        == "transfusion_source_unavailable"
+        == "transfusion_source_truncated"
     )
     assert result.llm_call_count == 0 + _protocol_calls(result)
 
@@ -3585,7 +3586,7 @@ def test_043_public_pretransfusion_row_resolvers_preserve_item_and_admission_con
 
 
 @pytest.mark.asyncio
-async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> None:
+async def test_043_checks_regular_items_before_transfusion_and_returns_times() -> None:
     selected = ("LX0609-07-01-01",)
     names = [
         "乙肝表面抗原",
@@ -3596,7 +3597,8 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
         "丙肝抗体",
         "HIV抗体",
         "梅毒抗体",
-        "谷丙转氨酶",
+        "*ABO血型鉴定",
+        "*Rh血型鉴定",
         "不规则抗体筛查",
     ]
 
@@ -3649,7 +3651,7 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
 
     assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "compliant"
     facts = dict(result.customer_display_facts)["LX0609-07-01-01"]
-    assert len(facts["checked_items"]) == 9
+    assert len(facts["checked_items"]) == 11
     assert facts["latest_test_time"] == "2026-06-05 10:00:00"
     assert facts["transfusion_time"] == "2026-06-05 14:20:00"
     assert facts["abo_present"] is True

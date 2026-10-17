@@ -11,7 +11,10 @@ from time import perf_counter
 from typing import Any, Literal
 
 
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import (
+    classify_luxian_0609_llm_call_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from .structured_output import structured_output_kwargs
 
 
@@ -227,9 +230,9 @@ async def classify_transfusion_orders(
             try:
                 # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
                 response = await llm_client.generate(_prompt(pending), **structured_output_kwargs(llm_client))
-            except Exception:
+            except Exception as error:
                 api_time += perf_counter() - started
-                return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_transport_error")
+                return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=classify_luxian_0609_llm_call_failure(error))
             try:
                 usage = _usage(response)
                 prompt_tokens += usage[0]

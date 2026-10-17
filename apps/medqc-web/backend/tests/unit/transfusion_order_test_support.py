@@ -12,13 +12,15 @@ OPEN_TRANSFUSION_ORDER = {
 
 class FrozenTransfusionProtocolClient:
     def __init__(self, delegate=None, *, course_labels=None, default_course_label=None,
-                 intraoperative=None):
+                 intraoperative=None, performance_state=None):
         self.delegate = delegate
         self.course_labels = dict(course_labels or {})
         # 仅供正文全部由测试作者写成同一类记录的用例使用，避免逐句重复标注。
         self.default_course_label = default_course_label
         # 048 术中原子事实协议的人工标注替身（FrozenIntraoperativeClient）。
         self.intraoperative = intraoperative
+        # 实施事实抽取协议的人工标注：整份正文作为引用、不给开始时刻；未提供时视为替身不可用。
+        self.performance_state = performance_state
         self.protocol_calls = 0
         self.protocol_prompts = []
 
@@ -36,6 +38,21 @@ class FrozenTransfusionProtocolClient:
         payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
         self.protocol_calls += 1
         self.protocol_prompts.append(prompt)
+        if set(payload) == {"documents"}:
+            if self.performance_state is None:
+                raise RuntimeError("未提供实施事实人工标注")
+            from app.services.luxian_0609.extended_document.transfusion_performance_extraction import SCHEMA_VERSION
+
+            output = {
+                "schema_version": SCHEMA_VERSION,
+                "documents": [{"document_ref": doc["document_ref"], "state": self.performance_state,
+                               "quote": doc["body"], "start_time_quote": None}
+                              for doc in payload["documents"]],
+            }
+            # 实施抽取按 choices 结构解析。
+            return {"choices": [{"message": {"content": json.dumps(output, ensure_ascii=False)},
+                                 "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
         if set(payload) == {"orders"}:
             rows = payload["orders"]
             assert len({row["index"] for row in rows}) == len(rows)

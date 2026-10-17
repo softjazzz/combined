@@ -23,6 +23,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .course_quality.rule_018 import (
     LX018_DIAGNOSIS_SOURCES as _LX018_DIAGNOSIS_SOURCES,
+    _lx018_complaint_text,
     _lx018_length_criterion_result,
     _lx018_atomic_semantic_result,
     _lx018_primary_diagnosis_available,
@@ -248,6 +249,7 @@ def _context(
         _substantive_rows(documents, _RULE_CONTEXT_SOURCES[rule_id])
     )
     if rule_id == "LX0609-01-01-02":
+        parts.insert(0, f"[主诉原文] {_lx018_complaint_text(documents)}")
         # trigger 读取完整 bounded diagnosis；模型上下文只投影唯一解析出的第一入院诊断。
         context_rows = [
             item for item in context_rows if item[0] not in _LX018_DIAGNOSIS_SOURCES
@@ -283,7 +285,12 @@ def _context(
         )
     for source_key, row, content in context_rows:
         record_time = _clean(row.get("record_time")) or "未提供"
-        parts.append(f"[{source_key}] 记录时间={record_time}；内容={content[:_MAX_ROW_CHARS]}")
+        scope = (
+            "（仅供核实病灶侧别、识别规范例外、理解术语）"
+            if rule_id == "LX0609-01-01-02" and source_key == "admission_record"
+            else ""
+        )
+        parts.append(f"[{source_key}]{scope} 记录时间={record_time}；内容={content[:_MAX_ROW_CHARS]}")
     return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
 
 
@@ -944,12 +951,15 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "non_compliant"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "data_gap"
+                            else "technical_error"
                             if rule_id == "LX0609-01-01-02"
                             else "data_gap"
                         ),
                         reason_code=(
-                            "source_readiness_unproven"
+                            "requirement_violated"
+                            if length_result is not None
+                            and length_result.status is CriterionStatus.FAILED
+                            else "model_transport_error"
                             if rule_id == "LX0609-01-01-02"
                             else "course_llm_unavailable"
                         ),
@@ -992,12 +1002,15 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "non_compliant"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "data_gap"
+                            else "technical_error"
                             if rule_id == "LX0609-01-01-02"
                             else "technical_error"
                         ),
                         reason_code=(
-                            "source_readiness_unproven"
+                            "requirement_violated"
+                            if length_result is not None
+                            and length_result.status is CriterionStatus.FAILED
+                            else "model_transport_error"
                             if rule_id == "LX0609-01-01-02"
                             else "model_transport_error"
                         ),
@@ -1018,7 +1031,9 @@ async def execute_luxian_0609_native_course_quality_rules(
             api_time += elapsed
             is_compliant = _parse_is_compliant(response)
             if rule_id == "LX0609-01-01-02":
-                atomic_result = _lx018_atomic_semantic_result(response)
+                atomic_result = _lx018_atomic_semantic_result(
+                    response, chief_complaint=_lx018_complaint_text(typed_documents),
+                )
                 if atomic_result is None:
                     unresolved_semantic = _lx018_unknown_semantic_result(
                         "model_invalid_output"
@@ -1030,13 +1045,13 @@ async def execute_luxian_0609_native_course_quality_rules(
                                 "non_compliant"
                                 if length_result is not None
                                 and length_result.status is CriterionStatus.FAILED
-                                else "data_gap"
+                                else "technical_error"
                             ),
                             reason_code=(
                                 "requirement_violated"
                                 if length_result is not None
                                 and length_result.status is CriterionStatus.FAILED
-                                else "source_readiness_unproven"
+                                else "model_invalid_output"
                             ),
                             executor_type="llm",
                             prompt_tokens=prompt,
@@ -1329,10 +1344,15 @@ async def execute_luxian_0609_native_course_quality_rules(
                         "non_compliant"
                         if length_result is not None
                         and length_result.status is CriterionStatus.FAILED
+                        else "technical_error"
+                        if rule_id == "LX0609-01-01-02"
                         else "data_gap"
                     ),
                     (
-                        "source_readiness_unproven"
+                        "requirement_violated"
+                        if length_result is not None
+                        and length_result.status is CriterionStatus.FAILED
+                        else "model_transport_error"
                         if rule_id == "LX0609-01-01-02"
                         else "course_llm_unavailable"
                     ),
@@ -1375,12 +1395,15 @@ async def execute_luxian_0609_native_course_quality_rules(
                         "non_compliant"
                         if length_result is not None
                         and length_result.status is CriterionStatus.FAILED
-                        else "data_gap"
+                        else "technical_error"
                         if rule_id == "LX0609-01-01-02"
                         else "data_gap"
                     ),
                     (
-                        "source_readiness_unproven"
+                        "requirement_violated"
+                        if length_result is not None
+                        and length_result.status is CriterionStatus.FAILED
+                        else "model_transport_error"
                         if rule_id == "LX0609-01-01-02"
                         else "course_llm_failure"
                     ),
@@ -1415,7 +1438,9 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             continue
         if rule_id == "LX0609-01-01-02":
-            atomic_result = _lx018_atomic_semantic_result(response)
+            atomic_result = _lx018_atomic_semantic_result(
+                response, chief_complaint=_lx018_complaint_text(documents),
+            )
             if atomic_result is None:
                 unresolved_semantic = _lx018_unknown_semantic_result(
                     "model_invalid_output"
@@ -1427,13 +1452,13 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "non_compliant"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "data_gap"
+                            else "technical_error"
                         ),
                         (
                             "requirement_violated"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "source_readiness_unproven"
+                            else "model_invalid_output"
                         ),
                         executor_type="llm",
                         prompt_tokens=prompt,

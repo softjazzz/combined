@@ -20,6 +20,7 @@ from ..evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
+from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .shared import clean_text, response_json_payload
 
 
@@ -488,19 +489,20 @@ async def evaluate_rule_077(
             ),
             llm_call_count=1,
         )
-    except Exception:
+    except Exception as error:
+        failure_reason = classify_luxian_0609_llm_call_failure(error)
         criterion = _criterion(
             status=CriterionStatus.UNKNOWN,
-            reason_code="model_transport_error",
+            reason_code=failure_reason,
             refs=refs,
-            actual="model_transport_error",
+            actual=failure_reason,
         )
         return Rule077Execution(
             _decision(
                 snapshot=snapshot,
                 refs=refs,
                 status="technical_error",
-                reason_code="model_transport_error",
+                reason_code=failure_reason,
                 criterion=criterion,
             ),
             llm_call_count=1,

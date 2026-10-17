@@ -29,6 +29,9 @@ _PRETRANSFUSION_ALLOWED_ITEMS = {
     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"
 }
 
+# 043 现按血型、抗体筛查加八项感染筛查核对；仍接受 alt，旧版九项口径已保存的结果读取时不被判为非法事实。
+_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS = _PRETRANSFUSION_ALLOWED_ITEMS | {"abo", "rh", "antibody_screen"}
+
 _SYSTEM_GAP_REASONS = {
     "LX0609-11-03-01": "consent_source_unavailable",
     "LX0609-11-03-02": "consent_signature_contract_unavailable",
@@ -174,7 +177,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("verification_kind") or raw.get("failure_kind")
     if kind == "pretransfusion_items_complete":
         checked = _controlled_list(
-            raw.get("checked_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+            raw.get("checked_items"), allowed=_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS
         )
         if (
             checked is None
@@ -204,7 +207,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }.get(str(kind))
     if list_key is None:
         return None
-    values = _controlled_list(raw.get(list_key), allowed=_PRETRANSFUSION_ALLOWED_ITEMS)
+    values = _controlled_list(raw.get(list_key), allowed=_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS)
     if values is None:
         return None
     result: dict[str, Any] = {"failure_kind": str(kind), list_key: values}
@@ -214,7 +217,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         result["transfusion_time"] = raw["transfusion_time"]
     if kind == "pretransfusion_items_incomplete":
         required = _controlled_list(
-            raw.get("required_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+            raw.get("required_items"), allowed=_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS
         )
         if required is None:
             return None

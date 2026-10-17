@@ -3343,7 +3343,7 @@ def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-07-01-01", "name": "输血前九项"}],
+        wrapper_rules=[{"rule_id": "LX0609-07-01-01", "name": "输血前常规检查"}],
         execution_results=[],
         reduced_decisions=(
             _reduced_decision("LX0609-07-01-01", direction=QcDirection.DEFECT),
@@ -3353,16 +3353,16 @@ def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
             {
                 "failure_kind": "pretransfusion_items_incomplete",
                 "performed_transfusion_confirmed": True,
-                "missing_items": ["hiv", "syphilis", "alt"],
+                "missing_items": ["hiv", "syphilis", "antibody_screen"],
                 "required_items": [
                     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
-                    "hcv", "hiv", "syphilis", "alt",
+                    "hcv", "hiv", "syphilis", "abo", "rh", "antibody_screen",
                 ],
             },
         ),),
     )[0]
 
-    assert result["findings"] == "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。"
+    assert result["findings"] == "输血前常规检查缺少：艾滋病病毒抗体、梅毒筛查、不规则抗体筛查。"
     assert result["status"] == "non_compliant"
 
 
@@ -5877,7 +5877,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
                 "performed_transfusion_confirmed": True,
                 "checked_items": [
                     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
-                    "hcv", "hiv", "syphilis", "alt",
+                    "hcv", "hiv", "syphilis", "abo", "rh", "antibody_screen",
                 ],
                 "latest_test_time": "2026-06-05 08:00:00",
                 "transfusion_time": "2026-06-05 14:20:00",
@@ -5891,7 +5891,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
                 "performed_transfusion_confirmed": True,
                 "checked_items": [
                     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
-                    "hcv", "hiv", "syphilis", "alt",
+                    "hcv", "hiv", "syphilis", "abo", "rh", "antibody_screen",
                 ],
                 "latest_test_time": "2026-06-05 08:00:00",
                 "transfusion_time": "2026-06-05 14:20:00",

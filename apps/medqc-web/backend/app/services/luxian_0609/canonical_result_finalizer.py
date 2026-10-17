@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import deepcopy
+import logging
 from types import NotImplementedType
 from typing import TYPE_CHECKING, Any, Callable
 
 from ..luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
+from .customer_explanation_contract import customer_explanation_satisfied
 from .customer_evidence_enrichment import (
     enrich_customer_evidence,
     project_legacy_source_level_evidence,
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
 
 
 SafeTraceSink = Callable[[Mapping[str, Any]], None]
+logger = logging.getLogger(__name__)
 
 
 _DATA_GAP_EXPLANATIONS = {
@@ -1120,6 +1123,7 @@ def finalize_luxian_0609_executor_customer_display_facts(
                     finalized.get("status") == "data_gap"
                     and finalized.get("reason_code") in {
                         "transfusion_source_unavailable",
+                        "transfusion_source_truncated",
                         "transfusion_projection_unavailable",
                         "transfusion_rule_projection_incomplete",
                     }
@@ -1517,13 +1521,20 @@ def finalize_luxian_0609_canonical_result(
 
 
 def finalize_luxian_0609_missing_decision_result(
-    *, wrapper: Mapping[str, Any]
+    *,
+    wrapper: Mapping[str, Any],
+    reason_code: str = "decision_contract_violation",
 ) -> dict[str, Any]:
-    """把正式 Canonical 主链缺少裁决收敛为纯技术失败。
+    """把正式 Canonical 主链缺少裁决或单条交付合同失败收敛为纯技术失败。
 
     该入口只处理交付合同失败，不读取旧执行结果、临床事实或证据；因此不会
     把编排缺陷伪装成资料不足，也不会把聚合器重新变成规则解释器。
     """
+
+    from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
+
+    if reason_code not in ALLOWED_REASON_CODES_BY_FINAL_STATE["technical_error"]:
+        raise ValueError("invalid technical failure reason code")
 
     from ..luxian_0609_result_schema import (
         CUSTOMER_SCHEMA_VERSION,
@@ -1544,7 +1555,7 @@ def finalize_luxian_0609_missing_decision_result(
         "rule_set_version": RULE_SET_VERSION,
         "schema_version": CUSTOMER_SCHEMA_VERSION,
         "status": "technical_error",
-        "reason_code": "decision_contract_violation",
+        "reason_code": reason_code,
         "findings": "质控执行结果不完整，本项未形成可交付的判定。",
         "evidence": "",
         "suggestion": "请重试本次质控；若仍失败，请检查规则执行与裁决绑定链路。",
@@ -1554,7 +1565,57 @@ def finalize_luxian_0609_missing_decision_result(
         "metadata": {
             "execution_source": "lx0609_canonical_delivery_guard",
             "executor_type": "program",
-            "reason_code": "decision_contract_violation",
+            "reason_code": reason_code,
             "technical_error_internal": True,
         },
     })
+
+
+# 单条客户结果在发布边界未满足解释/事实合同；属确定性程序问题，不自动补跑。
+CUSTOMER_RESULT_CONTRACT_VIOLATION = "customer_result_contract_violation"
+# 进入失败清单而非交付条目的状态，保存层不对其执行客户解释合同。
+_UNDELIVERED_FAILURE_STATUSES = frozenset({"technical_error", "uncertain"})
+
+
+def luxian_0609_customer_result_contract_holds(result: Mapping[str, Any]) -> bool:
+    """在单规则边界执行保存层同一份客户解释合同，提前发现不可交付条目。"""
+
+    rule_id = str(result.get("rule_id") or result.get("rule_code") or "").strip().upper()
+    status = str(result.get("status") or "").strip().lower()
+    if not rule_id.startswith("LX0609-") or status in _UNDELIVERED_FAILURE_STATUSES:
+        return True
+    try:
+        safe_facts = validate_luxian_0609_published_customer_display_facts(
+            rule_id=rule_id,
+            raw=result.get("customer_display_facts"),
+            status=status,
+            reason_code=str(result.get("reason_code") or "").strip(),
+        )
+    except (TypeError, ValueError, KeyError):
+        return False
+    return customer_explanation_satisfied(
+        rule_id=rule_id,
+        status=status,
+        safe_display_facts=safe_facts if isinstance(safe_facts, dict) else None,
+        criterion_results=result.get("criterion_results"),
+    )
+
+
+def enforce_luxian_0609_customer_result_contract(
+    result: dict[str, Any],
+    *,
+    wrapper: Mapping[str, Any],
+) -> dict[str, Any]:
+    """合同不满足时只把本条改判技术错误，同病例、同批其他结果照常交付。"""
+
+    if luxian_0609_customer_result_contract_holds(result):
+        return result
+    logger.warning(
+        "LX0609 单条客户结果未满足交付合同，改判技术错误: rule_id=%s status=%s",
+        str(result.get("rule_id") or "").strip().upper(),
+        str(result.get("status") or "").strip().lower(),
+    )
+    return finalize_luxian_0609_missing_decision_result(
+        wrapper=wrapper,
+        reason_code=CUSTOMER_RESULT_CONTRACT_VIOLATION,
+    )

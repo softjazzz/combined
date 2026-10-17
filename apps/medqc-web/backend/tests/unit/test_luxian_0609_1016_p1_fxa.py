@@ -1,6 +1,7 @@
 """1016 P1：合成材料覆盖诊断关系与完整空查房来源。"""
 
 import json
+import re
 
 import pytest
 
@@ -21,6 +22,8 @@ class AtomicClient:
         }
 
     async def generate(self, prompt, **kwargs):
+        complaint = re.search(r"\[主诉原文\] ([^\n]*)", prompt)
+        self.facts["chief_complaint_signals"] = [complaint.group(1)[:20]] if complaint else []
         return {"content": json.dumps(self.facts, ensure_ascii=False)}
 
 

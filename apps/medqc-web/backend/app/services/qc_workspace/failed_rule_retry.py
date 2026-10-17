@@ -13,11 +13,26 @@ FAILED_RULE_RETRY_SCHEMA_VERSION = "failed-rule-retry-v1"
 FAILED_RULE_AUTO_RETRY_MAX_ATTEMPTS = 3
 _FAILED_RULE_AUTO_RETRY_DELAYS_SECONDS = (0.0, 1.0, 3.0)
 _FAILED_RULE_AUTO_RETRY_PHASES = frozenset({"result_status", "result_missing"})
+# 同样输入重跑仍会得到同样失败的确定性原因：隐私护栏拦截、程序缺陷、单条交付合同
+# 不满足，以及执行器输出缺失/重复等结构问题。不自动补跑，避免空耗模型调用。
+_DETERMINISTIC_FAILURE_REASON_CODES = frozenset({
+    "privacy_guard_blocked",
+    "execution_program_error",
+    "customer_result_contract_violation",
+    "family_result_invalid",
+    "family_result_missing",
+    "family_result_duplicate",
+    "family_result_extra",
+    "family_result_order_mismatch",
+    "family_result_scope_mismatch",
+})
 
 
 def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
     rule = str(failure.get("rule_id") or failure.get("rule_code") or "").strip().upper()
     reason = str(failure.get("reason_code") or "")
+    if reason in _DETERMINISTIC_FAILURE_REASON_CODES:
+        return False
     if rule == "LX0609-05-01-03" and reason in {
         "model_invalid_output", "model_parse_error", "model_transport_error", "model_timeout",
         "model_rate_limited", "model_upstream_error", "model_http_error",

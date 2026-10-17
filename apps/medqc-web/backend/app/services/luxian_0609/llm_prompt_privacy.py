@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from typing import Any
 
 import httpx
 
+
+logger = logging.getLogger(__name__)
 
 _PERSON_NAME = r"(?:[\u4e00-\u9fff·]{2,12}|[A-Za-z][A-Za-z .'-]{1,48})"
 _CLINICIAN_NAME_LABEL = re.compile(
@@ -448,6 +451,45 @@ def _is_transient_transport_error(error: BaseException) -> bool:
     )
 
 
+# 程序自身缺陷（构造提示词、参数校验等）；同样输入重跑仍会失败。
+_PROGRAM_ERROR_TYPES = (TypeError, ValueError, LookupError, AttributeError, AssertionError)
+
+
+def classify_luxian_0609_llm_call_failure(error: BaseException) -> str:
+    """把模型调用处捕获的异常归为受控原因码，避免一律记成传输错误。
+
+    隐私护栏拦截与程序缺陷都是确定性失败，补跑不会改变结果；超时与上游/网络
+    错误仍按模型传输类原因交给既有补跑策略。
+    """
+
+    if isinstance(error, (PatientPrivacyViolation, PrivacyIdentityContextError)):
+        return "privacy_guard_blocked"
+    if isinstance(error, (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException)):
+        return "model_timeout"
+    if isinstance(error, _PROGRAM_ERROR_TYPES):
+        return "execution_program_error"
+    return "model_transport_error"
+
+
+def _log_privacy_guard_block(error: BaseException) -> None:
+    """隐私护栏拦截只记录异常类别与脱敏观测上下文，不记录提示词或身份值。"""
+
+    try:
+        from ..llm_observability import current_llm_observation_context
+
+        context = current_llm_observation_context()
+        executor_key = context.executor_key or "unknown"
+        record_key_hash = context.record_key_hash or "unknown"
+    except Exception:
+        executor_key = record_key_hash = "unknown"
+    logger.warning(
+        "LX0609 隐私护栏拦截模型请求: error_kind=%s executor_key=%s record_key_hash=%s",
+        type(error).__name__,
+        executor_key,
+        record_key_hash,
+    )
+
+
 @dataclass(frozen=True)
 class _Luxian0609PrivacyRedactingLLMClient:
     delegate: Any = field(repr=False)
@@ -457,17 +499,21 @@ class _Luxian0609PrivacyRedactingLLMClient:
     )
 
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
-        identities = set(self.identity_values)
-        for provider in self.identity_providers:
-            try:
-                identities.update(_freeze_identity_values(provider()))
-            except Exception:
-                raise PrivacyIdentityContextError(
-                    "Patient identity context is unavailable"
-                ) from None
-        redacted = redact_luxian_0609_patient_privacy(prompt)
-        assert_no_known_identity(redacted, identities)
-        assert_no_known_identity_in_model_request(kwargs, identities)
+        try:
+            identities = set(self.identity_values)
+            for provider in self.identity_providers:
+                try:
+                    identities.update(_freeze_identity_values(provider()))
+                except Exception:
+                    raise PrivacyIdentityContextError(
+                        "Patient identity context is unavailable"
+                    ) from None
+            redacted = redact_luxian_0609_patient_privacy(prompt)
+            assert_no_known_identity(redacted, identities)
+            assert_no_known_identity_in_model_request(kwargs, identities)
+        except (PatientPrivacyViolation, PrivacyIdentityContextError) as error:
+            _log_privacy_guard_block(error)
+            raise
         if "temperature" not in kwargs and _accepts_temperature(self.delegate):
             kwargs = {**kwargs, "temperature": EXTRACTION_TEMPERATURE}
         for _ in range(TRANSPORT_RETRY_ATTEMPTS):

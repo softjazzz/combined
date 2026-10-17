@@ -126,7 +126,7 @@ async def test_senior_course_actual_transfusion_provides_course_for_open_order()
 
 @pytest.mark.asyncio
 async def test_regular_pretransfusion_check_uses_explicit_start_in_dedicated_body():
-    from test_luxian_0609_transfusion_performance_043_047 import _run, NINE_ITEM_LABS
+    from test_luxian_0609_transfusion_performance_043_047 import _run, REGULAR_ITEM_LABS
     from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
     body = "2026年06月05日 14:20开始输注红细胞2U，16:20输毕。"
@@ -143,7 +143,7 @@ async def test_regular_pretransfusion_check_uses_explicit_start_in_dedicated_bod
 
     result = await _run("LX0609-07-01-01", {
         "bloodtrans_record": [{"document_id": "synthetic-time-in-body", "record_content": body}],
-        "labtest_item_report": NINE_ITEM_LABS,
+        "labtest_item_report": REGULAR_ITEM_LABS,
     }, {body: "record"}, client=Client(course_labels={body: "record"}))
     assert result["final"]["status"] == "compliant", result["final"]
 

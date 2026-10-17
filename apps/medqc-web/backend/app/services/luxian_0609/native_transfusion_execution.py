@@ -136,8 +136,18 @@ _PRETRANSFUSION_REQUIRED_ITEMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("hbcab", ("乙肝核心抗体", "乙型肝炎核心抗体", "乙型肝炎病毒核心抗体", "抗-hbc", "anti-hbc", "hbcab")),
     ("hcv", ("丙肝", "丙型肝炎", "抗-hcv", "hcv", "hcvab")),
     ("hiv", ("艾滋", "人免疫缺陷病毒", "人类免疫缺陷病毒", "hiv", "hivab", "hivagab")),
-    ("syphilis", ("梅毒", "tp", "trust", "rpr")),
+    # 缩写 TP 同时是总蛋白（如“*总蛋白测定”），不能作为梅毒别名。
+    ("syphilis", ("梅毒", "trust", "rpr")),
     ("alt", ("谷丙转氨酶", "丙氨酸氨基转移酶", "alt")),
+)
+
+# 043 常规项目按业务基线：血型及抗体筛查，加八项感染筛查，不含 ALT。
+_PRETRANSFUSION_REGULAR_ITEMS = (
+    ("abo", ("abo血型", "abo血型鉴定")),
+    ("rh", ("rh血型", "rh(d)", "rhd")),
+    # 不用裸“抗体筛查”：会同时命中 HIV 等感染项目的抗体筛查。
+    ("antibody_screen", ("不规则抗体筛查", "意外抗体筛查", "红细胞抗体筛查")),
+    *tuple(item for item in _PRETRANSFUSION_REQUIRED_ITEMS if item[0] != "alt"),
 )
 
 _TRANSFUSION_COURSE_SHELL_PATTERN = re.compile(
@@ -528,7 +538,12 @@ def _typed_decision_from_outcome(
             reason_code,
         )
     elif status == "data_gap":
-        source_gap = "source_unavailable" in outcome.reason_code
+        source_gap = (
+            "source_unavailable" in outcome.reason_code
+            or outcome.reason_code == "pretransfusion_lab_results_absent"
+        )
+        # 来源被截断与来源未接入不同：客户应看到“资料不完整”，而不是“数据源未接入”。
+        source_truncated = outcome.reason_code == "transfusion_source_truncated"
         authoritative_time_gap = (
             outcome.rule_id == "LX0609-07-03-01"
             and outcome.reason_code == "posttransfusion_evaluation_time_unavailable"
@@ -544,13 +559,15 @@ def _typed_decision_from_outcome(
         dimensions = (
             (
                 ApplicabilityState.UNKNOWN
-                if source_gap
+                if source_gap or source_truncated
                 else ApplicabilityState.APPLICABLE
             ),
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
             (
-                "source_unavailable"
+                "source_truncated"
+                if source_truncated
+                else "source_unavailable"
                 if source_gap
                 else "authoritative_time_missing"
                 if authoritative_time_gap
@@ -577,6 +594,10 @@ def _typed_decision_from_outcome(
                 "snapshot_mismatch",
                 "model_transport_error",
                 "model_invalid_output",
+                # 细分原因码原样保留：隐私拦截与程序异常是确定性失败，改写成执行器异常会被误补跑。
+                "model_timeout",
+                "privacy_guard_blocked",
+                "execution_program_error",
             }
             else "executor_exception"
         )
@@ -663,11 +684,10 @@ def _typed_documents_from_evidence_session(
             return None, "technical_error", "snapshot_mismatch"
         if observation.query_state.value == "error":
             return None, "technical_error", "source_query_error"
-        if (
-            observation.query_state.value == "unavailable"
-            or observation.completeness.value == "truncated"
-        ):
+        if observation.query_state.value == "unavailable":
             return None, "data_gap", "transfusion_source_unavailable"
+        if observation.completeness.value == "truncated":
+            return None, "data_gap", "transfusion_source_truncated"
 
     documents: dict[str, Any] = {}
     try:
@@ -1149,8 +1169,9 @@ def _programmatic_042_status(
 
 
 def _lab_item_key(row: Mapping[str, Any]) -> str:
+    # 来源合同同时认可 item_name 与 lab_item_name 两种项目名字段。
     return " ".join(_clean(row.get(key)) for key in (
-        "item_name", "item_code", "item_abbreviation", "content",
+        "item_name", "lab_item_name", "item_code", "item_abbreviation", "content",
     )).lower()
 
 
@@ -1164,11 +1185,15 @@ def _lab_item_alias_matches(key: str, alias: str) -> bool:
     return normalized in key
 
 
-def resolve_pretransfusion_required_item(row: Mapping[str, Any]) -> str | None:
-    """返回输血前九项中该检验行命中的受控项目；其余行不参与九项判定。"""
+def resolve_pretransfusion_required_item(
+    row: Mapping[str, Any],
+    *,
+    required_items: tuple[tuple[str, tuple[str, ...]], ...] = _PRETRANSFUSION_REQUIRED_ITEMS,
+) -> str | None:
+    """返回指定输血前项目集合中该检验行命中的唯一受控项目。"""
 
     key = _lab_item_key(row)
-    matched = {item for item, aliases in _PRETRANSFUSION_REQUIRED_ITEMS
+    matched = {item for item, aliases in required_items
                if any(_lab_item_alias_matches(key, alias) for alias in aliases)}
     return next(iter(matched)) if len(matched) == 1 else None
 
@@ -1195,6 +1220,7 @@ def evaluate_pretransfusion_nine_items(
     documents: Mapping[str, Any],
     *,
     require_current_stay: bool = False,
+    required_items: tuple[tuple[str, tuple[str, ...]], ...] = _PRETRANSFUSION_REQUIRED_ITEMS,
 ) -> tuple[str, str, Mapping[str, Any] | None]:
     # 九项检查本身就可能超过模型上下文使用的 8 行上限；确定性核对必须消费
     # 已进入同一 Evidence Session 的完整有界材料，不能把第九项误判为缺失。
@@ -1225,6 +1251,9 @@ def evaluate_pretransfusion_nine_items(
     ):
         return "data_gap", "transfusion_time_unavailable", None
 
+    if state == "empty" or not rows:
+        return "data_gap", "pretransfusion_lab_results_absent", None
+
     admission_time: datetime | None = None
     if require_current_stay:
         admission_times = {
@@ -1237,10 +1266,10 @@ def evaluate_pretransfusion_nine_items(
         admission_time = next(iter(admission_times))
 
     matched: dict[str, list[Mapping[str, Any]]] = {
-        item: [] for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS
+        item: [] for item, _ in required_items
     }
     for row in rows:
-        if (item := resolve_pretransfusion_required_item(row)) is not None:
+        if (item := resolve_pretransfusion_required_item(row, required_items=required_items)) is not None:
             matched[item].append(row)
     event_checks: list[dict[str, Any]] = []
     for transfusion_time in event_times:
@@ -1293,7 +1322,7 @@ def evaluate_pretransfusion_nine_items(
 
     base_facts: dict[str, Any] = {
         "performed_transfusion_confirmed": True,
-        "required_items": [item for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS],
+        "required_items": [item for item, _ in required_items],
         "transfusion_event_count": len(event_times),
         "checked_transfusion_times": [
             value.isoformat(sep=" ") for value in event_times
@@ -1395,11 +1424,11 @@ def evaluate_pretransfusion_nine_items(
     base_facts.update(
         {
             "verification_kind": "pretransfusion_items_complete",
-            "checked_items": [item for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS],
+            "checked_items": [item for item, _ in required_items],
             "latest_test_time": latest.isoformat(sep=" "),
             "transfusion_time": event_times[-1].isoformat(sep=" "),
-            "abo_present": abo_present,
-            "rh_present": rh_present,
+            "abo_present": bool(matched.get("abo")) if "abo" in matched else abo_present,
+            "rh_present": bool(matched.get("rh")) if "rh" in matched else rh_present,
             "antibody_screen_present": antibody_present,
         }
     )
@@ -2869,7 +2898,9 @@ async def _performed_source_state(
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
     include_course_sources: bool = False,
 ) -> tuple[str, str]:
-    """确认本次就诊是否实际输血，返回 (状态, 技术错误原因)。
+    """确认本次就诊是否实际输血，返回 (状态, 原因)。
+
+    原因只在技术错误或来源截断导致的资料不足时填写，其余为空串。
 
     结构化实际输注时间可直接证明实施；否则专用输血记录是否记载实际输注
     与 045/046 共用同一语义分类结果，不按正文长度或关键词推断。计划、拒绝、
@@ -2878,6 +2909,7 @@ async def _performed_source_state(
 
     rows_by_source: dict[str, list[Mapping[str, Any]]] = {}
     failed = False
+    truncated = False
 
     def available_without_query(source_key: str) -> bool:
         return evidence_materials is not None or (
@@ -2885,7 +2917,7 @@ async def _performed_source_state(
         )
 
     def load(source_key: str) -> list[Mapping[str, Any]]:
-        nonlocal failed
+        nonlocal failed, truncated
         if source_key in rows_by_source:
             return rows_by_source[source_key]
         rows: list[Mapping[str, Any]] = []
@@ -2894,6 +2926,8 @@ async def _performed_source_state(
         if evidence_materials is not None:
             try:
                 rows = [dict(row) for row in evidence_materials.rows(source_key)]
+            except EvidenceMaterialTruncated:
+                failed = truncated = True
             except Exception:
                 failed = True
         elif isinstance(documents, Mapping) and isinstance(documents.get(source_key), list):
@@ -2954,7 +2988,7 @@ async def _performed_source_state(
     ):
         return "data_gap", ""
     if failed or any(rows_by_source.get(key) for key in _TRIGGER_SOURCES):
-        return "data_gap", ""
+        return "data_gap", "transfusion_source_truncated" if truncated else ""
     return "absent", ""
 
 
@@ -3379,6 +3413,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                     api_time += order_result.api_time
                 order_result = order_trigger_cache[typed_rule]
             source_state = order_result.state
+            performed_error = ""
             order_identities = order_result.selected_identities
             if source_state == "technical_error":
                 emit_outcome(rule_id, "technical_error", order_result.reason_code or "model_invalid_output", executor_type="llm")
@@ -3427,7 +3462,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                 (
                     ("transfusion_order_absent" if rule_id in _ORDER_TRIGGER_RULES else "transfusion_fact_absent")
                     if source_state == "absent"
-                    else "transfusion_source_unavailable"
+                    else performed_error or "transfusion_source_unavailable"
                 ),
                 executor_type="program",
             )
@@ -3473,6 +3508,10 @@ async def execute_luxian_0609_native_transfusion_rules(
                 completion_tokens += performance.completion_tokens
                 total_tokens += performance.total_tokens
                 api_time += performance.api_time
+                if performance.technical_failure:
+                    # 实施抽取的模型调用失败不能交付为资料不足。
+                    emit_outcome(rule_id, "technical_error", performance.reason_code, executor_type="llm")
+                    continue
                 events = []
                 unresolved = False
                 for row, state, event_time in zip(record_rows, performance.states, performance.event_times):
@@ -3492,9 +3531,15 @@ async def execute_luxian_0609_native_transfusion_rules(
             programmatic = {
                 "LX0609-11-03-01": _programmatic_041_status,
                 "LX0609-11-03-02": _programmatic_042_status,
-                "LX0609-07-01-01": evaluate_pretransfusion_nine_items,
+                "LX0609-07-01-01": lambda docs: evaluate_pretransfusion_nine_items(
+                    docs, required_items=_PRETRANSFUSION_REGULAR_ITEMS,
+                ),
             }[rule_id](documents)
             status, reason_code, display_facts = programmatic
+            if reason_code == "pretransfusion_lab_results_absent":
+                display_facts = _customer_display_facts_for_outcome(
+                    rule_id=rule_id, status=status, reason_code="pretransfusion_item_contract_unavailable",
+                )
             emit_outcome(
                 rule_id,
                 status,

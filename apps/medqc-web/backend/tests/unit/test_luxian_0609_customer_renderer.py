@@ -1423,9 +1423,9 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "LX0609-07-01-01",
             {
                 "failure_kind": "pretransfusion_items_incomplete",
-                "missing_items": ["hiv", "syphilis", "alt"],
+                "missing_items": ["hiv", "syphilis", "antibody_screen"],
             },
-            "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。",
+            "输血前常规检查缺少：艾滋病病毒抗体、梅毒筛查、不规则抗体筛查。",
         ),
         (
             "LX0609-07-01-02",
@@ -2544,7 +2544,7 @@ def test_record_rule_multi_event_not_applicable_copy_is_unchanged(rule_id) -> No
         ),
         (
             "LX0609-07-01-01",
-            "暂无法完整核对输血前九项检查",
+            "暂无法完整核对输血前常规检查",
             "乙肝五项",
         ),
         (

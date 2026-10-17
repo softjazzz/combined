@@ -287,7 +287,7 @@ async def test_tc02_nonperformed_or_unknown_does_not_claim_entire_stay_no_transf
     # 开始时刻晚于记录时间：不是已发生的开始或跨日，不推测。
     ("2026-06-03 14:00:00", "2026-06-03 14:00:00悬浮红细胞2U输注完毕。", "data_gap"),
     ("下午2时", "下午2时悬浮红细胞2U输注完毕。", "data_gap"),
-    ("15:00", "14:00悬浮红细胞2U输注完毕。", "data_gap"),
+    ("15:00", "14:00悬浮红细胞2U输注完毕。", "technical_error"),
     # 开始时刻早于检验报告：输血前检查未完成。
     ("09:30", "09:30开始输注悬浮红细胞2U，11:00输注完毕。", "non_compliant"),
 ])
@@ -306,12 +306,12 @@ async def test_tc02_start_time_quote_is_grounded_and_bounded_by_record_time(quot
     lambda payload: payload["documents"][0].update(extra=1),
     lambda payload: payload["documents"][0].update(state="cancel", start_time_quote="14:00"),
 ], ids=["non_string_quote", "ungrounded_quote", "extra_key", "nonperformed_with_start_time"])
-async def test_tc02_invalid_model_output_is_one_call_gap(corrupt):
+async def test_tc02_invalid_model_output_is_one_call_technical_error(corrupt):
     case = actual_case()
     case["rows"]["bloodtrans_record"][0]["record_content"] = "14:00悬浮红细胞2U输注完毕。"
     client = PerformanceFake("performed", time_quote="14:00", mutation=corrupt)
     execution, _, final, client = await run_case(case, client_override=client)
-    assert final["status"] == "data_gap"
+    assert final["status"] == "technical_error"
     assert execution.llm_call_count == len(client.calls) == 1
 
 
@@ -324,7 +324,8 @@ async def test_tc02_known_mr_with_unknown_records_preserves_nc_but_cannot_publis
     case["rows"]["bloodtrans_record"] = [{"document_id": f"synthetic-unknown-{i}", "record_time": "2026-06-02 16:00:00",
                                            "record_content": "本次输血实施信息尚待核实。"} for i in range(unknown_count)]
     if known_nc:
-        case["rows"]["labtest_item_report"] = []
+        case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
+            "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
     execution, _, final, client = await run_case(case, client_override=PerformanceFake("unknown"))
     assert final["status"] == ("non_compliant" if known_nc else "data_gap")
     assert execution.llm_call_count == len(client.calls) == (0 if unknown_count == 9 else 1)
@@ -354,12 +355,13 @@ async def test_tc02_multiple_dedicated_performed_records_use_one_batch_and_each_
 
 
 @pytest.mark.asyncio
-async def test_tc02_model_exception_is_one_call_gap_not_retry_or_doctor_omission():
+async def test_tc02_model_exception_is_one_call_technical_error_not_doctor_omission():
     execution, _, final, client = await run_case(actual_case(), client_override=PerformanceFake("performed", error=TimeoutError()))
-    assert final["status"] == "data_gap"
-    assert final["reason_code"] == "semantic_extraction_unresolved"
+    assert final["status"] == "technical_error"
+    # 调用异常按统一分类给出细分原因码，超时可补跑。
+    assert final["reason_code"] == "model_timeout"
     assert execution.llm_call_count == len(client.calls) == 1
-    assert "不要据此补写或改写记录" in final["suggestion"]
+    assert "不应要求医务人员据此补写临床记录" in final["suggestion"]
 
 
 @pytest.mark.asyncio
@@ -429,8 +431,8 @@ async def test_tc02_invalid_atomic_outputs_cannot_publish_performed(mutation):
         else:
             payload["documents"] = []
     execution, _, final, client = await run_case(actual_case(), client_override=PerformanceFake("performed", mutation=corrupt))
-    assert final["status"] == "data_gap"
-    assert final["reason_code"] == "semantic_extraction_unresolved"
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
     assert execution.llm_call_count == len(client.calls) == 1
 
 
@@ -480,7 +482,8 @@ async def test_tc02_synthetic_sqlite_new_instance_preserves_status_scope_and_rea
     elif scenario == "known_nc_unknown":
         case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-MR-confirmed", "transfution_datetime": "2026-06-02 14:00:00"}]
         case["rows"]["bloodtrans_record"][0]["record_content"] = "本次实施事实尚待核实。"
-        case["rows"]["labtest_item_report"] = []
+        case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
+            "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
         case["state"] = "unknown"
     execution, _, final, client = await run_case(case)
     assert final["status"] == {"actual_c": "compliant", "cancel_gap": "data_gap", "known_nc_unknown": "non_compliant"}[scenario]
@@ -541,7 +544,8 @@ async def test_tc02_store_rejects_reserved_count_status_or_type_before_persistin
 
     case = actual_case()
     case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-actual-MR", "transfution_datetime": "2026-06-02 14:00:00"}]
-    case["rows"]["labtest_item_report"] = []
+    case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
+            "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
     case["state"] = "unknown"
     _, _, final, _ = await run_case(case)
     assert final["status"] == "non_compliant"
@@ -704,8 +708,9 @@ async def test_tc02_formal_privacy_wrapper_known_residue_still_fails_closed():
         delegate, identity_values=("synthetic-private-token",)))
     assert delegate.calls == []
     assert execution.llm_call_count == 1  # 一次逻辑尝试，privacy边界拒绝，delegate外发0。
-    assert final["status"] == "data_gap"
-    assert final["reason_code"] == "semantic_extraction_unresolved"
+    assert final["status"] == "technical_error"
+    # 隐私拦截是确定性失败，单独记原因码，不进入自动补跑。
+    assert final["reason_code"] == "privacy_guard_blocked"
 
 
 @pytest.mark.asyncio
@@ -749,7 +754,8 @@ async def test_tc02_frozen_marker_text_remains_body_and_cross_document_atom_reje
         assert marker in sent[0]["body"]
     if cross_document:
         assert result.states == ("unknown", "unknown")
-        assert result.reason_code == "semantic_extraction_unresolved"
+        assert result.reason_code == "model_invalid_output"
+        assert result.technical_failure
     else:
         assert result.states == ("performed", "performed")
         assert [item["quote"] for item in result.assertions] == MARKER_QUOTES

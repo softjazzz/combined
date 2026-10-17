@@ -316,6 +316,10 @@ class _Client:
                         for ref in expected_refs
                     ],
                 }
+        if isinstance(output, dict) and "chief_signal_kind" in output:
+            complaint = re.search(r"\[主诉原文\] ([^\n]*)", prompt)
+            output.setdefault("chief_complaint_signals", [] if output["chief_signal_kind"] == "unknown"
+                              else [complaint.group(1)[:20]] if complaint else [])
         content = (
             output
             if isinstance(output, str)
@@ -7186,7 +7190,7 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
 
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "data_gap",
+        "technical_error",
     ]
     assert result.llm_call_count == 1
     assert client.calls[-1] == {
@@ -7199,6 +7203,7 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
 def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     valid = {
         "chief_signal_kind": "localized_symptom_or_sign",
+        "chief_complaint_signals": ["胸痛"],
         "anatomic_relation": "supports",
         "laterality_relation": "not_applicable",
         "symptom_relation": "supports",
@@ -7208,7 +7213,7 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     }
 
     invalid_enum = {"content": json.dumps({**valid, "symptom_relation": "maybe"})}
-    assert rule_018_contract._parse_lx018_atomic_facts(invalid_enum) is None
+    assert rule_018_contract._parse_lx018_atomic_facts(invalid_enum, chief_complaint="胸痛1天") is None
 
     legacy_total_state = {
         "content": json.dumps({
@@ -7216,12 +7221,12 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
             "diagnostic_reason_dimensions": ["symptom_pattern"],
         })
     }
-    assert rule_018_contract._parse_lx018_atomic_facts(legacy_total_state) is None
+    assert rule_018_contract._parse_lx018_atomic_facts(legacy_total_state, chief_complaint="胸痛1天") is None
 
     conflict_response = {
         "content": json.dumps({**valid, "anatomic_relation": "conflicts"})
     }
-    conflict_facts = rule_018_contract._parse_lx018_atomic_facts(conflict_response)
+    conflict_facts = rule_018_contract._parse_lx018_atomic_facts(conflict_response, chief_complaint="胸痛1天")
     assert conflict_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(conflict_facts)[:2] == (
         "mismatch",
@@ -7231,7 +7236,7 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     unknown_response = {
         "content": json.dumps({**valid, "disease_direction_relation": "unknown"})
     }
-    unknown_facts = rule_018_contract._parse_lx018_atomic_facts(unknown_response)
+    unknown_facts = rule_018_contract._parse_lx018_atomic_facts(unknown_response, chief_complaint="胸痛1天")
     assert unknown_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(unknown_facts)[:2] == (
         "supported",
@@ -7249,7 +7254,7 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
         )
     }
     relevant_unknown_facts = rule_018_contract._parse_lx018_atomic_facts(
-        relevant_unknown_response
+        relevant_unknown_response, chief_complaint="胸痛1天"
     )
     assert relevant_unknown_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(
@@ -7351,8 +7356,8 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "source_readiness_unproven"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == criterion_reason
     assert result.results == ()
     assert result.llm_call_count == 1
     assert result.total_tokens == 45 if isinstance(model_output, str) else result.total_tokens == 0
