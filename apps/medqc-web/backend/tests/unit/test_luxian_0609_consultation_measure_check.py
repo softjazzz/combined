@@ -35,7 +35,7 @@ def test_specific_order_proves_execution_even_when_course_only_says_follow_advic
         source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
 
 
-def test_orders_before_documentation_are_candidates_but_earlier_courses_are_not():
+def test_orders_and_courses_before_consultation_are_not_execution_candidates():
     completed, _, _, _ = _setup()
     completed = (replace(completed[0], opinion_time=episode._ObservedTime(datetime(2026, 7, 20, 15, 59), True)),)
     candidates = tuple(episode._CandidateDocument(
@@ -48,8 +48,7 @@ def test_orders_before_documentation_are_candidates_but_earlier_courses_are_not(
             ("inpat_nondrug_order-4", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 59), "中药贴敷"),
         ))
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
-    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset({
-        "inpat_nondrug_order-1", "inpat_nondrug_order-2", "inpat_nondrug_order-3", "inpat_nondrug_order-4"})
+    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset()
 
 
 async def _check_clinical_decision(text, candidate_text, measures, generic=()):
@@ -200,8 +199,8 @@ async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution(
     aliases = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [{
         "recommendation_ref": recommendation.recommendation_ref, "measure": "关节松动术",
-        "evidence_ref": aliases[candidates[0].ref], "quote": "动态心电图检查",
-        "executed_action": "动态心电图检查", "action_relation": "unrelated",
+        "evidence_ref": aliases.get(candidates[0].ref, ""), "quote": "动态心电图检查" if aliases else "",
+        "executed_action": "动态心电图检查" if aliases else "", "action_relation": "unrelated" if aliases else "not_found",
     }]}
     result = await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed,
