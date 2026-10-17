@@ -1798,6 +1798,7 @@ _TRANSFUSION_FIELD_LABELS = {
     "dose": "输注量",
     "process_observation": "输血过程观察",
     "reaction_and_handling": "输血反应及处理",
+    "clinical_effect": "输注效果",
     "effect": "输血效果",
     "components": "血液成分",
     "doses": "输注量",
@@ -4002,6 +4003,7 @@ def customer_finding_from_controlled_facts(
                     "dose": "缺少输注量",
                     "process_observation": "缺少输血过程观察",
                     "reaction_and_handling": "缺少输血反应及处理",
+                    "clinical_effect": "缺少输注效果",
                 }
                 details = [
                     f"{raw_counts[field]} 份{field_phrases[field]}"

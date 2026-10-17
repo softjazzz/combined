@@ -8102,6 +8102,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
             "mr_bloodtrans",
             "bloodtrans_record",
             "labtest_item_report",
+            "admission_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
         }
     }
     assert set(execution.decisions[0].fact_refs) == (
@@ -8215,6 +8216,7 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
             "mr_bloodtrans",
             "bloodtrans_record",
             "labtest_item_report",
+            "admission_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
         }
     }
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
@@ -9660,8 +9662,8 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     )
 
     reduced_decision = reduced[0]
-    assert reduced_decision.final_state is CustomerFinalState.DATA_GAP
-    assert reduced_decision.reason_code == "source_empty"
+    assert reduced_decision.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced_decision.reason_code == "required_document_missing"
     assert dict(result.customer_display_facts)["LX0609-08-02-01"] == {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
@@ -9675,7 +9677,7 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
         result=result,
         reduced=reduced,
     )
-    assert canonical["status"] == "data_gap"
+    assert canonical["status"] == "non_compliant"
     assert "customer_evidence" not in canonical
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert result.llm_call_count == result.total_tokens == 0

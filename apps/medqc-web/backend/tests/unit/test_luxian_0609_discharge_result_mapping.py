@@ -113,7 +113,7 @@ def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
                 "checked_dates": ["2026-07-02", "2026-07-03"],
                 "course_present": False,
             },
-            "data_gap",
+            "non_compliant",
         ),
         (
             "LX0609-08-02-02",

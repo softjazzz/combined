@@ -82,6 +82,7 @@ from .extended_document.antimicrobial_action_extraction import (
 )
 from .extended_document.antimicrobial_effect_extraction import extract_antimicrobial_effects
 from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
+from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
@@ -274,11 +275,11 @@ _SENIOR_PHYSICIAN_CONSULTED_PATTERN = re.compile(
     r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
 )
 _AUTOMATIC_DISCHARGE_SIGNED_PATTERN = re.compile(
-    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)[》\"”]?"
+    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书|告知书)[》\"”]?"
 )
 _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN = re.compile(
     r"(?:未|未予|尚未|拒绝|拒不).{0,8}"
-    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)"
+    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书|告知书)"
 )
 _BLOCKING_DISCHARGE_HORIZON_ERRORS = frozenset(
     {"authoritative_time_missing", "authoritative_time_conflict"}
@@ -584,8 +585,12 @@ def _070_document_refs(
     """只返回 070 判定实际消费的、同一快照验证过的逐行引用。"""
 
     try:
-        bloodtrans_record_rows = materials.document_rows(
-            "bloodtrans_record", snapshot=snapshot
+        bloodtrans_record_rows = tuple(
+            item for key in ("bloodtrans_record", "daily_course_record", "senior_course_record")
+            for item in materials.document_rows(key, snapshot=snapshot)
+            if key == "bloodtrans_record" or (
+                consumed_bloodtrans_rows is not None and item[1] in consumed_bloodtrans_rows
+            )
         )
         if not include_pretransfusion_materials:
             # 没有已确认实施事件时未核对九项，只引用实际用于抽取的专用资料。
@@ -593,8 +598,9 @@ def _070_document_refs(
                 reference for reference, row in bloodtrans_record_rows
                 if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows
             ))
-        registration_rows = materials.document_rows(
-            "inpat_registration", snapshot=snapshot
+        registration_rows = (
+            *materials.document_rows("inpat_registration", snapshot=snapshot),
+            *materials.document_rows("admission_record", snapshot=snapshot),
         )
         transfusion_rows = materials.document_rows(
             "mr_bloodtrans", snapshot=snapshot
@@ -2343,6 +2349,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     diagnosis_equivalence_extraction = None
     invasive_extractions: list[Any] = []
     transfusion_performance_extraction = None
+    transfusion_course_extraction = None
     postoperative_time_estimated_rules: set[str] = set()
     selected = tuple(
         rule_id
@@ -3612,7 +3619,24 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-07-01-03":
             source_keys = (
-                "inpat_registration", "mr_bloodtrans", "bloodtrans_record", "labtest_item_report",
+                "inpat_registration", "admission_record", "mr_bloodtrans", "bloodtrans_record", "labtest_item_report",
+                "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
+            )
+            performance_rows = tuple(bloodtrans_record_rows)
+            dedicated_performance_source = bool(performance_rows)
+            if not performance_rows:
+                performance_rows = select_transfusion_course_candidates((*daily_rows, *senior_rows))
+                if performance_rows:
+                    transfusion_course_extraction = await classify_transfusion_course_records(performance_rows, llm_client)
+                    if transfusion_course_extraction.state in {"absent", "present"}:
+                        valid_ids = set(transfusion_course_extraction.valid_document_ids)
+                        performance_rows = tuple(row for row in performance_rows
+                                                 if str(row.get("document_id", row.get("id"))) in valid_ids)
+            pending_order = any(
+                re.search(r"输血|输(?:注|入)?(?:红细胞|悬浮红|去白|血浆|血小板|冷沉淀|全血)",
+                          _clean(row.get("order_name") or row.get("generic_name")))
+                for row in (*nondrug_order_rows, *drug_order_rows)
+                if not any(word in _clean(row.get("order_status")) for word in ("取消", "作废", "撤销", "未执行"))
             )
             transfusion_source_error = mr_bloodtrans_error or bloodtrans_record_error
             actual_transfusion_rows = tuple(mr_bloodtrans_rows)
@@ -3622,26 +3646,33 @@ async def execute_luxian_0609_native_extended_document_rules(
             performed_time_missing = False
             if transfusion_source_error:
                 final_state, reason_code = "data_gap", transfusion_source_error
-            elif not mr_bloodtrans_rows and not bloodtrans_record_rows:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif transfusion_course_extraction is not None and transfusion_course_extraction.state in {"data_gap", "technical_error"}:
+                final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+            elif not mr_bloodtrans_rows and not performance_rows:
+                final_state, reason_code = (
+                    ("data_gap", "positive_assertion_not_explicit") if pending_order
+                    else ("not_applicable", "trigger_absent_complete")
+                )
             else:
                 transfusion_performance_extraction = await extract_transfusion_performance(
-                    bloodtrans_record_rows, llm_client,
+                    [{**row, "record_time": _row_time(row)} for row in performance_rows], llm_client,
                 )
                 extraction_reason = transfusion_performance_extraction.reason_code
                 # 全部专用行均用于事实抽取或范围门控；否定资料不计入实施事件。
-                consumed_bloodtrans_rows = list(bloodtrans_record_rows)
+                consumed_bloodtrans_rows = list(performance_rows)
                 confirmed_records = []
                 for row, state, event_time in zip(
-                    bloodtrans_record_rows,
+                    performance_rows,
                     transfusion_performance_extraction.states,
                     transfusion_performance_extraction.event_times,
                 ):
-                    if state == "performed" and _parse_datetime(row.get("record_time")) is not None:
+                    if state == "performed" and (
+                        event_time is not None or (dedicated_performance_source and _row_time(row) is not None)
+                    ):
                         # 正文写明实际开始时刻时按开始时刻核对“输血前”；否则沿用记录时间合同。
                         confirmed_records.append(
                             {**row, "transfution_datetime": event_time.isoformat(sep=" ")}
-                            if event_time is not None else row
+                            if event_time is not None else {**row, "record_time": _row_time(row)}
                         )
                     elif state in {"performed", "unknown"}:
                         unconfirmed_record_count += 1
@@ -3660,7 +3691,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                 else:
                     final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
                         {
-                            "inpat_registration": list(registration_rows),
+                            "inpat_registration": list(registration_rows) if any(
+                                resolve_pretransfusion_admission_time(row) is not None for row in registration_rows
+                            ) else list(admission_rows),
                             "mr_bloodtrans": list(actual_transfusion_rows),
                             "labtest_item_report": list(lab_item_rows),
                             "blood_application": [],
@@ -4914,6 +4947,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 consumed_source_keys = ("inpat_registration",)
             elif outcome.final_state == "not_applicable":
                 consumed_source_keys = ("inpat_registration", "discharge_record")
+            elif outcome.final_state == "non_compliant":
+                consumed_source_keys = ("inpat_registration", "discharge_record", "daily_course_record", "senior_course_record")
             else:
                 consumed_source_keys = ()
             decisions.append(
@@ -5864,6 +5899,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5882,6 +5918,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5900,6 +5937,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5918,6 +5956,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5936,6 +5975,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,

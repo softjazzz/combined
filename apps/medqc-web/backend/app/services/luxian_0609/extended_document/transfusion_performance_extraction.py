@@ -61,8 +61,6 @@ def _grounded(quote: Any, doc: Mapping[str, Any]) -> str:
 def _start_time(quote: str, record_time: datetime | None) -> datetime | None:
     """解析实际开始时刻；不能可靠确定日期时返回 None（由调用方判未知）。"""
 
-    if record_time is None:
-        return None
     candidate = _parse_datetime(quote)
     if candidate is None:
         matches = list(_CLOCK_PATTERN.finditer(quote))
@@ -74,7 +72,11 @@ def _start_time(quote: str, record_time: datetime | None) -> datetime | None:
             return None
         try:
             clock = time(int(match["hour"]), int(match["minute"]), int(match["second"] or 0))
-            day = record_time.date()
+            if record_time is None and (not dates or not dates[0]["year"]):
+                return None
+            day = record_time.date() if record_time is not None else datetime(
+                int(dates[0]["year"]), int(dates[0]["month"]), int(dates[0]["day"])
+            ).date()
             if dates:
                 # 原文写了日期（可省略年份，按记录年份补全）时以原文日期为准。
                 day = day.replace(year=int(dates[0]["year"] or day.year), month=int(dates[0]["month"]),
@@ -83,7 +85,7 @@ def _start_time(quote: str, record_time: datetime | None) -> datetime | None:
             return None
         candidate = datetime.combine(day, clock)
     # 记录不早于实际开始；晚于记录时间说明可能跨日或并非已发生的开始，不推测。
-    return candidate if candidate <= record_time else None
+    return candidate if record_time is None or candidate <= record_time else None
 
 
 def _parsed(
@@ -142,6 +144,7 @@ def _prompt(documents: Sequence[Mapping[str, Any]]) -> str:
         "quote为能体现该state的连续原文，逐字复制；unknown时quote为null。"
         "start_time_quote仅在performed时填写：正文中本次实际开始输注时刻的连续原文（如“14:20”“2026-06-02 14:20”），"
         "逐字复制、不得改写；一份记录有多次输注时取最早一次开始时刻；结束时刻、检验时刻、计划时刻不是开始时刻；"
+        "正文开始时刻写明年月日时，引用必须保留年月日，不能只截取时分而丢失跨日事实；"
         "正文没有写开始时刻时为null。"
         "只输出严格JSON对象，顶层仅schema_version和documents；documents每项仅document_ref、state、quote、start_time_quote，"
         "全部记录恰各一次。schema_version=" + SCHEMA_VERSION

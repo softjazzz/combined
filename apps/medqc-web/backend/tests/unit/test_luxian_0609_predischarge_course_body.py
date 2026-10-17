@@ -88,9 +88,9 @@ async def test_title_and_author_do_not_replace_missing_body_column():
 
 
 @pytest.mark.asyncio
-async def test_no_rows_keeps_source_empty_contract():
+async def test_complete_sources_without_rows_report_missing_course():
     result = await _run(())
-    assert result["reason_code"] == "source_empty"
+    assert result["reason_code"] == "required_document_missing"
 
 
 @pytest.mark.parametrize("field,value", [("missing_body_count", 0), ("missing_body_count", True), ("checked_dates", ["2026-07-01", "2026-07-03"])])
