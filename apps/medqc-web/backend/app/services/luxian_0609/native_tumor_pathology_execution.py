@@ -2326,12 +2326,16 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         # （`tumor_pathology_result_mapping.py:247`），故可以带。
                         # 该事实仍是**纯展示事实**：不改变状态与原因码，只让客户文案
                         # 说出"恶性性质尚不明确、暂不能确定是否适用"。
+                        # 只有确有可疑诊断行时才携带“恶性性质未决”事实；来源不可用或诊断内容
+                        # 缺失时没有可展示的未决诊断，按普通资料不足交付，避免事实合同失败。
                         display_facts=(
                             {
                                 "verification_kind": "malignant_diagnosis_applicability_uncertain",
                                 "malignancy_state": "unknown",
                                 "uncertain_diagnosis_count": len(malignancy.uncertain_rows),
                             }
+                            if malignancy.uncertain_rows
+                            else None
                         ),
                         fact_refs=typed_document_refs(*(
                             (source_key, (row,)) for source_key, row in malignancy.uncertain_rows

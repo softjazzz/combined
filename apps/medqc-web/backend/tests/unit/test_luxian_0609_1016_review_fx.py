@@ -203,3 +203,61 @@ async def test_malignancy_result_count_check_stays_strict():
     from app.services.luxian_0609.malignancy_fact import MalignancyFactResolver
     resolution = await MalignancyFactResolver(_MalignancyClient(drop_one=True)).resolve(_dup_sources())
     assert (resolution.state, resolution.reason_code) == ("technical_error", "malignancy_llm_invalid")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["diagnosis", "discharge_record_diagnosis"])
+async def test_027_unknown_malignancy_without_uncertain_rows_is_plain_data_gap(source):
+    """诊断内容缺失导致恶性性质未知、且无可疑诊断行时，按普通资料不足交付，不携带未决事实。
+
+    此前仍携带计数为 0 的“恶性性质未决”事实，被事实合同拒绝后改判技术错误（第四轮 C06/C09/C24）。
+    """
+    from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+    from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows, build_luxian_0609_evidence_read_session
+    from app.services.luxian_0609.executor_registry import resolve_legacy_executor_material_source_keys
+
+    rule = "LX0609-08-01-04"
+    rows = [{"document_id": "normal", "diagnosis_name": "合成普通诊断"}, {"document_id": "blank"}]
+
+    def reader(**kwargs):
+        key = kwargs["source_key"]
+        material = rows if key == source else (
+            [{"document_id": "discharge", "treatment_course": "合成出院记录。"}] if key == "discharge_record" else [])
+        return SnapshotSourceRows.create(source_key=key, rows=material, truncated=False, limit_rows=50)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=(rule,), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        created_at="2026-01-09T09:00:00+08:00", row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(("tumor_pathology",), selected_rule_ids=(rule,)),
+    )
+
+    class NoModel:
+        async def generate(self, prompt, **kwargs):
+            raise AssertionError("诊断内容缺失时不调用模型")
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=(rule,), wrapper_rules=[{"rule_id": rule, "custom_prompt": "{medical_text}"}], evidence_payload=None,
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=NoModel(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials, decision_rule_ids=(rule,),
+    )
+    assert dict(result.customer_display_facts).get(rule) is None
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=(rule,),
+                                                         snapshot=session.snapshot, evidence_materials=session.materials)
+    final = finalize_luxian_0609_reduced_customer_result(decision=reduced[0], raw_customer_display_facts=None,
+                                                         evidence_snapshot=session.snapshot, evidence_materials=session.materials)
+    assert final["status"] == "data_gap"
+
+
+@pytest.mark.parametrize("rule_id", ["LX0609-06-01-02", "LX0609-06-03-03"])
+def test_exam_lab_default_facts_cap_source_document_ids_to_public_limit(rule_id):
+    """文书 ID 超过公开事实上限时只保留前 8 个，事实仍能通过合同校验（第四轮 C15 有 24 个）。"""
+    from app.services.luxian_0609.exam_lab_result_mapping import (
+        build_default_display_facts, safe_exam_lab_customer_display_facts)
+
+    ids = [f"doc-{index:02d}" for index in range(24)]
+    facts = build_default_display_facts(rule_id=rule_id, status="non_compliant",
+                                        reason_code="exam_lab_text_fact", source_document_ids=ids)
+    assert facts["source_document_ids"] == ids[:8]
+    assert safe_exam_lab_customer_display_facts(rule_id=rule_id, raw=facts) is not None

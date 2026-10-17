@@ -2033,6 +2033,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 source_document_ids=source_document_ids,
             )
         elif source_document_ids:
+            # 与公开事实合同一致最多 8 个文书 ID；超出时整条事实会被拒绝并改判技术错误。
             display_facts = {
                 **display_facts,
                 "source_document_ids": list(
@@ -2041,7 +2042,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         for raw in source_document_ids
                         if (value := _clean(raw))
                     )
-                ),
+                )[:8],
             }
         if display_facts is not None:
             customer_display_facts.append((rule_id, display_facts))

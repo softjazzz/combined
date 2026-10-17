@@ -838,7 +838,8 @@ def build_default_display_facts(
             )
         )
         if ids:
-            facts["source_document_ids"] = list(ids)
+            # 公开事实合同最多 8 个文书 ID。
+            facts["source_document_ids"] = list(ids)[:8]
         return facts
 
     if rule_id == "LX0609-06-01-02":

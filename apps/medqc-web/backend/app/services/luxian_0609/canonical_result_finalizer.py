@@ -1161,11 +1161,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
     finalized["status"] = "technical_error"
     finalized["result_status"] = "technical_error"
     finalized["is_compliant"] = None
-    finalized["reason_code"] = (
-        original_reason_code
-        if original_status == "technical_error" and original_reason_code
-        else "model_invalid_output"
-    )
+    if original_status == "technical_error" and original_reason_code:
+        finalized["reason_code"] = original_reason_code
+    else:
+        # 执行器展示事实未通过合同校验：既有合同按 model_invalid_output 交付，
+        # 这里补一条诊断日志，避免与真正的模型输出格式错误混淆。
+        logger.warning(
+            "LX0609 展示事实未通过合同校验，改判技术错误: rule_id=%s status=%s reason_code=%s",
+            str(rule_id or "").strip().upper(), original_status, original_reason_code,
+        )
+        finalized["reason_code"] = "model_invalid_output"
     return finalized, True
 
 
