@@ -181,7 +181,7 @@ def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
         ("LX0609-02-01-02", "2026-06-05"),
     ],
 )
-def test_missing_timeliness_document_after_maturity_is_data_gap(
+def test_missing_timeliness_document_after_maturity_is_defect(
     rule_id: str,
     evaluation_as_of_date: str,
 ):
@@ -197,15 +197,8 @@ def test_missing_timeliness_document_after_maturity_is_data_gap(
 
     _, reduced = _reduce_typed_basic(session, (rule_id,))
 
-    if rule_id == "LX0609-02-01-01":
-        assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-        assert reduced[0].reason_code == "source_empty"
-    elif rule_id == "LX0609-02-01-02":
-        assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-        assert reduced[0].reason_code == "required_document_missing"
-    else:
-        assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-        assert reduced[0].reason_code == "required_document_missing"
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
 
 
 @pytest.mark.unit
@@ -735,7 +728,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
 
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.NON_COMPLIANT,
-        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.NON_COMPLIANT,
         CustomerFinalState.NON_COMPLIANT,
     ]
     assert execution.customer_display_facts == (
@@ -754,6 +747,17 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
             },
         ),
         (
+            "LX0609-02-01-01",
+            {
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "attending_course_record",
+                "source_label": "主治医师及以上首次查房记录",
+                "timeliness_state": "missing",
+                "threshold_hours": 48,
+                "anchor_time": "2026-06-01 08:00:00",
+            },
+        ),
+        (
             "LX0609-02-01-02",
             {
                 "failure_kind": "timeliness_requirement_not_met",
@@ -767,7 +771,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
     )
     assert [item.reason_code for item in reduced] == [
         "threshold_exceeded",
-        "source_empty",
+        "required_document_missing",
         "required_document_missing",
     ]
     _assert_selected_document_ref(

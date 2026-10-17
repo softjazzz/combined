@@ -143,3 +143,16 @@ async def test_018_structured_present_illness_reaches_laterality_check():
     _, _, reduced, result = await _run_chain("LX0609-01-01-02", rows, client=client)
     assert history in client.prompt
     assert reduced.final_state.value == result["status"] == "non_compliant"
+
+
+def test_005_complete_empty_round_source_is_missing_document():
+    """判定口径：48 小时内没有主治及以上首次查房记录即为不合规。"""
+    from tests.unit.test_luxian_0609_basic_timeliness_evidence_freeze import _session, _execute_and_aggregate
+
+    rule = "LX0609-02-01-01"
+    session = _session(rule_ids=(rule,), rows_by_source={
+        "inpat_registration": [{"document_id": "registration", "admission_datetime": "2026-06-01 08:00:00"}],
+    })
+    _, reduced, results = _execute_and_aggregate(session, (rule,))
+    assert reduced[0].final_state.value == results[0]["status"] == "non_compliant"
+    assert results[0]["reason_code"] == "required_document_missing"

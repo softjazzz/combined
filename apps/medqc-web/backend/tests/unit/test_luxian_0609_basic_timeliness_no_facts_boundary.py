@@ -42,8 +42,8 @@ OTHER_TIME_RULES = (
      None, ("not_applicable", "evaluation_window_not_mature")),
     ("LX0609-01-02-01", {"inpat_registration": [{"admission_datetime": "2026-07-16 08:00:00"}]},
      None, ("data_gap", "evaluation_window_not_mature")),
-    ("LX0609-02-01-01", {"inpat_registration": [{"admission_datetime": "2026-06-01 08:00:00"}]},
-     None, ("data_gap", "source_empty")),
+    ("LX0609-02-01-01", {"inpat_registration": [{"admission_datetime": "2026-07-16 08:00:00"}]},
+     None, ("data_gap", "evaluation_window_not_mature")),
     *((rule_id, {}, None, ("data_gap", "authoritative_time_missing")) for rule_id in OTHER_TIME_RULES),
 ])
 def test_native_binding_published_sqlite_read_accepts_legal_absent_facts(rule_id, rows, failures, expected):
