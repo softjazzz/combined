@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from collections import Counter
 
+import logging
 import re
+import sys
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
@@ -119,6 +121,7 @@ from .surgery_applicability import (
 )
 from .surgery_procedure_catalog import catalog_surgery_state
 
+logger = logging.getLogger(__name__)
 
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
@@ -779,6 +782,12 @@ def _decision(
     exact_document_refs: bool = False,
     criterion_results: Sequence[Any] = (),
 ) -> RuleDecision:
+    if final_state == "technical_error":
+        # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
+        logger.warning(
+            "LX0609 扩展文书族技术错误: rule_id=%s reason_code=%s call_line=%s",
+            rule_id, reason_code, sys._getframe(1).f_lineno,
+        )
     dimensions = {
         "compliant": (
             ApplicabilityState.APPLICABLE,

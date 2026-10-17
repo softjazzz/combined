@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Literal
@@ -12,10 +13,12 @@ from typing import Any, Literal
 from .structured_output import structured_output_kwargs
 from .llm_prompt_privacy import (
     classify_luxian_0609_llm_call_failure,
+    describe_luxian_0609_llm_parse_failure,
     redact_luxian_0609_patient_privacy,
 )
 from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, _json_response_object, _usage
 
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609-transfusion-course-presence-v1"
 
@@ -184,7 +187,11 @@ async def classify_transfusion_course_records(
             total_tokens += usage[2]
             api_time += usage[3] or perf_counter() - started
             resolved = _records(response, batch)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+            logger.warning(
+                "LX0609 病程输血记录识别输出无效: batch_rows=%s %s",
+                len(batch), describe_luxian_0609_llm_parse_failure(error, response),
+            )
             return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
         for index, kind in resolved:
             if kind == "record":

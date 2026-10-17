@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import json
+import logging
 import math
 import re
 from time import perf_counter
@@ -13,10 +14,14 @@ from typing import Any, Literal, Mapping, Protocol, Sequence
 from zoneinfo import ZoneInfo
 
 from ...llm_observability import safe_status_for_exception
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    describe_luxian_0609_llm_parse_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from ..structured_output import structured_output_kwargs
 from .shared import _clean
 
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609_antimicrobial_actions_v1"
 MAX_CANDIDATES = 30
@@ -704,7 +709,11 @@ async def extract_antimicrobial_actions(
         if not isinstance(message, Mapping) or not isinstance(message.get("content"), str):
             raise ValueError("invalid content")
         items = _parse(message["content"], safe_candidates)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+        logger.warning(
+            "LX0609 抗菌药动作抽取输出无效: candidate_count=%s %s",
+            len(safe_candidates), describe_luxian_0609_llm_parse_failure(error, response),
+        )
         return AntimicrobialActionExtraction(
             "technical_error",
             "model_invalid_output",

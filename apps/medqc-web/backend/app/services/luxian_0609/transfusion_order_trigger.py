@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
+import logging
 import math
 import re
 from time import perf_counter
@@ -13,9 +14,12 @@ from typing import Any, Literal
 
 from .llm_prompt_privacy import (
     classify_luxian_0609_llm_call_failure,
+    describe_luxian_0609_llm_parse_failure,
     redact_luxian_0609_patient_privacy,
 )
 from .structured_output import structured_output_kwargs
+
+logger = logging.getLogger(__name__)
 
 
 MAX_BATCH_ROWS = 64
@@ -242,6 +246,10 @@ async def classify_transfusion_orders(
                 resolved = resolved_rows + _classifications(response, pending)
                 break
             except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+                logger.warning(
+                    "LX0609 输血医嘱识别输出无效: attempt=%s pending_rows=%s %s",
+                    attempt + 1, len(pending), describe_luxian_0609_llm_parse_failure(error, response),
+                )
                 if attempt + 1 == PROTOCOL_ATTEMPTS:
                     return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
                 if isinstance(error, _IncompleteCoverage):

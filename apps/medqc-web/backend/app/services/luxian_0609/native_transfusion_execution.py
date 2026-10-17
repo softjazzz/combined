@@ -6,7 +6,9 @@ import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
+import logging
 import re
+import sys
 import unicodedata
 from typing import Any, Awaitable, Callable, Mapping, Protocol, Sequence
 
@@ -49,6 +51,7 @@ from .source_registry import (
     resolve_luxian_0609_rule_sources,
 )
 
+logger = logging.getLogger(__name__)
 
 TRANSFUSION_RULE_IDS = (
     "LX0609-11-03-01",
@@ -3042,6 +3045,12 @@ async def execute_luxian_0609_native_transfusion_rules(
         display_facts: Mapping[str, Any] | None = None,
         selected_source_document_refs: Sequence[tuple[str, str]] = (),
     ) -> None:
+        if status == "technical_error":
+            # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
+            logger.warning(
+                "LX0609 输血族技术错误: rule_id=%s reason_code=%s call_line=%s",
+                rule_id, reason_code, sys._getframe(1).f_lineno,
+            )
         outcome = _TransfusionRuleOutcome(
             rule_id=rule_id,
             status=status,

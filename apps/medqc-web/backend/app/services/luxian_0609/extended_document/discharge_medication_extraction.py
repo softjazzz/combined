@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import logging
 import math
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol
 
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from ...llm_observability import safe_status_for_exception
 
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609_discharge_medications_v2"
 MAX_TEXT_CHARS = 8000
@@ -181,7 +183,8 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
         if not isinstance(content, str):
             raise ValueError("invalid extraction content")
         state, medications, field_assertions = _parse(content, safe_text)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+        logger.warning("LX0609 出院带药抽取输出无效: %s", describe_luxian_0609_llm_parse_failure(error, response))
         return Extraction("technical_error", "model_invalid_output", llm_call_count=1, prompt_tokens=usage_values[0], completion_tokens=usage_values[1], total_tokens=usage_values[2], api_time=api_time)
     return Extraction(
         state, {"ready": "discharge_medications_extracted", "absent": "discharge_medications_absent_explicit", "unknown": "semantic_low_confidence"}[state],

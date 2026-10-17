@@ -328,3 +328,29 @@ def test_dated_senior_discharge_plan_counts_as_confirmed_approval(text, expected
     """写明日期的出院安排视为同意出院；未写日期、考虑或带未满足前提的仍不算（院方 2026-10-17）。"""
     from app.services.luxian_0609.native_extended_document_execution import _has_confirmed_discharge_approval
     assert _has_confirmed_discharge_approval(text) is expected
+
+
+class _LeakyBadOutputClient:
+    """返回不可解析的输出，正文里带合成敏感串，用来确认诊断日志不记模型原文。"""
+
+    async def generate(self, prompt, **kwargs):
+        return {
+            "choices": [{"message": {"content": "患者张三 13800138000 不是JSON"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+
+@pytest.mark.asyncio
+async def test_discharge_medication_parse_failure_log_is_content_free(caplog):
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import (
+        extract_discharge_medications,
+    )
+
+    caplog.set_level("WARNING")
+    result = await extract_discharge_medications("出院带药：阿司匹林 100mg 口服 每日一次", _LeakyBadOutputClient())
+
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+    messages = [record.getMessage() for record in caplog.records if "出院带药抽取输出无效" in record.getMessage()]
+    assert len(messages) == 1
+    assert "finish_reason=stop" in messages[0] and "completion_tokens=5" in messages[0]
+    assert "张三" not in messages[0] and "13800138000" not in messages[0] and "阿司匹林" not in messages[0]

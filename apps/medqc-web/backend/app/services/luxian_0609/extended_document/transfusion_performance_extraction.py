@@ -11,15 +11,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, time
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure, redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    classify_luxian_0609_llm_call_failure,
+    describe_luxian_0609_llm_parse_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from ..native_preop_content_execution import _usage
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object
 from .shared import _parse_datetime
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609-transfusion-performance-v2"
 MAX_DOCUMENTS = 8
@@ -197,7 +204,11 @@ async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm
     try:
         usage = _usage(response)
         states, event_times, assertions = _parsed(response, documents)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+        logger.warning(
+            "LX0609 输血实施抽取输出无效: document_count=%s %s",
+            len(documents), describe_luxian_0609_llm_parse_failure(error, response),
+        )
         return PerformanceExtraction(unknown, "model_invalid_output", llm_call_count=1,
             prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
             api_time=perf_counter() - started, event_times=no_times)
