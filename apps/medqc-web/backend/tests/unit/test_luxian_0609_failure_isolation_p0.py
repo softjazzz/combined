@@ -196,8 +196,11 @@ def test_automatic_retry_selects_only_retryable_failures():
          "reason_code": "privacy_guard_blocked"},
         {"rule_id": "LX0609-01-02-02", **CASE, "error_phase": "result_status",
          "reason_code": "execution_program_error"},
-        {"rule_id": "LX0609-08-01-04", **CASE, "error_phase": "result_status",
+        # 格式错误在温度 0 下重跑无效，也不补跑；只有超时等偶发错误进入补跑范围。
+        {"rule_id": "LX0609-08-01-02", **CASE, "error_phase": "result_status",
          "reason_code": "model_invalid_output"},
+        {"rule_id": "LX0609-08-01-04", **CASE, "error_phase": "result_status",
+         "reason_code": "model_timeout"},
     ]
     summary = {"execution_status": "partial_failed"}
 
@@ -209,7 +212,7 @@ def test_automatic_retry_selects_only_retryable_failures():
     )
     assert scope["rule_ids"] == ["LX0609-08-01-04"]
 
-    deterministic_only = failures[:3]
+    deterministic_only = failures[:4]
     assert build_failed_rule_auto_retry_plan(
         summary=summary, failures=deterministic_only,
     )["should_retry"] is False

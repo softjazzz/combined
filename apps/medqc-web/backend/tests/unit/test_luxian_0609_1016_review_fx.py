@@ -118,3 +118,15 @@ async def test_043_empty_lab_source_holds_customer_contract():
                                              "labtest_item_report": []}, {}))["final"]
     assert (final["status"], final["reason_code"]) == ("data_gap", "source_unavailable")
     assert luxian_0609_customer_result_contract_holds(final)
+
+
+@pytest.mark.parametrize("reason", ["model_invalid_output", "model_parse_error"])
+def test_output_format_failure_is_not_auto_retried(reason):
+    """模型输出格式错误在温度 0 下重跑无效，不自动补跑。"""
+    assert not _automatic_retryable_failure({"rule_id": "LX0609-08-01-04", "reason_code": reason})
+
+
+@pytest.mark.parametrize("reason", ["model_timeout", "model_transport_error", "model_rate_limited", "model_upstream_error"])
+def test_transient_model_failure_is_still_auto_retried(reason):
+    """超时、网络、限流等偶发错误仍自动补跑。"""
+    assert _automatic_retryable_failure({"rule_id": "LX0609-08-01-04", "reason_code": reason})

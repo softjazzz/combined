@@ -26,12 +26,18 @@ _DETERMINISTIC_FAILURE_REASON_CODES = frozenset({
     "family_result_order_mismatch",
     "family_result_scope_mismatch",
 })
+# 模型输出不合格式：结构化抽取按温度 0 调用，同样输入重跑得到同样输出（第四轮 3 次补跑 19 条
+# 未恢复）。不自动补跑；超时、网络、限流等偶发错误仍自动补跑，人工定向重跑不受影响。
+_OUTPUT_FORMAT_FAILURE_REASON_CODES = frozenset({
+    "model_invalid_output",
+    "model_parse_error",
+})
 
 
 def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
     rule = str(failure.get("rule_id") or failure.get("rule_code") or "").strip().upper()
     reason = str(failure.get("reason_code") or "")
-    if reason in _DETERMINISTIC_FAILURE_REASON_CODES:
+    if reason in _DETERMINISTIC_FAILURE_REASON_CODES or reason in _OUTPUT_FORMAT_FAILURE_REASON_CODES:
         return False
     if rule == "LX0609-05-01-03" and reason in {
         "model_invalid_output", "model_parse_error", "model_transport_error", "model_timeout",
