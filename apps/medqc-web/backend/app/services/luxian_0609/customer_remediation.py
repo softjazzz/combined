@@ -167,6 +167,7 @@ _MISSING_FIELD_LABELS = {
     "start_and_end_time": "输血开始及结束时间",
     "process_observation": "输血过程观察",
     "reaction_and_handling": "输血反应及处理",
+    "clinical_effect": "输注效果",
     "effect": "输血效果",
 }
 

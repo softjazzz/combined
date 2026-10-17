@@ -798,9 +798,11 @@ def discharge_customer_fact_status_is_valid(
             else "non_compliant"
         )
     if normalized == "LX0609-08-02-01":
-        return normalized_status == (
-            "compliant" if safe_facts.get("course_present") is True else "data_gap"
-        )
+        if safe_facts.get("verification_kind") == "predischarge_course_presence_check":
+            return normalized_status == (
+                "compliant" if safe_facts.get("course_present") is True else "non_compliant"
+            )
+        return normalized_status == "data_gap"
     if normalized == "LX0609-08-02-02":
         return normalized_status == (
             "compliant"

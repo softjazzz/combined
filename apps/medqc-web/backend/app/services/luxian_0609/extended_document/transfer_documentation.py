@@ -242,7 +242,7 @@ def evaluate_transfer_documentation(
     evaluation_horizon_datetime: datetime | None = None,
     evaluation_horizon_error: str | None = None,
 ) -> TransferDocumentationOutcome:
-    """按唯一转科医嘱关联转入/转出记录，不以旧住院记录满足本次事件。"""
+    """逐次关联转科记录；不同事件不能复用同一份文书。"""
 
     source_error = nondrug_order_error or transfer_in_error or transfer_out_error
     if source_error:
@@ -251,6 +251,50 @@ def evaluate_transfer_documentation(
     if not orders:
         return TransferDocumentationOutcome("not_applicable", "trigger_absent_complete")
     if len(orders) != 1:
+        times = [_unique_order_time(order) for order in orders]
+        if any(conflict for _, conflict in times):
+            return TransferDocumentationOutcome("data_gap", "authoritative_time_conflict")
+        if any(value is None for value, _ in times):
+            return TransferDocumentationOutcome("data_gap", "authoritative_time_missing")
+        ordered = sorted(zip((value for value, _ in times), orders), key=lambda item: item[0])
+        # 同时/重复或目标冲突的医嘱仍不能按时间拆分，保留原关联缺口。
+        if len({value for value, _ in ordered}) == len(ordered) and all(
+            later[0] > earlier[0] + timedelta(hours=24)
+            for earlier, later in zip(ordered, ordered[1:])
+        ):
+            outcomes = []
+            for index, (start, order) in enumerate(ordered):
+                end = ordered[index + 1][0] if index + 1 < len(ordered) else None
+
+                def event_records(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+                    selected = []
+                    for row in rows:
+                        candidate = _candidate_for_order(row, order_time=start)
+                        if candidate.state == "time_unknown" or (
+                            candidate.state == "current"
+                            and (end is None or candidate.record_time < end)
+                        ):
+                            selected.append(row)
+                    return tuple(selected)
+
+                outcomes.append(evaluate_transfer_documentation(
+                    rule_id=rule_id, nondrug_order_error="", transfer_in_error="", transfer_out_error="",
+                    nondrug_order_rows=(order,),
+                    transfer_in_rows=event_records(transfer_in_rows),
+                    transfer_out_rows=event_records(transfer_out_rows),
+                    evaluation_horizon_date=evaluation_horizon_date,
+                    evaluation_horizon_datetime=evaluation_horizon_datetime,
+                    evaluation_horizon_error=evaluation_horizon_error,
+                ))
+            # 已明确的一次缺文书/超时足以证明不合规；其余事件仍逐项保留。
+            priority = {"non_compliant": 0, "data_gap": 1, "not_applicable": 2, "compliant": 3}
+            selected = min(outcomes, key=lambda outcome: priority[outcome.final_state])
+            return TransferDocumentationOutcome(
+                selected.final_state, selected.reason_code,
+                {**(selected.display_facts or {}), "transfer_order_count": len(orders),
+                 "event_checks": [{"status": outcome.final_state, "reason_code": outcome.reason_code,
+                                   **(outcome.display_facts or {})} for outcome in outcomes]},
+            )
         return TransferDocumentationOutcome(
             "data_gap",
             "association_failed",

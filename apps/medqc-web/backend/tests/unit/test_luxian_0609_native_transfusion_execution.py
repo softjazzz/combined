@@ -29,6 +29,9 @@ from app.services.luxian_0609.decision_binding import (
 
 # 人工审阅的历史病例协议标签；仅用于冻结模型oracle，不由产品函数推断。
 _COURSE_LABELS = {
+    "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。": "record",
+    "普通病程仅提到拟输血和备血。": "not_record",
+    "输血过程及输血后评价记录。": "not_record",
     '16:00输血结束。未记录输血后评价。': 'record',
     '2026-01-01 16:10 输血结束。': 'record',
     '2026-01-01 16:10 输血结束后评价未见异常，生命体征平稳，无输血不良反应。': 'record',
@@ -63,7 +66,6 @@ _COURSE_LABELS = {
     '患者贫血，血红蛋白降低，具有输血指征及必要性；既往无输血不良反应，已评估输血风险和生命体征。': 'not_record',
     '既往无输血不良反应，已说明风险。': 'not_record',
     '明确未记录输血前评估。': 'not_record',
-    '普通病程仅提到拟输血和备血。': 'not_record',
     '未记录输血病程主要内容。': 'not_record',
     '术中出血约800ml，输注红细胞2U。': 'record',
     '术后记录术中输注红细胞2U。': 'record',
@@ -105,7 +107,6 @@ _COURSE_LABELS = {
     '输血记录：按评估及医嘱完成输注。': 'record',
     '输血记录：过程顺利，无输血不良反应。': 'record',
     '输血过程中患者生命体征平稳。': 'record',
-    '输血过程及输血后评价记录。': 'not_record',
     '预计2026-06-05 16:10输血结束。生命体征平稳。': 'not_record',
     '空模板': 'not_record',
     '输血结束，继续观察。': 'record',
@@ -117,11 +118,17 @@ _COURSE_LABELS = {
     **{f'2026-06-05 16:10输血结束。{text}': 'record' for text in (
         '未见输血后评价异常。', '无输血后评价异常。', '输血后评价未见异常。',
         '未记录输血后评价。', '缺少输血后评价。', '未书写输血后评价。')},
-    '2026-06-05 16:10记录：输血结束。生命体征平稳。': 'record',
-    '2026-06-05 16:10输血结束，输注过程顺利。': 'record',
-    '2026-06-05 10:00输血结束。输血后复查血红蛋白改善。': 'record',
-    '16:00输血结束。未记录输血后评价。': 'record',
-    '2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
+    '输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，18:27输注完毕。输血过程顺利，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见寒战、发热及其他输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，结束时间19:00。输注过程中严密观察，过程顺利，未见皮疹、胸闷及输血反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间18:00，结束时间19:00。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，10时输毕，输注过程中生命体征平稳，未见不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。过程顺利，未见皮疹及输血反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，2026年07月07日18:27输注完毕。输血过程中严密观察，患者生命体征平稳，未见寒战、皮疹及输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。输血过程顺利，生命体征平稳，未见发热及输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
 }
 # 048 术中文书的人工原子事实标注：只有本次术中实际输注才是 present。
 _INTRAOPERATIVE_LABELS = {
@@ -315,8 +322,7 @@ def _typed_046_llm_session():
     return _typed_decision_session(
         selected_rule_ids=("LX0609-07-02-02",),
         bloodtrans_content=(
-            "输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，"
-            "18:27输注完毕。输血过程顺利，未见输血不良反应。"
+            '输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，18:27输注完毕。输血过程顺利，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。'
         ),
     )
 
@@ -1402,7 +1408,7 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
             inpat_nondrug_order=[],
             inpat_drug_order=[],
             bloodtrans_record=[],
-            daily_course_record=[{"content": "普通病程仅提到拟输血和备血。"}],
+            daily_course_record=[{"document_id": "synthetic-plan-only", "content": "普通病程仅提到拟输血和备血。"}],
             # 048 只看本次手术文书；无手术文书即无术中输血事实。
             surgery_record=[],
             anesthesia_record=[],
@@ -1505,7 +1511,7 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
     shell = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
-        evidence_payload=_documents(bloodtrans_record=[]),
+        evidence_payload=_documents(bloodtrans_record=[], daily_course_record=[{"document_id": "synthetic-course-shell", "content": "输血过程及输血后评价记录。"}]),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -1689,7 +1695,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
                     {
                         "content": (
                             "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
-                            "结束时间16:10。输血过程中严密观察，未见不良反应。"
+                            "结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。"
                         )
                     }
                 ]
@@ -1899,16 +1905,12 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
     complete_rows = [
         {
             "content": (
-                "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
-                "结束时间16:10。输血过程中严密观察，生命体征平稳，"
-                "未见寒战、发热及其他输血不良反应。"
+                '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见寒战、发热及其他输血不良反应。输血后复查血红蛋白提升，治疗有效。'
             )
         },
         {
             "content": (
-                "输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，"
-                "结束时间19:00。输注过程中严密观察，过程顺利，"
-                "未见皮疹、胸闷及输血反应。"
+                '输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，结束时间19:00。输注过程中严密观察，过程顺利，未见皮疹、胸闷及输血反应。输血后复查血红蛋白提升，治疗有效。'
             )
         },
     ]
@@ -1944,8 +1946,7 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     complete_content = (
-        "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
-        "结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。"
+        '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     rows = [
         {"document_id": f"blood-046-complete-{index}", "content": complete_content}
@@ -1955,8 +1956,7 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
         {
             "document_id": "blood-046-incomplete-9",
             "content": (
-                "输血目的：纠正贫血；开始时间18:00，结束时间19:00。"
-                "输血过程中严密观察，生命体征平稳，未见输血不良反应。"
+                '输血目的：纠正贫血；开始时间18:00，结束时间19:00。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。'
             ),
         }
     )
@@ -1998,8 +1998,7 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
             bloodtrans_record=[
                 {
                     "content": (
-                        "患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，"
-                        "10时输毕，输注过程中生命体征平稳，未见不良反应。"
+                        '患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，10时输毕，输注过程中生命体征平稳，未见不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 }
             ],
@@ -2034,14 +2033,12 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
             bloodtrans_record=[
                 {
                     "content": (
-                        "输血目的：纠正贫血；开始时间14:20，结束时间16:10。"
-                        "输血过程中严密观察，未见寒战及输血不良反应。"
+                        '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 },
                 {
                     "content": (
-                        "输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。"
-                        "过程顺利，未见皮疹及输血反应。"
+                        '输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。过程顺利，未见皮疹及输血反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 },
             ],
@@ -2078,9 +2075,7 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     record = (
-        "输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，"
-        "2026年07月07日18:27输注完毕。输血过程中严密观察，"
-        "患者生命体征平稳，未见寒战、皮疹及输血不良反应。"
+        '输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，2026年07月07日18:27输注完毕。输血过程中严密观察，患者生命体征平稳，未见寒战、皮疹及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     session = _typed_decision_session(
         selected_rule_ids=("LX0609-07-02-02",),
@@ -2194,9 +2189,7 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     record = (
-        "患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入"
-        "0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。"
-        "输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。"
+        '患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     client = _Client([model_output])
     result = await _execute_order_contract(
@@ -2228,8 +2221,7 @@ async def test_046_llm_accepts_component_that_includes_blood_type_but_not_type_o
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     record = (
-        "输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。"
-        "输血过程顺利，生命体征平稳，未见发热及输血不良反应。"
+        '输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。输血过程顺利，生命体征平稳，未见发热及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     client = _Client([
         {
@@ -2325,6 +2317,7 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
     ]
     assert display_facts["LX0609-07-01-02"]["missing_fields"] == []
     assert display_facts["LX0609-07-02-02"]["checked_fields"] == [
+        "clinical_effect",
         "component",
         "dose",
         "process_observation",
@@ -2409,6 +2402,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "record_count": 1,
             "incomplete_record_count": 1,
             "checked_fields": [
+                "clinical_effect",
                 "component",
                 "dose",
                 "process_observation",
@@ -2416,8 +2410,8 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
                 "reason_or_indication",
                 "start_and_end_time",
             ],
-            "missing_fields": ["reason_or_indication"],
-            "missing_field_record_counts": {"reason_or_indication": 1},
+            "missing_fields": ["clinical_effect", "reason_or_indication"],
+            "missing_field_record_counts": {"clinical_effect": 1, "reason_or_indication": 1},
             "source_document_ids": ["blood-record-1"],
         },
     }
@@ -3753,7 +3747,7 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
     result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01", "LX0609-07-04-02"),
         wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-07-04-02")],
-        evidence_payload=_documents(bloodtrans_record=[]),
+        evidence_payload=_documents(bloodtrans_record=[], daily_course_record=[{"document_id": "synthetic-course-shell", "content": "输血过程及输血后评价记录。"}]),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",

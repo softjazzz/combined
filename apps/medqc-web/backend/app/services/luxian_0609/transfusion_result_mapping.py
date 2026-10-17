@@ -462,7 +462,7 @@ def _safe_046(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     allowed_fields = {
         "reason_or_indication", "start_and_end_time", "component", "dose",
-        "process_observation", "reaction_and_handling",
+        "process_observation", "reaction_and_handling", "clinical_effect",
     }
     checked = _controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
     missing = _controlled_list(raw.get("missing_fields"), allowed=allowed_fields)

@@ -90,6 +90,7 @@ async def _run(
     course_labels: dict[str, str],
     *,
     horizon_date: str | None = None,
+    client=None,
 ) -> dict[str, Any]:
     def reader(**kwargs: Any) -> SnapshotSourceRows:
         return SnapshotSourceRows.create(
@@ -115,7 +116,7 @@ async def _run(
         row_reader=reader,
         **horizon_kwargs,
     )
-    client = FrozenTransfusionProtocolClient(course_labels=course_labels)
+    client = client or FrozenTransfusionProtocolClient(course_labels=course_labels)
     execution = await native.execute_luxian_0609_native_transfusion_rules(
         rule_ids=(rule_id,),
         decision_rule_ids=(rule_id,),
