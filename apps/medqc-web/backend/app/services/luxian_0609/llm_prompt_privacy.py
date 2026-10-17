@@ -471,6 +471,34 @@ def classify_luxian_0609_llm_call_failure(error: BaseException) -> str:
     return "model_transport_error"
 
 
+def describe_luxian_0609_llm_parse_failure(error: BaseException, response: Any) -> str:
+    """模型输出解析失败的安全描述，供诊断日志使用：不含提示词、病历或模型原文。
+
+    只保留异常类型、解析器自身写死的英文失败类别、finish_reason 与输出 Token 数；
+    KeyError 等可能携带模型输出片段的异常信息一律不记录。
+    """
+
+    detail = "-"
+    if type(error) is ValueError:
+        message = str(error)
+        if message.isascii() and len(message) <= 80 and not any(ch.isdigit() for ch in message):
+            detail = message
+    finish_reason = completion_tokens = "-"
+    try:
+        choice = response["choices"][0]
+        finish_reason = str(choice.get("finish_reason") or "-")[:20]
+    except Exception:
+        pass
+    try:
+        completion_tokens = str(int(response["usage"]["completion_tokens"]))
+    except Exception:
+        pass
+    return (
+        f"error_kind={type(error).__name__} detail={detail} "
+        f"finish_reason={finish_reason} completion_tokens={completion_tokens}"
+    )
+
+
 def _log_privacy_guard_block(error: BaseException) -> None:
     """隐私护栏拦截只记录异常类别与脱敏观测上下文，不记录提示词或身份值。"""
 

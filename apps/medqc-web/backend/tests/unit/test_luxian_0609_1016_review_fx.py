@@ -143,3 +143,63 @@ def test_018_prompt_states_symptom_grading_examples(example):
     """01-01-02 提示词写明器官系统方向与全身性非特异症状的划分示例。"""
     from app.services.luxian_0609.course_quality.rule_018 import _lx018_prompt
     assert example in _lx018_prompt(context="")
+
+
+def test_parse_failure_description_never_echoes_model_content():
+    """解析失败日志描述只含受控类别与计数，不带出模型输出片段。"""
+    from app.services.luxian_0609.llm_prompt_privacy import describe_luxian_0609_llm_parse_failure
+
+    response = {"choices": [{"finish_reason": "length", "message": {"content": "患者张三"}}],
+                "usage": {"completion_tokens": 2048}}
+    text = describe_luxian_0609_llm_parse_failure(ValueError("malignancy result count invalid"), response)
+    assert text == ("error_kind=ValueError detail=malignancy result count invalid "
+                    "finish_reason=length completion_tokens=2048")
+    for error in (KeyError("患者张三"), ValueError("引文不在原文：患者张三"), ValueError("ref D07 invalid")):
+        described = describe_luxian_0609_llm_parse_failure(error, response)
+        assert "张三" not in described and "D07" not in described
+    assert "finish_reason=-" in describe_luxian_0609_llm_parse_failure(ValueError("x"), None)
+
+
+class _MalignancyClient:
+    """按提示里实际送出的条目逐条应答；可指定某诊断名为 uncertain。"""
+
+    def __init__(self, uncertain_name=None, drop_one=False):
+        self.uncertain_name, self.drop_one, self.sent = uncertain_name, drop_one, []
+
+    async def generate(self, prompt, **kwargs):
+        from app.services.luxian_0609.malignancy_fact import SCHEMA_VERSION
+        items = json.loads(prompt.rsplit("输入：", 1)[1])
+        self.sent.append(items)
+        results = [{"ref": i["ref"], "state": "uncertain" if i["diagnosis_name"] == self.uncertain_name
+                    else "explicit_nonmalignant"} for i in items]
+        if self.drop_one:
+            results = results[:-1]
+        content = json.dumps({"schema_version": SCHEMA_VERSION, "results": results}, ensure_ascii=False)
+        return {"choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}}
+
+
+def _dup_sources():
+    from app.services.luxian_0609.malignancy_fact import build_malignancy_sources
+    rows = [{"diagnosis_name": name} for name in ("肺部肿物", "高血压", "肺部肿物", "高血压", "糖尿病")]
+    return build_malignancy_sources(diagnosis_state="available", diagnosis_rows=rows,
+                                    pathology_state="available", pathology_rows=[])
+
+
+@pytest.mark.asyncio
+async def test_malignancy_sends_duplicate_diagnoses_once_and_maps_back():
+    """重复诊断只送一次，不确定结果映射回全部重复行。"""
+    from app.services.luxian_0609.malignancy_fact import MalignancyFactResolver
+    client = _MalignancyClient(uncertain_name="肺部肿物")
+    resolution = await MalignancyFactResolver(client).resolve(_dup_sources())
+    assert [i["diagnosis_name"] for i in client.sent[0]] == ["肺部肿物", "高血压", "糖尿病"]
+    assert (resolution.state, resolution.reason_code) == ("unknown", "malignancy_semantics_uncertain")
+    assert [row["diagnosis_name"] for _, row in resolution.uncertain_rows] == ["肺部肿物", "肺部肿物"]
+
+
+@pytest.mark.asyncio
+async def test_malignancy_result_count_check_stays_strict():
+    """去重后仍严格校验条数：模型少返回一条仍判输出无效。"""
+    from app.services.luxian_0609.malignancy_fact import MalignancyFactResolver
+    resolution = await MalignancyFactResolver(_MalignancyClient(drop_one=True)).resolve(_dup_sources())
+    assert (resolution.state, resolution.reason_code) == ("technical_error", "malignancy_llm_invalid")

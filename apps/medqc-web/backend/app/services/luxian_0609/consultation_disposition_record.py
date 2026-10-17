@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
+
+logger = logging.getLogger(__name__)
 
 RULE_ID = "LX0609-03-01-05"
 SCHEMA_VERSION = "consultation-disposition-record-v2"
@@ -472,7 +475,13 @@ async def check_disposition_record(
                 continue
             status, reason, refs = parse_facts(response, documents, frozen)
             return DispositionRecordOutcome(status, reason, refs, 2, *totals, elapsed)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+            logger.warning(
+                "LX0609 会诊处置记录抽取输出无效: stage=%s document_count=%s %s",
+                "opinion" if attempt == 0 else "action",
+                len(documents),
+                describe_luxian_0609_llm_parse_failure(error, response),
+            )
             return extraction_failure(attempt + 1, "model_invalid_output")
     return DispositionRecordOutcome(
         "data_gap",
