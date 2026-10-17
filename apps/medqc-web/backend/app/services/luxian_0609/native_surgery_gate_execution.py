@@ -962,6 +962,20 @@ def _labeled_anesthesia_surgery_time(
     return unique[0] if len(unique) == 1 else None
 
 
+def _surgery_record_missing_facts(*, end: datetime | None, begin: datetime | None) -> dict[str, Any]:
+    """003 缺正式手术记录的受控展示事实；保存层要求确定问题必须可解释。"""
+
+    anchor, time_kind = (end, "end") if end is not None else (begin, "begin")
+    return {
+        "failure_kind": "surgery_record_missing",
+        "performed_surgery_confirmed": True,
+        "surgery_time": anchor.isoformat(sep=" ", timespec="minutes") if anchor else None,
+        "surgery_time_kind": time_kind,
+        "threshold_hours": 24,
+        "source_label": "手术记录",
+    }
+
+
 def _typed_003_decision(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -1105,6 +1119,7 @@ def _typed_003_decision(
                 )
                 return decision(
                     "non_compliant", "required_document_missing",
+                    _surgery_record_missing_facts(end=end, begin=begin),
                     selected_document_refs=(reference,) if reference else (),
                 )
     if not surgery_rows:
@@ -1176,6 +1191,7 @@ def _typed_003_decision(
                 "required_document_missing"
                 if mature
                 else "evaluation_window_not_mature",
+                _surgery_record_missing_facts(end=surgery_end_time, begin=None) if mature else None,
                 selected_document_refs=(
                     (selected_mr_ref,) if mature and selected_mr_ref else ()
                 ),

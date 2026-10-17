@@ -96,3 +96,38 @@ def test_surgeon_in_staff_with_position_and_title_is_present(participant, expect
     )
     assert reduced[0].final_state.value == expected
     assert out.llm_call_count == 0
+
+
+def test_missing_record_defect_carries_controlled_explanation_through_save_contract():
+    """确定缺正式手术记录必须带受控展示事实，否则整批保存会被客户解释合同拒绝。"""
+    from test_luxian_0609_surgery_record_event_coverage_regression import s
+    from app.services.luxian_0609.surgery_gate_result_mapping import safe_surgery_gate_customer_display_facts
+    from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
+    from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
+
+    rows = {"mr_surgery": [confirmed_master()]}
+
+    def reader(**kw):
+        return SnapshotSourceRows.create(source_key=kw["source_key"], rows=rows.get(kw["source_key"], ()),
+                                         truncated=False, limit_rows=500)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-04-02-01",), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, created_at="2026-10-07T12:00:00+08:00", row_reader=reader,
+        evaluation_as_of_date="2026-01-10",
+    )
+    out = asyncio.run(s.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-04-02-01",), decision_rule_ids=("LX0609-04-02-01",),
+        wrapper_rules=[{"rule_id": "LX0609-04-02-01", "defect_level": "轻微缺陷", "custom_prompt": "{medical_text}"}],
+        evidence_payload={}, institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=None, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    ))
+    raw = dict(out.customer_display_facts)["LX0609-04-02-01"]
+    assert raw["failure_kind"] == "surgery_record_missing"
+    safe = safe_surgery_gate_customer_display_facts(rule_id="LX0609-04-02-01", raw=raw)
+    assert safe is not None and safe["performed_surgery_confirmed"] is True
+    text = customer_finding_from_controlled_facts(rule_id="LX0609-04-02-01", facts=safe, status="non_compliant")
+    assert "未找到对应的正式手术记录" in text
+    item = {"rule_id": "LX0609-04-02-01", "status": "non_compliant", "customer_display_facts": raw}
+    facts, _ = validated_customer_explanation(item, rule_id="LX0609-04-02-01", status="non_compliant")
+    assert facts

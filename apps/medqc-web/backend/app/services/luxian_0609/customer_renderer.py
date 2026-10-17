@@ -2175,6 +2175,12 @@ def customer_finding_from_controlled_facts(
         if kind == "surgeon_not_in_preop_discussion":
             return "已确认实施手术并找到术前讨论记录，文书未记载为紧急抢救手术，但术者未在讨论参加人员中。"
 
+    if rule_id == "LX0609-04-02-01" and kind == "surgery_record_missing":
+        surgery_time = facts.get("surgery_time")
+        label = "手术结束时间" if facts.get("surgery_time_kind") == "end" else "手术开始时间"
+        detail = f"（{label} {surgery_time}）" if isinstance(surgery_time, str) and surgery_time else ""
+        return f"已确认实施手术{detail}，评价时点已超过术后 24 小时，未找到对应的正式手术记录。"
+
     if rule_id == "LX0609-04-02-01" and kind in {"surgery_record_late", "surgery_record_within_threshold"}:
         end_time = facts.get("surgery_end_time")
         record_time = facts.get("record_time")
