@@ -6,6 +6,7 @@ import pytest
 from app.services.luxian_0609 import anesthesia_visit_fact_extraction as visit
 from app.services.luxian_0609 import native_surgery_document_execution as surgery_doc
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
+from app.services.luxian_0609 import transfusion_result_mapping as mapping
 from app.services.luxian_0609.decision_reducer import CustomerFinalState, reduce_luxian_0609_rule_decision
 from app.services.qc_workspace.failed_rule_retry import _automatic_retryable_failure
 from tests.unit.test_luxian_0609_native_surgery_document_execution import _typed_session
@@ -94,3 +95,26 @@ def test_family_order_mismatch_is_not_auto_retried():
     assert not _automatic_retryable_failure(
         {"rule_id": "LX0609-07-01-01", "reason_code": "family_result_order_mismatch"})
     assert _automatic_retryable_failure({"rule_id": "LX0609-07-01-01", "reason_code": "model_timeout"})
+
+
+@pytest.mark.parametrize("rule_id", sorted(mapping._SYSTEM_GAP_REASONS))
+def test_stripped_system_gap_facts_pass_published_validation(rule_id):
+    """Finalizer 剥离文案后的系统缺口公开形状，对每条登记规则都能通过发布校验。"""
+    expected = mapping._SYSTEM_GAP_REASONS[rule_id]
+    reason = sorted(expected)[0] if isinstance(expected, frozenset) else expected
+    raw = {"failure_kind": "system_data_contract_gap", "system_gap_reason": reason, "gap_owner": "system_integration"}
+    assert mapping._safe_system_gap(rule_id=rule_id, raw=raw) == raw
+    # 原因与本规则不符时仍拒绝
+    assert mapping._safe_system_gap(rule_id=rule_id, raw={**raw, "system_gap_reason": "other_reason"}) is None
+
+
+@pytest.mark.asyncio
+async def test_043_empty_lab_source_holds_customer_contract():
+    """07-01-01 检验来源为空判资料不足，经收口后仍满足交付合同，不被改判技术错误。"""
+    from app.services.luxian_0609.canonical_result_finalizer import luxian_0609_customer_result_contract_holds
+    from test_luxian_0609_transfusion_performance_043_047 import BLOOD_APPLICATION, STRUCTURED_EVENT, _run
+
+    final = (await _run("LX0609-07-01-01", {"mr_bloodtrans": STRUCTURED_EVENT, "blood_application": BLOOD_APPLICATION,
+                                             "labtest_item_report": []}, {}))["final"]
+    assert (final["status"], final["reason_code"]) == ("data_gap", "source_unavailable")
+    assert luxian_0609_customer_result_contract_holds(final)

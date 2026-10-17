@@ -87,10 +87,10 @@ def _safe_system_gap(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         raw = {key: value for key, value in raw.items() if key != "transfusion_order_present"}
     # Finalizer 已剥离文案后的公开形状仍须能通过保存/读取时的同一校验。
     # 只接受精确字段及本规则原因；不接收任意宽松子集。
+    # 所有登记了系统缺口原因的规则都会被 Finalizer 剥离成同一公开形状，不能只放行部分规则。
     public_keys = {"failure_kind", "system_gap_reason", "gap_owner"}
     if (
-        rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
-        and set(raw) == public_keys
+        set(raw) == public_keys
         and raw.get("system_gap_reason") == expected_reason
         and raw.get("gap_owner") == "system_integration"
     ):
