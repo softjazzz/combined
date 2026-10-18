@@ -117,6 +117,8 @@ def _model_documents(
 
 
 _ACTION_GROUPS = ("medications", "examinations", "therapies", "other_actions")
+# 第一阶段（角色与引文）协议违规时最多调用次数。
+_OPINION_ATTEMPTS = 2
 
 
 def _required_followups(opinions: Sequence[str]) -> tuple[str, ...]:
@@ -478,25 +480,26 @@ async def check_disposition_record(
             refs, calls, *totals, elapsed,
         )
 
-    for attempt in range(2):
+    calls = 0
+    stage = "opinion"
+    while True:
         started = perf_counter()
         try:
-            options = structured_output_kwargs(llm_client)
-            if attempt == 1 and options:
-                # 本点第二阶段已真实复验 JSON 对象模式；不改其他规则的输出策略。
-                options["response_format"] = {"type": "json_object"}
+            # 两阶段都只关 thinking：真实对照（2026-10-17）中第二阶段叠加 json_object
+            # 5 次有 3 次输出残缺对象，不叠加 5 次全部合格。
             response = await llm_client.generate(
                 redact_luxian_0609_patient_privacy(prompt),
-                **options,
+                **structured_output_kwargs(llm_client),
             )
         except Exception:
             elapsed += perf_counter() - started
-            return extraction_failure(attempt + 1, "model_transport_error")
+            return extraction_failure(calls + 1, "model_transport_error")
+        calls += 1
         elapsed += perf_counter() - started
         try:
             usage = _usage(response)
             totals = [total + int(value) for total, value in zip(totals, usage[:3])]
-            if attempt == 0:
+            if stage == "opinion":
                 frozen = parse_opinions(response, documents)
                 if not any(
                     item["scope"] == "ordinary"
@@ -517,34 +520,29 @@ async def check_disposition_record(
                         else ("not_applicable", "trigger_absent_complete")
                     )
                     return DispositionRecordOutcome(
-                        status, reason, (), 1, *totals, elapsed
+                        status, reason, (), calls, *totals, elapsed
                     )
                 prompt = build_prompt(tuple(frozen.values()))
                 if len(prompt) > 60000:
                     return DispositionRecordOutcome(
-                        "data_gap", "source_truncated", (), 1, *totals, elapsed
+                        "data_gap", "source_truncated", (), calls, *totals, elapsed
                     )
+                stage = "action"
                 continue
             status, reason, refs = parse_facts(response, documents, frozen)
-            return DispositionRecordOutcome(status, reason, refs, 2, *totals, elapsed)
+            return DispositionRecordOutcome(status, reason, refs, calls, *totals, elapsed)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             logger.warning(
-                "LX0609 会诊处置记录抽取输出无效: stage=%s document_count=%s %s",
-                "opinion" if attempt == 0 else "action",
+                "LX0609 会诊处置记录抽取输出无效: stage=%s call=%s document_count=%s %s",
+                stage,
+                calls,
                 len(documents),
                 describe_luxian_0609_llm_parse_failure(error, response),
             )
-            return extraction_failure(attempt + 1, "model_invalid_output")
-    return DispositionRecordOutcome(
-        "data_gap",
-        "semantic_extraction_unresolved",
-        llm_call_count=2,
-        prompt_tokens=totals[0],
-        completion_tokens=totals[1],
-        total_tokens=totals[2],
-        api_time=elapsed,
-    )
-
+            if stage == "opinion" and calls < _OPINION_ATTEMPTS:
+                # 用户口径（2026-10-17）：第一阶段偶发复读整段原文、夹带推理致协议违规，重试 1 次；仍违规才拒收。
+                continue
+            return extraction_failure(calls, "model_invalid_output")
 
 def safe_disposition_display_facts(raw: Any) -> dict[str, Any] | None:
     """只发布已核验的不具体处置文书数量，不携带原文或身份。"""

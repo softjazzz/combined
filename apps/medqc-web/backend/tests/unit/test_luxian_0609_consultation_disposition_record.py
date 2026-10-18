@@ -389,12 +389,36 @@ async def test_two_stages_remain_bounded_and_do_not_send_internal_identity():
 
 
 @pytest.mark.asyncio
-async def test_first_stage_invalid_output_is_technical_error():
+async def test_first_stage_invalid_output_is_technical_error_after_one_retry():
+    client = Client({"content": "bad"}, {"content": "bad"})
     result = await record.check_disposition_record(
-        documents=documents("建议完善痰培养。"), llm_client=Client({"content": "bad"})
+        documents=documents("建议完善痰培养。"), llm_client=client
     )
-    assert result.status == "technical_error" and result.llm_call_count == 1
+    assert result.status == "technical_error" and result.llm_call_count == 2
     assert result.reason == "model_invalid_output"
+    assert len(client.prompts) == 2 and client.prompts[0] == client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_first_stage_protocol_violation_is_retried_once_then_continues():
+    docs = documents("建议完善痰培养。已完善痰培养。")
+    client = Client(
+        # 第一次复读原文，引文不能在原文中逐字找到。
+        opinions("建议完善痰培养建议完善痰培养", "已完善痰培养"),
+        opinions("建议完善痰培养", "已完善痰培养"),
+        response(item("完善痰培养", "已完善痰培养", "performed")),
+    )
+    result = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert result.status == "compliant" and result.llm_call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_second_stage_invalid_output_is_not_retried():
+    docs = documents("建议完善痰培养。已完善痰培养。")
+    client = Client(opinions("建议完善痰培养", "已完善痰培养"), {"content": "bad"}, {"content": "bad"})
+    result = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert (result.status, result.reason, result.llm_call_count) == ("technical_error", "model_invalid_output", 2)
+    assert len(client.prompts) == 2
 
 
 @pytest.mark.asyncio
@@ -480,10 +504,8 @@ async def test_supported_client_uses_existing_output_options_without_extra_calls
             return True
 
         async def generate(self, prompt, **kwargs):
-            expected = {"enable_thinking": False}
-            if self.prompts:
-                expected["response_format"] = {"type": "json_object"}
-            assert kwargs == expected
+            # 两阶段都不叠加 json_object：真实对照中它使第二阶段输出残缺对象。
+            assert kwargs == {"enable_thinking": False}
             return await super().generate(prompt)
 
     client = StructuredClient(
