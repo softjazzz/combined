@@ -660,6 +660,31 @@ def _effective_target_orders(
     )
 
 
+def _culture_orders_lack_report_material(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    projection: ExamLabTextProjection,
+) -> bool:
+    """培养医嘱存在但报告材料缺失时，不能拿普通检验主表拼出培养事件。
+
+    仅有项目名称、标本和报告时间不证明报告正文已取得。检查全部主表行，
+    任一候选含结果或正文时仍沿用既有事件核验，不因泛候选裁剪而漏掉报告。
+    """
+    if (
+        not _effective_target_orders(rows_by_source, fact_kind="culture")
+        or any(event.target_confirmed for event in events_for_family(projection, "culture"))
+        or rows_by_source.get("labtest_item_report")
+    ):
+        return False
+    result_fields = (
+        "description", "result", "abnormal_indicator", "organism_name",
+        "microbe_name", "sensitivity_result", "recommendation",
+    )
+    return not any(
+        _row_text(row) or any(_clean(row.get(field)) for field in result_fields)
+        for row in rows_by_source.get("labtest_master", ())
+    )
+
+
 def _order_exam_structure_outcome(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> _ExamLabOutcome | None:
@@ -2272,9 +2297,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 for rule_id in eligible_rule_ids:
                     family = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
                     events = events_for_family(projection, family)
+                    missing_culture_report = (
+                        family == "culture"
+                        and _culture_orders_lack_report_material(rows_by_source, projection)
+                    )
                     absence_gap, absence_refs = (
                         _culture_absence_gap(evidence_snapshot, evidence_materials)
-                        if family == "culture" and (
+                        if family == "culture" and not missing_culture_report and (
                             (not events and not _effective_target_orders(rows_by_source, fact_kind=family))
                             or bool(events) and all(event.target_explicitly_absent for event in events)
                         ) else (None, ())
@@ -2287,7 +2316,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             absence_refs,
                         )
                         typed_processed.add(rule_id)
-                    elif not events:
+                    elif not events or missing_culture_report:
                         if family == "exam":
                             emit_typed(
                                 rule_id,

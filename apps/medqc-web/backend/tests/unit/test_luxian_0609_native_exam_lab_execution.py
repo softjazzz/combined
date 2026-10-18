@@ -7044,3 +7044,109 @@ async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch, ct_
         )
         assert finalized["status"] == "non_compliant"
         assert "source_document_ids" not in facts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("master_count", (1, 12))
+@pytest.mark.parametrize("subject", ("常规检验项目", "血常规"))
+async def test_culture_orders_without_reports_are_not_bound_to_unrelated_masters(
+    monkeypatch, master_count, subject,
+):
+    """培养医嘱缺报告时，普通检验主表的数量和时间不能制造关联冲突或阴性。"""
+    rules = ("LX0609-06-03-03", "LX0609-06-03-04")
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        nondrug_order_rows=({
+            "order_id": "CULTURE-ORDER-1",
+            "order_name": "血培养及药敏",
+            "order_status": "新开",
+            "prescribed_datetime": "2026-04-25 09:00:00",
+        },),
+        culture_rows=tuple({
+            "test_id": f"ROUTINE-LAB-{index}",
+            "labtest_subject": subject,
+            "report_datetime": f"2026-04-26 {index:02d}:00:00",
+        } for index in range(master_count)),
+        course_rows=({
+            "record_time": "2026-04-26 13:00:00",
+            "record_content": "拟送血培养，继续观察。",
+        },),
+    )
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=rules,
+        wrapper_rules=[_wrapper(rule) for rule in rules],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=rules,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=rules,
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert [(item.final_state.value, item.reason_code) for item in reduced] == [
+        ("data_gap", "target_report_missing"),
+        ("data_gap", "target_report_missing"),
+    ]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    for rule in rules:
+        facts = dict(result.customer_display_facts)[rule]
+        assert facts["failure_kind"] == "exam_lab_target_report_missing"
+        assert facts["trigger_orders"] == [{
+            "order_name": "血培养及药敏", "order_time": "2026-04-25 09:00:00",
+        }]
+        assert safe_exam_lab_customer_display_facts(rule_id=rule, raw=facts) is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("master_count", (1, 12))
+@pytest.mark.parametrize("body_field", ("result", "record_content"))
+async def test_culture_candidate_report_material_keeps_identity_checks(
+    monkeypatch, master_count, body_field,
+):
+    """身份未明但有结果或正文的候选不能被缺报告分支覆盖，包括裁剪范围外的行。"""
+    rules = ("LX0609-06-03-03", "LX0609-06-03-04")
+    rows = [{
+        "test_id": f"UNKNOWN-LAB-{index}",
+        "labtest_subject": "项目身份待明确",
+        "report_datetime": f"2026-04-26 {index:02d}:00:00",
+    } for index in range(master_count)]
+    rows[-1][body_field] = "结果性质尚需核实。"
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        nondrug_order_rows=({
+            "order_id": "CULTURE-ORDER-1",
+            "order_name": "血培养及药敏",
+            "prescribed_datetime": "2026-04-25 09:00:00",
+        },),
+        culture_rows=tuple(rows),
+    )
+    client = _Client([_fact_response(
+        rules, applicability="unknown", semantic_state="unknown", positive_state="unknown",
+    )])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=rules,
+        wrapper_rules=[_wrapper(rule) for rule in rules],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=rules,
+    )
+
+    assert all(item.reason_code != "target_report_missing" for item in result.decisions)
+    assert all(item.evidence_state.value == "data_gap" for item in result.decisions)
+    if master_count == 1:
+        assert result.llm_call_count == 1
+        assert "结果性质尚需核实" in client.prompts[0]
+    else:
+        assert result.llm_call_count == 0
+        assert [item.reason_code for item in result.decisions] == ["association_failed"] * 2
