@@ -1365,6 +1365,12 @@ _054_UNCHANGED_SENTENCE_PATTERN = re.compile(
 )
 
 
+# 054 用户口径（2026-10-18，C05）：“给予X抗感染后仍有反复发热”是用药后病情回顾，不是新动作。
+_054_RETROSPECTIVE_OUTCOME_PATTERN = re.compile(
+    r"后(?:仍|仍有|无|未见|未|好转|改善|缓解|效果|体温|症状|病情|出现|反复)"
+)
+
+
 def _054_governs_drug(gap: str) -> bool:
     """延续标记与药名之间没有新的给药动词（紧跟标记的“继续予以”等复合写法除外）。"""
 
@@ -1378,6 +1384,7 @@ def _054_is_continuation_only(row: Mapping[str, Any], antimicrobial: str) -> boo
     以目标药所在分句为准：分句有加用/停用/更换等变更词即为触发；分句自身写
     “继续/维持”，或分句无给药动词而上一分句写“继续”（共用动词），视为延续；
     句中药名之前有“暂无调整/治疗同前”等且其间没有新的给药动词，也视为延续。
+    分句在药名之后写“后仍有/后好转”等用药后病情，是既往用药回顾，同样不是新动作。
     """
 
     text = _material_text(row)
@@ -1397,12 +1404,15 @@ def _054_is_continuation_only(row: Mapping[str, Any], antimicrobial: str) -> boo
                 for change in _054_CHANGE_ACTION_PATTERN.finditer(clause)
             ):
                 return False
-            drug_at = clause_start + clause.find(antimicrobial)
+            clause_drug_at = clause.find(antimicrobial)
+            if _054_RETROSPECTIVE_OUTCOME_PATTERN.search(clause[clause_drug_at + len(antimicrobial):]):
+                continuation = True
+                continue
+            drug_at = clause_start + clause_drug_at
             unchanged = any(
                 _054_governs_drug(sentence[marker.end():drug_at])
                 for marker in _054_UNCHANGED_SENTENCE_PATTERN.finditer(sentence[:drug_at])
             )
-            clause_drug_at = clause.find(antimicrobial)
             if (
                 any(
                     _054_governs_drug(clause[marker.end():clause_drug_at])

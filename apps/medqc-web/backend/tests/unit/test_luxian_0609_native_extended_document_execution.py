@@ -11158,6 +11158,11 @@ def test_056_explanation_rejects_invalid_counts_and_status_conflicts(count, befo
         ("加用莫西沙星联合亚胺培南西司他丁加强抗感染。", "莫西沙星", False),
         ("请示上级医师后予以头孢曲松抗感染、补液维持水电解质平衡。", "头孢曲松", False),
         ("继续目前治疗，今日予以万古霉素加强阳性菌覆盖。", "万古霉素", False),
+        # 用药后病情回顾不是新动作（用户口径 2026-10-18，C05）。
+        ("诊疗计划：患者给予哌拉西林他唑巴坦钠抗感染后仍有反复发热。", "哌拉西林", True),
+        ("予以头孢曲松抗感染后体温恢复正常。", "头孢曲松", True),
+        ("予以头孢曲松抗感染，3天后复查血常规。", "头孢曲松", False),
+        ("停用美罗培南后仍有发热。", "美罗培南", False),
     ),
 )
 def test_054_continuation_only_follows_drug_clause(text, drug, expected) -> None:
