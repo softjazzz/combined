@@ -261,7 +261,7 @@ _DISCHARGE_APPROVAL_PATTERN = re.compile(
     r"|(?<!拟)(?<!计划)(?<!准备)于今日(?:办理)?出院"
     # 院方口径（2026-10-17）：上级医师写明日期的出院安排（如拟明日带药出院）视为同意出院；
     # 未写日期的“拟办理出院”及“考虑出院”仍不构成明确同意。
-    r"|(?:拟|计划|准备)(?:于)?(?:今日|明日|次日)(?:带药)?(?:办理)?出院"
+    r"|(?P<dated_plan>(?:拟|计划|准备)(?:于)?(?:今日|明日|次日)(?:带药)?(?:办理)?出院)"
 )
 _DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
     r"(?:不|未|未获|未取得|未得到|尚未|尚不|暂不).{0,12}"
@@ -345,10 +345,11 @@ def _discharge_approval_path(
     return None
 
 
-def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
-    """返回未被否定或条件短语约束的明确出院处置。"""
+def _unnegated_discharge_approvals(text: str) -> list[re.Match[str]]:
+    """未被否定或条件短语约束的全部出院处置匹配。"""
 
     value = str(text or "")
+    approvals = []
     for approval in _DISCHARGE_APPROVAL_PATTERN.finditer(value):
         local_start = max(0, approval.start() - 80)
         local_context = value[local_start: approval.end() + 40]
@@ -358,8 +359,26 @@ def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
             for negated in _DISCHARGE_APPROVAL_NEGATED_PATTERN.finditer(local_context)
         )
         if not is_bound_to_negation:
-            return approval
-    return None
+            approvals.append(approval)
+    return approvals
+
+
+def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
+    """返回未被否定或条件短语约束的明确出院处置。"""
+
+    approvals = _unnegated_discharge_approvals(text)
+    return approvals[0] if approvals else None
+
+
+def _is_dated_discharge_plan_only(text: str) -> bool:
+    """引文只有“拟/计划某日出院”的安排、没有同意或批准等明确表态。
+
+    写明日期的出院安排只在确认为上级医师所写时才视为同意；身份不明的此类安排
+    （如住院医师日常病程“拟明日出院”）不构成上级同意，不能当作未能确认的同意。
+    """
+
+    approvals = _unnegated_discharge_approvals(text)
+    return bool(approvals) and all(approval.group("dated_plan") for approval in approvals)
 
 
 def _has_confirmed_discharge_approval(text: str) -> bool:
@@ -5264,7 +5283,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 row_time is not None
                                 and assertion.opinion == "approved"
                                 and (
-                                    assertion.role == "unknown"
+                                    (
+                                        assertion.role == "unknown"
+                                        and not _is_dated_discharge_plan_only(assertion.quote)
+                                    )
                                     or (
                                         assertion.role == "senior"
                                         and not _has_confirmed_discharge_approval(assertion.quote)
