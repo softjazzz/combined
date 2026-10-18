@@ -34,8 +34,10 @@ REPORT_RULE_ID = "LX0609-06-01-03"
 COURSE_SOURCES = (
     "first_course_record", "daily_course_record", "senior_course_record", "rescue_record",
 )
-MAX_CONTEXT_CHARS = 32000
-MAX_CLAUSES = 512
+# 长住院的多份正常病程须完整核对；累计预算与异常长单分句的保护分开。
+MAX_CONTEXT_CHARS = 64000
+MAX_CLAUSES = 1024
+MAX_CLAUSE_CHARS = 32000
 MAX_EVENTS = 128
 SCHEMA_VERSION = "ct-order-course-facts-v3"
 _SPLIT = re.compile(r"[^。；;\n]+[。；;]?")
@@ -165,7 +167,8 @@ def build_ct_review_input(
                     if not text:
                         continue
                     total_chars += len(text)
-                    if len(clauses) >= MAX_CLAUSES or total_chars > MAX_CONTEXT_CHARS:
+                    if (len(clauses) >= MAX_CLAUSES or total_chars > MAX_CONTEXT_CHARS
+                            or len(text) > MAX_CLAUSE_CHARS):
                         complete = False
                         continue
                     start = match.start() + len(match.group()) - len(match.group().lstrip())
