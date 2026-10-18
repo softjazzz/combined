@@ -101,6 +101,10 @@ def _restore_contiguous_quotes(quotes: Any, source: str) -> Any:
 # 会诊意见时会混入前文句子并陷入复读（C11 真实复验 8 次失败 6 次）。
 # 锚点不设长度上限：模型常把整段原文放进 start，只要逐字且唯一即可定位。
 _MIN_ANCHOR_CHARS = 4
+# 模型把整段放进 start 时会用省略号略去中段（C09 会诊记录 9：start 149 字，
+# 省略号前 22 字、后 124 字均逐字来自原文）。开头锚点只取省略号之前、结尾锚点
+# 只取最后一个省略号之后，切出的部分仍须逐字、唯一且不少于 4 字。
+_ANCHOR_ELLIPSIS = re.compile(r"\.{2,}|…+|。{3,}|·{3,}")
 
 
 def _resolve_anchor_quote(anchor: Any, source: str) -> str | None:
@@ -113,6 +117,8 @@ def _resolve_anchor_quote(anchor: Any, source: str) -> str | None:
     if not isinstance(anchor, dict) or set(anchor) != {"start", "end"}:
         return None
     start, end = (_normalized(anchor[key]) if isinstance(anchor[key], str) else "" for key in ("start", "end"))
+    start = _ANCHOR_ELLIPSIS.split(start)[0]
+    end = _ANCHOR_ELLIPSIS.split(end)[-1]
     if not all(len(value) >= _MIN_ANCHOR_CHARS for value in (start, end)):
         return None
     positions = [index for index, char in enumerate(source) if not char.isspace()]

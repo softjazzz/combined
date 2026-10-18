@@ -733,6 +733,25 @@ def test_invalid_anchor_is_rejected_as_ungrounded(anchor):
         record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
 
 
+@pytest.mark.parametrize("anchor", [
+    {"start": "呼吸科会诊意见:病史敬悉。患者咳嗽...建议完善痰培养及药敏", "end": "必要时转我科进一步治疗。"},
+    {"start": "呼吸科会诊意见:病史敬悉……继续抗感染", "end": "建议完善……必要时转我科进一步治疗。"},
+])
+def test_anchor_ellipsis_keeps_only_the_verbatim_outer_parts(anchor):
+    roles = record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
+    assert roles["consultation_record-1"]["opinion_quotes"] == [_LONG_OPINION]
+
+
+@pytest.mark.parametrize("anchor", [
+    {"start": "呼吸...建议完善痰培养及药敏", "end": "必要时转我科进一步治疗。"},  # 省略号前过短
+    {"start": "呼吸科会诊意见:病史知悉...建议完善", "end": "必要时转我科进一步治疗。"},  # 省略号前非原文
+    {"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转我科进一步...治疗"},  # 省略号后过短
+])
+def test_anchor_ellipsis_parts_must_still_be_grounded(anchor):
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
+
+
 def test_anchor_start_must_be_unique_in_the_document():
     body = "建议完善痰培养及药敏。另建议完善痰培养及药敏复查,继续抗感染治疗。遵照执行。"
     with pytest.raises(ValueError, match="role quotes not grounded"):
