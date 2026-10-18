@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from collections import Counter
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass, field as dataclass_field, replace
 from datetime import datetime, timedelta
 import json
 import logging
@@ -26,6 +26,11 @@ from .exam_lab_course_time import (
     scan_unplaced_time_state,
 )
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
+from .exam_lab_projection_batching import (
+    ExamLabProjectionBatch,
+    build_exam_lab_projection_batches,
+    select_exam_lab_projection_batch,
+)
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
@@ -1958,6 +1963,307 @@ def _result(rule_id: str, status: str, reason_code: str, *, executor_type: str) 
     return item
 
 
+@dataclass(frozen=True)
+class _ExamLabBatchResult:
+    facts: tuple[ExamLabEventFact, ...] | None
+    rule_failures: Mapping[str, str] = dataclass_field(default_factory=dict)
+    failure_reason: str = "exam_lab_llm_invalid_output"
+    result_conflicts: Mapping[int, tuple[str, ...]] = dataclass_field(default_factory=dict)
+    analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = dataclass_field(default_factory=dict)
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+    first_success_count: int = 0
+    retried_rule_count: int = 0
+    recovered_rule_count: int = 0
+    parse_failure_kinds: tuple[str, ...] = ()
+    transport_rule_ids: frozenset[str] = frozenset()
+
+
+async def _extract_exam_lab_batch(
+    *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
+) -> _ExamLabBatchResult:
+    """复用原单批语义抽取、受控恢复及专项核验；不在此处作规则判定。"""
+    llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
+    first_success_count = retried_rule_count = recovered_rule_count = 0
+    api_time = 0.0
+    parse_failure_kinds: list[str] = []
+    llm_call_count += 1
+    try:
+        response = await _generate_exam_lab_fact_response(
+            llm_client=llm_client,
+            selected_rule_ids=eligible_rule_ids,
+            projection=projection,
+        )
+    except Exception:
+        response = None
+    if response is None:
+        return _ExamLabBatchResult(
+            facts=None, failure_reason="exam_lab_llm_failure", llm_call_count=llm_call_count,
+            transport_rule_ids=frozenset(eligible_rule_ids),
+        )
+    else:
+        prompt, completion, total, elapsed = _usage(response)
+        prompt_tokens += prompt
+        completion_tokens += completion
+        total_tokens += total
+        api_time += elapsed
+        isolated_rule_failures: dict[str, str] = {}
+        try:
+            partition = parse_exam_lab_fact_response_isolated(
+                response=response,
+                selected_rule_ids=eligible_rule_ids,
+                projection=projection,
+                # 保留 native 模块上的严格解析符号，既不改变公开
+                # 解析行为，也让既有测试/诊断替换点继续生效。
+                _strict_parser=parse_exam_lab_fact_response,
+            )
+            text_facts = partition.facts
+            isolated_rule_failures = dict(partition.rule_failures)
+            first_success_count += len(eligible_rule_ids) - len(isolated_rule_failures)
+            if isolated_rule_failures:
+                # 首轮共享提取只记一次受控失败类别；重试仅携带
+                # 失败规则，其余已通过事实继续留在 text_facts。
+                failure_kind = next(iter(isolated_rule_failures.values()))
+                parse_failure_kinds.append(failure_kind)
+                logger.warning(
+                    "exam_lab_fact_parse_failed parse_failure_kind=%s",
+                    failure_kind,
+                )
+                logger.warning(
+                    "exam_lab_fact_parse_failed parse_failure_kind=%s; starting controlled recovery",
+                    failure_kind,
+                )
+                retry_rule_ids = tuple(
+                    rule_id
+                    for rule_id in eligible_rule_ids
+                    if rule_id in isolated_rule_failures
+                )
+                retried_rule_count += len(retry_rule_ids)
+                use_event_recovery = all(
+                    isolated_rule_failures[rule_id] == "evidence_ref"
+                    and len(events_for_family(
+                        projection,
+                        "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture",
+                    )) > 1
+                    for rule_id in retry_rule_ids
+                )
+                if use_event_recovery:
+                    for rule_id in retry_rule_ids:
+                        recovery = await recover_exam_lab_rule_by_event(
+                            rule_id=rule_id,
+                            projection=projection,
+                            generate_response=lambda selected, event_projection: (
+                                _generate_exam_lab_fact_response(
+                                    llm_client=llm_client,
+                                    selected_rule_ids=selected,
+                                    projection=event_projection,
+                                    enable_thinking=(
+                                        False
+                                        if rule_id in {
+                                            "LX0609-06-01-04",
+                                            "LX0609-06-03-03",
+                                        }
+                                        else None
+                                    ),
+                                )
+                            ),
+                            strict_parser=parse_exam_lab_fact_response,
+                        )
+                        llm_call_count += recovery.call_count
+                        for recovery_response in recovery.responses:
+                            retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(
+                                recovery_response
+                            )
+                            prompt_tokens += retry_prompt
+                            completion_tokens += retry_completion
+                            total_tokens += retry_total
+                            api_time += retry_elapsed
+                        if recovery.failure_kind is None:
+                            text_facts = tuple((*text_facts, *recovery.facts))
+                            isolated_rule_failures.pop(rule_id, None)
+                            recovered_rule_count += 1
+                        else:
+                            isolated_rule_failures[rule_id] = recovery.failure_kind
+                            logger.warning(
+                                "exam_lab_fact_event_recovery_failed rule_id=%s failure_kind=%s",
+                                rule_id,
+                                recovery.failure_kind,
+                            )
+                else:
+                    llm_call_count += 1
+                    try:
+                        retry_response = await _generate_exam_lab_fact_response(
+                            llm_client=llm_client,
+                            selected_rule_ids=retry_rule_ids,
+                            projection=projection,
+                        )
+                        retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
+                        prompt_tokens += retry_prompt
+                        completion_tokens += retry_completion
+                        total_tokens += retry_total
+                        api_time += retry_elapsed
+                        retry_partition = parse_exam_lab_fact_response_isolated(
+                            response=retry_response,
+                            selected_rule_ids=retry_rule_ids,
+                            projection=projection,
+                            _strict_parser=parse_exam_lab_fact_response,
+                        )
+                        text_facts = tuple(
+                            (*text_facts, *retry_partition.facts)
+                        )
+                        for rule_id in retry_rule_ids:
+                            isolated_rule_failures.pop(rule_id, None)
+                        isolated_rule_failures.update(
+                            retry_partition.rule_failures
+                        )
+                        recovered_rule_count += len(retry_rule_ids) - len(retry_partition.rule_failures)
+                    except Exception as retry_exc:  # noqa: BLE001
+                        # 重试响应的顶层/范围错误仍闭合失败规则；首轮
+                        # 已通过的其它规则保留，不把异常扩散回它们。
+                        logger.warning("exam_lab_fact_retry_failed")
+                        for rule_id in retry_rule_ids:
+                            isolated_rule_failures.setdefault(
+                                rule_id,
+                                getattr(retry_exc, "failure_kind", "value"),
+                            )
+        except (ExamLabFactParseError, ValueError) as exc:
+            # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
+            # 非受控 ValueError，仍按原合同让整批进入一次重试。
+            failure_kind = getattr(exc, "failure_kind", "value")
+            parse_failure_kinds.append(failure_kind)
+            retried_rule_count += len(eligible_rule_ids)
+            logger.warning(
+                "exam_lab_fact_parse_failed parse_failure_kind=%s",
+                failure_kind,
+            )
+            logger.warning(
+                "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
+                failure_kind,
+            )
+            llm_call_count += 1
+            try:
+                retry_response = await _generate_exam_lab_fact_response(
+                    llm_client=llm_client,
+                    selected_rule_ids=eligible_rule_ids,
+                    projection=projection,
+                )
+                retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
+                prompt_tokens += retry_prompt
+                completion_tokens += retry_completion
+                total_tokens += retry_total
+                api_time += retry_elapsed
+                retry_partition = parse_exam_lab_fact_response_isolated(
+                    response=retry_response,
+                    selected_rule_ids=eligible_rule_ids,
+                    projection=projection,
+                    _strict_parser=parse_exam_lab_fact_response,
+                )
+                text_facts = retry_partition.facts
+                isolated_rule_failures = dict(retry_partition.rule_failures)
+                parse_failure_kinds.extend(isolated_rule_failures.values())
+                recovered_rule_count += len(eligible_rule_ids) - len(isolated_rule_failures)
+            except Exception:  # noqa: BLE001
+                logger.warning("exam_lab_fact_retry_failed")
+                text_facts = None
+        result_conflicts: Mapping[int, tuple[str, ...]] = {}
+        analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
+        if text_facts is not None:
+            # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
+            # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
+            # 是否记录由逐份病程核对固定。各步互不依赖，并发调用；任一失败时该规则沿用主抽取原判断。
+            checks = []
+            if ("LX0609-06-01-05" in eligible_rule_ids
+                    and "LX0609-06-01-05" not in isolated_rule_failures):
+                checks.append((check_exam_finding_analysis(projection, llm_client), apply_finding_analysis))
+            if ("LX0609-06-01-02" in eligible_rule_ids
+                    and "LX0609-06-01-02" not in isolated_rule_failures):
+                checks.append((check_exam_reason(projection, llm_client), apply_exam_reason))
+            if ("LX0609-06-01-04" in eligible_rule_ids
+                    and "LX0609-06-01-04" not in isolated_rule_failures):
+                checks.append((check_exam_result_record(projection, llm_client), apply_result_record))
+            if checks:
+                check_outcomes = await asyncio.gather(*(check for check, _ in checks))
+                for (_, apply), check_outcome in zip(checks, check_outcomes):
+                    if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
+                        result_conflicts = check_outcome.conflict_refs
+                    if isinstance(check_outcome, FindingAnalysisOutcome) and check_outcome.state == "ready":
+                        analysis_gaps = check_outcome.gap_refs
+                    llm_call_count += check_outcome.llm_call_count
+                    prompt_tokens += check_outcome.prompt_tokens
+                    completion_tokens += check_outcome.completion_tokens
+                    total_tokens += check_outcome.total_tokens
+                    api_time += check_outcome.api_time
+                    text_facts = apply(text_facts, check_outcome)
+    return _ExamLabBatchResult(
+        facts=text_facts, rule_failures=isolated_rule_failures,
+        result_conflicts=result_conflicts, analysis_gaps=analysis_gaps,
+        llm_call_count=llm_call_count, prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time,
+        first_success_count=first_success_count, retried_rule_count=retried_rule_count,
+        recovered_rule_count=recovered_rule_count, parse_failure_kinds=tuple(parse_failure_kinds),
+    )
+
+
+async def _extract_exam_lab_batches(
+    *, projection: ExamLabTextProjection, batches: Sequence[ExamLabProjectionBatch],
+    eligible_rule_ids: Sequence[str], llm_client: Any,
+) -> tuple[_ExamLabBatchResult, int]:
+    """完整核验各批并归并全局事实，失败规则在全批结束后统一闭合。"""
+    if not batches:
+        return await _extract_exam_lab_batch(
+            projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+        ), len(eligible_rule_ids)
+    facts: dict[tuple[str, int], ExamLabEventFact] = {}
+    failures: dict[str, str] = {}
+    conflicts: dict[int, tuple[str, ...]] = {}
+    gaps: dict[int, tuple[tuple[str, str], ...]] = {}
+    transport_rules: set[str] = set()
+    failure_kinds: list[str] = []
+    counts = dict.fromkeys(("llm_call_count", "prompt_tokens", "completion_tokens", "total_tokens",
+                           "first_success_count", "retried_rule_count", "recovered_rule_count"), 0)
+    api_time = 0.0
+    requested_rule_count = 0
+    for batch in batches:
+        # 相关性提示可能已更新，仍从同一全局事件集选取本批。
+        current = select_exam_lab_projection_batch(
+            projection, tuple((family, global_pos) for (family, _), global_pos in batch.event_positions.items()),
+        )
+        rules = tuple(rule for rule in eligible_rule_ids if events_for_family(
+            current.projection, "exam" if rule in EXAM_RULE_IDS else "culture",
+        ))
+        if not rules:
+            continue
+        requested_rule_count += len(rules)
+        result = await _extract_exam_lab_batch(
+            projection=current.projection, eligible_rule_ids=rules, llm_client=llm_client,
+        )
+        for key in counts:
+            counts[key] += getattr(result, key)
+        api_time += result.api_time
+        failure_kinds.extend(result.parse_failure_kinds)
+        transport_rules.update(result.transport_rule_ids)
+        failures.update(result.rule_failures)
+        if result.facts is None:
+            failures.update({rule: "value" for rule in rules})
+        for fact in result.facts or ():
+            family = "exam" if fact.rule_id in EXAM_RULE_IDS else "culture"
+            global_position = current.event_positions[(family, fact.event_position)]
+            facts[(fact.rule_id, global_position)] = replace(fact, event_position=global_position)
+        for local, refs in result.result_conflicts.items():
+            conflicts[current.event_positions[("exam", local)]] = tuple(dict.fromkeys(refs))
+        for local, refs in result.analysis_gaps.items():
+            gaps[current.event_positions[("exam", local)]] = tuple(dict.fromkeys(refs))
+    return _ExamLabBatchResult(
+        facts=tuple(facts.values()), rule_failures=failures,
+        result_conflicts=conflicts, analysis_gaps=gaps,
+        transport_rule_ids=frozenset(transport_rules), api_time=api_time,
+        parse_failure_kinds=tuple(failure_kinds), **counts,
+    ), requested_rule_count
+
+
 async def execute_luxian_0609_native_exam_lab_rules(
     *,
     rule_ids: Sequence[str],
@@ -2266,6 +2572,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     )
                     typed_processed.add("LX0609-06-01-02")
                     eligible_rule_ids.remove("LX0609-06-01-02")
+            projection_batches: tuple[ExamLabProjectionBatch, ...] = ()
             projection_gap_reason = "exam_lab_projection_unavailable"
             try:
                 horizon_observation = next(
@@ -2292,6 +2599,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     # 来源已经成功物化；内部投影预算耗尽不等于数据源未接入。
                     projection_gap_reason = "course_projection_incomplete"
                 projection = None
+            if (projection is not None and projection.course_projection_truncated) or (
+                projection is None and projection_gap_reason == "course_projection_incomplete"
+            ):
+                try:
+                    plan = build_exam_lab_projection_batches(
+                        rows_by_source=rows_by_source,
+                        horizon_unavailable_reason=(
+                            horizon_observation.reason_code if horizon_observation is not None else None
+                        ),
+                    )
+                    projection = plan.projection
+                    projection_batches = plan.batches
+                except ValueError:
+                    projection = None
+                    projection_gap_reason = "course_projection_incomplete"
             if projection is not None:
                 semantic_rule_ids: list[str] = []
                 for rule_id in eligible_rule_ids:
@@ -2435,14 +2757,23 @@ async def execute_luxian_0609_native_exam_lab_rules(
             ):
                 # 用户口径（2026-10-11）：先单独判定报告异常是否与本次就诊相关（附带发现
                 # 不要求分析），固定为事件阳性提示，再判断有没有分析；失败时沿用原判断。
-                relevance = await classify_exam_finding_relevance(projection, llm_client)
-                llm_call_count += relevance.llm_call_count
-                prompt_tokens += relevance.prompt_tokens
-                completion_tokens += relevance.completion_tokens
-                total_tokens += relevance.total_tokens
-                api_time += relevance.api_time
-                if relevance.state == "ready":
-                    projection = apply_relevance_hints(projection, relevance.hints)
+                relevance_batches = projection_batches or (None,)
+                for batch in relevance_batches:
+                    current = batch.projection if batch is not None else projection
+                    if not events_for_family(current, "exam"):
+                        continue
+                    relevance = await classify_exam_finding_relevance(current, llm_client)
+                    llm_call_count += relevance.llm_call_count
+                    prompt_tokens += relevance.prompt_tokens
+                    completion_tokens += relevance.completion_tokens
+                    total_tokens += relevance.total_tokens
+                    api_time += relevance.api_time
+                    if relevance.state == "ready":
+                        hints = (
+                            {batch.event_positions[("exam", local)]: hint for local, hint in relevance.hints.items()}
+                            if batch is not None else relevance.hints
+                        )
+                        projection = apply_relevance_hints(projection, hints)
             if eligible_rule_ids and projection is not None:
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
@@ -2562,253 +2893,68 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     emit_typed(rule_id, status, reason)
                     typed_processed.add(rule_id)
             elif eligible_rule_ids:
-                model_rule_count += len(eligible_rule_ids)
-                llm_call_count += 1
-                try:
-                    response = await _generate_exam_lab_fact_response(
-                        llm_client=llm_client,
-                        selected_rule_ids=eligible_rule_ids,
-                        projection=projection,
-                    )
-                except Exception:
-                    response = None
-                if response is None:
-                    for rule_id in eligible_rule_ids:
-                        emit_typed(rule_id, "technical_error", "exam_lab_llm_failure")
-                        typed_processed.add(rule_id)
-                else:
-                    prompt, completion, total, elapsed = _usage(response)
-                    prompt_tokens += prompt
-                    completion_tokens += completion
-                    total_tokens += total
-                    api_time += elapsed
-                    isolated_rule_failures: dict[str, str] = {}
-                    try:
-                        partition = parse_exam_lab_fact_response_isolated(
-                            response=response,
-                            selected_rule_ids=eligible_rule_ids,
+                batch_result, requested_rule_count = await _extract_exam_lab_batches(
+                    projection=projection, batches=projection_batches,
+                    eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+                )
+                model_rule_count += requested_rule_count
+                llm_call_count += batch_result.llm_call_count
+                prompt_tokens += batch_result.prompt_tokens
+                completion_tokens += batch_result.completion_tokens
+                total_tokens += batch_result.total_tokens
+                api_time += batch_result.api_time
+                first_success_count += batch_result.first_success_count
+                retried_rule_count += batch_result.retried_rule_count
+                recovered_rule_count += batch_result.recovered_rule_count
+                parse_failure_kinds.extend(batch_result.parse_failure_kinds)
+                text_facts = batch_result.facts
+                isolated_rule_failures = batch_result.rule_failures
+                result_conflicts = batch_result.result_conflicts
+                analysis_gaps = batch_result.analysis_gaps
+                for rule_id in eligible_rule_ids:
+                    outcome = (
+                        _ExamLabOutcome(
+                            rule_id, "technical_error",
+                            "exam_lab_llm_failure" if rule_id in batch_result.transport_rule_ids
+                            else "exam_lab_llm_invalid_output",
+                        )
+                        if text_facts is None or rule_id in isolated_rule_failures
+                        else _text_fact_outcome(
+                            rule_id=rule_id,
+                            facts=text_facts,
                             projection=projection,
-                            # 保留 native 模块上的严格解析符号，既不改变公开
-                            # 解析行为，也让既有测试/诊断替换点继续生效。
-                            _strict_parser=parse_exam_lab_fact_response,
                         )
-                        text_facts = partition.facts
-                        isolated_rule_failures = dict(partition.rule_failures)
-                        first_success_count += len(eligible_rule_ids) - len(isolated_rule_failures)
-                        if isolated_rule_failures:
-                            # 首轮共享提取只记一次受控失败类别；重试仅携带
-                            # 失败规则，其余已通过事实继续留在 text_facts。
-                            failure_kind = next(iter(isolated_rule_failures.values()))
-                            parse_failure_kinds.append(failure_kind)
-                            logger.warning(
-                                "exam_lab_fact_parse_failed parse_failure_kind=%s",
-                                failure_kind,
-                            )
-                            logger.warning(
-                                "exam_lab_fact_parse_failed parse_failure_kind=%s; starting controlled recovery",
-                                failure_kind,
-                            )
-                            retry_rule_ids = tuple(
-                                rule_id
-                                for rule_id in eligible_rule_ids
-                                if rule_id in isolated_rule_failures
-                            )
-                            retried_rule_count += len(retry_rule_ids)
-                            use_event_recovery = all(
-                                isolated_rule_failures[rule_id] == "evidence_ref"
-                                and len(events_for_family(
-                                    projection,
-                                    "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture",
-                                )) > 1
-                                for rule_id in retry_rule_ids
-                            )
-                            if use_event_recovery:
-                                for rule_id in retry_rule_ids:
-                                    recovery = await recover_exam_lab_rule_by_event(
+                    )
+                    emit_typed(
+                        rule_id,
+                        outcome.status,
+                        outcome.reason_code,
+                        outcome.fact_refs,
+                        display_facts=(
+                            _with_analysis_gaps(
+                                _with_result_conflicts(
+                                    _display_facts_for_text_outcome(
                                         rule_id=rule_id,
+                                        facts=text_facts,
                                         projection=projection,
-                                        generate_response=lambda selected, event_projection: (
-                                            _generate_exam_lab_fact_response(
-                                                llm_client=llm_client,
-                                                selected_rule_ids=selected,
-                                                projection=event_projection,
-                                                enable_thinking=(
-                                                    False
-                                                    if rule_id in {
-                                                        "LX0609-06-01-04",
-                                                        "LX0609-06-03-03",
-                                                    }
-                                                    else None
-                                                ),
-                                            )
-                                        ),
-                                        strict_parser=parse_exam_lab_fact_response,
-                                    )
-                                    llm_call_count += recovery.call_count
-                                    for recovery_response in recovery.responses:
-                                        retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(
-                                            recovery_response
-                                        )
-                                        prompt_tokens += retry_prompt
-                                        completion_tokens += retry_completion
-                                        total_tokens += retry_total
-                                        api_time += retry_elapsed
-                                    if recovery.failure_kind is None:
-                                        text_facts = tuple((*text_facts, *recovery.facts))
-                                        isolated_rule_failures.pop(rule_id, None)
-                                        recovered_rule_count += 1
-                                    else:
-                                        isolated_rule_failures[rule_id] = recovery.failure_kind
-                                        logger.warning(
-                                            "exam_lab_fact_event_recovery_failed rule_id=%s failure_kind=%s",
-                                            rule_id,
-                                            recovery.failure_kind,
-                                        )
-                            else:
-                                llm_call_count += 1
-                                try:
-                                    retry_response = await _generate_exam_lab_fact_response(
-                                        llm_client=llm_client,
-                                        selected_rule_ids=retry_rule_ids,
-                                        projection=projection,
-                                    )
-                                    retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
-                                    prompt_tokens += retry_prompt
-                                    completion_tokens += retry_completion
-                                    total_tokens += retry_total
-                                    api_time += retry_elapsed
-                                    retry_partition = parse_exam_lab_fact_response_isolated(
-                                        response=retry_response,
-                                        selected_rule_ids=retry_rule_ids,
-                                        projection=projection,
-                                        _strict_parser=parse_exam_lab_fact_response,
-                                    )
-                                    text_facts = tuple(
-                                        (*text_facts, *retry_partition.facts)
-                                    )
-                                    for rule_id in retry_rule_ids:
-                                        isolated_rule_failures.pop(rule_id, None)
-                                    isolated_rule_failures.update(
-                                        retry_partition.rule_failures
-                                    )
-                                    recovered_rule_count += len(retry_rule_ids) - len(retry_partition.rule_failures)
-                                except Exception as retry_exc:  # noqa: BLE001
-                                    # 重试响应的顶层/范围错误仍闭合失败规则；首轮
-                                    # 已通过的其它规则保留，不把异常扩散回它们。
-                                    logger.warning("exam_lab_fact_retry_failed")
-                                    for rule_id in retry_rule_ids:
-                                        isolated_rule_failures.setdefault(
-                                            rule_id,
-                                            getattr(retry_exc, "failure_kind", "value"),
-                                        )
-                    except (ExamLabFactParseError, ValueError) as exc:
-                        # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
-                        # 非受控 ValueError，仍按原合同让整批进入一次重试。
-                        failure_kind = getattr(exc, "failure_kind", "value")
-                        parse_failure_kinds.append(failure_kind)
-                        retried_rule_count += len(eligible_rule_ids)
-                        logger.warning(
-                            "exam_lab_fact_parse_failed parse_failure_kind=%s",
-                            failure_kind,
-                        )
-                        logger.warning(
-                            "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
-                            failure_kind,
-                        )
-                        llm_call_count += 1
-                        try:
-                            retry_response = await _generate_exam_lab_fact_response(
-                                llm_client=llm_client,
-                                selected_rule_ids=eligible_rule_ids,
-                                projection=projection,
-                            )
-                            retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
-                            prompt_tokens += retry_prompt
-                            completion_tokens += retry_completion
-                            total_tokens += retry_total
-                            api_time += retry_elapsed
-                            retry_partition = parse_exam_lab_fact_response_isolated(
-                                response=retry_response,
-                                selected_rule_ids=eligible_rule_ids,
-                                projection=projection,
-                                _strict_parser=parse_exam_lab_fact_response,
-                            )
-                            text_facts = retry_partition.facts
-                            isolated_rule_failures = dict(retry_partition.rule_failures)
-                            parse_failure_kinds.extend(isolated_rule_failures.values())
-                            recovered_rule_count += len(eligible_rule_ids) - len(isolated_rule_failures)
-                        except Exception:  # noqa: BLE001
-                            logger.warning("exam_lab_fact_retry_failed")
-                            text_facts = None
-                    result_conflicts: Mapping[int, tuple[str, ...]] = {}
-                    analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
-                    if text_facts is not None:
-                        # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
-                        # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
-                        # 是否记录由逐份病程核对固定。各步互不依赖，并发调用；任一失败时该规则沿用主抽取原判断。
-                        checks = []
-                        if ("LX0609-06-01-05" in eligible_rule_ids
-                                and "LX0609-06-01-05" not in isolated_rule_failures):
-                            checks.append((check_exam_finding_analysis(projection, llm_client), apply_finding_analysis))
-                        if ("LX0609-06-01-02" in eligible_rule_ids
-                                and "LX0609-06-01-02" not in isolated_rule_failures):
-                            checks.append((check_exam_reason(projection, llm_client), apply_exam_reason))
-                        if ("LX0609-06-01-04" in eligible_rule_ids
-                                and "LX0609-06-01-04" not in isolated_rule_failures):
-                            checks.append((check_exam_result_record(projection, llm_client), apply_result_record))
-                        if checks:
-                            check_outcomes = await asyncio.gather(*(check for check, _ in checks))
-                            for (_, apply), check_outcome in zip(checks, check_outcomes):
-                                if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
-                                    result_conflicts = check_outcome.conflict_refs
-                                if isinstance(check_outcome, FindingAnalysisOutcome) and check_outcome.state == "ready":
-                                    analysis_gaps = check_outcome.gap_refs
-                                llm_call_count += check_outcome.llm_call_count
-                                prompt_tokens += check_outcome.prompt_tokens
-                                completion_tokens += check_outcome.completion_tokens
-                                total_tokens += check_outcome.total_tokens
-                                api_time += check_outcome.api_time
-                                text_facts = apply(text_facts, check_outcome)
-                    for rule_id in eligible_rule_ids:
-                        outcome = (
-                            _ExamLabOutcome(rule_id, "technical_error", "exam_lab_llm_invalid_output")
-                            if text_facts is None or rule_id in isolated_rule_failures
-                            else _text_fact_outcome(
-                                rule_id=rule_id,
-                                facts=text_facts,
-                                projection=projection,
-                            )
-                        )
-                        emit_typed(
-                            rule_id,
-                            outcome.status,
-                            outcome.reason_code,
-                            outcome.fact_refs,
-                            display_facts=(
-                                _with_analysis_gaps(
-                                    _with_result_conflicts(
-                                        _display_facts_for_text_outcome(
-                                            rule_id=rule_id,
-                                            facts=text_facts,
-                                            projection=projection,
-                                            outcome=outcome,
-                                        ),
-                                        conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
-                                        projection=projection,
+                                        outcome=outcome,
                                     ),
-                                    gaps=(
-                                        analysis_gaps
-                                        if rule_id == "LX0609-06-01-05" and outcome.status == "non_compliant"
-                                        else {}
-                                    ),
+                                    conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
                                     projection=projection,
-                                )
-                                if text_facts is not None
-                                and rule_id not in isolated_rule_failures
-                                else None
-                            ),
-                        )
-                        typed_processed.add(rule_id)
+                                ),
+                                gaps=(
+                                    analysis_gaps
+                                    if rule_id == "LX0609-06-01-05" and outcome.status == "non_compliant"
+                                    else {}
+                                ),
+                                projection=projection,
+                            )
+                            if text_facts is not None
+                            and rule_id not in isolated_rule_failures
+                            else None
+                        ),
+                    )
+                    typed_processed.add(rule_id)
 
     if ct_review is not None:
         ct_payload = None

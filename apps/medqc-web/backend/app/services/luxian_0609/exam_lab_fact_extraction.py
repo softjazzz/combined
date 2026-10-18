@@ -470,8 +470,8 @@ def _row_text(row: Mapping[str, Any]) -> str:
     return _clean(" ".join(_clean(row.get(field)) for field in fields if _clean(row.get(field))))
 
 
-def _bounded_text(value: str, limit: int) -> str:
-    if len(value) <= limit:
+def _bounded_text(value: str, limit: int | None) -> str:
+    if limit is None or len(value) <= limit:
         return value
     half = max(1, (limit - 12) // 2)
     return f"{value[:half]} …[已裁剪]… {value[-half:]}"
@@ -640,9 +640,9 @@ def build_exam_lab_text_projection(
     *,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     horizon_unavailable_reason: str | None = None,
-    max_course_rows: int = 32,
-    max_row_chars: int = 2000,
-    max_context_chars: int = 32000,
+    max_course_rows: int | None = 32,
+    max_row_chars: int | None = 2000,
+    max_context_chars: int | None = 32000,
 ) -> ExamLabTextProjection:
     """从本次就诊白名单来源按业务键构造影像与培养事件序列。"""
 
@@ -1189,7 +1189,9 @@ def build_exam_lab_text_projection(
             event_course_keys[(family, event_position)] = keys
             selected_course_entries.update(keys)
 
-    course_projection_truncated = len(selected_course_entries) > max_course_rows
+    course_projection_truncated = (
+        max_course_rows is not None and len(selected_course_entries) > max_course_rows
+    )
     if course_projection_truncated:
         anchors = tuple(
             value
@@ -1245,7 +1247,7 @@ def build_exam_lab_text_projection(
         )
 
     context = "\n".join(parts)
-    if len(context) > max_context_chars:
+    if max_context_chars is not None and len(context) > max_context_chars:
         raise ValueError("exam lab text projection truncated")
     horizon_rows = tuple(rows_by_source.get("evaluation_context.horizon", ()))
     precise_horizon, precise_horizon_conflict = _unique_role_time(
