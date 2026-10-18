@@ -8,6 +8,7 @@ import json
 import logging
 import re
 from time import perf_counter
+import unicodedata
 from typing import Any, Literal
 
 from .structured_output import structured_output_kwargs
@@ -120,6 +121,20 @@ def _prompt(batch: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+def _binding_text(value: str) -> str:
+    """绑定核对用的正文：去掉空白和标点，其余每个字须逐字一致、顺序不变。
+
+    flash 模型回抄整份病程时偶尔把顿号抄成逗号（C19 1768 字病程只差一个标点，
+    三次重放失败一次）。quote 只用于核对文书绑定，标点差异不改变正文身份；
+    截断、改字、漏句仍拒收。
+    """
+
+    return "".join(
+        char for char in value
+        if not char.isspace() and not unicodedata.category(char).startswith("P")
+    )
+
+
 def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) -> list[tuple[int, str]]:
     choices = response.get("choices")
     if choices is not None:
@@ -144,7 +159,11 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
         if not isinstance(item, dict) or set(item) != {"index", "kind", "quote"}:
             raise ValueError("invalid record schema")
         index, kind = item["index"], item["kind"]
-        if type(index) is not int or index not in expected or index in seen or item["quote"] != expected[index]:
+        if (
+            type(index) is not int or index not in expected or index in seen
+            or not isinstance(item["quote"], str)
+            or _binding_text(item["quote"]) != _binding_text(expected[index])
+        ):
             raise ValueError("invalid document binding")
         if not isinstance(kind, str) or kind not in {"record", "not_record", "unknown"}:
             raise ValueError("invalid record kind")
