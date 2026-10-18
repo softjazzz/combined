@@ -354,3 +354,65 @@ async def test_discharge_medication_parse_failure_log_is_content_free(caplog):
     assert len(messages) == 1
     assert "finish_reason=stop" in messages[0] and "completion_tokens=5" in messages[0]
     assert "张三" not in messages[0] and "13800138000" not in messages[0] and "阿司匹林" not in messages[0]
+
+
+_SPLICE_TEXT = "出院带药:药物甲片每次2片,一日三次,饭前,口服7天;药物乙胶囊每次1粒,一日三次,口服7天;药物丙片每次1片,一日一次,长期服用。"
+
+
+def _medication_field(quote):
+    return {"state": "present", "quote": quote} if quote is not None else {"state": "missing", "quote": None}
+
+
+class _MedicationClient:
+    def __init__(self, items):
+        self.items = items
+
+    async def generate(self, prompt, **kwargs):
+        content = json.dumps({
+            "schema_version": "lx0609_discharge_medications_v2",
+            "state": "medications_present",
+            "items": [
+                {"drug_name": _medication_field(name), "dose": _medication_field(dose),
+                 "route": _medication_field(route), "medication_time": _medication_field(time)}
+                for name, dose, route, time in self.items
+            ],
+        }, ensure_ascii=False)
+        return {"choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+
+
+@pytest.mark.asyncio
+async def test_discharge_medication_spliced_time_quote_restores_contiguous_source_span():
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import (
+        extract_discharge_medications,
+    )
+
+    # 模型把“口服”单独作为给药途径，又从用药时间引文里剔掉，拼成原文不存在的片段。
+    result = await extract_discharge_medications(_SPLICE_TEXT, _MedicationClient([
+        ("药物甲片", "每次2片", "口服", "一日三次,饭前,7天"),
+        ("药物乙胶囊", "每次1粒", "口服", "一日三次,7天"),
+        ("药物丙片", "每次1片", None, "一日一次,长期服用"),
+    ]))
+
+    assert result.state == "ready"
+    assert [item["duration"] for item in result.medications] == [
+        "一日三次,饭前,口服7天", "一日三次,口服7天", "一日一次,长期服用",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("time_quote", [
+    "一日三次,一日一次",  # 跨药物条目拼接
+    "一日三次,长期服用",  # 间隔跨过分号
+    "一日三次,每日7天",  # 有原文不存在的文字
+])
+async def test_discharge_medication_unrestorable_spliced_quote_still_fails(time_quote):
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import (
+        extract_discharge_medications,
+    )
+
+    result = await extract_discharge_medications(_SPLICE_TEXT, _MedicationClient([
+        ("药物甲片", "每次2片", "口服", time_quote),
+    ]))
+
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")

@@ -25,6 +25,55 @@ _INTERNAL_FIELD_BY_WIRE_FIELD = {
     "route": "route",
     "medication_time": "duration",
 }
+# 引文还原：模型偶尔把同一药物条目里被其他字段词隔开的片段拼成一条引文，
+# 例如原文“一日三次,饭前,口服7天”写成“一日三次,饭前,7天”（“口服”已单独作为给药途径）。
+_MAX_QUOTE_GAP_CHARS = 4
+_MIN_QUOTE_SEGMENT_CHARS = 2
+# 间隔里出现这些字符说明跨到了别的药物条目或段落，不能还原。
+_QUOTE_GAP_BOUNDARY = frozenset(";；。\n\r")
+
+
+def _restore_from(quote: str, text: str, start: int) -> int | None:
+    """从 text[start] 起按顺序匹配 quote 的各段，返回覆盖范围终点；无法还原时返回 None。"""
+
+    quote_at, text_at = 0, start
+    while quote_at < len(quote):
+        if quote_at:
+            # 下一段须在短间隔内出现，且间隔不跨药物条目。
+            candidates = range(text_at, min(text_at + _MAX_QUOTE_GAP_CHARS, len(text)) + 1)
+        else:
+            candidates = range(start, start + 1)
+        best_at = best_length = 0
+        for at in candidates:
+            if any(ch in _QUOTE_GAP_BOUNDARY for ch in text[text_at:at]):
+                break
+            length = 0
+            while (quote_at + length < len(quote) and at + length < len(text)
+                   and quote[quote_at + length] == text[at + length]):
+                length += 1
+            if length > best_length:
+                best_at, best_length = at, length
+        if best_length < _MIN_QUOTE_SEGMENT_CHARS:
+            return None
+        quote_at += best_length
+        text_at = best_at + best_length
+    return text_at
+
+
+def _restore_contiguous_quote(quote: str, text: str) -> str | None:
+    """把拼接引文还原为原文中覆盖各段的唯一连续片段；不唯一或无法还原时返回 None。"""
+
+    spans = {
+        (start, end)
+        for start in range(len(text))
+        if text.startswith(quote[:_MIN_QUOTE_SEGMENT_CHARS], start)
+        for end in (_restore_from(quote, text, start),)
+        if end is not None
+    }
+    if len(spans) != 1:
+        return None
+    start, end = spans.pop()
+    return text[start:end]
 
 
 class MedicationLLMClient(Protocol):
@@ -123,6 +172,8 @@ def _parse(content: str, text: str) -> tuple[str, tuple[Mapping[str, str | None]
             if not isinstance(assertion, str) or assertion not in {"present", "missing", "uncertain"}:
                 raise ValueError("invalid field state")
             if assertion == "present":
+                if isinstance(quote, str) and quote.strip() and quote not in text:
+                    quote = _restore_contiguous_quote(quote, text)
                 if not isinstance(quote, str) or not quote.strip() or quote not in text:
                     raise ValueError("unverified field quote")
             elif quote is not None or (
