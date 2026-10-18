@@ -1050,7 +1050,19 @@ def has_qualified_traditional_surgery_row(row: Mapping[str, Any]) -> bool:
     return surgical_level in known_levels or incision_level in known_incisions
 
 
+# LX0609 专用读取上限，只覆盖病历包共用值，不改其他引擎。
+# 2026-10-17 1016 样本池：药品医嘱最多 827 行、非药品医嘱最多 2156 行，超出共用上限
+# 700/1500（0426 冻结 258 例审计所定），约 30 项被判资料超读取范围。
+# 读满上限仍标记为可能截断；医嘱送入模型的路径各有去重、分批或候选上限。
+_LX0609_SOURCE_LIMIT_OVERRIDES: dict[str, int] = {
+    "inpat_drug_order": 3000,
+    "inpat_nondrug_order": 5000,
+}
+
+
 def _source_limit(source_key: str) -> int:
+    if source_key in _LX0609_SOURCE_LIMIT_OVERRIDES:
+        return _LX0609_SOURCE_LIMIT_OVERRIDES[source_key]
     return int(getattr(bundle_assembly, "_DOMAIN_FETCH_LIMITS", {}).get(source_key, 50))
 
 
