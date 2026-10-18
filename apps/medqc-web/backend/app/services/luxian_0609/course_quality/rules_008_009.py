@@ -1408,6 +1408,7 @@ def _rule_009_change_event_decision(
     """模型仅抽取事件，逐事件24小时及时性由Python唯一裁决。"""
 
     facts: list[dict[str, Any]] = []
+    pending_window: dict[str, Any] | None = None
     for event in events:
         event_ref = str(event["event_ref"])
         event_time = event_times.get(event_ref)
@@ -1456,19 +1457,17 @@ def _rule_009_change_event_decision(
             else:
                 window_mature = evaluation_horizon > deadline.date()
             if not window_mature:
-                return (
-                    _rule_009_semantic_decision(
-                        base_decision=base_decision,
-                        semantic_state="window_not_mature",
-                    ),
-                    {
+                # 主控代定口径（2026-10-18，用户授权，待客户复核）：
+                # 未成熟事件不能掩盖已成熟事件缺陷，完成成熟事件汇总后再返回。
+                if pending_window is None:
+                    pending_window = {
                         "failure_kind": "critical_change_window_not_mature",
                         "event_ref": event_ref,
                         "event_time": event_time.strftime("%Y-%m-%d %H:%M:%S"),
                         "deadline_time": deadline.strftime("%Y-%m-%d %H:%M:%S"),
                         "threshold_hours": 24,
-                    },
-                )
+                    }
+                continue
         facts.append(
             {
                 "event_ref": event_ref,
@@ -1495,6 +1494,13 @@ def _rule_009_change_event_decision(
                 "unmet_events": unmet[:_MAX_RULE_009_DISPLAY_EVENTS],
                 "threshold_hours": 24,
             },
+        )
+    if pending_window is not None:
+        return (
+            _rule_009_semantic_decision(
+                base_decision=base_decision, semantic_state="window_not_mature",
+            ),
+            pending_window,
         )
     return (
         base_decision,
@@ -1638,7 +1644,8 @@ async def evaluate_rules_008_009_typed(
         verified: dict[str, Mapping[str, Any]] = {}
         invalid_events: dict[str, Mapping[str, Any]] = {}
         for attempt in range(2):
-            # 仅补核非法对应引用，已完整核验的事件不重问、不覆盖。
+            # 每批最多补核一次：解析失败重试本批，非法引用只补核对应事件；
+            # 已完整核验的事件和已通过的批次不重问、不覆盖。
             active_context = "\n".join(
                 block.rstrip("\n")
                 for block in re.split(r"(?m)(?=^\[(?:course|external)_event_ref=)", batch_context)
@@ -1650,7 +1657,7 @@ async def evaluate_rules_008_009_typed(
             usage["llm_call_count"] += 1
             try:
                 allowed_courses = batch_course_refs
-                if attempt:
+                if attempt and invalid_events:
                     allowed_courses = tuple(
                         ref for ref in batch_course_refs
                         if course_times[ref] is None or any(
@@ -1662,12 +1669,17 @@ async def evaluate_rules_008_009_typed(
                 semantic_prompt = _rule_009_semantic_prompt(
                     context=active_context, event_refs=pending_refs, course_refs=allowed_courses,
                 )
-                if attempt:
+                if attempt and invalid_events:
                     semantic_prompt += (
                         "\n本次为唯一一次引用补核：上次对应病程不在允许范围或早于事件。"
                         "请按原文时间重新核对，只能选事件发生后的对应病程；没有则返回空引用。"
                         "这些事件已经判为明确变化，is_explicit_change必须保持true；本次只修正对应引用。"
                         "不得为规避引用校验而省略事件或改判非明确变化。"
+                    )
+                elif attempt:
+                    semantic_prompt += (
+                        "\n本次为唯一一次JSON解析补核：上次应答无法解析为JSON对象。"
+                        "请重新核对本批全部候选，仅按约定结构返回完整JSON对象，不得遗漏候选。"
                     )
                 response = await llm_client.generate(semantic_prompt)
             except Exception:
@@ -1683,6 +1695,8 @@ async def evaluate_rules_008_009_typed(
             usage["completion_tokens"] += completion
             usage["total_tokens"] += total
             usage["api_time"] += elapsed
+            if not attempt and _response_json_payload(response) is None:
+                continue
             batch_events = _parse_rule_009_change_events(response)
             if (
                 batch_events is None
@@ -1690,7 +1704,8 @@ async def evaluate_rules_008_009_typed(
                 or any(
                     event["change_category"] != "exam_lab"
                     or (not event["is_explicit_change"] and event["corresponding_course_ref"])
-                    or (attempt and event["is_explicit_change"] != invalid_events[str(event["event_ref"])]["is_explicit_change"])
+                    or (str(event["event_ref"]) in invalid_events
+                        and event["is_explicit_change"] != invalid_events[str(event["event_ref"])]["is_explicit_change"])
                     for event in batch_events
                 )
             ):

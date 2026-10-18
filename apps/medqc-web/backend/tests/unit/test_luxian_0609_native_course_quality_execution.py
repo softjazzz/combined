@@ -3135,7 +3135,8 @@ async def test_course_009_daily_complete_invalid_json_fails_closed() -> None:
 
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
+    # 主控代定口径（2026-10-18）：JSON 解析失败的批次补核一次，再次失败仍失败关闭。
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
