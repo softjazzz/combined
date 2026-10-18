@@ -1310,7 +1310,9 @@ def read_luxian_0609_exam_lab_order_rows(
         for field in ("prescribed_datetime", "order_time", "order_id", "order_name")
         if field in columns
     )
-    limit_rows = 50
+    # 长住院 CT/MRI/培养相关医嘱可超过 50 条（1016 C02 为 51 条），截断后整个来源被判不完整；
+    # 仍保留多读一行的真实截断标记。
+    limit_rows = 300
     order_name = bundle_assembly._quote_ident("order_name")
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, table)} "

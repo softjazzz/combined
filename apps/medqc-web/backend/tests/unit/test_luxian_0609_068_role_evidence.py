@@ -217,9 +217,11 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "semantic_extraction_unresolved"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 100
-    assert len(client.calls) == 1
+    # “复查后可出院”类附条件批准引文按设计定向补核一次（c74ad1bb3）。
+    calls = 2 if "后可出院" in text else 1
+    assert result.llm_call_count == calls
+    assert result.total_tokens == 100 * calls
+    assert len(client.calls) == calls
     canonical = _canonical_extended_result(
         rule_id="LX0609-08-02-02",
         snapshot=snapshot,

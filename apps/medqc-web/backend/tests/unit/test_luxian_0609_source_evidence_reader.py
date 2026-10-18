@@ -478,7 +478,7 @@ def test_exam_lab_order_reader_filters_before_limit_so_unrelated_orders_cannot_h
     assert "UPPER(\"order_name\") LIKE :ct_name" in sql
     assert "\"order_name\" LIKE :magnetic_name" in sql
     assert "\"order_name\" LIKE :nmr_name" in sql
-    assert params["limit_rows"] == 51
+    assert params["limit_rows"] == 301  # 检查检验医嘱读取上限 300（多读 1 行判截断）
     assert params["institute_id"] == "safe-institute"
     assert "safe-institute" not in sql
 
