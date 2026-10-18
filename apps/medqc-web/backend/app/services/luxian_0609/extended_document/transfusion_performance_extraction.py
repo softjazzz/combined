@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609-transfusion-performance-v2"
 MAX_DOCUMENTS = 8
+MAX_BATCHES = 16
 MAX_BODY_CHARS = 6000
 MAX_TOTAL_BODY_CHARS = 12000
 MAX_COMPLETION_TOKENS = 2048
@@ -170,19 +171,65 @@ def _prompt(documents: Sequence[Mapping[str, Any]]) -> str:
 
 
 async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm_client: Any) -> PerformanceExtraction:
+    """按单次预算完整分批核验；任一批失败时不发布部分实施事实。"""
     if not rows:
         return PerformanceExtraction()
     unknown = tuple("unknown" for _ in rows)
     no_times = tuple(None for _ in rows)
-    if (len(rows) > MAX_DOCUMENTS or any(isinstance(row.get("record_content"), str) and len(row["record_content"]) > MAX_BODY_CHARS for row in rows)
-            or sum(len(row["record_content"]) for row in rows if isinstance(row.get("record_content"), str)) > MAX_TOTAL_BODY_CHARS):
+    if any(isinstance(row.get("record_content"), str) and len(row["record_content"]) > MAX_BODY_CHARS for row in rows):
         return PerformanceExtraction(unknown, "candidate_scope_incomplete", event_times=no_times)
     if any(not isinstance(row.get("record_content"), str) or not row["record_content"].strip() for row in rows):
         return PerformanceExtraction(unknown, "source_readiness_unproven", event_times=no_times)
+    batches: list[list[Mapping[str, Any]]] = []
+    batch: list[Mapping[str, Any]] = []
+    chars = 0
+    for row in rows:
+        size = len(row["record_content"])
+        if batch and (len(batch) == MAX_DOCUMENTS or chars + size > MAX_TOTAL_BODY_CHARS):
+            batches.append(batch)
+            batch, chars = [], 0
+        batch.append(row)
+        chars += size
+    batches.append(batch)
+    if len(batches) > MAX_BATCHES:
+        return PerformanceExtraction(unknown, "candidate_scope_incomplete", event_times=no_times)
+
+    states: list[str] = []
+    event_times: list[datetime | None] = []
+    assertions: list[Mapping[str, Any]] = []
+    calls = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    for batch in batches:
+        result = await _extract_performance_batch(batch, llm_client, offset=len(states))
+        calls += result.llm_call_count
+        prompt_tokens += result.prompt_tokens
+        completion_tokens += result.completion_tokens
+        total_tokens += result.total_tokens
+        api_time += result.api_time
+        if result.reason_code not in {"", "positive_assertion_not_explicit"}:
+            return PerformanceExtraction(
+                unknown, result.reason_code, calls, prompt_tokens, completion_tokens,
+                total_tokens, api_time, no_times,
+            )
+        states.extend(result.states)
+        event_times.extend(result.event_times)
+        assertions.extend(result.assertions)
+    return PerformanceExtraction(
+        tuple(states), "positive_assertion_not_explicit" if "unknown" in states else "",
+        calls, prompt_tokens, completion_tokens, total_tokens, api_time,
+        tuple(event_times), tuple(assertions),
+    )
+
+
+async def _extract_performance_batch(
+    rows: Sequence[Mapping[str, Any]], llm_client: Any, *, offset: int,
+) -> PerformanceExtraction:
+    unknown = tuple("unknown" for _ in rows)
+    no_times = tuple(None for _ in rows)
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
         return PerformanceExtraction(unknown, "model_transport_error", event_times=no_times)
     documents = []
-    for index, row in enumerate(rows, 1):
+    for index, row in enumerate(rows, offset + 1):
         parsed_time = _parse_datetime(row.get("record_time"))
         documents.append({
             "document_ref": f"d{index}",

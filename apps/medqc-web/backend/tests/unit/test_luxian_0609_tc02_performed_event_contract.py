@@ -328,7 +328,8 @@ async def test_tc02_known_mr_with_unknown_records_preserves_nc_but_cannot_publis
             "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
     execution, _, final, client = await run_case(case, client_override=PerformanceFake("unknown"))
     assert final["status"] == ("non_compliant" if known_nc else "data_gap")
-    assert execution.llm_call_count == len(client.calls) == (0 if unknown_count == 9 else 1)
+    # 超过单批 8 份时分批完整核验（9 份为 2 批），不再以 0 次调用直接判范围不足。
+    assert execution.llm_call_count == len(client.calls) == (2 if unknown_count == 9 else 1)
     if known_nc:
         facts = final["customer_display_facts"]
         assert facts["unconfirmed_record_count"] == unknown_count

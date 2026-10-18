@@ -118,15 +118,33 @@ def _protect_clinician_names(text: str) -> tuple[str, tuple[tuple[str, str], ...
     return _CLINICIAN_NAME_LABEL.sub(_replace, text), tuple(protected)
 
 
-def redact_luxian_0609_patient_privacy(prompt: str) -> str:
+def redact_luxian_0609_patient_privacy(
+    prompt: str, *, identity_values: Iterable[str] | None = None,
+) -> str:
     """删除LX0609模型prompt中的患者身份信息，保留医疗事实和医务人员姓名。"""
 
     if not isinstance(prompt, str):
         raise TypeError("prompt must be str")
+    if identity_values is None and any(label in prompt for label in ("患者", "病人", "患儿")):
+        from .privacy_request_scope import current_luxian_0609_redaction_identities
+
+        identity_values = current_luxian_0609_redaction_identities()
+    # 已知身份只补充明确患者介绍的识别，不靠扩充姓氏表猜测，也不盲删数字/无标签身份。
+    known_names = [
+        re.escape(value) for value in _freeze_identity_values(identity_values if identity_values is not None else ())
+        if re.fullmatch(r"[\u4e00-\u9fff·]{2,12}", value)
+    ]
+    name_patterns = (_PATIENT_NAME_LABEL, _PATIENT_INTRO, _DEMOGRAPHIC_NAME)
+    if known_names:
+        known_intro = re.compile(
+            r"(?P<label>(?:患者|病人|患儿)\s*)"
+            + r"(?P<value>" + "|".join(known_names) + r")(?=[\s，,、；;。]|因|$)"
+        )
+        name_patterns = (*name_patterns, known_intro)
     protected_prompt, protected_clinicians = _protect_clinician_names(prompt)
     patient_names = {
         match.group("value").strip()
-        for pattern in (_PATIENT_NAME_LABEL, _PATIENT_INTRO, _DEMOGRAPHIC_NAME)
+        for pattern in name_patterns
         for match in pattern.finditer(protected_prompt)
     }
     contact_names = {
@@ -149,6 +167,8 @@ def redact_luxian_0609_patient_privacy(prompt: str) -> str:
         redacted,
         _PATIENT_NAME_PLACEHOLDER,
     )
+    if known_names:
+        redacted = _replace_labelled(known_intro, redacted, _PATIENT_NAME_PLACEHOLDER)
     redacted = _replace_labelled(
         _CONTACT_NAME,
         redacted,
@@ -536,7 +556,7 @@ class _Luxian0609PrivacyRedactingLLMClient:
                     raise PrivacyIdentityContextError(
                         "Patient identity context is unavailable"
                     ) from None
-            redacted = redact_luxian_0609_patient_privacy(prompt)
+            redacted = redact_luxian_0609_patient_privacy(prompt, identity_values=identities)
             assert_no_known_identity(redacted, identities)
             assert_no_known_identity_in_model_request(kwargs, identities)
         except (PatientPrivacyViolation, PrivacyIdentityContextError) as error:
