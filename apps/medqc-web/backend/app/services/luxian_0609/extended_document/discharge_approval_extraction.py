@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 import math
 import re
@@ -206,9 +206,10 @@ def _validated_documents(
     return tuple(result)
 
 
-async def extract_discharge_approval(
+async def _extract_discharge_approval_once(
     documents: Sequence[DischargeApprovalInput],
     llm_client: DischargeApprovalLLMClient | None,
+    *, instruction_correction: bool = False,
 ) -> DischargeApprovalExtraction:
     try:
         validated = _validated_documents(documents)
@@ -233,7 +234,12 @@ async def extract_discharge_approval(
     started = perf_counter()
     try:
         response = await llm_client.generate(
-            _prompt(safe_documents),
+            _prompt(safe_documents) + (
+                "\n纠正上一轮事实抽取：不能将‘出院医嘱’栏目标题或其下的休息、复查等嘱咐"
+                "本身当作上级医师已经批准出院。请重新核对完整文书中的意见主体和明确处置；"
+                "确有批准意见才返回approved，没有提取到意见时返回unknown及空quote。"
+                if instruction_correction else ""
+            ),
             max_completion_tokens=MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
         )
@@ -294,4 +300,39 @@ async def extract_discharge_approval(
         1,
         *usage_values,
         api_time,
+    )
+
+
+async def extract_discharge_approval(
+    documents: Sequence[DischargeApprovalInput],
+    llm_client: DischargeApprovalLLMClient | None,
+) -> DischargeApprovalExtraction:
+    """一般一次抽取；仅对误把出院医嘱标题作批准依据的文书补核一次。"""
+    result = await _extract_discharge_approval_once(documents, llm_client)
+    if result.state != "ready":
+        return result
+    pending_ids = {
+        assertion.local_doc_id for assertion in result.assertions
+        if assertion.opinion == "approved"
+        and "出院医嘱" in assertion.quote
+        and "出院" not in assertion.quote.replace("出院医嘱", "")
+    }
+    if not pending_ids:
+        return result
+    # 不用标题直接反推“未同意”；重读完整原文，其他已核验文书不重复抽取。
+    repaired = await _extract_discharge_approval_once(
+        tuple(item for item in documents if item.local_doc_id in pending_ids),
+        llm_client, instruction_correction=True,
+    )
+    by_id = {assertion.local_doc_id: assertion for assertion in repaired.assertions}
+    return replace(
+        repaired,
+        assertions=(tuple(
+            by_id.get(assertion.local_doc_id, assertion) for assertion in result.assertions
+        ) if repaired.state == "ready" else ()),
+        llm_call_count=result.llm_call_count + repaired.llm_call_count,
+        prompt_tokens=result.prompt_tokens + repaired.prompt_tokens,
+        completion_tokens=result.completion_tokens + repaired.completion_tokens,
+        total_tokens=result.total_tokens + repaired.total_tokens,
+        api_time=result.api_time + repaired.api_time,
     )

@@ -82,7 +82,10 @@ from .extended_document.antimicrobial_action_extraction import (
     extract_confirmed_antimicrobial_actions,
     linked_order_id as _linked_order_id,
 )
-from .extended_document.antimicrobial_effect_extraction import extract_antimicrobial_effects
+from .extended_document.antimicrobial_effect_extraction import (
+    extract_antimicrobial_effects,
+    extract_antimicrobial_effect_pairs,
+)
 from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
 from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
@@ -3256,6 +3259,23 @@ async def execute_luxian_0609_native_extended_document_rules(
                         course_rows, targets, llm_client,
                         max_prompt_bytes=65536, max_completion_tokens=16384,
                     )
+                    if antimicrobial_effect_extraction.reason_code == "source_capacity_exceeded":
+                        # 全住院笛卡尔配对超限时，按权威时间排除不可能满足窗口的配对。
+                        # 保留所有无时间病程及窗口内全文，不按药名或评价词筛选、截断正文。
+                        candidate_pairs = tuple(
+                            (row_index, target_index)
+                            for row_index, row in enumerate(course_rows)
+                            for target_index, target in enumerate(targets)
+                            if (value := _row_time(row)) is None
+                            or any(
+                                name == target and 48 <= (value - start).total_seconds() / 3600 <= 72
+                                for _order, name, start in mature_events
+                            )
+                        )
+                        antimicrobial_effect_extraction = await extract_antimicrobial_effect_pairs(
+                            course_rows, targets, candidate_pairs, llm_client,
+                            max_prompt_bytes=65536, max_completion_tokens=16384,
+                        )
                     extraction = antimicrobial_effect_extraction
                     if extraction.state != "ready":
                         final_state = extraction.state

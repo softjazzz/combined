@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import logging
 from time import perf_counter
@@ -279,4 +279,79 @@ async def extract_antimicrobial_effects(
         tuple(accepted[pair] for pair in expected if pair in accepted),
         calls, prompt_tokens, completion_tokens, total_tokens, max(0.0, api_time),
         reason if unresolved else "", unresolved,
+    )
+
+
+async def extract_antimicrobial_effect_pairs(
+    documents: Sequence[Mapping[str, Any]], targets: Sequence[str],
+    pairs: Sequence[tuple[int, int]], llm_client: Any,
+    *, max_prompt_bytes: int, max_completion_tokens: int,
+) -> AntimicrobialEffectResult:
+    """预算内逐批核对程序确定的候选；全文、引用及两次补缺合同沿用原抽取器。
+
+    每批仅一个目标药，局部编号核验后映射回原坐标；调用上限为候选配对数的两倍。
+    先完成全部分批预检，单份全文仍超限时不截断、不丢候选。
+    """
+    if (type(max_prompt_bytes) is not int or max_prompt_bytes <= 0
+            or type(max_completion_tokens) is not int or max_completion_tokens <= 0):
+        return AntimicrobialEffectResult("data_gap", reason_code="source_capacity_exceeded")
+    try:
+        _, bodies = _sources(documents, targets)
+        expected = tuple(pairs)
+        if any(
+            not isinstance(pair, tuple) or len(pair) != 2
+            or type(pair[0]) is not int or type(pair[1]) is not int
+            or not 0 <= pair[0] < len(bodies) or not 0 <= pair[1] < len(targets)
+            for pair in expected
+        ) or len(set(expected)) != len(expected):
+            raise ValueError("invalid candidate binding")
+    except (ValueError, TypeError, OverflowError):
+        return AntimicrobialEffectResult("data_gap", reason_code="required_field_missing")
+
+    batches: list[tuple[int, tuple[int, ...]]] = []
+    for target in range(len(targets)):
+        pending: list[int] = []
+
+        def fits(indexes: Sequence[int]) -> bool:
+            selected = [bodies[index] for index in indexes]
+            names = [targets[target]]
+            return (len(_prompt(selected, names).encode("utf-8")) <= max_prompt_bytes
+                    and _completion_bound(selected, names) <= max_completion_tokens)
+
+        for row, target_index in expected:
+            if target_index != target:
+                continue
+            if pending and not fits((*pending, row)):
+                batches.append((target, tuple(pending)))
+                pending = []
+            if not fits((row,)):
+                return AntimicrobialEffectResult("data_gap", reason_code="source_capacity_exceeded")
+            pending.append(row)
+        if pending:
+            batches.append((target, tuple(pending)))
+
+    accepted: dict[tuple[int, int], AntimicrobialEffectAssertion] = {}
+    calls = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    state, reason = "ready", ""
+    for target, indexes in batches:
+        result = await extract_antimicrobial_effects(
+            [documents[index] for index in indexes], [targets[target]], llm_client,
+            max_prompt_bytes=max_prompt_bytes, max_completion_tokens=max_completion_tokens,
+        )
+        calls += result.llm_call_count
+        prompt_tokens += result.prompt_tokens
+        completion_tokens += result.completion_tokens
+        total_tokens += result.total_tokens
+        api_time += result.api_time
+        for assertion in result.assertions:
+            row = indexes[assertion.row_index]
+            accepted[(row, target)] = replace(assertion, row_index=row, target_index=target)
+        if result.state != "ready":
+            state, reason = result.state, result.reason_code
+            break
+    unresolved = tuple(pair for pair in expected if pair not in accepted)
+    return AntimicrobialEffectResult(
+        state, tuple(accepted[pair] for pair in expected if pair in accepted),
+        calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason, unresolved,
     )
