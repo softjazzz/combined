@@ -243,7 +243,9 @@ async def test_future_same_drug_order_cannot_hide_documented_initial_empiric_use
         "first_course_record": ({"record_time": "2026-06-01 11:00:00",
                                   "record_content": "考虑感染，已给予左氧氟沙星抗感染。"},),
     })
-    assert reduced.final_state.value == ("compliant" if future_start else "not_applicable")
+    # 主控代定口径（2026-10-18，待客户复核），基线057：同药多医嘱存在即关联，
+    # 另一条医嘱缺开始时间也不再遮蔽首次经验用药及其已记录理由。
+    assert reduced.final_state.value == "compliant"
 
 
 @pytest.mark.asyncio

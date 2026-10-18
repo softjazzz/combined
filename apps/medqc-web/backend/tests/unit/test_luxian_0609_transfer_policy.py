@@ -67,8 +67,9 @@ async def test_early_transfer_out_department_mismatch_or_multiple_candidates_rem
 async def test_distinct_target_or_gap_over_24_hours_keeps_two_transfers(second_target, second_time):
     _, _, execution, reduced = await _evaluate_selected(("LX0609-10-02-02",), {
         "inpat_nondrug_order": (order("2026-06-01 08:00:00"), order(second_time, second_target, "O2")),
-        "transfer_in_record": ({"record_time": "2026-06-02 09:00:00"},),
-        "transfer_out_record": ({"record_time": "2026-06-02 08:30:00"},),
+        # 窗口相接（恰好 24 小时）时，记录须按科室唯一对应其中一次转科才能逐次核对。
+        "transfer_in_record": ({"record_time": "2026-06-02 09:00:00", "transferin_department": second_target},),
+        "transfer_out_record": ({"record_time": "2026-06-02 08:30:00", "transferin_department": second_target},),
     })
     assert reduced[0].final_state.value == "non_compliant"
     assert len(dict(execution.customer_display_facts)["LX0609-10-02-02"]["event_checks"]) == 2
@@ -81,5 +82,5 @@ async def test_intervening_transfer_in_prevents_same_target_order_merge():
         "transfer_in_record": ({"record_time": "2026-06-01 09:00:00"},),
         "transfer_out_record": ({"record_time": "2026-06-01 08:30:00"},),
     })
-    assert reduced[0].final_state.value == "non_compliant"
-    assert len(dict(execution.customer_display_facts)["LX0609-10-02-02"]["event_checks"]) == 2
+    # 中间有转入记录不合并；两次同目标、窗口重叠且记录无法按科室唯一对应，不拆分判缺文书。
+    assert (reduced[0].final_state.value, reduced[0].reason_code) == ("data_gap", "association_failed")

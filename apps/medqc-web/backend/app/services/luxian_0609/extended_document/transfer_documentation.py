@@ -324,7 +324,13 @@ def evaluate_transfer_documentation(
                 for earlier, later in zip(grouped, grouped[1:]))
             or (all(_target_department(order) for _, order in grouped)
                 and all(_precise_datetime(authoritative_document_time_value(row)) is not None
-                        for row in (*transfer_in_rows, *transfer_out_rows)))
+                        for row in (*transfer_in_rows, *transfer_out_rows))
+                # 窗口重叠的多次转科（如 2 分钟内改开不同目标）须每份记录按科室唯一对应
+                # 一次转科，否则不能拆分判缺文书（主控审查，避免把改开医嘱误判为漏写）。
+                and all(
+                    sum(_departments_correspond(row, order) for _, order in grouped) == 1
+                    for row in (*transfer_in_rows, *transfer_out_rows)
+                ))
         ):
             outcomes = []
             out_records_by_event: list[list[Mapping[str, Any]]] = [[] for _ in grouped]
