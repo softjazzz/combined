@@ -906,6 +906,7 @@ def _rule_009_semantic_context(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    allow_large_context: bool = False,
 ) -> tuple[
     str,
     bool,
@@ -1129,7 +1130,7 @@ def _rule_009_semantic_context(
     context = "\n".join(parts)
     return (
         ("", True, False, {}, {}, {}, {}, evaluation_horizon)
-        if len(context) > _MAX_RULE_009_CONTEXT_CHARS
+        if len(context) > _MAX_RULE_009_CONTEXT_CHARS and not allow_large_context
         else (
             context,
             False,
@@ -1141,6 +1142,78 @@ def _rule_009_semantic_context(
             evaluation_horizon,
         )
     )
+
+
+def _rule_009_context_batches(
+    *,
+    context: str,
+    event_times: Mapping[str, datetime | None],
+    course_times: Mapping[str, datetime | None],
+) -> tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]:
+    """只在整体超限时按事件窗口分批，保留基线和后续24小时完整病程。
+
+    单条正文或单个完整窗口仍超限时失败关闭；未知时间不能参与窗口裁剪。
+    外部事件恰好投递一次，文书引用仍使用同一快照内的全局引用。
+    """
+    if len(context) <= _MAX_RULE_009_CONTEXT_CHARS:
+        return ((context, tuple(event_times), tuple(course_times)),)
+    blocks = re.split(r"(?m)(?=^\[(?:course|external)_event_ref=)", context)
+    courses: dict[str, str] = {}
+    events: dict[str, str] = {}
+    for block in blocks:
+        match = re.match(r"\[(course|external)_event_ref=([^\]]+)\]", block)
+        if match:
+            (courses if match[1] == "course" else events)[match[2]] = block.rstrip("\n")
+    if (
+        set(courses) != set(course_times)
+        or set(events) != set(event_times)
+        or len([block for block in blocks if block]) != len(courses) + len(events)
+    ):
+        return ()
+    # 单条材料不能被截短，也不能因没有外部事件而绕过既有容量合同。
+    if not events or any(len(block) > _MAX_RULE_009_CONTEXT_CHARS for block in (*courses.values(), *events.values())):
+        return ()
+
+    def course_refs_for(ref: str) -> set[str]:
+        event_time = event_times[ref]
+        if event_time is None or any(value is None for value in course_times.values()):
+            return set(courses)
+        selected = {
+            key for key, value in course_times.items()
+            if event_time <= value <= event_time + _RULE_009_CHANGE_WINDOW
+        }
+        # 保留事件及所选病程各自的最近基线；不依靠模型猜测窗口外内容。
+        for block in (events[ref], *(courses[key] for key in tuple(selected))):
+            baseline = re.search(r"baseline_course_ref=(C\d+)", block)
+            if baseline and baseline[1] in courses:
+                selected.add(baseline[1])
+        return selected
+
+    batches: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = []
+    batch_events: list[str] = []
+    batch_courses: set[str] = set()
+
+    def render(refs: Sequence[str], selected_courses: set[str]) -> str:
+        return "\n".join([
+            *(block for ref, block in courses.items() if ref in selected_courses),
+            *(events[ref] for ref in refs),
+        ])
+
+    for ref in event_times:
+        selected_courses = course_refs_for(ref)
+        proposed = render([*batch_events, ref], batch_courses | selected_courses)
+        if len(proposed) > _MAX_RULE_009_CONTEXT_CHARS and batch_events:
+            batches.append((render(batch_events, batch_courses), tuple(batch_events),
+                            tuple(key for key in courses if key in batch_courses)))
+            batch_events, batch_courses = [], set()
+        batch_events.append(ref)
+        batch_courses.update(selected_courses)
+        if len(render(batch_events, batch_courses)) > _MAX_RULE_009_CONTEXT_CHARS:
+            return ()
+    if batch_events:
+        batches.append((render(batch_events, batch_courses), tuple(batch_events),
+                        tuple(key for key in courses if key in batch_courses)))
+    return tuple(batches)
 
 
 def _rule_009_external_source_terminal_decision(
@@ -1513,7 +1586,13 @@ async def evaluate_rules_008_009_typed(
         event_document_refs,
         course_document_refs,
         evaluation_horizon,
-    ) = _rule_009_semantic_context(snapshot=snapshot, materials=materials)
+    ) = _rule_009_semantic_context(
+        snapshot=snapshot, materials=materials, allow_large_context=True
+    )
+    batches = _rule_009_context_batches(
+        context=context, event_times=event_times, course_times=course_times
+    ) if context_ready else ()
+    context_capacity_exceeded = context_capacity_exceeded or (context_ready and not batches)
     if context_capacity_exceeded:
         return Rule008009TypedExecution(
             decision=_rule_009_semantic_decision(
@@ -1544,42 +1623,50 @@ async def evaluate_rules_008_009_typed(
             customer_display_facts=tuple(base_display_facts),
         )
 
-    try:
-        response = await llm_client.generate(
-            _rule_009_semantic_prompt(
-                context=context,
-                event_refs=tuple(event_times),
-                course_refs=tuple(course_times),
-            )
-        )
-    except Exception:
-        return Rule008009TypedExecution(
-            decision=_rule_009_semantic_decision(
-                base_decision=base_decision,
-                error_reason="model_transport_error",
-            ),
-            customer_display_facts=tuple(base_display_facts),
-            llm_call_count=1,
-        )
-
-    prompt, completion, total, elapsed = usage_parser(response)
     usage = {
-        "llm_call_count": 1,
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": total,
-        "api_time": elapsed,
+        "llm_call_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "api_time": 0.0,
     }
-    events = _parse_rule_009_change_events(response)
-    if events is None:
-        return Rule008009TypedExecution(
-            decision=_rule_009_semantic_decision(
-                base_decision=base_decision,
-                error_reason="model_invalid_output",
-            ),
-            customer_display_facts=tuple(base_display_facts),
-            **usage,
-        )
+    all_events: list[Mapping[str, Any]] = []
+    for batch_context, batch_event_refs, batch_course_refs in batches:
+        usage["llm_call_count"] += 1
+        try:
+            response = await llm_client.generate(_rule_009_semantic_prompt(
+                context=batch_context, event_refs=batch_event_refs, course_refs=batch_course_refs,
+            ))
+        except Exception:
+            return Rule008009TypedExecution(
+                decision=_rule_009_semantic_decision(
+                    base_decision=base_decision, error_reason="model_transport_error",
+                ),
+                customer_display_facts=tuple(base_display_facts), **usage,
+            )
+        prompt, completion, total, elapsed = usage_parser(response)
+        usage["prompt_tokens"] += prompt
+        usage["completion_tokens"] += completion
+        usage["total_tokens"] += total
+        usage["api_time"] += elapsed
+        batch_events = _parse_rule_009_change_events(response)
+        if (
+            batch_events is None
+            or tuple(str(event["event_ref"]) for event in batch_events) != batch_event_refs
+            or any(
+                event["corresponding_course_ref"]
+                and event["corresponding_course_ref"] not in batch_course_refs
+                for event in batch_events
+            )
+        ):
+            return Rule008009TypedExecution(
+                decision=_rule_009_semantic_decision(
+                    base_decision=base_decision, error_reason="model_invalid_output",
+                ),
+                customer_display_facts=tuple(base_display_facts), **usage,
+            )
+        all_events.extend(batch_events)
+    events = tuple(all_events)
     returned_event_refs = tuple(str(event["event_ref"]) for event in events)
     if (
         len(set(returned_event_refs)) != len(events)

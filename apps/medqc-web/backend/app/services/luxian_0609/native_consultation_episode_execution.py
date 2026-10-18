@@ -1276,6 +1276,38 @@ def _candidate_documents(
         if evidence_materials is not None and evidence_snapshot is not None
         else _EXECUTION_SOURCE_KEYS
     )
+    # 无正文主表头还可由同一检查/检验的完整报告代表。只接受同一快照内、
+    # 本次住院窗口中可投递的报告，不能用另一检查、截断来源或缺时报告补足。
+    covered_master_ids: dict[str, set[str]] = {}
+    if evidence_materials is not None and evidence_snapshot is not None:
+        for master, report, identity_field in (
+            ("exam_master", "exam_item_report", "exam_id"),
+            ("labtest_master", "labtest_item_report", "test_id"),
+        ):
+            observation = next(
+                (item for item in evidence_snapshot.observations if item.source_key == report),
+                None,
+            )
+            if observation is None or observation.completeness is not SourceCompleteness.COMPLETE:
+                continue
+            try:
+                report_rows = _read_rows(
+                    source_key=report, institute_id=institute_id, patient_id=patient_id,
+                    visit_id=visit_id, source_schema=source_schema,
+                    evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot,
+                    allow_truncated=False,
+                )
+            except (_SourceGap, _SourceTechnical):
+                continue
+            covered_master_ids[master] = {
+                identity
+                for row in report_rows
+                if (identity := _clean(row.get(identity_field)))
+                and (observed_time := _row_time(row, source_key=report)) is not None
+                and stay_window.contains(observed_time)
+                and (text := _candidate_text(row=row, source_key=report))
+                and len(text) <= _MAX_CANDIDATE_CHARS
+            }
     preloaded_course_rows: dict[str, tuple[str, Sequence[Mapping[str, Any]]]] = {}
     for source_key in source_keys:
         if source_key not in _COURSE_EXECUTION_SOURCE_KEYS:
@@ -1392,6 +1424,9 @@ def _candidate_documents(
                 # 空工件，不能仅因它同时缺时间就把完整病程来源降为不完整。
                 continue
             if not text and source_key in _MASTER_HEADER_SOURCE_KEYS:
+                identity_field = "exam_id" if source_key == "exam_master" else "test_id"
+                if _clean(row.get(identity_field)) in covered_master_ids.get(source_key, set()):
+                    continue
                 linked_order_ids = {
                     part for part in re.split(r"[+^]", _clean(row.get("order_id"))) if part
                 }
