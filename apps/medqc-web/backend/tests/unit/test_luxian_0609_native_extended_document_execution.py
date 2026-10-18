@@ -6327,14 +6327,16 @@ def test_054_high_confidence_candidate_action_is_conservative(
             "trigger_absent_complete",
         ),
         (
+            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
             "考虑感染，不建议停用而继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
         ),
         (
+            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
             "考虑感染，未见不良反应继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
         ),
         (
             "考虑感染，并非不予以左氧氟沙星抗感染。",
@@ -6377,9 +6379,10 @@ def test_054_high_confidence_candidate_action_is_conservative(
             "trigger_absent_complete",
         ),
         (
+            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
             "考虑感染，暂不更换并继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
         ),
     ),
 )
@@ -6737,8 +6740,14 @@ async def test_antimicrobial_nearby_distinct_orders_remain_ambiguous(
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
+    if rule_id == "LX0609-05-01-02":
+        # 054 用户口径（2026-10-18）：同药多条医嘱且无停止时间时，存在同药医嘱即关联成立，
+        # 按病程理由判定。
+        assert reduced.final_state is CustomerFinalState.COMPLIANT
+        assert reduced.reason_code == "requirement_satisfied"
+    else:
+        assert reduced.final_state is CustomerFinalState.DATA_GAP
+        assert reduced.reason_code == "association_failed"
 
 
 @pytest.mark.asyncio
@@ -11133,3 +11142,92 @@ def test_056_explanation_rejects_invalid_counts_and_status_conflicts(count, befo
             rule_id="LX0609-05-01-04", status=status, reason_code="requirement_violated",
             raw={"verification_kind": "key_antimicrobial_specimen_check", "key_drug_count": count, "specimen_before_first_order": before},
         )
+
+
+# 054 用户口径（2026-10-18）：同药存在即关联；延续原方案不触发；同句因果与病情依据可作理由。
+@pytest.mark.parametrize(
+    ("text", "drug", "expected"),
+    (
+        ("继续予以亚胺培南西司他丁联合莫西沙星抗感染。", "亚胺培南", True),
+        ("治疗上暂无调整，继续呼吸机辅助呼吸，美罗培南联合氟康唑抗感染。", "美罗培南", True),
+        ("继续予以心电监护、吸氧，头孢曲松抗感染。", "头孢曲松", True),
+        ("继续联用左氧氟沙星抗感染。", "左氧氟沙星", True),
+        ("暂不更换并继续使用左氧氟沙星抗感染。", "左氧氟沙星", True),
+        ("今日停用甲硝唑，余继续目前抗感染治疗。", "甲硝唑", False),
+        ("予以美罗培南降阶梯为哌拉西林他唑巴坦抗感染。", "美罗培南", False),
+        ("加用莫西沙星联合亚胺培南西司他丁加强抗感染。", "莫西沙星", False),
+        ("请示上级医师后予以头孢曲松抗感染、补液维持水电解质平衡。", "头孢曲松", False),
+        ("继续目前治疗，今日予以万古霉素加强阳性菌覆盖。", "万古霉素", False),
+    ),
+)
+def test_054_continuation_only_follows_drug_clause(text, drug, expected) -> None:
+    assert module._054_is_continuation_only({"record_content": text}, drug) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "drug", "expected"),
+    (
+        ("鉴于患者腹泻情况好转，故今日停用甲硝唑。", "甲硝唑", True),
+        ("复查炎症指标恢复正常，故停用哌拉西林他唑巴坦钠。", "哌拉西林", True),
+        ("患者肺部感染重，请临床药学会诊后建议更换抗生素。故更换头孢他啶。", "头孢他啶", True),
+        ("今日停用甲硝唑，患者腹泻好转。", "甲硝唑", False),
+        ("故停用甲硝唑。", "甲硝唑", False),
+        ("今日停用甲硝唑。", "甲硝唑", False),
+    ),
+)
+def test_054_reason_in_action_sentence_requires_basis_before_drug(text, drug, expected) -> None:
+    assert module._054_reason_in_action_sentence({"record_content": text}, drug) is expected
+
+
+def _two_metronidazole_orders() -> tuple[dict, dict]:
+    return (
+        {"order_id": "MET-1", "generic_name": "甲硝唑", "repeat_indicator": "长期",
+         "planned_start_datetime": "2026-06-01 10:00:00"},
+        {"order_id": "MET-2", "generic_name": "甲硝唑", "repeat_indicator": "长期",
+         "planned_start_datetime": "2026-06-05 10:00:00"},
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("course_text", "expected_state", "expected_reason"),
+    (
+        ("鉴于患者腹泻情况好转，故今日停用甲硝唑。", CustomerFinalState.COMPLIANT, "requirement_satisfied"),
+        ("今日停用甲硝唑。", CustomerFinalState.NON_COMPLIANT, "requirement_violated"),
+    ),
+)
+async def test_054_repeated_same_drug_orders_associate_and_judge_reason(
+    course_text, expected_state, expected_reason,
+) -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-02",
+        {
+            "inpat_drug_order": _two_metronidazole_orders(),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": course_text,
+            },),
+        },
+        llm_client=_AntimicrobialActionClient("affirmed"),
+    )
+
+    assert reduced.final_state is expected_state
+    assert reduced.reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+async def test_054_action_without_same_drug_order_remains_association_failed() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-02",
+        {
+            "inpat_drug_order": _two_metronidazole_orders(),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": "考虑感染加重，今日更换抗生素为哌拉西林他唑巴坦。",
+            },),
+        },
+        llm_client=_AntimicrobialActionClient("affirmed"),
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"

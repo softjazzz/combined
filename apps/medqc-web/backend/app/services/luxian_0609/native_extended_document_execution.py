@@ -1353,6 +1353,110 @@ class _AntimicrobialReasonAction:
     orders: tuple[Mapping[str, Any], ...]
 
 
+# 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作，
+# 只查使用/加用、停用、更换、新增联合、超说明书。
+_054_CHANGE_ACTION_PATTERN = re.compile(
+    r"加用|停用|停药|停止使用|更换|换用|改为|改用|调整为|降阶梯|升阶梯|启用|开始使用|首次使用|新加|超说明书"
+)
+_054_ADMINISTER_VERB_PATTERN = re.compile(r"予以|给予|使用|应用|静滴|口服|联用")
+_054_CONTINUATION_CLAUSE_PATTERN = re.compile(r"继续|维持|续用|仍予|仍用")
+_054_UNCHANGED_SENTENCE_PATTERN = re.compile(
+    r"暂无调整|暂不调整|未作调整|无调整|治疗同前|方案同前|维持原方案|方案不变|继续(?:目前|当前|原)"
+)
+
+
+def _054_governs_drug(gap: str) -> bool:
+    """延续标记与药名之间没有新的给药动词（紧跟标记的“继续予以”等复合写法除外）。"""
+
+    gap = re.sub(r"^\s*(?:予以|给予|使用|应用|联用)", "", gap)
+    return not _054_ADMINISTER_VERB_PATTERN.search(gap)
+
+
+def _054_is_continuation_only(row: Mapping[str, Any], antimicrobial: str) -> bool:
+    """该病程对目标药的所有提及都只是延续原方案时返回 True。
+
+    以目标药所在分句为准：分句有加用/停用/更换等变更词即为触发；分句自身写
+    “继续/维持”，或分句无给药动词而上一分句写“继续”（共用动词），视为延续；
+    句中药名之前有“暂无调整/治疗同前”等且其间没有新的给药动词，也视为延续。
+    """
+
+    text = _material_text(row)
+    continuation = False
+    for sentence in re.split(r"[。；;！!？?\n]", text):
+        if antimicrobial not in sentence:
+            continue
+        clauses = re.split(r"[，,]", sentence)
+        offset = 0
+        for index, clause in enumerate(clauses):
+            clause_start = offset
+            offset += len(clause) + 1
+            if antimicrobial not in clause:
+                continue
+            if any(
+                not re.search(r"(?:不|未|无需|无须|勿)(?:建议|考虑|需要|需|予|再)?$", clause[:change.start()])
+                for change in _054_CHANGE_ACTION_PATTERN.finditer(clause)
+            ):
+                return False
+            drug_at = clause_start + clause.find(antimicrobial)
+            unchanged = any(
+                _054_governs_drug(sentence[marker.end():drug_at])
+                for marker in _054_UNCHANGED_SENTENCE_PATTERN.finditer(sentence[:drug_at])
+            )
+            clause_drug_at = clause.find(antimicrobial)
+            if (
+                any(
+                    _054_governs_drug(clause[marker.end():clause_drug_at])
+                    for marker in _054_CONTINUATION_CLAUSE_PATTERN.finditer(clause[:clause_drug_at])
+                )
+                or (
+                    index > 0
+                    and not _054_ADMINISTER_VERB_PATTERN.search(clause)
+                    and _054_CONTINUATION_CLAUSE_PATTERN.search(clauses[index - 1])
+                )
+                or unchanged
+            ):
+                continuation = True
+                continue
+            return False
+    return continuation
+
+
+# 同一病程内与目标药同句的病情依据（用户口径 2026-10-18，程序判定）：
+# “鉴于…故/因此…”因果结构，或炎性指标、体温、症状等变化。
+_054_CAUSAL_CONNECTOR_PATTERN = re.compile(r"鉴于|故|因此|所以|遂|据此|结合")
+_054_CLINICAL_BASIS_PATTERN = re.compile(
+    r"(?:炎性|炎症|感染)指标[^，,。；;]{0,8}(?:下降|降低|好转|恢复正常|正常|升高|增高)"
+    r"|(?:体温|血象|白细胞|降钙素原|PCT|CRP|C反应蛋白)[^，,。；;]{0,8}(?:正常|下降|降低|好转|升高|增高)"
+    r"|(?:症状|病情|感染|腹泻|咳嗽|咳痰|发热)[^，,。；;]{0,6}(?:好转|缓解|控制|加重|无改善|未见好转)"
+)
+
+
+def _054_reason_in_action_sentence(row: Mapping[str, Any], antimicrobial: str) -> bool:
+    """理由须与目标药同句且位于药名之前：因果连接词前有内容，或写有病情依据。"""
+
+    sentences = re.split(r"[。；;！!？?\n]", _material_text(row))
+    for index, sentence in enumerate(sentences):
+        position = sentence.find(antimicrobial)
+        if position < 0:
+            continue
+        prefix = sentence[:position]
+        if _054_CLINICAL_BASIS_PATTERN.search(prefix):
+            return True
+        # “……。故更换X”：以“故/因此/遂”起句即声明理由在上一句。
+        if (
+            index > 0
+            and re.match(r"\s*(?:故|因此|所以|遂|据此)", prefix)
+            and re.search(r"[一-鿿]{4,}", sentences[index - 1])
+        ):
+            return True
+        connector = None
+        for connector in _054_CAUSAL_CONNECTOR_PATTERN.finditer(prefix):
+            pass
+        if connector is not None and re.search(r"[一-鿿]{4,}", prefix[:connector.start()]):
+            return True
+    return False
+
+
 def _054_action_events(
     rows: Sequence[Mapping[str, Any]],
     antimicrobial_orders: Sequence[Mapping[str, Any]],
@@ -1374,6 +1478,8 @@ def _054_action_events(
                 action := confirmed_actions.get((row_index, antimicrobial))
             ) is None:
                 continue
+            if _054_is_continuation_only(row, antimicrobial):
+                continue
             mentioned_antimicrobials.append(antimicrobial)
             row_order_id = _linked_order_id(row)
             if row_order_id:
@@ -1389,17 +1495,26 @@ def _054_action_events(
                     for order_event in order_events
                     if antimicrobial in order_event.antimicrobials
                 )
-            if len(candidates) != 1:
-                # 病程动作本身不能证明属于本次哪条受控医嘱；不能凭 status 或
-                # update_time 补造关联，也不能让其他同名医嘱代为触发。
+            if row_order_id and len(candidates) != 1:
+                # 病程带医嘱号时必须唯一对上该医嘱，不能让其他同名医嘱代为触发。
                 association_failed = True
                 continue
+            if not candidates:
+                # 本次就诊没有同药受控医嘱，病程动作无法证明属于本次用药。
+                association_failed = True
+                continue
+            # 同药多次开立且源库无停止时间时无法定位具体哪条（用户口径 2026-10-18：
+            # 存在同药医嘱即关联成立）；不绑定医嘱号，理由归属按药名规则处理。
+            single = candidates[0] if len(candidates) == 1 else None
             events.append(_AntimicrobialReasonAction(
                 row=row,
                 antimicrobial=antimicrobial,
                 action=action,
-                order_ids=candidates[0].order_ids,
-                orders=candidates[0].orders,
+                order_ids=single.order_ids if single is not None else (),
+                orders=(
+                    single.orders if single is not None
+                    else tuple(order for candidate in candidates for order in candidate.orders)
+                ),
             ))
     return (
         tuple(events),
@@ -1429,7 +1544,9 @@ def _054_event_reason_state(
     共享给多次同名动作。
     """
 
-    if _054_reason_documented(event.row):
+    if _054_reason_documented(event.row) or _054_reason_in_action_sentence(
+        event.row, event.antimicrobial
+    ):
         return "documented", event.row
 
     same_name_events = tuple(
