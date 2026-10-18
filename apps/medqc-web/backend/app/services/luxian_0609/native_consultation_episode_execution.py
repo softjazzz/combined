@@ -1432,6 +1432,15 @@ def _candidate_documents(
                 }
                 if linked_order_ids and linked_order_ids <= observed_order_ids:
                     continue
+            if (
+                source_key == "labtest_master"
+                and observed_time is None
+                and text == _clean(row.get("labtest_subject"))
+                and _clean(row.get("test_id")) in covered_master_ids.get(source_key, set())
+            ):
+                # 只有检验项目名的主表头不另承载临床事实；同键完整、可定时的
+                # 报告已代表该事件。独立正文、无关报告或缺时报告仍保留缺口。
+                continue
             if observed_time is None or not text or len(text) > text_limit:
                 source_is_complete = False
                 continue
@@ -3872,6 +3881,10 @@ def _decision(
     snapshot: Luxian0609EvidenceSnapshot,
     fact_refs: Sequence[str] = (),
 ) -> RuleDecision:
+    # 正式决策中，候选未能完整投递是资料不足，并非证据相互冲突。
+    # 兼容入口的旧状态仍保留，typed 路径按本规则允许的资料不足合同交付。
+    if status == "evaluation_unknown" and reason_code == "candidate_scope_incomplete":
+        status = "data_gap"
     if status == "compliant":
         dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.SATISFIED)
     elif status == "non_compliant":
