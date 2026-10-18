@@ -40,6 +40,8 @@ class AntimicrobialAction(str, Enum):
     CHANGE_TO = "改为"
     COMBINE = "联合"
     START = "启用"
+    # 第六轮 C02/C03：“加用莫西沙星”“拟加用美罗培南”不在词表，模型引文必被拒收。
+    ADD = "加用"
     INFUSE = "输注"
     USE = "使用"
     GIVE = "给予"
@@ -472,6 +474,31 @@ def _action_inputs(
     return confirmed, tuple(candidates), identity
 
 
+# 共用动作的长句被模型用省略号略去中段（第六轮 C05：“继续当前...伏立康唑”）。
+_QUOTE_ELLIPSIS = re.compile(r"\.{2,}|…+|。{3,}|·{3,}")
+_MIN_ELIDED_PIECE_CHARS = 2
+
+
+def _restore_elided_quote(quote: Any, text: str) -> Any:
+    """省略号两侧各段按顺序逐字出现在本项原文时，还原为原文连续段；否则原样交校验拒收。"""
+
+    if not isinstance(quote, str) or quote in text or not _QUOTE_ELLIPSIS.search(quote):
+        return quote
+    pieces = [piece for piece in _QUOTE_ELLIPSIS.split(quote) if piece.strip()]
+    if len(pieces) < 2 or any(len(piece.strip()) < _MIN_ELIDED_PIECE_CHARS for piece in pieces):
+        return quote
+    start = text.find(pieces[0])
+    if start < 0 or text.find(pieces[0], start + 1) >= 0:
+        return quote
+    cursor = start + len(pieces[0])
+    for piece in pieces[1:]:
+        found = text.find(piece, cursor)
+        if found < 0:
+            return quote
+        cursor = found + len(piece)
+    return text[start:cursor]
+
+
 def _action_in_quote(quote: str) -> AntimicrobialAction | None:
     return next(
         (action for action in AntimicrobialAction if action.value in quote),
@@ -616,6 +643,8 @@ def _parse(
         if not isinstance(state, str) or state not in _ITEM_STATES:
             raise ValueError("invalid action state")
         candidate = expected[identity]
+        if state != "no_action":
+            quote = _restore_elided_quote(quote, candidate.text)
         action: AntimicrobialAction | None = None
         if state == "no_action":
             if quote is not None:

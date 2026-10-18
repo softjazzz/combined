@@ -451,3 +451,50 @@ async def test_capable_client_extracts_with_thinking_disabled():
         "allow_length_retry": False,
         "enable_thinking": False,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text,state,quote", [
+    ("加用莫西沙星联合亚胺培南西司他丁加强抗感染", "affirmed", "加用莫西沙星"),
+    ("拟加用美罗培南加强抗感染", "negated_or_planned", "拟加用美罗培南"),
+])
+async def test_add_on_wording_is_a_recognized_action(text, state, quote):
+    antimicrobial = "莫西沙星" if "莫西沙星" in text else "美罗培南"
+    candidate = _candidate(antimicrobial=antimicrobial, text=text)
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,), _Client(_response([_item(candidate, state, quote)])),
+    )
+    assert result.state == "ready"
+    assert result.items[0].action is extraction.AntimicrobialAction.ADD
+
+
+_SHARED_CONTINUE = "诊疗计划：继续当前美罗培南抗感染、伏立康唑抗真菌等治疗"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", ["继续当前...伏立康唑", "继续当前……伏立康唑抗真菌"])
+async def test_elided_quote_restores_the_contiguous_source_span(quote):
+    candidate = _candidate(antimicrobial="伏立康唑", text=_SHARED_CONTINUE)
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,), _Client(_response([_item(candidate, "affirmed", quote)])),
+    )
+    assert result.state == "ready"
+    restored = result.items[0].action_quote
+    assert restored in _SHARED_CONTINUE
+    assert restored.startswith("继续当前美罗培南") and "伏立康唑" in restored
+    assert result.items[0].action is extraction.AntimicrobialAction.CONTINUE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", [
+    "继续当前...伏立康挫",  # 省略号后非原文
+    "伏立康唑...继续当前",  # 顺序颠倒
+    "继...伏立康唑",  # 省略号前过短
+    "继续使用...伏立康唑",  # 省略号前非原文
+])
+async def test_elided_quote_pieces_must_still_be_verbatim_in_order(quote):
+    candidate = _candidate(antimicrobial="伏立康唑", text=_SHARED_CONTINUE)
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,), _Client(_response([_item(candidate, "affirmed", quote)])),
+    )
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
