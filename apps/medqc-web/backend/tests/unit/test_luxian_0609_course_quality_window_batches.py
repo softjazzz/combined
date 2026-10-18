@@ -89,3 +89,67 @@ async def test_course_quality_later_window_transport_failure_keeps_prior_usage()
     assert reduced[0].reason_code == "model_transport_error"
     assert result.llm_call_count == 2
     assert result.total_tokens == 10
+
+
+class _ExplicitWindowClient(_WindowClient):
+    def __init__(self, *, missing=(), invalid_early=False, persistent=False):
+        super().__init__()
+        self.missing = missing
+        self.invalid_early = invalid_early
+        self.persistent = persistent
+
+    async def generate(self, prompt, **kwargs):
+        response = await super().generate(prompt, **kwargs)
+        payload = json.loads(response["content"])
+        for item in payload["events"]:
+            item["is_explicit_change"] = True
+            item["corresponding_course_ref"] = "" if item["event_ref"] in self.missing else "C02"
+            if self.invalid_early and (len(self.prompts) == 1 or self.persistent):
+                item["corresponding_course_ref"] = "C01"
+        response["content"] = json.dumps(payload)
+        return response
+
+
+def _many_explicit_session(count):
+    return _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 00:00:00"}],
+        daily_rows=[_row("合成每日病危记录。", f"2026-01-{day:02d} 11:00:00") for day in range(1, 5)],
+        external_rows={"exam_item_report": [
+            {"exam_id": f"synthetic-{index}", "report_time": "2026-01-02 10:00:00",
+             "exam_result": "合成明确变化。" * 200}
+            for index in range(count)
+        ]}, external_limit_rows=max(50, count), evaluation_as_of_date="2026-01-04",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count,missing,expected", [
+    (21, (), "compliant"),
+    (135, (), "compliant"),
+    (25, ("E25",), "non_compliant"),
+    (45, tuple(f"E{i:02d}" for i in range(1, 46)), "non_compliant"),
+])
+async def test_course_quality_all_explicit_events_decide_before_display_limit(count, missing, expected):
+    from app.services.luxian_0609.course_quality_result_mapping import safe_course_quality_customer_display_facts
+
+    client = _ExplicitWindowClient(missing=missing)
+    result, reduced = await _run_typed_009(_many_explicit_session(count), client)
+    assert reduced[0].final_state.value == expected
+    assert client.event_refs == [f"E{i:02d}" for i in range(1, count + 1)]
+    facts = dict(result.customer_display_facts)["LX0609-02-01-05"]
+    assert len(facts["change_events"]) == 20
+    assert safe_course_quality_customer_display_facts(rule_id="LX0609-02-01-05", raw=facts) is not None
+    if missing:
+        assert facts["change_events"][0]["event_ref"] == missing[0]
+        assert all(not item["timely"] for item in facts["unmet_events"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("persistent,expected", [(False, "compliant"), (True, "technical_error")])
+async def test_course_quality_early_course_reference_gets_one_bounded_recheck(persistent, expected):
+    client = _ExplicitWindowClient(invalid_early=True, persistent=persistent)
+    result, reduced = await _run_typed_009(_many_explicit_session(1), client)
+    assert reduced[0].final_state.value == expected
+    assert len(client.prompts) == 2
+    assert result.total_tokens == 20
+    assert result.llm_call_count == 2

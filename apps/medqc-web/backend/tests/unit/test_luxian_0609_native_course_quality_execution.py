@@ -40,6 +40,7 @@ def _severity_session(
     daily_rows: list[dict] | None = None,
     senior_rows: list[dict] | None = None,
     external_rows: dict[str, list[dict]] | None = None,
+    external_limit_rows: int = 50,
     external_failures: dict[str, Exception] | None = None,
     external_truncated: frozenset[str] = frozenset(),
     course_failure: Exception | None = None,
@@ -105,7 +106,7 @@ def _severity_session(
                 source_key=source_key,
                 rows=(external_rows or {})[source_key],
                 truncated=source_key in external_truncated,
-                limit_rows=50,
+                limit_rows=external_limit_rows,
             )
         if source_key in (external_failures or {}):
             raise (external_failures or {})[source_key]
@@ -2945,7 +2946,8 @@ async def test_course_009_model_cannot_bind_event_to_course_before_event() -> No
 
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
+    # 主控代定口径（2026-10-18）：对应病程早于事件的非法引用补核一次，再次无效仍失败关闭。
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -3035,7 +3037,7 @@ async def test_course_009_negative_candidates_are_ignored_but_duplicate_positive
 
 
 @pytest.mark.asyncio
-async def test_course_009_more_than_twenty_change_events_fails_closed_without_truncation() -> None:
+async def test_course_009_more_than_twenty_change_events_decides_all_and_limits_display() -> None:
     daily_rows = [
         _row(
             f"第{index}日病危记录，出现明确病情变化并已处理。",
@@ -3072,11 +3074,11 @@ async def test_course_009_more_than_twenty_change_events_fails_closed_without_tr
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "candidate_scope_incomplete"
-    assert result.customer_display_facts == ()
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert len(dict(result.customer_display_facts)["LX0609-02-01-05"]["change_events"]) == 20
     assert result.llm_call_count == 1
-    assert "超过20个" in client.prompts[0]
+    assert "明确变化事件无数量截断" in client.prompts[0]
 
 
 @pytest.mark.asyncio

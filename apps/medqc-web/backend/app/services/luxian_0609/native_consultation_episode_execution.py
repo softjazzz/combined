@@ -3034,6 +3034,42 @@ def _execution_prompt(
     return prompt, allowed_refs
 
 
+def _execution_event_batches(
+    *,
+    completed: Sequence[_CompletedRecommendation],
+    candidates: Sequence[_CandidateDocument],
+) -> tuple[tuple[_CompletedRecommendation, ...], ...]:
+    """按完整会诊意见事件分批，沿用原有后续时序过滤，不裁短正文。
+
+    保留可容纳的原单批路径；全部分批先做容量预检，任一事件仍超限即
+    资料不足，不能跳过事件或把下一次会诊当成未经确认的执行截止点。
+    """
+    try:
+        _execution_prompt(completed=completed, candidates=candidates)
+        return (tuple(completed),)
+    except _SourceGap:
+        pass
+    grouped: dict[tuple[str, str], list[_CompletedRecommendation]] = {}
+    for item in completed:
+        grouped.setdefault((item.episode_ref, item.recommendation.opinion_ref), []).append(item)
+    batches: list[tuple[_CompletedRecommendation, ...]] = []
+    pending: tuple[_CompletedRecommendation, ...] = ()
+    for items in grouped.values():
+        event = tuple(items)
+        _execution_prompt(completed=event, candidates=candidates)
+        proposed = (*pending, *event)
+        try:
+            _execution_prompt(completed=proposed, candidates=candidates)
+        except _SourceGap:
+            batches.append(pending)
+            pending = event
+        else:
+            pending = proposed
+    if pending:
+        batches.append(pending)
+    return tuple(batches)
+
+
 def _generic_trace_conflicts_with_completed_action(
     assessment: _ExecutionAssessment,
     candidates: Sequence[_CandidateDocument],
@@ -4559,372 +4595,398 @@ async def _execute_consultation_episode_rules(
                         for item in completed_recommendations
                     )
                 else:
+                    all_completed_recommendations = completed_recommendations
                     try:
-                        second_prompt, allowed_refs = _execution_prompt(
-                            completed=completed_recommendations,
+                        execution_batches = _execution_event_batches(
+                            completed=all_completed_recommendations,
                             candidates=projection.candidates,
                         )
                     except _SourceGap:
+                        execution_batches = ()
                         for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = (
-                                "evaluation_unknown",
-                                "candidate_scope_incomplete",
+                            statuses[rule_id] = ("evaluation_unknown", "candidate_scope_incomplete")
+                    merged_assessments: list[_ExecutionAssessment] = []
+                    for completed_recommendations in execution_batches:
+                        execution_assessments = None
+                        try:
+                            second_prompt, allowed_refs = _execution_prompt(
+                                completed=completed_recommendations,
+                                candidates=projection.candidates,
                             )
-                        second_prompt = ""
-                        allowed_refs = {}
-                    candidate_by_ref = {
-                        item.ref: item for item in projection.candidates
-                    }
-                    recommendation_refs_without_course_candidates = frozenset(
-                        recommendation_ref
-                        for recommendation_ref, refs in allowed_refs.items()
-                        if not _COURSE_EXECUTION_SOURCE_KEYS.intersection(
-                            projection.source_incomplete_keys
+                        except _SourceGap:
+                            for rule_id in stage_two_rule_ids:
+                                statuses[rule_id] = (
+                                    "evaluation_unknown",
+                                    "candidate_scope_incomplete",
+                                )
+                            second_prompt = ""
+                            allowed_refs = {}
+                        candidate_by_ref = {
+                            item.ref: item for item in projection.candidates
+                        }
+                        recommendation_refs_without_course_candidates = frozenset(
+                            recommendation_ref
+                            for recommendation_ref, refs in allowed_refs.items()
+                            if not _COURSE_EXECUTION_SOURCE_KEYS.intersection(
+                                projection.source_incomplete_keys
+                            )
+                            and not any(
+                                ref in candidate_by_ref
+                                and candidate_by_ref[ref].source_key
+                                in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                                for ref in refs
+                            )
                         )
-                        and not any(
+                        allowed_context_candidate_present = any(
                             ref in candidate_by_ref
                             and candidate_by_ref[ref].source_key
                             in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                            for refs in allowed_refs.values()
                             for ref in refs
                         )
-                    )
-                    allowed_context_candidate_present = any(
-                        ref in candidate_by_ref
-                        and candidate_by_ref[ref].source_key
-                        in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
-                        for refs in allowed_refs.values()
-                        for ref in refs
-                    )
-                    allowed_order_candidate_present = any(
-                        ref in candidate_by_ref
-                        and candidate_by_ref[ref].source_key
-                        in _ORDER_EXECUTION_SOURCE_KEYS
-                        for refs in allowed_refs.values()
-                        for ref in refs
-                    )
-                    if (
-                        not allowed_context_candidate_present
-                        and not allowed_order_candidate_present
-                    ):
-                        if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
-                            # projection 里的会诊前病程会在逐建议时序过滤后失去
-                            # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需的
-                            # 会诊后病程记录，也没有可评价的医嘱动作，确定性
-                            # 收敛为 no_trace。
-                            execution_assessments = tuple(
-                                _ExecutionAssessment(
-                                    item.recommendation.recommendation_ref,
-                                    "absent",
-                                    (),
-                                    "high",
-                                    (),
-                                    "no_trace",
-                                    (),
-                                    (),
+                        allowed_order_candidate_present = any(
+                            ref in candidate_by_ref
+                            and candidate_by_ref[ref].source_key
+                            in _ORDER_EXECUTION_SOURCE_KEYS
+                            for refs in allowed_refs.values()
+                            for ref in refs
+                        )
+                        if (
+                            not allowed_context_candidate_present
+                            and not allowed_order_candidate_present
+                        ):
+                            if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
+                                # projection 里的会诊前病程会在逐建议时序过滤后失去
+                                # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需的
+                                # 会诊后病程记录，也没有可评价的医嘱动作，确定性
+                                # 收敛为 no_trace。
+                                execution_assessments = tuple(
+                                    _ExecutionAssessment(
+                                        item.recommendation.recommendation_ref,
+                                        "absent",
+                                        (),
+                                        "high",
+                                        (),
+                                        "no_trace",
+                                        (),
+                                        (),
+                                    )
+                                    for item in completed_recommendations
                                 )
-                                for item in completed_recommendations
-                            )
-                    else:
-                        exhausted_missing_refs: set[str] = set()
-                        calls += 1
-                        retry_attempted = False
-                        stage_two_phase = "call"
-                        try:
-                            started = time.perf_counter()
+                        else:
+                            exhausted_missing_refs: set[str] = set()
+                            calls += 1
+                            retry_attempted = False
+                            stage_two_phase = "call"
                             try:
-                                response = await llm_client.generate(second_prompt)
-                            except Exception as first_error:
-                                api_time += time.perf_counter() - started
-                                if not _is_retryable_execution_transport_failure(first_error):
-                                    raise
-                                calls += 1
-                                retry_attempted = True
-                                retry_started = time.perf_counter()
+                                started = time.perf_counter()
                                 try:
                                     response = await llm_client.generate(second_prompt)
-                                except Exception:
-                                    api_time += time.perf_counter() - retry_started
-                                    raise
-                                started = retry_started
-                            stage_two_phase = "validate"
-                            if not isinstance(response, Mapping):
-                                raise _SemanticInvalid()
-                            next_prompt, next_completion, next_total, response_time = _usage(response)
-                            prompt_tokens += next_prompt
-                            completion_tokens += next_completion
-                            total_tokens += next_total
-                            api_time += response_time or (time.perf_counter() - started)
-                            try:
-                                try:
-                                    execution_assessments = _parse_executions(
-                                        _stage_two_payload(response),
-                                        completed=completed_recommendations,
-                                        allowed_refs=allowed_refs,
-                                        candidates=projection.candidates,
-                                    )
-                                except _SemanticInvalid as semantic_error:
-                                    if (
-                                        not semantic_error.retryable_stage_two_shape
-                                        or retry_attempted
-                                    ):
+                                except Exception as first_error:
+                                    api_time += time.perf_counter() - started
+                                    if not _is_retryable_execution_transport_failure(first_error):
                                         raise
-                                    # 只对 HTTP 已成功、且 payload 的 executions
-                                    # 或条目对象形状错误做一次同 Prompt 重试。身份、
-                                    # 引用结构和候选集完整性错误始终直接失败。
                                     calls += 1
                                     retry_attempted = True
-                                    semantic_retry_started = time.perf_counter()
-                                    stage_two_phase = "call"
+                                    retry_started = time.perf_counter()
                                     try:
-                                        semantic_retry_response = (
-                                            await llm_client.generate(second_prompt)
-                                        )
+                                        response = await llm_client.generate(second_prompt)
                                     except Exception:
-                                        api_time += (
-                                            time.perf_counter()
-                                            - semantic_retry_started
-                                        )
+                                        api_time += time.perf_counter() - retry_started
                                         raise
-                                    stage_two_phase = "validate"
-                                    if not isinstance(
-                                        semantic_retry_response, Mapping
-                                    ):
-                                        api_time += (
-                                            time.perf_counter()
-                                            - semantic_retry_started
-                                        )
-                                        raise _SemanticInvalid()
-                                    (
-                                        semantic_prompt_tokens,
-                                        semantic_completion_tokens,
-                                        semantic_total_tokens,
-                                        semantic_response_time,
-                                    ) = _usage(semantic_retry_response)
-                                    prompt_tokens += semantic_prompt_tokens
-                                    completion_tokens += semantic_completion_tokens
-                                    total_tokens += semantic_total_tokens
-                                    api_time += semantic_response_time or (
-                                        time.perf_counter()
-                                        - semantic_retry_started
-                                    )
-                                    execution_assessments = _parse_executions(
-                                        _stage_two_payload(semantic_retry_response),
-                                        completed=completed_recommendations,
-                                        allowed_refs=allowed_refs,
-                                        candidates=projection.candidates,
-                                    )
-                            except _ExecutionCoverageIncomplete as incomplete:
-                                # 模型偶发只漏回一部分建议。只把缺失建议连同其
-                                # 受控候选重问一次；首轮合法结果不重复发送，也不
-                                # 把缺项默认解释为未执行。补问失败或仍不完整时，
-                                # 保留两轮已经通过合同的建议，只有未闭合项降为
-                                # unknown，避免一个缺项抹掉同批合法事实。
-                                missing_completed = tuple(
-                                    item
-                                    for item in completed_recommendations
-                                    if item.recommendation.recommendation_ref
-                                    in incomplete.missing_refs
-                                )
-                                completed_missing_assessments: tuple[
-                                    _ExecutionAssessment, ...
-                                ] = ()
-                                if not retry_attempted:
-                                    missing_prompt, missing_allowed_refs = (
-                                        _execution_prompt(
-                                            completed=missing_completed,
+                                    started = retry_started
+                                stage_two_phase = "validate"
+                                if not isinstance(response, Mapping):
+                                    raise _SemanticInvalid()
+                                next_prompt, next_completion, next_total, response_time = _usage(response)
+                                prompt_tokens += next_prompt
+                                completion_tokens += next_completion
+                                total_tokens += next_total
+                                api_time += response_time or (time.perf_counter() - started)
+                                try:
+                                    try:
+                                        execution_assessments = _parse_executions(
+                                            _stage_two_payload(response),
+                                            completed=completed_recommendations,
+                                            allowed_refs=allowed_refs,
                                             candidates=projection.candidates,
                                         )
-                                    )
-                                    calls += 1
-                                    missing_started = time.perf_counter()
-                                    missing_time_recorded = False
-                                    try:
+                                    except _SemanticInvalid as semantic_error:
+                                        if (
+                                            not semantic_error.retryable_stage_two_shape
+                                            or retry_attempted
+                                        ):
+                                            raise
+                                        # 只对 HTTP 已成功、且 payload 的 executions
+                                        # 或条目对象形状错误做一次同 Prompt 重试。身份、
+                                        # 引用结构和候选集完整性错误始终直接失败。
+                                        calls += 1
+                                        retry_attempted = True
+                                        semantic_retry_started = time.perf_counter()
                                         stage_two_phase = "call"
-                                        missing_response = await llm_client.generate(
-                                            missing_prompt
-                                        )
-                                        missing_elapsed = (
-                                            time.perf_counter() - missing_started
-                                        )
+                                        try:
+                                            semantic_retry_response = (
+                                                await llm_client.generate(second_prompt)
+                                            )
+                                        except Exception:
+                                            api_time += (
+                                                time.perf_counter()
+                                                - semantic_retry_started
+                                            )
+                                            raise
                                         stage_two_phase = "validate"
-                                        if not isinstance(missing_response, Mapping):
-                                            api_time += missing_elapsed
-                                            missing_time_recorded = True
+                                        if not isinstance(
+                                            semantic_retry_response, Mapping
+                                        ):
+                                            api_time += (
+                                                time.perf_counter()
+                                                - semantic_retry_started
+                                            )
                                             raise _SemanticInvalid()
                                         (
-                                            missing_prompt_tokens,
-                                            missing_completion_tokens,
-                                            missing_total_tokens,
-                                            missing_response_time,
-                                        ) = _usage(missing_response)
-                                        prompt_tokens += missing_prompt_tokens
-                                        completion_tokens += missing_completion_tokens
-                                        total_tokens += missing_total_tokens
-                                        api_time += (
-                                            missing_response_time or missing_elapsed
+                                            semantic_prompt_tokens,
+                                            semantic_completion_tokens,
+                                            semantic_total_tokens,
+                                            semantic_response_time,
+                                        ) = _usage(semantic_retry_response)
+                                        prompt_tokens += semantic_prompt_tokens
+                                        completion_tokens += semantic_completion_tokens
+                                        total_tokens += semantic_total_tokens
+                                        api_time += semantic_response_time or (
+                                            time.perf_counter()
+                                            - semantic_retry_started
                                         )
-                                        missing_time_recorded = True
+                                        execution_assessments = _parse_executions(
+                                            _stage_two_payload(semantic_retry_response),
+                                            completed=completed_recommendations,
+                                            allowed_refs=allowed_refs,
+                                            candidates=projection.candidates,
+                                        )
+                                except _ExecutionCoverageIncomplete as incomplete:
+                                    # 模型偶发只漏回一部分建议。只把缺失建议连同其
+                                    # 受控候选重问一次；首轮合法结果不重复发送，也不
+                                    # 把缺项默认解释为未执行。补问失败或仍不完整时，
+                                    # 保留两轮已经通过合同的建议，只有未闭合项降为
+                                    # unknown，避免一个缺项抹掉同批合法事实。
+                                    missing_completed = tuple(
+                                        item
+                                        for item in completed_recommendations
+                                        if item.recommendation.recommendation_ref
+                                        in incomplete.missing_refs
+                                    )
+                                    completed_missing_assessments: tuple[
+                                        _ExecutionAssessment, ...
+                                    ] = ()
+                                    if not retry_attempted:
+                                        missing_prompt, missing_allowed_refs = (
+                                            _execution_prompt(
+                                                completed=missing_completed,
+                                                candidates=projection.candidates,
+                                            )
+                                        )
+                                        calls += 1
+                                        missing_started = time.perf_counter()
+                                        missing_time_recorded = False
                                         try:
-                                            completed_missing_assessments = (
-                                                _parse_executions(
-                                                    _stage_two_payload(missing_response),
-                                                    completed=missing_completed,
-                                                    allowed_refs=missing_allowed_refs,
-                                                    candidates=projection.candidates,
-                                                )
+                                            stage_two_phase = "call"
+                                            missing_response = await llm_client.generate(
+                                                missing_prompt
                                             )
-                                        except _ExecutionCoverageIncomplete as retry_incomplete:
-                                            completed_missing_assessments = (
-                                                retry_incomplete.parsed
-                                            )
-                                    except Exception as error:
-                                        if not missing_time_recorded:
-                                            api_time += (
+                                            missing_elapsed = (
                                                 time.perf_counter() - missing_started
                                             )
-                                        if isinstance(error, _SemanticInvalid):
-                                            logger.warning("consultation_missing_repair_invalid kind=%s exception_line=%s",
-                                                           error.kind.value, _exception_line(error))
-                                        else:
-                                            log_model_failure(logger, rule="LX0609-03-01-04", stage=stage_two_phase, error=error)
-                                assessment_by_ref = {
-                                    item.recommendation_ref: item
-                                    for item in (
-                                        *incomplete.parsed,
-                                        *completed_missing_assessments,
+                                            stage_two_phase = "validate"
+                                            if not isinstance(missing_response, Mapping):
+                                                api_time += missing_elapsed
+                                                missing_time_recorded = True
+                                                raise _SemanticInvalid()
+                                            (
+                                                missing_prompt_tokens,
+                                                missing_completion_tokens,
+                                                missing_total_tokens,
+                                                missing_response_time,
+                                            ) = _usage(missing_response)
+                                            prompt_tokens += missing_prompt_tokens
+                                            completion_tokens += missing_completion_tokens
+                                            total_tokens += missing_total_tokens
+                                            api_time += (
+                                                missing_response_time or missing_elapsed
+                                            )
+                                            missing_time_recorded = True
+                                            try:
+                                                completed_missing_assessments = (
+                                                    _parse_executions(
+                                                        _stage_two_payload(missing_response),
+                                                        completed=missing_completed,
+                                                        allowed_refs=missing_allowed_refs,
+                                                        candidates=projection.candidates,
+                                                    )
+                                                )
+                                            except _ExecutionCoverageIncomplete as retry_incomplete:
+                                                completed_missing_assessments = (
+                                                    retry_incomplete.parsed
+                                                )
+                                        except Exception as error:
+                                            if not missing_time_recorded:
+                                                api_time += (
+                                                    time.perf_counter() - missing_started
+                                                )
+                                            if isinstance(error, _SemanticInvalid):
+                                                logger.warning("consultation_missing_repair_invalid kind=%s exception_line=%s",
+                                                               error.kind.value, _exception_line(error))
+                                            else:
+                                                log_model_failure(logger, rule="LX0609-03-01-04", stage=stage_two_phase, error=error)
+                                    assessment_by_ref = {
+                                        item.recommendation_ref: item
+                                        for item in (
+                                            *incomplete.parsed,
+                                            *completed_missing_assessments,
+                                        )
+                                    }
+                                    for missing_item in missing_completed:
+                                        missing_ref = (
+                                            missing_item.recommendation.recommendation_ref
+                                        )
+                                        if missing_ref not in assessment_by_ref:
+                                            assessment_by_ref[missing_ref] = (
+                                                _unknown_execution_assessment(missing_ref)
+                                            )
+                                            exhausted_missing_refs.add(missing_ref)
+                                    execution_assessments = tuple(
+                                        assessment_by_ref[
+                                            item.recommendation.recommendation_ref
+                                        ]
+                                        for item in completed_recommendations
+                                    )
+                                execution_assessments = (
+                                    _settle_recommendations_without_course_candidates(
+                                        execution_assessments,
+                                        recommendation_refs=(
+                                            recommendation_refs_without_course_candidates
+                                        ),
+                                    )
+                                )
+                                conflict_refs = {
+                                    item.recommendation_ref
+                                    for item in execution_assessments
+                                    if item.confidence == "high"
+                                    and _generic_trace_conflicts_with_completed_action(
+                                        item, projection.candidates
                                     )
                                 }
-                                for missing_item in missing_completed:
-                                    missing_ref = (
-                                        missing_item.recommendation.recommendation_ref
-                                    )
-                                    if missing_ref not in assessment_by_ref:
-                                        assessment_by_ref[missing_ref] = (
-                                            _unknown_execution_assessment(missing_ref)
-                                        )
-                                        exhausted_missing_refs.add(missing_ref)
-                                execution_assessments = tuple(
-                                    assessment_by_ref[
-                                        item.recommendation.recommendation_ref
-                                    ]
-                                    for item in completed_recommendations
-                                )
-                            execution_assessments = (
-                                _settle_recommendations_without_course_candidates(
-                                    execution_assessments,
-                                    recommendation_refs=(
-                                        recommendation_refs_without_course_candidates
-                                    ),
-                                )
-                            )
-                            conflict_refs = {
-                                item.recommendation_ref
-                                for item in execution_assessments
-                                if item.confidence == "high"
-                                and _generic_trace_conflicts_with_completed_action(
-                                    item, projection.candidates
-                                )
-                            }
-                            if conflict_refs:
-                                # 具体执行原文与“笼统记录”标签冲突时只复核该建议；
-                                # 复核失败保留中置信事实，由状态机收敛为 uncertain。
-                                execution_assessments = tuple(
-                                    replace(item, confidence="medium")
-                                    if item.recommendation_ref in conflict_refs
-                                    else item
-                                    for item in execution_assessments
-                                )
-                            low_confidence_refs = {
-                                item.recommendation_ref
-                                for item in execution_assessments
-                                if item.confidence != "high"
-                                and item.recommendation_ref
-                                not in exhausted_missing_refs
-                                and item.recommendation_ref
-                                not in recommendation_refs_without_course_candidates
-                            }
-                            if low_confidence_refs and not retry_attempted:
-                                # 只对首轮明确标为中/低信心的建议做一次
-                                # 最小上下文重问；已高信心的其他建议不重复投递。
-                                recheck_completed = tuple(
-                                    item
-                                    for item in completed_recommendations
-                                    if item.recommendation.recommendation_ref
-                                    in low_confidence_refs
-                                )
-                                try:
-                                    recheck_prompt, recheck_allowed_refs = _execution_prompt(
-                                        completed=recheck_completed,
-                                        candidates=projection.candidates,
-                                    )
-                                    calls += 1
-                                    recheck_started = time.perf_counter()
-                                    recheck_response = await llm_client.generate(recheck_prompt)
-                                    if not isinstance(recheck_response, Mapping):
-                                        raise _SemanticInvalid()
-                                    (
-                                        recheck_prompt_tokens,
-                                        recheck_completion_tokens,
-                                        recheck_total_tokens,
-                                        recheck_response_time,
-                                    ) = _usage(recheck_response)
-                                    prompt_tokens += recheck_prompt_tokens
-                                    completion_tokens += recheck_completion_tokens
-                                    total_tokens += recheck_total_tokens
-                                    api_time += recheck_response_time or (
-                                        time.perf_counter() - recheck_started
-                                    )
-                                    rechecked = _parse_executions(
-                                        _stage_two_payload(recheck_response),
-                                        completed=recheck_completed,
-                                        allowed_refs=recheck_allowed_refs,
-                                        candidates=projection.candidates,
-                                    )
-                                    rechecked_by_ref = {
-                                        item.recommendation_ref: item for item in rechecked
-                                    }
+                                if conflict_refs:
+                                    # 具体执行原文与“笼统记录”标签冲突时只复核该建议；
+                                    # 复核失败保留中置信事实，由状态机收敛为 uncertain。
                                     execution_assessments = tuple(
-                                        _merge_rechecked_execution_assessment(
-                                            item,
-                                            rechecked_by_ref[item.recommendation_ref],
-                                        )
-                                        if item.recommendation_ref in rechecked_by_ref
+                                        replace(item, confidence="medium")
+                                        if item.recommendation_ref in conflict_refs
                                         else item
                                         for item in execution_assessments
                                     )
-                                except Exception:
-                                    # 语义复核只用于提升个别低信心事实；其失败
-                                    # 不得覆盖首轮可交付的其他建议。
-                                    pass
-                        except _SemanticInvalid as semantic_error:
-                            logger.warning(
-                                "consultation_stage_two_invalid "
-                                "stage_two_invalid_kind=%s retry_attempted=%s",
-                                semantic_error.kind.value,
-                                retry_attempted,
-                            )
-                            for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = (
-                                    "technical_error",
-                                    "model_invalid_output",
+                                low_confidence_refs = {
+                                    item.recommendation_ref
+                                    for item in execution_assessments
+                                    if item.confidence != "high"
+                                    and item.recommendation_ref
+                                    not in exhausted_missing_refs
+                                    and item.recommendation_ref
+                                    not in recommendation_refs_without_course_candidates
+                                }
+                                if low_confidence_refs and not retry_attempted:
+                                    # 只对首轮明确标为中/低信心的建议做一次
+                                    # 最小上下文重问；已高信心的其他建议不重复投递。
+                                    recheck_completed = tuple(
+                                        item
+                                        for item in completed_recommendations
+                                        if item.recommendation.recommendation_ref
+                                        in low_confidence_refs
+                                    )
+                                    try:
+                                        recheck_prompt, recheck_allowed_refs = _execution_prompt(
+                                            completed=recheck_completed,
+                                            candidates=projection.candidates,
+                                        )
+                                        calls += 1
+                                        recheck_started = time.perf_counter()
+                                        recheck_response = await llm_client.generate(recheck_prompt)
+                                        if not isinstance(recheck_response, Mapping):
+                                            raise _SemanticInvalid()
+                                        (
+                                            recheck_prompt_tokens,
+                                            recheck_completion_tokens,
+                                            recheck_total_tokens,
+                                            recheck_response_time,
+                                        ) = _usage(recheck_response)
+                                        prompt_tokens += recheck_prompt_tokens
+                                        completion_tokens += recheck_completion_tokens
+                                        total_tokens += recheck_total_tokens
+                                        api_time += recheck_response_time or (
+                                            time.perf_counter() - recheck_started
+                                        )
+                                        rechecked = _parse_executions(
+                                            _stage_two_payload(recheck_response),
+                                            completed=recheck_completed,
+                                            allowed_refs=recheck_allowed_refs,
+                                            candidates=projection.candidates,
+                                        )
+                                        rechecked_by_ref = {
+                                            item.recommendation_ref: item for item in rechecked
+                                        }
+                                        execution_assessments = tuple(
+                                            _merge_rechecked_execution_assessment(
+                                                item,
+                                                rechecked_by_ref[item.recommendation_ref],
+                                            )
+                                            if item.recommendation_ref in rechecked_by_ref
+                                            else item
+                                            for item in execution_assessments
+                                        )
+                                    except Exception:
+                                        # 语义复核只用于提升个别低信心事实；其失败
+                                        # 不得覆盖首轮可交付的其他建议。
+                                        pass
+                            except _SemanticInvalid as semantic_error:
+                                logger.warning(
+                                    "consultation_stage_two_invalid "
+                                    "stage_two_invalid_kind=%s retry_attempted=%s",
+                                    semantic_error.kind.value,
+                                    retry_attempted,
                                 )
-                        except Exception as error:
-                            logger.warning(
-                                "consultation_stage_two_failed "
-                                "stage_two_failure_kind=%s retry_attempted=%s "
-                                "exception_type=%s exception_module=%s exception_origin=%s stage=%s exception_line=%s",
-                                classify_model_failure(error, stage=stage_two_phase)[0],
-                                retry_attempted,
-                                type(error).__name__,
-                                _stage_two_exception_module(error),
-                                _stage_two_exception_origin(error),
-                                stage_two_phase,
-                                _exception_line(error),
-                            )
-                            for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = (
-                                    "technical_error", classify_model_failure(error, stage=stage_two_phase)[1],
+                                for rule_id in stage_two_rule_ids:
+                                    statuses[rule_id] = (
+                                        "technical_error",
+                                        "model_invalid_output",
+                                    )
+                            except Exception as error:
+                                logger.warning(
+                                    "consultation_stage_two_failed "
+                                    "stage_two_failure_kind=%s retry_attempted=%s "
+                                    "exception_type=%s exception_module=%s exception_origin=%s stage=%s exception_line=%s",
+                                    classify_model_failure(error, stage=stage_two_phase)[0],
+                                    retry_attempted,
+                                    type(error).__name__,
+                                    _stage_two_exception_module(error),
+                                    _stage_two_exception_origin(error),
+                                    stage_two_phase,
+                                    _exception_line(error),
                                 )
+                                for rule_id in stage_two_rule_ids:
+                                    statuses[rule_id] = (
+                                        "technical_error", classify_model_failure(error, stage=stage_two_phase)[1],
+                                    )
+                        if any(rule_id in statuses for rule_id in stage_two_rule_ids):
+                            execution_assessments = None
+                            break
+                        if execution_assessments is not None:
+                            merged_assessments.extend(execution_assessments)
+                    else:
+                        if execution_batches:
+                            by_ref = {item.recommendation_ref: item for item in merged_assessments}
+                            execution_assessments = tuple(
+                                by_ref[item.recommendation.recommendation_ref]
+                                for item in all_completed_recommendations
+                            )
+                    completed_recommendations = all_completed_recommendations
             else:
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = _execution_outcome(
@@ -4958,35 +5020,38 @@ async def _execute_consultation_episode_rules(
                 # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
                 # 只对原判合规者逐项核对；核对失败或漏拆改判资料不足，不沿用合规。
                 measure_candidates = execution_candidate_projection.candidates
-                _, measure_allowed_refs = _execution_prompt(
-                    completed=completed_recommendations,
-                    candidates=measure_candidates,
-                )
-                measure_outcome = await check_consultation_measures(
-                    completed=completed_recommendations,
-                    candidates=measure_candidates,
-                    allowed_refs=measure_allowed_refs,
-                    alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
-                    llm_client=llm_client,
-                )
-                calls += measure_outcome.llm_call_count
-                prompt_tokens += measure_outcome.prompt_tokens
-                completion_tokens += measure_outcome.completion_tokens
-                total_tokens += measure_outcome.total_tokens
-                api_time += measure_outcome.api_time
-                action_types = {
-                    item.recommendation.recommendation_ref: item.recommendation.action_type
-                    for item in completed_recommendations
-                }
-                statuses["LX0609-03-01-04"] = apply_measure_check(
-                    statuses["LX0609-03-01-04"],
-                    measure_outcome,
-                    relevant_source_incomplete=lambda ref: bool(
-                        _ACTION_TYPE_SOURCE_KEYS.get(
-                            action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
-                        ).intersection(execution_source_incomplete_keys)
-                    ),
-                )
+                for measure_completed in _execution_event_batches(
+                    completed=completed_recommendations, candidates=measure_candidates,
+                ):
+                    _, measure_allowed_refs = _execution_prompt(
+                        completed=measure_completed,
+                        candidates=measure_candidates,
+                    )
+                    measure_outcome = await check_consultation_measures(
+                        completed=measure_completed,
+                        candidates=measure_candidates,
+                        allowed_refs=measure_allowed_refs,
+                        alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
+                        llm_client=llm_client,
+                    )
+                    calls += measure_outcome.llm_call_count
+                    prompt_tokens += measure_outcome.prompt_tokens
+                    completion_tokens += measure_outcome.completion_tokens
+                    total_tokens += measure_outcome.total_tokens
+                    api_time += measure_outcome.api_time
+                    action_types = {
+                        item.recommendation.recommendation_ref: item.recommendation.action_type
+                        for item in measure_completed
+                    }
+                    statuses["LX0609-03-01-04"] = apply_measure_check(
+                        statuses["LX0609-03-01-04"],
+                        measure_outcome,
+                        relevant_source_incomplete=lambda ref: bool(
+                            _ACTION_TYPE_SOURCE_KEYS.get(
+                                action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
+                            ).intersection(execution_source_incomplete_keys)
+                        ),
+                    )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
         projection=execution_candidate_projection,
