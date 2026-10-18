@@ -248,6 +248,13 @@ _EMPIRIC_REASON_MARKERS = (
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
 )
+# 感染科副主任医师及以上的会诊署名（用户口径 2026-10-17：主治医师、临床药师不算授权专家）。
+# 兼容“感染性疾病科”、署名括号、署名后直接接“会诊/意见/指出/建议/查房/冒号/逗号”等写法；
+# 科室与职称之间不得出现其他科室，避免把他科医师意见算作感染科。
+_SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN = re.compile(
+    r"感染(?:性疾病)?科[^。；;\n科]{0,24}?(?:副主任医师|主任医师)"
+    r"[\]】）)]?\s*(?:会诊|意见|指出|建议|查房|[:：,，])"
+)
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
     r"(?:拒绝|不同意|未(?:行|完成|进行)|尚未|无).{0,12}"
     r"(?:感染专家|专家会诊|专家查房|会诊意见)|"
@@ -1280,6 +1287,28 @@ def _antimicrobial_start_datetime(row: Mapping[str, Any]) -> datetime | None:
     )
 
 
+def _lx0609_058_first_use_events(
+    events: Sequence[tuple[Mapping[str, Any], str, datetime | None]],
+) -> tuple[tuple[Mapping[str, Any], str, datetime | None], ...]:
+    """每种特殊级药物只保留首次启用事件。
+
+    用户口径（2026-10-17）：同一药物后续续开或调整剂量的医嘱沿用首次启用时的专家支持。
+    同药任一医嘱缺启用时间时无法确定首次启用，保留缺时间事件交由时间缺口出口处理。
+    """
+
+    first: dict[str, tuple[Mapping[str, Any], str, datetime | None]] = {}
+    for event in events:
+        _order, name, start = event
+        current = first.get(name)
+        if current is None:
+            first[name] = event
+        elif current[2] is None:
+            continue
+        elif start is None or start < current[2]:
+            first[name] = event
+    return tuple(first.values())
+
+
 def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
     value = authoritative_document_time_value(row)
     return _parse_lx0609_058_datetime(
@@ -1299,7 +1328,7 @@ def _is_special_antimicrobial_expert_support(row: Mapping[str, Any]) -> bool:
         (
             _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
             or (
-                re.search(r"感染科[^。；;\n]{0,24}(?:副主任医师|主任医师)会诊意见", text)
+                _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN.search(text)
                 and _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
                 and re.search(r"(?:建议|同意|予以|给予).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
                 and not re.search(r"(?:不同意|不建议|暂不|拒绝).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
@@ -3378,6 +3407,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for row in antimicrobial_orders
                     for name in _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
                 )
+                special_events = _lx0609_058_first_use_events(special_events)
                 special_names = tuple(dict.fromkeys(
                     name for _, name, _ in special_events
                 ))

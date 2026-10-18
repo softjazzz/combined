@@ -262,3 +262,60 @@ async def test_058_expert_support_within_24h_after_emergency_use_is_compliant(su
                                   "record_content": "感染科合成专家副主任医师会诊意见：患者脓毒性休克，同意使用亚胺培南西司他丁。"},),
     })
     assert reduced.final_state.value == status
+
+
+@pytest.mark.asyncio
+async def test_058_same_drug_renewal_reuses_first_use_expert_support():
+    # 用户口径（2026-10-17）：同药续开/调整剂量医嘱沿用首次启用时的专家支持（第六轮 C08）。
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (
+            {"order_id": "I-1", "generic_name": "亚胺培南西司他丁", "planned_start_datetime": "2026-06-01 19:00:00"},
+            {"order_id": "I-2", "generic_name": "亚胺培南西司他丁", "planned_start_datetime": "2026-06-03 11:00:00"},
+        ),
+        "consultation_record": ({"record_time": "2026-06-01 20:00:00",
+                                  "record_content": "感染科合成专家副主任医师会诊意见：同意使用亚胺培南西司他丁。"},),
+    })
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_058_same_drug_untimed_renewal_keeps_time_gap():
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (
+            {"order_id": "I-1", "generic_name": "亚胺培南西司他丁", "planned_start_datetime": "2026-06-01 19:00:00"},
+            {"order_id": "I-2", "generic_name": "亚胺培南西司他丁"},
+        ),
+        "consultation_record": ({"record_time": "2026-06-01 20:00:00",
+                                  "record_content": "感染科合成专家副主任医师会诊意见：同意使用亚胺培南西司他丁。"},),
+    })
+    assert (reduced.final_state.value, reduced.reason_code) == ("data_gap", "authoritative_time_missing")
+
+
+@pytest.mark.asyncio
+async def test_058_bracketed_infection_expert_signature_is_recognized():
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (
+            {"order_id": "V-1", "generic_name": "万古霉素", "planned_start_datetime": "2026-06-05 09:30:00"},
+        ),
+        "consultation_record": ({"record_time": "2026-06-05 12:51:00",
+                                  "record_content": "[感染科合成专家副主任医师]会诊意见:感染重,同意使用万古霉素加强抗感染治疗。"},),
+    })
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.parametrize("signature,expected", [
+    ("[感染科合成专家副主任医师]会诊意见:", True),
+    ("感染性疾病科合成专家副主任医师会诊查房:", True),
+    ("感染科会诊协助诊治!合成专家副主任医师会诊:", True),
+    ("感染科合成专家主任医师:病史尽知,", True),
+    ("感染科合成专家副主任医师,患者发热,", True),
+    ("感染科合成专家主治医师会诊意见:", False),  # 用户口径（2026-10-17）：主治医师不算授权专家
+    ("临床药学科合成专家主管药师会诊意见:", False),  # 临床药师不算授权专家
+    ("请感染科会诊,呼吸科合成专家主任医师会诊意见:", False),  # 他科医师不能算作感染科
+    ("感染科合成专家医师会诊后建议:", False),  # 无职称
+])
+def test_058_infection_expert_signature_variants(signature, expected):
+    from app.services.luxian_0609 import native_extended_document_execution as ned
+
+    row = {"record_content": signature + "患者感染重,同意使用美罗培南加强抗感染治疗。"}
+    assert bool(ned._is_special_antimicrobial_expert_support(row)) is expected
