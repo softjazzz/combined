@@ -10,15 +10,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 import json
+import logging
 import math
 import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence, cast
 
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object
 
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609_diagnosis_change_documentation_v2"
 MAX_DOCUMENTS = 12
@@ -297,7 +299,11 @@ async def _extract_once(
         if not isinstance(content, str):
             raise ValueError("invalid extraction content")
         assertions = _parse(content, safe_documents)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+        logger.warning(
+            "LX0609 诊断修正依据抽取输出无效: retry=%s document_count=%s %s",
+            retry, len(safe_documents), describe_luxian_0609_llm_parse_failure(error, response),
+        )
         return DiagnosisChangeExtraction(
             "technical_error",
             "model_invalid_output",
