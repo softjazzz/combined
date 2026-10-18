@@ -3852,8 +3852,9 @@ async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> Non
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
+    # 主控代定口径（2026-10-18，待客户复核），基线064/065/066：不同开始时间为独立台次。
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
 
 
 @pytest.mark.asyncio
@@ -4584,15 +4585,16 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         reduced=reduced_items,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "diagnosis_scope_uncertain"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "diagnosis_scope_uncertain"
-    assert "不能据此认定缺少疑难病例讨论" in canonical["findings"]
+    # 主控代定口径（2026-10-18，待客户复核），基线050：主诊断已明确，仅局部待查不触发。
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert canonical["status"] == "not_applicable"
+    assert canonical["reason_code"] == "trigger_absent_complete"
+    assert "本质控点不适用" in canonical["findings"]
     assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
-        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "verification_kind": "uncertain_diagnosis_discussion_check",
         "admission_time": "2026-06-01 08:00:00",
-        "uncertain_record_times": ["2026-06-09 09:00:00"],
+        "uncertain_record_times": [],
         "discussion_count": 0,
     }
     assert result.llm_call_count == 1
@@ -6746,8 +6748,9 @@ async def test_antimicrobial_nearby_distinct_orders_remain_ambiguous(
         assert reduced.final_state is CustomerFinalState.COMPLIANT
         assert reduced.reason_code == "requirement_satisfied"
     else:
-        assert reduced.final_state is CustomerFinalState.DATA_GAP
-        assert reduced.reason_code == "association_failed"
+        # 主控代定口径（2026-10-18，待客户复核），基线057：同药存在即关联，理由按药名归属。
+        assert reduced.final_state is CustomerFinalState.COMPLIANT
+        assert reduced.reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio

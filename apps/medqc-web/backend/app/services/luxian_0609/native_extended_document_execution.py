@@ -1633,6 +1633,14 @@ def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class _EmpiricAntimicrobialEvent:
+    """057 已关联的同药医嘱集合；未绑定具体医嘱时号集合为空。"""
+    orders: tuple[Mapping[str, Any], ...]
+    antimicrobials: tuple[str, ...]
+    order_ids: tuple[str, ...]
+
+
 def _empiric_antimicrobial_event_contexts(
     *,
     antimicrobial_orders: Sequence[Mapping[str, Any]],
@@ -1640,11 +1648,11 @@ def _empiric_antimicrobial_event_contexts(
     lab_master_rows: Sequence[Mapping[str, Any]] = (),
     lab_item_rows: Sequence[Mapping[str, Any]] = (),
     pathogen_sources_complete: bool = False,
-) -> tuple[tuple[tuple[Mapping[str, Any], _AntimicrobialOrderEvent], ...], bool]:
-    """返回可唯一关联的经验用药事件；无法归属具体医嘱时由调用方交付资料缺口。"""
+) -> tuple[tuple[tuple[Mapping[str, Any], _EmpiricAntimicrobialEvent], ...], bool]:
+    """返回按药名或唯一医嘱号关联的经验用药事件。"""
 
     order_events = _antimicrobial_order_events(antimicrobial_orders)
-    contexts: list[tuple[Mapping[str, Any], _AntimicrobialOrderEvent]] = []
+    contexts: list[tuple[Mapping[str, Any], _EmpiricAntimicrobialEvent]] = []
     association_ambiguous = False
     for row in candidate_rows:
         explicit = _is_explicit_empiric_antimicrobial_use(row)
@@ -1676,6 +1684,7 @@ def _empiric_antimicrobial_event_contexts(
                 event
                 for event in order_events
                 if linked_order_id in event.order_ids
+                and (not mentioned_names or all(name in event.antimicrobials for name in mentioned_names))
             )
         elif mentioned_names:
             candidates = tuple(
@@ -1687,9 +1696,8 @@ def _empiric_antimicrobial_event_contexts(
             candidates = order_events
         else:
             candidates = ()
-        if not explicit and len(candidates) > 1:
-            # 本次已实施叙述不能归属尚未启用的未来医嘱；只在排除未来项后
-            # 恰好剩一个事件时继续，多个既有疗程仍不猜测归属。
+        if not explicit and not linked_order_id and len(candidates) > 1:
+            # 沿用经验用药推断的时序门槛；尚未启用的未来医嘱不能证明本次已实施。
             document_time = _row_time(row)
             candidates = tuple(
                 event for event in candidates
@@ -1700,11 +1708,29 @@ def _empiric_antimicrobial_event_contexts(
                     for order in event.orders
                 )
             )
-        if len(candidates) != 1:
-            # 新增路径只修可确定的漏识别；同名多医嘱的实际疗程归属仍属
-            # 待定边界，不借本次扩展改写原有适用性结论。
+        if not candidates or (linked_order_id and len(candidates) != 1):
             association_ambiguous = association_ambiguous or explicit
             continue
+        if len(candidates) > 1 and len({
+            name for event in candidates for name in mentioned_names
+            if name in event.antimicrobials
+        }) > 1:
+            # 本轮只合并同药多医嘱；多种药物的原有事件归属边界不变。
+            association_ambiguous = association_ambiguous or explicit
+            continue
+        # 主控代定口径（2026-10-18，待客户复核），基线057：
+        # 同药存在即关联；多医嘱不绑定具体号，理由继续按药名归属。
+        if not linked_order_id and mentioned_names:
+            candidates = tuple(_EmpiricAntimicrobialEvent(
+                orders=tuple(order for event in candidates if name in event.antimicrobials
+                             for order in event.orders),
+                antimicrobials=(name,),
+                order_ids=(),
+            ) for name in mentioned_names if any(name in event.antimicrobials for event in candidates))
+            if len(candidates) != len(mentioned_names):
+                if explicit:
+                    association_ambiguous = True
+                    continue
         if not explicit:
             start = min((value for order in candidates[0].orders
                          if (value := _antimicrobial_start_datetime(order)) is not None), default=None)
@@ -1731,14 +1757,16 @@ def _empiric_antimicrobial_event_contexts(
             if unknown_basis_time:
                 association_ambiguous = True
                 continue
-        contexts.append((row, candidates[0]))
+        contexts.extend((row, _EmpiricAntimicrobialEvent(
+            event.orders, event.antimicrobials, event.order_ids,
+        )) for event in candidates)
     return tuple(contexts), association_ambiguous
 
 
 def _empiric_reason_documented(
     *,
     event_row: Mapping[str, Any],
-    order_event: _AntimicrobialOrderEvent,
+    order_event: _EmpiricAntimicrobialEvent,
     course_rows: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
     """理由只能来自可归属该经验用药事件的病程，不以培养/药敏调整代替。"""
@@ -1760,8 +1788,10 @@ def _empiric_reason_documented(
         ):
             continue
         row_order_id = _linked_order_id(row)
-        if row_order_id and order_ids:
-            if row_order_id in order_ids:
+        if row_order_id:
+            matches = tuple(event for event in _antimicrobial_order_events(order_event.orders)
+                            if row_order_id in event.order_ids)
+            if len(matches) == 1 and (not order_ids or row_order_id in order_ids):
                 return row
             continue
         row_names = _antimicrobial_names_in(row)
@@ -2146,7 +2176,7 @@ def _performed_surgery_event_count(
 
 @dataclass(frozen=True)
 class _PostoperativeSurgeryEvent:
-    """064/065 的最小事件投影：正式手术记录一行即一台手术。"""
+    """064–066 的手术台次投影，保留组成台次的原始行以绑定证据。"""
 
     source_key: str
     row: Mapping[str, Any]
@@ -2158,6 +2188,7 @@ class _PostoperativeSurgeryEvent:
     surgery_begin_time: datetime | None = None
     # 院方口径（2026-10-10）：源库缺实际结束时间时以开始时间推算术后起点。
     surgery_time_estimated: bool = False
+    member_rows: tuple[Mapping[str, Any], ...] = ()
 
 
 # 064 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
@@ -2357,7 +2388,31 @@ def _postoperative_surgery_events(
             surgery_begin_time=begin_time,
             surgery_time_estimated=end_time is None and begin_time is not None,
         ))
-    return tuple(events)
+    # 主控代定口径（2026-10-18，待客户复核），基线064/065/066：
+    # 仅首页同日同开始时间术式行合台；无开始时间的行独立保留，不猜测关联。
+    grouped: list[_PostoperativeSurgeryEvent] = []
+    for event in events:
+        matching_index = next((
+            index for index, existing in enumerate(grouped)
+            if event.source_key == existing.source_key == "mr_surgery"
+            and event.surgery_begin_time is not None
+            and existing.surgery_begin_time == event.surgery_begin_time
+        ), None)
+        if matching_index is None:
+            grouped.append(replace(event, member_rows=(event.row,)))
+            continue
+        existing = grouped[matching_index]
+        grouped[matching_index] = replace(
+            existing,
+            member_rows=(*existing.member_rows, event.row),
+            surgeon_names=tuple(dict.fromkeys((*existing.surgeon_names, *event.surgeon_names))),
+            surgeon_tokens=existing.surgeon_tokens | event.surgeon_tokens,
+            # 同台结束字段冲突时不擅自择一；后续按权威时间不足关闭。
+            surgery_end_time=(existing.surgery_end_time
+                              if existing.surgery_end_time == event.surgery_end_time else None),
+            surgery_time_estimated=existing.surgery_time_estimated or event.surgery_time_estimated,
+        )
+    return tuple(grouped)
 
 
 def _postoperative_document_refs(
@@ -2410,7 +2465,12 @@ def _link_postoperative_first_course_records(
     缺时间时无法做安全归属，保持数据不足而不猜测。
     """
 
-    if any(event.surgery_end_time is None for event in surgery_events):
+    if any(event.surgery_end_time is None for event in surgery_events) or (
+        len(surgery_events) > 1
+        and any(event.source_key == "mr_surgery" and event.surgery_begin_time is None
+                for event in surgery_events)
+    ):
+        # 主控代定口径（2026-10-18，待客户复核），基线066：缺开始时间的首页行不能证明台次关联。
         return (), "authoritative_time_missing"
     ordered_events = tuple(sorted(surgery_events, key=lambda item: item.surgery_end_time))
     if len({item.surgery_end_time for item in ordered_events}) != len(ordered_events):
@@ -2905,8 +2965,29 @@ async def execute_luxian_0609_native_extended_document_rules(
                         else "unavailable" if diagnosis_scope_extraction.state == "data_gap" else "invalid"
                     )
                 else:
+                    explicit_main_rows = tuple(
+                        scope_rows[document.row_index]
+                        for document in diagnosis_scope_extraction.documents
+                        if document.coverage == "complete" and any(
+                            assertion.scope == "diagnosis"
+                            and assertion.diagnosis_state == "explicit"
+                            and assertion.polarity == "affirmed"
+                            and assertion.temporal_scope == "current"
+                            and assertion.association == "explicit"
+                            for assertion in document.assertions
+                        )
+                    )
                     for document in diagnosis_scope_extraction.documents:
                         row = scope_rows[document.row_index]
+                        # 主控代定口径（2026-10-18，待客户复核），基线050：
+                        # 主诊断已明确时，局部问题未明不触发；不能证明主次范围仍保留缺口。
+                        main_diagnosis_explicit = any(
+                            main_row is row or (
+                                (main_time := _row_time(main_row)) is not None
+                                and (local_time := _row_time(row)) is not None
+                                and main_time <= local_time
+                            ) for main_row in explicit_main_rows
+                        )
                         if document.coverage == "unknown":
                             unknown_candidates.append(row)
                         for assertion in document.assertions:
@@ -2926,7 +3007,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     if row not in strong_candidates:
                                         strong_candidates.append(row)
                                 elif assertion.scope == "local_problem":
-                                    if row not in local_candidates:
+                                    if not main_diagnosis_explicit and row not in local_candidates:
                                         local_candidates.append(row)
                                 else:
                                     unknown_candidates.append(row)
@@ -3197,20 +3278,28 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not rule_antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-05-01-03":
+                # 主控代定口径（2026-10-18，待客户复核），基线055：
+                # 同药医嘱合为一个疗程，首次实际执行起算；续开不另建48–72小时窗。
+                course_orders: dict[str, list[Mapping[str, Any]]] = {}
+                for order in rule_antimicrobial_orders:
+                    for name in _antimicrobial_names_in(order):
+                        course_orders.setdefault(name, []).append(order)
                 order_events = tuple(
-                    (row, name, _antimicrobial_start_datetime(row))
-                    for row in rule_antimicrobial_orders
-                    for name in _antimicrobial_names_in(row)
+                    (_AntimicrobialOrderEvent(tuple(orders), (name,)), name,
+                     min(starts) if all(start is not None for start in starts) else None)
+                    for name, orders in course_orders.items()
+                    for starts in [tuple(_antimicrobial_start_datetime(order) for order in orders)]
                 )
                 # 即使评价窗尚未成熟，开始医嘱仍是这项否定结论实际消费的
                 # 业务事实；horizon 仅决定窗口状态，绝不成为客户证据。
                 selected_antimicrobial_evidence_rows.extend(
-                    order
-                    for order, _name, start in order_events
+                    row
+                    for event, _name, start in order_events
                     if start is not None
+                    for row in event.orders
                 )
                 event_windows: list[dict[str, Any]] = []
-                mature_events: list[tuple[Mapping[str, Any], str, datetime]] = []
+                mature_events: list[tuple[_AntimicrobialOrderEvent, str, datetime]] = []
                 immature_states: list[str] = []
                 if any(start is None for _, _, start in order_events):
                     final_state, reason_code = "data_gap", "authoritative_time_missing"
@@ -3335,7 +3424,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     final_state, reason_code = "data_gap", "association_failed"
                 else:
                     for order, name, start in mature_events:
-                        order_id = _clean(order.get("order_id"))
+                        order_ids = order.order_ids
                         for (
                             rows_by_name,
                             unknown_rows_by_name,
@@ -3361,7 +3450,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             matching_rows = tuple(
                                 row for row in rows_by_name.get(name, ())
                                 if not _linked_order_id(row)
-                                or (bool(order_id) and _linked_order_id(row) == order_id)
+                                or _linked_order_id(row) in order_ids
                             )
                             event_intervals = [
                                 (value - start).total_seconds() / 3600
@@ -3379,7 +3468,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 matching_unknown_rows = tuple(
                                     row for row in unknown_rows_by_name.get(name, ())
                                     if not _linked_order_id(row)
-                                    or (bool(order_id) and _linked_order_id(row) == order_id)
+                                    or _linked_order_id(row) in order_ids
                                 )
                                 unknown_is_relevant = any(
                                     (value := _row_time(row)) is None
@@ -4679,19 +4768,20 @@ async def execute_luxian_0609_native_extended_document_rules(
             if surgery_events:
                 if linkage_error:
                     selected_postoperative_rows.extend(
-                        event.row for event in surgery_events
+                        row for event in surgery_events for row in event.member_rows
                     )
                 elif final_state == "non_compliant":
                     # 缺失首次病程时，客户证据只指向缺失的手术事件；已满足
                     # 事件的病程不应被这条缺陷结论顺带投影。
                     selected_postoperative_rows.extend(
-                        event.row
+                        row
                         for event, linked_rows in linked_events
                         if not linked_rows
+                        for row in event.member_rows
                     )
                 else:
                     selected_postoperative_rows.extend(
-                        event.row for event, _linked_rows in linked_events
+                        row for event, _linked_rows in linked_events for row in event.member_rows
                     )
                     selected_postoperative_rows.extend(
                         row
@@ -4741,13 +4831,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = gate_outcome
             elif not surgery_events:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
-            elif (
-                len(surgery_events) > 1
-                and all(event.source_key == "mr_surgery" for event in surgery_events)
+            elif len(surgery_events) > 1 and any(
+                event.source_key == "mr_surgery" and event.surgery_begin_time is None
+                for event in surgery_events
             ):
-                # 没有正式手术记录时，多个操作目录行仍无法安全证明逐台关联。
-                # 本轮仅收敛“正式手术记录一行即一事件”的主路径。
-                final_state, reason_code = "data_gap", "association_failed"
+                # 主控代定口径（2026-10-18，待客户复核），基线064/065：多首页行缺开始时间仍资料不足。
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif any(event.surgery_end_time is None for event in surgery_events):
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
                 display.append((rule_id, {
@@ -4857,7 +4946,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     unresolved_senior_body = False
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
-                        selected_postoperative_rows.append(event.row)
+                        selected_postoperative_rows.extend(event.member_rows)
                         deadline = event.surgery_end_time + timedelta(hours=72)
                         window_mature = (
                             evaluation_time >= deadline
@@ -4988,7 +5077,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
-                        selected_postoperative_rows.append(event.row)
+                        selected_postoperative_rows.extend(event.member_rows)
                         required_dates = {
                             (event.surgery_end_time + timedelta(days=offset)).date()
                             for offset in (1, 2, 3)
