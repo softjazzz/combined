@@ -52,9 +52,10 @@ async def test_preop_summary_multiple_days_without_document_event_binding_stays_
 
 
 @pytest.mark.asyncio
-async def test_preop_summary_same_day_components_do_not_prove_missing_document():
+async def test_preop_summary_same_start_components_are_one_event():
     _, decision = await _run([1, 1, 1])
-    assert decision.final_state.value == "data_gap"
+    # 主控代定口径（2026-10-18，待客户复核），基线029：同开始时间合为一台。
+    assert decision.final_state.value == "compliant"
 
 
 @pytest.mark.asyncio

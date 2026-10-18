@@ -37,6 +37,7 @@ from .source_evidence_reader import (
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
+from .surgery_event_association import group_surgery_rows_by_start, merge_surgery_component_rows
 from .surgery_record_coverage import definitely_uncovered_surgery_rows, surgery_event_time
 from .prophylactic_antimicrobial_duration import (
     SurgeryEventInput as _ProphylaxisSurgeryEvent,
@@ -1127,10 +1128,16 @@ def _typed_003_decision(
             row for row in mr_rows if _qualified_traditional_surgery_present((row,))
         )
         if qualified_mr_rows:
-            # 003 缺正式手术记录时，只能由唯一一台主表手术形成“应有记录”的
-            # 结论。同一结束时间不能把多行不同手术事件压成一个时间点。
-            if len(qualified_mr_rows) != 1:
+            # 主控代定口径（2026-10-18，待客户复核），基线003：同开始时间组件
+            # 先合为一台；结束时间缺失仍不能计算24小时窗口。
+            groups = group_surgery_rows_by_start("mr_surgery", qualified_mr_rows)
+            if groups is None:
                 return decision("data_gap", "association_failed")
+            # 003 缺正式手术记录时，只能由唯一一台主表手术形成“应有记录”的
+            # 结论。同一结束时间不能把不同开始时间的手术压成一个时间点。
+            if len(groups) != 1:
+                return decision("data_gap", "association_failed")
+            selected_event = merge_surgery_component_rows(groups[0])
             selected_mr_ref = _material_document_ref_for_row(
                 materials=materials,
                 snapshot=snapshot,
@@ -1138,7 +1145,7 @@ def _typed_003_decision(
                 selected_row=qualified_mr_rows[0],
             )
             surgery_end_time = _authoritative_surgery_end_time(
-                source_key="mr_surgery", row=qualified_mr_rows[0]
+                source_key="mr_surgery", row=selected_event
             )
             if surgery_end_time is None:
                 return decision("data_gap", "authoritative_time_missing")

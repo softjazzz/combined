@@ -34,12 +34,14 @@ from .planner import PlannedRule
 from .source_manifest import QueryStatus
 from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
-    has_trusted_performed_surgery,
 )
 from .surgery_event_association import (
+    associate_preop_document_to_surgery_event,
+    build_surgery_document_events,
     count_associated_performed_surgery_events,
-    procedure_matches_surgery,
+    group_surgery_rows_by_start,
     summary_surgery_name_from_row,
+    summary_planned_surgery_time_from_row,
 )
 from .surgery_applicability import resolve_surgery_applicability
 from .surgery_procedure_catalog import normalize_surgery_level
@@ -1314,6 +1316,93 @@ def _anesthesia_record_association_state(
     return "unique" if common else "ambiguous"
 
 
+def _anesthesia_surgery_begin_time(row: Mapping[str, Any]) -> tuple[datetime | None, bool]:
+    """仅采用结构化或明确标签的手术开始时间，提交时间不证明手术归属。"""
+    values = {
+        parsed for field in ("surgery_begin_time", "surgery_begin_datetime")
+        if (parsed := _visit_datetime(row.get(field))) is not None
+    }
+    for match in re.finditer(
+        r"手术开始时间\s*[:：]\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)",
+        _clean(row.get("record_content")),
+    ):
+        if (parsed := _visit_datetime(match.group(1))) is not None:
+            values.add(parsed)
+    return (next(iter(values)), False) if len(values) == 1 else (None, bool(values))
+
+
+def _typed_038_session_outcome(
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> _SurgeryDocumentOutcome | None:
+    """主控代定口径（2026-10-18，待客户复核），基线038：按台核对麻醉记录。"""
+    if materials is None:
+        return None
+    try:
+        rows = tuple(materials.rows("anesthesia_record"))
+        master_rows = tuple(
+            row for row in materials.rows("mr_surgery")
+            if has_qualified_traditional_surgery_row(row)
+        )
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return None
+    # 无台次材料或原有单事件路径继续使用原受控麻醉事实；本分支解决逐台覆盖。
+    if not master_rows or (len(master_rows) <= 1 and len(rows) <= 1):
+        return None
+    rule_id = "LX0609-04-04-03"
+    groups = group_surgery_rows_by_start("mr_surgery", master_rows)
+    if groups is None:
+        return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+    required: set[int] = set()
+    for index, group in enumerate(groups):
+        methods = {
+            method for row in group if (method := _clean(row.get("anesthesia_method")))
+            and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(method)
+        }
+        if len(methods) != 1:
+            return _SurgeryDocumentOutcome(rule_id, "data_gap", "anesthesia_method_unavailable", "program")
+        if next(iter(methods)) not in _LOCAL_ANESTHESIA_VALUES:
+            required.add(index)
+    if not required:
+        return _SurgeryDocumentOutcome(rule_id, "not_applicable", "local_anesthesia_exception", "program")
+    begins = [group[0]["surgery_begin_datetime"] for group in groups]
+    covered: set[int] = set()
+    for row in rows:
+        begin, time_conflict = _anesthesia_surgery_begin_time(row)
+        if time_conflict:
+            return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+        candidates: set[int] = set()
+        for index, group in enumerate(groups):
+            business_match = any(
+                _clean(row.get(field)) and _clean(row.get(field)) == _clean(component.get(field))
+                for component in group for field in ("surgery_id", "application_id", "anesthesia_id")
+            )
+            event_begin = begins[index]
+            time_match = begin is not None and (
+                begin == event_begin
+                or event_begin.time() == datetime.min.time()
+                and begin.date() == event_begin.date()
+                and sum(value.date() == begin.date() for value in begins) == 1
+            )
+            if business_match and begin is not None and not time_match:
+                return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+            if business_match or time_match:
+                candidates.add(index)
+        if len(candidates) == 1:
+            covered.update(candidates)
+        elif len(groups) == len(rows) == 1 and begin is None:
+            # 唯一台次、唯一记录保留既有存在性口径；多份记录仍需各自关联证据。
+            covered.add(0)
+        elif candidates or begin is None:
+            return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+    missing = bool(required - covered)
+    kind = "anesthesia_record_missing" if missing else "anesthesia_record_present"
+    return _SurgeryDocumentOutcome(
+        rule_id, "non_compliant" if missing else "compliant", kind, "program",
+        {"failure_kind" if missing else "verification_kind": kind,
+         "performed_anesthesia_confirmed": True, "checked_sources": ["anesthesia_record"]},
+    )
+
+
 def _typed_terminal_outcome(
     *,
     rule_id: str,
@@ -1525,6 +1614,10 @@ def _typed_terminal_outcome(
         )
         if blocker is not None:
             return blocker
+    if rule_id == "LX0609-04-04-03":
+        session_outcome = _typed_038_session_outcome(materials)
+        if session_outcome is not None:
+            return session_outcome
     anesthesia_state, anesthesia_method, anesthesia_trigger_source = (
         _typed_anesthesia_trigger(snapshot, materials)
     )
@@ -1809,36 +1902,28 @@ def _clean_presurg_body(value: Any) -> str:
     return candidate
 
 
-def _try_associate_single_presurg_summary_to_surgeries(
+def _associate_presurg_summaries_to_surgeries(
     *,
     summary_rows: Sequence[Mapping[str, Any]],
     materials: Luxian0609EvidenceMaterialStore,
 ) -> tuple[int, int] | None:
-    """用术式名称将一份术前小结安全关联到手术记录；无法唯一匹配则返回 None。"""
-    if len(summary_rows) != 1:
+    """主控代定口径（2026-10-18，待客户复核），基线029：逐台关联非空小结。"""
+    events, _reason = build_surgery_document_events(materials)
+    if not events:
         return None
-    summary_name = summary_surgery_name_from_row(summary_rows[0])
-    if not summary_name:
-        return None
-    try:
-        surgery_rows = tuple(materials.rows("surgery_record"))
-    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-        return None
-    performed = [
-        row
-        for row in surgery_rows
-        if has_trusted_performed_surgery(source_key="surgery_record", row=row)
-    ]
-    if len(performed) < 2:
-        return None
-    matches = [
-        row
-        for row in performed
-        if procedure_matches_surgery(summary_name, row.get("surgery_name"))
-    ]
-    if len(matches) != 1:
-        return None
-    return len(performed), 1
+    covered: set[int] = set()
+    for row in summary_rows:
+        if not _clean_presurg_body(row.get("record_content")):
+            continue
+        association = associate_preop_document_to_surgery_event(
+            events=events, procedure_name=summary_surgery_name_from_row(row),
+            record_time=_visit_datetime(row.get("record_time")),
+            planned_surgery_time=summary_planned_surgery_time_from_row(row),
+        )
+        if association.state != "matched" or association.event_index is None:
+            return None
+        covered.add(association.event_index)
+    return (len(events), len(covered)) if covered else None
 
 
 def _typed_029_order_trigger(
@@ -2234,7 +2319,7 @@ async def _typed_029_outcome(
         performed_event_count, count_reason = count_associated_performed_surgery_events(
             materials
         )
-        if performed_event_count is None and count_reason != "association_failed":
+        if performed_event_count is None:
             return (
                 _SurgeryDocumentOutcome(
                     "LX0609-04-01-01", "data_gap", count_reason, "program", None,
@@ -2242,11 +2327,8 @@ async def _typed_029_outcome(
                 ),
                 0, 0, 0, 0, 0.0,
             )
-    if performed_triggered and (
-        (performed_event_count is None and count_reason == "association_failed")
-        or (performed_event_count is not None and performed_event_count > 1)
-    ):
-        associated_counts = _try_associate_single_presurg_summary_to_surgeries(
+    if performed_triggered and performed_event_count is not None and performed_event_count > 1:
+        associated_counts = _associate_presurg_summaries_to_surgeries(
             summary_rows=summary_rows,
             materials=materials,
         )
@@ -2268,10 +2350,8 @@ async def _typed_029_outcome(
                     ),
                     0, 0, 0, 0, 0.0,
                 )
-        if performed_event_count is None or performed_event_count > 1:
-            # 当前资料合同没有稳定的“术前小结 ↔ 单台已实施手术”关联字段；
-            # 因而一份或多份非空小结都不能覆盖多台手术。完全无小结已在上方
-            # 由 complete-empty 来源明确证明为逐台缺失，才允许输出不合规。
+        else:
+            # 仅有行数或无法唯一归属的非空小结，不能证明逐台覆盖或逐台缺失。
             return (
                 _SurgeryDocumentOutcome(
                     "LX0609-04-01-01",
