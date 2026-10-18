@@ -17,7 +17,7 @@ from .llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
     redact_luxian_0609_patient_privacy,
 )
-from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, _json_response_object, _usage
+from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, PROTOCOL_ATTEMPTS, _json_response_object, _usage
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,10 @@ def _binding_text(value: str) -> str:
     )
 
 
+class _EscapedQuoteBinding(ValueError):
+    """引文把控制字符多转义了一层；仅允许重读，不用于放宽绑定。"""
+
+
 def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) -> list[tuple[int, str]]:
     choices = response.get("choices")
     if choices is not None:
@@ -162,11 +166,16 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
         if (
             type(index) is not int or index not in expected or index in seen
             or not isinstance(item["quote"], str)
-            or _binding_text(item["quote"]) != _binding_text(expected[index])
         ):
             raise ValueError("invalid document binding")
         if not isinstance(kind, str) or kind not in {"record", "not_record", "unknown"}:
             raise ValueError("invalid record kind")
+        if _binding_text(item["quote"]) != _binding_text(expected[index]):
+            # 只识别可确定的转义错误来触发同批补核，不能直接采用替换后的引用。
+            unescaped = re.sub(r"\\([nrt])", lambda match: {"n": "\n", "r": "\r", "t": "\t"}[match[1]], item["quote"])
+            if unescaped == expected[index]:
+                raise _EscapedQuoteBinding("escaped control character in quote")
+            raise ValueError("invalid document binding")
         seen.add(index)
         result.append((index, kind))
     return result
@@ -192,26 +201,36 @@ async def classify_transfusion_course_records(
     selected: set[int] = set()
     unresolved = False
     for batch in batches:
-        started = perf_counter()
-        calls += 1
-        try:
-            response = await llm_client.generate(_prompt(batch), **structured_output_kwargs(llm_client))
-        except Exception as error:
-            api_time += perf_counter() - started
-            return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=classify_luxian_0609_llm_call_failure(error))
-        try:
-            usage = _usage(response)
-            prompt_tokens += usage[0]
-            completion_tokens += usage[1]
-            total_tokens += usage[2]
-            api_time += usage[3] or perf_counter() - started
-            resolved = _records(response, batch)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
-            logger.warning(
-                "LX0609 病程输血记录识别输出无效: batch_rows=%s %s",
-                len(batch), describe_luxian_0609_llm_parse_failure(error, response),
+        # 沿用输血协议最多两次的上限，仅补核已定位的回抄转义错误。
+        for attempt in range(PROTOCOL_ATTEMPTS):
+            started = perf_counter()
+            calls += 1
+            correction = (
+                "上一轮quote将换行或制表符多转义了一层。请重新阅读以下完整原文，"
+                "正确使用JSON转义，使JSON解码后的quote逐字等于content；不要输出字面量反斜杠加n/r/t。\n"
+                if attempt else ""
             )
-            return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
+            try:
+                response = await llm_client.generate(correction + _prompt(batch), **structured_output_kwargs(llm_client))
+            except Exception as error:
+                api_time += perf_counter() - started
+                return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=classify_luxian_0609_llm_call_failure(error))
+            try:
+                usage = _usage(response)
+                prompt_tokens += usage[0]
+                completion_tokens += usage[1]
+                total_tokens += usage[2]
+                api_time += usage[3] or perf_counter() - started
+                resolved = _records(response, batch)
+                break
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+                logger.warning(
+                    "LX0609 病程输血记录识别输出无效: attempt=%s batch_rows=%s %s",
+                    attempt + 1, len(batch), describe_luxian_0609_llm_parse_failure(error, response),
+                )
+                if isinstance(error, _EscapedQuoteBinding) and attempt + 1 < PROTOCOL_ATTEMPTS:
+                    continue
+                return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
         for index, kind in resolved:
             if kind == "record":
                 selected.add(index)
