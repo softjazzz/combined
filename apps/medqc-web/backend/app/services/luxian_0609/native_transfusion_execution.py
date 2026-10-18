@@ -29,6 +29,7 @@ from .pretransfusion_assessment import (
     PretransfusionReasonCandidate,
     build_pretransfusion_reason_candidate,
     evaluate_structured_pretransfusion_application,
+    has_structured_pretransfusion_application,
 )
 from .transfusion_order_trigger import TransfusionOrderTriggerResult, classify_transfusion_orders
 from .transfusion_course_presence import (
@@ -3181,6 +3182,7 @@ async def execute_luxian_0609_native_transfusion_rules(
     ] = {}
     intraoperative_task: asyncio.Task[_Intraoperative048Assessment] | None = None
     order_identities: tuple[tuple[str, str], ...] = ()
+    performance_event_cache: dict[tuple[tuple[str, str], ...], tuple[str, Any]] = {}
     try:
         asyncio.get_running_loop()
     except RuntimeError:
@@ -3256,6 +3258,52 @@ async def execute_luxian_0609_native_transfusion_rules(
                 )
             )
         return performed_tasks[key]
+
+    async def resolve_performance_events(
+        record_rows: Sequence[Mapping[str, Any]], *, dedicated_performance_source: bool,
+    ) -> tuple[str, Any]:
+        """从输血记录正文抽取实施事件及开始时间；同批记录在本次执行内只抽取一次。
+
+        返回 ("ok", 事件行) / ("technical_error", 原因码) / ("unresolved", None)。
+        07-01-01 与 07-01-02 共用（首页输血表缺失时的后备）。
+        """
+
+        nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
+        key = tuple(
+            (str(row.get("document_id") or row.get("id") or ""), str(row.get("record_time") or ""))
+            for row in record_rows
+        ) + (("dedicated", str(dedicated_performance_source)),)
+        if key in performance_event_cache:
+            return performance_event_cache[key]
+        from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
+
+        performance = await extract_transfusion_performance(
+            [{**row, "record_time": _authoritative_record_time(row)} for row in record_rows], llm_client,
+        )
+        llm_call_count += performance.llm_call_count
+        prompt_tokens += performance.prompt_tokens
+        completion_tokens += performance.completion_tokens
+        total_tokens += performance.total_tokens
+        api_time += performance.api_time
+        if performance.technical_failure:
+            # 实施抽取的模型调用失败不能交付为资料不足。
+            outcome: tuple[str, Any] = ("technical_error", performance.reason_code)
+        else:
+            events = []
+            unresolved = False
+            for row, state, event_time in zip(record_rows, performance.states, performance.event_times):
+                if state == "performed":
+                    # 普通/上级病程的完成时间不能替代实际开始输血时间。
+                    value = event_time or (_authoritative_record_time(row) if dedicated_performance_source else None)
+                    if value is not None:
+                        events.append({**row, "transfution_datetime": value.isoformat(sep=" ")})
+                    else:
+                        unresolved = True
+                elif state == "unknown":
+                    unresolved = True
+            outcome = ("unresolved", None) if unresolved or not events else ("ok", events)
+        performance_event_cache[key] = outcome
+        return outcome
 
     def get_order_trigger_task(
         *,
@@ -3502,41 +3550,21 @@ async def execute_luxian_0609_native_transfusion_rules(
         if rule_id in {"LX0609-11-03-01", "LX0609-11-03-02", "LX0609-07-01-01"}:
             if (rule_id == "LX0609-07-01-01" and not _transfusion_event_rows(documents)
                     and _logical_source_state(documents, "labtest_item_report") not in {"missing", "unavailable", "error"}):
-                from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
-
                 record_rows = _source_document_rows(documents, "bloodtrans_record")
                 dedicated_performance_source = bool(record_rows)
                 if not record_rows:
                     record_rows = [row for key in ("daily_course_record", "senior_course_record")
                                    for row in select_transfusion_course_candidates(_source_document_rows(documents, key))]
-                performance = await extract_transfusion_performance(
-                    [{**row, "record_time": _authoritative_record_time(row)} for row in record_rows], llm_client,
+                performance_state, performance_value = await resolve_performance_events(
+                    record_rows, dedicated_performance_source=dedicated_performance_source,
                 )
-                llm_call_count += performance.llm_call_count
-                prompt_tokens += performance.prompt_tokens
-                completion_tokens += performance.completion_tokens
-                total_tokens += performance.total_tokens
-                api_time += performance.api_time
-                if performance.technical_failure:
-                    # 实施抽取的模型调用失败不能交付为资料不足。
-                    emit_outcome(rule_id, "technical_error", performance.reason_code, executor_type="llm")
+                if performance_state == "technical_error":
+                    emit_outcome(rule_id, "technical_error", performance_value, executor_type="llm")
                     continue
-                events = []
-                unresolved = False
-                for row, state, event_time in zip(record_rows, performance.states, performance.event_times):
-                    if state == "performed":
-                        # 普通/上级病程的完成时间不能替代实际开始输血时间。
-                        value = event_time or (_authoritative_record_time(row) if dedicated_performance_source else None)
-                        if value is not None:
-                            events.append({**row, "transfution_datetime": value.isoformat(sep=" ")})
-                        else:
-                            unresolved = True
-                    elif state == "unknown":
-                        unresolved = True
-                if unresolved or not events:
+                if performance_state != "ok":
                     emit_outcome(rule_id, "data_gap", "transfusion_time_unavailable", executor_type="llm")
                     continue
-                documents = {**documents, "mr_bloodtrans": events}
+                documents = {**documents, "mr_bloodtrans": performance_value}
             programmatic = {
                 "LX0609-11-03-01": _programmatic_041_status,
                 "LX0609-11-03-02": _programmatic_042_status,
@@ -3574,6 +3602,24 @@ async def execute_luxian_0609_native_transfusion_rules(
         # 044–047 的专用输血记录具有更高证据优先级。先尝试确定性判定，
         # 只有不能定论时才检查日常病程等辅助投影并进入裁剪模型。
         if rule_id == "LX0609-07-01-02":
+            # 首页输血表缺失时，按 07-01-01 同一实施抽取从专用输血记录正文取开始输注时间
+            # （第六轮 C03、复验 C04/C08：输血记录写明开始时间仍判“缺实际输血时间”）。
+            # 只用专用输血记录；同批记录与 07-01-01 共用一次抽取。抽不到时间时交由原评估判资料不足。
+            # 只有结构化申请单路径比较申请时间与输血时间，旧非结构化资料不触发抽取。
+            bloodtrans_rows = _source_document_rows(documents, "bloodtrans_record")
+            if (
+                not _transfusion_event_rows(documents)
+                and bloodtrans_rows
+                and has_structured_pretransfusion_application(documents)
+            ):
+                performance_state, performance_value = await resolve_performance_events(
+                    bloodtrans_rows, dedicated_performance_source=True,
+                )
+                if performance_state == "technical_error":
+                    emit_outcome(rule_id, "technical_error", performance_value, executor_type="llm")
+                    continue
+                if performance_state == "ok":
+                    documents = {**documents, "mr_bloodtrans": performance_value}
             programmatic_status = _programmatic_044_status(documents)
             reason_candidate = build_pretransfusion_reason_candidate(documents)
             needs_reason_semantics = (

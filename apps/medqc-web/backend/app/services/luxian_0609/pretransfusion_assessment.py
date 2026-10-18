@@ -148,12 +148,8 @@ def _source_document_refs(
     return tuple(refs)
 
 
-def evaluate_structured_pretransfusion_application(
-    documents: Mapping[str, Any],
-) -> AssessmentOutcome | None:
-    """按输血申请单结构化事实核对 LX0609-07-01-02；非结构化旧资料交还调用方。"""
-
-    applications = [
+def _structured_applications(documents: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [
         row
         for row in _rows(documents, "blood_application")
         if any(
@@ -161,6 +157,20 @@ def evaluate_structured_pretransfusion_application(
             for field in ("reason_for_blood", "transfusion_reason", *INDICATOR_FIELDS)
         )
     ]
+
+
+def has_structured_pretransfusion_application(documents: Mapping[str, Any]) -> bool:
+    """是否存在结构化输血申请单（只有这条路径需要实际输血时间作时序比较）。"""
+
+    return bool(_structured_applications(documents))
+
+
+def evaluate_structured_pretransfusion_application(
+    documents: Mapping[str, Any],
+) -> AssessmentOutcome | None:
+    """按输血申请单结构化事实核对 LX0609-07-01-02；非结构化旧资料交还调用方。"""
+
+    applications = _structured_applications(documents)
     if not applications:
         return None
 
