@@ -691,3 +691,57 @@ def test_disposition_explanation_rejects_invalid_counts_and_extra_fields(raw):
         validate_luxian_0609_published_customer_display_facts(
             rule_id=record.RULE_ID, raw=raw, status="non_compliant", reason_code="requirement_violated",
         )
+
+
+_LONG_OPINION = (
+    "呼吸科会诊意见:病史敬悉。患者咳嗽咳痰,活动后呼吸困难明显,结合辅助检查考虑慢性阻塞性肺病急性加重,"
+    "建议完善痰培养及药敏,继续抗感染、解痉平喘治疗,必要时转我科进一步治疗。"
+)
+_LONG_BODY = "患者高龄,目前持续经鼻高流量吸氧,故请呼吸科会诊。 " + _LONG_OPINION + " 遵会诊意见,已完善痰培养。"
+
+
+def _anchored_opinions(opinion_quotes, feedback_quotes=("遵会诊意见,已完善痰培养。",)):
+    return {
+        "content": json.dumps({
+            "schema_version": record.SCHEMA_VERSION + "-opinions",
+            "documents": [{
+                "ref": "consultation_record-1", "scope": "ordinary", "suggestion_state": "present",
+                "opinion_quotes": list(opinion_quotes), "feedback_quotes": list(feedback_quotes),
+            }],
+        }, ensure_ascii=False)
+    }
+
+
+def test_long_opinion_anchors_resolve_to_the_full_source_paragraph():
+    roles = record.parse_opinions(
+        _anchored_opinions([{"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转我科进一步治疗。"}]),
+        documents(_LONG_BODY),
+    )
+    assert roles["consultation_record-1"]["opinion_quotes"] == [_LONG_OPINION]
+    assert roles["consultation_record-1"]["feedback_quotes"] == ["遵会诊意见,已完善痰培养。"]
+
+
+@pytest.mark.parametrize("anchor", [
+    {"start": "呼吸科会诊意见:病史知悉", "end": "必要时转我科进一步治疗。"},  # 开头不是原文
+    {"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转外科进一步治疗。"},  # 结尾不是原文
+    {"start": "呼吸科", "end": "必要时转我科进一步治疗。"},  # 锚点过短
+    {"start": "遵会诊意见,已完善", "end": "呼吸科会诊意见:病史敬悉"},  # 结尾在开头之前
+    {"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转我科进一步治疗。", "text": "多余字段"},
+])
+def test_invalid_anchor_is_rejected_as_ungrounded(anchor):
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
+
+
+def test_anchor_start_must_be_unique_in_the_document():
+    body = "建议完善痰培养及药敏。另建议完善痰培养及药敏复查,继续抗感染治疗。遵照执行。"
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        record.parse_opinions(
+            _anchored_opinions([{"start": "建议完善痰培养及药敏", "end": "继续抗感染治疗。"}], ["遵照执行。"]),
+            documents(body),
+        )
+
+
+def test_opinion_prompt_asks_for_anchors_on_long_paragraphs():
+    prompt = record.build_opinion_prompt(documents(_LONG_BODY))
+    assert '"start"' in prompt and '"end"' in prompt and "60字" in prompt

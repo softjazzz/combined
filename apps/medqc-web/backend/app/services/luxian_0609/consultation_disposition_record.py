@@ -97,6 +97,50 @@ def _restore_contiguous_quotes(quotes: Any, source: str) -> Any:
     return restored
 
 
+# 长段落由模型给出首尾锚点，程序在原文中取整段：flash 模型逐字照抄约 400 字的
+# 会诊意见时会混入前文句子并陷入复读（C11 真实复验 8 次失败 6 次）。
+# 锚点不设长度上限：模型常把整段原文放进 start，只要逐字且唯一即可定位。
+_MIN_ANCHOR_CHARS = 4
+
+
+def _resolve_anchor_quote(anchor: Any, source: str) -> str | None:
+    """按首尾锚点从原文截取连续段落；锚点须逐字来自原文且开头锚点唯一，否则返回 None。
+
+    结尾锚点取开头之后第一次出现的位置，段落只会截短不会越界拼接；
+    截出的文字逐字来自原文，引文合同不变。
+    """
+
+    if not isinstance(anchor, dict) or set(anchor) != {"start", "end"}:
+        return None
+    start, end = (_normalized(anchor[key]) if isinstance(anchor[key], str) else "" for key in ("start", "end"))
+    if not all(len(value) >= _MIN_ANCHOR_CHARS for value in (start, end)):
+        return None
+    positions = [index for index, char in enumerate(source) if not char.isspace()]
+    compact_source = "".join(source[index] for index in positions)
+    start_at = compact_source.find(start)
+    if start_at < 0 or compact_source.find(start, start_at + 1) >= 0:
+        return None
+    # 短段落首尾锚点可重叠，但结尾不能早于开头锚点的末尾。
+    end_at = compact_source.find(end, start_at)
+    while 0 <= end_at and end_at + len(end) < start_at + len(start):
+        end_at = compact_source.find(end, end_at + 1)
+    if end_at < 0:
+        return None
+    return source[positions[start_at]:positions[end_at + len(end) - 1] + 1]
+
+
+def _resolved_role_quotes(quotes: Any, source: str) -> Any:
+    """锚点项还原为原文段落；字符串项沿用拼接引文还原。无法解析的项交由原校验拒收。"""
+
+    if not isinstance(quotes, list):
+        return quotes
+    resolved = [
+        _resolve_anchor_quote(quote, source) if isinstance(quote, dict) else quote
+        for quote in quotes
+    ]
+    return _restore_contiguous_quotes(resolved, source)
+
+
 def _grounded(quote: str, source: str) -> bool:
     return bool(
         quote and len(quote) <= 240 and _normalized(quote) in _normalized(source)
@@ -379,7 +423,11 @@ def build_opinion_prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "即使没有已执行字样，也必须完整摘入feedback_quotes，不能将拟加用再列为新建议。"
         "相反，会诊医师自己说建议拟加用某药仍是opinion_quotes；不能仅凭拟、建议或药名判断说话者。"
         "两组引文在正文中的位置不得重叠；同一种药分别出现在建议和回应中时，应分别摘录对应位置。"
-        "两组引文都必须是正文中的连续原话，不得拼接；分别不超过4000/2400字，每组最多8段。\n"
+        "两组每段都必须对应正文中的一个连续段落，不得拼接；分别不超过4000/2400字，每组最多8段。"
+        "段落不超过60字时直接给原文字符串；超过60字时不要整段照抄，改给"
+        '{"start":"段落开头约15字原文","end":"段落结尾约15字原文"}，'
+        "start与end都须逐字复制原文、各至少4字（start只取开头约15字即可），start须在该份正文中只出现一次，"
+        "程序会从start截到其后第一次出现的end。\n"
         "scope取ordinary/non_target/unknown：普通专科会诊为ordinary，术前邀请但有具体诊治意见也算；"
         "纯麻醉耐受评估、MDT、空模板和非会诊为non_target，归属无法识别为unknown。混合正文只摘普通专科部分。"
         "suggestion_state取present/unavailable/no_action：有具体建议、意见内容缺失、仅诊断或无需具体措施。"
@@ -387,7 +435,8 @@ def build_opinion_prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "每个ref恰好返回一次，只输出JSON："
         f'{{"schema_version":"{SCHEMA_VERSION}-opinions","documents":['
         '{"ref":"输入ref","scope":"ordinary","suggestion_state":"present",'
-        '"opinion_quotes":["会诊医师的建议段落"],"feedback_quotes":["本科室的处置回应段落"]}]}。'
+        '"opinion_quotes":[{"start":"建议段落开头原文","end":"建议段落结尾原文"}],'
+        '"feedback_quotes":["本科室的60字以内回应原文"]}]}。'
         "\nDOCUMENTS_JSON="
         + json.dumps(
             _model_documents(documents), ensure_ascii=False, separators=(",", ":")
@@ -427,7 +476,7 @@ def parse_opinions(
         ):
             raise ValueError("invalid opinion identity")
         for key, limit in (("opinion_quotes", 4000), ("feedback_quotes", 2400)):
-            quotes = _restore_contiguous_quotes(item[key], sources.get(ref, ""))
+            quotes = _resolved_role_quotes(item[key], sources.get(ref, ""))
             item = {**item, key: quotes}
             if (
                 not isinstance(quotes, list)
