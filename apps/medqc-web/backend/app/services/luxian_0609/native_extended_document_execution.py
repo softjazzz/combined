@@ -288,6 +288,9 @@ _DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
     r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
     r"|考虑.{0,12}于今日(?:办理)?出院"
 )
+_SEMANTIC_DISCHARGE_DISPOSITION_PATTERN = re.compile(
+    r"(?:(?:今日|今天|明日|次日)(?:带药)?|办理|安排|予)出院(?!医嘱)"
+)
 _SENIOR_PHYSICIAN_REFERENCE_PATTERN = re.compile(
     r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
 )
@@ -398,7 +401,19 @@ def _is_dated_discharge_plan_only(text: str) -> bool:
 def _has_confirmed_discharge_approval(text: str) -> bool:
     """模型的 approved 枚举也必须通过同一明确处置合同。"""
 
-    return _confirmed_discharge_approval_match(text) is not None
+    if _confirmed_discharge_approval_match(text) is not None:
+        return True
+    # 此补充只供已核验为 senior/approved 的语义事实使用，不扩大无模型的角色推断。
+    for approval in _SEMANTIC_DISCHARGE_DISPOSITION_PATTERN.finditer(text):
+        prefix = re.split(r"[。！？!?；;\r\n]", text[:approval.start()])[-1]
+        if re.search(r"(?:不|未|尚未|尚不|暂不|拟|计划|准备).{0,6}$", prefix):
+            continue
+        if re.search(r"(?:待|若|如果|如无|如有|如复查|如病情|考虑)", prefix):
+            continue
+        if re.search(r"(?:复查|检查|治疗|换药).{0,16}后(?:再)?.{0,8}$", prefix):
+            continue
+        return True
+    return False
 
 
 def _source_rows(

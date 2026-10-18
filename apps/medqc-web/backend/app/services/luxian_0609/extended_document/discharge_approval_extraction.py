@@ -210,6 +210,8 @@ async def _extract_discharge_approval_once(
     documents: Sequence[DischargeApprovalInput],
     llm_client: DischargeApprovalLLMClient | None,
     *, instruction_correction: bool = False,
+    role_correction: bool = False,
+    condition_correction: bool = False,
 ) -> DischargeApprovalExtraction:
     try:
         validated = _validated_documents(documents)
@@ -239,6 +241,16 @@ async def _extract_discharge_approval_once(
                 "本身当作上级医师已经批准出院。请重新核对完整文书中的意见主体和明确处置；"
                 "确有批准意见才返回approved，没有提取到意见时返回unknown及空quote。"
                 if instruction_correction else ""
+            ) + (
+                "\n纠正上一轮多个主体或多个出院表达混入同一quote的问题：重读完整文书，"
+                "仅引用与本次意见直接绑定的主体及完整连续分句，不能借用其他主体的意见。"
+                "必须保留该分句中的条件和否定；不能仅为获得上级角色而删掉条件或改写原文。"
+                if role_correction else ""
+            ) + (
+                "\n补核处置完成情况：‘检查、治疗或换药后出院’仍须区分未来条件与已完成事实。"
+                "只有本份文书明确证明前提已完成且已批准出院才可approved；"
+                "尚需完成处置的用conditional，无法判断的用unknown，不能因已经出院推定完成。"
+                if condition_correction else ""
             ),
             max_completion_tokens=MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
@@ -307,22 +319,35 @@ async def extract_discharge_approval(
     documents: Sequence[DischargeApprovalInput],
     llm_client: DischargeApprovalLLMClient | None,
 ) -> DischargeApprovalExtraction:
-    """一般一次抽取；仅对误把出院医嘱标题作批准依据的文书补核一次。"""
+    """一般一次抽取；标题、主体或处置完成情况需补核时，仅重读相关文书一次。"""
     result = await _extract_discharge_approval_once(documents, llm_client)
     if result.state != "ready":
         return result
-    pending_ids = {
+    instruction_ids = {
         assertion.local_doc_id for assertion in result.assertions
         if assertion.opinion == "approved"
         and "出院医嘱" in assertion.quote
         and "出院" not in assertion.quote.replace("出院医嘱", "")
     }
+    role_ids = {
+        assertion.local_doc_id for assertion in result.assertions
+        if assertion.opinion in {"approved", "patient_request"} and assertion.role == "unknown"
+        and assertion.quote.count("出院") > 1
+        and _SENIOR_ROLE_PATTERN.search(assertion.quote)
+    }
+    condition_ids = {
+        assertion.local_doc_id for assertion in result.assertions
+        if assertion.opinion == "approved"
+        and re.search(r"(?:复查|检查|治疗|换药).{0,12}后.{0,8}出院", assertion.quote)
+    }
+    pending_ids = instruction_ids | role_ids | condition_ids
     if not pending_ids:
         return result
-    # 不用标题直接反推“未同意”；重读完整原文，其他已核验文书不重复抽取。
+    # 标题或混合主体不能直接反推“未同意”；其他已核验文书不重复抽取。
     repaired = await _extract_discharge_approval_once(
         tuple(item for item in documents if item.local_doc_id in pending_ids),
-        llm_client, instruction_correction=True,
+        llm_client, instruction_correction=bool(instruction_ids),
+        role_correction=bool(role_ids), condition_correction=bool(condition_ids),
     )
     by_id = {assertion.local_doc_id: assertion for assertion in repaired.assertions}
     return replace(
