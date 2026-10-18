@@ -3643,10 +3643,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                     content_consistent = sorted(authority) == sorted(written)
                     equivalent_pairs: tuple[tuple[str, str], ...] = ()
                     equivalence_state = "ready"
-                    if not content_consistent:
+                    authority_rest = list((Counter(authority) - Counter(written)).elements())
+                    written_rest = list((Counter(written) - Counter(authority)).elements())
+                    if not content_consistent and len(authority_rest) != len(written_rest):
+                        # 同义判定只做一对一配对：剩余条数不同时内容必不一致，不再调用模型
+                        # （第六轮 C07：21 对 23 条，模型偶发“无法判定”致缺陷被降为资料不足）。
+                        pass
+                    elif not content_consistent:
                         # 院方口径（2026-10-10）：逐字未匹配的剩余名称交模型判同义，程序裁定。
-                        authority_rest = list((Counter(authority) - Counter(written)).elements())
-                        written_rest = list((Counter(written) - Counter(authority)).elements())
                         diagnosis_equivalence_extraction = await extract_discharge_diagnosis_equivalence(
                             authority_rest, written_rest, llm_client,
                         )
