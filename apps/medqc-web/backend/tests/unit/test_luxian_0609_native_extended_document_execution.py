@@ -7454,7 +7454,7 @@ async def test_058_expert_support_after_special_antimicrobial_use_is_non_complia
                 "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
-                "record_time": "2026-06-01 11:00:00",
+                "record_time": "2026-06-02 11:00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -7642,7 +7642,7 @@ async def test_058_late_support_with_unavailable_senior_source_is_data_gap() -> 
                 "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
-                "record_time": "2026-06-01 11:00:00",
+                "record_time": "2026-06-02 11:00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -7786,8 +7786,8 @@ async def test_058_cross_timezone_late_support_is_non_compliant() -> None:
                 "planned_start_datetime": "2026-06-01T10:00:00+08:00",
             },),
             "consultation_record": ({
-                # 03:00 UTC == 11:00 Asia/Shanghai, after planned use.
-                "record_time": "2026-06-01T03:00:00+00:00",
+                # 次日 03:00 UTC == 11:00 Asia/Shanghai，晚于启用后 24 小时。
+                "record_time": "2026-06-02T03:00:00+00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -9137,7 +9137,7 @@ async def test_058_noncompliant_fact_refs_include_only_order_and_late_matched_su
                 {
                     "document_id": "CONSULT-058-LATE",
                     "related_order_id": "ORDER-058-MATCH",
-                    "record_time": "2026-06-01 11:00:00",
+                    "record_time": "2026-06-02 11:00:00",
                     "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
                 },
                 {

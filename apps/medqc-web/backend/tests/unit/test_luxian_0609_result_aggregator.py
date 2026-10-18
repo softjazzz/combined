@@ -528,7 +528,7 @@ def test_058_safe_projection_rejects_inconsistent_timed_expert_support_facts() -
         "special_antimicrobials": ["美罗培南"],
         "expert_support_present": True,
         "first_antimicrobial_time": "2026-06-01 10:00:00",
-        "expert_support_time": "2026-06-01 11:00:00",
+        "expert_support_time": "2026-06-02 11:00:00",
         "support_before_use": True,
         "unmatched_special_antimicrobials": [],
         "association_ambiguous": False,
@@ -545,7 +545,7 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
         "special_antimicrobials": ["美罗培南"],
         "expert_support_present": True,
         "first_antimicrobial_time": "2026-06-01 10:00:00",
-        "expert_support_time": "2026-06-01 11:00:00",
+        "expert_support_time": "2026-06-02 11:00:00",
         "support_before_use": False,
         "unmatched_special_antimicrobials": ["美罗培南"],
         "association_ambiguous": False,
@@ -570,7 +570,7 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
 
     expected_finding = (
         "已确认特殊级抗菌药物 美罗培南 的计划开始/启用时间为 2026-06-01 10:00:00，"
-        "但专家支持记录时间 2026-06-01 11:00:00 晚于该时间，不满足计划启用前支持要求。"
+        "但专家支持记录时间 2026-06-02 11:00:00 晚于启用后24小时，不满足专家支持（含紧急使用24小时内补办）要求。"
     )
     assert result["customer_display_facts"] == facts
     assert result["findings"] == expected_finding

@@ -3461,26 +3461,26 @@ def customer_finding_from_controlled_facts(
         planned_start_time = facts.get("first_antimicrobial_time")
         support_time = facts.get("expert_support_time")
         if facts.get("association_ambiguous") is True:
-            return f"已核对特殊级抗菌药物 {medicines}；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"
+            return f"已核对特殊级抗菌药物 {medicines}；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前或启用后24小时内的支持。"
         if unmatched and len(facts.get("special_antimicrobials") or ()) > 1:
-            return f"已核对特殊级抗菌药物 {medicines}；其中 {unmatched} 未找到可关联的计划启用前专家支持记录。"
+            return f"已核对特殊级抗菌药物 {medicines}；其中 {unmatched} 未找到可关联的计划启用前或启用后24小时内的专家支持记录。"
         if not planned_start_time:
             return (
                 f"已识别特殊级抗菌药物 {medicines} 计划，但缺少计划开始/启用时间，"
-                "暂无法判断专家支持记录是否在用药前完成。"
+                "暂无法判断专家支持记录是否在用药前或24小时内完成。"
             )
         if facts.get("support_before_use") is True:
             if len(facts.get("special_antimicrobials") or ()) > 1:
-                return f"已逐项确认特殊级抗菌药物 {medicines} 各自计划启用前或同刻有可关联的专家支持记录。"
+                return f"已逐项确认特殊级抗菌药物 {medicines} 各自计划启用前或启用后24小时内有可关联的专家支持记录。"
             return (
                 f"已确认特殊级抗菌药物 {medicines} 计划开始/启用时间为 "
-                f"{planned_start_time}，并在该时间前或同刻找到专家支持记录（{support_time}）。"
+                f"{planned_start_time}，并在该时间前或其后24小时内找到专家支持记录（{support_time}）。"
             )
         if facts.get("expert_support_present") is True and support_time and planned_start_time:
             return (
                 f"已确认特殊级抗菌药物 {medicines} 的计划开始/启用时间为 "
-                f"{planned_start_time}，但专家支持记录时间 {support_time} 晚于该时间，"
-                "不满足计划启用前支持要求。"
+                f"{planned_start_time}，但专家支持记录时间 {support_time} 晚于启用后24小时，"
+                "不满足专家支持（含紧急使用24小时内补办）要求。"
             )
         if facts.get("expert_support_present") is True:
             return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"

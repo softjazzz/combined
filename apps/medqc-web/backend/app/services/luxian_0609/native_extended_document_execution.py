@@ -123,6 +123,10 @@ from .surgery_procedure_catalog import catalog_surgery_state
 
 logger = logging.getLogger(__name__)
 
+# 058（05-01-06）业务基线：紧急越级使用特殊级抗菌药须在 24 小时内补办专家会诊/查房。
+# 用户口径（2026-10-17）：启用前或启用后 24 小时内有可关联的专家支持即合规，指征不单独核对。
+_LX0609_058_SUPPORT_WINDOW = timedelta(hours=24)
+
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
     "LX0609-03-02-01",
@@ -3392,12 +3396,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
                 ambiguous_support = len(special_events) > 1 and any(
                     not _linked_order_id(row)
-                    # 晚于首个启用事件的支持无论归属哪条续开医嘱，都不能
+                    # 晚于首个启用事件 24 小时的支持无论归属哪条续开医嘱，都不能
                     # 补足首个事件；不能用无关的归属歧义遮蔽已确定的缺陷。
                     and (
                         (support_time := _lx0609_058_row_time(row)) is None
                         or first_order_time is None
-                        or support_time <= first_order_time
+                        or support_time <= first_order_time + _LX0609_058_SUPPORT_WINDOW
                     )
                     and (
                         not (mentioned := _antimicrobial_names_in(row))
@@ -3446,7 +3450,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         selected_antimicrobial_evidence_rows.extend(matching_rows)
                         # 事实与精确证据共用实际关联行，不能借其他药支持时间。
                         associated_expert_support_rows.extend(matching_rows)
-                        if any(value <= start for value in matching_times):
+                        if any(value <= start + _LX0609_058_SUPPORT_WINDOW for value in matching_times):
                             continue
                         unmatched_names.append(name)
                         late_support = late_support or bool(matching_times)

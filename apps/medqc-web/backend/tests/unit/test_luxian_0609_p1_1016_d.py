@@ -226,7 +226,7 @@ async def test_later_ambiguous_expert_support_cannot_hide_unsupported_first_use(
             {"generic_name": "美罗培南", "planned_start_datetime": "2026-06-01 10:00:00"},
             {"generic_name": "美罗培南", "planned_start_datetime": "2026-06-03 10:00:00"},
         ),
-        "consultation_record": ({"record_time": "2026-06-02 10:00:00",
+        "consultation_record": ({"record_time": "2026-06-02 11:00:00",
                                   "record_content": "感染科合成专家副主任医师会诊意见：建议予以美罗培南抗感染。"},),
     })
     assert reduced.final_state.value == "non_compliant"
@@ -244,3 +244,21 @@ async def test_future_same_drug_order_cannot_hide_documented_initial_empiric_use
                                   "record_content": "考虑感染，已给予左氧氟沙星抗感染。"},),
     })
     assert reduced.final_state.value == ("compliant" if future_start else "not_applicable")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("support_time,status", [
+    ("2026-06-01 10:50:00", "compliant"),  # 第六轮 C08：启用后 50 分钟专家会诊同意（紧急越级补办）
+    ("2026-06-02 10:00:00", "compliant"),  # 恰好 24 小时
+    ("2026-06-02 10:00:01", "non_compliant"),  # 超过 24 小时
+])
+async def test_058_expert_support_within_24h_after_emergency_use_is_compliant(support_time, status):
+    # 用户口径（2026-10-17）：启用后 24 小时内补办专家支持即合规，紧急指征不单独核对。
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (
+            {"generic_name": "亚胺培南西司他丁", "planned_start_datetime": "2026-06-01 10:00:00"},
+        ),
+        "consultation_record": ({"record_time": support_time,
+                                  "record_content": "感染科合成专家副主任医师会诊意见：患者脓毒性休克，同意使用亚胺培南西司他丁。"},),
+    })
+    assert reduced.final_state.value == status

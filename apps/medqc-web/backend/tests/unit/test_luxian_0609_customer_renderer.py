@@ -246,7 +246,7 @@ def test_058_customer_finding_distinguishes_expert_support_after_special_use() -
             "special_antimicrobials": ["美罗培南"],
             "expert_support_present": True,
             "first_antimicrobial_time": "2026-06-01 10:00:00",
-            "expert_support_time": "2026-06-01 11:00:00",
+            "expert_support_time": "2026-06-02 11:00:00",
             "support_before_use": False,
             "unmatched_special_antimicrobials": ["美罗培南"],
             "association_ambiguous": False,
@@ -255,8 +255,8 @@ def test_058_customer_finding_distinguishes_expert_support_after_special_use() -
 
     assert finding == (
         "已确认特殊级抗菌药物 美罗培南 的计划开始/启用时间为 "
-        "2026-06-01 10:00:00，但专家支持记录时间 2026-06-01 11:00:00 "
-        "晚于该时间，不满足计划启用前支持要求。"
+        "2026-06-01 10:00:00，但专家支持记录时间 2026-06-02 11:00:00 "
+        "晚于启用后24小时，不满足专家支持（含紧急使用24小时内补办）要求。"
     )
 
 
@@ -277,7 +277,7 @@ def test_058_customer_finding_confirms_expert_support_before_or_at_special_use()
 
     assert finding == (
         "已确认特殊级抗菌药物 美罗培南 计划开始/启用时间为 "
-        "2026-06-01 10:00:00，并在该时间前或同刻找到专家支持记录（2026-06-01 10:00:00）。"
+        "2026-06-01 10:00:00，并在该时间前或其后24小时内找到专家支持记录（2026-06-01 10:00:00）。"
     )
 
 
@@ -296,7 +296,7 @@ def test_058_customer_finding_does_not_call_partial_support_late() -> None:
         },
     )
 
-    assert finding == "已核对特殊级抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到可关联的计划启用前专家支持记录。"
+    assert finding == "已核对特殊级抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到可关联的计划启用前或启用后24小时内的专家支持记录。"
 
 
 def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
@@ -331,7 +331,7 @@ def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
             "verification_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南", "万古霉素"],
             "association_ambiguous": True,
-        }, "已核对特殊级抗菌药物 美罗培南、万古霉素；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"),
+        }, "已核对特殊级抗菌药物 美罗培南、万古霉素；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前或启用后24小时内的支持。"),
     ),
 )
 def test_antimicrobial_customer_finding_explains_ambiguous_association(
@@ -1616,7 +1616,7 @@ def test_058_missing_drug_start_time_does_not_claim_expert_support_absent() -> N
 
     assert finding == (
         "已识别特殊级抗菌药物 美罗培南 计划，但缺少计划开始/启用时间，"
-        "暂无法判断专家支持记录是否在用药前完成。"
+        "暂无法判断专家支持记录是否在用药前或24小时内完成。"
     )
     assert "未找到专家" not in finding
 
