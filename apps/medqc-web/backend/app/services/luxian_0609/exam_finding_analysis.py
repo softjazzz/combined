@@ -553,31 +553,55 @@ _RETRY_HINTS = {
 }
 
 
-async def check_exam_finding_analysis(
+@dataclass(frozen=True)
+class _BatchResult:
+    ready: bool
+    analysed: Mapping[int, tuple[str, ...]]
+    gap_refs: Mapping[int, tuple[tuple[str, str], ...]]
+    calls: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    api_time: float
+
+
+def _target_batches(
+    projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, tuple[str, ...]]],
+) -> list[dict[int, tuple[str, tuple[str, ...]]]]:
+    """按事件顺序贪心装批，每批提示词不超过 MAX_PROMPT_CHARS；单事件超限时不调用，沿用主抽取。"""
+    batches: list[dict[int, tuple[str, tuple[str, ...]]]] = []
+    pending: dict[int, tuple[str, tuple[str, ...]]] = {}
+    for position, target in targets.items():
+        candidate = {**pending, position: target}
+        if len(_prompt(projection, candidate)) <= MAX_PROMPT_CHARS:
+            pending = candidate
+            continue
+        if pending:
+            batches.append(pending)
+        pending = {position: target} if len(_prompt(projection, {position: target})) <= MAX_PROMPT_CHARS else {}
+    if pending:
+        batches.append(pending)
+    return batches
+
+
+async def _check_batch(
     projection: ExamLabTextProjection, llm_client: Any,
-) -> FindingAnalysisOutcome:
-    targets = _targets(projection)
-    if not targets or llm_client is None:
-        return FindingAnalysisOutcome("skipped", {})
-    expected = {
-        position: tuple(ref for ref in refs if _course_text(projection, ref).strip())
-        for position, (_, refs) in targets.items()
-    }
-    # 没有任何可读病程的事件无需调用：已核对、未见分析。
-    if not any(expected.values()):
-        return FindingAnalysisOutcome("ready", {position: () for position in expected})
-    model_targets = {position: target for position, target in targets.items() if expected[position]}
-    prompt = _prompt(projection, model_targets)
-    if len(prompt) > MAX_PROMPT_CHARS:
-        return FindingAnalysisOutcome("failed", {})
-    model_expected = {position: expected[position] for position in model_targets}
+    model_targets: Mapping[int, tuple[str, tuple[str, ...]]],
+    model_expected: Mapping[int, tuple[str, ...]],
+) -> _BatchResult:
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
+    prompt = _prompt(projection, model_targets)
     attempt_prompt = prompt
     pending_expected = dict(model_expected)
     analysed: dict[int, tuple[str, ...]] = {}
     gap_refs: dict[int, tuple[tuple[str, str], ...]] = {}
     started = perf_counter()
+
+    def result(ready: bool) -> _BatchResult:
+        return _BatchResult(ready, analysed if ready else {}, gap_refs if ready else {}, calls, prompt_tokens,
+                            completion_tokens, total_tokens, api_time or perf_counter() - started)
+
     for attempt in range(PROTOCOL_ATTEMPTS):
         calls += 1
         try:
@@ -588,8 +612,7 @@ async def check_exam_finding_analysis(
         except Exception:
             if analysed:
                 break
-            return FindingAnalysisOutcome("failed", {}, calls, prompt_tokens, completion_tokens, total_tokens,
-                                          api_time or perf_counter() - started)
+            return result(False)
         try:
             usage = _usage(response)
             prompt_tokens += usage[0]
@@ -620,16 +643,47 @@ async def check_exam_finding_analysis(
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 if analysed:
                     break
-                return FindingAnalysisOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
-                                              total_tokens, api_time or perf_counter() - started)
+                return result(False)
             prompt = _prompt(projection, {position: model_targets[position] for position in pending_expected})
             attempt_prompt = _retry_prompt(prompt, error, response, pending=pending_expected)
+    return result(True)
 
+
+async def check_exam_finding_analysis(
+    projection: ExamLabTextProjection, llm_client: Any,
+) -> FindingAnalysisOutcome:
+    targets = _targets(projection)
+    if not targets or llm_client is None:
+        return FindingAnalysisOutcome("skipped", {})
+    expected = {
+        position: tuple(ref for ref in refs if _course_text(projection, ref).strip())
+        for position, (_, refs) in targets.items()
+    }
+    # 没有任何可读病程的事件无需调用：已核对、未见分析。
+    if not any(expected.values()):
+        return FindingAnalysisOutcome("ready", {position: () for position in expected})
+    model_targets = {position: target for position, target in targets.items() if expected[position]}
+    model_expected = {position: expected[position] for position in model_targets}
+    # 多事件病例整批提示词会超限：按事件分批核验，失败或单事件超限的批次只让其事件沿用主抽取。
+    batches = _target_batches(projection, model_targets)
+    if not batches:
+        return FindingAnalysisOutcome("failed", {})
+    results = [
+        await _check_batch(projection, llm_client, batch, {position: model_expected[position] for position in batch})
+        for batch in batches
+    ]
+    calls = sum(item.calls for item in results)
+    usage = (sum(item.prompt_tokens for item in results), sum(item.completion_tokens for item in results),
+             sum(item.total_tokens for item in results), sum(item.api_time for item in results))
+    if not any(item.ready for item in results):
+        return FindingAnalysisOutcome("failed", {}, calls, *usage)
     # 无可读病程的事件已核对、未见分析；有病程的事件以解析结果为准（漏核未定的事件不在其中）。
-    analysed_refs = {position: () for position in expected if position not in model_expected}
-    analysed_refs.update(analysed)
-    return FindingAnalysisOutcome("ready", analysed_refs, calls, prompt_tokens, completion_tokens, total_tokens,
-                                  api_time or perf_counter() - started, gap_refs=gap_refs)
+    analysed_refs: dict[int, tuple[str, ...]] = {position: () for position in expected if position not in model_expected}
+    gap_refs: dict[int, tuple[tuple[str, str], ...]] = {}
+    for item in results:
+        analysed_refs.update(item.analysed)
+        gap_refs.update(item.gap_refs)
+    return FindingAnalysisOutcome("ready", analysed_refs, calls, *usage, gap_refs=gap_refs)
 
 
 def apply_finding_analysis(

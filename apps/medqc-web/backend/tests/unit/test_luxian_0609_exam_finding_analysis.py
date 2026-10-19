@@ -348,3 +348,69 @@ async def test_naming_this_exam_or_echoing_report_finding_keeps_analysis(lead):
     answer = _answer(ref, "management_linked", "肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗", span="双肺感染")
     outcome = await check_exam_finding_analysis(projection, _Client([answer]))
     assert outcome.analysed_refs == {1: (ref,)}
+
+
+def _two_event_projection():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:30:00",
+                 "report_time": "2026-08-18 13:30:00", "exam_conclusion": "双肺感染，建议治疗后复查。"},
+                {"exam_id": "EX-2", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-20 12:30:00",
+                 "report_time": "2026-08-20 13:30:00", "exam_conclusion": "L4/5椎间盘突出，椎管狭窄。"},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-18 15:00:00", "record_content": "胸部CT提示双肺感染，与发热咳嗽相符，予抗感染治疗。"},
+                {"record_time": "2026-08-20 15:00:00", "record_content": LINKED},
+            ),
+        }
+    )
+    return apply_relevance_hints(projection, {1: "positive", 2: "positive"})
+
+
+def _batch_answers(projection):
+    times = projection.course_times
+    first, second = sorted(times, key=lambda ref: times[ref])
+    chest = {"schema_version": SCHEMA_VERSION, "docs": [{
+        "event_position": 1, "course_doc_ref": first, "quote_type": "finding_linked",
+        "quote": "胸部CT提示双肺感染，与发热咳嗽相符", "report_span": "双肺感染"}, {
+        "event_position": 1, "course_doc_ref": second, "quote_type": "none", "quote": "", "report_span": ""}]}
+    spine = {"schema_version": SCHEMA_VERSION, "docs": [{
+        "event_position": 2, "course_doc_ref": second, "quote_type": "finding_linked",
+        "quote": "L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符", "report_span": "L4/5椎间盘突出"}]}
+    return first, second, chest, spine
+
+
+@pytest.mark.asyncio
+async def test_events_are_checked_in_batches_when_whole_prompt_exceeds_limit(monkeypatch):
+    """多事件病例整批提示词超限时按事件分批，各批结论合并，不再整体放弃核验。"""
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    projection = _two_event_projection()
+    first, second, chest, spine = _batch_answers(projection)
+    targets = module._targets(projection)
+    single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
+    client = _Client([chest, spine])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert len(client.prompts) == 2 and all(len(prompt) <= single for prompt in client.prompts)
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,), 2: (second,)}
+    assert outcome.llm_call_count == 2 and outcome.total_tokens == 30
+
+
+@pytest.mark.asyncio
+async def test_failed_batch_leaves_only_its_events_to_main_extraction(monkeypatch):
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    projection = _two_event_projection()
+    first, _second, chest, _spine = _batch_answers(projection)
+    targets = module._targets(projection)
+    single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
+    outcome = await check_exam_finding_analysis(projection, _Client([chest, "不是JSON", "不是JSON"]))
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,)}
+    assert outcome.llm_call_count == 3
+    # 单事件仍超限时不调用模型，整体沿用主抽取。
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", 10)
+    client = _Client([])
+    assert (await check_exam_finding_analysis(projection, client)).state == "failed" and client.prompts == []
