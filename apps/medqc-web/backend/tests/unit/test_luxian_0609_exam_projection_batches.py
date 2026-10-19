@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import asyncio
 import json
 
 import pytest
@@ -407,3 +408,38 @@ async def test_exam_batches_run_result_record_verification_for_all_global_events
     assert client.checked_refs == {f"D06-{i:02d}" for i in range(1, 37)}
     details = dict(result.customer_display_facts)[rule]["event_results"]
     assert [item["event_position"] for item in details] == list(range(1, 19))
+
+
+class _ConcurrentAbsentClient(_AbsentClient):
+    """首批在第二批发出前不返回：主抽取各批串行时会超时失败。"""
+
+    def __init__(self):
+        super().__init__()
+        self.second_sent = asyncio.Event()
+
+    async def generate(self, prompt, **kwargs):
+        if len(self.prompts) >= 1:
+            self.second_sent.set()
+        response = await super().generate(prompt, **kwargs)
+        await asyncio.wait_for(self.second_sent.wait(), timeout=2)
+        return response
+
+
+@pytest.mark.asyncio
+async def test_native_exam_projection_batches_are_extracted_concurrently(monkeypatch):
+    """用户决定（2026-10-19）：主抽取各投影批并发调用，结果按原批次顺序归并。"""
+    rows = _rows(18, 80)
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=rows["labtest_master"],
+        course_rows=rows["daily_course_record"],
+        evaluation_horizon_rows=({"horizon_date": "2026-12-31"},),
+    )
+    client = _ConcurrentAbsentClient()
+    rule = "LX0609-06-03-03"
+    result = await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(rule,), wrapper_rules=(), evidence_payload=None, llm_client=client,
+        evidence_snapshot=snapshot, evidence_materials=materials, decision_rule_ids=(rule,),
+    )
+    assert len(client.prompts) > 1
+    assert result.decisions[0].qc_direction.value == "defect"

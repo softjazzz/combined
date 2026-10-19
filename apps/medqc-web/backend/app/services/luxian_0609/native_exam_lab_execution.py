@@ -2373,6 +2373,7 @@ async def _extract_exam_lab_batches(
                            "first_success_count", "retried_rule_count", "recovered_rule_count"), 0)
     api_time = 0.0
     requested_rule_count = 0
+    selected_batches = []
     for batch in batches:
         # 相关性提示可能已更新，仍从同一全局事件集选取本批。
         current = select_exam_lab_projection_batch(
@@ -2384,9 +2385,14 @@ async def _extract_exam_lab_batches(
         if not rules:
             continue
         requested_rule_count += len(rules)
-        result = await _extract_exam_lab_batch(
-            projection=current.projection, eligible_rule_ids=rules, llm_client=llm_client,
-        )
+        selected_batches.append((current, rules))
+    # 各批只读同一全局投影、互不依赖：并发抽取，耗时不随批数累加（C02 多批串行接近执行时限）；
+    # 结果仍按批次原顺序归并，归并结论与串行一致。
+    batch_results = await asyncio.gather(*(
+        _extract_exam_lab_batch(projection=current.projection, eligible_rule_ids=rules, llm_client=llm_client)
+        for current, rules in selected_batches
+    ))
+    for (current, rules), result in zip(selected_batches, batch_results):
         for key in counts:
             counts[key] += getattr(result, key)
         api_time += result.api_time
