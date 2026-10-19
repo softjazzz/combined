@@ -178,3 +178,12 @@ def test_repeated_protocol_violation_after_recheck_is_technical_error():
     assert result.state == "technical_error"
     assert result.reason_code == "model_invalid_output"
     assert result.llm_call_count == 2
+
+
+def test_prompt_marks_count_or_distribution_difference_as_uncertain():
+    # 用户口径（2026-10-19）：同一疾病仅数量或分布不同（C25 孤立性肺结节/双肺小结节）判无法确定。
+    from app.services.luxian_0609.extended_document.discharge_diagnosis_equivalence import _prompt
+
+    prompt = _prompt(["孤立性肺结节"], ["双肺小结节"])
+    assert "孤立/单发与多发、单侧与双侧" in prompt
+    assert "relation=uncertain、match=null，不要判absent" in prompt
