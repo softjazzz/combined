@@ -97,14 +97,14 @@ async def test_differential_naming_only_exam_site_without_finding_is_not_analysi
     projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
     ref = _report_ref(projection)
     answer = _answer(ref, "targeted_differential", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
-    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
     assert outcome.analysed_refs == {1: ()}
     # 非鉴别类同样不能靠部位对应放行。
     misfiled = _answer(ref, "finding_linked", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
-    assert (await check_exam_finding_analysis(projection, _Client([misfiled]))).analysed_refs == {1: ()}
+    assert (await check_exam_finding_analysis(projection, _Client([misfiled, misfiled]))).analysed_refs == {1: ()}
     event = replace(event, order_names=("MRI左膝关节平扫",))
     projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
-    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
     assert outcome.analysed_refs == {1: ()}
 
 
@@ -144,9 +144,12 @@ async def test_quote_about_another_exam_does_not_count_for_this_event():
     """真实样本：共用病程里“胸部CT提示右肺小结节，请胸外科会诊”被挂到膝关节MRI名下。"""
     projection = _projection(LINKED + "胸部CT提示右肺小结节，请胸外科会诊评估。")
     ref = _report_ref(projection)
-    outcome = await check_exam_finding_analysis(projection, _Client([
-        _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="椎管狭窄")]))
+    wrong = _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="椎管狭窄")
+    client = _Client([wrong, wrong])
+    outcome = await check_exam_finding_analysis(projection, client)
+    # 引文与所选异常对不上：定向补核一次，仍对不上则不算分析。
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
+    assert outcome.llm_call_count == 2 and "不能选“较某日片”" in client.prompts[1]
 
     client = _Client([
         _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="右肺小结节"),
@@ -414,3 +417,32 @@ async def test_failed_batch_leaves_only_its_events_to_main_extraction(monkeypatc
     monkeypatch.setattr(module, "MAX_PROMPT_CHARS", 10)
     client = _Client([])
     assert (await check_exam_finding_analysis(projection, client)).state == "failed" and client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_comparison_lead_span_gets_one_targeted_retry_to_pick_the_finding():
+    """C04 形状：归为对比分析却选了“较某日片”引导语，补核一次改选具体异常后成立。"""
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:30:00",
+                 "report_time": "2026-08-18 13:30:00",
+                 "exam_conclusion": "双肺多发感染。较2026-08-10片，右肺上叶病灶吸收减少。"},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-18 15:00:00",
+                 "record_content": "仍有间断发热，复查胸部CT提示右肺上叶病灶吸收减少，考虑抗感染有效，继续当前方案。"},
+            ),
+        }
+    )
+    projection = apply_relevance_hints(projection, {1: "positive"})
+    ref = _report_ref(projection)
+    quote = "仍有间断发热，复查胸部CT提示右肺上叶病灶吸收减少，考虑抗感染有效"
+    lead = _answer(ref, "prior_comparison", quote, span="较2026-08-10片")
+    fixed = _answer(ref, "prior_comparison", quote, span="右肺上叶病灶吸收减少")
+    client = _Client([lead, fixed])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.analysed_refs == {1: (ref,)} and outcome.llm_call_count == 2
+    retry = client.prompts[1]
+    assert "span not attributed" in retry or "对比引导语" in retry
+    assert "PREVIOUS_OUTPUT=" in retry and f"course_doc_ref={ref}" in retry

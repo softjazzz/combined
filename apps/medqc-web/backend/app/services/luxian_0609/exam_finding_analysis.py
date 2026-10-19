@@ -504,6 +504,10 @@ def _parse(
                 # 照抄报告结论的引文不能证明分析；针对的异常须与本次报告片段对得上。
                 # 只写“结合某 MRI”而不写所见，即使模型归到鉴别类也不得靠检查部位放行。
                 attributed = any(_shares_finding(span, quote) for quote in quotes)
+                if not attributed and complete_events_only:
+                    # 归为分析却选了对比引导语、日期等非异常片段：首次定向补核重选；
+                    # 末次仍对不上才按不算分析处理，不改变最终判定口径。
+                    raise ValueError("span not attributed")
                 own = sum(_own_chars(quote, reports[position], (lead_sites or {}).get(position, ())) for quote in quotes)
                 if (own >= MIN_OWN_CHARS and attributed and basis_quotes and relation == "same_finding"
                         and _course_names_exam(projection, position, _course_text(projection, ref), span)):
@@ -513,7 +517,7 @@ def _parse(
                     gaps[position].append((ref, _REJECTED_ANALYSIS_GAPS[kind]))
         except ValueError as error:
             # 可修正证据错误集中回传；末次仍按已核验事件决定是否固定。
-            field_name = "report_fragment_id" if str(error) in {"missing report span", "span not in report"} else "course_fragment_ids/basis_fragment_ids"
+            field_name = "report_fragment_id" if str(error) in {"missing report span", "span not in report", "span not attributed"} else "course_fragment_ids/basis_fragment_ids"
             value = report_id if field_name == "report_fragment_id" else json.dumps([selected, basis], ensure_ascii=False)
             issues.append(_RetryIssue(str(error), location, field_name, value, _RETRY_HINTS[str(error)]))
             seen.discard(key)
@@ -549,6 +553,7 @@ _RETRY_HINTS = {
     "quote without element": "quote_type为none时course_fragment_ids为空数组、report_fragment_id为空字符串",
     "missing report span": "算分析的类别必须选择本次报告异常的report_fragment_id",
     "span not in report": "report_fragment_id只选当前事件report_fragments中的编号",
+    "span not attributed": "report_fragment_id须选本次报告中被这份病程分析的具体异常所见（病灶、积液、狭窄等），不能选“较某日片”“与前片相比”等对比引导语或日期；所选病程片段须写到该异常。确实只复述报告或没有针对该异常的分析时，改归不算分析的类别",
     "missing quote": "quote_type不为none时必须选择总计不超过200字的病程片段编号",
 }
 
