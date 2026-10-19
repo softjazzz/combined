@@ -498,3 +498,33 @@ async def test_elided_quote_pieces_must_still_be_verbatim_in_order(quote):
         (candidate,), _Client(_response([_item(candidate, "affirmed", quote)])),
     )
     assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+
+
+_SHARED_COMBINE = "亚胺培南西司他丁联合万古霉素及氟康唑抗感染"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", ["及氟康唑抗感染", "氟康唑抗感染"])
+async def test_coordinated_drug_quote_restores_the_shared_preceding_action(quote):
+    candidate = _candidate(antimicrobial="氟康唑", text=_SHARED_COMBINE)
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,), _Client(_response([_item(candidate, "affirmed", quote)])),
+    )
+    assert result.state == "ready"
+    assert result.items[0].action_quote == "联合万古霉素及氟康唑抗感染"
+    assert result.items[0].action is extraction.AntimicrobialAction.COMBINE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", [
+    "未予亚胺培南联合万古霉素及氟康唑抗感染",  # 分句内否定
+    "拟联合万古霉素及氟康唑抗感染",  # 拟行
+    "既往联合万古霉素及氟康唑抗感染",  # 既往
+    "联合万古霉素后加用其他药物及氟康唑抗感染",  # 中间夹非药名文字
+])
+async def test_shared_action_restore_rejects_negated_planned_historical_or_non_list_context(text):
+    candidate = _candidate(antimicrobial="氟康唑", text=text)
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,), _Client(_response([_item(candidate, "affirmed", "及氟康唑抗感染")])),
+    )
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")

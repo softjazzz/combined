@@ -499,6 +499,52 @@ def _restore_elided_quote(quote: Any, text: str) -> Any:
     return text[start:cursor]
 
 
+# 并列药名共用前方动作（第七轮 C08：“联合万古霉素及氟康唑抗感染”中氟康唑被引作“及氟康唑抗感染”）。
+_COORDINATION_CONNECTORS = re.compile(r"[及和与、\s]+")
+_ANTIMICROBIAL_NAME_PATTERN = re.compile(
+    "|".join(map(re.escape, sorted(ANTIMICROBIALS, key=len, reverse=True)))
+)
+
+
+def _restore_shared_action_quote(quote: Any, text: str) -> Any:
+    """缺动作词的引文若与前方动作之间只隔并列药名与连接词，还原为含该动作的原文连续段。
+
+    动作与引文之间出现药名、连接词以外的文字，或扩展片段含否定、拟行、既往等标记时，
+    原样交校验拒收。
+    """
+
+    if (
+        not isinstance(quote, str)
+        or not quote.strip()
+        or _ACTION_PATTERN.search(quote)
+        or _SHORT_ADMINISTER_PATTERN.search(quote)
+    ):
+        return quote
+    start = text.find(quote)
+    if start < 0 or text.find(quote, start + 1) >= 0:
+        return quote
+    prefix = text[:start]
+    action = None
+    for action in _ACTION_PATTERN.finditer(prefix):
+        pass
+    if action is None:
+        return quote
+    between = prefix[action.end():]
+    if _COORDINATION_CONNECTORS.sub("", _ANTIMICROBIAL_NAME_PATTERN.sub("", between)):
+        return quote
+    # 否定或拟行可能写在动作之前并作用于整个分句，按所在分句整体检查。
+    clause_start = max(prefix.rfind(mark) for mark in "，,。；;：:") + 1
+    clause = text[clause_start:start + len(quote)]
+    if (
+        "未" in clause
+        or "不" in clause
+        or _has_plan_marker(clause)
+        or any(marker in clause for marker in _ACTION_HISTORICAL_MARKERS)
+    ):
+        return quote
+    return text[action.start():start + len(quote)]
+
+
 def _action_in_quote(quote: str) -> AntimicrobialAction | None:
     return next(
         (action for action in AntimicrobialAction if action.value in quote),
@@ -644,7 +690,9 @@ def _parse(
             raise ValueError("invalid action state")
         candidate = expected[identity]
         if state != "no_action":
-            quote = _restore_elided_quote(quote, candidate.text)
+            quote = _restore_shared_action_quote(
+                _restore_elided_quote(quote, candidate.text), candidate.text
+            )
         action: AntimicrobialAction | None = None
         if state == "no_action":
             if quote is not None:
