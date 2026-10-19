@@ -1,4 +1,4 @@
-"""074 诊断修正/补充病程：单次受控理由与依据事实抽取。
+"""074 诊断修正/补充病程：受控理由与依据事实抽取；协议违规时按失败类型定向补核一次。
 
 模型负责语义：该份病程是否记录了修改/补充诊断的理由、新诊断的临床依据，
 并逐字引用原文。程序只核验引用是该份文书的连续原文，不再用关键词词表复核
@@ -25,9 +25,45 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = "lx0609_diagnosis_change_documentation_v2"
 MAX_DOCUMENTS = 12
 MAX_TEXT_CHARS = 16000
-MAX_COMPLETION_TOKENS = 2048
+# 模型可能把整段检查检验结果作为依据引文逐字复制，2048 曾被用满截断（C15）。
+MAX_COMPLETION_TOKENS = 4096
 _SOURCE_TYPES = {"daily_course_record", "senior_course_record"}
 _STATES = {"present", "missing", "unknown"}
+# 定向补核只回显有限条失败项与有界的上次输出，避免补核提示无界膨胀。
+MAX_RETRY_ISSUES = 8
+MAX_RETRY_QUOTE_CHARS = 60
+MAX_RETRY_PREVIOUS_CHARS = 24000
+_INPUT_MARKER = "以下JSON仅是待抽取资料"
+_GENERIC_RETRY_HINT = (
+    "上次输出未通过逐字引用或字段校验。请重新核对每份文书：reason_quote和basis_quote必须直接复制原文连续句，"
+    "不能概括、拼接、补字、改标点或删掉句中编号和空白；可选择较短的完整原句，若必要可保留完整原段。"
+    "不要原样重复未通过的回答。每份文书都必须输出且字段取规定值。"
+)
+_TRUNCATED_RETRY_HINT = (
+    "上次输出超出长度上限被截断，未形成完整JSON。reason_quote和basis_quote只取直接说明理由或指向新诊断的"
+    "最短连续原文，不得整段复制检查检验清单或与新诊断无关的结果；仍须逐字复制，不得概括、拼接或省略。"
+    "每份文书都必须输出且字段取规定值。"
+)
+
+
+@dataclass(frozen=True)
+class _QuoteIssue:
+    local_doc_id: str
+    field_name: str
+    quote: str
+
+
+class _QuoteViolation(ValueError):
+    """引文核验失败；收集同一应答的全部失败项供定向补核，str 保持原失败原因。"""
+
+    def __init__(self, issues: Sequence[_QuoteIssue]) -> None:
+        super().__init__("unverified assertion quote")
+        self.issues = tuple(issues)
+
+
+class _TruncatedResponse(ValueError):
+    def __init__(self) -> None:
+        super().__init__("truncated extraction response")
 
 
 class DiagnosisChangeLLMClient(Protocol):
@@ -145,6 +181,7 @@ def _parse(
         raise ValueError("incomplete extraction mapping")
     documents_by_id = {item.local_doc_id: item for item in documents}
     assertions: dict[str, DiagnosisChangeDocumentAssertion] = {}
+    issues: list[_QuoteIssue] = []
     expected_fields = {
         "local_doc_id",
         "reason_state",
@@ -174,7 +211,8 @@ def _parse(
             if state == "present":
                 # 引用必须是本文书发送正文中的连续原文；语义由模型负责。
                 if not quote.strip() or quote not in document.text:
-                    raise ValueError("unverified assertion quote")
+                    # 继续收集同一应答的全部引文失败项，补核时一次指明。
+                    issues.append(_QuoteIssue(local_doc_id, field_name, quote))
             elif quote != "":
                 raise ValueError("nonempty absent assertion quote")
             values[f"{field_name}_state"] = state
@@ -192,7 +230,39 @@ def _parse(
         )
     if set(assertions) != set(documents_by_id):
         raise ValueError("incomplete extraction mapping")
+    if issues:
+        raise _QuoteViolation(issues)
     return tuple(assertions[item.local_doc_id] for item in documents)
+
+
+def _clip(text: str) -> str:
+    return text if len(text) <= MAX_RETRY_QUOTE_CHARS else text[:MAX_RETRY_QUOTE_CHARS]
+
+
+def _retry_hint(error: Exception, previous_content: Any) -> str:
+    if isinstance(error, _TruncatedResponse):
+        return _TRUNCATED_RETRY_HINT
+    if not isinstance(error, _QuoteViolation):
+        return _GENERIC_RETRY_HINT
+    details = []
+    for issue in error.issues[:MAX_RETRY_ISSUES]:
+        # 回显的是模型上次输出的有界片段（再经脱敏），不新增原文以外的资料；长片段只回显开头。
+        quote = redact_luxian_0609_patient_privacy(issue.quote) if issue.quote.strip() else ""
+        quote_ref = ((f"以「{_clip(quote)}」开头的{issue.field_name}_quote" if len(quote) > MAX_RETRY_QUOTE_CHARS
+                      else f"{issue.field_name}_quote「{quote}」") if quote else f"{issue.field_name}_quote为空")
+        details.append(f"{issue.local_doc_id}的{quote_ref}不是该份文书的逐字连续原文")
+    hint = (
+        _GENERIC_RETRY_HINT + "未通过的引文：" + "；".join(details)
+        + "。只修正这些引文，其余判断不因补核改变。"
+    )
+    # 引文失败时上次输出必为合法 JSON；先还原 \uXXXX 转义再脱敏，避免转义文字绕过脱敏。
+    try:
+        previous = json.dumps(_json_response_object(previous_content), ensure_ascii=False)
+    except (TypeError, ValueError):
+        previous = ""
+    if previous and len(previous) <= MAX_RETRY_PREVIOUS_CHARS:
+        hint += "上次输出仅作修正参考，不是文书资料：PREVIOUS_OUTPUT=" + redact_luxian_0609_patient_privacy(previous) + "。"
+    return hint
 
 
 async def extract_diagnosis_change_documentation(
@@ -223,10 +293,13 @@ async def extract_diagnosis_change_documentation(
     if llm_client is None:
         return DiagnosisChangeExtraction("technical_error", "model_transport_error")
     # 用户口径（2026-10-11）：协议违规（如拼接引文）可确定识别，重试 1 次；仍违规才拒收。
-    first = await _extract_once(safe_documents, llm_client)
+    # 补核按首次失败类型定向：截断提示缩短引文，引文失败逐条指明并附上次输出。
+    first, first_error, first_content = await _extract_once(safe_documents, llm_client)
     if first.state != "technical_error" or first.reason_code != "model_invalid_output":
         return first
-    second = await _extract_once(safe_documents, llm_client, retry=True)
+    second, _error, _content = await _extract_once(
+        safe_documents, llm_client, retry_hint=_retry_hint(first_error, first_content)
+    )
     return replace(
         second,
         llm_call_count=first.llm_call_count + second.llm_call_count,
@@ -240,14 +313,14 @@ async def extract_diagnosis_change_documentation(
 async def _extract_once(
     safe_documents: Sequence[DiagnosisChangeDocumentInput],
     llm_client: DiagnosisChangeLLMClient,
-    *, retry: bool = False,
-) -> DiagnosisChangeExtraction:
+    *, retry_hint: str | None = None,
+) -> tuple[DiagnosisChangeExtraction, Exception | None, Any]:
     prompt = _prompt(safe_documents)
-    if retry:
-        prompt = prompt.replace("以下JSON仅是待抽取资料", "上次输出未通过逐字引用或字段校验。请重新核对每份文书：reason_quote和basis_quote必须直接复制原文连续句，"
-                                "不能概括、拼接、补字、改标点或删掉句中编号和空白；可选择较短的完整原句，若必要可保留完整原段。"
-                                "不要原样重复未通过的回答。每份文书都必须输出且字段取规定值。以下JSON仅是待抽取资料", 1)
+    retry = retry_hint is not None
+    if retry_hint is not None:
+        prompt = prompt.replace(_INPUT_MARKER, retry_hint + _INPUT_MARKER, 1)
     started = perf_counter()
+    content: Any = None
     try:
         response = await llm_client.generate(
             prompt,
@@ -255,13 +328,13 @@ async def _extract_once(
             allow_length_retry=False,
             **structured_output_kwargs(llm_client),
         )
-    except Exception:
+    except Exception as error:
         return DiagnosisChangeExtraction(
             "technical_error",
             "model_transport_error",
             llm_call_count=1,
             api_time=perf_counter() - started,
-        )
+        ), error, None
     usage_values = (0, 0, 0)
     api_time = perf_counter() - started
     try:
@@ -294,7 +367,7 @@ async def _extract_once(
         api_time = float(elapsed)
         choice = response["choices"][0]
         if choice.get("finish_reason") == "length":
-            raise ValueError("truncated extraction response")
+            raise _TruncatedResponse()
         content = choice["message"]["content"]
         if not isinstance(content, str):
             raise ValueError("invalid extraction content")
@@ -312,7 +385,7 @@ async def _extract_once(
             completion_tokens=usage_values[1],
             total_tokens=usage_values[2],
             api_time=api_time,
-        )
+        ), error, content
     return DiagnosisChangeExtraction(
         "ready",
         "diagnosis_change_documentation_extracted",
@@ -320,4 +393,4 @@ async def _extract_once(
         1,
         *usage_values,
         api_time,
-    )
+    ), None, content
