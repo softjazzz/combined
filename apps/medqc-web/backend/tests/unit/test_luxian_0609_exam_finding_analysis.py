@@ -137,6 +137,10 @@ async def test_prompt_preserves_same_course_multisentence_basis_chain_with_posit
         "结合颈椎MRI故不考虑该诊断",
     ):
         assert protected_negative in prompt
+    # 用户口径（2026-10-19）：报告后修正/补充诊断并针对处置算分析；处置针对别的问题或照常罗列仍不算。
+    assert "‘修正诊断’‘补充诊断’‘新增诊断’" in prompt
+    assert "处置只写补白蛋白、利尿纠正心衰" in prompt
+    assert "照常罗列原有诊断而没有修正、补充之意，仍归diagnosis_only" in prompt
 
 
 @pytest.mark.asyncio
