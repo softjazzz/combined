@@ -335,6 +335,34 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
     )
 
 
+# 用户口径（2026-10-11/19）：笼统的变化判断（“CT提示较前好转”“病灶减少”）、常规治疗
+# （“继续目前治疗/对症处理”“观察病情变化”）和正常查体不是病程针对本次异常的自有分析，
+# 计算自有内容与异常归属前先去除；具体药物、处置和阳性症状体征保留。
+_GENERIC_PHRASES = re.compile(
+    "|".join((
+        r"(?:较前|较前次|较上次|较入院时|较前片|与前片相比)?(?:无明显|明显|稍|略|有所|逐渐)?"
+        r"(?:好转|改善|缓解|减轻|吸收|减少|增多|增加|加重|稳定|变化不大|无变化|相仿|相似)",
+        r"(?:较前|较前次|较上次|较入院时|较前片|与前片相比)",
+        r"(?:ct|cta|mri|mr|影像|检查|片)(?:检查)?(?:结果)?(?:提示|回示|示)",
+        r"(?:余|其余|其他)?(?:治疗上?)?(?:继续|维持)(?:予以|给予)?(?:目前|当前|原|前|现|原有)?的?"
+        r"(?:治疗方案|方案|对症支持治疗|对症治疗|对症处理|治疗|处理)",
+        r"(?:余|其余)?(?:治疗上?)?(?:基本)?同前",
+        r"(?:继续)?(?:密切)?(?:关注|观察)(?:患者)?(?:病情|生命体征)?(?:变化)?(?:情况)?",
+        r"(?:动态|随诊|定期)复查",
+        r"(?:双肺|两肺)(?:呼吸音清)?未闻及(?:明显)?(?:干湿性?|干、湿性?|湿性?|干性?)?(?:啰音|罗音)",
+        r"(?:各)?瓣膜听诊区未闻及(?:明显)?(?:病理性)?杂音",
+        r"心律齐|腹平?软|(?:全腹)?无(?:明显)?(?:压痛|反跳痛|肌紧张)|双下肢(?:不肿|无水肿)",
+        r"心率\d+(?:次/分|bpm)",
+        r"患者|目前|今日|本次|复查|查体",
+    )),
+    re.I,
+)
+
+
+def _strip_generic(text: str) -> str:
+    return _GENERIC_PHRASES.sub("|", unicodedata.normalize("NFKC", text).casefold())
+
+
 def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
     """引文中不属于报告原文（≥MIN_REPORT_OVERLAP 字连续重合片段）、也不是本次检查部位的字数。"""
     # 抄录报告前的日期和检查标签不是分析内容；否则十位日期数字就能
@@ -361,7 +389,8 @@ def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
     own = "".join(char if not flag else "|" for flag, char in zip(covered, text))
     for site in sorted({_normalize(site) for site in lead_sites if _normalize(site)}, key=len, reverse=True):
         own = own.replace(site, "|")
-    return sum(1 for char in own if char.isalnum())
+    own = re.sub(r"[，,。；;：:、\s]+", "", own)
+    return sum(1 for char in _strip_generic(own) if char.isalnum())
 
 
 def _course_names_exam(projection: ExamLabTextProjection, position: int, course: str, span: str) -> bool:
@@ -383,7 +412,8 @@ def _course_names_exam(projection: ExamLabTextProjection, position: int, course:
 def _shares_finding(span: str, quote: str) -> bool:
     """报告片段与病程引文须有 MIN_SPAN_SHARED 个连续相同的字（仅计汉字与字母数字）。"""
     left = "".join(char for char in _normalize(span).casefold() if char.isalnum())
-    right = "".join(char for char in _normalize(quote).casefold() if char.isalnum())
+    # 只靠“减少”“好转”等笼统变化词相同不能证明针对同一异常。
+    right = "".join(char for char in _strip_generic(_normalize(quote)) if char.isalnum() or char == "|")
     return any(left[index:index + MIN_SPAN_SHARED] in right
                for index in range(len(left) - MIN_SPAN_SHARED + 1))
 

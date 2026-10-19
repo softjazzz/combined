@@ -446,3 +446,58 @@ async def test_comparison_lead_span_gets_one_targeted_retry_to_pick_the_finding(
     retry = client.prompts[1]
     assert "span not attributed" in retry or "对比引导语" in retry
     assert "PREVIOUS_OUTPUT=" in retry and f"course_doc_ref={ref}" in retry
+
+
+def _followup_projection(course_text, conclusion="双肺下叶少许渗出或感染，较2026-08-06片，双肺病灶减少。"):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-11 12:30:00",
+                 "report_time": "2026-08-11 13:30:00", "exam_conclusion": conclusion},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-11 15:00:00", "record_content": course_text},
+            ),
+        }
+    )
+    return apply_relevance_hints(projection, {1: "positive"})
+
+
+@pytest.mark.asyncio
+async def test_restated_report_with_generic_improvement_and_normal_exam_is_not_analysis():
+    """C15 形状（用户口径 2026-10-11）：复述报告 + “CT提示较前好转” + 正常查体，即使模型归为对比分析也不成立。"""
+    course = ("患者今日复查胸部CT平扫 双肺下叶少许渗出或感染，较2026-08-06片，双肺病灶减少。"
+              "查体：双肺未闻及干湿啰音，心律齐，腹软。患者目前胸部ct检查提示较前好转，继续补钾治疗。")
+    projection = _followup_projection(course)
+    ref = _report_ref(projection)
+    answer = _answer(ref, "prior_comparison",
+                     "双肺下叶少许渗出或感染，较2026-08-06片，双肺病灶减少。查体：双肺未闻及干湿啰音，心律齐，腹软。患者目前胸部ct检查提示较前好转",
+                     span="双肺下叶少许渗出或感染")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
+    assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_generic_symptom_improvement_and_routine_plan_do_not_attribute_to_finding():
+    """C02 形状：只有“较前减少/好转、继续目前对症处理”与报告共用笼统变化词，不算针对本次异常。"""
+    projection = _followup_projection("复查胸部CT示双肺渗出减少。痰较前减少，症状好转，继续目前对症处理。",
+                                      conclusion="双肺散在渗出、纤维灶，较前片双肺渗出减少。")
+    ref = _report_ref(projection)
+    answer = _answer(ref, "finding_linked", "痰较前减少，症状好转，继续目前对症处理", span="双肺渗出减少")
+    client = _Client([answer, answer])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.analysed_refs == {1: ()} and outcome.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_specific_symptoms_and_targeted_treatment_after_followup_ct_still_count():
+    """C04 形状（2026-10-12 口径）：阳性症状 + 复查 CT 所见 + 具体抗感染方案，去除笼统词后仍成立。"""
+    projection = _followup_projection(
+        "痰量较前无明显增加，但仍有间断发热。今日复查胸部CT提示右肺上叶病灶较前吸收减少，暂继续目前抗感染治疗方案。",
+        conclusion="双肺多发感染。较2026-04-13片，右肺上叶病灶吸收减少。")
+    ref = _report_ref(projection)
+    answer = _answer(ref, "prior_comparison",
+                     "痰量较前无明显增加，但仍有间断发热。今日复查胸部CT提示右肺上叶病灶较前吸收减少，暂继续目前抗感染治疗方案",
+                     span="右肺上叶病灶吸收减少")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.analysed_refs == {1: (ref,)}
