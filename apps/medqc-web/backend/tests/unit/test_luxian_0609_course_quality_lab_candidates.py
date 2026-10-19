@@ -1,4 +1,4 @@
-"""病危检验候选仅投递异常、状态改变或整单标志不可用的项目。"""
+"""病危检验候选仅投递危急、新异常、状态改变或整单标志不可用的项目。"""
 
 from copy import deepcopy
 from datetime import datetime
@@ -152,3 +152,64 @@ async def test_course_009_state_change_without_test_id_uses_item_report_time():
     result, _ = await _run_typed_009(session, client)
     assert result.llm_call_count == 1
     assert "合成无编号项目" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("old,new", [
+    ("H", "高"), ("L", "LOW"), ("A", "异常"), ("POS", "阳性"),
+])
+async def test_course_009_persistent_noncritical_abnormal_is_not_a_change(old, new):
+    client = _WindowClient()
+    session = _session([
+        _item("old", "合成持续异常项目", old, "2026-01-01 10:00:00", result="1"),
+        _item("new", "合成持续异常项目", new, result="10000"),
+    ])
+    result, reduced = await _run_typed_009(session, client)
+    assert reduced[0].final_state.value == "compliant"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("old,new", [
+    ("PH", "HH"), ("PL", "LL"), ("危急", "CRITICAL"),
+    ("H", "PH"), ("阳性", "阴性"),
+])
+async def test_course_009_critical_or_changed_state_is_kept(old, new):
+    client = _WindowClient()
+    result, _ = await _run_typed_009(_session([
+        _item("old", "合成危急或变化项目", old, "2026-01-01 10:00:00"),
+        _item("new", "合成危急或变化项目", new),
+    ]), client)
+    assert result.llm_call_count == 1
+    assert "合成危急或变化项目" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prior_flags", [[], [None], ["未知编码"], ["H", "L"], ["H", None]])
+async def test_course_009_abnormal_without_comparable_previous_state_is_kept(prior_flags):
+    client = _WindowClient()
+    history = [
+        _item(f"old-{index}", "合成历史待核项目", flag, "2026-01-01 10:00:00")
+        for index, flag in enumerate(prior_flags)
+    ]
+    result, _ = await _run_typed_009(_session([
+        *history, _item("new", "合成历史待核项目", "H"),
+    ]), client)
+    assert result.llm_call_count == 1
+    assert "合成历史待核项目" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_course_009_persistent_items_do_not_reenter_through_master_or_hide_changed_item():
+    client = _WindowClient()
+    result, _ = await _run_typed_009(_session([
+        _item("old", "合成持续高项目", "H", "2026-01-01 10:00:00"),
+        _item("old", "合成转低项目", "H", "2026-01-01 10:00:00"),
+        _item("new", "合成持续高项目", "H"),
+        _item("new", "合成转低项目", "L"),
+    ], masters=[{"test_id": "new", "report_datetime": "2026-01-02 10:00:00",
+                 "record_content": "合成持续高项目主记录"}]), client)
+    assert result.llm_call_count == 1
+    assert "合成转低项目" in client.prompts[0]
+    assert "合成持续高项目" not in client.prompts[0]

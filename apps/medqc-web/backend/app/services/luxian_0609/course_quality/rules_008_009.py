@@ -71,6 +71,7 @@ _RULE_009_LAB_STATES = {
     **dict.fromkeys(("CRITICAL", "危急", "危急值"), "critical"),
 }
 _RULE_009_LAB_NORMAL_STATES = frozenset({"normal", "negative"})
+_RULE_009_LAB_CRITICAL_STATES = frozenset({"critical_high", "critical_low", "critical"})
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -885,7 +886,7 @@ def _rule_009_filter_lab_candidates(
     grouped_external_events: Mapping[tuple[str, str], Mapping[str, Any]],
     lab_history_groups: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> dict[tuple[str, str], Mapping[str, Any]]:
-    """纯函数：只保留异常、同名最近结果状态改变或整单标志不可用的项目。
+    """纯函数：保留危急、状态变化、新出现异常或整单标志不可用的项目。
 
     历史包含本次就诊病危期前的结果；同一权威报告时刻状态冲突时不猜测。
     不改写输入，也不使用结果数值或正文判断异常。
@@ -924,11 +925,17 @@ def _rule_009_filter_lab_candidates(
                 default=None,
             )
             prior_states = previous.get(prior_time, set())
+            comparable = len(prior_states) == 1 and None not in prior_states
             changed = (
-                state is not None and len(prior_states) == 1
-                and None not in prior_states and state not in prior_states
+                state is not None and comparable and state not in prior_states
             )
-            if all_unknown or changed or (state is not None and state not in _RULE_009_LAB_NORMAL_STATES):
+            # 用户选定口径（2026-10-18，待客户复核）：持续普通异常不算变化；
+            # 没有可比较历史时，不能证明持续，仍按新出现异常保留。
+            new_abnormal = (
+                state is not None and state not in _RULE_009_LAB_NORMAL_STATES
+                and not comparable
+            )
+            if all_unknown or state in _RULE_009_LAB_CRITICAL_STATES or changed or new_abnormal:
                 content = _rule_009_external_event_text("labtest_item_report", row)
                 if content and content not in texts:
                     texts.append(content)
@@ -1357,6 +1364,7 @@ def _rule_009_semantic_prompt(
     context: str,
     event_refs: Sequence[str],
     course_refs: Sequence[str],
+    event_course_refs: Mapping[str, Sequence[str]],
 ) -> str:
     allowed_event_refs = json.dumps(
         list(event_refs),
@@ -1365,6 +1373,11 @@ def _rule_009_semantic_prompt(
     )
     allowed_course_refs = json.dumps(
         list(course_refs),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    allowed_by_event = json.dumps(
+        {ref: list(event_course_refs[ref]) for ref in event_refs},
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -1378,14 +1391,17 @@ def _rule_009_semantic_prompt(
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
 只判断每个受控外部检查/检验候选是否显示“相对既往基线发生明确改变”。“病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。
 只能引用材料中给出的 event_ref 和 course_ref，不得编造引用；事件发生时间由 Python 根据受控 event_ref 唯一确定。
-病程记录只作为变化后的对应记录候选，不是待分类事件；病程内已经记录的变化视为已由该病程同期记录，无需模型重复抽取为事件。
+病程记录用于既往基线比较及变化后的对应记录候选，不是待分类事件；病程内已经记录的变化视为已由该病程同期记录，无需模型重复抽取为事件。
 
 只能使用以下当前就诊、评价区间内的外部检查/检验候选与病程记录。event_ref 只能引用 external_event_ref，change_category 只能返回 exam_lab。
 对应病程只能引用下列 course_event_ref；Python 会按权威时间严格校验它是否位于事件发生后 24 小时内：
 {context}
 
 本次允许event_ref={allowed_event_refs}。
-本次允许corresponding_course_ref={allowed_course_refs}，也可以返回空字符串。
+本批可见病程引用={allowed_course_refs}，其中事件前病程仅供基线比较。
+本次逐事件允许corresponding_course_ref={allowed_by_event}。
+每个事件只能从自己的允许列表中选择对应病程，或返回空字符串；不得借用其他事件的列表。
+各列表仅包含本批权威时间不早于该事件的病程及时间待核验的病程；时间待核验仍由Python沿用既有规则校验。
 {external_ref_constraint}
 不得创建、改写或猜测列表以外的引用。
 必须对允许event_ref列表中的每个候选恰好返回一次，顺序与允许列表一致；明确变化返回is_explicit_change=true，非明确变化也必须返回is_explicit_change=false且corresponding_course_ref为空。不得遗漏候选。
@@ -1741,6 +1757,15 @@ async def evaluate_rules_008_009_typed(
     }
     all_events: list[Mapping[str, Any]] = []
     for batch_context, batch_event_refs, batch_course_refs in batches:
+        # 基线病程仍供语义比较；对应记录候选则逐事件按既有时间校验条件投影。
+        event_course_refs = {
+            event_ref: tuple(
+                course_ref for course_ref in batch_course_refs
+                if event_times[event_ref] is None or course_times[course_ref] is None
+                or course_times[course_ref] >= event_times[event_ref]
+            )
+            for event_ref in batch_event_refs
+        }
         pending_refs = batch_event_refs
         verified: dict[str, Mapping[str, Any]] = {}
         invalid_events: dict[str, Mapping[str, Any]] = {}
@@ -1769,6 +1794,7 @@ async def evaluate_rules_008_009_typed(
                     )
                 semantic_prompt = _rule_009_semantic_prompt(
                     context=active_context, event_refs=pending_refs, course_refs=allowed_courses,
+                    event_course_refs=event_course_refs,
                 )
                 if attempt and invalid_events:
                     semantic_prompt += (
@@ -1776,6 +1802,11 @@ async def evaluate_rules_008_009_typed(
                         "请按原文时间重新核对，只能选事件发生后的对应病程；没有则返回空引用。"
                         "这些事件已经判为明确变化，is_explicit_change必须保持true；本次只修正对应引用。"
                         "不得为规避引用校验而省略事件或改判非明确变化。"
+                    )
+                    semantic_prompt += "\n" + "\n".join(
+                        f"event_ref={ref}：上次corresponding_course_ref="
+                        f"{invalid_events[ref]['corresponding_course_ref']}不在该事件允许列表。"
+                        for ref in pending_refs
                     )
                 elif attempt:
                     semantic_prompt += (
