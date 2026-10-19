@@ -296,23 +296,25 @@ async def test_tc02_start_time_quote_is_grounded_and_bounded_by_record_time(quot
     case["rows"]["bloodtrans_record"][0]["record_content"] = body
     execution, _, final, client = await run_case(case, client_override=PerformanceFake("performed", time_quote=quote))
     assert final["status"] == expected
-    assert execution.llm_call_count == len(client.calls) == 1
+    # 开始时刻引文不落地属可修正错误，定向补核一次（补核规范 2026-10-18）。
+    assert execution.llm_call_count == len(client.calls) == (2 if expected == "technical_error" else 1)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("corrupt", [
-    lambda payload: payload["documents"][0].update(quote=False),
-    lambda payload: payload["documents"][0].update(quote="未出现在正文的引用"),
-    lambda payload: payload["documents"][0].update(extra=1),
-    lambda payload: payload["documents"][0].update(state="cancel", start_time_quote="14:00"),
+@pytest.mark.parametrize(("corrupt", "calls"), [
+    (lambda payload: payload["documents"][0].update(quote=False), 2),
+    (lambda payload: payload["documents"][0].update(quote="未出现在正文的引用"), 2),
+    (lambda payload: payload["documents"][0].update(extra=1), 1),
+    (lambda payload: payload["documents"][0].update(state="cancel", start_time_quote="14:00"), 2),
 ], ids=["non_string_quote", "ungrounded_quote", "extra_key", "nonperformed_with_start_time"])
-async def test_tc02_invalid_model_output_is_one_call_technical_error(corrupt):
+async def test_tc02_invalid_model_output_is_one_call_technical_error(corrupt, calls):
     case = actual_case()
     case["rows"]["bloodtrans_record"][0]["record_content"] = "14:00悬浮红细胞2U输注完毕。"
     client = PerformanceFake("performed", time_quote="14:00", mutation=corrupt)
     execution, _, final, client = await run_case(case, client_override=client)
     assert final["status"] == "technical_error"
-    assert execution.llm_call_count == len(client.calls) == 1
+    # 引文与状态绑定错误定向补核一次；结构错误（多余字段）不补核。
+    assert execution.llm_call_count == len(client.calls) == calls
 
 
 @pytest.mark.asyncio
@@ -434,7 +436,9 @@ async def test_tc02_invalid_atomic_outputs_cannot_publish_performed(mutation):
     execution, _, final, client = await run_case(actual_case(), client_override=PerformanceFake("performed", mutation=corrupt))
     assert final["status"] == "technical_error"
     assert final["reason_code"] == "model_invalid_output"
-    assert execution.llm_call_count == len(client.calls) == 1
+    # 引用、覆盖类错误定向补核一次；多余字段、版本错误为结构错误，不补核。
+    expected_calls = 2 if mutation in {"duplicate_ref", "wrong_quote", "missing_document"} else 1
+    assert execution.llm_call_count == len(client.calls) == expected_calls
 
 
 @pytest.mark.asyncio
@@ -748,7 +752,8 @@ async def test_tc02_frozen_marker_text_remains_body_and_cross_document_atom_reje
 
     delegate = PerformanceFake("performed", action_quote=MARKER_QUOTES, mutation=cross if cross_document else None)
     result = await extract_transfusion_performance(deepcopy(MARKER_ROWS), wrap_luxian_0609_llm_client(delegate))
-    assert result.llm_call_count == len(delegate.calls) == 1
+    # 跨文书借用引文属可修正错误，定向补核一次；首次发送内容不变。
+    assert result.llm_call_count == len(delegate.calls) == (2 if cross_document else 1)
     sent = read_sent_documents(delegate.calls[0][0])
     assert [doc["body"] for doc in sent] == [redact_luxian_0609_patient_privacy(row["record_content"]) for row in MARKER_ROWS]
     for marker in ("SPAN_BEGIN d1:full", "SPAN_END d1:full", "SPAN_BEGIN d2:full", "SPAN_END d2:full"):

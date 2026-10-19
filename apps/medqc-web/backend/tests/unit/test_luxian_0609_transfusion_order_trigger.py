@@ -295,4 +295,6 @@ def test_invalid_partial_rows_are_not_preserved_as_verified_results(invalid):
     client = FakeClient(mutate=mutate)
     result = _run([_row(0), _row(1), _row(2)], client)
     assert result.state == "technical_error" and result.llm_call_count == 2
-    assert client.prompts[0] == client.prompts[1]
+    # 补核不再原样重发：指明失败行并附上次输出（补核规范 2026-10-18）。
+    assert client.prompts[0] != client.prompts[1]
+    assert "上次校验失败" in client.prompts[1] and "PREVIOUS_OUTPUT=" in client.prompts[1]

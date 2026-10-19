@@ -19,7 +19,9 @@ from typing import Any, Callable
 
 from .structured_output import structured_output_kwargs
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
-from .transfusion_order_trigger import _json_response_object, _usage
+from .transfusion_order_trigger import (
+    _RecheckIssue, _RecheckViolation, _json_response_object, _recheck_prompt, _usage,
+)
 
 SCHEMA_VERSION = "lx0609-intraoperative-transfusion-items-v1"
 SOURCES = ("surgery_record", "anesthesia_record", "postsurg_firstcourse_record")
@@ -96,6 +98,7 @@ def _parse_item(
     body: str,
     safe_body: str,
     parse_time: Callable[[str], datetime | None],
+    location: str = "items",
 ) -> tuple[TransfusionItem, tuple[int, int]]:
     if not isinstance(raw, dict) or set(raw) != {"quote", "component", "dose", "event_time"}:
         raise ValueError("invalid item schema")
@@ -103,35 +106,58 @@ def _parse_item(
         raw["quote"], raw["component"], raw["dose"], raw["event_time"])
     if not isinstance(quote, str) or not quote.strip():
         raise ValueError("invalid quote")
-    start = _unique_span(quote, body)
-    _unique_span(quote, safe_body)
+    if any(value is not None and not isinstance(value, str) for value in (component, dose, event_time)):
+        raise ValueError("invalid item schema")
+    issues: list[_RecheckIssue] = []
+    start = 0
+    try:
+        start = _unique_span(quote, body)
+        _unique_span(quote, safe_body)
+    except ValueError as error:
+        # 包括重叠出现次数，不以任取第一个位置绕过唯一定位。
+        count = sum(safe_body.startswith(quote, index) for index in range(len(safe_body)))
+        issues.append(_RecheckIssue(str(error), location, "quote", quote, count,
+            "须逐字复制单个连续片段，补充紧邻上下文使其仅出现一次；不得拼接、改写或任取第一个位置"))
     # 成分：片段内恰好一个血液成分且声明值逐字对应；原文未写成分则为 null。
     components = COMPONENT_PATTERN.findall(quote)
     if component is None:
         if components:
-            raise ValueError("component present in quote but not declared")
+            issues.append(_RecheckIssue("component present in quote but not declared", location, "component", component,
+                correction="quote已写明成分，component须逐字填写该成分；每条quote只能对应一个血液成分"))
         component = ""
     elif not isinstance(component, str) or len(components) != 1 or component != components[0]:
-        raise ValueError("component not atomically bound to quote")
+        issues.append(_RecheckIssue("component not atomically bound to quote", location, "component", component,
+            correction="component须逐字等于quote内唯一成分；多个成分须分开用各自连续quote绑定"))
     # 剂量：片段内至多一个剂量；有剂量时声明值必须与该剂量逐字一致。
     doses = [match.group() for match in DOSE_PATTERN.finditer(quote)]
     if dose is None:
         if doses:
-            raise ValueError("dose present in quote but not declared")
+            issues.append(_RecheckIssue("dose present in quote but not declared", location, "dose", dose,
+                correction="quote已写明剂量，dose须逐字填写该剂量"))
         quantity = unit = ""
     else:
         if not isinstance(dose, str) or len(doses) != 1 or dose != doses[0]:
-            raise ValueError("dose not atomically bound to quote")
-        quantity, unit = normalize_dose(dose)
+            issues.append(_RecheckIssue("dose not atomically bound to quote", location, "dose", dose,
+                correction="dose须逐字等于quote内唯一剂量，不能借用计划量、其他成分或其他片段剂量"))
+            quantity = unit = ""
+        else:
+            quantity, unit = normalize_dose(dose)
     # 时间：只能取片段内唯一出现的实际事件时间，不取文书完成时间。
     parsed_time = ""
     if event_time is not None:
         if not isinstance(event_time, str) or not event_time.strip() or quote.count(event_time) != 1:
-            raise ValueError("event time not bound to quote")
-        parsed = parse_time(event_time)
-        if parsed is None:
-            raise ValueError("unparseable event time")
-        parsed_time = parsed.isoformat(sep=" ")
+            issues.append(_RecheckIssue("event time not bound to quote", location, "event_time", event_time,
+                quote.count(event_time) if event_time else 0,
+                "event_time须逐字取自同条quote且只出现一次，为实际输注时间；未写则为null"))
+        else:
+            parsed = parse_time(event_time)
+            if parsed is None:
+                issues.append(_RecheckIssue("unparseable event time", location, "event_time", event_time,
+                    correction="须引用quote内可解析的实际输注时刻原文，不得改写或推测日期时间"))
+            else:
+                parsed_time = parsed.isoformat(sep=" ")
+    if issues:
+        raise _RecheckViolation(issues)
     item = TransfusionItem(component, quantity, unit, parsed_time, quote)
     return item, (start, start + len(quote))
 
@@ -158,31 +184,57 @@ def parse_intraoperative_response(
         raise ValueError("invalid schema")
     aliases = {f"d{index}": doc for index, doc in enumerate(documents, 1)}
     entries = payload["documents"]
-    if not isinstance(entries, list) or len(entries) != len(aliases):
+    if not isinstance(entries, list):
         raise ValueError("incomplete document coverage")
+    issues: list[_RecheckIssue] = []
+    if len(entries) != len(aliases):
+        issues.append(_RecheckIssue("incomplete document coverage", "documents", "document_ref", "",
+            correction="每份输入文书必须且仅输出一次，补齐遗漏文书并删除重复项"))
+    seen: set[str] = set()
     facts: dict[str, DocumentFacts] = {}
-    for entry in entries:
+    for position, entry in enumerate(entries, 1):
         if not isinstance(entry, dict) or set(entry) != {"document_ref", "state", "items"}:
             raise ValueError("invalid document schema")
         alias, state, raw_items = entry["document_ref"], entry["state"], entry["items"]
-        if not isinstance(alias, str) or alias not in aliases or aliases[alias].document_ref in facts:
+        if not isinstance(alias, str):
             raise ValueError("invalid document alias")
-        if state not in {"present", "absent", "unknown"} or not isinstance(raw_items, list):
+        if not isinstance(state, str) or state not in {"present", "absent", "unknown"} or not isinstance(raw_items, list):
             raise ValueError("invalid document state")
         if (state == "present") != bool(raw_items):
             raise ValueError("items must exist exactly when present")
+        if alias not in aliases or alias in seen:
+            issues.append(_RecheckIssue("invalid document alias", f"documents第{position}项", "document_ref", alias,
+                correction="document_ref须来自本批输入且仅输出一次"))
+        seen.add(alias)
+        if alias not in aliases:
+            # 未知文书也检查条目结构，不能遮蔽后项结构错误。
+            for raw in raw_items:
+                if not isinstance(raw, dict) or set(raw) != {"quote", "component", "dose", "event_time"}:
+                    raise ValueError("invalid item schema")
+            continue
         doc = aliases[alias]
         safe_body = redact_luxian_0609_patient_privacy(doc.body)
         items: list[TransfusionItem] = []
         spans: list[tuple[int, int]] = []
-        for raw in raw_items:
-            item, span = _parse_item(raw, body=doc.body, safe_body=safe_body, parse_time=parse_time)
+        for item_index, raw in enumerate(raw_items, 1):
+            location = f"document_ref={alias} items第{item_index}项"
+            try:
+                item, span = _parse_item(raw, body=doc.body, safe_body=safe_body, parse_time=parse_time, location=location)
+            except _RecheckViolation as error:
+                issues.extend(error.issues)
+                continue
             # 片段互不重叠，防止同一剂量被两条事实重复计入。
             if any(span[0] < end and start < span[1] for start, end in spans):
-                raise ValueError("overlapping item quotes")
+                issues.append(_RecheckIssue("overlapping item quotes", location, "quote", raw["quote"],
+                    correction="各条quote须互不重叠；同一实际剂量不得重复计入多个事实"))
             spans.append(span)
             items.append(item)
         facts[doc.document_ref] = DocumentFacts(state, tuple(items))
+    for alias in aliases.keys() - seen:
+        issues.append(_RecheckIssue("incomplete document coverage", f"document_ref={alias}", "document_ref", "",
+            correction="该文书遗漏，须补齐该文书并仅引用该份正文"))
+    if issues:
+        raise _RecheckViolation(issues)
     return facts
 
 
@@ -315,28 +367,40 @@ async def extract_intraoperative_transfusion_items(
         return IntraoperativeExtraction("data_gap", "candidate_scope_incomplete")
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
         return IntraoperativeExtraction("technical_error", "model_transport_error")
-    started = perf_counter()
-    try:
-        response = await llm_client.generate(
-            _prompt(documents),
-            max_completion_tokens=MAX_COMPLETION_TOKENS,
-            allow_length_retry=False,
-            **structured_output_kwargs(llm_client),
-        )
-    except Exception:
-        return IntraoperativeExtraction("technical_error", "model_transport_error",
-                                        llm_call_count=1, api_time=perf_counter() - started)
-    counters = (0, 0, 0)
-    try:
-        prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
-        counters = (prompt_tokens, completion_tokens, total_tokens)
-        facts = parse_intraoperative_response(response, documents, parse_time)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError):
-        return IntraoperativeExtraction("technical_error", "model_invalid_output", llm_call_count=1,
-                                        prompt_tokens=counters[0], completion_tokens=counters[1],
-                                        total_tokens=counters[2], api_time=perf_counter() - started)
+    prompt = _prompt(documents)
+    attempt_prompt = prompt
+    prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    for attempt in range(2):
+        started = perf_counter()
+        try:
+            response = await llm_client.generate(
+                attempt_prompt,
+                max_completion_tokens=MAX_COMPLETION_TOKENS,
+                allow_length_retry=False,
+                **structured_output_kwargs(llm_client),
+            )
+        except Exception:
+            return IntraoperativeExtraction("technical_error", "model_transport_error",
+                llm_call_count=attempt + 1, prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens, total_tokens=total_tokens,
+                api_time=api_time + perf_counter() - started)
+        try:
+            usage = _usage(response)
+            prompt_tokens += usage[0]
+            completion_tokens += usage[1]
+            total_tokens += usage[2]
+            api_time += usage[3] or perf_counter() - started
+            facts = parse_intraoperative_response(response, documents, parse_time)
+            break
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+            if isinstance(error, _RecheckViolation) and attempt == 0:
+                attempt_prompt = _recheck_prompt(prompt, error, response)
+                continue
+            return IntraoperativeExtraction("technical_error", "model_invalid_output",
+                llm_call_count=attempt + 1, prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time)
     return IntraoperativeExtraction(
-        "ready", facts=facts, llm_call_count=1, prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens, total_tokens=total_tokens,
-        api_time=api_time or perf_counter() - started,
+        "ready", facts=facts, llm_call_count=attempt + 1, prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time,
     )

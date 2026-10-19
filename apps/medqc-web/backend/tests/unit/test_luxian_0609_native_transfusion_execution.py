@@ -398,8 +398,8 @@ def test_typed_transfusion_preserves_only_approved_canonical_reasons(
             },
             "technical_error",
             "model_invalid_output",
-            1,
-            110,
+            2,
+            220,
         ),
         (
             {
@@ -429,7 +429,7 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
         "read_luxian_0609_native_source_rows",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
     )
-    client = None if model_output is None else _Client([model_output])
+    client = None if model_output is None else _Client([model_output, model_output])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
@@ -474,7 +474,7 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
             },
             "technical_error",
             "model_invalid_output",
-            110,
+            220,
         ),
         (
             {
@@ -503,7 +503,7 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
         "read_luxian_0609_native_source_rows",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
     )
-    client = None if model_output is None else _Client([model_output])
+    client = None if model_output is None else _Client([model_output, model_output])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
@@ -527,7 +527,8 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
 
     assert result.results == ()
     assert result.customer_display_facts == ()
-    assert result.llm_call_count == 1 + _protocol_calls(result)
+    # 引文或绑定错误定向补核一次，调用与 Token 各计两次。
+    assert result.llm_call_count == (2 if expected_tokens == 220 else 1) + _protocol_calls(result)
     assert result.total_tokens == expected_tokens
     assert canonical[0].final_state.value == expected_final_state
     assert canonical[0].reason_code == expected_reason
@@ -2192,7 +2193,7 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
     record = (
         '患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
-    client = _Client([model_output])
+    client = _Client([model_output, model_output])
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
@@ -2208,8 +2209,9 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
 
     assert result.results[0]["status"] == expected_status
     assert result.results[0]["metadata"]["reason_code"] == expected_reason
-    assert result.llm_call_count == 1 + _protocol_calls(result)
-    assert result.total_tokens == (0 if isinstance(model_output, Exception) else 110)
+    retried = expected_reason == "model_invalid_output"
+    assert result.llm_call_count == (2 if retried else 1) + _protocol_calls(result)
+    assert result.total_tokens == (0 if isinstance(model_output, Exception) else 220 if retried else 110)
     if expected_status == "non_compliant":
         assert dict(result.customer_display_facts)["LX0609-07-02-02"]["missing_fields"] == ["component"]
 
@@ -3351,13 +3353,12 @@ async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypat
 @pytest.mark.asyncio
 async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    client = _Client(
-        [{
-            "reason_state": "present",
-            "evidence_quote": "原文中不存在的理由",
-            "application_ref": "BA-001",
-        }]
-    )
+    bad = {
+        "reason_state": "present",
+        "evidence_quote": "原文中不存在的理由",
+        "application_ref": "BA-001",
+    }
+    client = _Client([bad, bad])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
@@ -3386,7 +3387,10 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
     assert result.results[0]["metadata"]["reason_code"] == (
         "model_invalid_output"
     )
-    assert result.llm_call_count == 1 + _protocol_calls(result)
+    # 引文不在申请单正文：定向补核一次，补核提示指明失败字段并附上次输出。
+    assert result.llm_call_count == 2 + _protocol_calls(result)
+    assert client.prompts[0] != client.prompts[1]
+    assert "evidence_quote" in client.prompts[1] and "PREVIOUS_OUTPUT=" in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -3885,13 +3889,12 @@ async def test_044_empty_application_reason_without_pretransfusion_course_stays_
 @pytest.mark.asyncio
 async def test_044_course_reason_quote_must_be_in_pretransfusion_course(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    client = _Client(
-        [{
-            "reason_state": "present",
-            "evidence_quote": "昨日输注红细胞后复查血红蛋白较前上升",
-            "application_ref": "BA-EMPTY",
-        }]
-    )
+    bad = {
+        "reason_state": "present",
+        "evidence_quote": "昨日输注红细胞后复查血红蛋白较前上升",
+        "application_ref": "BA-EMPTY",
+    }
+    client = _Client([bad, bad])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
@@ -3914,6 +3917,7 @@ async def test_044_course_reason_quote_must_be_in_pretransfusion_course(monkeypa
 
     assert result.results[0]["status"] == "technical_error"
     assert result.results[0]["metadata"]["reason_code"] == "model_invalid_output"
+    assert len(client.prompts) == 2 and "输血前病程" in client.prompts[1]
 
 
 @pytest.mark.asyncio

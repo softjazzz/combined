@@ -136,9 +136,76 @@ def _prompt(batch: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
-class _IncompleteCoverage(ValueError):
+@dataclass(frozen=True)
+class _RecheckIssue:
+    reason: str
+    location: str
+    field: str
+    quote: Any = ""
+    count: int | None = None
+    correction: str = "须逐字复制单个连续原文片段，不得删去中间文字后拼接或改写"
+
+
+class _RecheckViolation(ValueError):
+    def __init__(self, issues: Sequence[_RecheckIssue]):
+        # 失败项为空时沿用通用协议失败原因，避免构造异常本身出错。
+        super().__init__(issues[0].reason if issues else "invalid row binding")
+        self.issues = tuple(issues)
+
+
+class _TruncatedResponse(ValueError):
+    pass
+
+
+def _response_content(response: Mapping[str, Any]) -> Any:
+    choices = response.get("choices")
+    if choices is not None:
+        return choices[0]["message"]["content"]
+    return response.get("content", response.get("text"))
+
+
+def _recheck_prompt(prompt: str, error: Exception, response: Mapping[str, Any]) -> str:
+    """有界回显失败位置与上次输出；JSON 解码后再脱敏，防止身份转义绕过。"""
+    if isinstance(error, _TruncatedResponse):
+        hint = "上次输出超长被截断；请完整覆盖输入，引文只取最短必要的连续原文，减少输出长度。"
+    else:
+        details = []
+        issues = error.issues if isinstance(error, _RecheckViolation) else ()
+        for issue in issues[:8]:
+            quote = redact_luxian_0609_patient_privacy(str(issue.quote))
+            quote_ref = ("引文开头" if len(quote) > 60 else "引文") + "「" + quote[:60] + "」"
+            count = f"，出现{issue.count}次" if issue.count is not None else ""
+            details.append(redact_luxian_0609_patient_privacy(
+                f"{issue.location} 的 {issue.field}：{quote_ref}{count}；{issue.correction}"))
+        if not details:
+            # 医嘱路径已有结构错误补核，保留上限并指明实际失败字段。
+            corrections = {
+                "invalid classification": "orders.classification 仅允许 transfusion/other/unknown",
+                "invalid cancellation state": "orders.cancelled 仅允许 true/false/null",
+                "invalid row schema": "orders 每项仅含 index、classification、cancelled、quote",
+                "invalid response schema": "根对象仅含 schema_version 和 orders，版本须原样保留",
+            }
+            details.append(corrections.get(str(error), "JSON 协议校验失败：" + str(error)))
+        hint = ("上次校验失败：" + "；".join(details)
+                + "。仅修正失败项，其他已核验判断不因补核改变。"
+                "JSON解码后的引文须与原文相同；换行、回车、制表符不得多转义为字面量反斜杠加n/r/t。")
+        try:
+            previous = json.dumps(_json_response_object(_response_content(response)), ensure_ascii=False)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError):
+            previous = ""
+        if previous and len(previous) <= 24000:
+            previous = redact_luxian_0609_patient_privacy(previous)
+            if len(previous) <= 24000:
+                hint += "上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + previous
+    if "\nINPUT_JSON=" in prompt:
+        return prompt.replace("\nINPUT_JSON=", "\n" + hint + "\nINPUT_JSON=", 1)
+    return hint + "\n" + prompt
+
+
+class _IncompleteCoverage(_RecheckViolation):
     def __init__(self, resolved: list[tuple[int, str, bool | None]], missing: set[int]):
-        super().__init__("incomplete row coverage")
+        super().__init__([_RecheckIssue("incomplete row coverage", f"index={index}", "orders", "",
+            correction="该行遗漏，须输出该输入行且仅输出一次，quote须逐字等于该行name") for index in sorted(missing)])
         self.resolved, self.missing = resolved, missing
 
 
@@ -146,10 +213,14 @@ def _classifications(response: Mapping[str, Any], batch: Sequence[Mapping[str, A
     choices = response.get("choices")
     if choices is not None:
         choice = choices[0]
+        if choice.get("finish_reason") == "length":
+            raise _TruncatedResponse("incomplete response")
         if choice.get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = choice["message"]["content"]
     else:
+        if response.get("finish_reason") == "length":
+            raise _TruncatedResponse("incomplete response")
         if response.get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = response.get("content", response.get("text"))
@@ -162,19 +233,27 @@ def _classifications(response: Mapping[str, Any], batch: Sequence[Mapping[str, A
         raise ValueError("incomplete row coverage")
     seen: set[int] = set()
     result = []
-    for item in orders:
+    issues: list[_RecheckIssue] = []
+    for position, item in enumerate(orders, 1):
         if not isinstance(item, dict) or set(item) != {"index", "classification", "cancelled", "quote"}:
             raise ValueError("invalid row schema")
         index = item["index"]
-        if type(index) is not int or index not in expected or index in seen or item["quote"] != expected[index]:
+        if type(index) is not int or not isinstance(item["quote"], str):
             raise ValueError("invalid row binding")
         classification, cancelled = item["classification"], item["cancelled"]
         if not isinstance(classification, str) or classification not in {"transfusion", "other", "unknown"}:
             raise ValueError("invalid classification")
         if cancelled is not None and type(cancelled) is not bool:
             raise ValueError("invalid cancellation state")
+        if index not in expected or index in seen or item["quote"] != expected[index]:
+            issues.append(_RecheckIssue("invalid row binding", f"orders第{position}项 index={index}",
+                "index/quote", item["quote"], correction="index须来自本批输入且仅出现一次；quote须完整连续、逐字等于该行name，不能使用其他名称"))
         seen.add(index)
         result.append((index, classification, cancelled))
+    if issues:
+        issues.extend(_RecheckIssue("incomplete row coverage", f"index={index}", "orders", "",
+            correction="该行遗漏，须完整覆盖本批输入且每行仅输出一次") for index in sorted(set(expected) - seen))
+        raise _RecheckViolation(issues)
     if seen != set(expected):
         # 已出现的行全部通过身份、逐字与状态校验后，才允许只补核缺行。
         raise _IncompleteCoverage(result, set(expected) - seen)
@@ -227,13 +306,14 @@ async def classify_transfusion_orders(
     for batch in _batches(list(representatives.values())):
         pending = batch
         resolved_rows: list[tuple[int, str, bool | None]] = []
+        attempt_prompt = _prompt(pending)
         # 用户口径（2026-10-11）：协议违规（漏行、引用不符等）可确定识别，重试 1 次；仍违规才拒收。
         for attempt in range(PROTOCOL_ATTEMPTS):
             started = perf_counter()
             calls += 1
             try:
                 # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
-                response = await llm_client.generate(_prompt(pending), **structured_output_kwargs(llm_client))
+                response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
             except Exception as error:
                 api_time += perf_counter() - started
                 return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=classify_luxian_0609_llm_call_failure(error))
@@ -255,6 +335,7 @@ async def classify_transfusion_orders(
                 if isinstance(error, _IncompleteCoverage):
                     resolved_rows.extend(error.resolved)
                     pending = [row for row in pending if row["index"] in error.missing]
+                attempt_prompt = _recheck_prompt(_prompt(pending), error, response)
         for index, classification, cancelled in resolved:
             if cancelled is True:
                 continue

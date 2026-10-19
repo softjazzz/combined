@@ -25,7 +25,8 @@ class BatchClient:
              "quote": "输注红细胞2U。", "start_time_quote": "09:00"}
             for doc in docs
         ]
-        if self.bad_binding and len(self.batches) == 2:
+        # 第二批首次与补核均返回不落地引文，验证后批失败仍丢弃前批事实。
+        if self.bad_binding and len(self.batches) in (2, 3):
             items[0]["quote"] = "未出现在正文中的引用"
         return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
             "schema_version": extraction.SCHEMA_VERSION, "documents": items,
@@ -66,8 +67,9 @@ async def test_performance_later_batch_failure_discards_partial_facts(bad_bindin
     assert result.states == ("unknown",) * 9
     assert result.event_times == (None,) * 9
     assert result.assertions == ()
-    assert result.llm_call_count == 2
-    assert result.total_tokens == (30 if bad_binding else 15)
+    # 不落地引文在第二批定向补核一次后仍失败：共 3 次调用；传输失败不补核。
+    assert result.llm_call_count == (3 if bad_binding else 2)
+    assert result.total_tokens == (45 if bad_binding else 15)
 
 
 @pytest.mark.asyncio

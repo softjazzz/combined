@@ -31,7 +31,10 @@ from .pretransfusion_assessment import (
     evaluate_structured_pretransfusion_application,
     has_structured_pretransfusion_application,
 )
-from .transfusion_order_trigger import TransfusionOrderTriggerResult, classify_transfusion_orders
+from .transfusion_order_trigger import (
+    TransfusionOrderTriggerResult, classify_transfusion_orders,
+    _RecheckIssue, _RecheckViolation, _recheck_prompt,
+)
 from .transfusion_course_presence import (
     TransfusionCoursePresenceResult, classify_transfusion_course_records,
     select_transfusion_course_candidates,
@@ -1839,15 +1842,26 @@ def _validated_044_reason_state(
     *,
     candidate: PretransfusionReasonCandidate,
 ) -> str | None:
+    issues: list[_RecheckIssue] = []
+    location = f"application_ref={candidate.application_ref}"
     if payload.get("application_ref") != candidate.application_ref:
-        return None
+        issues.append(_RecheckIssue("invalid application binding", location, "application_ref", payload.get("application_ref"),
+            correction="application_ref须原样使用输入申请单标识，不能引用其他申请单"))
     state = payload.get("reason_state") or ""
     quote = payload.get("evidence_quote") or ""
     if state == "present":
-        return state if quote and quote in candidate.application_text else None
-    if state in {"absent", "uncertain"}:
-        return state if not quote or quote in candidate.application_text else None
-    return None
+        invalid_quote = not quote or quote not in candidate.application_text
+    elif state in {"absent", "uncertain"}:
+        invalid_quote = bool(quote) and quote not in candidate.application_text
+    else:
+        return None
+    if invalid_quote:
+        source = "输血前病程" if candidate.reason_source == "course" else "申请单正文"
+        issues.append(_RecheckIssue("invalid reason quote", location, "evidence_quote", quote,
+            correction=f"须逐字复制输入{source}中直接表达本次输血理由的单个连续片段，不得拼接、改写或借用其他文书"))
+    if issues:
+        raise _RecheckViolation(issues)
+    return state
 
 
 def _parse_046_component_response(
@@ -1880,13 +1894,16 @@ def _validated_046_component_assertion(
 ) -> str | None:
     """验证模型引用仍落在同一原文，且成分不能只是血型、编号或剂量。"""
 
+    issues: list[_RecheckIssue] = []
+    location = f"document_ref={document_ref}"
     if payload.get("document_ref") != document_ref:
-        return None
+        issues.append(_RecheckIssue("invalid component document binding", location, "document_ref", payload.get("document_ref"),
+            correction="document_ref须原样使用输入文书标识，不得借用其他文书"))
     quote = payload.get("quote") or ""
     component_text = payload.get("component_text") or ""
     assertion = payload.get("assertion") or ""
     if not quote or quote not in record_text:
-        return None
+        issues.append(_RecheckIssue("invalid component quote", location, "quote", quote))
     if assertion == "explicit":
         component_remainder = _BLOOD_TYPE_OR_RH_PATTERN.sub("", component_text)
         component_remainder = _TRANSFUSION_PRODUCT_IDENTIFIER_PATTERN.sub(
@@ -1901,10 +1918,56 @@ def _validated_046_component_assertion(
             # 一类表述去掉血型后仍保留制品名称，应允许通过同原文校验。
             or not component_remainder
         ):
-            return None
+            issues.append(_RecheckIssue("invalid component binding", location, "component_text", component_text,
+                correction="component_text须逐字取自同条quote中明确的实际输注成分；不能把血型、Rh、编号或剂量推断为成分"))
     elif component_text:
-        return None
+        issues.append(_RecheckIssue("unproven component assertion", location, "component_text", component_text,
+            correction="非explicit时component_text须为空，不能断言成分"))
+    if issues:
+        raise _RecheckViolation(issues)
     return assertion
+
+
+@dataclass(frozen=True)
+class _SemanticRecheck:
+    state: str | None
+    reason_code: str
+    calls: int
+    usage: tuple[int, int, int, float]
+
+
+async def _recheck_transfusion_semantics(
+    prompt: str, llm_client: Any,
+    parse: Callable[[Mapping[str, Any]], Mapping[str, str] | None],
+    validate: Callable[[Mapping[str, str]], str | None],
+) -> _SemanticRecheck:
+    """单条语义仅对已识别的引文或绑定错误补核一次，结构错误立即结束。"""
+    attempt_prompt = prompt
+    prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    for attempt in range(2):
+        try:
+            response = await llm_client.generate(attempt_prompt)
+        except Exception:
+            return _SemanticRecheck(None, "model_transport_error", attempt + 1,
+                (prompt_tokens, completion_tokens, total_tokens, api_time))
+        usage = _usage(response)
+        prompt_tokens += usage[0]
+        completion_tokens += usage[1]
+        total_tokens += usage[2]
+        api_time += usage[3]
+        payload = parse(response)
+        state = None
+        if payload is not None:
+            try:
+                state = validate(payload)
+            except _RecheckViolation as error:
+                if attempt == 0:
+                    attempt_prompt = _recheck_prompt(prompt, error, response)
+                    continue
+        return _SemanticRecheck(state, "" if state is not None else "model_invalid_output", attempt + 1,
+            (prompt_tokens, completion_tokens, total_tokens, api_time))
+    raise AssertionError("输血语义补核未结束")
 
 
 def _datetime_from_match(match: re.Match[str]) -> datetime | None:
@@ -3662,38 +3725,22 @@ async def execute_luxian_0609_native_transfusion_rules(
                         executor_type="program",
                     )
                     continue
-                llm_call_count += 1
-                try:
-                    response = await llm_client.generate(
-                        _044_reason_prompt(reason_candidate)
-                    )
-                except Exception:
-                    emit_outcome(
-                        rule_id,
-                        "technical_error",
-                        "model_transport_error",
-                        executor_type="llm",
-                    )
-                    continue
-                prompt, completion, total, elapsed = _usage(response)
-                prompt_tokens += prompt
-                completion_tokens += completion
-                total_tokens += total
-                api_time += elapsed
-                reason_payload = _parse_044_reason_response(response)
-                reason_state = (
-                    _validated_044_reason_state(
-                        reason_payload,
-                        candidate=reason_candidate,
-                    )
-                    if reason_payload is not None
-                    else None
+                checked = await _recheck_transfusion_semantics(
+                    _044_reason_prompt(reason_candidate), llm_client,
+                    _parse_044_reason_response,
+                    lambda payload: _validated_044_reason_state(payload, candidate=reason_candidate),
                 )
+                llm_call_count += checked.calls
+                prompt_tokens += checked.usage[0]
+                completion_tokens += checked.usage[1]
+                total_tokens += checked.usage[2]
+                api_time += checked.usage[3]
+                reason_state = checked.state
                 if reason_state is None:
                     emit_outcome(
                         rule_id,
                         "technical_error",
-                        "model_invalid_output",
+                        checked.reason_code,
                         executor_type="llm",
                     )
                     continue
@@ -3851,42 +3898,23 @@ async def execute_luxian_0609_native_transfusion_rules(
                         executor_type="program",
                     )
                     continue
-                llm_call_count += 1
-                try:
-                    response = await llm_client.generate(
-                        _046_component_prompt(
-                            document_ref=document_ref,
-                            record_text=record_text,
-                        )
-                    )
-                except Exception:
-                    emit_outcome(
-                        rule_id,
-                        "technical_error",
-                        "model_transport_error",
-                        executor_type="llm",
-                    )
-                    continue
-                prompt, completion, total, elapsed = _usage(response)
-                prompt_tokens += prompt
-                completion_tokens += completion
-                total_tokens += total
-                api_time += elapsed
-                component_payload = _parse_046_component_response(response)
-                assertion = (
-                    _validated_046_component_assertion(
-                        component_payload,
-                        document_ref=document_ref,
-                        record_text=record_text,
-                    )
-                    if component_payload is not None
-                    else None
+                checked = await _recheck_transfusion_semantics(
+                    _046_component_prompt(document_ref=document_ref, record_text=record_text), llm_client,
+                    _parse_046_component_response,
+                    lambda payload: _validated_046_component_assertion(
+                        payload, document_ref=document_ref, record_text=record_text),
                 )
+                llm_call_count += checked.calls
+                prompt_tokens += checked.usage[0]
+                completion_tokens += checked.usage[1]
+                total_tokens += checked.usage[2]
+                api_time += checked.usage[3]
+                assertion = checked.state
                 if assertion is None:
                     emit_outcome(
                         rule_id,
                         "technical_error",
-                        "model_invalid_output",
+                        checked.reason_code,
                         executor_type="llm",
                     )
                     continue
