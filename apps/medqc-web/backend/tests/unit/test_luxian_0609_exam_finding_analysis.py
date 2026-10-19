@@ -544,3 +544,24 @@ async def test_batches_run_concurrently_with_thinking_enabled_only_here(monkeypa
                for item in client.kwargs)
     # 不支持结构化输出的替身不附加思考参数。
     assert module._analysis_output_kwargs(_Client([])) == {}
+
+
+@pytest.mark.parametrize("quote, report", [
+    # C02 形状：逐字抄录报告对比句，句中日期、检查标签与“伤后48小时复查”不是自有分析。
+    ("伤后48小时复查头颅CT提示:2025-10-07 颅脑螺旋CT平扫 双侧额颞叶少许脑挫伤，较2025-10-06片颅内出血稍吸收减少，",
+     "双侧额颞叶少许脑挫伤，硬膜下出血。较2025-10-06片颅内出血稍吸收减少，头皮肿胀减轻。"),
+    # C01 形状：诊断依据只复述 CTA 所见再接序号诊断与“故考虑”。
+    ("2026-07-31 颅内+颈动脉CT造影成像 头颈部CTA：双侧颈内动脉C6段管腔轻-中度狭窄，12.双侧颈内动脉狭窄，故考虑。",
+     "双侧颈内动脉C6段管腔轻-中度狭窄，余管腔轻度狭窄。"),
+])
+def test_restated_report_with_labels_and_connectors_has_no_own_analysis(quote, report):
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    assert module._own_chars(quote, report) < module.MIN_OWN_CHARS
+
+
+def test_real_analysis_keeps_own_content_after_label_stripping():
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    quote = "患者右侧肢体无力，结合CTA双侧颈内动脉C6段狭窄，考虑脑供血不足，加用阿托伐他汀稳定斑块"
+    assert module._own_chars(quote, "双侧颈内动脉C6段管腔轻-中度狭窄。") >= module.MIN_OWN_CHARS

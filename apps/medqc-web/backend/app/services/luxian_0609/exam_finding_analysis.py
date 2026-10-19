@@ -364,6 +364,10 @@ _GENERIC_PHRASES = re.compile(
         r"心律齐|腹平?软|(?:全腹)?无(?:明显)?(?:压痛|反跳痛|肌紧张)|双下肢(?:不肿|无水肿)",
         r"心率\d+(?:次/分|bpm)",
         r"患者|目前|今日|本次|复查|查体",
+        # 用户口径（2026-10-19）：诊断依据只复述报告所见再接“故考虑/故诊断”不算分析（C01 颈内动脉狭窄）；
+        # 列表序号与结论连接语不是病程自有分析。
+        r"(?<![0-9.])[0-9]{1,2}[.、．](?![0-9])",
+        r"(?:故|可)?(?:考虑|诊断)(?:为|明确)?",
     )),
     re.I,
 )
@@ -380,7 +384,16 @@ def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
     quote = re.sub(r"^\s*(?:患者)?(?:今日|本次)?(?:复查|完善|辅助检查[:：]?)?\s*", "", quote)
     quote = re.sub(r"^\d{4}[-年/]\d{1,2}[-月/]\d{1,2}日?\s*", "", quote)
     quote = re.sub(
-        r"^[^，。；;\n]{0,16}?(?:CT|MRI|MR)(?:平扫|增强|检查|扫描)?(?:[（(][^）)]{0,16}[）)])?\s*[:：]?",
+        r"^[^，。；;\n]{0,16}?(?:CT|MRI|MR)(?:平扫|增强|检查|扫描|造影)?(?:成像)?(?:[（(][^）)]{0,16}[）)])?\s*[:：]?",
+        "", quote, flags=re.I,
+    )
+    # 句中的日期、检查标签与“伤后48小时复查”等时间引导语同样只是摘录格式（C02：病程逐字抄录报告的
+    # 对比句，靠日期数字和“伤后48小时”越过门槛）。部位前缀只取最多 6 个汉字，不吞掉逗号前的分析语。
+    quote = re.sub(r"\d{4}[-年/.]\d{1,2}[-月/.]\d{1,2}日?", "", quote)
+    quote = re.sub(r"(?:伤后|术后|入院后?|发病后?|治疗后)?\d+(?:小时|h|天|日|周)(?:后)?(?:复查)?", "", quote, flags=re.I)
+    quote = re.sub(
+        r"[一-鿿]{0,6}?(?:螺旋)?(?:CTA|CT|MRI|MR)(?:平扫|增强|检查|扫描|造影)?(?:成像)?"
+        r"(?:[（(][^）)]{0,16}[）)])?(?:提示|回示|示)?\s*[:：]?",
         "", quote, flags=re.I,
     )
     text, source = _normalize(quote), _normalize(report)
@@ -514,6 +527,7 @@ def _parse(
             continue
         try:
             quotes, span = _selected_evidence(item, _course_text(projection, ref), reports[position])
+            course_quotes = quotes
             basis_quotes, _ = _selected_evidence(
                 {**item, "course_fragment_ids": basis}, _course_text(projection, ref), reports[position])
             # 依据单独选择也须完整纳入原文核验及总长度；无需模型重复填写同一编号。
@@ -549,6 +563,10 @@ def _parse(
                     # 末次仍对不上才按不算分析处理，不改变最终判定口径。
                     raise ValueError("span not attributed")
                 own = sum(_own_chars(quote, reports[position], (lead_sites or {}).get(position, ())) for quote in quotes)
+                if kind == "prior_comparison":
+                    # 对比判断须是病程自己写的：只按引文（不含依据）计自有内容，抄录报告对比句不能靠旁列依据过门槛。
+                    own = min(own, sum(_own_chars(quote, reports[position], (lead_sites or {}).get(position, ()))
+                                       for quote in course_quotes))
                 if (own >= MIN_OWN_CHARS and attributed and basis_quotes and relation == "same_finding"
                         and _course_names_exam(projection, position, _course_text(projection, ref), span)):
                     analysed[position].append(ref)
