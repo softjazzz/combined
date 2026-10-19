@@ -1777,6 +1777,25 @@ def _046_component_prompt(*, document_ref: str, record_text: str) -> str:
 def _044_reason_prompt(candidate: PretransfusionReasonCandidate) -> str:
     """044专用语义提取：只确认这一张申请单是否写明申请输血的临床理由。"""
 
+    if candidate.reason_source == "course":
+        # 申请单未提供理由与正文时，理由改从实际输血前的病程核对（用户口径 2026-10-18）。
+        return (
+            "输血申请单没有申请理由与正文。你只核对下面实际输血前的病程记录，"
+            "是否明确写出本次决定输血的临床理由（如结合检验结果说明贫血、出血风险、"
+            "凝血功能异常等而决定输注某种血液成分）。\n"
+            "仅写“必要时输血”“必要时可输血”等条件性计划、未决定本次输血的，不算理由；"
+            "仅记录输血后的情况也不算。\n"
+            "不得根据检验数值、拟输血成分、剂量或医学常识自行推断理由。\n"
+            "reason_state=present时，evidence_quote必须逐字摘自病程原文的单个连续片段并直接表达输血理由；"
+            "无法确定时返回uncertain。\n"
+            "仅输出严格JSON，不要解释："
+            '{"reason_state":"present|absent|uncertain","evidence_quote":"",'
+            '"application_ref":""}\n'
+            f"application_ref: {candidate.application_ref}\n"
+            f"实际输血时间：{candidate.transfusion_time.isoformat(sep=' ')}\n"
+            "输血前病程：\n"
+            f"{candidate.application_text}"
+        )
     return (
         "你只核对下面这一张输血申请单是否明确写出申请输血的临床理由。\n"
         "不得根据检验数值、拟输血成分、剂量或医学常识自行推断理由。\n"

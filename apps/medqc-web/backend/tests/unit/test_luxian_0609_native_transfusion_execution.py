@@ -3798,3 +3798,149 @@ def test_transfusion_consent_sources_never_alias_surgery_consent() -> None:
     )
     assert len(rows) == 1
     assert rows[0]["consent_type"] == "blood_transfusion"
+
+
+def _empty_reason_application(application_id="BA-EMPTY"):
+    # 接口未提供申请理由与正文，仅有申请时间与客观指标。
+    return {
+        "application_id": application_id,
+        "request_datetime": "2026-08-20 09:00:00",
+        "reason_for_blood": "",
+        "hemoglobin": "58",
+        "record_content": "",
+    }
+
+
+_PRE_COURSE = "患者贫血貌，血红蛋白较前下降，HGB 58g/L，有输血指征，拟输注红细胞悬液2u纠正贫血。"
+_POST_COURSE = "昨日输注红细胞后复查血红蛋白较前上升。"
+
+
+@pytest.mark.asyncio
+async def test_044_empty_application_reason_checks_pretransfusion_course(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client(
+        [{
+            "reason_state": "present",
+            "evidence_quote": "有输血指征，拟输注红细胞悬液2u纠正贫血",
+            "application_ref": "BA-EMPTY",
+        }]
+    )
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[_empty_reason_application()],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-1", "record_time": "2026-08-20 09:40:00", "content": _PRE_COURSE},
+                {"document_id": "SC-2", "record_time": "2026-08-21 10:00:00", "content": _POST_COURSE},
+                {"document_id": "SC-0", "record_time": "2026-08-17 10:00:00", "content": "三日前病程，必要时输血。"},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_complete"
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert "输血前病程" in prompt and "必要时输血" in prompt and _PRE_COURSE in prompt
+    assert _POST_COURSE not in prompt and "三日前病程" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_044_empty_application_reason_without_pretransfusion_course_stays_incomplete(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"reason_state": "present", "evidence_quote": "x", "application_ref": "BA-EMPTY"}])
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[_empty_reason_application()],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-2", "record_time": "2026-08-21 10:00:00", "content": _POST_COURSE},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_incomplete"
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_044_course_reason_quote_must_be_in_pretransfusion_course(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client(
+        [{
+            "reason_state": "present",
+            "evidence_quote": "昨日输注红细胞后复查血红蛋白较前上升",
+            "application_ref": "BA-EMPTY",
+        }]
+    )
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[_empty_reason_application()],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-1", "record_time": "2026-08-20 09:40:00", "content": _PRE_COURSE},
+                {"document_id": "SC-2", "record_time": "2026-08-21 10:00:00", "content": _POST_COURSE},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "technical_error"
+    assert result.results[0]["metadata"]["reason_code"] == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_044_application_text_keeps_application_reason_prompt_even_with_course(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    application_text = "因血红蛋白65g/L申请输注悬浮红细胞2U。"
+    client = _Client(
+        [{"reason_state": "present", "evidence_quote": "因血红蛋白65g/L申请输注", "application_ref": "BA-001"}]
+    )
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[{**_empty_reason_application("BA-001"), "record_content": application_text}],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-1", "record_time": "2026-08-20 09:40:00", "content": _PRE_COURSE},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert "输血申请单正文" in client.prompts[0] and _PRE_COURSE not in client.prompts[0]
