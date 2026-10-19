@@ -1435,7 +1435,9 @@ def _post_report_response_outcome(
             "exam_lab_text_fact",
             tuple(dict.fromkeys((*refs, safe_ref))) if safe_ref else refs,
         )
-    if projection.course_projection_truncated:
+    if projection.course_projection_truncated or projection.course_time_incomplete:
+        # 与“未见分析”同口径：病程时间不完整时，可能有未进入窗口的病程在 24 小时内，
+        # 只见超时分析也不能认定超时（C02）。
         return _ExamLabOutcome(
             rule_id, "data_gap", "course_projection_incomplete", refs
         )

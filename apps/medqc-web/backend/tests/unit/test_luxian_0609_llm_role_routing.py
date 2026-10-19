@@ -87,4 +87,5 @@ async def test_finding_analysis_uses_the_configured_role_model(monkeypatch):
     judge, main = _Capture([answer]), _Capture()
     monkeypatch.setattr(routing, "build_role_delegate", lambda role: judge if role == "exam_finding_analysis" else None)
     outcome = await check_exam_finding_analysis(projection, wrap_luxian_0609_llm_client(main))
-    assert outcome.state == "ready" and len(judge.prompts) == 1 and main.prompts == []
+    # 判为未分析时另有单独复核（用户决定 2026-10-19）；所有分析核验调用都走配置的判断模型。
+    assert outcome.state == "ready" and len(judge.prompts) >= 1 and main.prompts == []

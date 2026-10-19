@@ -756,6 +756,22 @@ async def check_exam_finding_analysis(
     for item in results:
         analysed_refs.update(item.analysed)
         gap_refs.update(item.gap_refs)
+    # 用户决定（2026-10-19）：多事件整批核对偶有漏看（C08、C04 约 1/5～1/9 误判未分析）。
+    # 判为未分析的事件单独复核一次，只带本事件报告与病程；复核证实有分析才改判，否则维持未分析。
+    negatives = [position for position in model_expected
+                 if position in analysed_refs and not analysed_refs[position]]
+    rechecks = list(await asyncio.gather(*(
+        _check_batch(projection, llm_client, {position: model_targets[position]},
+                     {position: model_expected[position]})
+        for position in negatives
+    )))
+    for position, item in zip(negatives, rechecks):
+        calls += item.calls
+        usage = (usage[0] + item.prompt_tokens, usage[1] + item.completion_tokens,
+                 usage[2] + item.total_tokens, usage[3] + item.api_time)
+        if item.ready and item.analysed.get(position):
+            analysed_refs[position] = item.analysed[position]
+            gap_refs.pop(position, None)
     return FindingAnalysisOutcome("ready", analysed_refs, calls, *usage, gap_refs=gap_refs)
 
 

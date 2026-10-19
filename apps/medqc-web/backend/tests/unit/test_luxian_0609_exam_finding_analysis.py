@@ -71,7 +71,7 @@ async def test_listing_then_diagnosis_is_not_analysis_and_pre_report_note_is_exc
     client = _Client([_answer(ref, "diagnosis_only", "目前考虑诊断：腰椎间盘突出症")])
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
-    assert outcome.llm_call_count == 1
+    assert outcome.llm_call_count == 2  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
     sent = json.loads(client.prompts[0].split("EVENTS_JSON=", 1)[1])
     assert [doc["course_doc_ref"] for doc in sent[0]["course_docs"]] == [ref]
     assert "罗列后直接列出诊断" in client.prompts[0] and "diagnosis_only" in client.prompts[0]
@@ -154,14 +154,14 @@ async def test_quote_about_another_exam_does_not_count_for_this_event():
     outcome = await check_exam_finding_analysis(projection, client)
     # 引文与所选异常对不上：定向补核一次，仍对不上则不算分析。
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
-    assert outcome.llm_call_count == 2 and "不能选“较某日片”" in client.prompts[1]
+    assert outcome.llm_call_count == 3 and "不能选“较某日片”" in client.prompts[1]  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
 
     client = _Client([
         _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="右肺小结节"),
         _answer(ref, "none"),
     ])
     outcome = await check_exam_finding_analysis(projection, client)
-    assert outcome.llm_call_count == 2 and "report_fragment_id只选当前事件" in client.prompts[1]
+    assert outcome.llm_call_count == 3 and "report_fragment_id只选当前事件" in client.prompts[1]  # 含单独复核一次
     assert outcome.analysed_refs == {1: ()}
 
 
@@ -491,7 +491,7 @@ async def test_generic_symptom_improvement_and_routine_plan_do_not_attribute_to_
     answer = _answer(ref, "finding_linked", "痰较前减少，症状好转，继续目前对症处理", span="双肺渗出减少")
     client = _Client([answer, answer])
     outcome = await check_exam_finding_analysis(projection, client)
-    assert outcome.analysed_refs == {1: ()} and outcome.llm_call_count == 2
+    assert outcome.analysed_refs == {1: ()} and outcome.llm_call_count == 3  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
 
 
 @pytest.mark.asyncio
@@ -565,3 +565,18 @@ def test_real_analysis_keeps_own_content_after_label_stripping():
 
     quote = "患者右侧肢体无力，结合CTA双侧颈内动脉C6段狭窄，考虑脑供血不足，加用阿托伐他汀稳定斑块"
     assert module._own_chars(quote, "双侧颈内动脉C6段管腔轻-中度狭窄。") >= module.MIN_OWN_CHARS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recheck_kind, expected_analysed", [("finding_linked", True), ("none", False)])
+async def test_negative_event_is_rechecked_alone_and_only_confirmed_analysis_flips(recheck_kind, expected_analysed):
+    """用户决定（2026-10-19）：整批判为未分析的事件单独复核一次；复核证实有分析才改判（C08、C04 漏看）。"""
+    linked = "腰椎MRI示L4/5椎间盘突出压迫右侧神经根，右下肢放射痛明显，直腿抬高试验阳性，与本次报告所见相符，拟行手术。"
+    projection = _projection(linked)
+    ref = _report_ref(projection)
+    recheck = _answer(ref, "finding_linked", linked) if recheck_kind == "finding_linked" else _answer(ref, "none")
+    client = _Client([_answer(ref, "none"), recheck])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.state == "ready" and outcome.llm_call_count == 2
+    assert outcome.analysed_refs == ({1: (ref,)} if expected_analysed else {1: ()})
+    assert outcome.total_tokens == 30
