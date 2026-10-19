@@ -573,6 +573,15 @@ class _Luxian0609PrivacyRedactingLLMClient:
             await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
         return await self.delegate.generate(redacted, **kwargs)
 
+    def for_role(self, role: str) -> Any:
+        """按调用点换用 LLM_ROLE_MODELS 配置的模型；身份脱敏与护栏不变。"""
+        from .llm_role_routing import build_role_delegate
+
+        delegate = build_role_delegate(role)
+        if delegate is None:
+            return self
+        return _Luxian0609PrivacyRedactingLLMClient(delegate, self.identity_values, self.identity_providers)
+
     def supports_strict_json_schema(self) -> bool:
         capability = getattr(self.delegate, "supports_strict_json_schema", None)
         if not callable(capability):

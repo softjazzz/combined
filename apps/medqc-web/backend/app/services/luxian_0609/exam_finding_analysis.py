@@ -30,6 +30,7 @@ from .exam_lab_fact_extraction import (
     events_for_family,
 )
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_role_routing import client_for_role
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
@@ -690,6 +691,8 @@ async def check_exam_finding_analysis(
     targets = _targets(projection)
     if not targets or llm_client is None:
         return FindingAnalysisOutcome("skipped", {})
+    # 判断步骤可单独配置模型（LLM_ROLE_MODELS，2026-10-19 评估）；未配置时沿用裁决模型。
+    llm_client = client_for_role(llm_client, "exam_finding_analysis")
     expected = {
         position: tuple(ref for ref in refs if _course_text(projection, ref).strip())
         for position, (_, refs) in targets.items()
