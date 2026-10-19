@@ -105,6 +105,36 @@ def test_bundle_check_requires_exact_saved_content():
         tool.verify_bundles(assembly, [p])
 
 
+def test_pathology_check_uses_real_bundle_domains_and_checks_both():
+    from app.services.bundles import assembly as production
+
+    p = plan("合成诊断")
+    p.update(table="pathology_exam_report", field="diagnosis")
+    p["projected_rows"] = [{**p["projected_rows"][0], "diagnosis": "合成诊断"}]
+    domains = []
+
+    def load(**kw):
+        domain = kw["execution_domain"]
+        # 文书标签exam_results不是可持久化的bundle域，必须对真实注册表断言。
+        assert domain in production._DOMAIN_BUNDLE_TABLE
+        assert p["table"] in production._DOMAIN_DOC_PRIORITY[domain]
+        domains.append(domain)
+        return {"structured_context": {"documents": {p["table"]: p["projected_rows"]}}}
+
+    tool.verify_bundles(SimpleNamespace(load_domain_bundle=load), [p])
+    assert domains == ["course", "surgery"]
+
+    def stale_surgery(**kw):
+        result = load(**kw)
+        if kw["execution_domain"] == "surgery":
+            result["structured_context"]["documents"] = {}
+        return result
+
+    with pytest.raises(check.CheckError, match="bundle_content_not_updated") as exc:
+        tool.verify_bundles(SimpleNamespace(load_domain_bundle=stale_surgery), [p])
+    assert exc.value.details["domain"] == "surgery"
+
+
 @pytest.mark.parametrize("failure", [None, "backup", "refresh"])
 def test_cli_reports_commit_boundary_and_never_prints_clinical_text(monkeypatch, tmp_path, engine, capsys, failure):
     from app.database import connection as db

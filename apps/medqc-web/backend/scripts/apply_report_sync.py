@@ -108,21 +108,22 @@ def update_fields(conn, plans):
 def verify_bundles(assembly, plans):
     """核对已保存domain bundle的原字段，不运行规则或模型。"""
     for plan in plans:
-        domain = "exam_results" if plan["table"] == "pathology_exam_report" else "terminal"
+        domains = ("course", "surgery") if plan["table"] == "pathology_exam_report" else ("terminal",)
         cases = {}
         for row in plan["projected_rows"]:
             key = tuple(row[k] for k in ("institute_id", "patient_id", "visit_id"))
             cases.setdefault(key, []).append(row)
-        for key, rows in cases.items():
-            bundle = assembly.load_domain_bundle(execution_domain=domain,
-                                                **dict(zip(("institute_id", "patient_id", "visit_id"), key)))
-            docs = ((bundle or {}).get("structured_context") or {}).get("documents") or {}
-            saved = {tuple(str(r.get(k) or "") for k in plan["keys"]): r
-                     for r in docs.get(plan["table"], [])}
-            for row in rows:
-                match = saved.get(tuple(str(row[k]) for k in plan["keys"]))
-                if match is None or match.get(plan["field"]) != row[plan["field"]]:
-                    raise check.CheckError("bundle_content_not_updated", table=plan["table"])
+        for domain in domains:
+            for key, rows in cases.items():
+                bundle = assembly.load_domain_bundle(execution_domain=domain,
+                                                    **dict(zip(("institute_id", "patient_id", "visit_id"), key)))
+                docs = ((bundle or {}).get("structured_context") or {}).get("documents") or {}
+                saved = {tuple(str(r.get(k) or "") for k in plan["keys"]): r
+                         for r in docs.get(plan["table"], [])}
+                for row in rows:
+                    match = saved.get(tuple(str(row[k]) for k in plan["keys"]))
+                    if match is None or match.get(plan["field"]) != row[plan["field"]]:
+                        raise check.CheckError("bundle_content_not_updated", table=plan["table"], domain=domain)
 
 
 def main():
