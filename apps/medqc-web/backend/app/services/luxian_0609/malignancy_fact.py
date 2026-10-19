@@ -26,6 +26,14 @@ _ALLOWED_ITEM_STATES = frozenset(
 )
 _MALIGNANT_CODE = re.compile(r"^C\d{2}(?:[.A-Z0-9-]*)$")
 _UNCERTAIN_NEOPLASM_CODE = re.compile(r"^D(?:0[0-9]|3[7-9]|4[0-8])")
+# 用户口径（2026-10-19）：“肿瘤性/肿瘤相关”只修饰贫血、发热等表现，且未写明具体恶性肿瘤时
+# 不算明确恶性（如“肿瘤性贫血”而骨髓活检证据不充分）。
+_TUMOR_MODIFIER_ONLY = re.compile(r"肿瘤(?:性|相关性?)")
+_EXPLICIT_MALIGNANT_TERM = re.compile(r"癌|恶性|肉瘤|淋巴瘤|白血病|骨髓瘤|母细胞瘤|黑色素瘤|间皮瘤|转移")
+
+
+def _tumor_modifier_only(name: str) -> bool:
+    return bool(_TUMOR_MODIFIER_ONLY.search(name)) and not _EXPLICIT_MALIGNANT_TERM.search(name)
 
 
 class MalignancyLLMClient(Protocol):
@@ -324,6 +332,9 @@ def _parse_resolution(
         ):
             raise ValueError("malignancy result reference invalid")
         states_by_ref[ref] = state
+    for item in items:
+        if states_by_ref.get(item.ref) == "explicit_malignant" and _tumor_modifier_only(item.name):
+            states_by_ref[item.ref] = "uncertain"
     if set(states_by_ref) != expected_refs:
         raise ValueError("malignancy result references incomplete")
     states = set(states_by_ref.values())
@@ -352,7 +363,8 @@ def _prompt(items: Sequence[_DiagnosisItem]) -> str:
         "不得依据患者身份、坐标或文书编号推断。\n"
         f"schema_version固定为{SCHEMA_VERSION}。每个输入ref必须恰好返回一次，"
         "state只允许explicit_malignant、explicit_nonmalignant、uncertain。"
-        "疑似、待排、占位、肿物、性质待定必须返回uncertain。\n"
+        "疑似、待排、占位、肿物、性质待定必须返回uncertain；"
+        "“肿瘤性”“肿瘤相关”只修饰贫血、发热等表现而未写明具体恶性肿瘤时也返回uncertain。\n"
         "只能输出一个JSON对象，禁止输出顶层数组、Markdown、解释或额外字段。"
         "输出结构示例："
         f'{{"schema_version":"{SCHEMA_VERSION}","results":['
