@@ -15,6 +15,7 @@ v4 让模型选择本份病程和本次报告的原文片段编号，不再自�
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field, replace
 import json
 import re
@@ -50,6 +51,9 @@ MAX_COURSE_CHARS = 6000
 MAX_PROMPT_CHARS = 60000
 MAX_QUOTE_CHARS = 200
 MAX_COMPLETION_TOKENS = 2048
+# 用户决定（2026-10-19）：本调用点开启思考。qwen3.8-flash 实测预算 1000 时标注集 16/16、
+# 多异常报告不再锚定单一异常；预算 4096 时长病例超时。其余 0609 结构化调用仍关闭思考。
+ANALYSIS_THINKING_BUDGET = 1000
 # 未见分析时最接近的一句属于哪种不足：用于客户修改建议，不参与判定。
 GAP_KINDS = {
     "listing_only": "listing_only",
@@ -606,6 +610,13 @@ class _BatchResult:
     api_time: float
 
 
+def _analysis_output_kwargs(llm_client: Any) -> dict[str, Any]:
+    """支持结构化输出的客户端在本调用点开思考并限定预算；测试替身等不附加参数。"""
+    if not structured_output_kwargs(llm_client):
+        return {}
+    return {"enable_thinking": True, "thinking_budget": ANALYSIS_THINKING_BUDGET}
+
+
 def _target_batches(
     projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, tuple[str, ...]]],
 ) -> list[dict[int, tuple[str, tuple[str, ...]]]]:
@@ -648,7 +659,7 @@ async def _check_batch(
         try:
             response = await llm_client.generate(
                 attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
-                **structured_output_kwargs(llm_client),
+                **_analysis_output_kwargs(llm_client),
             )
         except Exception:
             if analysed:
@@ -711,10 +722,11 @@ async def check_exam_finding_analysis(
     batches = _target_batches(projection, model_targets)
     if not batches:
         return FindingAnalysisOutcome("failed", {})
-    results = [
-        await _check_batch(projection, llm_client, batch, {position: model_expected[position] for position in batch})
+    # 各批互不依赖，并发调用：耗时不再随批数累加（C02 三批串行开思考会超出执行时限）。
+    results = list(await asyncio.gather(*(
+        _check_batch(projection, llm_client, batch, {position: model_expected[position] for position in batch})
         for batch in batches
-    ]
+    )))
     calls = sum(item.calls for item in results)
     usage = (sum(item.prompt_tokens for item in results), sum(item.completion_tokens for item in results),
              sum(item.total_tokens for item in results), sum(item.api_time for item in results))

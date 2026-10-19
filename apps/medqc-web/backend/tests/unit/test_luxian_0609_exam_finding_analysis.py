@@ -1,5 +1,6 @@
 """012 分析要素核对：按同一病程的连续语义归类，罗列后下诊断仍不算分析。"""
 
+import asyncio
 import json
 
 import pytest
@@ -505,3 +506,41 @@ async def test_specific_symptoms_and_targeted_treatment_after_followup_ct_still_
                      span="右肺上叶病灶吸收减少")
     outcome = await check_exam_finding_analysis(projection, _Client([answer]))
     assert outcome.analysed_refs == {1: (ref,)}
+
+
+class _ConcurrentStrictClient(_Client):
+    """支持结构化输出；第一批在第二批发出前不返回，串行调用会超时失败。"""
+
+    def __init__(self, outputs, expected_in_flight):
+        super().__init__(outputs)
+        self.kwargs, self.expected_in_flight = [], expected_in_flight
+        self.all_sent = asyncio.Event()
+
+    def supports_strict_json_schema(self):
+        return True
+
+    async def generate(self, prompt, **kwargs):
+        self.kwargs.append(kwargs)
+        if len(self.kwargs) >= self.expected_in_flight:
+            self.all_sent.set()
+        await asyncio.wait_for(self.all_sent.wait(), timeout=2)
+        return await super().generate(prompt, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_batches_run_concurrently_with_thinking_enabled_only_here(monkeypatch):
+    """用户决定（2026-10-19）：分析核验调用点开思考（预算 1000），各批并发，耗时不随批数累加。"""
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    projection = _two_event_projection()
+    first, second, chest, spine = _batch_answers(projection)
+    targets = module._targets(projection)
+    single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
+    client = _ConcurrentStrictClient([chest, spine], expected_in_flight=2)
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,), 2: (second,)}
+    assert all(item["enable_thinking"] is True and item["thinking_budget"] == module.ANALYSIS_THINKING_BUDGET
+               for item in client.kwargs)
+    # 不支持结构化输出的替身不附加思考参数。
+    assert module._analysis_output_kwargs(_Client([])) == {}
