@@ -8304,7 +8304,7 @@ async def test_ungrounded_stage_one_quote_is_not_frozen(monkeypatch, tmp_path):
         "technical_error",
         "technical_error",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
     assert list(tmp_path.glob("*.json")) == []
 
 

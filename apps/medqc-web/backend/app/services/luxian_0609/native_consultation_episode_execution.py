@@ -20,6 +20,7 @@ from typing import Any, Mapping, Protocol, Sequence
 
 from .consultation_measure_check import apply_measure_check, check_consultation_measures
 from .consultation_disposition_record import RULE_ID as DISPOSITION_RECORD_RULE_ID, check_disposition_record
+from .consultation_disposition_record import _ReviewIssue, _review_retry_prompt
 from .consultation_decision_evidence import (
     bind_document_material_rows,
     is_material_binding_error,
@@ -1729,6 +1730,7 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
 def _parse_compact_document_facts(
     payload: Mapping[str, Any],
     documents: Sequence[Mapping[str, str]],
+    *, review_issues: list[_ReviewIssue] | None = None,
 ) -> tuple[_Episode, ...]:
     raw_facts = payload.get("consultation_event_facts")
     if not isinstance(raw_facts, list):
@@ -1780,6 +1782,8 @@ def _parse_compact_document_facts(
                 or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
             ):
                 raise _SemanticInvalid()
+            if not isinstance(source_quote, str):
+                raise _SemanticInvalid()
             grounded_source_quote = ""
             if (
                 isinstance(source_quote, str)
@@ -1791,6 +1795,13 @@ def _parse_compact_document_facts(
                 )
             ):
                 grounded_source_quote = source_quote
+            if not grounded_source_quote and review_issues is not None:
+                review_issues.append(_ReviewIssue(
+                    "recommendation quote not grounded",
+                    f"recommendation_ref={recommendation_ref} opinion_ref={ref}.source_quote",
+                    source_quote,
+                    "须逐字摘取所属文书的支持原句，不得改写或跨文书拼接，最长240字",
+                ))
             recommendations.append(
                 _Recommendation(
                     recommendation_ref,
@@ -1959,9 +1970,10 @@ def _merge_authoritative_event_group_splits(
     return tuple(normalized)
 
 
-def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -> tuple[_Episode, ...]:
+def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *,
+           review_issues: list[_ReviewIssue] | None = None) -> tuple[_Episode, ...]:
     if _uses_compact_document_contract(documents):
-        return _parse_compact_document_facts(payload, documents)
+        return _parse_compact_document_facts(payload, documents, review_issues=review_issues)
     raw_episodes = payload.get("episodes")
     non_target = payload.get("non_target_refs")
     unresolved = payload.get("unresolved_refs")
@@ -2133,10 +2145,18 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     return tuple(episodes)
 
 
+class _EpisodeGroundingViolation(_SemanticInvalid):
+    """第一阶段逐条落地问题；异常种类与原技术错误合同一致。"""
+
+    def __init__(self, issues: Sequence[_ReviewIssue]) -> None:
+        super().__init__()
+        self.issues = tuple(issues)
+
+
 def _episode_recommendations_are_grounded(
     episodes: Sequence[_Episode],
     documents: Sequence[Mapping[str, str]],
-) -> bool:
+) -> tuple[_ReviewIssue, ...]:
     """已解析建议的 source_quote 必须能由该建议所属意见文书逐字支持。
 
     问题证据：第一阶段模型可能给出 schema 完全合法、但在意见原文中并不存在
@@ -2145,21 +2165,25 @@ def _episode_recommendations_are_grounded(
     不再调用模型，错误会长期固化。
 
     具体判据见 _recommendation_quote_is_grounded（复用同一归一化，不做同义
-    替换或医学解释）；任何一条不通过即整体不通过。
+    替换或医学解释）；收集全部失败项，补核后仍须全部通过才能冻结。
     """
 
     documents_by_ref = {str(item["ref"]): item for item in documents}
+    issues: list[_ReviewIssue] = []
     for episode in episodes:
         for recommendation in episode.recommendations:
             document = documents_by_ref.get(recommendation.opinion_ref)
-            if document is None:
-                return False
-            if not _recommendation_quote_is_grounded(
+            if document is None or not _recommendation_quote_is_grounded(
                 quote=recommendation.source_quote,
                 source=str(document.get("text") or ""),
             ):
-                return False
-    return True
+                issues.append(_ReviewIssue(
+                    "recommendation quote not grounded",
+                    f"recommendation_ref={recommendation.recommendation_ref} opinion_ref={recommendation.opinion_ref}.source_quote",
+                    recommendation.source_quote,
+                    "source_quote须按该opinion_ref原文逐字摘录，不得改写；仅可引用给定文书，不得跨文书拼接",
+                ))
+    return tuple(issues)
 
 
 def _consultation_semantic_display_facts(
@@ -4349,23 +4373,40 @@ async def _execute_consultation_episode_rules(
         if frozen is not None:
             payload = dict(frozen.payload)
         else:
-            started = time.perf_counter()
-            phase = "call"
-            calls += 1
-            response = await llm_client.generate(_prompt(documents), **structured_output_kwargs(llm_client))
-            phase = "validate"
-            if not isinstance(response, Mapping):
-                raise _SemanticInvalid()
-            prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
-            api_time = response_time or (time.perf_counter() - started)
-            payload = dict(_payload(response))
+            # 仅可确定识别的引文落地违规新增一次补核；结构错误沿用原失败路径。
+            first_prompt = _prompt(documents)
+            attempt_prompt = first_prompt
+            for attempt in range(2):
+                started = time.perf_counter()
+                phase = "call"
+                calls += 1
+                response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
+                phase = "validate"
+                if not isinstance(response, Mapping):
+                    raise _SemanticInvalid()
+                usage = _usage(response)
+                prompt_tokens += usage[0]
+                completion_tokens += usage[1]
+                total_tokens += usage[2]
+                api_time += usage[3] or (time.perf_counter() - started)
+                payload = dict(_payload(response))
+                issues: list[_ReviewIssue] = []
+                episodes = _parse(payload, documents, review_issues=issues)
+                if not issues:
+                    issues.extend(_episode_recommendations_are_grounded(episodes, documents))
+                if not issues:
+                    break
+                error = _EpisodeGroundingViolation(issues)
+                if attempt:
+                    raise error
+                attempt_prompt = _review_retry_prompt(first_prompt, error, response, "输入：")
         phase = "validate"
         episodes = _parse(payload, documents)
         if frozen is None:
-            # 不可逐字落地的事实不得冻结：否则伪造摘录会被长期复用，
-            # 且逐建议执行核对与客户证据定位都建立在摘录可复现之上。
-            if not _episode_recommendations_are_grounded(episodes, documents):
-                raise _SemanticInvalid()
+            # 补核后的事实同样先通过逐条落地校验，才能冻结复用。
+            issues = _episode_recommendations_are_grounded(episodes, documents)
+            if issues:
+                raise _EpisodeGroundingViolation(issues)
             phase = "opinion_freeze"
             freeze_state = save_opinion_payload(
                 visit_id=visit_id,

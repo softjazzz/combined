@@ -396,7 +396,8 @@ async def test_first_stage_invalid_output_is_technical_error_after_one_retry():
     )
     assert result.status == "technical_error" and result.llm_call_count == 2
     assert result.reason == "model_invalid_output"
-    assert len(client.prompts) == 2 and client.prompts[0] == client.prompts[1]
+    assert len(client.prompts) == 2 and client.prompts[0] != client.prompts[1]
+    assert "上次校验失败" in client.prompts[1]
 
 
 @pytest.mark.asyncio

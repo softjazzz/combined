@@ -171,6 +171,59 @@ _ACTION_GROUPS = ("medications", "examinations", "therapies", "other_actions")
 _OPINION_ATTEMPTS = 2
 
 
+@dataclass(frozen=True)
+class _ReviewIssue:
+    reason: str
+    position: str
+    quote: str = ""
+    hint: str = "须逐字复制单个连续原文片段，不得删去中间文字后拼接或改写"
+
+
+class _ReviewViolation(ValueError):
+    """收集可修正的落地问题，异常文本沿用原失败原因。"""
+
+    def __init__(self, issues: Sequence[_ReviewIssue], *,
+                 fallback: tuple[str, str, tuple[str, ...]] | None = None) -> None:
+        super().__init__(issues[0].reason)
+        self.issues = tuple(issues)
+        self.fallback = fallback
+
+
+def _review_response_parts(response: Any) -> tuple[Any, Any]:
+    if not isinstance(response, Mapping):
+        return None, None
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        return (message.get("content") if isinstance(message, Mapping) else None,
+                choices[0].get("finish_reason"))
+    return response.get("content", response.get("text")), response.get("finish_reason")
+
+
+def _review_retry_prompt(prompt: str, error: Exception, response: Any, marker: str) -> str:
+    """仅补核附加有界、解码并脱敏的旧输出；首次提示不变。"""
+    content, finish = _review_response_parts(response)
+    if finish == "length":
+        hint = "上次输出超长被截断。请输出完整JSON，引文只取最短必要的连续原文，避免复读或长段照抄。"
+    else:
+        details = []
+        for issue in getattr(error, "issues", ())[:8]:
+            quote = redact_luxian_0609_patient_privacy(issue.quote)
+            shown = f"以「{quote[:60]}」开头" if len(quote) > 60 else f"「{quote}」"
+            details.append(redact_luxian_0609_patient_privacy(
+                f"{issue.position}：{shown}；{issue.reason}；{issue.hint}"))
+        hint = "上次校验失败：" + ("；".join(details) or
+            f"{str(error)}；检查规定的结构、字段和枚举，重新输出完整JSON")
+        try:
+            previous = json.dumps(json.loads(content), ensure_ascii=False)
+        except (ValueError, TypeError):
+            previous = ""
+        previous = redact_luxian_0609_patient_privacy(previous)
+        if previous and len(previous) <= 24000:
+            hint += "。上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + previous
+    return prompt.replace(marker, "\n" + hint + "\n" + marker, 1)
+
+
 def _required_followups(opinions: Sequence[str]) -> tuple[str, ...]:
     """显式复查项目必须单独核对；不据此推断是否执行或触发条件。"""
     targets = []
@@ -244,6 +297,7 @@ def parse_facts(
     response: Mapping[str, Any],
     documents: Sequence[Mapping[str, str]],
     roles: Mapping[str, Mapping[str, Any]],
+    *, review_issues: list[_ReviewIssue] | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
     """身份和覆盖仍整批严格校验；独立文书失败不能覆盖已核验的缺陷。"""
     payload = _payload(response)
@@ -254,10 +308,17 @@ def parse_facts(
         raise ValueError("invalid response schema")
     expected = {document["ref"]: document for document in documents}
     items = payload["documents"]
-    if (not all(isinstance(item, dict) and isinstance(item.get("ref"), str) for item in items)
-        or len(items) != len(expected)
-        or {item["ref"] for item in items} != set(expected)):
+    if not all(isinstance(item, dict) and isinstance(item.get("ref"), str) for item in items):
         raise ValueError("incomplete document coverage")
+    refs = [item["ref"] for item in items]
+    if len(items) != len(expected) or set(refs) != set(expected):
+        issues = [
+            _ReviewIssue("incomplete document coverage", f"documents.ref={ref}", ref,
+                         f"出现{refs.count(ref)}次；每个输入ref须恰好返回一次，补齐遗漏并删除重复或越界ref")
+            for ref in dict.fromkeys([*expected, *refs])
+            if refs.count(ref) != 1 or ref not in expected
+        ]
+        raise _ReviewViolation(issues)
     outcomes = []
     invalid = False
     for item in items:
@@ -265,7 +326,7 @@ def parse_facts(
         try:
             outcomes.append(_parse_document_facts(
                 {"content": json.dumps({"schema_version": SCHEMA_VERSION, "documents": [item]})},
-                (expected[ref],), {ref: roles[ref]},
+                (expected[ref],), {ref: roles[ref]}, review_issues=review_issues,
             ))
         except (ValueError, TypeError, KeyError, IndexError, AttributeError):
             invalid = True
@@ -285,6 +346,7 @@ def _parse_document_facts(
     response: Mapping[str, Any],
     documents: Sequence[Mapping[str, str]],
     roles: Mapping[str, Mapping[str, Any]],
+    *, review_issues: list[_ReviewIssue] | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
     payload = _payload(response)
     if (
@@ -320,6 +382,9 @@ def _parse_document_facts(
             continue
         applicable.append(ref)
         if not items:
+            if review_issues is not None:
+                review_issues.append(_ReviewIssue("incomplete action coverage", f"ref={ref}.actions", "",
+                    "逐项覆盖意见中的独立动作；无反馈的建议也须列项"))
             unresolved = True
             continue
         if len(items) > 24:
@@ -327,7 +392,7 @@ def _parse_document_facts(
         actions: set[str] = set()
         required_followups = _required_followups(role["opinion_quotes"])
         covered_followups: set[str] = set()
-        for group, item in items:
+        for item_index, (group, item) in enumerate(items, 1):
             if (
                 not isinstance(item, dict)
                 or set(item)
@@ -347,6 +412,16 @@ def _parse_document_facts(
             if kind not in _KINDS:
                 unresolved = True
                 continue
+            position = f"ref={ref}.{group}第{item_index}项"
+            if review_issues is not None:
+                for field, quote, valid in (
+                    ("action_quote", action, _in_quotes(action, role["opinion_quotes"]) or _in_quotes(action, role["feedback_quotes"])),
+                    ("feedback_quote", feedback, not feedback or _in_quotes(feedback, role["feedback_quotes"])),
+                    ("referent_quote", referent, not referent or _in_quotes(referent, role["opinion_quotes"])),
+                ):
+                    if not valid:
+                        review_issues.append(_ReviewIssue("role quotes not grounded", position + "." + field, quote,
+                            "须逐字摘自对应角色引文的单个连续片段，不得拼接、改写或跨说话者借用"))
             if not _in_quotes(action, role["opinion_quotes"]):
                 # 本科室后来新增的安排不属于本次会诊建议，不要求再次回应。
                 unresolved |= not _in_quotes(action, role["feedback_quotes"])
@@ -405,9 +480,13 @@ def _parse_document_facts(
             if kind in {"generic", "missing"}:
                 defects.append(ref)
             unresolved |= kind == "unknown"
+        if review_issues is not None and set(required_followups) != covered_followups:
+            for target in set(required_followups) - covered_followups:
+                review_issues.append(_ReviewIssue("incomplete action coverage", f"ref={ref}.examinations", target,
+                    "显式复查须单独列入examinations，不得并入用药动作；无反馈时仍列项"))
         unresolved |= not actions or set(required_followups) != covered_followups
     if seen != set(sources):
-        raise ValueError("incomplete document coverage")
+        raise _ReviewViolation([_ReviewIssue("incomplete document coverage", "documents.ref", "", "每个输入ref恰好返回一次，补齐遗漏并删除重复或越界ref")])
     if defects:
         return "non_compliant", "requirement_violated", tuple(dict.fromkeys(defects))
     if unresolved:
@@ -463,48 +542,68 @@ def parse_opinions(
         raise ValueError("invalid opinions schema")
     sources = {d["ref"]: d["text"] for d in _model_documents(documents)}
     output: dict[str, Mapping[str, Any]] = {}
-    for item in payload["documents"]:
+    issues: list[_ReviewIssue] = []
+    for index, item in enumerate(payload["documents"], 1):
         if not isinstance(item, dict) or set(item) != {
-            "ref",
-            "scope",
-            "suggestion_state",
-            "opinion_quotes",
-            "feedback_quotes",
+            "ref", "scope", "suggestion_state", "opinion_quotes", "feedback_quotes",
         }:
             raise ValueError("invalid opinion document")
         ref, scope, state = item["ref"], item["scope"], item["suggestion_state"]
-        if (
-            not isinstance(ref, str)
-            or ref not in sources
-            or ref in output
-            or scope not in {"ordinary", "non_target", "unknown"}
-            or state not in {"present", "unavailable", "no_action"}
-        ):
+        if (not isinstance(ref, str) or not isinstance(scope, str) or not isinstance(state, str)
+                or scope not in {"ordinary", "non_target", "unknown"}
+                or state not in {"present", "unavailable", "no_action"}):
             raise ValueError("invalid opinion identity")
+        position = f"documents第{index}项 ref={ref}"
+        if ref not in sources or ref in output:
+            issues.append(_ReviewIssue("invalid opinion identity", position + ".ref", ref,
+                                       "每个输入ref恰好返回一次，只能引用输入文书"))
+            continue
         for key, limit in (("opinion_quotes", 4000), ("feedback_quotes", 2400)):
-            quotes = _resolved_role_quotes(item[key], sources.get(ref, ""))
-            item = {**item, key: quotes}
-            if (
-                not isinstance(quotes, list)
-                or len(quotes) > 8
-                or not all(
-                    isinstance(q, str)
-                    and q
-                    and len(q) <= limit
-                    and _normalized(q) in _normalized(sources[ref])
-                    for q in quotes
-                )
-                or len(set(map(_normalized, quotes))) != len(quotes)
-            ):
+            original = item[key]
+            if not isinstance(original, list):
                 raise ValueError("role quotes not grounded")
+            for value in original:
+                if not isinstance(value, (str, dict)) or (isinstance(value, dict) and
+                        (set(value) != {"start", "end"} or not all(isinstance(v, str) for v in value.values()))):
+                    raise ValueError("role quotes not grounded")
+            quotes = _resolved_role_quotes(original, sources[ref])
+            if len(quotes) > 8:
+                raise ValueError("role quotes not grounded")
+            item = {**item, key: quotes}
+            seen_quotes: set[str] = set()
+            for quote_index, (raw, quote) in enumerate(zip(original, [
+                    _resolve_anchor_quote(q, sources[ref]) if isinstance(q, dict) else q for q in original]), 1):
+                # 拼接引文沿用原有还原规则，不改变逐字落地合同。
+                restored = _restore_contiguous_quotes([quote], sources[ref])
+                valid = all(isinstance(q, str) and q and len(q) <= limit
+                            and _normalized(q) in _normalized(sources[ref]) for q in restored)
+                duplicate = valid and (any(_normalized(q) in seen_quotes for q in restored)
+                                       or len(set(map(_normalized, restored))) != len(restored))
+                if not valid or duplicate:
+                    hint = "须逐字复制单个连续原文片段，不得删去中间文字后拼接或改写"
+                    if isinstance(raw, dict):
+                        count = _normalized(sources[ref]).count(_ANCHOR_ELLIPSIS.split(_normalized(raw["start"]))[0]) if raw["start"] else 0
+                        hint += f"；start出现{count}次，首尾锚点各至少4字，start须唯一，end须位于其后"
+                    if duplicate:
+                        hint += "；删除重复引文"
+                    issues.append(_ReviewIssue("role quotes not grounded",
+                        f"{position}.{key}第{quote_index}项", json.dumps(raw, ensure_ascii=False) if isinstance(raw, dict) else raw, hint))
+                if valid:
+                    seen_quotes.update(_normalized(q) for q in restored)
         if scope == "ordinary" and state == "present":
             if not item["opinion_quotes"]:
-                raise ValueError("missing opinion text")
+                issues.append(_ReviewIssue("missing opinion text", position + ".opinion_quotes", "",
+                                           "有建议时须摘录该文书中的意见原文"))
         elif item["opinion_quotes"] or item["feedback_quotes"]:
             raise ValueError("unexpected role text")
         output[ref] = item
-    if set(output) != set(sources):
-        raise ValueError("incomplete opinion document coverage")
+    for ref in sources:
+        if ref in output:
+            continue
+        issues.append(_ReviewIssue("incomplete opinion document coverage", f"ref={ref}", "",
+                                   "补齐该文书，两组引文仍须来自该份原文"))
+    if issues:
+        raise _ReviewViolation(issues)
     return output
 
 
@@ -537,6 +636,9 @@ async def check_disposition_record(
 
     calls = 0
     stage = "opinion"
+    stage_prompt = prompt
+    action_retried = False
+    action_fallback = None
     while True:
         started = perf_counter()
         try:
@@ -582,9 +684,13 @@ async def check_disposition_record(
                     return DispositionRecordOutcome(
                         "data_gap", "source_truncated", (), calls, *totals, elapsed
                     )
+                stage_prompt = prompt
                 stage = "action"
                 continue
-            status, reason, refs = parse_facts(response, documents, frozen)
+            issues: list[_ReviewIssue] = []
+            status, reason, refs = parse_facts(response, documents, frozen, review_issues=issues)
+            if issues and status == "data_gap":
+                raise _ReviewViolation(issues, fallback=(status, reason, refs))
             return DispositionRecordOutcome(status, reason, refs, calls, *totals, elapsed)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             logger.warning(
@@ -595,8 +701,17 @@ async def check_disposition_record(
                 describe_luxian_0609_llm_parse_failure(error, response),
             )
             if stage == "opinion" and calls < _OPINION_ATTEMPTS:
-                # 用户口径（2026-10-17）：第一阶段偶发复读整段原文、夹带推理致协议违规，重试 1 次；仍违规才拒收。
+                prompt = _review_retry_prompt(stage_prompt, error, response, "\nDOCUMENTS_JSON=")
                 continue
+            if stage == "action" and isinstance(error, _ReviewViolation):
+                if not action_retried:
+                    action_retried = True
+                    action_fallback = error.fallback
+                    prompt = _review_retry_prompt(stage_prompt, error, response, "\nROLE_FACTS_JSON=")
+                    continue
+                fallback = error.fallback or action_fallback
+                if fallback is not None:
+                    return DispositionRecordOutcome(*fallback, calls, *totals, elapsed)
             return extraction_failure(calls, "model_invalid_output")
 
 def safe_disposition_display_facts(raw: Any) -> dict[str, Any] | None:
