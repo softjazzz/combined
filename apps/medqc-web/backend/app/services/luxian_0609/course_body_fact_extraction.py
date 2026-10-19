@@ -26,6 +26,36 @@ _ATOM_KEYS = {"state", "quote"}
 _STATES = frozenset({"present", "absent", "unknown"})
 
 
+class _BodyViolation(ValueError):
+    """保留首个失败原因，同时带回同批全部可修正位置。"""
+
+    def __init__(self, issues: Sequence[tuple[str, str, Any]]) -> None:
+        # 失败项为空时沿用通用覆盖失败原因，避免构造异常本身出错。
+        super().__init__(issues[0][0] if issues else "incomplete coverage")
+        self.issues = tuple(issues)
+
+
+def _retry_prompt(prompt: str, error: Exception, response: Mapping[str, Any]) -> str:
+    choices = response.get("choices") if isinstance(response, Mapping) else None
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping) else {}
+    if choice.get("finish_reason") == "length":
+        hint = "输出超长被截断；quote只取最短必要的连续原文，不超过40字，重新输出完整JSON"
+    else:
+        details = []
+        for reason, location, quote in getattr(error, "issues", ())[:8]:
+            shown = redact_luxian_0609_patient_privacy(str(quote))
+            details.append(f"{location}：{reason}，上次值「{shown[:60]}」")
+        hint = ("；".join(details) + "。quote必须是该份材料中逐字存在的一句原文（不超过40字），须逐字复制单个连续片段，不得删去中间文字后拼接；"
+                "修正引用、文书绑定及覆盖，其他已核验状态不因补核改变" if details else "输出必须完全符合上述JSON约定")
+        try:
+            previous = json.dumps(json.loads(choice["message"]["content"]), ensure_ascii=False)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            previous = ""
+        if previous and len(previous) <= 24000:
+            hint += "。上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + redact_luxian_0609_patient_privacy(previous)
+    return prompt.replace("\nINPUT_JSON=", "\n上一次输出未通过校验：" + hint + "。请修正后重新输出完整JSON。\nINPUT_JSON=", 1)
+
+
 @dataclass(frozen=True)
 class CourseBodyDocument:
     document_ref: str
@@ -54,27 +84,41 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
         raise ValueError("invalid response schema")
     expected = {doc["document_ref"]: doc for doc in inputs}
     items = payload["documents"]
-    if not isinstance(items, list) or len(items) != len(expected):
+    if not isinstance(items, list):
         raise ValueError("invalid document coverage")
+    issues = []
+    if len(items) != len(expected):
+        issues.append(("invalid document coverage", "documents", f"应为{list(expected)}，实际{len(items)}项"))
     result: dict[str, str] = {}
-    for item in items:
+    seen: set[str] = set()
+    for index, item in enumerate(items):
         if not isinstance(item, dict) or set(item) != {"document_ref", "clinical_body"}:
             raise ValueError("invalid response document")
         ref = item["document_ref"]
-        if not isinstance(ref, str) or ref not in expected or ref in result:
+        if not isinstance(ref, str):
             raise ValueError("invalid document reference")
-        doc, atom = expected[ref], item["clinical_body"]
+        atom = item["clinical_body"]
         if not isinstance(atom, dict) or set(atom) != _ATOM_KEYS or atom["state"] not in _STATES:
             raise ValueError("invalid atom")
+        location = f"documents[{index}].document_ref={ref}"
+        if ref not in expected or ref in seen:
+            issues.append(("invalid document reference", location, f"出现{sum(i.get('document_ref') == ref for i in items if isinstance(i, dict))}次；须使用给定且不重复的document_ref"))
+            continue
+        seen.add(ref)
+        doc = expected[ref]
         state, quote = atom["state"], atom["quote"]
         if state == "present":
             # 引用须逐字出现在该份材料实际发送正文与原文中。
             if (not isinstance(quote, str) or not quote.strip()
                     or quote not in doc["body"] or quote not in doc["original_body"]):
-                raise ValueError("invalid same-material quotation")
+                issues.append(("invalid same-material quotation", location + ".clinical_body.quote", quote))
         elif quote is not None:
-            raise ValueError("absent or unknown must not quote")
+            issues.append(("absent or unknown must not quote", location + ".clinical_body.quote", quote))
         result[ref] = state
+    for ref in expected.keys() - seen:
+        issues.append(("invalid document coverage", f"document_ref={ref}", "遗漏；须逐份完整覆盖"))
+    if issues:
+        raise _BodyViolation(issues)
     return result
 
 
@@ -138,11 +182,8 @@ async def extract_course_body_facts(documents: Sequence[CourseBodyDocument], llm
                 return CourseBodyExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=calls,
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
                     api_time=api_time or perf_counter() - started)
-            hint = ("quote必须是该份材料中逐字存在的一句原文（不超过40字）"
-                    if str(error) == "invalid same-material quotation" else "输出必须完全符合上述JSON约定")
             # 提示放在输入资料之前，资料仍在末尾。
-            attempt_prompt = prompt.replace(
-                "\nINPUT_JSON=", "\n上一次输出未通过校验：" + hint + "。请修正后重新输出完整JSON。\nINPUT_JSON=", 1)
+            attempt_prompt = _retry_prompt(prompt, error, response)
     return CourseBodyExtraction("ready", states={**automatic, **{aliases[alias]: state for alias, state in resolved.items()}},
         llm_call_count=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
         api_time=api_time or perf_counter() - started)
