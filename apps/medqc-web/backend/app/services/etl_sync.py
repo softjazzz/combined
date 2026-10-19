@@ -2910,6 +2910,10 @@ def validate_pg_sync_plan(
                             table_cursor, table_schema, source_table, column
                         ) for column in required):
                             row_blockers.append("homology 源表缺少机构或稳定行标识字段")
+                        if table_name == "pathology_exam_report" and not _remote_column_exists(
+                            table_cursor, table_schema, source_table, "diagnosis"
+                        ):
+                            row_blockers.append("homology 病理报告缺少 diagnosis 字段")
                     # 当前固定病例锚点口径：discharge_record 负责日期过滤能力。
                     if source_table == "discharge_record":
                         date_field = str(item.get("date_field") or "update_time")

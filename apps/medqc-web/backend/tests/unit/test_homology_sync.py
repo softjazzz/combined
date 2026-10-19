@@ -10,12 +10,18 @@ from app.services.case_set_sync_service import CaseSetSyncService
 from app.services import etl_sync
 from app.database.models.cdm import (
     InpatDrugOrder, InpatNondrugOrder, LabtestMaster, LabtestItem, LabtestItemReport,
+    PathologyExamReport,
 )
+from app.services.document_assembly.assembler import assemble_document
 from app.services.homology_sync import resolve_homology_source
+from app.services.luxian_0609.source_evidence_reader import (
+    _SNAPSHOT_SOURCE_FIELDS, _normalize_snapshot_source_row,
+)
 
 
 @pytest.fixture
 def enabled(monkeypatch):
+    monkeypatch.delenv("HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED", raising=False)
     monkeypatch.setenv("HOMOLOGY_SYNC_ENABLED", "true")
     monkeypatch.setenv("HOMOLOGY_SOURCE_INSTITUTE_ID", "SOURCE-H1")
     monkeypatch.setenv("HOMOLOGY_TARGET_INSTITUTE_ID", "H1")
@@ -217,7 +223,10 @@ def test_shared_service_routes_maps_and_upserts_actual_cdm_fields(enabled, monke
         assert "5 mmol/L" in saved[-1]["record_content"]
 
 
-def test_zero_upstream_rows_replaces_old_case_snapshot_without_source_fallback(enabled):
+@pytest.mark.parametrize("table", ["inpat_drug_order", "pathology_exam_report"])
+def test_zero_upstream_rows_replaces_old_case_snapshot_without_source_fallback(enabled, monkeypatch, table):
+    if table == "pathology_exam_report":
+        monkeypatch.setenv("HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED", "true")
     calls, writes = [], []
 
     def fetch(**kwargs):
@@ -225,8 +234,8 @@ def test_zero_upstream_rows_replaces_old_case_snapshot_without_source_fallback(e
         return [TARGET.as_dict()] if kwargs["source_table"] == "mr" else []
 
     result = build_service(fetch, lambda **kwargs: writes.append(kwargs) or len(kwargs["records"]),
-                           ["inpat_drug_order"]).sync_case_set(
-        case_refs=[TARGET], table_names=["mr", "inpat_drug_order"],
+                           [table]).sync_case_set(
+        case_refs=[TARGET], table_names=["mr", table],
         policy_version="test", sync_scene="final",
     )
     assert len(calls) == 2
@@ -235,7 +244,10 @@ def test_zero_upstream_rows_replaces_old_case_snapshot_without_source_fallback(e
     assert result.synced_tables[-1]["rows_pulled"] == 0
 
 
-def test_transport_failure_does_not_fall_back_or_refresh_bundle(enabled):
+@pytest.mark.parametrize("table", ["inpat_drug_order", "pathology_exam_report"])
+def test_transport_failure_does_not_fall_back_or_refresh_bundle(enabled, monkeypatch, table):
+    if table == "pathology_exam_report":
+        monkeypatch.setenv("HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED", "true")
     calls, writes, refreshes = [], [], []
 
     def fetch(**kwargs):
@@ -246,8 +258,8 @@ def test_transport_failure_does_not_fall_back_or_refresh_bundle(enabled):
 
     with pytest.raises(RuntimeError, match="连接失败"):
         build_service(fetch, lambda **kwargs: writes.append(kwargs) or 1,
-                      ["inpat_drug_order"], refreshes).sync_case_set(
-            case_refs=[TARGET], table_names=["mr", "inpat_drug_order"],
+                      [table], refreshes).sync_case_set(
+            case_refs=[TARGET], table_names=["mr", table],
             policy_version="test", sync_scene="final",
         )
     assert len(calls) == 2
@@ -312,8 +324,23 @@ def test_homology_fetch_uses_readonly_session_and_full_source_coordinates(enable
     assert events[-2:] == ["cursor_closed", "connection_closed"]
 
 
-@pytest.mark.parametrize("missing_field", [None, "carried_datetime", "print_order_id"])
-def test_preflight_checks_routed_database_and_evidence_columns(enabled, monkeypatch, missing_field):
+@pytest.mark.parametrize("pathology_only,missing_field,missing_side", [
+    (False, None, "both"),
+    (False, "carried_datetime", "both"),
+    (False, "print_order_id", "both"),
+    (True, None, "both"),
+    (True, "diagnosis", "source"),
+    (True, "diagnosis", "target"),
+    (True, "pathology_exam_id", "source"),
+])
+def test_preflight_checks_routed_database_and_evidence_columns(
+    enabled, monkeypatch, pathology_only, missing_field, missing_side,
+):
+    models = MODELS
+    if pathology_only:
+        monkeypatch.setenv("HOMOLOGY_SYNC_ENABLED", "false")
+        monkeypatch.setenv("HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED", "true")
+        models = {"pathology_exam_report": PathologyExamReport}
     connections, closed, inspected = [], [], []
 
     class Cursor:
@@ -345,12 +372,13 @@ def test_preflight_checks_routed_database_and_evidence_columns(enabled, monkeypa
         return conn
 
     def meta(_session, name):
-        model = MODELS[name].__table__
-        return "cdm", [c for c in model.c.keys() if c != missing_field], [c.name for c in model.primary_key]
+        model = models[name].__table__
+        columns = [c for c in model.c.keys() if missing_side == "source" or c != missing_field]
+        return "cdm", columns, [c.name for c in model.primary_key]
 
     def column(cursor, schema, table, name):
         inspected.append((cursor.database, schema, table))
-        return name != missing_field
+        return missing_side == "target" or name != missing_field
 
     class Session:
         def close(self):
@@ -364,7 +392,7 @@ def test_preflight_checks_routed_database_and_evidence_columns(enabled, monkeypa
     monkeypatch.setattr(etl_sync, "_get_local_table_meta", meta)
     monkeypatch.setattr(etl_sync, "_remote_table_exists", lambda *_: True)
     monkeypatch.setattr(etl_sync, "_remote_column_exists", column)
-    result = etl_sync.validate_pg_sync_plan(tables=list(MODELS), mode="table")
+    result = etl_sync.validate_pg_sync_plan(tables=list(models), mode="table")
     assert result["executable"] is (missing_field is None)
     assert {c.database for c in connections} == {"clinical_data", "homology"}
     assert len(connections) == 2
@@ -460,3 +488,140 @@ def test_missing_source_institute_is_not_filled_for_homology(enabled, monkeypatc
             remote_url=route.remote_url, remote_schema=route.schema, source_table=route.table,
             case_refs=route.source_case_refs([TARGET]), readonly=True,
         )
+
+
+@pytest.fixture
+def pathology_enabled(enabled, monkeypatch):
+    monkeypatch.setenv("HOMOLOGY_SYNC_ENABLED", "false")
+    monkeypatch.setenv("HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED", "true")
+
+
+def test_pathology_switch_is_independent_of_existing_five_tables(pathology_enabled):
+    route = source("pathology_exam_report")
+    assert route is not None
+    assert parse_dsn(route.remote_url)["dbname"] == "homology"
+    assert route.required_target_columns == ("diagnosis",)
+    for table in (*MODELS, "pathology_exam_master", "consultation_record", "surgery_record",
+                  "daily_course_record", "senior_course_record", "discharge_record", "death_record"):
+        assert source(table) is None
+
+
+def test_existing_five_table_switch_does_not_enable_pathology(enabled):
+    assert source("pathology_exam_report") is None
+    assert source("inpat_nondrug_order") is not None
+
+
+def test_invalid_pathology_switch_reports_its_own_setting(pathology_enabled, monkeypatch):
+    monkeypatch.setenv("HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED", "invalid")
+    with pytest.raises(ValueError, match="HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED"):
+        source("pathology_exam_report")
+
+
+def test_verified_pathology_shape_reaches_cdm_rule_input_and_display(pathology_enabled, monkeypatch):
+    """复用已核对的 1+4 份报告和诊断长度；内容、标识和时间均为合成数据。"""
+    refs = (TARGET, CaseRef("H1", "P2", "V2"))
+    report_rows = [{
+        "institute_id": "SOURCE-H1", "patient_id": ref.patient_id, "visit_id": ref.visit_id,
+        "pathology_exam_id": f"SYN-EXAM-{i}", "pathology_id": f"SYN-PATH-{i}",
+        "diagnosis": "合" * length, "report_status": "审核",
+        "report_datetime": datetime(2026, 1, i + 1, 10, 20, 23),
+        "specimen_name": "合成标本", "eye_findings": "合成肉眼所见",
+        "microscope_findings": None, "record_content": None,
+    } for i, (ref, length) in enumerate(zip(
+        (refs[0], refs[1], refs[1], refs[1], refs[1]), (14, 268, 6, 48, 37)
+    ))]
+    calls, statements, saved, refreshes = [], [], [], []
+    model = PathologyExamReport.__table__
+
+    class Session:
+        def execute(self, sql, params):
+            statements.append((str(sql), params))
+            if str(sql).startswith("INSERT INTO cdm.pathology_exam_report "):
+                saved.extend(params if isinstance(params, list) else [params])
+
+    def meta(_session, table):
+        if table == "mr":
+            return "cdm", list(TARGET.as_dict()), list(TARGET.as_dict())
+        assert table == "pathology_exam_report"
+        return "cdm", list(model.c.keys()), list(model.primary_key.columns.keys())
+
+    monkeypatch.setattr(etl_sync, "_get_local_table_meta", meta)
+
+    def fetch(**kwargs):
+        calls.append(kwargs)
+        if kwargs["source_table"] == "mr":
+            return [ref.as_dict() for ref in refs]
+        if kwargs["source_table"] == "pathology_exam_report":
+            return report_rows
+        return []
+
+    def upsert(**kwargs):
+        return etl_sync.upsert_to_local(**kwargs, session=Session())
+
+    tables = ["mr", "pathology_exam_report", "consultation_record", "surgery_record"]
+    result = build_service(fetch, upsert, tables[1:], refreshes).sync_case_set(
+        case_refs=refs, table_names=tables, policy_version="test", sync_scene="final",
+    )
+    by_table = {call["source_table"]: call for call in calls}
+    routed = by_table["pathology_exam_report"]
+    assert parse_dsn(routed["remote_url"])["dbname"] == "homology"
+    assert routed["remote_schema"] == "graph3_homology"
+    assert routed["readonly"] is True
+    assert routed["case_refs"] == [CaseRef("SOURCE-H1", r.patient_id, r.visit_id) for r in refs]
+    for table in ("mr", "consultation_record", "surgery_record"):
+        assert parse_dsn(by_table[table]["remote_url"])["dbname"] == "clinical_data"
+        assert "readonly" not in by_table[table]
+    assert len(saved) == 5
+    assert len({(r["patient_id"], r["visit_id"], r["pathology_exam_id"]) for r in saved}) == 5
+    assert [len(row["diagnosis"]) for row in saved] == [14, 268, 6, 48, 37]
+    assert all(row["institute_id"] == "H1" for row in saved)
+    assert all(row["institute_id"] == "SOURCE-H1" for row in report_rows)
+    assert all(row["report_status"] == "审核" for row in saved)
+    assert [row["report_datetime"] for row in saved] == [row["report_datetime"] for row in report_rows]
+    deletes = [(sql, params) for sql, params in statements if sql.startswith("DELETE FROM")]
+    assert len(deletes) == 1 and deletes[0][0].startswith("DELETE FROM cdm.pathology_exam_report ")
+    assert deletes[0][1] == [ref.as_dict() for ref in refs]
+    assert refreshes
+    assert result.source_rows_by_table["pathology_exam_report"][1]["diagnosis"] == "合" * 268
+    for row in saved:
+        rule_row = _normalize_snapshot_source_row("pathology_exam_report", {
+            k: v for k, v in row.items() if k in _SNAPSHOT_SOURCE_FIELDS["pathology_exam_report"]
+        })
+        assert rule_row["diagnosis"] == row["diagnosis"]
+        assert row["diagnosis"] in assemble_document("pathology_exam_report", row).assembled_text
+
+
+@pytest.mark.parametrize("problem", ["missing_key", "duplicate_key", "missing_diagnosis_field"])
+def test_invalid_pathology_rows_stop_before_report_replacement(pathology_enabled, problem):
+    row = {"institute_id": "SOURCE-H1", "patient_id": "P1", "visit_id": "V1",
+           "pathology_exam_id": "SYN-EXAM", "diagnosis": "合成诊断"}
+    rows = [row]
+    if problem == "missing_key":
+        del row["pathology_exam_id"]
+    elif problem == "duplicate_key":
+        rows.append(dict(row))
+    else:
+        del row["diagnosis"]
+    writes, refreshes = [], []
+
+    def fetch(**kwargs):
+        return [TARGET.as_dict()] if kwargs["source_table"] == "mr" else rows
+
+    with pytest.raises(ValueError):
+        build_service(fetch, lambda **kw: writes.append(kw) or len(kw["records"]),
+                      ["pathology_exam_report"], refreshes).sync_case_set(
+            case_refs=[TARGET], table_names=["mr", "pathology_exam_report"],
+            policy_version="test", sync_scene="final",
+        )
+    assert [w["table_name"] for w in writes] == ["mr"]
+    assert refreshes == []
+
+
+def test_unfinalized_pathology_report_can_have_empty_diagnosis(pathology_enabled):
+    route = source("pathology_exam_report")
+    result = route.adapt_rows([{
+        "institute_id": "SOURCE-H1", "patient_id": "P1", "visit_id": "V1",
+        "pathology_exam_id": "SYN-EXAM", "diagnosis": None, "report_status": "待报告",
+    }], [TARGET])
+    assert result[0]["diagnosis"] is None
+    assert result[0]["report_status"] == "待报告"

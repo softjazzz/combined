@@ -1,4 +1,4 @@
-"""已验证的医嘱、检验来源适配；其他文书仍由原同步来源负责。"""
+"""已验证的医嘱、检验及独立启用的病理报告来源适配。"""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ HOMOLOGY_TABLE_KEYS = {
     "labtest_master": ("test_id",),
     "labtest_item": ("test_id", "test_item_id"),
     "labtest_item_report": ("test_id", "print_order_id"),
+    "pathology_exam_report": ("pathology_exam_id",),
 }
 ORDER_EVIDENCE_TIMES = ("reviewed_datetime", "carried_datetime", "canceled_datetime")
 _HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
@@ -41,6 +42,8 @@ class HomologySource:
             return (*ORDER_EVIDENCE_TIMES, "planned_end_datetime")
         if self.table == "labtest_item_report":
             return ("report_status", "item_id", "report_time")
+        if self.table == "pathology_exam_report":
+            return ("diagnosis",)
         return ()
 
     def source_case_refs(self, case_refs: Sequence[CaseRef]) -> list[CaseRef]:
@@ -69,6 +72,8 @@ class HomologySource:
             if unique_key in seen:
                 raise ValueError(f"homology {self.table} 存在重复稳定标识，未替换本地快照")
             seen.add(unique_key)
+            if self.table == "pathology_exam_report" and "diagnosis" not in row:
+                raise ValueError("homology 病理报告缺少 diagnosis 字段，未替换本地快照")
             row["institute_id"] = self.target_institute_id
             if not row.get("inpat_no") and row.get("inpatno"):
                 row["inpat_no"] = row["inpatno"]
@@ -95,11 +100,17 @@ class HomologySource:
 def resolve_homology_source(*, table_name: str, remote_url: str) -> HomologySource | None:
     if table_name not in HOMOLOGY_TABLE_KEYS:
         return None
-    enabled = os.getenv("HOMOLOGY_SYNC_ENABLED", "false").strip().lower()
+    # 病理报告单独启用，避免补诊断时连带改变医嘱、检验或其他文书的来源。
+    flag = (
+        "HOMOLOGY_PATHOLOGY_REPORT_SYNC_ENABLED"
+        if table_name == "pathology_exam_report"
+        else "HOMOLOGY_SYNC_ENABLED"
+    )
+    enabled = os.getenv(flag, "false").strip().lower()
     if enabled in {"", "0", "false", "no", "off"}:
         return None
     if enabled not in {"1", "true", "yes", "on"}:
-        raise ValueError("HOMOLOGY_SYNC_ENABLED 必须是布尔值")
+        raise ValueError(f"{flag} 必须是布尔值")
     source_institute = os.getenv("HOMOLOGY_SOURCE_INSTITUTE_ID", "").strip()
     target_institute = os.getenv("HOMOLOGY_TARGET_INSTITUTE_ID", "").strip()
     if not source_institute or not target_institute:
