@@ -3279,7 +3279,10 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
             },
         ),
     )
-    client = _Client([])
+    # 2026-10-19：06-01-05 不再走关键词快速通道，是否分析由模型事实与分析核验决定。
+    client = _Client([
+        _fact_response(("LX0609-06-01-05",), semantic_state="absent", positive_state="positive")
+    ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-06-01-05",),
@@ -3298,8 +3301,8 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
     assert result.decisions[0].fact_refs
     facts = dict(result.customer_display_facts)["LX0609-06-01-05"]
     assert facts["subject"] == "ct_mri"
@@ -3322,8 +3325,9 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
         (item["source_type"], item["source_document_id"])
         for item in canonical["customer_evidence"]
     } == {
+        # 模型判 absent 时协议不允许引用病程（2026-10-19 起不再由关键词挂入“仅记结果”的病程）；
+        # 未分析病程的修改建议由分析核验的 gap_refs 给出。
         ("exam_master", "ct-report-012"),
-        ("daily_course_record", "course-012"),
     }
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
@@ -3838,12 +3842,12 @@ async def test_lx0609_015_same_culture_action_remains_compliant(monkeypatch):
         (
             "阳性：右肺占位。",
             "胸部CT报告提示右肺占位，结合临床考虑肺部肿瘤，计划进一步检查。",
-            None,
-            None,
-            None,
+            "applicable",
+            "present",
+            "positive",
             "compliant",
             "requirement_satisfied",
-            0,
+            1,
         ),
         (
             "未见明确阳性表现。",
@@ -5699,7 +5703,8 @@ async def test_explicit_report_and_culture_action_phrases_use_python_without_mod
             ),
         },),
     )
-    client = _Client([])
+    # 06-01-05 交模型事实抽取（2026-10-19）；其余三条仍由明确短语确定、不调用模型。
+    client = _Client([_fact_response(("LX0609-06-01-05",))])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"),
@@ -5722,9 +5727,9 @@ async def test_explicit_report_and_culture_action_phrases_use_python_without_mod
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -5751,7 +5756,9 @@ async def test_explicit_result_only_course_closes_analysis_rules_without_model(m
         },),
         evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
     )
-    client = _Client([])
+    client = _Client([
+        _fact_response(("LX0609-06-01-05",), semantic_state="absent", positive_state="positive")
+    ])
     rule_ids = ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -5770,8 +5777,8 @@ async def test_explicit_result_only_course_closes_analysis_rules_without_model(m
         "satisfied",
         "defect",
     ]
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 def test_pending_or_conditional_report_phrases_are_not_strong_evidence():
@@ -6943,10 +6950,15 @@ async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch, ct_
     class CtClient:
         def __init__(self) -> None:
             self.calls = 0
+            self.other_calls = 0
 
         async def generate(self, prompt, **_kwargs):
+            if "unmatched_current_clause_ids" not in prompt:
+                # 06-01-05 在前置读取完成后交模型事实抽取/分析核验（2026-10-19）。
+                self.other_calls += 1
+                return {"content": json.dumps(_fact_response(("LX0609-06-01-05",))),
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}}
             self.calls += 1
-            assert "unmatched_current_clause_ids" in prompt
             await barrier.arrive()
             return {
                 "content": json.dumps(
@@ -7021,9 +7033,9 @@ async def test_ct_review_and_finding_relevance_run_concurrently(monkeypatch, ct_
     )
 
     assert barrier.arrivals == 2
-    assert client.calls == 1
-    assert result.llm_call_count == 2
-    assert result.total_tokens == 132
+    assert client.calls == 1 and client.other_calls >= 1
+    assert result.llm_call_count == 2 + client.other_calls
+    assert result.total_tokens == 132 + 120 * client.other_calls
     assert [item.rule_id for item in result.decisions] == [
         "LX0609-06-01-01",
         "LX0609-06-01-05",
@@ -7150,3 +7162,20 @@ async def test_culture_candidate_report_material_keeps_identity_checks(
     else:
         assert result.llm_call_count == 0
         assert [item.reason_code for item in result.decisions] == ["association_failed"] * 2
+
+
+def test_finding_analysis_rule_never_closes_by_keyword_fast_path():
+    """2026-10-19（C07）：06-01-05 是否已分析由模型与分析核验决定；关键词既漏真实分析也绕过从严口径。"""
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({
+                "exam_name": "胸部CT", "exam_time": "2026-04-26 08:00:00",
+                "report_time": "2026-04-26 12:00:00", "exam_conclusion": "阳性：右肺占位。",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "胸部CT报告提示右肺占位。结合咳嗽咯血，予抗感染并请胸外科会诊。",
+            },),
+        }
+    )
+    assert exam_lab._strong_semantic_fact(rule_id="LX0609-06-01-05", projection=projection) is None

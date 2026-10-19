@@ -1966,6 +1966,10 @@ def _strong_semantic_fact(
             )
         if event.positive_hint != "positive":
             return None
+        if rule_id == "LX0609-06-01-05":
+            # 用户口径（2026-10-12）：是否已分析由逐份病程的分析核验固定；关键词既会
+            # 漏掉未用固定短语的真实分析（C07），也会绕过从严口径与笼统表述过滤。
+            return None
         positive_state = "positive"
     else:
         positive_state = "not_relevant"
