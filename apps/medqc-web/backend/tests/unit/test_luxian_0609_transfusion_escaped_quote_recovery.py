@@ -75,3 +75,16 @@ async def test_literal_backslash_in_source_is_preserved_without_recovery():
     result = await classify_transfusion_course_records(source, client)
     assert result.state == "present"
     assert result.llm_call_count == client.calls == 1
+
+
+def test_literal_newline_against_crlf_source_is_escape_error_not_binding_failure():
+    """C20（2026-10-19）：原文回车换行、引文写成字面量反斜杠 n，属转义错误，应走转义补核而非直接判绑定失败。"""
+    import app.services.luxian_0609.transfusion_course_presence as module
+
+    content = "今日输注红细胞2U，过程顺利。\r\n医生签名：某医师"
+    quote = "今日输注红细胞2U，过程顺利。" + chr(92) + "n医生签名：某医师"  # 字面量反斜杠 n
+    response = {"content": json.dumps({"schema_version": module.SCHEMA_VERSION, "records": [
+        {"index": 0, "kind": "record", "quote": quote}]}, ensure_ascii=False)}
+    with pytest.raises(module._EscapedQuoteBinding) as caught:
+        module._records(response, [{"index": 0, "title": "病程", "content": content}])
+    assert caught.value.indices == (0,)

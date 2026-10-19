@@ -51,6 +51,22 @@ class _QuoteIssue:
     local_doc_id: str
     field_name: str
     quote: str
+    # 引文开头与原文逐字一致的字数；之后即断点（补核据此指明位置，C07 用省略号跨段拼接）。
+    matched_prefix: int = 0
+
+
+_ELLIPSIS = ("...", "…", "。。。")
+
+
+def _matched_prefix(quote: str, text: str) -> int:
+    low, high = 0, len(quote)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if quote[:middle] in text:
+            low = middle
+        else:
+            high = middle - 1
+    return low
 
 
 class _QuoteViolation(ValueError):
@@ -212,7 +228,7 @@ def _parse(
                 # 引用必须是本文书发送正文中的连续原文；语义由模型负责。
                 if not quote.strip() or quote not in document.text:
                     # 继续收集同一应答的全部引文失败项，补核时一次指明。
-                    issues.append(_QuoteIssue(local_doc_id, field_name, quote))
+                    issues.append(_QuoteIssue(local_doc_id, field_name, quote, _matched_prefix(quote, document.text)))
             elif quote != "":
                 raise ValueError("nonempty absent assertion quote")
             values[f"{field_name}_state"] = state
@@ -250,7 +266,13 @@ def _retry_hint(error: Exception, previous_content: Any) -> str:
         quote = redact_luxian_0609_patient_privacy(issue.quote) if issue.quote.strip() else ""
         quote_ref = ((f"以「{_clip(quote)}」开头的{issue.field_name}_quote" if len(quote) > MAX_RETRY_QUOTE_CHARS
                       else f"{issue.field_name}_quote「{quote}」") if quote else f"{issue.field_name}_quote为空")
-        details.append(f"{issue.local_doc_id}的{quote_ref}不是该份文书的逐字连续原文")
+        detail = f"{issue.local_doc_id}的{quote_ref}不是该份文书的逐字连续原文"
+        broken = redact_luxian_0609_patient_privacy(issue.quote[issue.matched_prefix:issue.matched_prefix + 12])
+        if issue.quote.strip() and 0 < issue.matched_prefix < len(issue.quote):
+            detail += f"：前{issue.matched_prefix}字与原文一致，从「{broken}」起与原文不符"
+        if any(mark in issue.quote for mark in _ELLIPSIS):
+            detail += "；引文用省略号跨段拼接，不允许，只保留其中一段连续原文"
+        details.append(detail)
     hint = (
         _GENERIC_RETRY_HINT + "未通过的引文：" + "；".join(details)
         + "。只修正这些引文，其余判断不因补核改变。"

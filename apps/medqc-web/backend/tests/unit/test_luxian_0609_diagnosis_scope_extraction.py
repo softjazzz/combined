@@ -604,3 +604,15 @@ def test_repeated_uncertainty_evidence_still_cannot_anchor_repeated_problem():
     result = run(client, [{"content": body}])
     assert result.reason_code == "model_invalid_output" and result.llm_call_count == 2
     assert "problem_quote「尿崩症」出现2次" in client.calls[1][0]
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("患者现肾功能衰竭合并心力衰竭可能大", True),
+    ("考虑肺部感染可能较大。", True),
+    ("可能大量出血，需密切观察", False),
+])
+def test_suffix_possibility_variants_count_as_uncertainty(text, expected):
+    """C06（2026-10-19）：“X可能大/可能较大”与“可能性大”同义；“可能大量”等非后缀用法不算。"""
+    from app.services.luxian_0609.extended_document.diagnosis_scope_extraction import _has_uncertainty_marker
+
+    assert _has_uncertainty_marker(text) is expected

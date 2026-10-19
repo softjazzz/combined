@@ -375,3 +375,17 @@ async def test_structural_failure_retry_keeps_generic_hint_without_previous_outp
     retry_prompt = client.calls[1][0]
     assert "上次输出未通过逐字引用或字段校验" in retry_prompt
     assert "未通过的引文" not in retry_prompt and "PREVIOUS_OUTPUT" not in retry_prompt
+
+
+def test_retry_hint_points_to_break_and_rejects_ellipsis_splice():
+    """C07（2026-10-19）：引文用省略号跨段拼接时，补核指明断点并禁止省略号拼接，避免原样重复。"""
+    import app.services.luxian_0609.extended_document.diagnosis_change_extraction as module
+
+    text = "患者痰培养提示鲍曼不动杆菌。今日查房。结合会诊意见，目前修正诊断为：肺部感染。"
+    quote = "患者痰培养提示鲍曼不动杆菌。...结合会诊意见，目前修正诊断为：肺部感染。"
+    prefix = module._matched_prefix(quote, text)
+    assert prefix == len("患者痰培养提示鲍曼不动杆菌。")
+    error = module._QuoteViolation([module._QuoteIssue("doc_01", "reason", quote, prefix)])
+    hint = module._retry_hint(error, "{}")
+    assert f"前{prefix}字与原文一致" in hint and "从「...结合会诊意见" in hint
+    assert "省略号跨段拼接" in hint

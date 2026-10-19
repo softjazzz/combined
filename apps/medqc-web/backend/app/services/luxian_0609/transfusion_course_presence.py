@@ -199,7 +199,8 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
         if _binding_text(item["quote"]) != _binding_text(expected[index]):
             # 只识别可确定的转义错误来触发同批补核，不能直接采用替换后的引用。
             unescaped = re.sub(r"\\([nrt])", lambda match: {"n": "\n", "r": "\r", "t": "\t"}[match[1]], item["quote"])
-            if unescaped == expected[index]:
+            # 与绑定核对同口径忽略空白：原文为回车换行时把换行抄成字面量反斜杠n也属转义错误（C20，2026-10-19）。
+            if _binding_text(unescaped) == _binding_text(expected[index]):
                 escaped_indices.append(index)
             else:
                 raise ValueError("invalid document binding")
