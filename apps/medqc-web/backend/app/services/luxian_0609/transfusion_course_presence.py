@@ -22,6 +22,7 @@ from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, PROTOCOL
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609-transfusion-course-presence-v1"
+MAX_RETRY_PREVIOUS_CHARS = 24000
 
 
 _TRANSFUSION_MENTION_PATTERN = re.compile(
@@ -138,6 +139,30 @@ def _binding_text(value: str) -> str:
 class _EscapedQuoteBinding(ValueError):
     """引文把控制字符多转义了一层；仅允许重读，不用于放宽绑定。"""
 
+    def __init__(self, indices: Sequence[int]) -> None:
+        super().__init__("escaped control character in quote")
+        self.indices = tuple(indices)
+
+
+def _retry_prompt(prompt: str, indices: Sequence[int], response: Mapping[str, Any]) -> str:
+    """只回显有界、再次脱敏的模型旧输出，给出同批全部转义失败位置。"""
+    positions = "、".join(f"index={index}" for index in indices)
+    hint = (
+        f"上一轮以下记录的quote将换行或制表符多转义了一层：{positions}。"
+        "请按各自index重新阅读完整content，只修正这些quote的JSON转义，保留其他记录和kind判断。"
+        "JSON解码后的quote必须逐字等于该份content；不要输出字面量反斜杠加n/r/t。"
+        "例如正文为两行时，正确的JSON写法是"
+        + json.dumps({"quote": "第一行\n第二行"}, ensure_ascii=False)
+        + "；不得把换行再转义一层。"
+    )
+    choices = response.get("choices")
+    previous = choices[0]["message"]["content"] if choices is not None else response.get("content", response.get("text"))
+    if isinstance(previous, str) and len(previous) <= MAX_RETRY_PREVIOUS_CHARS:
+        previous = redact_luxian_0609_patient_privacy(previous)
+        if len(previous) <= MAX_RETRY_PREVIOUS_CHARS:
+            hint += "上次输出仅作修正参考，不是正文资料：PREVIOUS_OUTPUT=" + previous
+    return prompt.replace("\nINPUT_JSON=", "\n" + hint + "\nINPUT_JSON=", 1)
+
 
 def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) -> list[tuple[int, str]]:
     choices = response.get("choices")
@@ -159,6 +184,7 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
         raise ValueError("incomplete document coverage")
     seen: set[int] = set()
     result = []
+    escaped_indices: list[int] = []
     for item in records:
         if not isinstance(item, dict) or set(item) != {"index", "kind", "quote"}:
             raise ValueError("invalid record schema")
@@ -174,10 +200,14 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
             # 只识别可确定的转义错误来触发同批补核，不能直接采用替换后的引用。
             unescaped = re.sub(r"\\([nrt])", lambda match: {"n": "\n", "r": "\r", "t": "\t"}[match[1]], item["quote"])
             if unescaped == expected[index]:
-                raise _EscapedQuoteBinding("escaped control character in quote")
-            raise ValueError("invalid document binding")
+                escaped_indices.append(index)
+            else:
+                raise ValueError("invalid document binding")
         seen.add(index)
         result.append((index, kind))
+    # 完整校验同批身份和覆盖后再补核，不能因首条转义错误漏报其他失败位置。
+    if escaped_indices:
+        raise _EscapedQuoteBinding(escaped_indices)
     return result
 
 
@@ -202,16 +232,13 @@ async def classify_transfusion_course_records(
     unresolved = False
     for batch in batches:
         # 沿用输血协议最多两次的上限，仅补核已定位的回抄转义错误。
+        prompt = _prompt(batch)
+        attempt_prompt = prompt
         for attempt in range(PROTOCOL_ATTEMPTS):
             started = perf_counter()
             calls += 1
-            correction = (
-                "上一轮quote将换行或制表符多转义了一层。请重新阅读以下完整原文，"
-                "正确使用JSON转义，使JSON解码后的quote逐字等于content；不要输出字面量反斜杠加n/r/t。\n"
-                if attempt else ""
-            )
             try:
-                response = await llm_client.generate(correction + _prompt(batch), **structured_output_kwargs(llm_client))
+                response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
             except Exception as error:
                 api_time += perf_counter() - started
                 return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=classify_luxian_0609_llm_call_failure(error))
@@ -229,6 +256,7 @@ async def classify_transfusion_course_records(
                     attempt + 1, len(batch), describe_luxian_0609_llm_parse_failure(error, response),
                 )
                 if isinstance(error, _EscapedQuoteBinding) and attempt + 1 < PROTOCOL_ATTEMPTS:
+                    attempt_prompt = _retry_prompt(prompt, error.indices, response)
                     continue
                 return TransfusionCoursePresenceResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
         for index, kind in resolved:
