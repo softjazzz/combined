@@ -178,6 +178,33 @@ async def test_native_exam_within_budget_keeps_original_single_projection(monkey
     )
 
 
+@pytest.mark.asyncio
+async def test_native_exam_single_projection_keeps_long_course_body_uncut(monkeypatch):
+    """总上下文未超限时，长病程不得逐行裁去中段（首次查房的诊断依据常在中段）。"""
+
+    rows = _rows(2, 3000)
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=rows["labtest_master"],
+        course_rows=rows["daily_course_record"],
+        evaluation_horizon_rows=({"horizon_date": "2026-12-31"},),
+    )
+    client = _AbsentClient()
+    rule = "LX0609-06-03-03"
+    await native.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=(rule,),
+        wrapper_rules=(),
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=(rule,),
+    )
+    assert len(client.prompts) == 1
+    assert "已裁剪" not in client.prompts[0]
+    assert all(f"末尾标记{index}。" in client.prompts[0] for index in range(2))
+
+
 def test_projection_batches_keep_long_body_and_singleton_failure():
     from app.services.luxian_0609.exam_lab_projection_batching import (
         build_exam_lab_projection_batches,

@@ -21,7 +21,9 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .exam_lab_course_time import (
+    assess_course_response,
     assess_fact_responses,
+    course_restates_event_result,
     has_time_sources,
     scan_unplaced_time_state,
 )
@@ -39,6 +41,7 @@ from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
     ExamLabTextProjection,
+    _course_refs_for_rule_event,
     _event_identity_mentions_course,
     build_exam_lab_fact_prompt,
     build_exam_lab_fact_response_format,
@@ -1360,6 +1363,44 @@ def _unplaced_record_gap_outcome(
     return None
 
 
+def _uncited_verbatim_in_window_ref(
+    *,
+    rule_id: str,
+    fact: ExamLabEventFact,
+    projection: ExamLabTextProjection,
+    event: Any,
+) -> str | None:
+    """模型已判结果已记录、但所引病程不能证明 24 小时内时，补查同事件目录内未引用的病程。
+
+    同一结果常被多份病程复述，模型只引用其中时间无法对账的一份会使结论随机落入
+    资料不足。只接受逐字复述整段本事件结果、且记录/提交时间在窗口内的文书；
+    不以身份提及或关键词补证，也不改变 absent/unknown 的模型判断。
+    """
+
+    if event is None or event.report_time is None or not event.result_texts:
+        return None
+    cited = set(fact.course_doc_refs)
+    texts = projection.course_texts or {}
+    for ref in _course_refs_for_rule_event(
+        projection, rule_id=rule_id, event_position=fact.event_position
+    ):
+        if ref in cited:
+            continue
+        text = texts.get(ref, "")
+        if not course_restates_event_result(event.result_texts, text):
+            continue
+        response = assess_course_response(
+            ref=ref,
+            projection=projection,
+            report_time=event.report_time,
+            result_texts=event.result_texts,
+            course_text=text,
+        )
+        if response.kind == "in_window":
+            return ref
+    return None
+
+
 def _post_report_response_outcome(
     *,
     rule_id: str,
@@ -1383,6 +1424,17 @@ def _post_report_response_outcome(
     )
     if any(item.kind == "in_window" for item in responses):
         return _ExamLabOutcome(rule_id, "compliant", "exam_lab_text_fact", refs)
+    supplemented = _uncited_verbatim_in_window_ref(
+        rule_id=rule_id, fact=fact, projection=projection, event=event
+    )
+    if supplemented is not None:
+        safe_ref = (projection.safe_refs or {}).get(supplemented)
+        return _ExamLabOutcome(
+            rule_id,
+            "compliant",
+            "exam_lab_text_fact",
+            tuple(dict.fromkeys((*refs, safe_ref))) if safe_ref else refs,
+        )
     if projection.course_projection_truncated:
         return _ExamLabOutcome(
             rule_id, "data_gap", "course_projection_incomplete", refs
@@ -2678,6 +2730,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     # 事件级窗口选择由事实投影模块统一完成。旧的最早医嘱预筛
                     # 最多只保留4份病程，会系统性丢失后续检查事件。
                     rows_by_source=rows_by_source,
+                    # 不逐行裁剪：首次查房的诊断依据常在长文中段，裁掉后模型只能
+                    # 凭残文判“未分析”。总上下文超限时改走完整事件分批。
+                    max_row_chars=None,
                     horizon_unavailable_reason=(
                         horizon_observation.reason_code
                         if horizon_observation is not None
