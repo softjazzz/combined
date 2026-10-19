@@ -308,3 +308,43 @@ async def test_final_attempt_unverifiable_quote_skips_only_that_course():
     outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
     # 该事件有一份病程未核到：不固定为“未分析”，沿用主抽取；整步不再失败。
     assert outcome.state == "ready" and outcome.llm_call_count == 2 and outcome.analysed_refs == {}
+
+
+def _chest_projection(course_text):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:30:00",
+                 "report_time": "2026-08-18 13:30:00", "exam_conclusion": "慢支炎、肺气肿；双肺感染，建议治疗后复查。"},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-18 15:00:00", "record_content": course_text},
+            ),
+        }
+    )
+    return apply_relevance_hints(projection, {1: "positive"})
+
+
+INFECTION_PLAN = "患者仍呼吸困难，双肺闻及较多湿啰音，肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗。"
+
+
+@pytest.mark.asyncio
+async def test_same_clinical_problem_without_naming_this_exam_is_not_analysis():
+    """用户口径（2026-10-19）：病程未提本次检查、也未写报告所见，只与报告共用“感染”二字，不算分析；PCT 不是 CT。"""
+
+    projection = _chest_projection(INFECTION_PLAN)
+    ref = _report_ref(projection)
+    answer = _answer(ref, "management_linked", "肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗", span="双肺感染")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
+    assert outcome.gap_refs == {1: ((ref, "plan_without_basis"),)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lead", ["胸部CT提示双肺感染，", "复查影像示双肺感染，", "双肺感染，"])
+async def test_naming_this_exam_or_echoing_report_finding_keeps_analysis(lead):
+    projection = _chest_projection(lead + INFECTION_PLAN)
+    ref = _report_ref(projection)
+    answer = _answer(ref, "management_linked", "肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗", span="双肺感染")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.analysed_refs == {1: (ref,)}

@@ -19,9 +19,10 @@ from dataclasses import dataclass, field, replace
 import json
 import re
 from time import perf_counter
+import unicodedata
 from typing import Any, Mapping, Sequence
 
-from .ct_order_course_consistency import _exam_key
+from .ct_order_course_consistency import _exam_key, _normalized_name, _order_modality
 from .exam_lab_fact_extraction import (
     ExamLabEventFact,
     ExamLabTextProjection,
@@ -55,6 +56,14 @@ GAP_KINDS = {
     "generic_plan": "plan_without_basis",
 }
 MAX_GAP_NOTES_PER_EVENT = 8
+# 用户口径（2026-10-19）：病程须提到本次检查（同一模态），或逐字写出本次报告所见的
+# 至少 MIN_FINDING_ECHO 个连续字，才算针对本次报告的分析；只对同一临床问题作判断处置、
+# 与报告仅有“感染”等通用词相同，不成立。
+MIN_FINDING_ECHO = 4
+_EXAM_MENTION_PATTERNS = {
+    "ct": r"(?<![a-z])cta?(?![a-z])",
+    "mr": r"(?<![a-z])mri?(?![a-z])|磁共振|核磁",
+}
 _REJECTED_ANALYSIS_GAPS = {
     "finding_linked": "listing_only",
     "prior_comparison": "listing_only",
@@ -355,6 +364,22 @@ def _own_chars(quote: str, report: str, lead_sites: Sequence[str] = ()) -> int:
     return sum(1 for char in own if char.isalnum())
 
 
+def _course_names_exam(projection: ExamLabTextProjection, position: int, course: str, span: str) -> bool:
+    """整份病程是否提到本次检查的模态（或“影像”），或逐字写出报告片段中的具体所见。"""
+    # 无事件身份（旧式手工投影）时不限定模态，CT 与 MRI 写法均接受。
+    events = events_for_family(projection, "exam") if hasattr(projection, "imaging_events") else ()
+    event = events[position - 1] if 0 < position <= len(events) else None
+    names = (event.identity_text, *event.order_names) if event is not None else ()
+    modalities = {_order_modality(_normalized_name(name)) for name in names if name} - {""}
+    text = unicodedata.normalize("NFKC", course).casefold()
+    patterns = [_EXAM_MENTION_PATTERNS[key] for key in sorted(modalities or _EXAM_MENTION_PATTERNS)]
+    if "影像" in text or any(re.search(pattern, text) for pattern in patterns):
+        return True
+    echo, body = _normalized_name(span), _normalized_name(course)
+    return any(echo[index:index + MIN_FINDING_ECHO] in body
+               for index in range(len(echo) - MIN_FINDING_ECHO + 1))
+
+
 def _shares_finding(span: str, quote: str) -> bool:
     """报告片段与病程引文须有 MIN_SPAN_SHARED 个连续相同的字（仅计汉字与字母数字）。"""
     left = "".join(char for char in _normalize(span).casefold() if char.isalnum())
@@ -480,7 +505,8 @@ def _parse(
                 # 只写“结合某 MRI”而不写所见，即使模型归到鉴别类也不得靠检查部位放行。
                 attributed = any(_shares_finding(span, quote) for quote in quotes)
                 own = sum(_own_chars(quote, reports[position], (lead_sites or {}).get(position, ())) for quote in quotes)
-                if own >= MIN_OWN_CHARS and attributed and basis_quotes and relation == "same_finding":
+                if (own >= MIN_OWN_CHARS and attributed and basis_quotes and relation == "same_finding"
+                        and _course_names_exam(projection, position, _course_text(projection, ref), span)):
                     analysed[position].append(ref)
                 elif attributed:
                     # 归为分析但去掉照抄部分后不剩实质内容：按其所属类别给修改建议。
