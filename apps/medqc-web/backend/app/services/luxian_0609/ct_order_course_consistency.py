@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import re
 import unicodedata
@@ -490,6 +490,26 @@ def _unique_temporal_anchor(
     return False
 
 
+_EXPLICIT_DATE = re.compile(r"(?<![0-9])((?:19|20)[0-9]{2})[-./年]([0-9]{1,2})[-./月]([0-9]{1,2})(?![0-9])")
+
+
+def _clause_dates(text: str) -> tuple[date, ...]:
+    found = []
+    for year, month, day_value in _EXPLICIT_DATE.findall(text):
+        try:
+            found.append(date(int(year), int(month), int(day_value)))
+        except ValueError:
+            continue
+    return tuple(found)
+
+
+def _before_current_stay(review: CtReviewInput, clause: CourseClause) -> bool:
+    """分句写明的完整日期全部早于本次住院最早病程日：属入院前检查，不是本次住院已执行检查。"""
+    record_days = [found for item in review.clauses for found in _clause_dates(item.record_time)[:1]]
+    mentioned = _clause_dates(clause.text)
+    return bool(record_days) and bool(mentioned) and max(mentioned) < min(record_days)
+
+
 def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None = None) -> HandbookEvaluation:
     """响应必须覆盖整批事件；不把模型失败当作资料缺失。"""
     if review.reference_budget_exceeded:
@@ -558,7 +578,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
             decisive = next(item for item in items if item.status == status)
             findings[position] = HandbookFinding(status, decisive.issue,
                 tuple(dict.fromkeys(ref for item in items for ref in item.refs)), decisive.name)
-        unmatched = cited(payload["unmatched_current_clause_ids"], maximum=MAX_CLAUSES)
+        unmatched = tuple(
+            clause for clause in cited(payload["unmatched_current_clause_ids"], maximum=MAX_CLAUSES)
+            if not _before_current_stay(review, clause)
+        )
         if unmatched:
             extras.append(HandbookFinding("data_gap", "course_without_order", tuple(dict.fromkeys(clause.document_ref for clause in unmatched))))
     else:

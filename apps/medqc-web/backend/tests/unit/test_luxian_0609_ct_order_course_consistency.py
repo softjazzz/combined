@@ -817,3 +817,27 @@ async def test_capable_client_extracts_ct_facts_with_thinking_disabled():
     assert result.decisions[0].reason_code == "requirement_satisfied"
     assert client.kwargs["enable_thinking"] is False
     assert client.kwargs["response_format"]["type"] == "json_schema"
+
+
+def _dated_review(*texts):
+    clauses = tuple(
+        CourseClause(f"C{index}", "course:1", text, 1, "first_course_record", "2026-08-24 08:58:25",
+                     "record_content", 0, len(text))
+        for index, text in enumerate(texts, 1)
+    )
+    return CtReviewInput((), (), clauses, {}, True)
+
+
+def test_unmatched_clause_dated_before_current_stay_is_not_current_exam():
+    review = _dated_review("2025-10-25 胸部螺旋CT平扫 心脏增大，双肺轻度肺水肿。", "完善胸CT等辅查。")
+    assert review.needs_model
+    assert evaluate_ct_review(review, _unmatched_only("C1")).status == "not_applicable"
+
+
+@pytest.mark.parametrize("text", [
+    "2026-08-24 胸部CT示双肺水肿。",
+    "2025年10月25日及2026年8月25日胸部CT均示肺水肿。",
+    "本次胸部CT示双肺水肿。",
+])
+def test_unmatched_clause_on_or_after_stay_or_undated_still_blocks(text):
+    assert evaluate_ct_review(_dated_review(text), _unmatched_only("C1")).status == "data_gap"
