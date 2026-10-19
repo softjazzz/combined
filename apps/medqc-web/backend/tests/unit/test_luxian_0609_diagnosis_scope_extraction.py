@@ -253,7 +253,7 @@ def test_repeated_problem_mention_retry_explains_which_binding_must_be_unique():
     body = "患者诉右下肢肿胀。查体右下肢肿胀，病因待查。"
     class CorrectingClient(Client):
         async def generate(self, prompt, **kwargs):
-            problem = "患者诉右下肢肿胀" if "problem_quote在quote内必须唯一" in prompt else "右下肢肿胀"
+            problem = "患者诉右下肢肿胀" if "problem_quote「右下肢肿胀」出现2次" in prompt else "右下肢肿胀"
             self.documents = [dict(row_index=0, coverage="complete", assertions=[claim(body, problem)])]
             return await super().generate(prompt, **kwargs)
     client = CorrectingClient()
@@ -261,3 +261,72 @@ def test_repeated_problem_mention_retry_explains_which_binding_must_be_unique():
     assert result.state == "ready" and result.llm_call_count == 2
     fact = result.documents[0].assertions[0]
     assert body[fact.problem_start:fact.problem_end] == "患者诉右下肢肿胀"
+
+
+def test_retry_names_every_grounding_failure_with_its_quote_and_previous_output():
+    """补核须一次指明全部失败项（行、引文、出现次数）并附上次输出；定位规则本身不放宽。"""
+    bodies = [{"content": "不排除尿崩症，复查尿比重，明确是否存在尿崩症。"},
+              {"content": "肠壁肿厚，考虑炎症可能，合并梗阻？必要时进一步检查。"}]
+    first = [dict(row_index=0, coverage="complete", assertions=[
+                 claim("不排除尿崩症，复查尿比重，明确是否存在尿崩症", "尿崩症")]),
+             dict(row_index=1, coverage="complete", assertions=[
+                 claim("肠壁肿厚...合并梗阻？", "肠壁肿厚")])]
+    fixed = [dict(row_index=0, coverage="complete", assertions=[
+                 claim("不排除尿崩症，复查尿比重，明确是否存在尿崩症", "不排除尿崩症")]),
+             dict(row_index=1, coverage="complete", assertions=[
+                 claim("肠壁肿厚，考虑炎症可能，合并梗阻？", "肠壁肿厚")])]
+
+    class TwoStep(Client):
+        async def generate(self, prompt, **kwargs):
+            self.documents = first if not self.calls else fixed
+            return await super().generate(prompt, **kwargs)
+
+    client = TwoStep()
+    result = run(client, bodies)
+    assert result.state == "ready" and result.llm_call_count == 2
+    retry = client.calls[1][0]
+    hint = retry[retry.index("上次校验失败"):retry.index("PREVIOUS_OUTPUT=")]
+    assert "row_index=0的quote「不排除尿崩症，复查尿比重，明确是否存在尿崩症」中problem_quote「尿崩症」出现2次" in hint
+    assert "row_index=1的quote「肠壁肿厚...合并梗阻？」不是该正文逐字连续原文" in hint
+    # quote 失败时 problem_quote 未经核验，须提示随新 quote 一并修正。
+    assert "problem_quote须同步改为新quote内只出现一次的逐字连续原文" in hint
+    assert "不得任取第一个位置" in hint
+    previous = retry[retry.index("PREVIOUS_OUTPUT="):retry.index("\nINPUT_JSON=")]
+    assert SCHEMA_VERSION in previous
+    # 首次提示词不变，只在补核时追加。
+    assert "上次校验失败" not in client.calls[0][0]
+    fact = result.documents[0].assertions[0]
+    assert bodies[0]["content"][fact.problem_start:fact.problem_end] == "不排除尿崩症"
+
+
+def test_retry_echo_is_redacted_and_bounded():
+    long_quote = "目前发热病因仍不明确" * 10
+    leak = "患者姓名：张三。" + long_quote
+
+    class Leaky(Client):
+        async def generate(self, prompt, **kwargs):
+            self.documents = [dict(row_index=0, coverage="complete", assertions=[claim(leak, "发热病因")])]
+            return await super().generate(prompt, **kwargs)
+
+    client = Leaky()
+    result = run(client, [{"content": BODY}])
+    assert result.reason_code == "model_invalid_output" and result.llm_call_count == 2
+    retry = client.calls[1][0]
+    assert "张三" not in retry
+    hint = retry[retry.index("上次校验失败"):retry.index("PREVIOUS_OUTPUT=")]
+    assert "开头的quote" in hint and long_quote not in hint
+
+
+def test_schema_failure_keeps_generic_retry_without_previous_output():
+    calls = []
+
+    def mutate(payload):
+        calls.append(1)
+        if len(calls) == 1:
+            payload["documents"][0].update(coverage="absent")
+
+    client = Client(mutate=mutate)
+    result = run(client)
+    assert result.state == "ready" and result.llm_call_count == 2
+    assert "PREVIOUS_OUTPUT=" not in client.calls[1][0]
+    assert "请逐项检查完整覆盖" in client.calls[1][0]

@@ -127,6 +127,10 @@ def _prompt(bodies: Sequence[str]) -> str:
 
 
 PROTOCOL_ATTEMPTS = 2
+# 定向补核只回显有限条失败项与有界的上次输出，避免补核提示无界膨胀。
+MAX_RETRY_ISSUES = 8
+MAX_RETRY_QUOTE_CHARS = 60
+MAX_RETRY_PREVIOUS_CHARS = 24000
 
 
 def _unique_position(text: str, quote: str) -> int:
@@ -136,6 +140,33 @@ def _unique_position(text: str, quote: str) -> int:
     if position < 0 or text.find(quote, position + 1) >= 0:
         raise ValueError("quote not uniquely grounded")
     return position
+
+
+@dataclass(frozen=True)
+class _GroundingIssue:
+    reason: str
+    row_index: int
+    quote: str
+    problem_quote: str
+    count: int
+
+
+class _GroundingViolation(ValueError):
+    """引文定位失败；收集同一应答的全部失败项供定向补核，str 仍为首个失败原因。"""
+
+    def __init__(self, issues: Sequence[_GroundingIssue]) -> None:
+        super().__init__(issues[0].reason)
+        self.issues = tuple(issues)
+
+
+def _occurrences(text: str, part: str) -> int:
+    if not part:
+        return 0
+    count, position = 0, text.find(part)
+    while position >= 0:
+        count += 1
+        position = text.find(part, position + 1)
+    return count
 
 
 def _parse(response: Mapping[str, Any], originals: Sequence[str],
@@ -159,6 +190,7 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
     if not isinstance(items, list) or len(items) != len(bodies):
         raise ValueError("incomplete document coverage")
     result = []
+    issues: list[_GroundingIssue] = []
     seen_rows: set[int] = set()
     fields = {"scope", "diagnosis_state", "polarity", "temporal_scope", "association", "quote", "problem_quote"}
     for item in items:
@@ -183,26 +215,100 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
                     or association not in {"explicit", "ambiguous", "unknown"}):
                 raise ValueError("invalid assertion enum")
             quote, problem = claim["quote"], claim["problem_quote"]
-            _unique_position(bodies[row], quote)
-            start = _unique_position(originals[row], quote)
+            # 定位规则不变（逐字、唯一）；失败项继续收集，补核时一次指明全部失败位置。
+            try:
+                _unique_position(bodies[row], quote)
+                start = _unique_position(originals[row], quote)
+            except ValueError as error:
+                issues.append(_GroundingIssue(str(error), row, quote, problem, _occurrences(bodies[row], quote)))
+                continue
             problem_start = None
             if association == "explicit":
                 try:
                     problem_start = start + _unique_position(quote, problem)
-                except ValueError as error:
-                    raise ValueError("problem not uniquely grounded") from error
+                except ValueError:
+                    issues.append(_GroundingIssue("problem not uniquely grounded", row, quote, problem,
+                                                  _occurrences(quote, problem)))
+                    continue
             elif problem:
-                raise ValueError("unproven problem identity")
+                issues.append(_GroundingIssue("unproven problem identity", row, quote, problem, 0))
+                continue
             identity = (scope, state, polarity, temporal, association, quote, problem)
             if identity in seen_claims:
-                raise ValueError("duplicate assertion")
+                issues.append(_GroundingIssue("duplicate assertion", row, quote, problem, 2))
+                continue
             seen_claims.add(identity)
             assertions.append(DiagnosisScopeAssertion(scope, state, polarity, temporal, association,
                 quote, problem, start, start + len(quote), problem_start,
                 None if problem_start is None else problem_start + len(problem)))
         seen_rows.add(row)
         result.append(DiagnosisScopeDocument(row, coverage, tuple(assertions)))
+    if issues:
+        raise _GroundingViolation(issues)
     return tuple(sorted(result, key=lambda document: document.row_index))
+
+
+def _clip(text: str) -> str:
+    return text if len(text) <= MAX_RETRY_QUOTE_CHARS else text[:MAX_RETRY_QUOTE_CHARS]
+
+
+def _issue_hint(issue: _GroundingIssue) -> str:
+    row = issue.row_index
+    # 回显的是模型上次输出的有界片段（再经脱敏），不新增正文以外的资料；长片段只回显开头。
+    quote = redact_luxian_0609_patient_privacy(issue.quote) if issue.quote else ""
+    quote_ref = ((f"以「{_clip(quote)}」开头的quote" if len(quote) > MAX_RETRY_QUOTE_CHARS
+                  else f"quote「{quote}」") if quote else "该quote")
+    problem = redact_luxian_0609_patient_privacy(issue.problem_quote) if issue.problem_quote else ""
+    problem_ref = f"「{problem}」" if problem and len(problem) <= MAX_RETRY_QUOTE_CHARS else ""
+    if issue.reason == "problem not uniquely grounded":
+        if issue.count > 1:
+            return (f"row_index={row}的{quote_ref}中problem_quote{problem_ref}出现{issue.count}次；"
+                    "须把problem_quote改为该quote内只出现一次的连续原文（可带紧邻的限定词或动词），"
+                    "或把quote改为只含一次该问题提及且仍完整体现状态的连续原文")
+        return (f"row_index={row}的{quote_ref}中找不到problem_quote{problem_ref}；"
+                "problem_quote须是该quote内逐字连续原文，不得用省略号拼接、概括或改写")
+    if issue.reason == "quote not uniquely grounded":
+        # quote 失败时 problem_quote 未经核验；有内容时提示随新 quote 一并逐字修正。
+        follow = ("；该assertion的problem_quote须同步改为新quote内只出现一次的逐字连续原文，同样不得用省略号拼接"
+                  if issue.problem_quote else "")
+        if issue.count > 1:
+            return (f"row_index={row}的{quote_ref}在该正文出现{issue.count}次；"
+                    "须只向前或向后补充紧邻的少量原文，使quote在该正文只出现一次且不覆盖另一处重复，"
+                    "不得拼接或改写" + follow)
+        if issue.count == 1:
+            return (f"row_index={row}的{quote_ref}无法在原文唯一定位；须避开脱敏占位符并补充相邻原文，不得拼接或改写"
+                    + follow)
+        return (f"row_index={row}的{quote_ref}不是该正文逐字连续原文；须逐字摘取，不得用省略号拼接、省略或改写；"
+                "需覆盖相隔两处表述时取含中间内容的完整连续原文" + follow)
+    if issue.reason == "unproven problem identity":
+        return f"row_index={row}的{quote_ref}的association不是explicit，problem_quote必须为空字符串"
+    if issue.reason == "duplicate assertion":
+        return f"row_index={row}的{quote_ref}存在七个字段完全相同的重复assertion，须删除重复项"
+    return f"row_index={row}有assertion的quote为空，须提供逐字连续原文"
+
+
+def _retry_prompt(prompt: str, error: Exception, previous_content: Any) -> str:
+    if isinstance(error, _GroundingViolation):
+        details = "；".join(_issue_hint(issue) for issue in error.issues[:MAX_RETRY_ISSUES])
+        hint = ("以下assertion未通过逐字唯一定位：" + details
+                + "。只修正这些assertion的quote/problem_quote，其余判断与覆盖不因补核改变；不得任取第一个位置")
+        previous = (redact_luxian_0609_patient_privacy(previous_content)
+                    if isinstance(previous_content, str) and len(previous_content) <= MAX_RETRY_PREVIOUS_CHARS else "")
+        if previous:
+            hint += "。上次输出仅作修正参考，不是正文资料：PREVIOUS_OUTPUT=" + previous
+    else:
+        hint = "请逐项检查完整覆盖、字段枚举和逐字引用，修正后重新输出完整JSON"
+    return prompt.replace("\nINPUT_JSON=", f"\n上次校验失败：{hint}。\nINPUT_JSON=", 1)
+
+
+def _response_content(response: Any) -> Any:
+    if not isinstance(response, Mapping):
+        return None
+    choices = response.get("choices")
+    if isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        return message.get("content") if isinstance(message, Mapping) else None
+    return response.get("content", response.get("text"))
 
 
 async def extract_diagnosis_scope(
@@ -252,11 +358,7 @@ async def extract_diagnosis_scope(
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return DiagnosisScopeResult("technical_error", (), calls, *totals, reason_code="model_invalid_output")
-            hint = {
-                "problem not uniquely grounded": "problem_quote在quote内必须唯一；当前引文重复提及同一问题，请缩短quote到保留明确性语义的唯一原文句，或扩展problem_quote的相邻原话以唯一定位。不得原样重复上次回答、改写或任取第一个位置",
-                "quote not uniquely grounded": "quote必须逐字且唯一见于对应正文；重复时补充相邻上下文，不得拼接或改写",
-            }.get(str(error), "请逐项检查完整覆盖、字段枚举和逐字引用，修正后重新输出完整JSON")
-            attempt_prompt = prompt.replace("\nINPUT_JSON=", f"\n上次校验失败：{hint}。\nINPUT_JSON=", 1)
+            attempt_prompt = _retry_prompt(prompt, error, _response_content(response))
             continue
         return DiagnosisScopeResult("ready", facts, calls, *totals)
     raise AssertionError("unreachable")
