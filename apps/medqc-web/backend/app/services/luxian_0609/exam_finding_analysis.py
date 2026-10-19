@@ -28,6 +28,7 @@ from .exam_lab_fact_extraction import (
     _course_refs_for_rule_event,
     events_for_family,
 )
+from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
@@ -61,6 +62,80 @@ _REJECTED_ANALYSIS_GAPS = {
     "targeted_differential": "conclusion_without_basis",
 }
 
+
+
+@dataclass(frozen=True)
+class _RetryIssue:
+    reason: str
+    location: str
+    field: str
+    value: str
+    hint: str
+
+
+class _RetryViolation(ValueError):
+    """收集同份应答的可修正项，异常字符串仍为首个失败原因。"""
+
+    def __init__(self, issues: Sequence[_RetryIssue]) -> None:
+        # 失败项为空（如目标无候选病程且应答为空）时沿用原覆盖失败原因。
+        super().__init__(issues[0].reason if issues else "invalid doc coverage")
+        self.issues = tuple(issues)
+        self.updates: dict[int, tuple[str, ...]] = {}
+        self.gaps: dict[int, tuple[tuple[str, str], ...]] = {}
+
+
+class _TruncatedResponse(ValueError):
+    def __init__(self) -> None:
+        super().__init__("incomplete response")
+
+
+def _response_content(response: Mapping[str, Any]) -> Any:
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        return message.get("content") if isinstance(message, Mapping) else None
+    return response.get("content", response.get("text"))
+
+
+def _retry_prompt(
+    prompt: str, error: Exception, response: Mapping[str, Any],
+    *, pending: Mapping[int, tuple[str, ...]] | None = None,
+) -> str:
+    if isinstance(error, _TruncatedResponse):
+        hint = "输出超长被截断。请输出完整JSON，引文只取最短必要的连续原文，编号只选最短必要证明，避免重复。"
+    elif isinstance(error, _RetryViolation):
+        details = []
+        for issue in error.issues[:8]:
+            # 回显先脱敏再限长，避免裁掉身份标签后泄漏身份值。
+            value = redact_luxian_0609_patient_privacy(issue.value)
+            value_ref = (f"以「{value[:60]}」开头的{issue.field}" if len(value) > 60
+                         else f"{issue.field}「{value}」")
+            location = redact_luxian_0609_patient_privacy(issue.location)
+            details.append(f"{location}的{value_ref}：{issue.hint}")
+        hint = "；".join(details) + "。请修正以上失败项并补齐覆盖，其余已核验判断不因补核改变。"
+        try:
+            payload = json.loads(_response_content(response))
+            if pending is not None and isinstance(payload, dict) and isinstance(payload.get("docs"), list):
+                payload = {**payload, "docs": [item for item in payload["docs"]
+                           if isinstance(item, dict) and type(item.get("event_position")) is int
+                           and item["event_position"] in pending]}
+            previous = json.dumps(payload, ensure_ascii=False)
+        except (ValueError, TypeError):
+            previous = ""
+        if previous and len(previous) <= 24000:
+            previous = redact_luxian_0609_patient_privacy(previous)
+            if len(previous) <= 24000:
+                hint += "\n上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + previous
+    else:
+        hint = "每个事件的每份病程必须且仅输出一次，字段取规定值。请修正后重新输出完整JSON。"
+    return prompt.replace("\nEVENTS_JSON=", "\n上一次输出未通过校验：" + hint + "\nEVENTS_JSON=", 1)
+
+
+def _coverage_issue(index: int | None, position: Any, ref: Any, *, count: int = 0) -> _RetryIssue:
+    location = (f"docs第{index}项 " if index is not None else "遗漏项 ")
+    location += f"event_position={position} course_doc_ref={ref}"
+    return _RetryIssue("invalid doc coverage", location, "event_position/course_doc_ref", "",
+                       f"该配对出现{count}次；每个给定事件的每份病程必须且仅输出一次，不得引用集合外配对")
 
 @dataclass(frozen=True)
 class FindingAnalysisOutcome:
@@ -300,6 +375,8 @@ def _parse(
 ) -> tuple[dict[int, tuple[str, ...]], dict[int, tuple[tuple[str, str], ...]]]:
     choices = response.get("choices")
     if choices is not None:
+        if choices[0].get("finish_reason") == "length":
+            raise _TruncatedResponse()
         if choices[0].get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = choices[0]["message"]["content"]
@@ -310,7 +387,9 @@ def _parse(
             or payload["schema_version"] != SCHEMA_VERSION or not isinstance(payload["docs"], list)):
         raise ValueError("invalid response schema")
     seen: set[tuple[int, str]] = set()
-    evidence_error: ValueError | None = None
+    issues: list[_RetryIssue] = []
+    coverage_invalid = False
+    addressed: set[tuple[int, str]] = set()
     analysed: dict[int, list[str]] = {position: [] for position in expected}
     gaps: dict[int, list[tuple[str, str]]] = {position: [] for position in expected}
     # 只对应一次检查的病程：不算分析的引文未填报告片段时，仍可按该次检查给修改建议。
@@ -318,31 +397,60 @@ def _parse(
     for _, refs in _targets(projection).values():
         for candidate in refs:
             event_count_by_ref[candidate] = event_count_by_ref.get(candidate, 0) + 1
-    for item in payload["docs"]:
+    for index, item in enumerate(payload["docs"], 1):
         if not isinstance(item, dict) or set(item) != {
             "event_position", "course_doc_ref", "quote_type", "course_fragment_ids", "report_fragment_id", "basis_fragment_ids", "basis_relation",
         }:
             raise ValueError("invalid doc schema")
         position, ref = item["event_position"], item["course_doc_ref"]
         kind = item["quote_type"]
-        key = (position, ref)
-        if type(position) is not int or position not in expected or ref not in expected[position] or key in seen:
-            raise ValueError("invalid doc coverage")
         if kind not in QUOTE_TYPES:
             raise ValueError("invalid quote type")
+        if type(position) is not int or type(ref) is not str:
+            raise ValueError("invalid doc coverage")
+        key = (position, ref)
+        if position not in expected or ref not in expected[position] or key in seen:
+            count = sum(row.get("event_position") == position and row.get("course_doc_ref") == ref
+                        for row in payload["docs"] if isinstance(row, dict))
+            issues.append(_coverage_issue(index, position, ref, count=count))
+            coverage_invalid = True
+            continue
+        addressed.add(key)
         seen.add(key)
+        location = f"docs第{index}项 event_position={position} course_doc_ref={ref}"
+        before = len(issues)
+        selected, basis, report_id = item["course_fragment_ids"], item["basis_fragment_ids"], item["report_fragment_id"]
+        if (not isinstance(selected, list) or any(type(value) is not str for value in selected)
+                or type(report_id) is not str):
+            raise ValueError("invalid evidence selection")
+        if not isinstance(basis, list):
+            raise ValueError("invalid basis selection")
+        if any(type(value) is not str for value in basis):
+            raise ValueError("invalid evidence selection")
+        relation = item["basis_relation"]
+        if relation not in {"same_finding", "different_finding", "uncertain", "none"}:
+            raise ValueError("invalid basis relation")
+        courses = {part["id"] for part in _fragments(_course_text(projection, ref)[:MAX_COURSE_CHARS], f"{ref}:C", 80)}
+        report_ids = {part["id"] for part in _fragments(reports[position], f"E{position}:R", MAX_SPAN_CHARS)}
+        for field_name, values in (("course_fragment_ids", selected), ("basis_fragment_ids", basis)):
+            invalid = [value for value in values if value not in courses]
+            if invalid:
+                issues.append(_RetryIssue("quote not in course", location, field_name,
+                                         json.dumps(invalid, ensure_ascii=False),
+                                         f"{field_name}只选该病程的片段编号，不得跨文书"))
+        if report_id and report_id not in report_ids:
+            issues.append(_RetryIssue("span not in report", location, "report_fragment_id", report_id,
+                                     _RETRY_HINTS["span not in report"]))
+        if kind in ANALYSIS_TYPES and relation == "uncertain":
+            issues.append(_RetryIssue("unresolved basis relation", location, "basis_relation", relation,
+                                     _RETRY_HINTS["unresolved basis relation"]))
+        if len(issues) != before:
+            seen.discard(key)
+            continue
         try:
             quotes, span = _selected_evidence(item, _course_text(projection, ref), reports[position])
-            basis = item["basis_fragment_ids"]
-            if not isinstance(basis, list):
-                raise ValueError("invalid basis selection")
             basis_quotes, _ = _selected_evidence(
                 {**item, "course_fragment_ids": basis}, _course_text(projection, ref), reports[position])
-            relation = item["basis_relation"]
-            if relation not in {"same_finding", "different_finding", "uncertain", "none"}:
-                raise ValueError("invalid basis relation")
-            if kind in ANALYSIS_TYPES and relation == "uncertain":
-                raise ValueError("unresolved basis relation")
             # 依据单独选择也须完整纳入原文核验及总长度；无需模型重复填写同一编号。
             quotes, span = _selected_evidence(
                 {**item, "course_fragment_ids": [*item["course_fragment_ids"], *basis]},
@@ -378,19 +486,17 @@ def _parse(
                     # 归为分析但去掉照抄部分后不剩实质内容：按其所属类别给修改建议。
                     gaps[position].append((ref, _REJECTED_ANALYSIS_GAPS[kind]))
         except ValueError as error:
-            # 单份病程引文核验不过只视为未核到，不连累同批已完整核验的事件。
-            if not allow_partial:
-                raise
-            evidence_error = evidence_error or error
+            # 可修正证据错误集中回传；末次仍按已核验事件决定是否固定。
+            field_name = "report_fragment_id" if str(error) in {"missing report span", "span not in report"} else "course_fragment_ids/basis_fragment_ids"
+            value = report_id if field_name == "report_fragment_id" else json.dumps([selected, basis], ensure_ascii=False)
+            issues.append(_RetryIssue(str(error), location, field_name, value, _RETRY_HINTS[str(error)]))
             seen.discard(key)
 
-    if not seen:
-        if evidence_error is not None:
-            raise evidence_error
-        raise ValueError("invalid doc coverage")
+    for position, refs in expected.items():
+        for ref in refs:
+            if (position, ref) not in addressed:
+                issues.append(_coverage_issue(None, position, ref))
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
-    if not allow_partial and len(complete) != len(expected):
-        raise ValueError("invalid doc coverage")
     # 末次仍漏核时按事件处理：已核到一份算分析即已分析；全部核到且均不算才判未分析；
     # 其余事件不固定，单独沿用主抽取判断，不连累同批其他事件。
     decided = {
@@ -401,6 +507,12 @@ def _parse(
         position: tuple(gaps[position][:MAX_GAP_NOTES_PER_EVENT])
         for position, refs in decided.items() if not refs and gaps[position]
     }
+    if issues and (not allow_partial or complete_events_only or not seen or coverage_invalid):
+        error = _RetryViolation(issues)
+        if allow_partial and not coverage_invalid:
+            error.updates = decided
+            error.gaps = gap_refs
+        raise error
     return decided, gap_refs
 
 
@@ -470,19 +582,23 @@ async def check_exam_finding_analysis(
                 break
             # 已完整核验的检查不再交给重试改写；未完整核验的检查仍保留原有第二次机会。
             prompt = _prompt(projection, {position: model_targets[position] for position in pending_expected})
-            attempt_prompt = prompt.replace(
-                "\nEVENTS_JSON=", "\n仅复核以下尚未完整核验的检查：补齐每份病程，report_fragment_id只选当前事件"
-                "的报告片段，course_fragment_ids和basis_fragment_ids只选本份病程的片段，"
-                "两组原文合计不超过200字。\nEVENTS_JSON=", 1)
+            # 未完整覆盖时解析器会携带失败明细抛出；保留这一分支兼容无失败的部分结果。
+            missing = [_coverage_issue(None, position, ref)
+                       for position, refs in pending_expected.items() for ref in refs]
+            attempt_prompt = _retry_prompt(prompt, _RetryViolation(missing), response, pending=pending_expected)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+            if isinstance(error, _RetryViolation):
+                analysed.update(error.updates)
+                gap_refs.update(error.gaps)
+                pending_expected = {position: refs for position, refs in pending_expected.items() if position not in error.updates}
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 if analysed:
                     break
                 return FindingAnalysisOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                               total_tokens, api_time or perf_counter() - started)
-            hint = _RETRY_HINTS.get(str(error), "每个事件的每份病程必须且仅输出一次，字段取规定值")
-            attempt_prompt = prompt.replace(
-                "\nEVENTS_JSON=", f"\n上一次输出未通过校验：{hint}。请修正后重新输出完整JSON。\nEVENTS_JSON=", 1)
+            prompt = _prompt(projection, {position: model_targets[position] for position in pending_expected})
+            attempt_prompt = _retry_prompt(prompt, error, response, pending=pending_expected)
+
     # 无可读病程的事件已核对、未见分析；有病程的事件以解析结果为准（漏核未定的事件不在其中）。
     analysed_refs = {position: () for position in expected if position not in model_expected}
     analysed_refs.update(analysed)
