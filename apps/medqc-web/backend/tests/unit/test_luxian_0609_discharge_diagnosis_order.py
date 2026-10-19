@@ -114,7 +114,8 @@ async def test_equivalent_wording_is_consistent_and_keeps_written_text():
         [{"diagnosis_no": 1, "diagnosis_name": "肺炎"}, {"diagnosis_no": 2, "diagnosis_name": "高血压"}],
         client,
     )
-    assert client.calls == 1
+    # 用户口径（2026-10-19）：书写名称逐字包含于权威名称时由程序配对，不调用模型。
+    assert client.calls == 0
     assert reduced.final_state.value == "compliant"
     assert facts["written_diagnoses"] == ["肺炎", "高血压"]
     assert facts["equivalent_pairs"] == [["高血压病", "高血压"]]
