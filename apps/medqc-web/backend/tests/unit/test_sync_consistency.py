@@ -24,8 +24,12 @@ from app.services import etl_sync, mongo_sync, sync_run_history
 from app.services.case_identity import CaseRef
 from app.services.case_scope_service import HospitalizationScopeResult
 from app.services.case_set_sync_service import CaseSetSyncResult
+from app.services.document_assembly.assembler import assemble_document
 from app.services.luxian_0609.exam_lab_fact_extraction import _row_text
-from app.services.luxian_0609.source_evidence_reader import _SNAPSHOT_SOURCE_FIELDS
+from app.services.luxian_0609.source_evidence_reader import (
+    _SNAPSHOT_SOURCE_FIELDS,
+    _normalize_snapshot_source_row,
+)
 
 
 def _load_migration_module(filename: str):
@@ -2008,7 +2012,16 @@ def test_upsert_to_local_maps_generic_time_aliases(monkeypatch):
     assert executed_params[0]["last_modified_datetime"] == "2026-06-06 09:30:00+08"
 
 
-def test_upsert_to_local_derives_senior_round_title_from_structured_type(monkeypatch):
+@pytest.mark.parametrize(
+    "type_fields",
+    [
+        {"ward_round_type": "上级医师查房"},
+        {"ward_round_type": None, "v2_schema": '{"ward_round_type":"上级医师查房"}'},
+        {"ward_round_type": "", "v2_schema": {"ward_round_type": "上级医师查房"}},
+    ],
+    ids=["physical", "json-text", "json-object"],
+)
+def test_upsert_to_local_derives_senior_round_title_from_structured_type(monkeypatch, type_fields):
     executed_params: list[dict] = []
 
     class _FakeSession:
@@ -2052,7 +2065,7 @@ def test_upsert_to_local_derives_senior_round_title_from_structured_type(monkeyp
                 "visit_id": "V1",
                 "document_id": "S1",
                 "document_title": "",
-                "ward_round_type": "上级医师查房",
+                **type_fields,
                 "record_content": "今日随彭中主任医师联合普外科医师查房。",
             },
             {
@@ -2061,7 +2074,7 @@ def test_upsert_to_local_derives_senior_round_title_from_structured_type(monkeyp
                 "visit_id": "V1",
                 "document_id": "S2",
                 "document_title": "彭中主任医师首次查房记录",
-                "ward_round_type": "上级医师查房",
+                **type_fields,
                 "record_content": "彭中主任医师首次查房。",
             },
         ],
@@ -2072,6 +2085,36 @@ def test_upsert_to_local_derives_senior_round_title_from_structured_type(monkeyp
     assert executed_params[0]["document_title"] == "上级医师查房记录"
     assert executed_params[0]["record_content"].startswith("今日随彭中主任医师")
     assert executed_params[1]["document_title"] == "彭中主任医师首次查房记录"
+    assert all("v2_schema" not in row for row in executed_params)
+    for saved_row in executed_params:
+        rule_row = _normalize_snapshot_source_row(
+            "senior_course_record",
+            {k: v for k, v in saved_row.items() if k in _SNAPSHOT_SOURCE_FIELDS["senior_course_record"]},
+        )
+        assert rule_row["document_title"] == saved_row["document_title"]
+        assert assemble_document("senior_course_record", saved_row).document_title == saved_row["document_title"]
+
+
+@pytest.mark.parametrize(
+    "record,expected_title",
+    [
+        ({"ward_round_type": "主任医师查房", "v2_schema": {"ward_round_type": "上级医师查房"}}, "主任医师查房记录"),
+        ({"round_type": "主任医师查房", "v2_schema": {"ward_round_type": "上级医师查房"}}, "主任医师查房记录"),
+        ({"v2_schema": {"ward_round_type": " 主任医师查房记录 "}}, "主任医师查房记录"),
+        *[({"v2_schema": value}, None) for value in (
+            None, "", "not-json", "[]", "null", "1", {},
+            {"ward_round_type": " "}, {"ward_round_type": []},
+            {"ward_round_type": {"text": "主任医师查房"}}, {"ward_round_type": 1},
+        )],
+    ],
+)
+def test_senior_round_type_json_fallback_preserves_source_priority(record, expected_title):
+    mapped = etl_sync._apply_sync_column_aliases(
+        table_name="senior_course_record",
+        record=record,
+        existing_columns={"document_title"},
+    )
+    assert mapped.get("document_title") == expected_title
 
 
 def test_upsert_to_local_maps_inpatient_order_aliases(monkeypatch):

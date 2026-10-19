@@ -875,6 +875,18 @@ def _apply_sync_derived_fields(
             normalized,
             ("ward_round_type", "round_type"),
         )
+        if not ward_round_type:
+            # 源表普通列可能为空，查房类型仍保存在二级结构化的同名字段中。
+            payload = normalized.get("v2_schema")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError:
+                    payload = None
+            if isinstance(payload, dict):
+                candidate = payload.get("ward_round_type")
+                if isinstance(candidate, str):
+                    ward_round_type = candidate.strip()
         if ward_round_type:
             normalized["document_title"] = (
                 ward_round_type
