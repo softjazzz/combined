@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
+import logging
 import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -57,6 +58,20 @@ _MAX_RULE_009_DISPLAY_EVENTS = 20
 _RULE_009_TEMPLATE_VALUES = frozenset(
     {"", "模板", "空模板", "待补充", "暂无内容", "无内容", "未填写", "待完善", "null", "none"}
 )
+# 明确区分正常、阴性及异常方向；空白和未定义编码不能当成正常。
+_RULE_009_LAB_STATES = {
+    **dict.fromkeys(("N", "NORMAL", "正常"), "normal"),
+    **dict.fromkeys(("NEG", "NEGATIVE", "阴性", "-"), "negative"),
+    **dict.fromkeys(("H", "HIGH", "高", "偏高", "升高", "↑"), "high"),
+    **dict.fromkeys(("L", "LOW", "低", "偏低", "降低", "↓"), "low"),
+    **dict.fromkeys(("PH", "HH", "危急高"), "critical_high"),
+    **dict.fromkeys(("PL", "LL", "危急低"), "critical_low"),
+    **dict.fromkeys(("POS", "POSITIVE", "阳性", "+", "++", "+++", "++++"), "positive"),
+    **dict.fromkeys(("A", "ABNORMAL", "异常"), "abnormal"),
+    **dict.fromkeys(("CRITICAL", "危急", "危急值"), "critical"),
+}
+_RULE_009_LAB_NORMAL_STATES = frozenset({"normal", "negative"})
+_LOGGER = logging.getLogger(__name__)
 
 
 class Rule008009LLMClient(Protocol):
@@ -793,10 +808,11 @@ def _rule_009_external_event_text(
         for field_name, label in (
             ("item_name", "项目"),
             ("result", "结果"),
-            ("abnormal_flag", "异常标志"),
         ):
             if (value := _clean(row.get(field_name))):
                 parts.append(f"{label}={value}")
+        if (flag := _rule_009_lab_flag(row)):
+            parts.append(f"异常标志={flag}")
         if parts:
             return "；".join(parts)
 
@@ -856,6 +872,70 @@ def _rule_009_group_event_time(
         if unique_times:
             return unique_times[0] if len(unique_times) == 1 else None
     return None
+
+
+def _rule_009_lab_flag(row: Mapping[str, Any]) -> str:
+    """兼容规则输入名和生产快照字段名，不推断数值编码含义。"""
+
+    return _clean(row.get("abnormal_flag")) or _clean(row.get("abnormal_indicator"))
+
+
+def _rule_009_filter_lab_candidates(
+    *,
+    grouped_external_events: Mapping[tuple[str, str], Mapping[str, Any]],
+    lab_history_groups: Mapping[tuple[str, str], Mapping[str, Any]],
+) -> dict[tuple[str, str], Mapping[str, Any]]:
+    """纯函数：只保留异常、同名最近结果状态改变或整单标志不可用的项目。
+
+    历史包含本次就诊病危期前的结果；同一权威报告时刻状态冲突时不猜测。
+    不改写输入，也不使用结果数值或正文判断异常。
+    """
+
+    history: dict[str, dict[datetime, set[str | None]]] = {}
+    for group in lab_history_groups.values():
+        report_time = _rule_009_group_event_time(
+            event_kind="lab", times_by_source=group["times_by_source"],
+        )
+        if report_time is None:
+            continue
+        for row in group["items"]:
+            name = _clean(row.get("item_name"))
+            if name:
+                state = _RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper())
+                history.setdefault(name, {}).setdefault(report_time, set()).add(state)
+
+    selected: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for identity, group in grouped_external_events.items():
+        items = group["items"]
+        # 检查不筛；无明细的检验主记录按无法判断保留。
+        if not items:
+            selected[identity] = group
+            continue
+        states = [_RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper()) for row in items]
+        all_unknown = all(state is None for state in states)
+        report_time = _rule_009_group_event_time(
+            event_kind="lab", times_by_source=lab_history_groups[identity]["times_by_source"],
+        )
+        texts: list[str] = []
+        for row, state in zip(items, states):
+            previous = history.get(_clean(row.get("item_name")), {})
+            prior_time = max(
+                (time for time in previous if report_time is not None and time < report_time),
+                default=None,
+            )
+            prior_states = previous.get(prior_time, set())
+            changed = (
+                state is not None and len(prior_states) == 1
+                and None not in prior_states and state not in prior_states
+            )
+            if all_unknown or changed or (state is not None and state not in _RULE_009_LAB_NORMAL_STATES):
+                content = _rule_009_external_event_text("labtest_item_report", row)
+                if content and content not in texts:
+                    texts.append(content)
+        if texts:
+            # 有明细时不附主记录正文，避免被排除的正常项目从主记录重新进入提示词。
+            selected[identity] = {**group, "texts": texts}
+    return selected
 
 
 def _rule_009_group_event_document_refs(
@@ -964,6 +1044,7 @@ def _rule_009_semantic_context(
 
     observation_by_source = {item.source_key: item for item in snapshot.observations}
     grouped_external_events: dict[tuple[str, str], dict[str, Any]] = {}
+    lab_history_groups: dict[tuple[str, str], dict[str, Any]] = {}
     for source_key in _RULE_009_EXTERNAL_EVENT_SOURCES:
         observation = observation_by_source.get(source_key)
         if (
@@ -982,23 +1063,31 @@ def _rule_009_semantic_context(
         except Exception:
             return "", False, False, {}, {}, {}, {}, evaluation_horizon
         for index, row in enumerate(source_rows):
+            event_kind, event_ref = _rule_009_external_event_identity(source_key, index, row)
+            event_time = _rule_009_external_event_time(source_key, row)
+            if source_key in {"labtest_master", "labtest_item_report"}:
+                history_group = lab_history_groups.setdefault(
+                    (event_kind, event_ref), {"items": [], "times_by_source": {}},
+                )
+                if source_key == "labtest_item_report":
+                    history_group["items"].append(row)
+                if event_time is not None:
+                    history_group["times_by_source"].setdefault(source_key, []).append(event_time)
             content = _rule_009_external_event_text(source_key, row)
             if not content:
                 continue
-            event_time = _rule_009_external_event_time(source_key, row)
             # 不能因为一条尚未被模型识别为病情变化的外部行缺时间，就把整条
             # 规则降级。只有模型明确引用的事件才进入后续权威时间校验。
             if event_time is not None and not _date_in_active_intervals(
                 event_time.date(), active_intervals
             ):
                 continue
-            event_kind, event_ref = _rule_009_external_event_identity(
-                source_key, index, row
-            )
             group = grouped_external_events.setdefault(
                 (event_kind, event_ref),
-                {"texts": [], "times_by_source": {}, "rows_by_source": {}},
+                {"texts": [], "times_by_source": {}, "rows_by_source": {}, "items": []},
             )
+            if source_key == "labtest_item_report":
+                group["items"].append(row)
             if content not in group["texts"]:
                 group["texts"].append(content)
             if event_time is not None:
@@ -1008,8 +1097,20 @@ def _rule_009_semantic_context(
                         (event_time, document_ref)
                     )
 
+    filtered_external_events = _rule_009_filter_lab_candidates(
+        grouped_external_events=grouped_external_events, lab_history_groups=lab_history_groups,
+    )
+    candidate_diagnostics = {
+        "candidates_before": len(grouped_external_events),
+        "candidates_after": len(filtered_external_events),
+    }
+    _LOGGER.info(
+        "02-01-05 检验候选筛选：筛前=%d，筛后=%d",
+        candidate_diagnostics["candidates_before"], candidate_diagnostics["candidates_after"],
+        extra={"rule_id": "LX0609-02-01-05", **candidate_diagnostics},
+    )
     external_events: list[tuple[datetime | None, str, str, tuple[str, ...]]] = []
-    for (event_kind, event_ref), group in grouped_external_events.items():
+    for (event_kind, event_ref), group in filtered_external_events.items():
         event_time = _rule_009_group_event_time(
             event_kind=event_kind,
             times_by_source=group["times_by_source"],
