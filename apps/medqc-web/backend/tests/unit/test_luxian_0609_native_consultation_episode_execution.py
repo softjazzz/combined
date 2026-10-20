@@ -4902,7 +4902,7 @@ async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
 def test_023_order_candidates_keep_nearest_post_consultation_per_recommendation(
     monkeypatch,
 ):
-    """每个建议的每个医嘱来源最多保留24条，保留的是时序最接近的会诊后候选。"""
+    """会诊当日医嘱全部进入候选；名额只约束继续类建议纳入的会诊前医嘱。"""
 
     source_rows, far_rows, target_row = _post_consultation_tail_order_rows()
     monkeypatch.setattr(
@@ -4935,16 +4935,13 @@ def test_023_order_candidates_keep_nearest_post_consultation_per_recommendation(
 
     payload = json.loads(prompt.rsplit("输入：", 1)[1])
     allowed = payload["recommendations"][0]["allowed_candidate_refs"]
-    assert len(allowed) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
-    assert len(allowed_refs["consultation_record-1#r1"]) == (
-        episode._MAX_ORDER_CANDIDATES_PER_SOURCE
-    )
+    # 用户口径（2026-10-20）：会诊当日医嘱都算，当日候选不受 24 条名额截断。
+    assert len(allowed) == len(far_rows) + 1
+    assert len(allowed_refs["consultation_record-1#r1"]) == len(far_rows) + 1
     rendered = _stage_two_candidate_texts(prompt)
-    assert len(rendered) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert len(rendered) == len(far_rows) + 1
     assert any(target_row["order_name"] in text for text in rendered)
-    # 时序最远的会诊后无关医嘱被截掉，而不是截掉会诊后2小时的对应医嘱。
-    assert all(far_rows[-1]["order_name"] not in text for text in rendered)
-    assert any(far_rows[0]["order_name"] in text for text in rendered)
+    assert any(far_rows[-1]["order_name"] in text for text in rendered)
 
 
 @pytest.mark.asyncio
@@ -9687,7 +9684,7 @@ def test_continuation_keeps_matching_earlier_long_term_order_within_budget():
     assert episode._is_continuation_recommendation(completed[0].recommendation)
     filler = tuple(episode._CandidateDocument(
         f"inpat_drug_order-{index}", "inpat_drug_order",
-        episode._ObservedTime(datetime(2026, 1, 19 if index < 20 else 20, 8, index), True),
+        episode._ObservedTime(datetime(2026, 1, 19 if index < 30 else 20, 8, index), True),
         "氯化钠注射液",
     ) for index in range(40))
     target = episode._CandidateDocument(
@@ -9697,5 +9694,22 @@ def test_continuation_keeps_matching_earlier_long_term_order_within_budget():
     )
     _, allowed = episode._execution_prompt(completed=completed, candidates=(*filler, target))
     assert "inpat_drug_order-99" in allowed["r1"]
-    assert len(allowed["r1"]) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
-    assert {f"inpat_drug_order-{index}" for index in range(20, 40)} <= allowed["r1"]
+    assert len(allowed["r1"]) == 10 + episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert {f"inpat_drug_order-{index}" for index in range(30, 40)} <= allowed["r1"]
+
+
+def test_same_day_orders_are_not_cut_by_order_budget():
+    # 会诊当日 58 条非药品医嘱中，排在第 30 位的 proBNP 也须进入候选（心衰指标）。
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "test", "完善血气分析、乳酸、心衰指标等相关检查", "完善血气分析、乳酸、心衰指标检查", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 8, 24, 15, 7), True),
+    ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"inpat_nondrug_order-{index}", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2026, 8, 24, 15 if index < 40 else 8, index % 60), True),
+        "proBNP测定" if index == 57 else "静脉输液",
+    ) for index in range(58))
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert len(allowed["r1"]) == 58
+    assert "inpat_nondrug_order-57" in allowed["r1"]

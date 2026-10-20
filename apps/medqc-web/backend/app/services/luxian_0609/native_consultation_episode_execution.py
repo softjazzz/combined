@@ -100,6 +100,8 @@ _ORDER_EXECUTION_SOURCE_KEYS = frozenset(
 # 医嘱是高频结构化事件。保留紧凑候选可供模型确认正向落实；来源超过
 # 此上限时仍标记不完整，因此模型的 absent 绝不会生成确定性缺陷。
 _MAX_ORDER_CANDIDATES_PER_SOURCE = 24
+# 会诊当日医嘱都算执行，只设防止提示过长的安全上限。
+_MAX_SAME_DAY_ORDER_CANDIDATES_PER_SOURCE = 80
 _MAX_ORDER_CANDIDATE_CHARS = 180
 _EXECUTION_SOURCE_KEYS = (
     "daily_course_record",
@@ -2921,20 +2923,33 @@ def _execution_prompt(
                 )
         # “继续”类建议会纳入会诊前的全部医嘱，按时间远近截断会丢掉数日前开立的
         # 长期医嘱；与建议原文有连续三字重合（如药名）的医嘱优先保留，其次会诊当日。
+        # 用户口径（2026-10-20）会诊当日医嘱都算，当日医嘱只受较宽的安全上限约束，
+        # 不能被 24 条名额截掉（真实病例当日非药品医嘱可达 58 条）。
         recommendation_trigrams = _cjk_trigrams(_recommendation_text(item.recommendation))
         kept_order_refs: set[str] = set()
         for per_source in order_candidates_by_source.values():
+            ordered = sorted(
+                per_source,
+                key=lambda candidate: (
+                    0 if recommendation_trigrams & _cjk_trigrams(candidate.text) else 1,
+                    abs(candidate.observed_time.value - item.opinion_time.value),
+                    candidate_rank[candidate.ref],
+                ),
+            )
+            same_day = [
+                candidate for candidate in ordered
+                if candidate.observed_time.day == item.opinion_time.day
+            ]
+            earlier = [
+                candidate for candidate in ordered
+                if candidate.observed_time.day != item.opinion_time.day
+            ]
             kept_order_refs.update(
                 candidate.ref
-                for candidate in sorted(
-                    per_source,
-                    key=lambda candidate: (
-                        0 if recommendation_trigrams & _cjk_trigrams(candidate.text) else 1,
-                        0 if candidate.observed_time.day == item.opinion_time.day else 1,
-                        abs(candidate.observed_time.value - item.opinion_time.value),
-                        candidate_rank[candidate.ref],
-                    ),
-                )[:_MAX_ORDER_CANDIDATES_PER_SOURCE]
+                for candidate in (
+                    *same_day[:_MAX_SAME_DAY_ORDER_CANDIDATES_PER_SOURCE],
+                    *earlier[:_MAX_ORDER_CANDIDATES_PER_SOURCE],
+                )
             )
         kept_refs = {
             candidate.ref
