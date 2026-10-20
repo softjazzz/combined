@@ -3851,6 +3851,39 @@ def _order_name_matches(recommendation_text: str, candidate_text: str) -> bool:
     return run >= _ORDER_LEXICAL_MIN_CHARS and run >= len(core) * _ORDER_LEXICAL_MIN_COVERAGE
 
 
+def _settle_recommendations_without_any_candidate(
+    assessments: Sequence["_ExecutionAssessment"],
+    *,
+    completed: Sequence["_CompletedRecommendation"],
+    candidates: Sequence["_CandidateDocument"],
+    source_incomplete_keys: frozenset[str],
+) -> tuple["_ExecutionAssessment", ...]:
+    """执行窗口内没有任何候选（如会诊当日无医嘱）且医嘱来源完整时，确定性判为未执行。
+
+    真实 C02 11-17 会诊当日医嘱为 0 条，二阶段只投医嘱后该建议候选为空，模型答 unknown
+    使整例落资料不足；用户口径（2026-10-20）当日确实没有医嘱即判不合规。
+    """
+
+    if _ORDER_EXECUTION_SOURCE_KEYS & source_incomplete_keys:
+        return tuple(assessments)
+    by_ref = {item.recommendation.recommendation_ref: item for item in completed}
+    settled: list[_ExecutionAssessment] = []
+    for assessment in assessments:
+        item = by_ref.get(assessment.recommendation_ref)
+        if item is None or assessment.execution_state != "unknown":
+            settled.append(assessment)
+            continue
+        _, allowed = _execution_prompt(completed=(item,), candidates=candidates)
+        if allowed.get(assessment.recommendation_ref):
+            settled.append(assessment)
+            continue
+        settled.append(replace(
+            assessment, execution_state="absent", execution_refs=(), confidence="high",
+            execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
+        ))
+    return tuple(settled)
+
+
 def _apply_lexical_order_matches(
     assessments: Sequence["_ExecutionAssessment"],
     *,
@@ -5394,6 +5427,12 @@ async def _execute_consultation_episode_rules(
                 embedded_refs=embedded_decision_refs,
             )
             if execution_candidate_projection is not None:
+                execution_assessments = _settle_recommendations_without_any_candidate(
+                    execution_assessments,
+                    completed=completed_recommendations,
+                    candidates=execution_candidate_projection.candidates,
+                    source_incomplete_keys=execution_candidate_projection.source_incomplete_keys,
+                )
                 execution_assessments = _apply_lexical_order_matches(
                     execution_assessments,
                     completed=completed_recommendations,

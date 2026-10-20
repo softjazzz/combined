@@ -9789,3 +9789,35 @@ def test_lexical_order_match_upgrades_model_absent_to_same_day_order():
             (absent,), completed=(completed(text),), candidates=candidates,
         )
         assert kept is absent
+
+
+def test_recommendation_without_any_window_candidate_is_settled_absent():
+    # C02 11-17 会诊当日医嘱为 0 条：候选为空时模型答 unknown 不能使整例落资料不足。
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "test", "完善支原体DNA测定", "完善支原体DNA测定", "consultation_record-1"),
+        episode._ObservedTime(datetime(2025, 11, 17, 17, 35), True),
+    ),)
+    unknown = episode._unknown_execution_assessment("r1")
+    next_day = (episode._CandidateDocument(
+        "inpat_nondrug_order-1", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2025, 11, 18, 9, 0), True), "支原体DNA测定",
+    ),)
+    [settled] = episode._settle_recommendations_without_any_candidate(
+        (unknown,), completed=completed, candidates=next_day, source_incomplete_keys=frozenset(),
+    )
+    assert (settled.execution_state, settled.execution_record_state, settled.confidence) == ("absent", "no_trace", "high")
+    # 医嘱来源不完整时不能确定“确无医嘱”；有候选时仍由模型判断。
+    [kept] = episode._settle_recommendations_without_any_candidate(
+        (unknown,), completed=completed, candidates=next_day,
+        source_incomplete_keys=frozenset({"inpat_nondrug_order"}),
+    )
+    assert kept is unknown
+    same_day = (episode._CandidateDocument(
+        "inpat_nondrug_order-2", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2025, 11, 17, 18, 0), True), "支原体DNA测定",
+    ),)
+    [kept] = episode._settle_recommendations_without_any_candidate(
+        (unknown,), completed=completed, candidates=same_day, source_incomplete_keys=frozenset(),
+    )
+    assert kept is unknown
