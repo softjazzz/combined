@@ -19,6 +19,12 @@ import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
 from .consultation_measure_check import apply_measure_check, check_consultation_measures
+from .consultation_order_scope import (
+    declined_measure_objects,
+    measure_is_declined,
+    order_window_start,
+    recommendation_decline,
+)
 from .consultation_disposition_record import RULE_ID as DISPOSITION_RECORD_RULE_ID, check_disposition_record
 from .consultation_disposition_record import _ReviewIssue, _review_retry_prompt
 from .consultation_decision_evidence import (
@@ -489,6 +495,12 @@ class _CompletedRecommendation:
     episode_ref: str
     recommendation: _Recommendation
     opinion_time: "_ObservedTime"
+    # 023 医嘱核对窗口起点（会诊记录前 3 天）；未标注时按会诊记录当天。
+    window_start: date | None = None
+    # 本次会诊记录写明患者/家属拒绝或暂缓的措施原文；declined_measures 为其中对得上本建议的。
+    declined_objects: tuple[str, ...] = ()
+    declined_measures: tuple[str, ...] = ()
+    fully_declined: bool = False
 
 
 @dataclass(frozen=True)
@@ -2709,6 +2721,18 @@ def _consultation_execution_display_facts(
                 ][:8]
                 if missing_measures:
                     recommendation_evidence[-1]["missing_measures"] = missing_measures
+                # 医嘱核对起点（会诊记录前3天）与会诊记录写明不执行、因而不核对的措施。
+                if item.window_start is not None:
+                    recommendation_evidence[-1]["window_start_date"] = (
+                        item.window_start.isoformat()
+                    )
+                declined_measures = [
+                    redact_luxian_0609_patient_privacy(_clean(measure))[:40]
+                    for measure in item.declined_measures
+                    if _clean(measure)
+                ][:8]
+                if declined_measures:
+                    recommendation_evidence[-1]["declined_measures"] = declined_measures
         if rule_id == "LX0609-03-01-01":
             facts["recommendation_results"] = recommendation_results
         facts["recommendation_evidence"] = recommendation_evidence[:96]
@@ -2730,7 +2754,7 @@ def _consultation_execution_display_facts(
                     "recommendation_text": redact_luxian_0609_patient_privacy(
                         _clean(item.recommendation.normalized_action)
                     ),
-                    "exclusion_reason": _order_scope_exclusion_reason(item.recommendation),
+                    "exclusion_reason": _order_scope_exclusion_reason(item),
                 }
                 for item in order_scope_excluded[:96]
             )
@@ -2930,6 +2954,7 @@ def _execution_prompt(
                     candidate.observed_time,
                     item.opinion_time,
                     continuation=_is_continuation_recommendation(item.recommendation),
+                    window_start=item.window_start,
                 )
             elif candidate.observed_time.day > item.opinion_time.day:
                 include = True
@@ -2968,13 +2993,14 @@ def _execution_prompt(
                     candidate_rank[candidate.ref],
                 ),
             )
+            # 会诊记录前3天至当天的医嘱都算执行，同受较宽的安全上限。
             same_day = [
                 candidate for candidate in ordered
-                if candidate.observed_time.day == item.opinion_time.day
+                if _in_order_window_days(item, candidate.observed_time.day)
             ]
             earlier = [
                 candidate for candidate in ordered
-                if candidate.observed_time.day != item.opinion_time.day
+                if not _in_order_window_days(item, candidate.observed_time.day)
             ]
             kept_order_refs.update(
                 candidate.ref
@@ -3709,15 +3735,21 @@ def _order_in_execution_window(
     opinion_time: "_ObservedTime",
     *,
     continuation: bool,
+    window_start: date | None = None,
 ) -> bool:
-    """用户口径（2026-10-20）：只认会诊记录当天开立的医嘱，记录前后都算；次日起开立的不算。
+    """用户口径（2026-10-20）：认会诊记录前3天至会诊记录当天开立的医嘱；会诊记录次日起开立的不算。
 
-    “继续/维持”原治疗的建议，会诊当天之前已开立的医嘱也即为执行。
+    窗口起点见 consultation_order_scope；未标注时按会诊记录当天。
+    “继续/维持”原治疗的建议，窗口起点之前已开立的医嘱也即为执行。
     """
 
     if order_time.day > opinion_time.day:
         return False
-    return continuation or order_time.day == opinion_time.day
+    return continuation or order_time.day >= (window_start or opinion_time.day)
+
+
+def _in_order_window_days(item: "_CompletedRecommendation", day: date) -> bool:
+    return (item.window_start or item.opinion_time.day) <= day <= item.opinion_time.day
 
 
 def _is_continuation_recommendation(recommendation: "_Recommendation") -> bool:
@@ -3754,9 +3786,10 @@ def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
     )
 
 
-def _order_scope_exclusion_reason(recommendation: "_Recommendation") -> str:
-    """023 未纳入核对的原因：非医嘱类建议、院外自带药，或条件未成立。"""
+def _order_scope_exclusion_reason(item: "_CompletedRecommendation") -> str:
+    """023 未纳入核对的原因：非医嘱类建议、院外自带药、会诊记录写明不执行，或条件未成立。"""
 
+    recommendation = item.recommendation
     if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
         return "non_order_recommendation"
     text = _recommendation_text(recommendation)
@@ -3764,6 +3797,10 @@ def _order_scope_exclusion_reason(recommendation: "_Recommendation") -> str:
         return "home_medication"
     if not _is_order_recommendation(recommendation):
         return "non_order_recommendation"
+    if item.fully_declined or (
+        item.declined_objects and not _is_conditional_recommendation(recommendation)
+    ):
+        return "declined_in_record"
     return "condition_not_met"
 
 
@@ -3789,11 +3826,16 @@ def _measure_in_conditional_clause(recommendation: "_Recommendation", measure: s
 def _drop_conditional_missing_measures(
     outcome: Any, completed: Sequence["_CompletedRecommendation"],
 ) -> Any:
-    by_ref = {item.recommendation.recommendation_ref: item.recommendation for item in completed}
+    """条件分句里的措施，以及会诊记录写明拒绝/暂缓的措施，都不列为未开立医嘱。"""
+
+    by_ref = {item.recommendation.recommendation_ref: item for item in completed}
     missing = {
         ref: tuple(
             measure for measure in measures
-            if ref not in by_ref or not _measure_in_conditional_clause(by_ref[ref], measure)
+            if ref not in by_ref or not (
+                _measure_in_conditional_clause(by_ref[ref].recommendation, measure)
+                or measure_is_declined(measure, by_ref[ref].declined_objects)
+            )
         )
         for ref, measures in outcome.missing_measures.items()
     }
@@ -3920,19 +3962,82 @@ def _apply_lexical_order_matches(
     return tuple(upgraded)
 
 
+def _annotate_order_scope(
+    completed: Sequence["_CompletedRecommendation"],
+    *,
+    documents_by_ref: Mapping[str, Mapping[str, Any]],
+) -> tuple["_CompletedRecommendation", ...]:
+    """为 023 标注医嘱核对窗口起点（会诊记录前 3 天）和会诊记录内写明不执行的措施。"""
+
+    declined_by_opinion: dict[str, tuple[str, ...]] = {}
+    for item in completed:
+        opinion_ref = item.recommendation.opinion_ref
+        if opinion_ref in declined_by_opinion:
+            continue
+        text = _clean(documents_by_ref.get(opinion_ref, {}).get("text"))
+        declined_by_opinion[opinion_ref] = declined_measure_objects(
+            text, is_conditional=_is_conditional_clause,
+        )
+    annotated: list[_CompletedRecommendation] = []
+    for item in completed:
+        opinion_ref = item.recommendation.opinion_ref
+        declined_objects = declined_by_opinion.get(opinion_ref, ())
+        declined_measures, fully_declined = recommendation_decline(
+            _clean(item.recommendation.source_quote) or _clean(item.recommendation.normalized_action),
+            declined_objects,
+            is_conditional=_is_conditional_clause,
+        )
+        annotated.append(replace(
+            item,
+            window_start=order_window_start(item.opinion_time.day),
+            declined_objects=declined_objects,
+            declined_measures=declined_measures,
+            fully_declined=fully_declined,
+        ))
+    return tuple(annotated)
+
+
+def _is_conditional_clause(text: str) -> bool:
+    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(text or ""))
+
+
+def _declined_by_record_semantics(
+    item: "_CompletedRecommendation", assessment: "_ExecutionAssessment",
+) -> bool:
+    """措施名对不上字面（如“暂不处理痔疮”对“请消化内科评估”）时，采用模型的语义关联。
+
+    只在本次会诊记录确有程序识别出的拒绝/暂缓表述、字面比对没有命中本建议任何措施、
+    且模型自己把本次会诊文书判为该建议的具体执行反馈（未标部分覆盖）时成立；
+    字面已命中部分措施的，以程序逐项结果为准，其余措施仍须有医嘱。
+    """
+
+    return bool(
+        item.declined_objects
+        and not item.declined_measures
+        and assessment.execution_record_state == "specific_trace"
+        and item.recommendation.opinion_ref in assessment.trace_refs
+        and assessment.recommendation_coverage_state != "partial"
+        and not any(
+            ref.startswith(_ORDER_EXECUTION_REF_PREFIXES) for ref in assessment.execution_refs
+        )
+    )
+
+
 def _order_execution_view(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
 ) -> tuple[tuple["_CompletedRecommendation", ...], tuple["_ExecutionAssessment", ...] | None]:
     """023 只按医嘱核对：剔除非医嘱类建议，并把病程痕迹从执行证据中去掉。
 
-    同次会诊文书内明确暂缓/拒绝的闭环决定仍按已处理保留；医嘱候选在二阶段
-    已按会诊当日窗口过滤，这里只保留医嘱引用。条件式建议没有对应医嘱时视为
-    条件未成立，不纳入核对。
+    用户口径（2026-10-20）：会诊记录写明患者/家属拒绝或暂缓的措施只免该项——整条建议
+    的措施都已写明不执行时不纳入核对；只免部分措施时，其余措施仍须有医嘱，会诊文书
+    本身不再作为整条建议的执行证据。医嘱候选在二阶段已按会诊记录前3天至当天的
+    窗口过滤，这里只保留医嘱引用。条件式建议没有对应医嘱时视为条件未成立，不纳入核对。
     """
 
     in_scope = tuple(
-        item for item in completed if _is_order_recommendation(item.recommendation)
+        item for item in completed
+        if _is_order_recommendation(item.recommendation) and not item.fully_declined
     )
     if assessments is None:
         return in_scope, None
@@ -3945,9 +4050,8 @@ def _order_execution_view(
         if assessment is None:
             view.append(_unknown_execution_assessment(item.recommendation.recommendation_ref))
             continue
-        opinion_ref = item.recommendation.opinion_ref
-        if assessment.execution_record_state == "specific_trace" and opinion_ref in assessment.trace_refs:
-            view.append(assessment)
+        if _declined_by_record_semantics(item, assessment):
+            kept.pop()
             continue
         order_refs = tuple(
             ref for ref in assessment.execution_refs if ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
@@ -4108,6 +4212,13 @@ def _execution_outcome(
         order_completed, order_assessments = _order_execution_view(
             completed_recommendations, assessments,
         )
+        if not order_completed and assessments is not None and any(
+            _is_order_recommendation(item.recommendation)
+            and _order_scope_exclusion_reason(item) == "declined_in_record"
+            for item in completed_recommendations
+        ):
+            # 需医嘱落实的建议全部由会诊记录写明拒绝/暂缓，已闭环，判合规而非不适用。
+            return "compliant", "requirement_satisfied"
         return _execution_quality_outcome(
             assessments=order_assessments,
             completed_recommendations=order_completed,
@@ -4830,6 +4941,7 @@ async def _execute_consultation_episode_rules(
         # 原有语义链处理其余规则，但模型不得覆盖已经由正文确定的 022 结论。
         statuses["LX0609-03-01-03"] = ("compliant", "requirement_satisfied")
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
+    order_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
     context_only_candidate_present = False
@@ -4894,6 +5006,10 @@ async def _execute_consultation_episode_rules(
                 documents_by_ref = {
                     _clean(item.get("ref")): item for item in documents
                 }
+                completed_recommendations = _annotate_order_scope(
+                    completed_recommendations,
+                    documents_by_ref=documents_by_ref,
+                )
                 embedded_decision_refs = frozenset({
                     ref
                     for item in episodes
@@ -4915,11 +5031,17 @@ async def _execute_consultation_episode_rules(
                         _clean(documents_by_ref[ref].get("document_id")),
                     )
                     # 只增加候选，不按文书级关键词把所有建议强制判为已落实。
+                    # 程序识别出拒绝/暂缓措施的会诊记录也投给模型，供 023 判断措施名
+                    # 对不上字面时的语义关联（见 _declined_by_record_semantics）。
                     for ref in sorted(embedded_decision_refs | frozenset(
                         ref for event in episodes for ref in event.opinion_refs
                         if _EMBEDDED_CLINICAL_DECISION_PATTERN.search(
                             _clean(documents_by_ref.get(ref, {}).get("text"))
                         )
+                    ) | frozenset(
+                        item.recommendation.opinion_ref
+                        for item in completed_recommendations
+                        if item.declined_objects
                     ))
                     if (
                         observed_time := _parse_observed_time(
@@ -5421,6 +5543,9 @@ async def _execute_consultation_episode_rules(
                         assessments=None,
                     )
         if execution_assessments is not None:
+            # 023 用模型逐建议的原始判断：整份会诊文书兜底到全部建议的做法只给 020，
+            # 023 由 _order_execution_view 按措施只免会诊记录写明不执行的那一项。
+            order_assessments = execution_assessments
             execution_assessments = _apply_embedded_decision_traces(
                 execution_assessments,
                 completed=completed_recommendations,
@@ -5438,12 +5563,26 @@ async def _execute_consultation_episode_rules(
                     completed=completed_recommendations,
                     candidates=execution_candidate_projection.candidates,
                 )
+                order_assessments = _apply_lexical_order_matches(
+                    _settle_recommendations_without_any_candidate(
+                        order_assessments,
+                        completed=completed_recommendations,
+                        candidates=execution_candidate_projection.candidates,
+                        source_incomplete_keys=execution_candidate_projection.source_incomplete_keys,
+                    ),
+                    completed=completed_recommendations,
+                    candidates=execution_candidate_projection.candidates,
+                )
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,
                     episodes=episodes,
                     completed_recommendations=completed_recommendations,
-                    assessments=execution_assessments,
+                    assessments=(
+                        order_assessments
+                        if rule_id == "LX0609-03-01-04"
+                        else execution_assessments
+                    ),
                     source_technical=execution_source_technical,
                     source_incomplete_keys=execution_source_incomplete_keys,
                     context_only_candidate_present=context_only_candidate_present,
@@ -5461,7 +5600,7 @@ async def _execute_consultation_episode_rules(
                     candidate for candidate in execution_candidate_projection.candidates
                     if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
                 )
-                measure_scope = _measure_check_scope(completed_recommendations, execution_assessments)
+                measure_scope = _measure_check_scope(completed_recommendations, order_assessments)
                 for measure_completed in _execution_event_batches(
                     completed=measure_scope, candidates=measure_candidates,
                 ):
@@ -5531,7 +5670,7 @@ async def _execute_consultation_episode_rules(
                 continue
             try:
                 rule_completed, rule_assessments = (
-                    _order_execution_view(completed_recommendations, execution_assessments)
+                    _order_execution_view(completed_recommendations, order_assessments)
                     if rule_id == "LX0609-03-01-04"
                     else (completed_recommendations, execution_assessments)
                 )
@@ -5594,7 +5733,7 @@ async def _execute_consultation_episode_rules(
         if rule_id not in selected or rule_id not in statuses:
             continue
         rule_completed, rule_assessments = (
-            _order_execution_view(completed_recommendations, execution_assessments)
+            _order_execution_view(completed_recommendations, order_assessments)
             if rule_id == "LX0609-03-01-04"
             else (completed_recommendations, execution_assessments)
         )

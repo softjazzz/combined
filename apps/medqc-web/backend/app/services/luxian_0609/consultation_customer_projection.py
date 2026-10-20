@@ -47,7 +47,12 @@ _023_EXCLUSION_REASONS = frozenset({
     "non_order_recommendation",
     "home_medication",
     "condition_not_met",
+    "declined_in_record",
 })
+
+
+def _valid_window_start(value: Any) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None and _valid_record_time(value)
 
 
 def _valid_missing_measures(value: Any) -> bool:
@@ -351,14 +356,22 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
                 expected_item_keys.add("recommendation_text")
             opinion_time = item.get("opinion_time")
             missing_measures = item.get("missing_measures")
+            window_start_date = item.get("window_start_date")
+            declined_measures = item.get("declined_measures")
             if rule_id == "LX0609-03-01-04":
                 if opinion_time is not None:
                     expected_item_keys.add("opinion_time")
                 if missing_measures is not None:
                     expected_item_keys.add("missing_measures")
+                if window_start_date is not None:
+                    expected_item_keys.add("window_start_date")
+                if declined_measures is not None:
+                    expected_item_keys.add("declined_measures")
             if (
                 (opinion_time is not None and not _valid_record_time(opinion_time))
                 or (missing_measures is not None and not _valid_missing_measures(missing_measures))
+                or (window_start_date is not None and not _valid_window_start(window_start_date))
+                or (declined_measures is not None and not _valid_missing_measures(declined_measures))
             ):
                 return None
             episode_index = item.get("episode_index")
@@ -410,6 +423,10 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
                 safe_item["opinion_time"] = opinion_time
             if missing_measures is not None:
                 safe_item["missing_measures"] = [value.strip() for value in missing_measures]
+            if window_start_date is not None:
+                safe_item["window_start_date"] = window_start_date
+            if declined_measures is not None:
+                safe_item["declined_measures"] = [value.strip() for value in declined_measures]
             safe_recommendation_evidence.append(safe_item)
         if any(
             raw[f"{state}_execution_count"]
@@ -588,11 +605,13 @@ def _published_recommendation_evidence(raw: dict[str, Any]) -> bool:
     expected = {"episode_index", "recommendation_index", "execution_state", "opinion_evidence", "execution_evidence"}
     optional = {"recommendation_text"}
     if raw["verification_kind"] == "consultation_execution_quality_check":
-        optional |= {"opinion_time", "missing_measures"}
+        optional |= {"opinion_time", "missing_measures", "window_start_date", "declined_measures"}
     for index, item in enumerate(evidence, start=1):
         if (type(item) is not dict or not expected <= set(item) <= expected | optional
                 or ("opinion_time" in item and not _valid_record_time(item["opinion_time"]))
                 or ("missing_measures" in item and not _valid_missing_measures(item["missing_measures"]))
+                or ("window_start_date" in item and not _valid_window_start(item["window_start_date"]))
+                or ("declined_measures" in item and not _valid_missing_measures(item["declined_measures"]))
                 or type(item["episode_index"]) is not int
                 or not 1 <= item["episode_index"] <= raw["completed_opinion_episode_count"]
                 or type(item["recommendation_index"]) is not int or item["recommendation_index"] != index

@@ -4775,7 +4775,10 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
 async def test_023_order_before_consultation_cannot_prove_execution(
     monkeypatch,
 ):
-    """按会诊后时间边界，会诊前医嘱不能单独证明后续落实。"""
+    """核对窗口之前开立的医嘱不能证明后续落实。
+
+    用户口径（2026-10-20）：窗口从会诊记录前3天起；会诊记录为 07-20，07-16 的医嘱不算。
+    """
 
     source_rows = _no_course_source_rows(
         consultation_text="会诊意见：建议加强抗感染治疗。",
@@ -4783,7 +4786,7 @@ async def test_023_order_before_consultation_cannot_prove_execution(
         source_rows=[{
             "order_id": "ORDER-023-PRE",
             "generic_name": "头孢哌酮舒巴坦",
-            "start_time": "2026-07-19 10:00:00",
+            "start_time": "2026-07-16 10:00:00",
         }],
     )
     monkeypatch.setattr(
@@ -4830,10 +4833,12 @@ def test_023_order_candidates_remain_inside_current_stay_when_documentation_is_l
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("order_time", "expected"), [
-    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱都算执行（记录前后均可）；前几天的不算。
+    # 用户口径（2026-10-20）：会诊记录前3天（07-17）至会诊记录当天开立的医嘱都算执行
+    # （记录前后均可）；更早的和次日起的都不算。
     ("2026-07-20 15:56:46", "compliant"), ("2026-07-20 15:55:22", "compliant"),
     ("2026-07-20 18:30:00", "compliant"),
-    ("2026-07-19 15:56:46", "non_compliant"), ("2026-07-17 15:55:22", "non_compliant"),
+    ("2026-07-19 15:56:46", "compliant"), ("2026-07-17 00:00:00", "compliant"),
+    ("2026-07-16 23:59:59", "non_compliant"), ("2026-07-21 08:00:00", "non_compliant"),
 ])
 async def test_023_only_consultation_day_order_counts(monkeypatch, order_time, expected):
     rows = _no_course_source_rows(
@@ -4850,6 +4855,74 @@ async def test_023_only_consultation_day_order_counts(monkeypatch, order_time, e
         rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client)
     assert result.results[0]["status"] == expected
+
+
+_DECLINED_BRONCHOSCOPY_CONSULTATION = (
+    "既往肺结核病史，请感染性疾病科会诊。会诊意见:考虑陈旧性病变,"
+    "建议诱导痰查XPERT,真菌G\\GM试验,若均为阴性,可充分沟通后气管镜进一步排除活动性病变。"
+    "会诊执行:患者家属表示不行纤支镜检查。"
+)
+
+
+def _declined_bronchoscopy_rows(*, orders):
+    rows = _no_course_source_rows(
+        consultation_text=_DECLINED_BRONCHOSCOPY_CONSULTATION,
+        source_key="inpat_nondrug_order",
+        source_rows=orders,
+    )
+    return rows
+
+
+@pytest.mark.asyncio
+async def test_023_window_starts_three_days_before_record_and_only_declined_measure_is_exempt(monkeypatch):
+    """用户口径（2026-10-20）：核对窗口从会诊记录前3天起；家属拒绝纤支镜只免该项。"""
+
+    rows = _declined_bronchoscopy_rows(orders=[{
+        "order_id": "ORDER-XPERT", "order_name": "痰XPERT检测",
+        "prescribed_datetime": "2026-07-17 10:00:00",
+    }])
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(
+            action_type="test",
+            source_quote="建议诱导痰查XPERT,真菌G\\GM试验,若均为阴性,可充分沟通后气管镜进一步排除活动性病变",
+        ),
+        candidate_ref="inpat_nondrug_order-1", candidate_text="痰XPERT检测")
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+
+    # 会诊记录在 07-20，前3天即 07-17，07-17 开立的医嘱也算。
+    assert any("痰XPERT检测" in text for text in _stage_two_candidate_texts(client.prompts[1]))
+    evidence = dict(result.customer_display_facts)["LX0609-03-01-04"]["recommendation_evidence"][0]
+    assert evidence["window_start_date"] == "2026-07-17"
+    assert evidence["declined_measures"] == ["纤支镜检查"]
+
+
+@pytest.mark.asyncio
+async def test_023_recommendation_only_declined_in_record_is_compliant_and_listed_as_excluded(monkeypatch):
+    rows = _declined_bronchoscopy_rows(orders=[])
+    rows["consultation_record"][0]["record_content"] = (
+        "请感染性疾病科会诊。会诊意见:建议行气管镜检查排除活动性病变。"
+        "会诊执行:患者家属表示不行纤支镜检查。"
+    )
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(action_type="procedure", source_quote="建议行气管镜检查排除活动性病变"),
+        candidate_ref="inpat_nondrug_order-1", candidate_text="不存在的医嘱")
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+
+    assert result.results[0]["status"] == "compliant"
+    facts = dict(result.customer_display_facts)["LX0609-03-01-04"]
+    assert facts["excluded_recommendations"] == [{
+        "episode_index": 1,
+        "recommendation_text": "建议行气管镜检查排除活动性病变",
+        "exclusion_reason": "declined_in_record",
+    }]
 
 
 @pytest.mark.asyncio

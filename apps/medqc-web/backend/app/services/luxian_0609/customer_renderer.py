@@ -218,7 +218,7 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-03-01-02": ("会诊申请中的具体临床问题、会诊理由或明确目的",),
     "LX0609-03-01-03": ("会诊记录中的明确诊疗意见",),
     "LX0609-03-01-04": (
-        f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}、会诊记录当天的住院医嘱或两者的关联信息",
+        f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}、会诊记录前3天至当天的住院医嘱或二者关联",
     ),
     "LX0609-03-01-05": ("会诊执行记录正文中引用的会诊意见或本科室逐条处置记载",),
     "LX0609-04-02-01": ("手术结束时间、手术记录时间或单台手术关联信息",),
@@ -327,7 +327,7 @@ _RULE_DATA_GAP_MESSAGES = {
     "LX0609-03-01-04": (
         f"暂无法核对会诊建议是否已开立住院医嘱（{_CONSULTATION_023_BODY_EXTRACTION_NOTE}）",
         f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；当前缺少可唯一关联的会诊意见、"
-        "会诊记录当天的住院医嘱，或两者之间的关联信息。",
+        "会诊记录前3天至当天的住院医嘱，或两者之间的关联信息。",
         "请确认会诊意见和住院医嘱已完整同步并可相互关联后重新评估。",
     ),
     "LX0609-03-01-05": (
@@ -2868,11 +2868,13 @@ def customer_finding_from_controlled_facts(
             if state not in labels_by_state:
                 continue
             opinion_time = item.get("opinion_time")
-            when = (
-                f"（会诊记录{opinion_time[:16]}）"
-                if isinstance(opinion_time, str) and opinion_time.strip()
-                else ""
-            )
+            window_start = item.get("window_start_date")
+            when_parts = []
+            if isinstance(window_start, str) and window_start.strip():
+                when_parts.append(f"医嘱核对自{window_start[:10]}起")
+            if isinstance(opinion_time, str) and opinion_time.strip():
+                when_parts.append(f"会诊记录{opinion_time[:16]}")
+            when = f"（{'，'.join(when_parts)}）" if when_parts else ""
             label = (
                 f"第{item['episode_index']}次会诊{when}的"
                 f"第{item['recommendation_index']}条建议"
@@ -2880,6 +2882,14 @@ def customer_finding_from_controlled_facts(
             recommendation_text = item.get("recommendation_text")
             if isinstance(recommendation_text, str) and recommendation_text.strip():
                 label += f"“{recommendation_text.strip()}”"
+            declined_measures = item.get("declined_measures")
+            if isinstance(declined_measures, list):
+                declined = "、".join(
+                    value.strip() for value in declined_measures
+                    if isinstance(value, str) and value.strip()
+                )
+                if declined:
+                    label += f"（会诊记录写明不执行“{declined}”，该项不核对）"
             missing_measures = item.get("missing_measures")
             if state == "specific" and isinstance(missing_measures, list) and missing_measures:
                 measures = "、".join(
@@ -2900,34 +2910,36 @@ def customer_finding_from_controlled_facts(
 
         finding_parts = [
             f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；"
-            "执行证据按会诊记录当天开立的住院医嘱核对（“继续/维持”原治疗的建议"
-            "也认此前已开立的医嘱），次日起开立的不算；"
+            "执行证据按会诊记录前3天至会诊记录当天开立的住院医嘱核对（系统无结构化会诊日期，"
+            "固定回看3天；“继续/维持”原治疗的建议也认此前已开立的医嘱），"
+            "会诊记录次日起开立的不算；"
             f"共核对{len(recommendation_evidence)}条建议。"
         ]
         if labels_by_state["missing"]:
             finding_parts.append(
                 f"未执行：{'；'.join(labels_by_state['missing'])}。"
-                "会诊记录当天未开立与上述建议对应的医嘱。"
+                "会诊记录前3天至当天未开立与上述建议对应的医嘱。"
             )
         if labels_by_state["partial"]:
             finding_parts.append(
                 f"部分措施未执行：{'；'.join(labels_by_state['partial'])}，"
-                "会诊记录当天未开立对应医嘱。"
+                "会诊记录前3天至当天未开立对应医嘱。"
             )
         if labels_by_state["generic"]:
             finding_parts.append(
                 f"执行医嘱不具体：{'；'.join(labels_by_state['generic'])}。"
-                "会诊记录当天仅有与建议笼统相关的医嘱，不能确认具体落实。"
+                "会诊记录前3天至当天仅有与建议笼统相关的医嘱，不能确认具体落实。"
             )
         if labels_by_state["specific"]:
             finding_parts.append(
-                f"其余{len(labels_by_state['specific'])}条建议当天已开立对应医嘱。"
+                f"其余{len(labels_by_state['specific'])}条建议已开立对应医嘱。"
             )
         exclusion_notes = {
             "execution_condition_not_defined": "未说明何时达到执行条件",
             "non_order_recommendation": "不通过开立医嘱落实",
             "home_medication": "属院外自带药",
-            "condition_not_met": "条件式建议当天未开医嘱，视为条件未成立",
+            "condition_not_met": "条件式建议在核对期间未开医嘱，视为条件未成立",
+            "declined_in_record": "会诊记录写明患者或家属拒绝、或暂缓执行",
         }
         excluded_labels: list[str] = []
         for item in excluded_recommendations:
