@@ -178,7 +178,7 @@
 }
 
 .result-row.is-expanded > .result-detail,
-.result-row.is-expanded > .result-suggestion,
+.result-row.is-expanded > .result-suggestion-disclosure,
 .result-row.is-expanded > .result-feedback-panel,
 .result-row.is-expanded > .rule-fulltext,
 .result-row.is-expanded > .result-event-overview,
@@ -419,17 +419,59 @@
   line-height: 20px;
 }
 
-/* ---------- 整改建议 ---------- */
-.result-suggestion {
-  padding: 12px 14px;
+/* ---------- 修改建议：默认折叠，点标题行展开 ---------- */
+.result-suggestion-disclosure {
   border-radius: 18px;
   background: rgba(118, 128, 160, 0.07);
 }
 
-.result-suggestion :deep(.qc-remediation-title) {
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
+.result-suggestion-disclosure > summary {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
   font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.result-suggestion-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.result-suggestion-disclosure > summary::after {
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  content: '展开';
+}
+
+.result-suggestion-disclosure[open] > summary::after {
+  content: '收起';
+}
+
+.result-suggestion-disclosure > summary:focus-visible {
+  border-radius: 18px;
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.result-suggestion {
+  padding: 0 14px 12px;
+}
+
+/* 折叠标题已写「修改建议」，组件内标题只留给读屏 */
+.result-suggestion :deep(.qc-remediation-head) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .result-suggestion :deep(.qc-remediation-sections) {

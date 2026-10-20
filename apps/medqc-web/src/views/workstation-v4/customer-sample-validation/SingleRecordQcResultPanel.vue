@@ -392,15 +392,21 @@
             </div>
           </section>
 
-          <QcRemediationSuggestion
+          <details
             v-if="!isCompliantResult(item) && item.suggestion"
-            class="result-suggestion"
-            compact
-            :suggestion="item.suggestion"
-            :status="item.status"
-            :rule-id="item.rule_id"
-            :record-context="debugContext"
-          />
+            class="result-suggestion-disclosure"
+            data-testid="single-record-suggestion-disclosure"
+          >
+            <summary>修改建议</summary>
+            <QcRemediationSuggestion
+              class="result-suggestion"
+              compact
+              :suggestion="item.suggestion"
+              :status="item.status"
+              :rule-id="item.rule_id"
+              :record-context="debugContext"
+            />
+          </details>
 
           <section
             v-if="feedbackEnabled && feedbackOpenKey === item.key"
@@ -1950,12 +1956,6 @@ watch(
   color: rgba(29, 29, 31, 0.68);
   font-size: 12px;
   line-height: 19px;
-}
-
-.result-suggestion {
-  margin: 0 14px;
-  padding: 8px 0 10px;
-  border-top: 1px solid rgba(0, 0, 0, 0.065);
 }
 
 @container (max-width: 900px) {

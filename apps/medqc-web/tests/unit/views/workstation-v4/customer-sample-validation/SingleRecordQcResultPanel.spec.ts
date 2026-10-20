@@ -328,7 +328,12 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('关键证据')
     expect(wrapper.text()).toContain('修改建议')
-    const suggestion = wrapper.get('[data-testid="qc-remediation-suggestion"]')
+    // 修改建议默认折叠，点标题行展开
+    const suggestionDisclosure = wrapper.get('[data-testid="single-record-suggestion-disclosure"]')
+    expect(suggestionDisclosure.element.tagName).toBe('DETAILS')
+    expect(suggestionDisclosure.attributes('open')).toBeUndefined()
+    expect(suggestionDisclosure.get('summary').text()).toBe('修改建议')
+    const suggestion = suggestionDisclosure.get('[data-testid="qc-remediation-suggestion"]')
     expect(suggestion.classes()).toContain('qc-remediation--compact')
     // 侧栏排版只改样式，建议原文逐字保留
     expect(suggestion.text().replace(/\s+/g, '')).toContain(
