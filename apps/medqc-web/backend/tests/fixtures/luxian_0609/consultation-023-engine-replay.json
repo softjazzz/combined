@@ -26,7 +26,15 @@
       }
     ],
     "inpat_registration": [{ "admission_datetime": "2026-07-01 08:00:00" }],
-    "current_visit_discharge_horizon": [{ "discharge_datetime": "2026-07-03 08:00:00" }]
+    "current_visit_discharge_horizon": [{ "discharge_datetime": "2026-07-03 08:00:00" }],
+    "inpat_nondrug_order": [
+      {
+        "order_id": "ORDER-SYN-001",
+        "order_name": "血常规",
+        "order_type": "检验",
+        "prescribed_datetime": "2026-07-02 09:10:00"
+      }
+    ]
   },
   "responses": [
     {
@@ -62,11 +70,11 @@
         "executions": [
           {
             "recommendation_ref": "consultation_record-1#r1",
-            "execution_state": "absent",
+            "execution_state": "linked_specific",
             "execution_record_state": "specific_trace",
             "execution_refs": [],
             "trace_refs": ["daily_course_record-1"],
-            "structured_action_refs": [],
+            "structured_action_refs": ["inpat_nondrug_order-1"],
             "execution_quotes": ["复查血常规"],
             "confidence": "high"
           }
@@ -82,9 +90,9 @@
           {
             "recommendation_ref": "consultation_record-1#r1",
             "measure": "复查血常规",
-            "evidence_ref": "daily_course_record-1",
-            "quote": "已复查血常规",
-            "executed_action": "复查血常规",
+            "evidence_ref": "inpat_nondrug_order-1",
+            "quote": "血常规",
+            "executed_action": "血常规",
             "action_relation": "matched"
           }
         ],

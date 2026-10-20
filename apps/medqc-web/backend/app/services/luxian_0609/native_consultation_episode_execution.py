@@ -1632,7 +1632,8 @@ def _compact_document_prompt(
         + _RECOMMENDATION_ACTION_BOUNDARY_PROMPT +
         "recommendations仅用于ordinary且意见clear、confidence=high的可执行建议；不得把诊断、风险描述、"
         "既往史或泛化继续治疗当建议。建议身份由Python按数组顺序生成，禁止输出recommendation_ref；action_type只能是"
-        "medication/test/procedure/transfer/monitoring/other；source_quote优先返回该文书的连续支持原句，最长240字；"
+        "medication/test/procedure/transfer/monitoring/other（卧床、活动、体位、制动方式、饮食与营养目标、护理、宣教、"
+        "随诊及继续原科室治疗等不通过开立医嘱落实的建议一律为other）；source_quote优先返回该文书的连续支持原句，最长240字；"
         "normalized_action只做医学归一化，不得虚构。non_target/unknown的recommendations必须为空。"
         "每个输入ref必须恰好输出一次，禁止创造、改写、遗漏或重复ref。"
         "严格输出JSON对象：{consultation_event_facts:[{ref,scope,application_state,opinion_state,confidence,"
@@ -1714,7 +1715,8 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         + _RECOMMENDATION_ACTION_BOUNDARY_PROMPT +
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
-        "medication/test/procedure/transfer/monitoring/other。每项必须返回opinion_ref、source_quote和normalized_action："
+        "medication/test/procedure/transfer/monitoring/other（卧床、活动、体位、制动方式、饮食与营养目标、护理、宣教、"
+        "随诊及继续原科室治疗等不通过开立医嘱落实的建议一律为other）。每项必须返回opinion_ref、source_quote和normalized_action："
         "opinion_ref只能是本episode的opinion_refs之一；source_quote用于人工溯源，优先摘录该单一意见文书的支持性原句，"
         "不得拼接多个文书、删改否定词、剂量或数值，最长240字；normalized_action仅用于后续语义关联，"
         "允许source_quote和normalized_action作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
@@ -2889,6 +2891,12 @@ def _execution_prompt(
                 continue
             if embedded_same_episode:
                 include = True
+            elif candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
+                include = _order_in_execution_window(
+                    candidate.observed_time,
+                    item.opinion_time,
+                    continuation=_is_continuation_recommendation(item.recommendation),
+                )
             elif candidate.observed_time.day > item.opinion_time.day:
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:
@@ -3604,6 +3612,88 @@ def _every_recommendation_has_trace(
 
 _RECORDED_TRACE_LEVELS = frozenset({"specific_trace", "generic_trace"})
 _ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
+# 用户口径（2026-10-20）：023 会诊执行只认医嘱，不看病程；只核对需通过医嘱落实的建议
+# （药物、检查检验、操作治疗、转科），卧床/活动/体位/饮食营养目标/护理宣教等不属于医嘱，不核对。
+_ORDER_RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer"})
+_CONTINUATION_RECOMMENDATION_PATTERN = re.compile(r"^\s*(?:暂)?(?:继续|维持|续用|仍予|仍用)")
+
+
+def _order_in_execution_window(
+    order_time: "_ObservedTime",
+    opinion_time: "_ObservedTime",
+    *,
+    continuation: bool,
+) -> bool:
+    """用户口径（2026-10-20）：会诊记录是对会诊当天所开医嘱的总结，不是计划。
+
+    只认会诊记录当天、记录时间之前（含）开立的医嘱；记录之后才开的不算执行。
+    “继续/维持”原治疗的建议，记录时间之前已开立的医嘱即为执行。
+    """
+
+    if order_time.day > opinion_time.day:
+        return False
+    if (
+        order_time.precise
+        and opinion_time.precise
+        and order_time.value > opinion_time.value
+    ):
+        return False
+    return continuation or order_time.day == opinion_time.day
+
+
+def _is_continuation_recommendation(recommendation: "_Recommendation") -> bool:
+    return bool(
+        _CONTINUATION_RECOMMENDATION_PATTERN.match(_clean(recommendation.source_quote))
+        or _CONTINUATION_RECOMMENDATION_PATTERN.match(_clean(recommendation.normalized_action))
+    )
+
+
+def _order_execution_view(
+    completed: Sequence["_CompletedRecommendation"],
+    assessments: Sequence["_ExecutionAssessment"] | None,
+) -> tuple[tuple["_CompletedRecommendation", ...], tuple["_ExecutionAssessment", ...] | None]:
+    """023 只按医嘱核对：剔除非医嘱类建议，并把病程痕迹从执行证据中去掉。
+
+    同次会诊文书内明确暂缓/拒绝的闭环决定仍按已处理保留；医嘱候选在二阶段
+    已按会诊当日窗口过滤，这里只保留医嘱引用。
+    """
+
+    in_scope = tuple(
+        item for item in completed
+        if _clean(item.recommendation.action_type).lower() in _ORDER_RECOMMENDATION_TYPES
+    )
+    if assessments is None:
+        return in_scope, None
+    by_ref = {item.recommendation_ref: item for item in assessments}
+    view: list[_ExecutionAssessment] = []
+    for item in in_scope:
+        assessment = by_ref.get(item.recommendation.recommendation_ref)
+        if assessment is None:
+            view.append(_unknown_execution_assessment(item.recommendation.recommendation_ref))
+            continue
+        opinion_ref = item.recommendation.opinion_ref
+        if assessment.execution_record_state == "specific_trace" and opinion_ref in assessment.trace_refs:
+            view.append(assessment)
+            continue
+        order_refs = tuple(
+            ref for ref in assessment.execution_refs if ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
+        )
+        if order_refs and assessment.execution_state in {"linked_specific", "linked_vague"}:
+            view.append(replace(
+                assessment, execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
+                execution_refs=order_refs,
+            ))
+        elif assessment.execution_state == "unknown":
+            view.append(replace(
+                assessment, execution_record_state="unknown", trace_refs=(), context_only_refs=(),
+                execution_refs=(),
+            ))
+        else:
+            view.append(replace(
+                assessment, execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
+                execution_refs=(), execution_state="absent",
+            ))
+    return in_scope, tuple(view)
 
 
 def _execution_quality_outcome(
@@ -3739,10 +3829,13 @@ def _execution_outcome(
     if rule_id == "LX0609-03-01-01" and _every_recommendation_has_trace(assessments):
         return "compliant", "requirement_satisfied"
     if rule_id == "LX0609-03-01-04":
+        order_completed, order_assessments = _order_execution_view(
+            completed_recommendations, assessments,
+        )
         return _execution_quality_outcome(
-            assessments=assessments,
-            completed_recommendations=completed_recommendations,
-            source_incomplete_keys=source_incomplete_keys,
+            assessments=order_assessments,
+            completed_recommendations=order_completed,
+            source_incomplete_keys=source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
         )
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
@@ -5060,9 +5153,14 @@ async def _execute_consultation_episode_rules(
             ):
                 # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
                 # 只对原判合规者逐项核对；核对失败或漏拆改判资料不足，不沿用合规。
-                measure_candidates = execution_candidate_projection.candidates
+                # 用户口径（2026-10-20）：逐项核对同样只认会诊当日医嘱、只核医嘱类建议。
+                measure_candidates = tuple(
+                    candidate for candidate in execution_candidate_projection.candidates
+                    if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+                )
+                measure_scope, _ = _order_execution_view(completed_recommendations, None)
                 for measure_completed in _execution_event_batches(
-                    completed=completed_recommendations, candidates=measure_candidates,
+                    completed=measure_scope, candidates=measure_candidates,
                 ):
                     _, measure_allowed_refs = _execution_prompt(
                         completed=measure_completed,
@@ -5121,14 +5219,19 @@ async def _execute_consultation_episode_rules(
             if rule_id not in typed:
                 continue
             try:
+                rule_completed, rule_assessments = (
+                    _order_execution_view(completed_recommendations, execution_assessments)
+                    if rule_id == "LX0609-03-01-04"
+                    else (completed_recommendations, execution_assessments)
+                )
                 fact_refs = select_consultation_rule_material_refs(
                     rule_id=rule_id,
                     status=statuses[rule_id][0],
                     reason_code=statuses[rule_id][1],
                     documents=documents,
                     episodes=episodes,
-                    completed_recommendations=completed_recommendations,
-                    assessments=execution_assessments,
+                    completed_recommendations=rule_completed,
+                    assessments=rule_assessments,
                     candidates=(
                         execution_candidate_projection.candidates
                         if execution_candidate_projection is not None
@@ -5179,6 +5282,11 @@ async def _execute_consultation_episode_rules(
     for rule_id in ("LX0609-03-01-01", "LX0609-03-01-04"):
         if rule_id not in selected or rule_id not in statuses:
             continue
+        rule_completed, rule_assessments = (
+            _order_execution_view(completed_recommendations, execution_assessments)
+            if rule_id == "LX0609-03-01-04"
+            else (completed_recommendations, execution_assessments)
+        )
         display_facts.append(
             (
                 rule_id,
@@ -5186,8 +5294,8 @@ async def _execute_consultation_episode_rules(
                     rule_id=rule_id,
                     status=statuses[rule_id][0],
                     episodes=episodes,
-                    completed_recommendations=completed_recommendations,
-                    assessments=execution_assessments,
+                    completed_recommendations=rule_completed,
+                    assessments=rule_assessments,
                     documents=documents,
                     candidates=(
                         execution_candidate_projection.candidates

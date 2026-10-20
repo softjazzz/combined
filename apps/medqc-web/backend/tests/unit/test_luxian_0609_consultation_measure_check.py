@@ -1,4 +1,7 @@
-"""023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施既无医嘱也无病程记录即不合规。"""
+"""023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施无执行证据即不合规。
+
+用户口径（2026-10-20）：执行证据只认会诊记录当天、记录时间之前（含）开立的医嘱。
+"""
 
 import asyncio
 import json
@@ -35,7 +38,9 @@ def test_specific_order_proves_execution_even_when_course_only_says_follow_advic
         source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
 
 
-def test_orders_and_courses_before_consultation_are_not_execution_candidates():
+def test_only_same_day_orders_up_to_consultation_record_are_execution_candidates():
+    # 用户口径（2026-10-20）：会诊记录是对当天所开医嘱的总结，记录前（含）的当天医嘱算执行；
+    # 前一天的医嘱不算；病程不作执行证据（同日早于记录的病程本就不在候选内）。
     completed, _, _, _ = _setup()
     completed = (replace(completed[0], opinion_time=episode._ObservedTime(datetime(2026, 7, 20, 15, 59), True)),)
     candidates = tuple(episode._CandidateDocument(
@@ -48,7 +53,8 @@ def test_orders_and_courses_before_consultation_are_not_execution_candidates():
             ("inpat_nondrug_order-4", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 59), "中药贴敷"),
         ))
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
-    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset()
+    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset(
+        {"inpat_nondrug_order-1", "inpat_nondrug_order-2", "inpat_nondrug_order-4"})
 
 
 async def _check_clinical_decision(text, candidate_text, measures, generic=()):
@@ -56,7 +62,9 @@ async def _check_clinical_decision(text, candidate_text, measures, generic=()):
     recommendation = replace(completed[0].recommendation, action_type="test",
                              source_quote=text, normalized_action=text)
     completed = (replace(completed[0], recommendation=recommendation),)
-    candidates = (replace(candidates[0], source_key="daily_course_record"),)
+    # 本组只验证逐项核对器对“暂不执行及原因”等语义的处理，病程放在会诊之后。
+    candidates = (replace(candidates[0], source_key="daily_course_record",
+                          observed_time=episode._ObservedTime(datetime(2026, 7, 20, 20), True)),)
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
     aliases = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [
@@ -111,7 +119,8 @@ def _setup(orders=BASE_ORDERS):
             episode._Recommendation(
                 "consultation_record-1#r1", "procedure", RECOMMENDATION, RECOMMENDATION, "consultation_record-1"
             ),
-            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+            # 用户口径（2026-10-20）：只认会诊记录当天、记录时间之前开立的医嘱。
+            episode._ObservedTime(datetime(2026, 7, 20, 18), True),
         ),
     )
     candidates = tuple(
@@ -344,7 +353,7 @@ async def test_purpose_clause_in_recommendation_is_not_an_omission():
     completed = (episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation("consultation_record-1#r1", "procedure", text, text, "consultation_record-1"),
-        episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        episode._ObservedTime(datetime(2026, 7, 20, 18), True),
     ),)
     candidates = (episode._CandidateDocument(
         "inpat_nondrug_order-1", "inpat_nondrug_order", episode._ObservedTime(datetime(2026, 7, 20, 9), True),
