@@ -5137,7 +5137,7 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 2  # 会诊文书内的暂缓/拒绝决定无医嘱证据，023 不再逐项核对
     assert "同一会诊文书" in client.prompts[1]
 
 
@@ -9625,3 +9625,52 @@ def test_023_home_medication_recommendations_are_not_checked():
     )
     in_scope, _ = episode._order_execution_view(completed, None)
     assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
+
+
+def test_023_conditional_is_judged_by_first_clause_and_measure_clause():
+    # “先查A，若阴性则行B”前半句仍须执行；只有条件分句里的措施未见医嘱时才不计。
+    rec = lambda quote: episode._Recommendation("r1", "test", quote, quote, "consultation_record-1")
+    assert episode._is_conditional_recommendation(rec("疼痛完全缓解2周后予非布司他20mg qd降尿酸"))
+    assert episode._is_conditional_recommendation(rec("若病情加重及家属同意可转科进一步治疗"))
+    compound = rec("复查凝血功能，无明显异常后行气管切开")
+    assert not episode._is_conditional_recommendation(compound)
+    assert episode._measure_in_conditional_clause(compound, "行气管切开")
+    assert not episode._measure_in_conditional_clause(compound, "复查凝血功能")
+    staged = rec("诱导痰XPERT检测、真菌G/GM试验；若均阴性则行气管镜检查排除活动性病变")
+    assert not episode._is_conditional_recommendation(staged)
+    assert episode._measure_in_conditional_clause(staged, "行气管镜检查")
+    assert not episode._measure_in_conditional_clause(staged, "诱导痰XPERT检测")
+
+
+def test_023_measure_check_scope_and_conditional_missing_measures():
+    # 逐项核对只针对已由医嘱证明执行的建议；条件分句中的未执行措施不计。
+    from app.services.luxian_0609.consultation_measure_check import MeasureCheckOutcome
+
+    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "test", "诱导痰XPERT检测；若均阴性则行气管镜检查"),
+        rec("r2", "transfer", "若病情加重及家属同意可转科进一步治疗"),
+    )
+    assessments = (
+        episode._ExecutionAssessment(
+            "r1", "linked_specific", ("inpat_nondrug_order-1",), "high", ()
+        ),
+        episode._ExecutionAssessment(
+            "r2", "linked_specific", ("consultation_record-1",), "high", (),
+            execution_record_state="specific_trace", trace_refs=("consultation_record-1",),
+        ),
+    )
+    scope = episode._measure_check_scope(completed, assessments)
+    assert [item.recommendation.recommendation_ref for item in scope] == ["r1"]
+    outcome = episode._drop_conditional_missing_measures(
+        MeasureCheckOutcome("ready", {"r1": ("行气管镜检查",)}), scope,
+    )
+    assert not outcome.has_missing
+    outcome = episode._drop_conditional_missing_measures(
+        MeasureCheckOutcome("ready", {"r1": ("诱导痰XPERT检测",)}), scope,
+    )
+    assert outcome.has_missing

@@ -3632,8 +3632,10 @@ _HOME_MEDICATION_PATTERN = re.compile(
 # 条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
 _CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
     r"若|如果|假如|倘若|如[^，,。；;]{1,16}(?:则|时|者)|待[^，,。；;]{1,24}后"
-    r"|(?:同意|稳定|好转|平稳|无异常|正常|允许|阴性|阳性)(?:后|则)|必要时|酌情|视情况"
+    r"|(?:同意|稳定|好转|平稳|缓解|无[^，,。；;]{0,4}异常|正常|允许|阴性|阳性)[^，,。；;]{0,6}?(?:后|则)"
+    r"|必要时|酌情|视情况"
 )
+_CLAUSE_SPLIT_PATTERN = re.compile(r"[，,；;。\n]")
 
 
 def _order_in_execution_window(
@@ -3676,7 +3678,52 @@ def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
 
 
 def _is_conditional_recommendation(recommendation: "_Recommendation") -> bool:
-    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(_recommendation_text(recommendation)))
+    """整条建议以条件开头才算条件式；“先查A，若阴性则行B”前半句仍须执行。"""
+
+    text = _clean(recommendation.source_quote) or _clean(recommendation.normalized_action)
+    first_clause = _CLAUSE_SPLIT_PATTERN.split(text, maxsplit=1)[0]
+    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(first_clause))
+
+
+def _measure_in_conditional_clause(recommendation: "_Recommendation", measure: str) -> bool:
+    """措施所在分句带条件（如“无明显异常后行气管切开”）时，未见医嘱视为条件未成立。"""
+
+    target = _clean(measure)
+    for text in (_clean(recommendation.source_quote), _clean(recommendation.normalized_action)):
+        for clause in _CLAUSE_SPLIT_PATTERN.split(text):
+            if target and target in clause and _CONDITIONAL_RECOMMENDATION_PATTERN.search(clause):
+                return True
+    return False
+
+
+def _drop_conditional_missing_measures(
+    outcome: Any, completed: Sequence["_CompletedRecommendation"],
+) -> Any:
+    by_ref = {item.recommendation.recommendation_ref: item.recommendation for item in completed}
+    missing = {
+        ref: tuple(
+            measure for measure in measures
+            if ref not in by_ref or not _measure_in_conditional_clause(by_ref[ref], measure)
+        )
+        for ref, measures in outcome.missing_measures.items()
+    }
+    return replace(outcome, missing_measures=missing)
+
+
+def _measure_check_scope(
+    completed: Sequence["_CompletedRecommendation"],
+    assessments: Sequence["_ExecutionAssessment"] | None,
+) -> tuple["_CompletedRecommendation", ...]:
+    """逐项核对只针对已由医嘱证明执行的建议；会诊文书内的暂缓/拒绝决定不再逐项要求医嘱。"""
+
+    in_scope, view = _order_execution_view(completed, assessments)
+    if view is None:
+        return in_scope
+    with_orders = {
+        item.recommendation_ref for item in view
+        if any(ref.startswith(_ORDER_EXECUTION_REF_PREFIXES) for ref in item.execution_refs)
+    }
+    return tuple(item for item in in_scope if item.recommendation.recommendation_ref in with_orders)
 
 
 def _order_execution_view(
@@ -5193,7 +5240,7 @@ async def _execute_consultation_episode_rules(
                     candidate for candidate in execution_candidate_projection.candidates
                     if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
                 )
-                measure_scope, _ = _order_execution_view(completed_recommendations, None)
+                measure_scope = _measure_check_scope(completed_recommendations, execution_assessments)
                 for measure_completed in _execution_event_batches(
                     completed=measure_scope, candidates=measure_candidates,
                 ):
@@ -5217,6 +5264,9 @@ async def _execute_consultation_episode_rules(
                         item.recommendation.recommendation_ref: item.recommendation.action_type
                         for item in measure_completed
                     }
+                    measure_outcome = _drop_conditional_missing_measures(
+                        measure_outcome, measure_completed,
+                    )
                     statuses["LX0609-03-01-04"] = apply_measure_check(
                         statuses["LX0609-03-01-04"],
                         measure_outcome,
