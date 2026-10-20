@@ -42,6 +42,7 @@ LLM_ENV_KEYS = [
     "LUXIAN_0609_NATIVE_MDT_040_ENABLED",
     "LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED",
     "LUXIAN_0609_FAMILY_MAX_CONCURRENCY",
+    "LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY",
     "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
     "LUXIAN_0609_PREPRODUCTION_API_ENABLED",
 ]
@@ -238,6 +239,20 @@ def test_luxian_family_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
     monkeypatch.setenv("LUXIAN_0609_FAMILY_MAX_CONCURRENCY", "5")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_single_record_family_budget_defaults_to_eight_and_leaves_batch_unchanged(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    settings = Settings(_env_file=None)
+    assert settings.LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY == 8
+    assert settings.LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 4
+    monkeypatch.setenv("LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY", "6")
+    assert Settings(_env_file=None).LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY == 6
+    for invalid in ("0", "12"):
+        monkeypatch.setenv("LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY", invalid)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None)
 
 
 def test_formal_qc_default_llm_model_should_use_current_aliyun_model(monkeypatch):

@@ -140,12 +140,29 @@ def test_running_luxian_job_keeps_accepted_clients_after_global_config_reload():
 
 
 @pytest.mark.asyncio
-async def test_formal_worker_isolates_real_service_before_reading_records(monkeypatch):
+@pytest.mark.parametrize(("record_count", "sample_pool", "child", "expected_limit"), [
+    (0, False, False, 4),
+    (1, True, False, 8),
+    (2, True, False, 4),
+    (1, True, True, 4),
+    (1, False, False, 4),
+])
+async def test_formal_worker_isolates_real_service_before_reading_records(
+    monkeypatch, record_count, sample_pool, child, expected_limit,
+):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
         "rule_set_key": "luxian_0609_qc_v1",
         "rule_ids": ["LX0609-01-01-01"],
+        "record_refs": [
+            {"institute_id": "inst", "patient_id": f"case-{i}", "visit_id": f"visit-{i}"}
+            for i in range(record_count)
+        ],
     }
+    if sample_pool:
+        workspace.job["filters"]["sample_pool_id"] = "pool-test"
+    if child:
+        workspace.job["parent_job_id"] = "parent-test"
     shared = SichuanQCService({
         "provider_code": "alibaba", "api_endpoint": "https://example.invalid/llm",
         "api_key": "test-secret", "model": "model-a", "source": "test",
@@ -153,8 +170,8 @@ async def test_formal_worker_isolates_real_service_before_reading_records(monkey
     isolated: list[SichuanQCService] = []
     original = SichuanQCService.isolated_luxian_0609_runtime
 
-    def record_isolation(self):
-        result = original(self)
+    def record_isolation(self, **kwargs):
+        result = original(self, **kwargs)
         isolated.append(result)
         return result
 
@@ -178,7 +195,33 @@ async def test_formal_worker_isolates_real_service_before_reading_records(monkey
     )
     assert len(isolated) == 1
     assert isolated[0].client is not shared.client
+    assert isolated[0].client.family_max_concurrency == expected_limit
+    assert shared.client.family_max_concurrency == 4
     assert workspace.job["status"] == "failed"
+
+
+@pytest.mark.parametrize("single_limit", [6, 8])
+def test_single_record_family_budget_does_not_change_batch_or_shared_client(monkeypatch, single_limit):
+    from app.core.settings import Settings
+    from app.services import sichuan_qc_service as service_module
+
+    settings = Settings(_env_file=None, JWT_SECRET="test-only-budget",
+                        LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY=single_limit)
+    monkeypatch.setattr(service_module, "get_settings", lambda: settings)
+    shared = SichuanQCService({
+        "provider_code": "alibaba", "api_endpoint": "https://example.invalid/llm",
+        "api_key": "test-secret", "model": "model-a", "source": "test",
+        "custom_parameters": {"execution_concurrency": {
+            "max_parallel_records": 16, "family_max_concurrency": 4, "http_max_concurrency": 40,
+        }},
+    })
+    single = shared.isolated_luxian_0609_runtime(single_record=True)
+    batch = shared.isolated_luxian_0609_runtime(single_record=False)
+    assert single.client.family_max_concurrency == single_limit
+    assert batch.client.family_max_concurrency == shared.client.family_max_concurrency == 4
+    assert single.client.http_max_concurrency == batch.client.http_max_concurrency == 40
+    assert single.client.max_parallel_records == batch.client.max_parallel_records == 16
+    assert single.rule_engine._llm_generate.__self__ is single.client
 
 
 @pytest.mark.asyncio

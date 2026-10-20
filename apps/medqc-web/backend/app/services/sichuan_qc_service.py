@@ -441,7 +441,7 @@ class SichuanQCService:
             },
         }
 
-    def isolated_luxian_0609_runtime(self) -> "SichuanQCService":
+    def isolated_luxian_0609_runtime(self, *, single_record: bool = False) -> "SichuanQCService":
         """为已领取的原始0609任务保留独立客户端，避免全局热重载串改在途模型。"""
 
         runtime = SichuanQCService(self._client_runtime_config(self.client))
@@ -450,6 +450,10 @@ class SichuanQCService:
         )
         runtime.client._stats_parent = self.client
         runtime.adjudicator_client._stats_parent = self.adjudicator_client
+        if single_record:
+            runtime.client.family_max_concurrency = (
+                get_settings().LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY
+            )
         return runtime
 
     def _ensure_rule_execution_meta(self, rule: Dict[str, Any]) -> Dict[str, Any]:

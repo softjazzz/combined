@@ -3714,7 +3714,7 @@ describe('CustomerSampleValidationView', () => {
     expect(recordCheckboxes[0].element).toHaveProperty('checked', true)
   })
 
-  it('LX0609 质控点范围支持选择多组规则并按族并发提交', async () => {
+  it('单病历选择多组规则时提交单任务，由引擎执行族并发调度', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
       data: {
@@ -3760,7 +3760,6 @@ describe('CustomerSampleValidationView', () => {
     expect(submittedPayload).toEqual(
       expect.objectContaining({
         max_parallel_records: 16,
-        group_by_luxian_family: true,
         selected_rule_ids: [
           'LX0609-01-01-01',
           'LX0609-01-01-02',
@@ -3776,9 +3775,23 @@ describe('CustomerSampleValidationView', () => {
         ],
       }),
     )
+    expect(submittedPayload).not.toHaveProperty('group_by_luxian_family')
   })
 
-  it('LX0609 质控点范围支持一次性选择全部规则族', async () => {
+  it('批量病历全选规则族时保留原有父子任务并发', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord(),
+          buildRecord({ id: 'V002', matched_visit_id: 'V002', sample_item_ids: ['item-2'] }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      },
+    })
     const allRuleIds = Object.keys(luxian0609RuleNames).sort()
     runManualSamplePool.mockResolvedValueOnce({
       success: true,
@@ -3844,6 +3857,7 @@ describe('CustomerSampleValidationView', () => {
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
+    await recordCheckboxes[1].setValue(true)
 
     const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()

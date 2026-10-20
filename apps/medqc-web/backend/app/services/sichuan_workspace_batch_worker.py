@@ -1407,7 +1407,14 @@ async def run_sichuan_workspace_batch_job(
             if isinstance(qc_service, SichuanQCService) and isinstance(
                 getattr(qc_service, "client", None), SichuanQCLLMClient
             ):
-                qc_service = qc_service.isolated_luxian_0609_runtime()
+                qc_service = qc_service.isolated_luxian_0609_runtime(
+                    # 按原接纳范围判断，批量补跑剩一份时仍保留批量预算。
+                    single_record=bool(
+                        filters.get("sample_pool_id")
+                        and len(filters.get("record_refs") or []) == 1
+                        and not current.get("parent_job_id")
+                    ),
+                )
             assert_luxian_0609_task_settings_match(
                 filters.get(LX0609_TASK_SETTINGS_FILTER_KEY), settings,
             )

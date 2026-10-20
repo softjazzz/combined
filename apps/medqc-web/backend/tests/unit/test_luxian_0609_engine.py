@@ -203,6 +203,47 @@ async def test_engine_runs_independent_families_with_bounded_concurrency():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [4, 8])
+async def test_full_record_engine_reaches_selected_budget_without_model_calls(limit):
+    contracts = load_luxian_0609_rule_contracts()
+    batches = {}
+    for contract in contracts:
+        batches.setdefault(contract.executor_key, (contract.rule_id,))
+    assert len(batches) >= 8
+    active = 0
+    peak = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def evaluate(context):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        if active == limit:
+            started.set()
+        await release.wait()
+        active -= 1
+        return _envelope(context)
+
+    registry = Luxian0609ExecutorRegistry(tuple(
+        ExecutorRegistration(executor_key=key, executor=_Executor(evaluate))
+        for key in batches
+    ))
+    task = asyncio.create_task(Luxian0609ExecutionEngine(registry=registry).execute(
+        executor_batches=tuple(batches.items()), snapshot=_snapshot(), contracts=contracts,
+        default_deadline_seconds=2.0, max_concurrency=limit,
+    ))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1.0)
+        assert peak == limit
+    finally:
+        release.set()
+        report = await task
+    assert all(isinstance(item, FamilyExecutionSuccess) for item in report.outcomes)
+    assert peak == limit
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cycle", [False, True])
 async def test_engine_rejects_missing_or_cyclic_dependencies(cycle: bool):
     async def _evaluate(context: FamilyExecutionContext):

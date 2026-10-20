@@ -1722,7 +1722,12 @@ export function useCustomerSampleValidationController() {
   }
 
   function shouldRunLuxianFamiliesInParallel(ruleIds: string[]): boolean {
-    return isLuxian0609Mode.value && buildLuxianFamilyRunScopes(ruleIds).length > 1
+    // 单病历由一个任务内的执行族并发调度，避免再受后台子任务池上限限制。
+    return (
+      isLuxian0609Mode.value &&
+      selectedRecordStats.value.runnableCount !== 1 &&
+      buildLuxianFamilyRunScopes(ruleIds).length > 1
+    )
   }
 
   async function handleRuleSetChange(ruleSetKey: string | number) {
