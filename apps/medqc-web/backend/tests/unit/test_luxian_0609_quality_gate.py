@@ -232,3 +232,21 @@ def test_accepted_golden_profile_is_separate_and_propagates_blocked_state() -> N
     assert summary["failures"] == [
         {"gate": "accepted_golden", "failure_kind": "blocked"}
     ]
+
+
+def test_failed_test_lines_keep_node_and_error_type_without_message_body():
+    from scripts.run_luxian_0609_quality_gate import failed_test_lines
+
+    output = "\n".join((
+        "FAILED tests/unit/test_a.py::test_x[case-1] - AssertionError: 患者张三 诊断不符",
+        "ERROR tests/unit/test_b.py::test_y - FileNotFoundError: [Errno 2] /secret/path",
+        "FAILED tests/unit/test_c.py::test_z",
+        "FAILED tests/unit/test_a.py::test_x[case-1] - AssertionError: 重复",
+        "普通输出 FAILED 不是摘要行",
+    ))
+
+    assert failed_test_lines(output) == [
+        "FAILED tests/unit/test_a.py::test_x[case-1] [AssertionError]",
+        "ERROR tests/unit/test_b.py::test_y [FileNotFoundError]",
+        "FAILED tests/unit/test_c.py::test_z",
+    ]

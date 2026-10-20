@@ -201,6 +201,25 @@ def gate_environment(base: dict[str, str], *, database_dir: str) -> dict[str, st
     return env
 
 
+_FAILED_TEST_LINE = re.compile(r"^(FAILED|ERROR) (tests/\S+)(?: - ([A-Za-z_][\w.]*(?:Error|Exception|Exit|Failed))\b)?")
+_MAX_FAILED_TEST_LINES = 400
+
+
+def failed_test_lines(output: str) -> list[str]:
+    """只提取失败用例节点名与异常类型，不回显断言或错误消息正文（可能含合成病历片段）。"""
+
+    lines: list[str] = []
+    for raw in output.splitlines():
+        match = _FAILED_TEST_LINE.match(raw.strip())
+        if match is None:
+            continue
+        kind, node, error_type = match.groups()
+        lines.append(f"{kind} {node}" + (f" [{error_type}]" if error_type else ""))
+        if len(lines) >= _MAX_FAILED_TEST_LINES:
+            break
+    return list(dict.fromkeys(lines))
+
+
 def run_gate_subprocess(
     gate: GateSpec,
     *,
@@ -238,6 +257,8 @@ def run_gate_subprocess(
         database_dir.cleanup()
 
     output = f"{getattr(completed, 'stdout', '')}\n{getattr(completed, 'stderr', '')}"
+    for line in failed_test_lines(output):
+        print(f"[{gate.name}] {line}", file=sys.stderr)
     passed_tests = _pytest_count(r"(\d+)[ \t]+passed", output)
     failed_tests = _pytest_count(r"(\d+)[ \t]+failed", output) + _pytest_count(
         r"(\d+)[ \t]+errors?", output
