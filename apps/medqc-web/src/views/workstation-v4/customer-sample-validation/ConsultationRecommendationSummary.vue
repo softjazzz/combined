@@ -3,7 +3,7 @@
     <header class="consultation-summary-header">
       <div class="consultation-summary-heading">
         <h4>逐条建议核对</h4>
-        <p>按会诊记录当天开立的医嘱逐条核对会诊建议是否执行</p>
+        <p>按会诊记录前3天至当天开立的医嘱逐条核对会诊建议是否执行</p>
       </div>
       <p class="consultation-summary-counts" aria-label="会诊建议核对统计">
         <strong>{{ presentation.comparedCount }}</strong> 条纳入核对
@@ -32,6 +32,7 @@
               <span class="consultation-recommendation-position">
                 第{{ row.episodeIndex }}次会诊<span v-if="row.recommendationIndex">
                   · 第{{ row.recommendationIndex }}条建议</span
+                ><span v-if="row.windowStartDate"> · 医嘱核对自 {{ row.windowStartDate }} 起</span
                 ><span v-if="row.opinionTime"> · 会诊记录 {{ row.opinionTime }}</span>
               </span>
               <span

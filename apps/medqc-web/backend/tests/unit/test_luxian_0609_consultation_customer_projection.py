@@ -431,6 +431,22 @@ def test_023_projection_publishes_opinion_time_missing_measures_and_exclusion_re
     assert validate_published_consultation_facts(rule_id="LX0609-03-01-04", raw=facts) == facts
 
 
+def test_023_projection_publishes_window_start_and_declined_measures() -> None:
+    # 2026-10-20：写明会诊日期（医嘱核对起点）与会诊记录写明拒绝、因而不核对的措施。
+    raw = _023_reason_raw(window_start_date="2026-08-22", declined_measures=["纤支镜检查"])
+    raw["excluded_recommendations"].append(
+        {"episode_index": 1, "recommendation_text": "建议行胃镜检查", "exclusion_reason": "declined_in_record"}
+    )
+    facts = safe_consultation_customer_display_facts(rule_id="LX0609-03-01-04", raw=raw)
+
+    assert facts is not None
+    item = facts["recommendation_evidence"][0]
+    assert item["window_start_date"] == "2026-08-22"
+    assert item["declined_measures"] == ["纤支镜检查"]
+    assert facts["excluded_recommendations"][-1]["exclusion_reason"] == "declined_in_record"
+    assert validate_published_consultation_facts(rule_id="LX0609-03-01-04", raw=facts) == facts
+
+
 @pytest.mark.parametrize(
     "extra",
     (
@@ -438,6 +454,9 @@ def test_023_projection_publishes_opinion_time_missing_measures_and_exclusion_re
         {"missing_measures": []},
         {"missing_measures": ["措" * 41]},
         {"missing_measures": [1]},
+        {"window_start_date": "2026-08-22 08:00:00"},
+        {"window_start_date": "2026-02-30"},
+        {"declined_measures": []},
     ),
 )
 def test_023_projection_rejects_malformed_reason_fields(extra) -> None:

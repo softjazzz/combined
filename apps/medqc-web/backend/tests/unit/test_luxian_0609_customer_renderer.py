@@ -1004,7 +1004,7 @@ def test_surviving_consultation_rule_keeps_structured_action() -> None:
     assert "照抄" not in result["suggestion"]
     for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
         assert section in result["suggestion"]
-    assert "请在会诊记录当天按会诊建议开立对应医嘱" in result["suggestion"]
+    assert "请不晚于会诊记录当天按会诊建议开立对应医嘱" in result["suggestion"]
 
 
 def _023_facts(*states: str) -> dict:
@@ -1047,9 +1047,9 @@ def test_023_finding_distinguishes_missing_and_generic_execution(
 
     assert expected in result["findings"]
     assert unexpected not in result["findings"]
-    assert "执行证据按会诊记录当天开立的住院医嘱核对" in result["findings"]
+    assert "执行证据按会诊记录前3天至会诊记录当天开立的住院医嘱核对" in result["findings"]
     if state == "missing":
-        assert "会诊记录当天未开立与上述建议对应的医嘱" in result["findings"]
+        assert "会诊记录前3天至当天未开立与上述建议对应的医嘱" in result["findings"]
     else:
         assert "仅有与建议笼统相关的医嘱" in result["findings"]
 
@@ -1062,7 +1062,7 @@ def test_023_mixed_execution_lists_missing_and_generic_gaps_separately() -> None
 
     assert "未执行：第2次会诊的第3条建议“具体建议3”" in finding
     assert "执行医嘱不具体：第1次会诊的第2条建议“具体建议2”" in finding
-    assert "其余1条建议当天已开立对应医嘱" in finding
+    assert "其余1条建议已开立对应医嘱" in finding
     assert "缺少执行证据或执行记录不具体" not in finding
 
 
@@ -1102,8 +1102,29 @@ def test_023_finding_names_consultation_time_partial_measures_and_exclusions() -
     assert "部分措施未执行：第1次会诊（会诊记录2026-01-20 17:21）的第2条建议“具体建议2”中的“乳酸”、“心衰指标”" in finding
     assert "“卧床休息”（不通过开立医嘱落实）" in finding
     assert "“继续服用原降压药”（属院外自带药）" in finding
-    assert "“若病情加重可转科”（条件式建议当天未开医嘱，视为条件未成立）" in finding
+    assert "“若病情加重可转科”（条件式建议在核对期间未开医嘱，视为条件未成立）" in finding
     assert "其余" not in finding
+
+
+def test_023_finding_names_consultation_date_and_declined_measures() -> None:
+    # 用户口径（2026-10-20）：写明医嘱核对起点；会诊记录写明拒绝的措施只免该项并说明。
+    facts = _023_facts("missing")
+    facts["recommendation_evidence"][0].update({
+        "opinion_time": "2026-10-07 20:16:04",
+        "window_start_date": "2026-10-05",
+        "declined_measures": ["纤支镜检查"],
+    })
+    facts["excluded_recommendations"] = [
+        {"episode_index": 1, "recommendation_text": "建议行胃镜检查", "exclusion_reason": "declined_in_record"},
+    ]
+
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-03-01-04", facts=facts)
+
+    assert (
+        "未执行：第1次会诊（医嘱核对自2026-10-05起，会诊记录2026-10-07 20:16）的第1条建议“具体建议1”"
+        "（会诊记录写明不执行“纤支镜检查”，该项不核对）"
+    ) in finding
+    assert "“建议行胃镜检查”（会诊记录写明患者或家属拒绝、或暂缓执行）" in finding
 
 
 def test_023_precise_defect_finding_does_not_override_non_defect_states() -> None:
