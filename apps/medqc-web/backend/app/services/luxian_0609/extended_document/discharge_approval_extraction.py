@@ -29,6 +29,46 @@ _SENIOR_ROLE_PATTERN = re.compile(
     r"(?:上级医师|主任医师|副主任医师|主任|副主任|主治医师|主治)"
 )
 _OPINION_CLAUSE_SPLIT_PATTERN = re.compile(r"[。！？!?；;\r\n]+")
+_DISCHARGE_DISPOSITION_PATTERN = re.compile(
+    r"(?:同意|批准|准许|准予|许可|建议|予以|可以|可).{0,12}出院"
+    r"|(?:今日|今天|明日|次日)(?:带药)?(?:安排|办理)?出院"
+    r"|(?:安排|办理|予)出院"
+)
+_DISCHARGE_DENIAL_PATTERN = re.compile(
+    r"(?:不|未|尚未|尚不|暂不|拒绝|不同意|未获|未得到).{0,16}"
+    r"(?:同意|批准|准许|准予|许可|建议|予以|可以|可|安排|办理)?.{0,6}出院"
+)
+_SENIOR_CONSULT_TARGET_PATTERN = re.compile(
+    r"(?:需|须|待|拟|准备)?(?:请示|报请|报告|征求).{0,12}"
+    r"(?:上级医师|主任医师|副主任医师|主任|副主任|主治医师|主治)"
+    r".{0,6}后.{0,12}出院"
+)
+_COMPLETED_SENIOR_APPROVAL_PATTERN = re.compile(
+    r"(?:(?:(?:已|已经|经).{0,4})?(?:请示|报请|报告|征求).{0,12}"
+    r"(?:上级医师|主任医师|副主任医师|主任|副主任|主治医师|主治)"
+    r".{0,8}(?:同意|批准|准许|准予|许可)"
+    r"|(?:已|已经)(?:获|取得|得到).{0,8}"
+    r"(?:上级医师|主任医师|副主任医师|主任|副主任|主治医师|主治)"
+    r".{0,6}(?:同意|批准|准许|准予|许可))"
+)
+_PENDING_MEDICAL_ACTION_PATTERN = re.compile(
+    r"(?:复查|检查|治疗|换药).{0,16}后(?:再)?.{0,8}出院"
+)
+_COMPLETED_MEDICAL_ACTION_PATTERN = re.compile(
+    r"(?:复查|检查)(?:结果)?(?:已|已经)(?:正常|无异常|完成)"
+    r"|(?:治疗|换药)(?:已|已经)(?:完成|结束)"
+    r"|(?:已|已经)完成(?:复查|检查|治疗|换药)"
+)
+_PENDING_GENERAL_CONDITION_PATTERN = re.compile(
+    r"(?:若|如果|如无|如有|待).{0,24}出院"
+)
+_TENTATIVE_DISCHARGE_PLAN_PATTERN = re.compile(
+    r"(?:考虑|拟|计划|准备).{0,16}出院"
+)
+_DATED_DISCHARGE_PLAN_PATTERN = re.compile(
+    r"(?:拟|计划|准备)(?:于)?(?:今日|今天|明日|次日)(?:带药)?(?:办理)?出院"
+)
+_DISCHARGE_INSTRUCTION_HEADING_PATTERN = re.compile(r"出院医嘱")
 
 
 class DischargeApprovalLLMClient(Protocol):
@@ -80,18 +120,87 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _daily_quote_has_senior_role(quote: str) -> bool:
-    if quote.count("出院") != 1:
-        return False
+def _single_discharge_evidence_clause(quote: str) -> str | None:
     discharge_clauses = [
         clause
         for clause in _OPINION_CLAUSE_SPLIT_PATTERN.split(quote)
         if "出院" in clause
     ]
-    return (
-        len(discharge_clauses) == 1
-        and _SENIOR_ROLE_PATTERN.search(discharge_clauses[0]) is not None
-    )
+    return discharge_clauses[0] if len(discharge_clauses) == 1 else None
+
+
+def _single_discharge_clause(quote: str) -> str | None:
+    if quote.count("出院") != 1:
+        return None
+    return _single_discharge_evidence_clause(quote)
+
+
+def _senior_is_opinion_subject(clause: str) -> bool:
+    """上级称谓必须是意见主体，不能只是尚待请示的对象。"""
+
+    for match in _SENIOR_ROLE_PATTERN.finditer(clause):
+        before = clause[max(0, match.start() - 12):match.start()]
+        after = clause[match.end():match.end() + 20]
+        is_consult_target = re.search(r"(?:请示|报请|报告|征求).{0,4}$", before)
+        records_approval = re.search(
+            r"^(?:已|已经|明确|并|且|后|查房|意见|认为|指示|决定|建议|同意|批准|准许|准予|许可|获){0,8}"
+            r"(?:同意|批准|准许|准予|许可|建议|安排|办理|今日|今天|明日|次日)",
+            after,
+        )
+        if not is_consult_target or records_approval:
+            return True
+    return False
+
+
+def _daily_quote_has_senior_role(quote: str) -> bool:
+    clause = _single_discharge_clause(quote)
+    return clause is not None and _senior_is_opinion_subject(clause)
+
+
+def has_confirmed_senior_discharge_approval_quote(
+    quote: str,
+    *,
+    source_type: str,
+) -> bool:
+    """校验同一连续分句内的上级主体、完成条件和明确出院处置。
+
+    该纯函数供语义抽取及 native 确认入口共用；它不读取文书外事实，也不根据
+    实际出院或时间流逝推定条件已经满足。
+    """
+
+    if source_type not in _SOURCE_TYPES or not isinstance(quote, str):
+        return False
+    clause = _single_discharge_evidence_clause(quote)
+    if (
+        clause is None
+        or _DISCHARGE_DENIAL_PATTERN.search(clause)
+        or _DISCHARGE_INSTRUCTION_HEADING_PATTERN.search(clause)
+        or _PENDING_GENERAL_CONDITION_PATTERN.search(clause)
+    ):
+        return False
+    if (
+        source_type == "daily_course_record"
+        and not _senior_is_opinion_subject(clause)
+        and not _COMPLETED_SENIOR_APPROVAL_PATTERN.search(clause)
+    ):
+        return False
+    if (
+        _SENIOR_CONSULT_TARGET_PATTERN.search(clause)
+        and not _COMPLETED_SENIOR_APPROVAL_PATTERN.search(clause)
+    ):
+        return False
+    if (
+        _TENTATIVE_DISCHARGE_PLAN_PATTERN.search(clause)
+        and not _COMPLETED_SENIOR_APPROVAL_PATTERN.search(clause)
+        and not _DATED_DISCHARGE_PLAN_PATTERN.search(clause)
+    ):
+        return False
+    if (
+        _PENDING_MEDICAL_ACTION_PATTERN.search(clause)
+        and not _COMPLETED_MEDICAL_ACTION_PATTERN.search(clause)
+    ):
+        return False
+    return _DISCHARGE_DISPOSITION_PATTERN.search(clause) is not None
 
 
 def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
@@ -123,6 +232,8 @@ def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
         "其他opinion的quote必须为对应文书中支持意见的完整连续分句，必须保留其中的条件、否定和意见主体，不能只摘取‘出院’等词片段。"
         "daily_course_record的quote必须同时包含意见主体和意见的完整条件、否定及结论，"
         "意见主体必须与本次出院意见位于同一连续分句，不能挪用同文书其他句子的上级医师角色；"
+        "‘请示上级医师后才可出院’表示尚待请示，不能仅因含上级称谓就视为上级已经批准；"
+        "只有同一连续分句明确记载已经获得上级同意，才可把请示后的出院安排记为approved。"
         "不要合并多个不同主体或多个出院表达；若意见原文没有明确主体，也只按原文返回quote。"
         "senior_course_record自身可确定上级角色，quote只需完整保留意见原文。"
         f"schema_version固定为{SCHEMA_VERSION}。只返回JSON，不能有Markdown或额外字段。"
@@ -251,6 +362,7 @@ async def _extract_discharge_approval_once(
                 if role_correction else ""
             ) + (
                 "\n补核处置完成情况：‘检查、治疗或换药后出院’仍须区分未来条件与已完成事实。"
+                "‘请示上级医师后才可出院’也属于尚未证实完成的条件，不能把被请示者当作已发表意见的主体。"
                 "只有本份文书明确证明前提已完成且已批准出院才可approved；"
                 "尚需完成处置的用conditional，无法判断的用unknown，不能因已经出院推定完成。"
                 if condition_correction else ""
@@ -340,10 +452,17 @@ async def extract_discharge_approval(
         and assertion.quote.count("出院") > 1
         and _SENIOR_ROLE_PATTERN.search(assertion.quote)
     }
+    documents_by_id = {item.local_doc_id: item for item in documents}
     condition_ids = {
         assertion.local_doc_id for assertion in result.assertions
         if assertion.opinion == "approved"
-        and re.search(r"(?:复查|检查|治疗|换药).{0,12}后.{0,8}出院", assertion.quote)
+        and (
+            re.search(r"(?:复查|检查|治疗|换药).{0,12}后.{0,8}出院", assertion.quote)
+            or (
+                _SENIOR_CONSULT_TARGET_PATTERN.search(assertion.quote)
+                and not _COMPLETED_SENIOR_APPROVAL_PATTERN.search(assertion.quote)
+            )
+        )
     }
     pending_ids = instruction_ids | role_ids | condition_ids
     if not pending_ids:
@@ -354,7 +473,17 @@ async def extract_discharge_approval(
         llm_client, instruction_correction=bool(instruction_ids),
         role_correction=bool(role_ids), condition_correction=bool(condition_ids),
     )
-    by_id = {assertion.local_doc_id: assertion for assertion in repaired.assertions}
+    repaired_assertions = tuple(
+        replace(assertion, role="unknown")
+        if assertion.opinion == "approved"
+        and not has_confirmed_senior_discharge_approval_quote(
+            assertion.quote,
+            source_type=documents_by_id[assertion.local_doc_id].source_type,
+        )
+        else assertion
+        for assertion in repaired.assertions
+    )
+    by_id = {assertion.local_doc_id: assertion for assertion in repaired_assertions}
     return replace(
         repaired,
         assertions=(tuple(

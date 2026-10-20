@@ -94,6 +94,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "pathology_exam_report",
         "inpat_registration.discharge_horizon",
         "discharge_record",
+        "death_record",
     ),
 }
 _TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
@@ -2254,6 +2255,37 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 )
                 continue
             if typed_rule and rule_id == "LX0609-08-01-04":
+                # 客户已确认的 027 仅核对恶性肿瘤患者的《出院记录》。
+                # 死亡记录是互斥终末场景，必须在出院阶段和肿瘤适用性判断前排除；
+                # 不能因缺少出院记录或出院诊断把死亡病例交付为资料不足。
+                death_record = source_for_rule("death_record")
+                if death_record.state == "error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        "source_query_error",
+                        executor_type="program",
+                    )
+                    continue
+                if death_record.state in {"unavailable", "truncated"}:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "source_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                if death_record.rows:
+                    emit_outcome(
+                        rule_id,
+                        "not_applicable",
+                        "trigger_absent_complete",
+                        executor_type="program",
+                        fact_refs=typed_document_refs(
+                            ("death_record", death_record.rows)
+                        ),
+                    )
+                    continue
                 stage = _discharge_stage(
                     source_for_rule("inpat_registration.discharge_horizon"),
                     source_for_rule("discharge_record"),

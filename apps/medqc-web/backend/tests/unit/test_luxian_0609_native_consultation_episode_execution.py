@@ -9682,8 +9682,8 @@ def test_023_conditional_recommendation_without_order_is_not_checked():
     assert not episode._is_conditional_recommendation(completed[3].recommendation)
 
 
-def test_023_home_medication_recommendations_are_not_checked():
-    # 用户口径（2026-10-20）：院外自带药不核对；“原发病”“原则”不误判为自带药。
+def test_023_existing_home_medication_recommendations_still_require_inpatient_orders():
+    # 明确自备药沿用院外药豁免；仅写“原药”不能推定来自院外，仍核对住院医嘱。
     rec = lambda ref, quote: episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation(ref, "medication", quote, quote, "consultation_record-1"),
@@ -9696,7 +9696,9 @@ def test_023_home_medication_recommendations_are_not_checked():
         rec("r4", "按抗感染原则使用头孢类药物"),
     )
     in_scope, _ = episode._order_execution_view(completed, None)
-    assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
+    assert [item.recommendation.recommendation_ref for item in in_scope] == [
+        "r1", "r3", "r4",
+    ]
 
 
 def test_023_conditional_is_judged_by_first_clause_and_measure_clause():
@@ -9798,7 +9800,6 @@ def test_023_display_facts_explain_time_missing_measures_and_exclusions():
     checked = rec("consultation_record-1#r1", "test", "完善血气分析、乳酸、心衰指标")
     excluded = (
         rec("consultation_record-1#r2", "other", "卧床休息"),
-        rec("consultation_record-1#r3", "medication", "继续服用原降压药"),
         rec("consultation_record-1#r4", "transfer", "若病情加重可转科"),
     )
     current_episode = episode._Episode(
@@ -9826,7 +9827,7 @@ def test_023_display_facts_explain_time_missing_measures_and_exclusions():
     assert item["opinion_time"] == "2026-08-24 15:07:30"
     assert item["missing_measures"] == ["心衰指标"]
     assert [row["exclusion_reason"] for row in facts["excluded_recommendations"]] == [
-        "non_order_recommendation", "home_medication", "condition_not_met",
+        "non_order_recommendation", "condition_not_met",
     ]
 
 

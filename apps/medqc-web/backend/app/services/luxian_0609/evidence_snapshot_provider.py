@@ -21,6 +21,7 @@ from .evaluation_horizon import (
     EVALUATION_HORIZON_POLICY_DISABLED,
     EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
     resolve_frozen_discharge_horizon,
+    resolve_frozen_running_record_scene,
     resolve_snapshot_task_frozen_date,
 )
 from .evidence_material import (
@@ -343,6 +344,7 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-06-04-01",
             "LX0609-05-01-03",
             "LX0609-08-01-01",
+            "LX0609-08-01-03",
             "LX0609-10-02-01",
             "LX0609-04-05-01",
             "LX0609-04-05-02",
@@ -740,6 +742,7 @@ def build_luxian_0609_evidence_read_session(
         horizon_date: date | None = None
         horizon_datetime: datetime | None = None
         horizon_basis = ""
+        horizon_record_scene = ""
         task_frozen_date: date | None = None
         resolved_horizon_reason = horizon_unavailable_reason or ""
         if (
@@ -748,6 +751,13 @@ def build_luxian_0609_evidence_read_session(
         ):
             horizon_date = explicit_as_of_date
             horizon_basis = "evaluation_as_of"
+            horizon_record_scene = resolve_frozen_running_record_scene(
+                evaluation_horizon_snapshot,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                expected_horizon_date=horizon_date,
+            )
         elif (
             evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
             and evaluation_horizon_snapshot is not None
@@ -864,6 +874,11 @@ def build_luxian_0609_evidence_read_session(
                 ),
                 "basis": horizon_basis,
                 **(
+                    {"record_scene": horizon_record_scene}
+                    if horizon_record_scene
+                    else {}
+                ),
+                **(
                     {"task_frozen_date": task_frozen_date.isoformat()}
                     if task_frozen_date is not None
                     else {}
@@ -874,6 +889,7 @@ def build_luxian_0609_evidence_read_session(
                         horizon_basis,
                         horizon_date.isoformat(),
                         horizon_datetime.isoformat() if horizon_datetime else "",
+                        *((horizon_record_scene,) if horizon_record_scene else ()),
                         *((task_frozen_date.isoformat(),) if task_frozen_date is not None else ()),
                     )
                 ),

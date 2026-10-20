@@ -18,7 +18,7 @@ import traceback
 import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
-from .consultation_measure_check import apply_measure_check, check_consultation_measures
+from .consultation_measure_check import check_consultation_measures
 from .consultation_order_scope import (
     declined_measure_objects,
     current_checks_declined_after_communication,
@@ -3725,9 +3725,10 @@ _NON_ORDER_RECOMMENDATION_PATTERN = re.compile(
 _ORDER_RECOMMENDATION_HINT_PATTERN = re.compile(
     r"药|mg|片|注射|输注|静滴|口服|检查|复查|CT|MRI|彩超|手术|穿刺|切开|置管|转科"
 )
-# 用户口径（2026-10-20）：院外自带药（“继续服用原降压药”等）不核对。
+# 已明确属于院外的自备/自带用药不以住院医嘱核对；仅写“原药”“继续用药”
+# 不能推定药品来自院外，仍须核对住院医嘱。
 _HOME_MEDICATION_PATTERN = re.compile(
-    r"自备|自带|院外|家中|原(?![发则因])(?:有|来|口服)?[^，,。；;]{0,8}药"
+    r"(?:自备|自带|院外|家中)[^，,。；;]{0,12}(?:药|口服|服用)"
 )
 # 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对。当天有对应医嘱即视为
 # 条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
@@ -3737,6 +3738,13 @@ _CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
     r"|必要时|酌情|视情况"
 )
 _CLAUSE_SPLIT_PATTERN = re.compile(r"[，,；;。\n]")
+_CONDITIONAL_CLAUSE_ACTION_PATTERN = re.compile(
+    r"给予|予以|加用|使用|服用|口服|注射|输注|复查|检查|检验|治疗|手术|穿刺|置管"
+    r"|转科|转院|处置|操作|评估|监测|观察|随访|停用|停止|继续|维持"
+)
+_BARE_CONDITIONAL_END_PATTERN = re.compile(
+    r"(?:后|时|则|成立|同意|允许|阴性|阳性|正常|异常|稳定|好转|平稳|缓解)\s*$"
+)
 
 
 def _order_in_execution_window(
@@ -3796,13 +3804,12 @@ def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
 
 
 def _order_scope_exclusion_reason(item: "_CompletedRecommendation") -> str:
-    """023 未纳入核对的原因：非医嘱类建议、院外自带药、会诊记录写明不执行，或条件未成立。"""
+    """023 未纳入核对的原因：非医嘱类、明确院外用药、拒绝，或条件未成立。"""
 
     recommendation = item.recommendation
     if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
         return "non_order_recommendation"
-    text = _recommendation_text(recommendation)
-    if _HOME_MEDICATION_PATTERN.search(text):
+    if _HOME_MEDICATION_PATTERN.search(_recommendation_text(recommendation)):
         return "home_medication"
     if not _is_order_recommendation(recommendation):
         return "non_order_recommendation"
@@ -3822,13 +3829,24 @@ def _is_conditional_recommendation(recommendation: "_Recommendation") -> bool:
 
 
 def _measure_in_conditional_clause(recommendation: "_Recommendation", measure: str) -> bool:
-    """措施所在分句带条件（如“无明显异常后行气管切开”）时，未见医嘱视为条件未成立。"""
+    """措施所在分句或紧邻前一分句带条件时，未见医嘱视为条件未成立。"""
 
     target = _clean(measure)
     for text in (_clean(recommendation.source_quote), _clean(recommendation.normalized_action)):
+        previous_clause_is_bare_condition = False
         for clause in _CLAUSE_SPLIT_PATTERN.split(text):
-            if target and target in clause and _CONDITIONAL_RECOMMENDATION_PATTERN.search(clause):
+            clause_is_condition = bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(clause))
+            if target and target in clause and (
+                clause_is_condition or previous_clause_is_bare_condition
+            ):
                 return True
+            previous_clause_is_bare_condition = bool(
+                clause_is_condition
+                and (
+                    _BARE_CONDITIONAL_END_PATTERN.search(clause)
+                    or not _CONDITIONAL_CLAUSE_ACTION_PATTERN.search(clause)
+                )
+            )
     return False
 
 
@@ -3855,16 +3873,20 @@ def _measure_check_scope(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
 ) -> tuple["_CompletedRecommendation", ...]:
-    """逐项核对只针对已由医嘱证明执行的建议；会诊文书内的暂缓/拒绝决定不再逐项要求医嘱。"""
+    """逐项核对覆盖全部医嘱类建议，包括初判未找到医嘱的建议。"""
 
-    in_scope, view = _order_execution_view(completed, assessments)
-    if view is None:
-        return in_scope
-    with_orders = {
-        item.recommendation_ref for item in view
-        if any(ref.startswith(_ORDER_EXECUTION_REF_PREFIXES) for ref in item.execution_refs)
-    }
-    return tuple(item for item in in_scope if item.recommendation.recommendation_ref in with_orders)
+    in_scope, _ = _order_execution_view(completed, assessments)
+    return in_scope
+
+
+def _needs_measure_scope_refinement(item: "_CompletedRecommendation") -> bool:
+    """初判不合规时，仅补核需要按措施拆分的条件项或部分拒绝项。"""
+
+    if item.declined_objects and not item.fully_declined:
+        return True
+    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(
+        _recommendation_text(item.recommendation)
+    ))
 
 
 # 药名/检查名能否对上是结构化比对，由程序确定性判定（真实样本 C02“小牛血去蛋白提取物眼用凝胶”
@@ -4183,6 +4205,106 @@ def _execution_quality_outcome(
     if has_unknown:
         return "data_gap", "linkage_unresolved"
     return "compliant", "requirement_satisfied"
+
+
+def _apply_order_measure_check(
+    status: tuple[str, str],
+    outcome: Any,
+    *,
+    completed: Sequence[_CompletedRecommendation],
+    assessments: Sequence[_ExecutionAssessment] | None,
+    already_excluded: frozenset[str],
+    source_incomplete_keys: frozenset[str],
+    checked_refs: frozenset[str] | None = None,
+) -> tuple[tuple[str, str], frozenset[str]]:
+    """把 023 逐措施结果并回建议级结论，并保留拆分/协议失败。"""
+
+    if outcome.state == "skipped":
+        return status, already_excluded
+    if outcome.state != "ready":
+        if status[0] == "non_compliant":
+            checked = checked_refs or frozenset(
+                item.recommendation.recommendation_ref for item in completed
+            )
+            order_completed, order_assessments = _order_execution_view(completed, assessments)
+            remaining_completed = tuple(
+                item for item in order_completed
+                if item.recommendation.recommendation_ref not in checked
+            )
+            remaining_assessments = tuple(
+                item for item in order_assessments or ()
+                if item.recommendation_ref not in checked
+            )
+            remaining_status = _execution_quality_outcome(
+                assessments=remaining_assessments,
+                completed_recommendations=remaining_completed,
+                source_incomplete_keys=source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
+            )
+            if remaining_status[0] == "non_compliant":
+                return status, already_excluded
+        return ("data_gap", "semantic_extraction_unresolved"), already_excluded
+
+    filtered_outcome = _drop_conditional_missing_measures(outcome, completed)
+    order_completed, order_assessments = _order_execution_view(completed, assessments)
+    view_by_ref = {
+        item.recommendation_ref: item for item in order_assessments or ()
+    }
+    excluded = set(already_excluded)
+    for ref, raw_missing in outcome.missing_measures.items():
+        if not raw_missing or filtered_outcome.missing_measures.get(ref):
+            continue
+        assessment = view_by_ref.get(ref)
+        if assessment is not None and (
+            assessment.execution_state == "absent"
+            and not assessment.execution_refs
+            and not assessment.trace_refs
+        ):
+            # 该建议在建议级只因“未见医嘱”命中，逐措施核验后确认其全部缺项
+            # 均为条件未成立或本次明确拒绝的措施，故从 023 范围中剔除。
+            excluded.add(ref)
+
+    remaining_missing = {
+        ref: measures
+        for ref, measures in filtered_outcome.missing_measures.items()
+        if measures
+    }
+    if remaining_missing:
+        if status[0] != "compliant":
+            return status, frozenset(excluded)
+        recommendations_by_ref = {
+            item.recommendation.recommendation_ref: item.recommendation
+            for item in completed
+        }
+        source_incomplete = any(
+            _ACTION_TYPE_SOURCE_KEYS.get(
+                recommendations_by_ref.get(ref).action_type
+                if recommendations_by_ref.get(ref) is not None
+                else "other",
+                frozenset(_EXECUTION_SOURCE_KEYS),
+            ).intersection(source_incomplete_keys)
+            for ref in remaining_missing
+        )
+        return (
+            ("data_gap", "candidate_scope_incomplete")
+            if source_incomplete
+            else ("non_compliant", "requirement_violated")
+        ), frozenset(excluded)
+
+    kept_completed = tuple(
+        item
+        for item in order_completed
+        if item.recommendation.recommendation_ref not in excluded
+    )
+    kept_assessments = tuple(
+        item
+        for item in order_assessments or ()
+        if item.recommendation_ref not in excluded
+    )
+    return _execution_quality_outcome(
+        assessments=kept_assessments,
+        completed_recommendations=kept_completed,
+        source_incomplete_keys=source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
+    ), frozenset(excluded)
 
 
 def _execution_outcome(
@@ -5614,21 +5736,35 @@ async def _execute_consultation_episode_rules(
                 )
             if (
                 "LX0609-03-01-04" in stage_two_rule_ids
-                and statuses.get("LX0609-03-01-04", ("",))[0] == "compliant"
+                and statuses.get("LX0609-03-01-04", ("",))[0]
+                in {"compliant", "non_compliant"}
                 and execution_candidate_projection is not None
                 and llm_client is not None
             ):
-                # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
-                # 只对原判合规者逐项核对；核对失败或漏拆改判资料不足，不沿用合规。
-                # 用户口径（2026-10-20）：逐项核对同样只认会诊当日医嘱、只核医嘱类建议。
+                # 用户口径（2026-10-12）：建议所列多项措施任一无住院医嘱即判不合规。
+                # 初判合规者照常逐项核对；初判不合规者只补核需拆项的条件/部分拒绝建议。
+                # 必要补核失败或漏拆且无其他已证实普通缺项时改判资料不足。
+                # 用户口径（2026-10-20）：只核医嘱类建议，窗口为会诊前 3 天至当天；
+                # “继续/维持”可使用更早的在院医嘱。
                 measure_candidates = tuple(
                     candidate for candidate in execution_candidate_projection.candidates
                     if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
                 )
                 measure_scope = _measure_check_scope(completed_recommendations, order_assessments)
-                for measure_completed in _execution_event_batches(
-                    completed=measure_scope, candidates=measure_candidates,
-                ):
+                if statuses["LX0609-03-01-04"][0] == "non_compliant":
+                    measure_scope = tuple(
+                        item for item in measure_scope
+                        if _needs_measure_scope_refinement(item)
+                    )
+                measure_excluded_refs = frozenset()
+                measure_batches = (
+                    _execution_event_batches(
+                        completed=measure_scope, candidates=measure_candidates,
+                    )
+                    if measure_scope
+                    else ()
+                )
+                for measure_completed in measure_batches:
                     _, measure_allowed_refs = _execution_prompt(
                         completed=measure_completed,
                         candidates=measure_candidates,
@@ -5645,26 +5781,27 @@ async def _execute_consultation_episode_rules(
                     completion_tokens += measure_outcome.completion_tokens
                     total_tokens += measure_outcome.total_tokens
                     api_time += measure_outcome.api_time
-                    action_types = {
-                        item.recommendation.recommendation_ref: item.recommendation.action_type
-                        for item in measure_completed
-                    }
-                    measure_outcome = _drop_conditional_missing_measures(
+                    filtered_measure_outcome = _drop_conditional_missing_measures(
                         measure_outcome, measure_completed,
                     )
                     measure_missing_by_ref.update(
                         (ref, measures)
-                        for ref, measures in measure_outcome.missing_measures.items()
+                        for ref, measures in filtered_measure_outcome.missing_measures.items()
                         if measures
                     )
-                    statuses["LX0609-03-01-04"] = apply_measure_check(
-                        statuses["LX0609-03-01-04"],
-                        measure_outcome,
-                        relevant_source_incomplete=lambda ref: bool(
-                            _ACTION_TYPE_SOURCE_KEYS.get(
-                                action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
-                            ).intersection(execution_source_incomplete_keys)
-                        ),
+                    statuses["LX0609-03-01-04"], measure_excluded_refs = (
+                        _apply_order_measure_check(
+                            statuses["LX0609-03-01-04"],
+                            measure_outcome,
+                            completed=completed_recommendations,
+                            assessments=order_assessments,
+                            already_excluded=measure_excluded_refs,
+                            source_incomplete_keys=execution_source_incomplete_keys,
+                            checked_refs=frozenset(
+                                item.recommendation.recommendation_ref
+                                for item in measure_completed
+                            ),
+                        )
                     )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,

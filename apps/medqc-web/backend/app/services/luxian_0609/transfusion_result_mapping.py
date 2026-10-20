@@ -397,8 +397,12 @@ def _safe_044(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     legacy_fields = {"indication", "laboratory_indicator", "risk_history_or_status"}
     application_fields = {"application_reason", "laboratory_indicator"}
-    checked = _controlled_list(raw.get("checked_fields"), allowed=legacy_fields | application_fields)
-    missing = _controlled_list(raw.get("missing_fields"), allowed=legacy_fields | application_fields)
+    checked = _controlled_list(
+        raw.get("checked_fields"), allowed=legacy_fields | application_fields
+    )
+    missing = _controlled_list(
+        raw.get("missing_fields"), allowed=legacy_fields | application_fields
+    )
     expected_fields = sorted(
         application_fields if checked == sorted(application_fields) else legacy_fields
     )

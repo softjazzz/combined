@@ -1,4 +1,4 @@
-"""062 自由文本出院带药：受控事实抽取，原文引用由 Python 严格核验；仅引文核验失败时定向补核一次。"""
+"""062 自由文本出院带药：受控事实抽取，原文引用由 Python 严格核验并定向补核。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 import math
+import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 
@@ -156,8 +157,14 @@ def _prompt(text: str) -> str:
         "若频次、用药时机或疗程在每个药物后分别出现，每项只引用该药附近对应的原文片段。"
         "drug_name不能为missing。medication_time表示用药时间；原文明示频次、用药时机或疗程任一项即可present，"
         "不要求同时写明疗程，且仅摘取原文连续片段，不自行换算。"
-        "列举药物前的共同用药时间说明，若明确适用于随后整组药物，应为组内每项保留该原文引用；"
+        "药物条目及归属明确，完整核对该条和适用的组级说明后，均没有频次、用药时机或疗程时，"
+        "medication_time必须为missing，不能仅因原文未写就标uncertain；"
+        "例如‘药物甲，每次1g’只有剂量，用药时间为missing。"
+        "uncertain仅用于原文表述含糊、药物边界或共同说明归属无法可靠确定，不能猜成缺失或存在。"
+        "列举药物前或末尾的共同用药时间说明，若明确适用于整组药物，应为组内每项保留该原文引用；"
         "例如‘院外规律用药(1周):药物甲……、药物乙……’，两项均可引用‘1周’，不能因每项未重复书写就报medication_time缺失。"
+        "列表末尾‘以上药物使用7天’同样明确回指此前整组药物；其中未单独写频次的药物也可引用‘7天’，"
+        "不能只检查列表前的共同限定而漏掉末尾限定。"
         "共同说明只作用于其明确限定的药物组，不扩展到其他段落；某药另有明确用药时间时按该药说明提取。"
         "组级给药途径若明确限定随后整组药物，应为组内每项保留相同的原文连续引用；"
         "不得跨药物组或跨段传播；无法明确适用范围时，route必须为uncertain。"
@@ -294,6 +301,116 @@ def _retry_prompt(text: str, error: _QuoteViolation, previous_content: str) -> s
     return _prompt(text).replace(_TEXT_MARKER, f"{hint}。\n{_TEXT_MARKER}", 1)
 
 
+def _targeted_uncertain_slots(
+    field_assertions: Sequence[Mapping[str, str]],
+) -> tuple[tuple[int, str], ...]:
+    """只补核药名已确认的剂量或用药时间；不重复抽取药物身份和途径。"""
+
+    if not field_assertions or any(item.get("drug_name") != "present" for item in field_assertions):
+        return ()
+    slots = tuple(
+        (item_index, field_name)
+        for item_index, item in enumerate(field_assertions)
+        for field_name, assertion in item.items()
+        if assertion == "uncertain"
+    )
+    if any(field_name not in {"dose", "duration"} for _, field_name in slots):
+        return ()
+    return slots
+
+
+def _uncertain_recheck_prompt(
+    text: str,
+    slots: Sequence[tuple[int, str]],
+) -> str:
+    locations = "、".join(
+        f"items第{item_index + 1}项{'medication_time' if field_name == 'duration' else field_name}"
+        for item_index, field_name in slots
+    )
+    hint = (
+        f"首轮结构和引文已经通过校验，仅定向复核这些不确定字段：{locations}。"
+        "必须重新核对下方原文对应药物条目及明确适用的组级说明；"
+        "先将目标条目限定在该药名至下一分号、句号或下一药名之间；"
+        "分号前的时间表达属于前一药物，除非列表前或末尾有明确适用于整组药物的共同限定，"
+        "后一药物的时间表达不得向前传播。"
+        "必须另行检查列表末尾‘以上药物使用7天’这类回指整组的限定；它不是后一药物的专属时间，"
+        "适用时应给目标项medication_time标present并引用该连续原文，而不是missing或uncertain。"
+        "例如‘合成药物甲，每次一片；合成药物乙，每次两片，每日一次’，"
+        "第一项medication_time应为missing，第二项才可引用‘每日一次’；"
+        "不能把uncertain默认改成missing，只有完整核对后能确认原文确未记录才可标missing；"
+        "present仍须提供原文逐字连续quote，持续无法确定则保持uncertain。"
+        "不得从药名、处方或常识补写剂量、频次、时机、疗程；不得改变药物数量、顺序或药名绑定。"
+        "仍返回完整的同版schema；未要求复核的字段仅作绑定定位，其输出不会覆盖首轮已验证结果"
+    )
+    return _prompt(text).replace(_TEXT_MARKER, f"{hint}。\n{_TEXT_MARKER}", 1)
+
+
+def _with_explicit_list_course(
+    state: str,
+    medications: tuple[Mapping[str, str | None], ...],
+    assertions: tuple[Mapping[str, str], ...],
+    text: str,
+) -> tuple[str, tuple[Mapping[str, str | None], ...], tuple[Mapping[str, str], ...]]:
+    """只核验显式回指整组的疗程；不从邻项频次或常识补值。"""
+
+    if not medications or any(item.get("drug_name") != "present" for item in assertions):
+        return state, medications, assertions
+    endings = tuple(re.finditer(
+        r"(?:^|[。；;\n])\s*以上(?:药物|药品)(?:连续)?(?:使用|服用|用药)\s*"
+        r"(?P<course>(?:\d+|[一二三四五六七八九十两]+)\s*(?:个月|天|日|周|月))",
+        text,
+    ))
+    if len(endings) != 1:
+        return state, medications, assertions
+    ending = endings[0]
+    starts = tuple(re.finditer(r"(?:出院|院外)(?:带药|用药)\s*[:：]", text[:ending.start()]))
+    if not starts:
+        return state, medications, assertions
+    group = text[starts[-1].end():ending.start()]
+    names = tuple(item.get("drug_name") for item in medications)
+    # 必须能把本次每一药物唯一绑定到同一显式列表；多组或后续药物不猜归属。
+    if any(not name or group.count(name) != 1 for name in names):
+        return state, medications, assertions
+    updated = [dict(item) for item in medications]
+    checked = [dict(item) for item in assertions]
+    for index, item in enumerate(checked):
+        if item.get("duration") in {"missing", "uncertain"}:
+            updated[index]["duration"] = ending.group("course")
+            item["duration"] = "present"
+    state = "unknown" if any(
+        value == "uncertain" for item in checked for value in item.values()
+    ) else "ready"
+    return state, tuple(updated), tuple(checked)
+
+
+def _merge_uncertain_recheck(
+    initial_medications: Sequence[Mapping[str, str | None]],
+    initial_assertions: Sequence[Mapping[str, str]],
+    recheck_medications: Sequence[Mapping[str, str | None]],
+    recheck_assertions: Sequence[Mapping[str, str]],
+    slots: Sequence[tuple[int, str]],
+) -> tuple[str, tuple[Mapping[str, str | None], ...], tuple[Mapping[str, str], ...]] | None:
+    """合入首轮 uncertain 槽位；药物数量或药名绑定漂移时拒收整次补核。"""
+
+    if len(initial_medications) != len(recheck_medications):
+        return None
+    for item_index in range(len(initial_medications)):
+        if (
+            recheck_assertions[item_index].get("drug_name") != "present"
+            or recheck_medications[item_index].get("drug_name") != initial_medications[item_index].get("drug_name")
+        ):
+            return None
+    merged_medications = [dict(item) for item in initial_medications]
+    merged_assertions = [dict(item) for item in initial_assertions]
+    for item_index, field_name in slots:
+        merged_medications[item_index][field_name] = recheck_medications[item_index][field_name]
+        merged_assertions[item_index][field_name] = recheck_assertions[item_index][field_name]
+    state = "unknown" if any(
+        assertion == "uncertain" for item in merged_assertions for assertion in item.values()
+    ) else "ready"
+    return state, tuple(merged_medications), tuple(merged_assertions)
+
+
 async def extract_discharge_medications(text: str, llm_client: MedicationLLMClient | None) -> Extraction:
     if not isinstance(text, str) or not text.strip():
         return Extraction("data_gap", "required_field_missing")
@@ -308,7 +425,12 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
     totals = [0, 0, 0]
     api_time = 0.0
     prompt = _prompt(safe_text)
-    # 仅引文核验失败时定向补核一次；结构与枚举错误不补核。
+    pending_recheck: tuple[
+        tuple[Mapping[str, str | None], ...],
+        tuple[Mapping[str, str], ...],
+        tuple[tuple[int, str], ...],
+    ] | None = None
+    # 引文失败和字段不确定补核共用两次协议调用总预算；结构与枚举错误不补核。
     for attempt in range(PROTOCOL_ATTEMPTS):
         started = perf_counter()
         calls += 1
@@ -320,6 +442,12 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
                 enable_thinking=False,
             )
         except Exception as error:
+            if pending_recheck is not None:
+                medications, field_assertions, _slots = pending_recheck
+                return Extraction(
+                    "unknown", "semantic_low_confidence", medications, calls, *totals,
+                    api_time + perf_counter() - started, field_assertions=field_assertions,
+                )
             is_timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
             return Extraction("technical_error", "model_timeout" if is_timeout else "model_transport_error", (), calls, *totals, api_time + perf_counter() - started)
         call_time = perf_counter() - started
@@ -349,11 +477,35 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             api_time += call_time
             logger.warning("LX0609 出院带药抽取输出无效: %s", describe_luxian_0609_llm_parse_failure(error, response))
+            if pending_recheck is not None:
+                medications, field_assertions, _slots = pending_recheck
+                return Extraction(
+                    "unknown", "semantic_low_confidence", medications, calls, *totals, api_time,
+                    field_assertions=field_assertions,
+                )
             if isinstance(error, _QuoteViolation) and isinstance(content, str) and attempt + 1 < PROTOCOL_ATTEMPTS:
                 prompt = _retry_prompt(safe_text, error, content)
                 continue
             return Extraction("technical_error", "model_invalid_output", (), calls, *totals, api_time)
         api_time += call_time
+        state, medications, field_assertions = _with_explicit_list_course(
+            state, medications, field_assertions, safe_text,
+        )
+        if pending_recheck is not None:
+            initial_medications, initial_assertions, slots = pending_recheck
+            merged = _merge_uncertain_recheck(
+                initial_medications, initial_assertions, medications, field_assertions, slots,
+            )
+            if merged is None:
+                state, medications, field_assertions = "unknown", initial_medications, initial_assertions
+            else:
+                state, medications, field_assertions = merged
+        elif state == "unknown" and attempt + 1 < PROTOCOL_ATTEMPTS:
+            slots = _targeted_uncertain_slots(field_assertions)
+            if slots:
+                pending_recheck = (medications, field_assertions, slots)
+                prompt = _uncertain_recheck_prompt(safe_text, slots)
+                continue
         return Extraction(
             state, {"ready": "discharge_medications_extracted", "absent": "discharge_medications_absent_explicit", "unknown": "semantic_low_confidence"}[state],
             medications, calls, *totals, api_time,

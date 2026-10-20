@@ -2795,12 +2795,12 @@ def _programmatic_transfusion_display_facts(
         ]
         joined = " ".join(entries)
         checked = {
-            "indication": bool(_PRETRANSFUSION_CORE_PATTERNS[0].search(joined)),
+            "application_reason": bool(
+                _PRETRANSFUSION_PURPOSE_PATTERN.search(joined)
+                or _PRETRANSFUSION_CORE_PATTERNS[0].search(joined)
+            ),
             "laboratory_indicator": bool(
                 _PRETRANSFUSION_CORE_PATTERNS[1].search(joined)
-            ),
-            "risk_history_or_status": bool(
-                _PRETRANSFUSION_CORE_PATTERNS[2].search(joined)
             ),
         }
         missing = sorted(key for key, present in checked.items() if not present)
@@ -3808,12 +3808,32 @@ async def execute_luxian_0609_native_transfusion_rules(
             if course_state not in {"available", "empty"}:
                 emit_outcome(rule_id, "data_gap", "transfusion_course_source_unavailable", executor_type="program")
                 continue
-            if rule_id == "LX0609-07-02-01" and not _source_document_rows(documents, "bloodtrans_record"):
+            if not _source_document_rows(documents, "bloodtrans_record"):
                 selected_courses = []
                 selected_refs = []
                 course_failure = None
+                course_source_unavailable = False
                 for source_key in ("daily_course_record", "senior_course_record"):
-                    candidates = list(select_transfusion_course_candidates(_source_document_rows(documents, source_key)))
+                    source_rows = _source_document_rows(documents, source_key)
+                    if rule_id == "LX0609-07-02-02":
+                        source_state = _logical_source_state(documents, source_key)
+                        if source_state == "missing" and (
+                            isinstance(documents.get(source_key), list)
+                            or not isinstance(
+                                documents.get("__logical_source_states__"), Mapping
+                            )
+                        ):
+                            # Legacy payloads predate logical source-state metadata.
+                            source_state = "available" if source_rows else "empty"
+                        if source_state == "error":
+                            course_failure = TransfusionCoursePresenceResult(
+                                "technical_error", reason_code="source_query_error"
+                            )
+                            break
+                        if source_state not in {"available", "empty"}:
+                            course_source_unavailable = True
+                            continue
+                    candidates = list(select_transfusion_course_candidates(source_rows))
                     if not candidates:
                         continue
                     course_presence = await classify_course_records(candidates)
@@ -3828,6 +3848,14 @@ async def execute_luxian_0609_native_transfusion_rules(
                     emit_outcome(rule_id, course_failure.state,
                                  course_failure.reason_code or "transfusion_course_record_content_unavailable",
                                  executor_type="llm")
+                    continue
+                if not selected_courses and course_source_unavailable:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_course_source_unavailable",
+                        executor_type="program",
+                    )
                     continue
                 if selected_courses:
                     # 临床内核复用逐份核查；证据始终绑定原始物理来源。

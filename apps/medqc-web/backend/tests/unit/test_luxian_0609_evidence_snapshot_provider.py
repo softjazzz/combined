@@ -517,7 +517,7 @@ def test_authoritative_horizon_detects_same_day_minute_level_time_conflict() -> 
     assert observation.reason_code == "authoritative_time_conflict"
 
 
-def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
+def test_027_projects_terminal_and_discharge_records_into_the_same_evidence_session() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -542,6 +542,7 @@ def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
     )
 
     assert calls == [
+        "death_record",
         "diagnosis",
         "discharge_record",
         "discharge_record_diagnosis",
@@ -553,6 +554,7 @@ def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
         for source_key in calls
     )
     assert tuple(item.source_key for item in session.snapshot.observations) == (
+        "death_record",
         "diagnosis",
         "discharge_record",
         "discharge_record_diagnosis",

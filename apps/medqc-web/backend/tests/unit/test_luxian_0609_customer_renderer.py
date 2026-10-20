@@ -31,6 +31,29 @@ SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 
 
+@pytest.mark.parametrize("requirement_met", [False, True])
+@pytest.mark.parametrize("with_senior", [False, True])
+def test_pathology_finding_matches_verified_result_and_checked_sources(requirement_met, with_senior):
+    sources = ["surgery_record", "daily_course_record"] + (["senior_course_record"] if with_senior else [])
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-06-02-03", facts={
+        "verification_kind": "pathology_result_documentation_check",
+        "report_time": "2026-09-14 10:20:23", "requirement_met": requirement_met,
+        "checked_target_sources": [{"source": source, "state": "present"} for source in sources],
+    })
+    assert ("已找到病理结果记录" if requirement_met else "未找到病理结果记录") in finding
+    assert ("上级医师查房记录" in finding) == with_senior
+    if requirement_met:
+        assert "未找到" not in finding
+
+
+def test_pathology_finding_requires_explicit_verified_requirement():
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-06-02-03", facts={
+        "verification_kind": "pathology_result_documentation_check", "report_time": "2026-09-14 10:20:23",
+        "checked_target_sources": [{"source": "surgery_record", "state": "empty"},
+                                   {"source": "daily_course_record", "state": "empty"}],
+    }) == ""
+
+
 @pytest.mark.parametrize(
     ("rule_id", "reason_code", "missing_sources", "expected"),
     [

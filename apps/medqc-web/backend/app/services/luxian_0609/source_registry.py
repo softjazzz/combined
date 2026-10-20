@@ -436,10 +436,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-01-02-02": ("first_course_record_diagnosis",),
     "LX0609-04-01-04": ("presurg_summary", "surgery_record", "senior_course_record"),
     "LX0609-04-01-05": ("presurg_discussion",),
-    # 027 需要同一快照内的病历阶段、恶性事实与正式出院记录。
+    # 027 需要同一快照内的病历阶段、互斥死亡终末事实、恶性事实与正式出院记录。
     "LX0609-08-01-04": (
         "diagnosis", "discharge_record_diagnosis", "pathology_exam_report",
-        "inpat_registration.discharge_horizon", "discharge_record",
+        "inpat_registration.discharge_horizon", "discharge_record", "death_record",
     ),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
@@ -626,7 +626,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 063 比较病案首页与出院记录的出院/死亡诊断；mr_diagnosis 仅作为
     # 规则内部决策支持来源，不改变客户适用文书范围。
-    "LX0609-08-01-03": ("discharge_record", "mr_diagnosis", "inpat_registration", "death_record"),
+    "LX0609-08-01-03": (
+        "discharge_record", "mr_diagnosis", "inpat_registration", "death_record",
+        "evaluation_context.horizon",
+    ),
     # 用户口径（2026-10-11）：重要住院事件按结构化来源由程序确定，不再读病程。
     "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
                         "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",

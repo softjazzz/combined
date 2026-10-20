@@ -95,6 +95,7 @@ from .extended_document.discharge_medication_extraction import extract_discharge
 from .extended_document.discharge_approval_extraction import (
     DischargeApprovalInput,
     extract_discharge_approval,
+    has_confirmed_senior_discharge_approval_quote,
 )
 from .extended_document.transfer_documentation import (
     evaluate_transfer_documentation,
@@ -348,17 +349,17 @@ def _discharge_approval_path(
     ):
         return "automatic_discharge"
 
-    approval = _confirmed_discharge_approval_match(text)
-    if approval is None:
-        return None
-    local_context = text[max(0, approval.start() - 80): approval.end() + 40]
     author_title = _clean(row.get("author_title"))
-    if (
-        source_key == "senior_course_record"
-        or _SENIOR_PHYSICIAN_REFERENCE_PATTERN.search(local_context)
-        or _SENIOR_PHYSICIAN_REFERENCE_PATTERN.search(author_title)
-    ):
-        return "senior_approval"
+    known_senior = source_key == "senior_course_record" or bool(
+        _SENIOR_PHYSICIAN_REFERENCE_PATTERN.search(author_title)
+    )
+    # 与语义入口共用同分句完成条件，既不把待请示当批准，也不漏掉已获同意后的安排。
+    for clause in re.split(r"[。！？!?；;\r\n]+", text):
+        if has_confirmed_senior_discharge_approval_quote(
+            clause,
+            source_type="senior_course_record" if known_senior else "daily_course_record",
+        ):
+            return "senior_approval"
     return None
 
 
@@ -400,20 +401,10 @@ def _is_dated_discharge_plan_only(text: str) -> bool:
 
 def _has_confirmed_discharge_approval(text: str) -> bool:
     """模型的 approved 枚举也必须通过同一明确处置合同。"""
-
-    if _confirmed_discharge_approval_match(text) is not None:
-        return True
-    # 此补充只供已核验为 senior/approved 的语义事实使用，不扩大无模型的角色推断。
-    for approval in _SEMANTIC_DISCHARGE_DISPOSITION_PATTERN.finditer(text):
-        prefix = re.split(r"[。！？!?；;\r\n]", text[:approval.start()])[-1]
-        if re.search(r"(?:不|未|尚未|尚不|暂不|拟|计划|准备).{0,6}$", prefix):
-            continue
-        if re.search(r"(?:待|若|如果|如无|如有|如复查|如病情|考虑)", prefix):
-            continue
-        if re.search(r"(?:复查|检查|治疗|换药).{0,16}后(?:再)?.{0,8}$", prefix):
-            continue
-        return True
-    return False
+    # 此入口只消费已独立确认的 senior 角色；引文自身仍须证明条件已完成。
+    return has_confirmed_senior_discharge_approval_quote(
+        text, source_type="senior_course_record",
+    )
 
 
 def _source_rows(
@@ -2798,6 +2789,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             "LX0609-06-04-01",
             "LX0609-05-01-03",
             "LX0609-08-01-01",
+            "LX0609-08-01-03",
             "LX0609-04-05-01",
             "LX0609-04-05-02",
             "LX0609-08-02-01",
@@ -3901,6 +3893,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
             )
             explicit_death = bool(death_rows or death_registration_rows)
+            frozen_running = (
+                not horizon_error and len(horizon_rows) == 1
+                and horizon_rows[0].get("record_scene") == "running"
+            )
             # 可信mr精确死亡类型本身证明范围；记录完成时间占位不反证死亡。
             typed_death = mr_diagnosis_observed and authority_types == {"死亡诊断"}
             scope_conflict = bool(alive_registration_rows) and (
@@ -3920,6 +3916,14 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif len(authority_types) > 1:
                 scope_gap = "scope_conflict"
                 consumed.extend((authority_source_key, row) for row in raw_authority_rows)
+            elif frozen_running and (discharge_rows or "出院诊断" in authority_types):
+                scope_gap = "scope_conflict"
+                consumed.extend(("evaluation_context.horizon", row) for row in horizon_rows)
+                consumed.extend(("discharge_record", row) for row in discharge_rows)
+                consumed.extend((authority_source_key, row) for row in raw_authority_rows)
+            elif frozen_running:
+                scope_gap = None
+                consumed.extend(("evaluation_context.horizon", row) for row in horizon_rows)
             elif discharge_rows and not discharge_error:
                 diagnosis_scope, scope_gap = "discharge", None
                 consumed.extend(("discharge_record", row) for row in discharge_rows)
@@ -3929,7 +3933,9 @@ async def execute_luxian_0609_native_extended_document_rules(
             else:
                 scope_gap = "scope_unknown"
 
-            if authority_error:
+            if frozen_running and diagnosis_scope is None and scope_gap is None:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif authority_error:
                 final_state, reason_code = "data_gap", authority_error
             elif scope_conflict or scope_gap == "scope_conflict":
                 final_state, reason_code = "data_gap", "required_field_missing"
@@ -4089,7 +4095,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     # 内部诊断无文书ID只保留合法来源锚点；不伪造逐行文书坐标。
                     matched_refs = tuple(
-                        ref if _clean(row.get("document_id") or row.get("id")) or source_key == "inpat_registration"
+                        ref if _clean(row.get("document_id") or row.get("id")) or source_key in {"inpat_registration", "evaluation_context.horizon"}
                         else _fact_refs(evidence_snapshot, (source_key,))[0]
                         for ref, row in matched_rows
                     )

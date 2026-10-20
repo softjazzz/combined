@@ -90,6 +90,70 @@ def resolve_record_evaluation_horizon_unavailable_reason(
     return None
 
 
+def _frozen_snapshot_case_binding(
+    snapshot: Mapping[str, Any],
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+) -> str:
+    """复用冻结终点的三坐标/旧 record_id 身份校验。"""
+
+    context = CaseRef(institute_id.strip(), patient_id.strip(), visit_id.strip())
+    coordinate_fields = ("institute_id", "patient_id", "visit_id")
+    if any(key in snapshot for key in coordinate_fields):
+        coordinates = tuple(
+            _normalized_text(snapshot.get(key)) for key in coordinate_fields
+        )
+        if not all(coordinates) or coordinates != tuple(context):
+            return "conflict"
+    else:
+        record_id = _normalized_text(snapshot.get("record_id"))
+        if not record_id:
+            return "missing"
+        if record_id != context.visit_id:
+            return "conflict"
+    if (
+        "record_key" in snapshot
+        and _normalized_text(snapshot.get("record_key")) != context.as_key()
+    ):
+        return "conflict"
+    return "match"
+
+
+def resolve_frozen_running_record_scene(
+    snapshot: Mapping[str, Any] | None,
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    expected_horizon_date: date | None,
+) -> str:
+    """只返回与病例、策略和冻结日一致的 ``running`` 场景。"""
+
+    if not isinstance(snapshot, Mapping) or expected_horizon_date is None:
+        return ""
+    if (
+        _normalized_text(snapshot.get("resolution_status")) != "resolved"
+        or _normalized_text(snapshot.get("record_scene")) != "running"
+        or _normalized_text(snapshot.get("evaluation_basis")) != "task_frozen_date"
+        or _frozen_snapshot_case_binding(
+            snapshot,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+        ) != "match"
+    ):
+        return ""
+    try:
+        frozen_horizon = date.fromisoformat(
+            _normalized_text(snapshot.get("evaluation_horizon"))
+        )
+    except ValueError:
+        return ""
+    return "running" if frozen_horizon == expected_horizon_date else ""
+
+
 def resolve_frozen_discharge_horizon(
     snapshot: Mapping[str, Any], *, institute_id: str, patient_id: str, visit_id: str,
 ) -> tuple[datetime | None, str]:
@@ -107,20 +171,14 @@ def resolve_frozen_discharge_horizon(
         return None, missing
     if status != "resolved" or scene != "final" or basis != "discharge_datetime":
         return None, conflict
-    context = CaseRef(institute_id.strip(), patient_id.strip(), visit_id.strip())
-    coordinate_fields = ("institute_id", "patient_id", "visit_id")
-    if any(key in snapshot for key in coordinate_fields):
-        coordinates = tuple(_normalized_text(snapshot.get(key)) for key in coordinate_fields)
-        if not all(coordinates) or coordinates != tuple(context):
-            return None, conflict
-    else:
-        record_id = _normalized_text(snapshot.get("record_id"))
-        if not record_id:
-            return None, missing
-        if record_id != context.visit_id:
-            return None, conflict
-    if "record_key" in snapshot and _normalized_text(snapshot.get("record_key")) != context.as_key():
-        return None, conflict
+    binding = _frozen_snapshot_case_binding(
+        snapshot,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+    )
+    if binding != "match":
+        return None, missing if binding == "missing" else conflict
     try:
         admission = _parse_datetime(snapshot.get("admission_datetime"), field_name="admission_datetime")
         discharge = _parse_datetime(snapshot.get("discharge_datetime"), field_name="discharge_datetime")

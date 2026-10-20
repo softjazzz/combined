@@ -197,6 +197,7 @@ async def test_partial_uncertainty_preserves_verified_medications_and_field_stat
         "drug_name": _field("合成药乙"), "dose": _field("每次两片"),
         "route": _field(None), "medication_time": _field("连续七天"),
     })
+    # 同一合法应答在定向补核时仍保持 uncertain，验证两次协议预算和首轮事实稳定性。
     client = Client(payload)
     result = await extract_discharge_medications(TEXT + "合成药乙，每次两片，连续七天。", client)
     assert result.state == "unknown"
@@ -206,7 +207,8 @@ async def test_partial_uncertainty_preserves_verified_medications_and_field_stat
     assert result.field_assertions[0]["duration"] == "uncertain"
     assert result.field_assertions[1]["route"] == "missing"
     assert result.field_assertions[0]["route"] == "present"
-    assert result.llm_call_count == len(client.calls) == 1
+    assert result.llm_call_count == len(client.calls) == 2
+    assert "items第1项medication_time" in client.calls[1][0]
 
 
 @pytest.mark.asyncio

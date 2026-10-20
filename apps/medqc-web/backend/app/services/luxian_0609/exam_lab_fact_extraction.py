@@ -1061,8 +1061,44 @@ def build_exam_lab_text_projection(
             )
         )
 
+    horizon_rows = tuple(rows_by_source.get("evaluation_context.horizon", ()))
+    precise_horizon, precise_horizon_conflict = _unique_role_time(
+        horizon_rows, ("horizon_datetime",)
+    )
+    horizon_dates = {
+        parsed
+        for row in horizon_rows
+        if isinstance(row, Mapping)
+        if (parsed := _parse_date(row.get("horizon_date"))) is not None
+    }
+    horizon_date = next(iter(horizon_dates)) if len(horizon_dates) == 1 else None
+    horizon_conflict = (
+        precise_horizon_conflict
+        or len(horizon_dates) > 1
+        or (
+            precise_horizon is not None
+            and horizon_date is not None
+            and precise_horizon.date() != horizon_date
+        )
+    )
+
+    def culture_event_within_horizon(event: ExamLabSingleEvent) -> bool:
+        """只剔除可确认晚于受控评价终点的培养报告事件。"""
+
+        if horizon_conflict or event.report_time is None:
+            return True
+        if precise_horizon is not None:
+            return event.report_time <= precise_horizon
+        if horizon_date is not None:
+            return event.report_time.date() <= horizon_date
+        return True
+
     imaging_events = build_events("exam")
-    culture_events = build_events("culture")
+    culture_events = tuple(
+        event
+        for event in build_events("culture")
+        if culture_event_within_horizon(event)
+    )
     imaging_event = imaging_events[0] if len(imaging_events) == 1 else None
     culture_event = culture_events[0] if len(culture_events) == 1 else None
 
@@ -1253,17 +1289,6 @@ def build_exam_lab_text_projection(
     context = "\n".join(parts)
     if max_context_chars is not None and len(context) > max_context_chars:
         raise ValueError("exam lab text projection truncated")
-    horizon_rows = tuple(rows_by_source.get("evaluation_context.horizon", ()))
-    precise_horizon, precise_horizon_conflict = _unique_role_time(
-        horizon_rows, ("horizon_datetime",)
-    )
-    horizon_dates = {
-        parsed
-        for row in horizon_rows
-        if isinstance(row, Mapping)
-        if (parsed := _parse_date(row.get("horizon_date"))) is not None
-    }
-    horizon_date = next(iter(horizon_dates)) if len(horizon_dates) == 1 else None
     return ExamLabTextProjection(
         context=context,
         document_refs=frozenset(refs),
@@ -1284,7 +1309,7 @@ def build_exam_lab_text_projection(
         safe_refs=dict(safe_refs),
         precise_horizon=precise_horizon,
         horizon_date=horizon_date,
-        horizon_conflict=precise_horizon_conflict or len(horizon_dates) > 1,
+        horizon_conflict=horizon_conflict,
         horizon_unavailable_reason=horizon_unavailable_reason,
         course_time_incomplete=any(
             _row_text(row) and _course_datetime(row) is None

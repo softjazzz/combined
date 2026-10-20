@@ -8427,7 +8427,8 @@ async def test_062_partial_uncertainty_only_reports_confirmed_missing_fields(mis
     result, reduced = await _evaluate(
         "LX0609-08-01-02", {"discharge_record": ({"discharge_order": text},)}, llm_client=Client(),
     )
-    assert result.llm_call_count == 1
+    # 药名明确时，用药时间 uncertain 允许一次定向补核；仍不确定不冒充缺项。
+    assert result.llm_call_count == (2 if known_drug_name else 1)
     if missing_route and known_drug_name:
         assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
         facts = dict(result.customer_display_facts)["LX0609-08-01-02"]
@@ -8494,8 +8495,8 @@ async def test_062_multiple_medications_keep_confirmed_gap_despite_other_uncerta
         "required_fields": ["drug_name", "dose", "route", "duration"],
         "missing_fields": ["route"],
     }
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
+    assert result.llm_call_count == 2
+    assert len(client.calls) == 2
 
 
 @pytest.mark.asyncio
@@ -8587,6 +8588,7 @@ def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None
         "mr_diagnosis",
         "inpat_registration",
         "death_record",
+        "evaluation_context.horizon",
     }
 
 

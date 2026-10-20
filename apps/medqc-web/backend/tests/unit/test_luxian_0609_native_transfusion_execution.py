@@ -2314,9 +2314,8 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
     assert [item["status"] for item in result.results] == ["compliant"] * 4
     display_facts = dict(result.customer_display_facts)
     assert display_facts["LX0609-07-01-02"]["checked_fields"] == [
-        "indication",
+        "application_reason",
         "laboratory_indicator",
-        "risk_history_or_status",
     ]
     assert display_facts["LX0609-07-01-02"]["missing_fields"] == []
     assert display_facts["LX0609-07-02-02"]["checked_fields"] == [

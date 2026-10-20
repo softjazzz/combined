@@ -1053,6 +1053,66 @@ async def test_typed_027_late_malignant_code_is_not_lost_by_prompt_row_limit() -
 
 
 @pytest.mark.asyncio
+async def test_typed_027_excludes_death_terminal_before_discharge_and_malignancy_checks() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = {
+            "death_record": ({"record_content": "匿名死亡记录"},),
+            # 即使存在恶性诊断，也不能把死亡终末病例送入《出院记录》计划核对。
+            "diagnosis": ({"diagnosis_code": "C18.9"},),
+            "inpat_registration.discharge_horizon": (
+                {
+                    "record_scene": "final",
+                    "discharge_datetime": "2026-01-01 12:00:00",
+                },
+            ),
+        }.get(source_key, ())
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-08-01-04",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",),
+            selected_rule_ids=("LX0609-08-01-04",),
+        ),
+    )
+    client = _Client([])
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-08-01-04",),
+        wrapper_rules=[_wrapper("LX0609-08-01-04")],
+        evidence_payload=None,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-08-01-04",),
+    )
+
+    decision = result.decisions[0]
+    reduced = reduce_luxian_0609_rule_decision(decision)
+    assert reduced.final_state.value == "not_applicable"
+    assert decision.reason_code == "trigger_absent_complete"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert "death_record" in tumor._TYPED_RULE_SOURCE_KEYS["LX0609-08-01-04"]
+
+
+@pytest.mark.asyncio
 async def test_truncated_pathology_material_fails_closed_without_model_or_live_query(
     monkeypatch,
 ):

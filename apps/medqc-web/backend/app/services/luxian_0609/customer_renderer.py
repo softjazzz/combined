@@ -2818,7 +2818,19 @@ def customer_finding_from_controlled_facts(
             )
 
     if rule_id == "LX0609-06-02-03" and kind == "pathology_result_documentation_check":
-        return f"病理报告于 {facts.get('report_time')} 出具；已核对手术记录和病程记录，未找到病理结果记录。"
+        requirement_met = facts.get("requirement_met")
+        checked = facts.get("checked_target_sources")
+        if type(requirement_met) is not bool or not isinstance(checked, list):
+            return ""
+        sources = [item.get("source") for item in checked if isinstance(item, Mapping)]
+        if sources == ["surgery_record", "daily_course_record"]:
+            scope = "手术记录和病程记录"
+        elif sources == ["surgery_record", "daily_course_record", "senior_course_record"]:
+            scope = "手术记录、日常病程记录和上级医师查房记录"
+        else:
+            return ""
+        conclusion = "已找到病理结果记录" if requirement_met else "未找到病理结果记录"
+        return f"病理报告于 {facts.get('report_time')} 出具；已核对{scope}，{conclusion}。"
 
     if rule_id == "LX0609-06-02-02" and kind == "pathology_sampling_not_documented":
         checked_sources = facts.get("checked_target_sources")

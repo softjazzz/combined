@@ -391,6 +391,7 @@ _NATIVE_SOURCE_FIELDS = {
         "order_time",
         "prescribed_datetime",
         "planned_start_datetime",
+        "carried_datetime",
         # 028：医嘱停止时间（源库同步后启用；列不存在时不选取）。
         "stop_datetime",
         "order_stop_datetime",
@@ -727,6 +728,7 @@ _SNAPSHOT_SOURCE_FIELDS[EVALUATION_HORIZON_SOURCE_KEY] = (
     "horizon_date",
     "horizon_datetime",
     "basis",
+    "record_scene",
     "row_ref",
 )
 _SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (

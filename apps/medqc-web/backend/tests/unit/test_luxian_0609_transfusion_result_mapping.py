@@ -86,6 +86,33 @@ def test_transfusion_fact_status_conflict_is_isolated_technical_error() -> None:
     assert "customer_display_facts" not in result
 
 
+def test_044_mapping_keeps_legacy_saved_fact_shape_readable() -> None:
+    """历史已保存的 044 三字段事实仍可经过公共安全映射读取。"""
+
+    assert safe_transfusion_customer_display_facts(
+        rule_id="LX0609-07-01-02",
+        raw={
+            "verification_kind": "pretransfusion_assessment_complete",
+            "transfusion_order_present": True,
+            "checked_fields": [
+                "indication",
+                "laboratory_indicator",
+                "risk_history_or_status",
+            ],
+            "missing_fields": [],
+        },
+    ) == {
+        "verification_kind": "pretransfusion_assessment_complete",
+        "transfusion_order_present": True,
+        "checked_fields": [
+            "indication",
+            "laboratory_indicator",
+            "risk_history_or_status",
+        ],
+        "missing_fields": [],
+    }
+
+
 def test_transfusion_contract_owner_includes_migrated_041_to_048_and_070() -> None:
     assert all(
         is_transfusion_customer_rule(rule_id)
