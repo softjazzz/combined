@@ -42,6 +42,8 @@ class _FakeSession:
 
     def execute(self, statement):
         self.last_statement = statement
+        if "discharge_record" in str(statement):
+            return _FakeExecuteResult([])
         return _FakeExecuteResult(self._rows)
 
     def close(self):
@@ -5189,3 +5191,65 @@ def test_list_pool_records_reads_current_registration_admission_time(
     expected = ("2026-02-02 10:00:00"
                 if registration_case == ("H1", "P1", "V1") and registration_time else old_time)
     assert result.items[0]["admission_time"] == expected
+
+
+@pytest.mark.parametrize("source_case,source_department,frontpage_department,stored_department,status,expected", [
+    (("H1", "P1", "V1"), "测试科室", "", "", "discharged", "测试科室"),
+    (("H2", "P1", "V1"), "其他机构科室", "", "", "discharged", ""),
+    (("H1", "P2", "V1"), "其他患者科室", "", "", "discharged", ""),
+    (("H1", "P1", "V1"), "出院记录科室", "首页出院科室", "原科室", "discharged", "首页出院科室"),
+    (("H1", "P1", "V1"), "出院记录科室", "", "入院科室", "discharged", "出院记录科室"),
+    (("H1", "P1", "V1"), "  ", "", "原科室", "discharged", "原科室"),
+    (("H1", "P1", "V1"), "  ", "", "", "discharged", ""),
+    (("H1", "P1", "V1"), "出院记录科室", "首页出院科室", "当前科室", "active", "当前科室"),
+])
+def test_list_pool_records_uses_same_case_discharge_department_for_discharged_samples(
+    monkeypatch, source_case, source_department, frontpage_department,
+    stored_department, status, expected
+):
+    service = CustomQCSamplePoolService()
+    row = {
+        "id": "item-1", "pool_id": "pool-1", "row_no": 1,
+        "patient_name": "C22", "department": stored_department,
+        "matched_institute_id": "H1", "matched_patient_id": "P1",
+        "matched_visit_id": "V1", "match_status": "matched",
+        "sync_status": "synced", "bundle_status": "ready",
+        "raw_payload_json": '{"_sample_sync_state":{"hospitalization_status":"'
+                            + status + '","status_source":"mr"}}',
+    }
+    # 真实执行三坐标查询，防止同就诊号跨机构或跨患者补错科室。
+    table = sample_pool_module.DischargeRecord.__table__
+    db_engine = sa.create_engine("sqlite:///:memory:").execution_options(
+        schema_translate_map={table.schema: None}
+    )
+    table.create(db_engine)
+    frontpage = sample_pool_module.MedicalRecordFrontpage.__table__
+    frontpage.create(db_engine)
+    with db_engine.begin() as connection:
+        connection.execute(table.insert().values(
+            institute_id=source_case[0], patient_id=source_case[1],
+            visit_id=source_case[2], dept_name=source_department,
+        ))
+        connection.execute(frontpage.insert().values(
+            institute_id=source_case[0], patient_id=source_case[1],
+            visit_id=source_case[2], discharge_dept_name=frontpage_department,
+        ))
+
+    class DepartmentSession(_FakeSession):
+        def execute(self, statement):
+            if "discharge_record" in str(statement):
+                with db_engine.connect() as connection:
+                    return _FakeExecuteResult(connection.execute(statement).mappings().all())
+            if "inpat_registration" in str(statement):
+                return _FakeExecuteResult([])
+            return super().execute(statement)
+
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: DepartmentSession([row]))
+    monkeypatch.setattr(service, "_load_record_display_map", lambda **kwargs: {})
+    monkeypatch.setattr(service, "_load_patient_display_map", lambda **kwargs: {})
+    monkeypatch.setattr(service, "_load_bundle_source_table_map", lambda **kwargs: {})
+    try:
+        result = service.list_pool_records(pool_id="pool-1")
+        assert result.items[0]["department"] == expected
+    finally:
+        db_engine.dispose()

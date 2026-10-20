@@ -4902,6 +4902,35 @@ class CustomQCSamplePoolService:
                         legacy_state.get("discharge_time")
                     )
                 row["issue_preview_text"] = "；".join(row["issue_preview"][:2]) or "-"
+            # 已出院样本统一展示出院科室；不改变源文书或质控使用的科室。
+            discharged_keys = {
+                tuple(_safe_text(row.get(f"matched_{field}"))
+                      for field in ("institute_id", "patient_id", "visit_id"))
+                for row in paged_rows if row.get("hospitalization_status") == "discharged"
+            } & case_keys
+            if discharged_keys:
+                department_rows = session.execute(sa.union_all(*[
+                    select(model.institute_id, model.patient_id, model.visit_id,
+                           department.label("department"), sa.literal(priority).label("priority"))
+                    .where(sa.tuple_(model.institute_id, model.patient_id, model.visit_id)
+                           .in_(sorted(discharged_keys)))
+                    for model, department, priority in (
+                        (MedicalRecordFrontpage, MedicalRecordFrontpage.discharge_dept_name, 0),
+                        (DischargeRecord, DischargeRecord.dept_name, 1),
+                    )
+                ])).mappings().all()
+                department_map = {}
+                for record in sorted(department_rows, key=lambda record: record["priority"]):
+                    key = tuple(_safe_text(record.get(field))
+                                for field in ("institute_id", "patient_id", "visit_id"))
+                    department = _safe_text(record.get("department"))
+                    if department:
+                        department_map.setdefault(key, department)
+                for row in paged_rows:
+                    key = tuple(_safe_text(row.get(f"matched_{field}"))
+                                for field in ("institute_id", "patient_id", "visit_id"))
+                    if key in discharged_keys and key in department_map:
+                        row["department"] = department_map[key]
             return SamplePoolListResult(
                 items=paged_rows,
                 total=total,
