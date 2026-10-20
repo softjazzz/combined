@@ -980,7 +980,8 @@ def test_023_specific_and_unknown_cannot_be_declared_fully_compliant():
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
-    ) == ("data_gap", "linkage_unresolved")
+        # 用户口径（2026-10-20）：病程痕迹不作 023 执行证据，第一条即确定未执行。
+    ) == ("non_compliant", "requirement_violated")
 
 
 def test_023_high_generic_remains_non_compliant():
@@ -1412,6 +1413,27 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_opinion_extraction_disables_thinking_for_capable_client(monkeypatch, tmp_path):
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("申请会诊", "专科会诊意见"))
+
+    class StructuredClient(_Client):
+        def supports_strict_json_schema(self):
+            return True
+
+        async def generate(self, prompt, **kwargs):
+            assert kwargs == {"enable_thinking": False}
+            return await super().generate(prompt)
+
+    client = StructuredClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1", "consultation_record-2"])]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path,
+    )
+    assert result.results[0]["status"] == "compliant"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchanged(
     monkeypatch,
 ):
@@ -1696,11 +1718,11 @@ async def test_020_document_copies_share_one_semantically_confirmed_event(monkey
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
     facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert facts["completed_opinion_episode_count"] == 1
     assert facts["recommendation_count"] == 1
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
     assert all("CONSULT-COPY" not in prompt for prompt in client.prompts)
 
 
@@ -2511,8 +2533,8 @@ async def test_semantic_neuroblock_recommendation_can_link_to_different_specific
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -2543,8 +2565,8 @@ async def test_one_execution_document_can_explicitly_cover_two_recommendations(m
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -2577,7 +2599,8 @@ async def test_same_category_generic_execution_is_vague_for_each_rehabilitation_
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]
+    # 用户口径（2026-10-20）：康复训练等 other 类建议不通过医嘱核对，023 不适用。
+    assert [item["status"] for item in result.results] == ["compliant", "not_applicable"]
     assert "同一治疗类别的多个细项" in client.prompts[1]
 
 
@@ -2835,6 +2858,10 @@ def _scope_test_completed_recommendations(
         ("test", "复查血常规", True),
         ("test", "复查肝功能", True),
         ("test", "建议完善血脂，必要时完善TCD", True),
+        ("test", "必要时完善TCD检查", False),
+        ("test", "如有必要时复查血常规", False),
+        ("medication", "酌情给予降压药", False),
+        ("test", "视情况复查头颅CT", False),
         # 冻结 22 例中随访范围边界：A-E/F/G/I 应排除，H 保留。
         pytest.param(
             "monitoring",
@@ -2903,6 +2930,30 @@ def test_completed_recommendations_exclude_non_order_execution_scope(
     assert bool(completed) is included
 
 
+def test_conditional_recommendation_uses_source_quote_when_normalized_action_drops_condition():
+    recommendation = episode._Recommendation(
+        "consultation_record-1#r1",
+        "test",
+        "必要时完善TCD检查",
+        "完善TCD检查",
+        "consultation_record-1",
+    )
+
+    assert episode._has_ambiguous_execution_condition(recommendation) is True
+
+
+def test_explicit_source_condition_is_not_excluded_by_ambiguous_normalized_action():
+    recommendation = episode._Recommendation(
+        "consultation_record-1#r1",
+        "transfer",
+        "家属强烈要求时建议上级医院",
+        "必要时转上级医院",
+        "consultation_record-1",
+    )
+
+    assert episode._has_ambiguous_execution_condition(recommendation) is False
+
+
 def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope():
     recommendations = (
         episode._Recommendation(
@@ -2926,6 +2977,13 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
             "复查血常规",
             "consultation_record-1",
         ),
+        episode._Recommendation(
+            "consultation_record-1#r4",
+            "test",
+            "必要时完善TCD检查",
+            "必要时完善TCD检查",
+            "consultation_record-1",
+        ),
     )
     model_episode = episode._Episode(
         "consultation_record-1",
@@ -2940,10 +2998,15 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
     documents = ({
         "ref": "consultation_record-1",
         "time": "2026-07-20 08:00:00",
-        "text": "会诊意见：建议动态随访；调整降压药；复查血常规",
+        "text": "会诊意见：建议动态随访；调整降压药；复查血常规；必要时完善TCD检查",
         "document_id": "CONSULT-1",
     },)
     completed = episode._completed_recommendations(
+        (model_episode,),
+        documents,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+    )
+    excluded = episode._excluded_conditional_recommendations(
         (model_episode,),
         documents,
         stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
@@ -2983,6 +3046,7 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
         assessments=assessment_rows,
         documents=documents,
         candidates=candidates,
+        excluded_recommendations=excluded,
     )
 
     assert [item.recommendation.action_type for item in completed] == [
@@ -2996,6 +3060,16 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
     assert facts["recommendation_count"] == 2
     assert facts["missing_execution_count"] == 2
     assert len(facts["recommendation_evidence"]) == 2
+    assert [
+        item["recommendation_text"] for item in facts["recommendation_evidence"]
+    ] == ["调整降压药", "复查血常规"]
+    assert facts["excluded_recommendations"] == [
+        {
+            "episode_index": 1,
+            "recommendation_text": "必要时完善TCD检查",
+            "exclusion_reason": "execution_condition_not_defined",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -3169,10 +3243,11 @@ def test_execution_prompt_exposes_exact_allowed_refs_per_recommendation():
             episode._ObservedTime(datetime(2026, 7, 20, 10), True),
             "安全检查记录",
         ),
+        # 用户口径（2026-10-20）：医嘱须在会诊记录当天开立。
         episode._CandidateDocument(
             "inpat_drug_order-1",
             "inpat_drug_order",
-            episode._ObservedTime(datetime(2026, 7, 20, 11), True),
+            episode._ObservedTime(datetime(2026, 7, 20, 10), True),
             "安全药品医嘱",
         ),
     )
@@ -3288,7 +3363,13 @@ def test_execution_prompt_short_aliases_keep_c04_sized_candidate_scope():
         episode._CandidateDocument(
             f"{source_key}-{index}",
             source_key,
-            episode._ObservedTime(datetime(2026, 7, 21, 8), True),
+            # 用户口径（2026-10-20）：医嘱只认会诊记录当天、记录之前开立的。
+            episode._ObservedTime(
+                datetime(2026, 7, 20, 0, 30)
+                if source_key in episode._ORDER_EXECUTION_SOURCE_KEYS
+                else datetime(2026, 7, 21, 8),
+                True,
+            ),
             f"安全候选{index}",
         )
         for source_key, count in source_counts
@@ -3988,7 +4069,7 @@ async def test_parse_failure_and_model_failure_are_technical(monkeypatch):
         llm_client=_BrokenClient(),
     )
     assert broken.results[0]["status"] == "technical_error"
-    assert broken.results[0]["metadata"]["reason_code"] == "model_transport_error"
+    assert broken.results[0]["metadata"]["reason_code"] == "execution_program_error"
     assert "MODEL_SECRET" not in repr(broken)
 
 
@@ -4085,9 +4166,10 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["compliant", "compliant", "compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规，不再逐项核对。
+    assert [item["status"] for item in result.results] == ["compliant", "compliant", "compliant", "non_compliant"]
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
     execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
     assert len(execution_payload["candidate_documents"]) == 1
     assert execution_payload["candidate_documents"][0]["ref"] == "c1"
@@ -4103,7 +4185,8 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
 @pytest.mark.parametrize(
     ("execution_state", "expected"),
     [
-        ("linked_specific", ("compliant", "compliant")),
+        # 用户口径（2026-10-20）：病程痕迹不作 023 执行证据。
+        ("linked_specific", ("compliant", "non_compliant")),
         ("linked_vague", ("compliant", "non_compliant")),
         ("absent", ("non_compliant", "non_compliant")),
         # 无法可靠判断是否存在执行证据时，023 不能宣称合规或不合规。
@@ -4196,7 +4279,7 @@ async def test_020_023_specific_course_trace_does_not_require_structured_order(m
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
     display = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert display["relation_state"] == "all_linked"
     assert display["completed_opinion_episode_count"] == 1
@@ -4272,11 +4355,11 @@ async def test_020_023_accept_exact_course_ref_when_model_omits_redundant_quote(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
     facts = dict(result.customer_display_facts)
     assert "source_document_refs" not in facts["LX0609-03-01-04"]
-    assert facts["LX0609-03-01-04"]["specific_execution_count"] == 1
+    assert facts["LX0609-03-01-04"]["specific_execution_count"] == 0  # 只有病程痕迹，不计医嘱执行
 
 
 @pytest.mark.asyncio
@@ -4428,7 +4511,7 @@ async def test_023_accepts_specific_order_match_without_course_trace(monkeypatch
         "inpat_drug_order": [{
             "generic_name": "头孢哌酮舒巴坦",
             "order_name": "抗感染治疗",
-            "prescribed_datetime": "2026-07-20 03:00:00",
+            "prescribed_datetime": "2026-07-20 00:30:00",
         }],
         "inpat_nondrug_order": [], "exam_item_report": [],
         "labtest_item_report": [], "surgery_record": [],
@@ -4551,14 +4634,15 @@ def _post_consultation_tail_order_rows():
         {
             "order_id": f"ORDER-023-FAR-{index}",
             "order_name": f"会诊后无关医嘱{index}",
-            "prescribed_datetime": f"2026-07-22 08:{index - 1:02d}:00",
+            # 用户口径（2026-10-20）：医嘱只认会诊记录当天、记录之前开立的；越靠前离会诊越远。
+            "prescribed_datetime": f"2026-07-20 00:{episode._MAX_ORDER_CANDIDATES_PER_SOURCE - index:02d}:00",
         }
         for index in range(1, episode._MAX_ORDER_CANDIDATES_PER_SOURCE + 1)
     ]
     target_row = {
         "order_id": "ORDER-023-TARGET",
         "order_name": "头皮针治疗",
-        "prescribed_datetime": "2026-07-20 03:00:00",
+        "prescribed_datetime": "2026-07-20 00:30:00",
     }
     source_rows = _no_course_source_rows(
         consultation_text="会诊意见：建议头皮针治疗。",
@@ -4609,13 +4693,13 @@ class _EvidenceBoundStageClient:
         (
             "medication", "加强抗感染治疗", "inpat_drug_order",
             {"order_id": "ORDER-023-DRUG", "generic_name": "头孢哌酮舒巴坦",
-             "order_name": "抗感染治疗", "start_time": "2026-07-20 03:00:00"},
+             "order_name": "抗感染治疗", "start_time": "2026-07-20 00:30:00"},
             "inpat_drug_order-1",
         ),
         (
             "test", "复查血常规", "inpat_nondrug_order",
             {"order_id": "ORDER-023-NONDRUG", "order_name": "复查血常规",
-             "prescribed_datetime": "2026-07-20 03:00:00"},
+             "prescribed_datetime": "2026-07-20 00:30:00"},
             "inpat_nondrug_order-1",
         ),
     ),
@@ -4688,10 +4772,13 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
 
 
 @pytest.mark.asyncio
-async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
+async def test_023_order_before_consultation_cannot_prove_execution(
     monkeypatch,
 ):
-    """会诊前医嘱不是会诊后的执行证据，023判未落实且不发起二阶段调用。"""
+    """核对窗口之前开立的医嘱不能证明后续落实。
+
+    用户口径（2026-10-20）：窗口从会诊记录前3天起；会诊记录为 07-20，07-16 的医嘱不算。
+    """
 
     source_rows = _no_course_source_rows(
         consultation_text="会诊意见：建议加强抗感染治疗。",
@@ -4699,7 +4786,7 @@ async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
         source_rows=[{
             "order_id": "ORDER-023-PRE",
             "generic_name": "头孢哌酮舒巴坦",
-            "start_time": "2026-07-19 10:00:00",
+            "start_time": "2026-07-16 10:00:00",
         }],
     )
     monkeypatch.setattr(
@@ -4721,12 +4808,121 @@ async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
         source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == [
-        "non_compliant",
-        "non_compliant",
-    ]
+    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
     assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
+
+
+def test_023_order_candidates_remain_inside_current_stay_when_documentation_is_later(monkeypatch):
+    rows = _no_course_source_rows(
+        consultation_text="会诊意见：中药贴敷。", source_key="inpat_nondrug_order", source_rows=[
+            {"order_name": text, "prescribed_datetime": time}
+            for text, time in (("入院前治疗", "2026-06-30 12:00:00"),
+                               ("本次住院治疗", "2026-07-19 12:00:00"),
+                               ("评价时点后治疗", "2026-08-01 12:00:00"))])
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    projection = episode._candidate_documents(
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        evidence_materials=None, evidence_snapshot=None,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+        keep_all_order_candidates=True)
+    orders = [candidate.text for candidate in projection.candidates
+              if candidate.source_key == "inpat_nondrug_order"]
+    assert orders == ["本次住院治疗"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("order_time", "expected"), [
+    # 用户口径（2026-10-20）：会诊记录前3天（07-17）至会诊记录当天开立的医嘱都算执行
+    # （记录前后均可）；更早的和次日起的都不算。
+    ("2026-07-20 15:56:46", "compliant"), ("2026-07-20 15:55:22", "compliant"),
+    ("2026-07-20 18:30:00", "compliant"),
+    ("2026-07-19 15:56:46", "compliant"), ("2026-07-17 00:00:00", "compliant"),
+    ("2026-07-16 23:59:59", "non_compliant"), ("2026-07-21 08:00:00", "non_compliant"),
+])
+async def test_023_only_consultation_day_order_counts(monkeypatch, order_time, expected):
+    rows = _no_course_source_rows(
+        consultation_text="会诊意见：中药贴敷天突、双肺俞。处理：遵照执行。",
+        source_key="inpat_nondrug_order", source_rows=[{
+            "order_id": "SYNTHETIC-ORDER", "order_name": "中药贴敷", "prescribed_datetime": order_time}])
+    rows["consultation_record"][0]["record_time"] = "2026-07-20 15:59:00"
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(action_type="procedure", source_quote="中药贴敷"),
+        candidate_ref="inpat_nondrug_order-1", candidate_text="中药贴敷")
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+    assert result.results[0]["status"] == expected
+
+
+_DECLINED_BRONCHOSCOPY_CONSULTATION = (
+    "既往肺结核病史，请感染性疾病科会诊。会诊意见:考虑陈旧性病变,"
+    "建议诱导痰查XPERT,真菌G\\GM试验,若均为阴性,可充分沟通后气管镜进一步排除活动性病变。"
+    "会诊执行:患者家属表示不行纤支镜检查。"
+)
+
+
+def _declined_bronchoscopy_rows(*, orders):
+    rows = _no_course_source_rows(
+        consultation_text=_DECLINED_BRONCHOSCOPY_CONSULTATION,
+        source_key="inpat_nondrug_order",
+        source_rows=orders,
+    )
+    return rows
+
+
+@pytest.mark.asyncio
+async def test_023_window_starts_three_days_before_record_and_only_declined_measure_is_exempt(monkeypatch):
+    """用户口径（2026-10-20）：核对窗口从会诊记录前3天起；家属拒绝纤支镜只免该项。"""
+
+    rows = _declined_bronchoscopy_rows(orders=[{
+        "order_id": "ORDER-XPERT", "order_name": "痰XPERT检测",
+        "prescribed_datetime": "2026-07-17 10:00:00",
+    }])
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(
+            action_type="test",
+            source_quote="建议诱导痰查XPERT,真菌G\\GM试验,若均为阴性,可充分沟通后气管镜进一步排除活动性病变",
+        ),
+        candidate_ref="inpat_nondrug_order-1", candidate_text="痰XPERT检测")
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+
+    # 会诊记录在 07-20，前3天即 07-17，07-17 开立的医嘱也算。
+    assert any("痰XPERT检测" in text for text in _stage_two_candidate_texts(client.prompts[1]))
+    evidence = dict(result.customer_display_facts)["LX0609-03-01-04"]["recommendation_evidence"][0]
+    assert evidence["window_start_date"] == "2026-07-17"
+    assert evidence["declined_measures"] == ["纤支镜检查"]
+
+
+@pytest.mark.asyncio
+async def test_023_recommendation_only_declined_in_record_is_compliant_and_listed_as_excluded(monkeypatch):
+    rows = _declined_bronchoscopy_rows(orders=[])
+    rows["consultation_record"][0]["record_content"] = (
+        "请感染性疾病科会诊。会诊意见:建议行气管镜检查排除活动性病变。"
+        "会诊执行:患者家属表示不行纤支镜检查。"
+    )
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: rows[source_key])
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(action_type="procedure", source_quote="建议行气管镜检查排除活动性病变"),
+        candidate_ref="inpat_nondrug_order-1", candidate_text="不存在的医嘱")
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+
+    assert result.results[0]["status"] == "compliant"
+    facts = dict(result.customer_display_facts)["LX0609-03-01-04"]
+    assert facts["excluded_recommendations"] == [{
+        "episode_index": 1,
+        "recommendation_text": "建议行气管镜检查排除活动性病变",
+        "exclusion_reason": "declined_in_record",
+    }]
 
 
 @pytest.mark.asyncio
@@ -4779,7 +4975,7 @@ async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
 def test_023_order_candidates_keep_nearest_post_consultation_per_recommendation(
     monkeypatch,
 ):
-    """每个建议的每个医嘱来源最多保留24条，保留的是时序最接近的会诊后候选。"""
+    """会诊当日医嘱全部进入候选；名额只约束继续类建议纳入的会诊前医嘱。"""
 
     source_rows, far_rows, target_row = _post_consultation_tail_order_rows()
     monkeypatch.setattr(
@@ -4812,16 +5008,13 @@ def test_023_order_candidates_keep_nearest_post_consultation_per_recommendation(
 
     payload = json.loads(prompt.rsplit("输入：", 1)[1])
     allowed = payload["recommendations"][0]["allowed_candidate_refs"]
-    assert len(allowed) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
-    assert len(allowed_refs["consultation_record-1#r1"]) == (
-        episode._MAX_ORDER_CANDIDATES_PER_SOURCE
-    )
+    # 用户口径（2026-10-20）：会诊当日医嘱都算，当日候选不受 24 条名额截断。
+    assert len(allowed) == len(far_rows) + 1
+    assert len(allowed_refs["consultation_record-1#r1"]) == len(far_rows) + 1
     rendered = _stage_two_candidate_texts(prompt)
-    assert len(rendered) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert len(rendered) == len(far_rows) + 1
     assert any(target_row["order_name"] in text for text in rendered)
-    # 时序最远的会诊后无关医嘱被截掉，而不是截掉会诊后2小时的对应医嘱。
-    assert all(far_rows[-1]["order_name"] not in text for text in rendered)
-    assert any(far_rows[0]["order_name"] in text for text in rendered)
+    assert any(far_rows[-1]["order_name"] in text for text in rendered)
 
 
 @pytest.mark.asyncio
@@ -4866,8 +5059,8 @@ async def test_complete_daily_trace_closes_020_023_when_senior_source_is_incompl
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -5014,8 +5207,44 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
     )
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 2  # 会诊文书内的暂缓/拒绝决定无医嘱证据，023 不再逐项核对
     assert "同一会诊文书" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_culture", [False, True])
+async def test_clinical_non_execution_decision_in_same_opinion_is_available_per_recommendation(monkeypatch, missing_culture):
+    """本次会诊内的临床不执行反馈须可核对，但不能替其他建议兜底。"""
+    ref = "consultation_record-1"
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows(
+        "会诊意见：完善血气分析、肺功能、痰培养。现无气紧症状，暂不考虑血气分析、肺功能检查。",
+        action_suffix=False,
+    )
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
+                        lambda *, source_key, **_: source_rows.get(source_key, []))
+    client = _SequentialClient(
+        _payload(episodes=[_episode(ref, [ref], application="absent", recommendations=[
+            {"recommendation_ref": f"{ref}#r{index}", "source_quote": text,
+             "normalized_action": text, "action_type": "test"}
+            for index, text in enumerate(("血气分析", "肺功能", "痰培养") if missing_culture else ("血气分析", "肺功能"), 1)
+        ])]),
+        {"executions": [
+            {"recommendation_ref": f"{ref}#r{index}", "execution_state": "absent",
+             "structured_action_refs": [], "execution_quotes": [], "confidence": "high",
+             "execution_record_state": "specific_trace" if index < 3 else "no_trace",
+             "trace_refs": [ref] if index < 3 else [],
+             "recommendation_coverage_state": "complete" if index < 3 else "no_trace",
+             "coverage_confidence": "high", "uncovered_source_quotes": []}
+            for index in ((1, 2, 3) if missing_culture else (1, 2))
+        ]},
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client)
+    assert result.results[0]["status"] == ("non_compliant" if missing_culture else "compliant")
+    assert "现无气紧症状" in client.prompts[1]
+    assert "暂不考虑血气分析" in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -5109,8 +5338,8 @@ async def test_023_rechecks_high_generic_label_that_conflicts_with_concrete_acti
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 3  # 023 未判合规，不再逐项核对
     assert "consultation_record-1#r1" in client.prompts[2]
     assert "consultation_record-1#r2" not in client.prompts[2]
 
@@ -5196,13 +5425,14 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert result.total_tokens == 32
+    # 用户口径（2026-10-20）：other 类建议不通过医嘱核对，023 不适用；本例只验证 020 证据类别。
+    assert [item["status"] for item in result.results] == ["compliant", "not_applicable"]
+    assert result.llm_call_count == 2
     safe_facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert "source_document_refs" not in safe_facts
     assert safe_facts["specific_execution_count"] == 1
-    for rule_id in ("LX0609-03-01-01", "LX0609-03-01-04"):
+    assert dict(result.customer_display_facts)["LX0609-03-01-04"]["recommendation_count"] == 0
+    for rule_id in ("LX0609-03-01-01",):
         facts = dict(result.customer_display_facts)[rule_id]
         assert facts["specific_execution_count"] == 1
         assert "source_document_refs" not in facts
@@ -5471,8 +5701,8 @@ async def test_020_023_keep_action_matched_exam_lab_and_surgery_evidence(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
     execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
     expected_sources = {
         ref.rsplit("-", 1)[0] for ref in structured_refs
@@ -5827,6 +6057,13 @@ async def test_023_late_offending_episode_is_in_decision_and_projected_customer_
                 _episode(
                     f"consultation_record-{index}",
                     [f"consultation_record-{index}"],
+                    # 用户口径（2026-10-20）：023 只核医嘱类建议；前八次为 other 类不核对，
+                    # 只有第九次的检查建议缺少当日医嘱。
+                    recommendations=[{
+                        "recommendation_ref": f"consultation_record-{index}#r1",
+                        "action_type": "test" if index == 9 else "other",
+                        "source_quote": "复查血常规",
+                    }],
                 )
                 for index in range(1, 10)
             ]
@@ -5885,7 +6122,9 @@ async def test_023_late_offending_episode_is_in_decision_and_projected_customer_
     )
     # RuleDecision 对 material refs 作全局稳定排序；这里验证在截断前选中的末次
     # 缺陷文书仍完整进入八条决定性引用，不能因排序改变而丢失。
-    assert {late_consultation_ref, late_course_ref}.issubset(decision_023.fact_refs)
+    # 用户口径（2026-10-20）：023 不看病程，末次缺陷只由会诊记录本身体现。
+    assert late_consultation_ref in decision_023.fact_refs
+    assert late_course_ref not in decision_023.fact_refs
     assert len(decision_023.fact_refs) == 8
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=(decision_023,),
@@ -5903,7 +6142,6 @@ async def test_023_late_offending_episode_is_in_decision_and_projected_customer_
         for item in customer_evidence
     }.issuperset({
         ("consultation_record", "CONSULT-9"),
-        ("daily_course_record", "COURSE-9"),
     })
 
 
@@ -6041,11 +6279,13 @@ async def test_real_partial_candidate_material_mapping_only_fails_the_dependent_
     decisions_by_rule = {item.rule_id: item for item in result.decisions}
     assert decisions_by_rule["LX0609-03-01-01"].reason_code == "requirement_violated"
     assert decisions_by_rule["LX0609-03-01-01"].fact_refs
-    assert decisions_by_rule["LX0609-03-01-04"].reason_code == "snapshot_mismatch"
-    assert decisions_by_rule["LX0609-03-01-04"].fact_refs == ()
+    # 用户口径（2026-10-20）：023 不看病程，缺材料的病程候选不再是 023 的依赖，
+    # 023 按“两次会诊均无当日医嘱”正常判定，不受该病程绑定失败影响。
+    assert decisions_by_rule["LX0609-03-01-04"].reason_code == "requirement_violated"
+    assert decisions_by_rule["LX0609-03-01-04"].fact_refs
     safe_facts_by_rule = dict(result.customer_display_facts)
     assert "LX0609-03-01-01" in safe_facts_by_rule
-    assert "LX0609-03-01-04" not in safe_facts_by_rule
+    assert "LX0609-03-01-04" in safe_facts_by_rule
 
 
 @pytest.mark.asyncio
@@ -6060,7 +6300,7 @@ async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(m
         }],
         "senior_course_record": [],
         "inpat_drug_order": [],
-        "inpat_nondrug_order": [{"order_name": "复查血常规", "prescribed_datetime": "2026-07-20 03:00:00"}],
+        "inpat_nondrug_order": [{"order_name": "复查血常规", "prescribed_datetime": "2026-07-20 00:30:00"}],
         "exam_item_report": [], "labtest_item_report": [], "surgery_record": [],
     }
     monkeypatch.setattr(
@@ -6187,9 +6427,9 @@ async def test_course_time_is_recovered_from_same_document_id_without_guessing(
 
     assert [item["status"] for item in result.results] == [
         "compliant",
-        "compliant",
+        "non_compliant",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -6471,8 +6711,8 @@ async def test_same_day_date_only_candidate_can_be_semantically_linked(monkeypat
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
     assert "已完成复查血常规" in client.prompts[1]
 
 
@@ -6513,9 +6753,9 @@ async def test_same_day_date_only_candidate_does_not_block_later_specific_link(m
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
+    assert len(client.prompts) == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -6607,7 +6847,7 @@ async def test_020_023_missing_llm_client_is_technical_error():
         "technical_error", "technical_error",
     ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
-        "model_transport_error", "model_transport_error",
+        "model_configuration_error", "model_configuration_error",
     ]
     assert result.llm_call_count == 0
 
@@ -6775,7 +7015,7 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     )
 
     assert result.results == ()
-    assert [item.qc_direction.value for item in result.decisions] == ["satisfied", "satisfied"]
+    assert [item.qc_direction.value for item in result.decisions] == ["satisfied", "defect"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     # 正式 episode 主链只把实际用于判定的会诊意见与病程执行文书写入
     # fact_refs。住院窗口、未采用的医嘱/检查/检验/手术来源仅提供上下文，
     # 不能伪装成客户证据，也不能用来源级 snapshot ref 冒充文书。
@@ -6799,7 +7039,7 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
         for reference, row in course_rows.items()
         if row.get("document_id") == "COURSE-EXECUTION-1"
     )
-    assert all(item.fact_refs == (consultation_ref, course_ref) for item in result.decisions)
+    assert [item.fact_refs for item in result.decisions] == [(consultation_ref, course_ref), (consultation_ref,)]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     assert all(
         reference in session.snapshot.document_refs
         for item in result.decisions
@@ -6823,12 +7063,12 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
             {"source_type": "consultation_record", "source_document_id": "CONSULT-OPINION-1"},
             {"source_type": "daily_course_record", "source_document_id": "COURSE-EXECUTION-1"},
         ],
+        # 用户口径（2026-10-20）：023 不看病程，缺陷只由会诊记录体现。
         [
             {"source_type": "consultation_record", "source_document_id": "CONSULT-OPINION-1"},
-            {"source_type": "daily_course_record", "source_document_id": "COURSE-EXECUTION-1"},
         ],
     ]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -6864,10 +7104,10 @@ async def test_020_023_retries_one_transient_stage_two_transport_failure_without
     )
 
     assert [item["status"] for item in result.results] == [
-        "compliant", "compliant", "compliant", "compliant",
+        "compliant", "compliant", "compliant", "non_compliant",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
-    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert len(client.prompts) == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
+    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     assert client.prompts[1] == client.prompts[2]
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (24, 8, 32)
 
@@ -6925,10 +7165,11 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
             "httpx",
         ),
         (
-            (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),),
+            (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),
+             RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET")),
             "upstream_429",
-            False,
-            2,
+            True,
+            3,
             "RuntimeError",
             "builtins",
         ),
@@ -6942,7 +7183,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (ValueError("UNCLASSIFIED_SECRET"),),
-            "unclassified",
+            "program_error",
             False,
             2,
             "ValueError",
@@ -6950,7 +7191,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (_ExternalStageFailure("EXTERNAL_MODULE_SECRET"),),
-            "unclassified",
+            "program_error",
             False,
             2,
             "_ExternalStageFailure",
@@ -6996,7 +7237,8 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
         f"stage_two_failure_kind={expected_kind} retry_attempted={retry_attempted} "
         f"exception_type={expected_exception_type} "
         f"exception_module={expected_exception_module} "
-        "exception_origin=test_luxian_0609_native_consultation_episode_execution:generate"
+        "exception_origin=test_luxian_0609_native_consultation_episode_execution:generate "
+        f"stage=call exception_line={episode._exception_line(stage_two_errors[-1])}"
     ]
     logged = "\n".join(warning_messages)
     assert "STAGE_TWO_TIMEOUT_SECRET" not in logged
@@ -7016,9 +7258,9 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_identity_contract_failure
     })
     for second_stage_response, expected_status, expected_reason in (
         (
-            RuntimeError("upstream_http_error upstream_http_status=429"),
+            RuntimeError("upstream_http_error upstream_http_status=401"),
             "technical_error",
-            "model_transport_error",
+            "model_http_error",
         ),
         (
             _execution({
@@ -7079,8 +7321,8 @@ async def test_020_023_retries_one_stage_two_shape_error_with_same_prompt():
         evidence_materials=session.materials,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 3  # 023 未判合规，不再逐项核对
     assert client.prompts[1] == client.prompts[2]
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (
         36,
@@ -7170,7 +7412,7 @@ async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck(
     assert len(client.prompts) == 3
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "linkage_unresolved",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
     facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
@@ -7205,13 +7447,13 @@ async def test_stage_two_shape_retry_skips_low_confidence_recheck():
         evidence_materials=session.materials,
     )
 
-    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert len(client.prompts) == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 3  # 023 未判合规，不再逐项核对
+    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定
     # （用户口径 2026-10-11：不看模型自评置信度）。
     assert [item["status"] for item in result.results] == [
         "compliant",
-        "compliant",
+        "non_compliant",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
 
 
@@ -7256,7 +7498,7 @@ async def test_020_023_accepts_omitted_optional_execution_quotes():
 
     assert [item.reason_code for item in result.decisions] == [
         "requirement_satisfied",
-        "requirement_satisfied",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
 
 
@@ -7324,9 +7566,9 @@ async def test_020_023_reasks_only_omitted_recommendation_once():
 
     assert [item.reason_code for item in result.decisions] == [
         "requirement_satisfied",
-        "requirement_satisfied",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
-    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 3  # 023 未判合规，不再逐项核对
     assert "consultation_record-1#r1" not in client.prompts[2]
     assert "consultation_record-1#r2" in client.prompts[2]
 
@@ -7376,7 +7618,7 @@ async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unkno
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "linkage_unresolved",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
     assert result.llm_call_count == 3
     facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
@@ -7448,7 +7690,7 @@ async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "linkage_unresolved",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
     assert result.llm_call_count == 3
     facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
@@ -7636,7 +7878,7 @@ async def test_020_023_misplaced_course_ref_only_marks_its_recommendation_unknow
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "linkage_unresolved",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
     facts = dict(result.customer_display_facts)["LX0609-03-01-01"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
@@ -7720,8 +7962,8 @@ async def test_020_023_window_allows_later_specific_execution_when_admission_reg
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
 
 
 @pytest.mark.asyncio
@@ -7764,7 +8006,7 @@ async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch
     )
     assert result.results == ()
     assert [(item.rule_id, item.qc_direction.value) for item in result.decisions] == [
-        ("LX0609-03-01-01", "satisfied"), ("LX0609-03-01-04", "satisfied"),
+        ("LX0609-03-01-01", "satisfied"), ("LX0609-03-01-04", "defect"),  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
     assert all(item.fact_refs for item in result.decisions)
     rendered = repr(result)
@@ -7823,9 +8065,9 @@ async def test_many_or_long_course_candidates_remain_available_to_stage_two(
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert len(client.prompts) == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
+    assert len(client.prompts) == 2  # 023 未判合规，不再逐项核对
     execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
     assert any(
         item["source"] == "daily_course_record"
@@ -7917,7 +8159,7 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
     ]
     assert [item.reason_code for item in result.decisions] == [
         "requirement_satisfied",
-        "requirement_satisfied",
+        "requirement_violated",  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     ]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
@@ -7925,12 +8167,12 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
-    assert [item.final_state.value for item in reduced] == ["compliant", "compliant"]
+    assert [item.final_state.value for item in reduced] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱
     assert [item.reason_code for item in reduced] == [
         "requirement_satisfied",
-        "requirement_satisfied",
+        "requirement_violated",
     ]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
     assert secret not in repr(result)
 
 
@@ -8157,7 +8399,7 @@ async def test_ungrounded_stage_one_quote_is_not_frozen(monkeypatch, tmp_path):
         "technical_error",
         "technical_error",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
     assert list(tmp_path.glob("*.json")) == []
 
 
@@ -8398,7 +8640,7 @@ async def test_specific_result_bearing_record_is_compliant_without_copy_comparis
         institute_id="i", patient_id="p", visit_id="v",
         source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
     facts = dict(result.customer_display_facts)
     assert facts["LX0609-03-01-04"]["generic_execution_count"] == 0
 
@@ -8437,8 +8679,8 @@ async def test_untimed_order_does_not_block_linked_execution_candidate(monkeypat
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 3  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 2  # 023 未判合规，不再逐项核对
     assert timely_execution in client.prompts[1]
     assert untimed_order not in client.prompts[1]
 
@@ -8584,7 +8826,7 @@ async def test_specific_execution_stays_compliant_when_unrelated_source_is_incom
         rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
 
 
 @pytest.mark.asyncio
@@ -8594,7 +8836,7 @@ async def test_other_recommendation_absent_is_data_gap_when_needed_source_is_inc
     client = _SequentialClient(
         _payload(episodes=[_episode(
             "consultation_record-1", ["consultation_record-1"],
-            recommendations=_action_recommendation(action_type="other"),
+            recommendations=_action_recommendation(action_type="medication"),  # 用户口径（2026-10-20）：other 类不核对，改用需药品医嘱的建议
         )]),
         _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
     )
@@ -8900,7 +9142,7 @@ async def test_later_recommendation_without_post_consultation_course_is_determin
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "data_gap",
+        "non_compliant",  # 用户口径（2026-10-20）：023 不看病程，第一条建议无当日医嘱
     ]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
@@ -9004,8 +9246,8 @@ async def test_stage_two_top_level_array_retries_once(monkeypatch):
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
-    assert result.llm_call_count == 4  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]  # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程痕迹判不合规
+    assert result.llm_call_count == 3  # 023 未判合规，不再逐项核对
 
 
 def test_valid_course_trace_survives_misplaced_auxiliary_course_reference():
@@ -9063,7 +9305,7 @@ async def test_direct_reader_keeps_nondrug_order_as_structured_evidence_without_
     source_rows["consultation_record"] = _rows("申请与明确会诊意见")
     source_rows["inpat_nondrug_order"] = [{
         "order_name": "会诊后转入康复治疗",
-        "prescribed_datetime": "2026-07-20 02:00:00",
+        "prescribed_datetime": "2026-07-20 00:30:00",
         "record_content": "不应作为正文候选",
     }]
     monkeypatch.setattr(
@@ -9233,7 +9475,7 @@ def test_planned_only_course_trace_keeps_independent_structured_execution():
         episode._CandidateDocument(
             "inpat_nondrug_order-1",
             "inpat_nondrug_order",
-            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            episode._ObservedTime(datetime(2026, 7, 20, 0, 30), True),  # 会诊记录当天、记录之前开立
             "电针；治疗",
         ),
     )
@@ -9262,3 +9504,393 @@ def test_planned_only_course_trace_keeps_independent_structured_execution():
         source_incomplete_keys=frozenset(),
     ) == ("compliant", "requirement_satisfied")
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("error", "expected_reason"), [
+    (ValueError("identity context unavailable"), "executor_exception"),
+    (RuntimeError("upstream_http_status=429"), "model_transport_error"),
+    (RuntimeError("upstream_http_status=503"), "model_transport_error"),
+    (RuntimeError("upstream_http_status=401"), "executor_exception"),
+    (RuntimeError("client not configured"), "executor_exception"),
+])
+async def test_typed_consultation_call_failure_keeps_valid_technical_decision(error, expected_reason):
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("会诊文书")),
+    })
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04", "LX0609-03-01-05"),
+        decision_rule_ids=("LX0609-03-01-04", "LX0609-03-01-05"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        llm_client=_PlannedStageClient(error, error),
+    )
+    assert len(result.decisions) == 2
+    assert result.decisions[0].evidence_state is episode.EvidenceState.TECHNICAL_ERROR
+    assert result.decisions[0].reason_code == expected_reason
+    assert "identity context unavailable" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_consultation_stage_two_privacy_failure_is_legal_and_not_retried():
+    from app.services.luxian_0609.llm_prompt_privacy import PatientPrivacyViolation
+    from app.services.qc_workspace.failed_rule_retry import build_failed_rule_auto_retry_plan
+
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+        # 023 单独运行时二阶段只投医嘱（2026-10-20），须有会诊当日医嘱才进入二阶段。
+        "inpat_nondrug_order": ({"order_name": "血常规", "prescribed_datetime": "2026-07-02 08:00:00"},),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        PatientPrivacyViolation("Patient identity remains in model request"),
+    )
+    outcome = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), decision_rule_ids=("LX0609-03-01-04",),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    decision = outcome.decisions[0]
+    assert decision.evidence_state is episode.EvidenceState.TECHNICAL_ERROR
+    assert decision.reason_code == "executor_exception"
+    assert len(client.prompts) == 2
+    plan = build_failed_rule_auto_retry_plan(
+        summary={"execution_status": "failed"},
+        failures=[{"rule_id": decision.rule_id, "reason_code": decision.reason_code, "error_phase": "result_status"}],
+    )
+    assert plan["should_retry"] is False
+
+
+@pytest.mark.parametrize("source,action_type", [("inpat_drug_order", "medication"), ("inpat_nondrug_order", "procedure")])
+def test_execution_orders_must_be_on_consultation_record_day(source, action_type):
+    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱都算（记录前后均可），次日起不算。
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", action_type, "合成建议", "合成建议", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"{source}-{index}", source,
+        episode._ObservedTime(moment, True), "合成治疗医嘱",
+    ) for index, moment in enumerate(
+        (datetime(2026, 7, 20, 9), datetime(2026, 7, 20, 23), datetime(2026, 7, 21, 8)), 1))
+    prompt, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert allowed["r1"] == frozenset({f"{source}-1", f"{source}-2"})
+    payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    assert len(payload["candidate_documents"]) == 2
+
+
+def test_order_candidate_budget_excludes_next_day_orders_before_limiting():
+    # 用户口径（2026-10-20）：会诊次日起开立的医嘱先剔除，再按名额截断。
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "procedure", "给予合成气压治疗", "气压治疗", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+    ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"inpat_nondrug_order-{index}", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2026, 7, 21 if index < 25 else 20, 9, index), True),
+        "合成其他处置" if index < 25 else "气压治疗费",
+    ) for index in range(26))
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert "inpat_nondrug_order-25" in allowed["r1"]
+    assert allowed["r1"] == frozenset({"inpat_nondrug_order-25"})
+
+
+def test_continuation_recommendation_accepts_order_opened_before_consultation_day():
+    # 用户口径（2026-10-20）：会诊执行只认当日、记录前开立的医嘱；
+    # “继续/维持”原治疗的建议，会诊前已开立的医嘱即为执行，记录之后开立的仍不算。
+    def completed(quote):
+        return (episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation("r1", "medication", quote, quote, "consultation_record-1"),
+            episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+        ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"inpat_drug_order-{index}", "inpat_drug_order",
+        episode._ObservedTime(moment, True), "亚胺培南西司他丁",
+    ) for index, moment in enumerate((datetime(2026, 7, 15, 8), datetime(2026, 7, 20, 9), datetime(2026, 7, 21, 9)), 1))
+    _, continued = episode._execution_prompt(completed=completed("继续亚胺培南西司他丁抗感染"), candidates=candidates)
+    _, started = episode._execution_prompt(completed=completed("加用亚胺培南西司他丁抗感染"), candidates=candidates)
+    assert continued["r1"] == frozenset({"inpat_drug_order-1", "inpat_drug_order-2"})
+    assert started["r1"] == frozenset({"inpat_drug_order-2"})
+
+
+def test_023_ignores_non_order_recommendations():
+    # 用户口径（2026-10-20）：卧床、营养目标等不属于医嘱的建议不核对 023。
+    rec = lambda ref, kind: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, kind, "建议", "建议", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (rec("r1", "other"), rec("r2", "monitoring"), rec("r3", "test"))
+    in_scope, _ = episode._order_execution_view(completed, None)
+    assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3"]
+    assert episode._execution_quality_outcome(
+        assessments=(), completed_recommendations=(rec("r1", "other"),)[:0],
+        source_incomplete_keys=frozenset(),
+    ) == ("not_applicable", "trigger_absent_complete")
+
+
+def test_023_keyword_non_order_recommendations_are_not_checked():
+    # 模型把“改前臂吊带”“骨盆骨折卧床”归为操作类时，按关键词剔除；含明确药物/检查的仍核对。
+    rec = lambda ref, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, "procedure", quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "改前臂吊带悬吊患肢"),
+        rec("r2", "骨盆骨折需卧床2个月"),
+        rec("r3", "卧床期间复查骨盆CT"),
+        rec("r4", "行气管切开术"),
+    )
+    in_scope, _ = episode._order_execution_view(completed, None)
+    assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
+
+
+def test_023_conditional_recommendation_without_order_is_not_checked():
+    # 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对；当天有医嘱即按已执行。
+    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "transfer", "若病情加重及家属同意可转科"),
+        rec("r2", "test", "若均阴性则行气管镜检查"),
+        rec("r3", "procedure", "凝血无异常后行气管切开"),
+        rec("r4", "medication", "予以亚胺培南抗感染"),
+    )
+    absent = lambda ref: episode._ExecutionAssessment(ref, "absent", (), "high", ())
+    assessments = (
+        absent("r1"),
+        absent("r2"),
+        episode._ExecutionAssessment(
+            "r3", "linked_specific", ("inpat_nondrug_order-1",), "high", ()
+        ),
+        absent("r4"),
+    )
+    kept, view = episode._order_execution_view(completed, assessments)
+    assert [item.recommendation.recommendation_ref for item in kept] == ["r3", "r4"]
+    assert [(item.recommendation_ref, item.execution_state) for item in view] == [
+        ("r3", "linked_specific"),
+        ("r4", "absent"),
+    ]
+    assert episode._is_conditional_recommendation(completed[0].recommendation)
+    assert not episode._is_conditional_recommendation(completed[3].recommendation)
+
+
+def test_023_home_medication_recommendations_are_not_checked():
+    # 用户口径（2026-10-20）：院外自带药不核对；“原发病”“原则”不误判为自带药。
+    rec = lambda ref, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, "medication", quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "继续服用原降压药"),
+        rec("r2", "自备药物继续口服"),
+        rec("r3", "积极治疗原发病，予以抗感染药物"),
+        rec("r4", "按抗感染原则使用头孢类药物"),
+    )
+    in_scope, _ = episode._order_execution_view(completed, None)
+    assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
+
+
+def test_023_conditional_is_judged_by_first_clause_and_measure_clause():
+    # “先查A，若阴性则行B”前半句仍须执行；只有条件分句里的措施未见医嘱时才不计。
+    rec = lambda quote: episode._Recommendation("r1", "test", quote, quote, "consultation_record-1")
+    assert episode._is_conditional_recommendation(rec("疼痛完全缓解2周后予非布司他20mg qd降尿酸"))
+    assert episode._is_conditional_recommendation(rec("若病情加重及家属同意可转科进一步治疗"))
+    compound = rec("复查凝血功能，无明显异常后行气管切开")
+    assert not episode._is_conditional_recommendation(compound)
+    assert episode._measure_in_conditional_clause(compound, "行气管切开")
+    assert not episode._measure_in_conditional_clause(compound, "复查凝血功能")
+    staged = rec("诱导痰XPERT检测、真菌G/GM试验；若均阴性则行气管镜检查排除活动性病变")
+    assert not episode._is_conditional_recommendation(staged)
+    assert episode._measure_in_conditional_clause(staged, "行气管镜检查")
+    assert not episode._measure_in_conditional_clause(staged, "诱导痰XPERT检测")
+
+
+def test_023_measure_check_scope_and_conditional_missing_measures():
+    # 逐项核对只针对已由医嘱证明执行的建议；条件分句中的未执行措施不计。
+    from app.services.luxian_0609.consultation_measure_check import MeasureCheckOutcome
+
+    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "test", "诱导痰XPERT检测；若均阴性则行气管镜检查"),
+        rec("r2", "transfer", "若病情加重及家属同意可转科进一步治疗"),
+    )
+    assessments = (
+        episode._ExecutionAssessment(
+            "r1", "linked_specific", ("inpat_nondrug_order-1",), "high", ()
+        ),
+        episode._ExecutionAssessment(
+            "r2", "linked_specific", ("consultation_record-1",), "high", (),
+            execution_record_state="specific_trace", trace_refs=("consultation_record-1",),
+        ),
+    )
+    scope = episode._measure_check_scope(completed, assessments)
+    assert [item.recommendation.recommendation_ref for item in scope] == ["r1"]
+    outcome = episode._drop_conditional_missing_measures(
+        MeasureCheckOutcome("ready", {"r1": ("行气管镜检查",)}), scope,
+    )
+    assert not outcome.has_missing
+    outcome = episode._drop_conditional_missing_measures(
+        MeasureCheckOutcome("ready", {"r1": ("诱导痰XPERT检测",)}), scope,
+    )
+    assert outcome.has_missing
+
+
+def test_continuation_keeps_matching_earlier_long_term_order_within_budget():
+    # “可继续亚胺培南”：数日前开立的同名长期医嘱不能因名额被更近的无关医嘱挤掉。
+    quote = "可继续亚胺培南西司它丁抗感染治疗"
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "medication", quote, "继续亚胺培南西司他丁抗感染治疗", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 1, 20, 17, 21), True),
+    ),)
+    assert episode._is_continuation_recommendation(completed[0].recommendation)
+    filler = tuple(episode._CandidateDocument(
+        f"inpat_drug_order-{index}", "inpat_drug_order",
+        episode._ObservedTime(datetime(2026, 1, 19 if index < 30 else 20, 8, index), True),
+        "氯化钠注射液",
+    ) for index in range(40))
+    target = episode._CandidateDocument(
+        "inpat_drug_order-99", "inpat_drug_order",
+        episode._ObservedTime(datetime(2026, 1, 13, 16, 10), True),
+        "注射用亚胺培南西司他丁钠(1.0g) 长期 Q8h",
+    )
+    _, allowed = episode._execution_prompt(completed=completed, candidates=(*filler, target))
+    assert "inpat_drug_order-99" in allowed["r1"]
+    assert len(allowed["r1"]) == 10 + episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert {f"inpat_drug_order-{index}" for index in range(30, 40)} <= allowed["r1"]
+
+
+def test_same_day_orders_are_not_cut_by_order_budget():
+    # 会诊当日 58 条非药品医嘱中，排在第 30 位的 proBNP 也须进入候选（心衰指标）。
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "test", "完善血气分析、乳酸、心衰指标等相关检查", "完善血气分析、乳酸、心衰指标检查", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 8, 24, 15, 7), True),
+    ),)
+    candidates = tuple(episode._CandidateDocument(
+        f"inpat_nondrug_order-{index}", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2026, 8, 24, 15 if index < 40 else 8, index % 60), True),
+        "proBNP测定" if index == 57 else "静脉输液",
+    ) for index in range(58))
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert len(allowed["r1"]) == 58
+    assert "inpat_nondrug_order-57" in allowed["r1"]
+
+
+def test_023_display_facts_explain_time_missing_measures_and_exclusions():
+    # 2026-10-20：不合规原因要让医生看清会诊记录时间、哪项措施当天没开医嘱、哪些建议为何不核对。
+    def rec(ref, kind, text):
+        return episode._Recommendation(ref, kind, text, text, "consultation_record-1")
+
+    checked = rec("consultation_record-1#r1", "test", "完善血气分析、乳酸、心衰指标")
+    excluded = (
+        rec("consultation_record-1#r2", "other", "卧床休息"),
+        rec("consultation_record-1#r3", "medication", "继续服用原降压药"),
+        rec("consultation_record-1#r4", "transfer", "若病情加重可转科"),
+    )
+    current_episode = episode._Episode(
+        "consultation_record-1", ("consultation_record-1",), ("consultation_record-1",),
+        ("consultation_record-1",), "clear", "clear", "high", (checked, *excluded),
+    )
+    when = episode._ObservedTime(datetime(2026, 8, 24, 15, 7, 30), True)
+    completed = episode._CompletedRecommendation("consultation_record-1", checked, when)
+    facts = episode._consultation_execution_display_facts(
+        rule_id="LX0609-03-01-04",
+        status="non_compliant",
+        episodes=(current_episode,),
+        completed_recommendations=(completed,),
+        assessments=(episode._ExecutionAssessment(
+            checked.recommendation_ref, "linked_specific", ("inpat_nondrug_order-1",), "high", (),
+        ),),
+        documents=({"ref": "consultation_record-1", "document_id": "CONSULT-1"},),
+        order_scope_excluded=tuple(
+            episode._CompletedRecommendation("consultation_record-1", item, when) for item in excluded
+        ),
+        missing_measures_by_ref={checked.recommendation_ref: ("心衰指标",)},
+    )
+
+    item = facts["recommendation_evidence"][0]
+    assert item["opinion_time"] == "2026-08-24 15:07:30"
+    assert item["missing_measures"] == ["心衰指标"]
+    assert [row["exclusion_reason"] for row in facts["excluded_recommendations"]] == [
+        "non_order_recommendation", "home_medication", "condition_not_met",
+    ]
+
+
+def test_lexical_order_match_upgrades_model_absent_to_same_day_order():
+    # C02：会诊当日已开“小牛血去蛋白提取物眼用凝胶”，模型在长输入中偶尔漏判；药名对上由程序认定。
+    def completed(text):
+        return episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation("r1", "medication", text, text, "consultation_record-1"),
+            episode._ObservedTime(datetime(2026, 1, 22, 16, 18), True),
+        )
+    candidates = (
+        episode._CandidateDocument(
+            "inpat_drug_order-1", "inpat_drug_order",
+            episode._ObservedTime(datetime(2026, 1, 22, 11, 58), True),
+            "小牛血去蛋白提取物眼用凝胶(5g:1g)；小牛血去蛋白提取物眼用凝胶(5g:1g)；其他眼科用药；滴眼；Tid",
+        ),
+        episode._CandidateDocument(
+            "inpat_drug_order-2", "inpat_drug_order",
+            episode._ObservedTime(datetime(2026, 1, 23, 9, 0), True),
+            "(JC)伏立康唑片(50mg*10片)(临购)；伏立康唑片；三唑类衍生物；口服；Q12h",
+        ),
+    )
+    absent = episode._ExecutionAssessment("r1", "absent", (), "high", ())
+
+    [upgraded] = episode._apply_lexical_order_matches(
+        (absent,), completed=(completed("予小牛血去蛋白提取物眼用凝胶涂双眼后包扎"),), candidates=candidates,
+    )
+    assert (upgraded.execution_state, upgraded.execution_refs) == ("linked_specific", ("inpat_drug_order-1",))
+    # 次日医嘱不在窗口内；停用类建议开着同名药不算执行；名称对不上不补。
+    for text in ("加用伏立康唑抗真菌", "停用小牛血去蛋白提取物眼用凝胶", "予玻璃酸钠滴眼液滴眼"):
+        [kept] = episode._apply_lexical_order_matches(
+            (absent,), completed=(completed(text),), candidates=candidates,
+        )
+        assert kept is absent
+
+
+def test_recommendation_without_any_window_candidate_is_settled_absent():
+    # C02 11-17 会诊当日医嘱为 0 条：候选为空时模型答 unknown 不能使整例落资料不足。
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "test", "完善支原体DNA测定", "完善支原体DNA测定", "consultation_record-1"),
+        episode._ObservedTime(datetime(2025, 11, 17, 17, 35), True),
+    ),)
+    unknown = episode._unknown_execution_assessment("r1")
+    next_day = (episode._CandidateDocument(
+        "inpat_nondrug_order-1", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2025, 11, 18, 9, 0), True), "支原体DNA测定",
+    ),)
+    [settled] = episode._settle_recommendations_without_any_candidate(
+        (unknown,), completed=completed, candidates=next_day, source_incomplete_keys=frozenset(),
+    )
+    assert (settled.execution_state, settled.execution_record_state, settled.confidence) == ("absent", "no_trace", "high")
+    # 医嘱来源不完整时不能确定“确无医嘱”；有候选时仍由模型判断。
+    [kept] = episode._settle_recommendations_without_any_candidate(
+        (unknown,), completed=completed, candidates=next_day,
+        source_incomplete_keys=frozenset({"inpat_nondrug_order"}),
+    )
+    assert kept is unknown
+    same_day = (episode._CandidateDocument(
+        "inpat_nondrug_order-2", "inpat_nondrug_order",
+        episode._ObservedTime(datetime(2025, 11, 17, 18, 0), True), "支原体DNA测定",
+    ),)
+    [kept] = episode._settle_recommendations_without_any_candidate(
+        (unknown,), completed=completed, candidates=same_day, source_incomplete_keys=frozenset(),
+    )
+    assert kept is unknown

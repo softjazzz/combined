@@ -3,6 +3,7 @@ import {
   MAX_CONSECUTIVE_READ_FAILURES,
   decidePollReadFailure,
   pollReadFailureMessage,
+  resolveTerminalBatchJobStatus,
 } from '../batchJobPollReadPolicy'
 
 describe('batchJobPollReadPolicy', () => {
@@ -23,6 +24,19 @@ describe('batchJobPollReadPolicy', () => {
       expect(decidePollReadFailure(409, 1, jobStatus)).toBe('retry')
     },
   )
+
+  it.each([
+    ['completed', 'completed'],
+    ['failed', 'failed'],
+    ['canceled', 'canceled'],
+    ['cancelled', 'canceled'],
+  ] as const)('只将权威终态 %s 回写为 %s', (jobStatus, expected) => {
+    expect(resolveTerminalBatchJobStatus(jobStatus)).toBe(expected)
+  })
+
+  it.each(['running', 'queued', 'retrying'])('不把执行态 %s 改写为终态', (jobStatus) => {
+    expect(resolveTerminalBatchJobStatus(jobStatus)).toBeUndefined()
+  })
 
   it('旧后端未附带任务状态的 409 视为临时失败，按上限暂停', () => {
     expect(decidePollReadFailure(409, 1)).toBe('retry')

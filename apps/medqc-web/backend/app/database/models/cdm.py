@@ -706,6 +706,7 @@ class LabtestItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     referencevalue_min = Column(String(100), comment="参考下限")
     referencevalue_max = Column(String(100), comment="参考上限")
     report_time = Column(DateTime, comment="报告时间")
+    report_status = Column(Text, comment="源检验报告状态")
 
 
 class ExamMaster(AuditMixin, PatientBasicMixin, Base):
@@ -1146,6 +1147,10 @@ class InpatDrugOrder(AuditMixin, Base):
     )
     prescribed_doctor = Column(String(100), comment="开立医师姓名")
     order_status = Column(String(100), comment="医嘱状态")
+    planned_end_datetime = Column(DateTime(timezone=True), comment="计划结束时间")
+    reviewed_datetime = Column(DateTime, comment="源医嘱审核时间")
+    carried_datetime = Column(DateTime, comment="源医嘱执行时间")
+    canceled_datetime = Column(DateTime, comment="源医嘱撤销时间")
     record_content = Column(Text, comment="记录内容")
 
 
@@ -1187,6 +1192,9 @@ class InpatNondrugOrder(AuditMixin, Base):
     )
     prescribed_doctor = Column(String(100), comment="开立医师姓名")
     order_status = Column(String(100), comment="医嘱状态")
+    reviewed_datetime = Column(DateTime, comment="源医嘱审核时间")
+    carried_datetime = Column(DateTime, comment="源医嘱执行时间")
+    canceled_datetime = Column(DateTime, comment="源医嘱撤销时间")
     record_content = Column(Text, comment="记录内容")
 
 
@@ -1406,7 +1414,7 @@ class PathologyExamReport(AuditMixin, Base):
 
     pathology_id = Column(String(100), comment="病理号")
     specimen_name = Column(String(100), comment="标本名称")
-    eye_findings = Column(String(100), comment="肉眼观察所见")
+    eye_findings = Column(Text, comment="肉眼观察所见")
     microscope_findings = Column(String(100), comment="镜下所见")
     diagnosis = Column(Text, comment="病理诊断")  # HIS额外增加的字段
     report_status = Column(String(100), comment="报告状态")

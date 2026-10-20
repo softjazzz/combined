@@ -10,6 +10,8 @@ export interface ExamEventPresentationRow {
   tone: ExamEventTone
   statusLabel: string
   description: string
+  reportResultLabel: string
+  reportResultTexts: string[]
 }
 
 export interface ExamLabEventPresentation {
@@ -63,6 +65,13 @@ export function buildExamLabEventPresentation(
     const positiveState = event.positive_state
     const eventStatus = typeof event.event_status === 'string' ? event.event_status : ''
     const responseRecordCount = event.response_record_count
+    const rawReportResultTexts = event.report_result_texts
+    const reportResultTexts = Array.isArray(rawReportResultTexts)
+      ? rawReportResultTexts.filter(
+          (value): value is string =>
+            typeof value === 'string' && value.trim() === value && value.length > 0,
+        )
+      : []
     if (
       eventPosition !== index + 1 ||
       typeof reportTime !== 'string' ||
@@ -82,10 +91,27 @@ export function buildExamLabEventPresentation(
         'technical_error',
       ].includes(eventStatus) ||
       !Number.isInteger(responseRecordCount) ||
-      Number(responseRecordCount) < 0
+      Number(responseRecordCount) < 0 ||
+      (rawReportResultTexts !== undefined &&
+        (!Array.isArray(rawReportResultTexts) ||
+          reportResultTexts.length !== rawReportResultTexts.length ||
+          reportResultTexts.length > 8 ||
+          reportResultTexts.some((value) => value.length > 500) ||
+          reportResultTexts.reduce((total, value) => total + value.length, 0) > 2000)) ||
+      (reportResultTexts.length > 0 &&
+        (!analysisRule || item.rule_id !== 'LX0609-06-01-05' || positiveState !== 'positive'))
     ) {
       return null
     }
+
+    const reportResultLabel =
+      eventStatus === 'non_compliant'
+        ? '未分析的 CT/MRI 阳性结果'
+        : eventStatus === 'compliant'
+          ? '已分析的 CT/MRI 阳性结果'
+          : eventStatus === 'not_applicable'
+            ? '待评价的 CT/MRI 阳性结果'
+            : '待核实的 CT/MRI 阳性结果'
 
     const positive = positiveState === 'positive'
     const responseRecordTime =
@@ -108,6 +134,8 @@ export function buildExamLabEventPresentation(
           tone: 'success',
           statusLabel: '已记录',
           description: `已完成报告结果记录${timing}`,
+          reportResultLabel: '',
+          reportResultTexts: [],
         })
         continue
       }
@@ -120,6 +148,8 @@ export function buildExamLabEventPresentation(
           tone: 'danger',
           statusLabel: '未记录',
           description: '报告后 24 小时内未找到报告结果记录',
+          reportResultLabel: '',
+          reportResultTexts: [],
         })
         continue
       }
@@ -134,6 +164,8 @@ export function buildExamLabEventPresentation(
           eventStatus === 'not_applicable'
             ? '本次事件不适用'
             : '资料待核实，暂无法确认报告结果是否已记录',
+        reportResultLabel: '',
+        reportResultTexts: [],
       })
       continue
     }
@@ -151,6 +183,8 @@ export function buildExamLabEventPresentation(
             : positiveState === 'negative'
               ? NOT_APPLICABLE_NEGATIVE_TEXT
               : NOT_APPLICABLE_UNKNOWN_TEXT,
+        reportResultLabel,
+        reportResultTexts,
       })
       continue
     }
@@ -162,7 +196,12 @@ export function buildExamLabEventPresentation(
         eventStatus,
         tone: 'danger',
         statusLabel: '未完成分析',
-        description: '阳性结果未在 24 小时内找到临床分析记录',
+        description:
+          reportResultTexts.length > 0
+            ? '下列 CT/MRI 阳性结果未在 24 小时内找到临床分析记录'
+            : '阳性结果未在 24 小时内找到临床分析记录',
+        reportResultLabel,
+        reportResultTexts,
       })
       continue
     }
@@ -175,6 +214,8 @@ export function buildExamLabEventPresentation(
         tone: 'success',
         statusLabel: '已完成分析',
         description: `阳性结果已找到 ${responseRecordCount} 条临床分析记录`,
+        reportResultLabel,
+        reportResultTexts,
       })
       continue
     }
@@ -186,6 +227,8 @@ export function buildExamLabEventPresentation(
       tone: 'warning',
       statusLabel: '待核实',
       description: '当前资料不足，暂无法完成分析记录核对',
+      reportResultLabel,
+      reportResultTexts,
     })
   }
 

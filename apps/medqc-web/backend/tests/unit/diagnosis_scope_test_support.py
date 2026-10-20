@@ -5,8 +5,12 @@ import json
 
 def _fact(quote, problem, *, state="unresolved", temporal="current", polarity="affirmed",
           scope="diagnosis", association="explicit"):
-    return dict(scope=scope, diagnosis_state=state, temporal_scope=temporal,
+    fact = dict(scope=scope, diagnosis_state=state, temporal_scope=temporal,
                 polarity=polarity, association=association, quote=quote, problem_quote=problem)
+    if state in {"unresolved", "undetermined"} or (state == "explicit" and polarity == "negated"):
+        # 既有人工标签提供完整逐字状态依据，不改变原有语义和预期。
+        fact["uncertainty_quote"] = quote
+    return fact
 
 
 # 仅以完整正文精确查表。标签由原人工语义/冻结预期标注，不使用子串规则。

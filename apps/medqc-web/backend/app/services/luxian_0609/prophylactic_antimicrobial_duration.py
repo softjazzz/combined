@@ -56,6 +56,21 @@ _INCISION_LABEL = re.compile(
 )
 _CARDIAC_CODE = re.compile(r"^\s*3[5-7]\.")
 _CARDIAC_NAME = re.compile(r"心脏|瓣膜置换|瓣膜成形|冠状动脉旁路|冠脉搭桥|房间隔|室间隔|法洛")
+_PURPOSE_SEGMENT = re.compile(r"[。！？!?；;\r\n]+")
+_PROPHYLACTIC_PURPOSE = re.compile(r"预防|防治")
+_SPECIFIC_INFECTION = (
+    r"(?:肺部感染|肺炎|呼吸道感染|尿路感染|泌尿系感染|腹腔感染|胆道感染|切口感染|"
+    r"血流感染|导管相关感染|败血症|脓毒症)"
+)
+_THERAPEUTIC_ACTION = r"(?:予|给予|使用|应用|选用|改用|继续使用|建议使用|建议)"
+_NEGATED_INFECTION = rf"(?:未见|排除|未提示|不考虑|无).{{0,4}}{_SPECIFIC_INFECTION}"
+_NEGATED_DRUG_ACTION = r"(?:停用|未使用|未予|未给予|不使用|无需使用|暂不使用)"
+_DRUG_NAME_PARENS = re.compile(r"[（(][^（）()]*[）)]")
+_DRUG_NAME_PREFIX = re.compile(r"^(?:注射用|口服|静脉滴注用|静滴用)+")
+_DRUG_NAME_SUFFIX = re.compile(
+    r"(?:氯化钠注射液|葡萄糖注射液|注射液|冻干粉针剂?|粉针剂?|颗粒剂?|胶囊剂?|片剂?|"
+    r"分散片|缓释片|肠溶片|盐酸盐|盐酸|钠盐|钠)$"
+)
 
 
 @dataclass(frozen=True)
@@ -156,6 +171,110 @@ def order_stop(row: Mapping[str, Any]) -> datetime | None:
     ):
         return start
     return next((value for key in STOP_TIME_FIELDS if (value := parse_time(row.get(key))) is not None), None)
+
+
+def _drug_name_aliases(row: Mapping[str, Any]) -> tuple[str, ...]:
+    """生成足够具体的药名别名，只用于把目的表述绑定到单条药品医嘱。"""
+
+    aliases: list[str] = []
+    for key in ("generic_name", "brand_name", "order_name"):
+        name = _clean(row.get(key))
+        if not name:
+            continue
+        without_parens = _DRUG_NAME_PARENS.sub("", name)
+        base = _DRUG_NAME_PREFIX.sub("", without_parens)
+        previous = ""
+        while base != previous:
+            previous = base
+            base = _DRUG_NAME_SUFFIX.sub("", base)
+        for candidate in (without_parens, base):
+            if len(candidate) >= 4 and candidate not in aliases:
+                aliases.append(candidate)
+    return tuple(aliases)
+
+
+def _linked_name_fragments(text: Any, aliases: Sequence[str]) -> tuple[str, ...]:
+    """截取药名附近的目的表述，避免同句另一种药的感染用途串到本药。"""
+
+    compact = _clean(text)
+    fragments: list[str] = []
+    for alias in aliases:
+        offset = 0
+        while (index := compact.find(alias, offset)) >= 0:
+            fragment = compact[max(index - 20, 0):index + len(alias) + 20]
+            if fragment not in fragments:
+                fragments.append(fragment)
+            offset = index + len(alias)
+    return tuple(fragments)
+
+
+def _purpose_texts_for_order(
+    row: Mapping[str, Any],
+    course_rows: Sequence[tuple[str, Mapping[str, Any]]],
+) -> tuple[str, ...]:
+    """只收集与该药名明确同句、且时间邻近该医嘱的目的表述。"""
+
+    aliases = _drug_name_aliases(row)
+    if not aliases:
+        return ()
+    start = order_start(row)
+    stop = order_stop(row)
+    texts: list[str] = []
+    order_text = str(row.get("record_content") or "")
+    for segment in _PURPOSE_SEGMENT.split(order_text):
+        texts.extend(_linked_name_fragments(segment, aliases))
+    if start is None:
+        return tuple(texts)
+    lower = start - _CHAIN_GAP
+    upper = (stop or start + timedelta(hours=72)) + _CHAIN_GAP
+    for _key, course_row in course_rows:
+        course_time = parse_time(
+            course_row.get("record_time") or course_row.get("record_datetime")
+            or course_row.get("submit_datetime") or course_row.get("submit_time")
+        )
+        if course_time is None or not lower <= course_time <= upper:
+            continue
+        for segment in _PURPOSE_SEGMENT.split(str(course_row.get("record_content") or "")):
+            texts.extend(_linked_name_fragments(segment, aliases))
+    return tuple(texts)
+
+
+def _has_linked_therapeutic_purpose(text: str, aliases: Sequence[str]) -> bool:
+    """只接受“具体感染适应证 + 该药治疗动作”的局部绑定。"""
+
+    for alias in aliases:
+        drug = re.escape(alias)
+        if re.search(_NEGATED_INFECTION, text) or re.search(
+            rf"{_NEGATED_DRUG_ACTION}.{{0,8}}{drug}|{drug}.{{0,4}}(?:停用|不再使用)", text,
+        ):
+            continue
+        patterns = (
+            rf"{_THERAPEUTIC_ACTION}.{{0,8}}{drug}.{{0,12}}(?:用于|针对|控制|治疗|抗)?{_SPECIFIC_INFECTION}",
+            rf"{drug}.{{0,8}}(?:用于|针对|控制|治疗|抗感染).{{0,12}}{_SPECIFIC_INFECTION}",
+            rf"{_SPECIFIC_INFECTION}.{{0,16}}{drug}.{{0,8}}(?:用于|针对|控制|治疗|抗感染)",
+        )
+        if any(re.search(pattern, text) for pattern in patterns):
+            return True
+    return False
+
+
+def _antimicrobial_intent(
+    row: Mapping[str, Any],
+    course_rows: Sequence[tuple[str, Mapping[str, Any]]],
+) -> str:
+    """返回单条药品医嘱的明确目的；不明确或预防/治疗并存时均不得排除。"""
+
+    texts = _purpose_texts_for_order(row, course_rows)
+    prophylactic = any(_PROPHYLACTIC_PURPOSE.search(text) for text in texts)
+    aliases = _drug_name_aliases(row)
+    therapeutic = any(_has_linked_therapeutic_purpose(text, aliases) for text in texts)
+    if therapeutic and not prophylactic:
+        return "therapeutic"
+    if prophylactic and therapeutic:
+        return "both"
+    if prophylactic:
+        return "prophylactic"
+    return "unknown"
 
 
 def _format(value: datetime) -> str:
@@ -327,7 +446,10 @@ async def evaluate_prophylactic_antimicrobial_duration(
 
     if not events:
         return ProphylaxisOutcome("not_applicable", "trigger_absent_complete")
-    orders = tuple(row for row in drug_order_rows if is_systemic_antibacterial(row))
+    orders = tuple(
+        row for row in drug_order_rows
+        if is_systemic_antibacterial(row) and _antimicrobial_intent(row, course_rows) != "therapeutic"
+    )
     results = [_evaluate_event(event, orders) for event in events]
     pending = [result for result in results if result.status == "pending_evidence"]
     usage = (0, 0, 0, 0, 0.0)

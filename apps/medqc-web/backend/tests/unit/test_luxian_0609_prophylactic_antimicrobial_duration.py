@@ -260,6 +260,166 @@ async def test_028_executor_end_to_end_with_synthetic_stop_time() -> None:
 
 
 @pytest.mark.asyncio
+async def test_028_public_entry_keeps_prophylaxis_check_after_excluding_linked_treatment_order() -> None:
+    """同例不同药逐项判目的；治疗药缺停药时间不应遮蔽预防药的时长结论。"""
+    rows = {
+        "surgery_record": ({
+            "document_id": "S-MIXED", "surgery_name": "合成腹部手术",
+            "surgery_begin_time": "2026-06-01 08:00:00+08:00",
+            "surgery_end_time": "2026-06-01 10:00:00+08:00",
+            "surgery_process": "合成手术记录。",
+        },),
+        "mr_surgery": ({
+            "surgery_begin_datetime": datetime(2026, 6, 1, 8, 0),
+            "surgery_end_datetime": datetime(2026, 6, 1, 10, 0),
+            "surgial_incision_level": "Ⅱ", "surgery_code": "00.0000", "surgery_name": "合成腹部手术",
+        },),
+        "inpat_drug_order": (
+            _order("注射用头孢呋辛钠", "2026-06-01 07:30:00", "2026-06-02 16:00:00"),
+            _order("左氧氟沙星氯化钠注射液", "2026-06-01 18:30:00"),
+        ),
+        "senior_course_record": ({
+            "document_id": "R-MIXED", "record_time": "2026-06-02 09:00:00",
+            "record_content": "因合成的呼吸道感染诊断，左氧氟沙星用于抗感染治疗；头孢呋辛为围术期预防感染用药。",
+        },),
+    }
+
+    def reader(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"], rows=rows.get(kwargs["source_key"], ()),
+            truncated=False, limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-05-01-01",), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, created_at="2026-06-10T00:00:00+08:00", row_reader=reader,
+    )
+    client = _Client(["absent"])
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-05-01-01",), decision_rule_ids=("LX0609-05-01-01",),
+        wrapper_rules=[_wrapper("LX0609-05-01-01")], evidence_payload={},
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-05-01-01",),
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    facts = dict(result.customer_display_facts)["LX0609-05-01-01"]
+    assert (facts["duration_hours"], facts["infection_evidence"]) == (30.0, "not_recorded")
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_028_explicitly_linked_treatment_order_without_stop_is_not_applicable() -> None:
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=(_event(incision="II"),),
+        drug_order_rows=(_order("左氧氟沙星氯化钠注射液", "2026-06-01 18:30"),),
+        course_rows=((
+            "daily:0",
+            _course("2026-06-02 09:00", "专科建议使用左氧氟沙星控制合成肺部感染。"),
+        ),),
+        llm_client=_Client([]),
+    )
+
+    assert (outcome.status, outcome.reason_code, outcome.display_facts) == (
+        "not_applicable", "trigger_absent_complete", None,
+    )
+    assert outcome.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_028_unlinked_infection_text_does_not_exclude_unknown_purpose_order() -> None:
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=(_event(incision="II"),),
+        drug_order_rows=(_order("左氧氟沙星氯化钠注射液", "2026-06-01 18:30"),),
+        course_rows=((
+            "daily:0",
+            _course("2026-06-02 09:00", "合成感染诊断明确，改用头孢他啶进行抗感染治疗。"),
+        ),),
+        llm_client=_Client([]),
+    )
+
+    assert (outcome.status, outcome.display_facts) == (
+        "data_gap", {"failure_kind": "order_stop_time_unavailable"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_028_generic_anti_infection_wording_does_not_prove_treatment_purpose() -> None:
+    """围术期常写“予某药抗感染”，没有治疗性适应证时仍须核对停药时间。"""
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=(_event(incision="II"),),
+        drug_order_rows=(_order("注射用头孢呋辛钠", "2026-06-01 07:30"),),
+        course_rows=((
+            "daily:0", _course("2026-06-01 12:00", "术后予头孢呋辛抗感染，切口情况稳定。"),
+        ),),
+        llm_client=_Client([]),
+    )
+
+    assert (outcome.status, outcome.display_facts) == (
+        "data_gap", {"failure_kind": "order_stop_time_unavailable"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_028_nearby_other_drug_treatment_purpose_is_not_shared() -> None:
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=(_event(incision="II"),),
+        drug_order_rows=(_order("注射用头孢呋辛钠", "2026-06-01 07:30"),),
+        course_rows=((
+            "daily:0",
+            _course("2026-06-01 12:00", "专科建议使用左氧氟沙星控制合成肺部感染，另予头孢呋辛调整方案。"),
+        ),),
+        llm_client=_Client([]),
+    )
+
+    assert (outcome.status, outcome.display_facts) == (
+        "data_gap", {"failure_kind": "order_stop_time_unavailable"},
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("purpose_text", (
+    "未见合成肺部感染，予左氧氟沙星抗感染。",
+    "停用左氧氟沙星治疗合成肺部感染。",
+    "未使用左氧氟沙星治疗合成肺部感染。",
+))
+async def test_028_negated_infection_or_drug_use_does_not_prove_treatment_purpose(
+    purpose_text: str,
+) -> None:
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=(_event(incision="II"),),
+        drug_order_rows=(_order("左氧氟沙星氯化钠注射液", "2026-06-01 18:30"),),
+        course_rows=(("daily:0", _course("2026-06-02 09:00", purpose_text)),),
+        llm_client=_Client([]),
+    )
+
+    assert (outcome.status, outcome.display_facts) == (
+        "data_gap", {"failure_kind": "order_stop_time_unavailable"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_028_same_drug_with_prophylactic_and_treatment_purposes_stays_in_scope() -> None:
+    outcome = await evaluate_prophylactic_antimicrobial_duration(
+        events=(_event(incision="II"),),
+        drug_order_rows=(_order("注射用头孢呋辛钠", "2026-06-01 07:30"),),
+        course_rows=((
+            "daily:0",
+            _course("2026-06-01 12:00", "头孢呋辛先用于围术期预防感染，后因合成感染继续抗感染治疗。"),
+        ),),
+        llm_client=_Client([]),
+    )
+
+    assert (outcome.status, outcome.display_facts) == (
+        "data_gap", {"failure_kind": "order_stop_time_unavailable"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_028_antibacterial_order_without_any_time_is_data_gap_not_absent() -> None:
     outcome = await evaluate_prophylactic_antimicrobial_duration(
         events=(_event(),), drug_order_rows=({"generic_name": "注射用头孢唑林钠", "repeat_indicator": "长期"},),

@@ -106,8 +106,8 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert basic_senior_round.family_key == "basic_timeliness"
     assert basic_senior_round.executor_key == "basic_timeliness"
     assert basic_senior_round.execution_mode == "native_sync"
-    assert basic_senior_round.decision_authority == "program_then_optional_llm"
-    assert basic_senior_round.max_llm_calls_per_rule == 1
+    assert basic_senior_round.decision_authority == "program_only"
+    assert basic_senior_round.max_llm_calls_per_rule == 0
 
     repeated_course = contracts["LX0609-12-01-02"]
     assert repeated_course.contract_version == "v7"
@@ -240,6 +240,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     }
 
     assert program_only == {
+        "LX0609-02-01-02",
         "LX0609-01-01-01",
         "LX0609-01-02-01",
         "LX0609-04-02-01",
@@ -296,7 +297,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     effect_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-05-01-03")
     assert (effect_contract.contract_version, effect_contract.decision_authority,
             effect_contract.max_llm_calls_per_rule, effect_contract.prompt_version) == (
-                "v2", "program_then_optional_llm", 1, "lx0609-antimicrobial-effect-facts-v1")
+                "v3", "program_then_optional_llm", 2, "lx0609-antimicrobial-effect-pair-repair-v1")
     visit_contract = next(contract for contract in contracts if contract.rule_id == "LX0609-04-04-02")
     assert (visit_contract.contract_version, visit_contract.decision_authority, visit_contract.max_llm_calls_per_rule, visit_contract.prompt_version) == ("v3", "program_then_optional_llm", 1, "lx0609-anesthesia-visit-facts-v2")
     for rule in ("LX0609-04-05-02", "LX0609-08-02-01"):
@@ -327,6 +328,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-03-01-02",
         "LX0609-03-01-03",
         "LX0609-03-01-04",
+        "LX0609-03-01-05",
         "LX0609-04-02-04",
         "LX0609-05-01-01",
         "LX0609-04-01-01",
@@ -394,7 +396,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
         == (2 if contract.rule_id in {
-            "LX0609-03-01-04", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01",
+            "LX0609-03-01-04", "LX0609-03-01-05", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03",
         } else 1)
         and bool(contract.prompt_version)
         for contract in contracts

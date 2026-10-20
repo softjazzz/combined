@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 
 AssessmentOutcome = tuple[str, str, Mapping[str, Any]]
+
+# 用户口径（2026-10-18）：申请单申请理由字段与正文均为空（接口未提供）时，
+# 申请理由改从实际输血前的病程核对，与无申请单病例一致。
+COURSE_REASON_SOURCE_KEYS = ("daily_course_record", "senior_course_record")
+COURSE_REASON_WINDOW = timedelta(hours=48)
+MAX_COURSE_REASON_CHARS = 6000
 
 INDICATOR_FIELDS = (
     "hemoglobin",
@@ -45,6 +51,8 @@ class PretransfusionReasonCandidate:
     transfusion_time: datetime
     indicators: tuple[str, ...]
     source_document_refs: tuple[tuple[str, str], ...]
+    # application：理由取自申请单正文；course：申请单无理由与正文，取自输血前病程。
+    reason_source: Literal["application", "course"] = "application"
 
     def display_facts(self, *, reason_present: bool) -> dict[str, Any]:
         facts = {
@@ -148,12 +156,8 @@ def _source_document_refs(
     return tuple(refs)
 
 
-def evaluate_structured_pretransfusion_application(
-    documents: Mapping[str, Any],
-) -> AssessmentOutcome | None:
-    """按输血申请单结构化事实核对 LX0609-07-01-02；非结构化旧资料交还调用方。"""
-
-    applications = [
+def _structured_applications(documents: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [
         row
         for row in _rows(documents, "blood_application")
         if any(
@@ -161,6 +165,20 @@ def evaluate_structured_pretransfusion_application(
             for field in ("reason_for_blood", "transfusion_reason", *INDICATOR_FIELDS)
         )
     ]
+
+
+def has_structured_pretransfusion_application(documents: Mapping[str, Any]) -> bool:
+    """是否存在结构化输血申请单（只有这条路径需要实际输血时间作时序比较）。"""
+
+    return bool(_structured_applications(documents))
+
+
+def evaluate_structured_pretransfusion_application(
+    documents: Mapping[str, Any],
+) -> AssessmentOutcome | None:
+    """按输血申请单结构化事实核对 LX0609-07-01-02；非结构化旧资料交还调用方。"""
+
+    applications = _structured_applications(documents)
     if not applications:
         return None
 
@@ -286,6 +304,7 @@ def build_pretransfusion_reason_candidate(
         return None
     transfusion_time = event_times[0]
     transfusion_records = _rows(documents, "bloodtrans_record")
+    course_text, course_refs = _pretransfusion_course_text(documents, transfusion_time)
     candidates: list[PretransfusionReasonCandidate] = []
     for index, row in enumerate(_rows(documents, "blood_application"), start=1):
         application_time = _datetime(row.get("request_datetime") or row.get("request_time"))
@@ -299,27 +318,70 @@ def build_pretransfusion_reason_candidate(
             or application_time >= transfusion_time
             or reason_present
             or not indicators
-            or not application_text
+            or not (application_text or course_text)
         ):
             continue
+        source_document_refs = _source_document_refs(
+            application=row,
+            transfusion_records=transfusion_records,
+            transfusion_time=transfusion_time,
+        )
         candidates.append(
             PretransfusionReasonCandidate(
                 application_ref=(
                     _text(row.get("application_id") or row.get("document_id"))
                     or f"blood_application-{index}"
                 ),
-                application_text=application_text[:1200],
+                application_text=application_text[:1200] if application_text else course_text,
                 application_time=application_time,
                 transfusion_time=transfusion_time,
                 indicators=indicators,
-                source_document_refs=_source_document_refs(
-                    application=row,
-                    transfusion_records=transfusion_records,
-                    transfusion_time=transfusion_time,
+                source_document_refs=(
+                    source_document_refs if application_text
+                    else (*source_document_refs, *course_refs)
                 ),
+                reason_source="application" if application_text else "course",
             )
         )
     return max(candidates, key=lambda item: item.application_time) if candidates else None
+
+
+def _pretransfusion_course_text(
+    documents: Mapping[str, Any], transfusion_time: datetime,
+) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """实际输血前 48 小时内的病程正文（按时间排列，超长时保留最接近输血的记录）。"""
+
+    entries: list[tuple[datetime, str, str, str]] = []
+    for source_key in COURSE_REASON_SOURCE_KEYS:
+        for row in _rows(documents, source_key):
+            record_time = _datetime(row.get("record_time"))
+            content = _application_text(row)
+            if (
+                record_time is None
+                or not content
+                or not transfusion_time - COURSE_REASON_WINDOW <= record_time < transfusion_time
+            ):
+                continue
+            entries.append((record_time, source_key, _text(row.get("document_id")), content))
+    selected: list[tuple[datetime, str, str, str]] = []
+    used = 0
+    for entry in sorted(entries, key=lambda item: item[0], reverse=True):
+        block = len(entry[3]) + 40
+        if selected and used + block > MAX_COURSE_REASON_CHARS:
+            break
+        selected.append(entry)
+        used += block
+    selected.sort(key=lambda item: item[0])
+    text = "\n".join(
+        f"[病程 {record_time.isoformat(sep=' ')}] {content[:MAX_COURSE_REASON_CHARS]}"
+        for record_time, _source_key, _document_id, content in selected
+    )
+    refs = tuple(
+        (source_key, document_id)
+        for _record_time, source_key, document_id, _content in selected
+        if document_id
+    )
+    return text, refs
 
 
 def _outcome(

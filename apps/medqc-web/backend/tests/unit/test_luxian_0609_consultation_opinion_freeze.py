@@ -76,6 +76,18 @@ def test_saved_freeze_is_reused_with_same_fingerprint(tmp_path):
     assert loaded.payload == PAYLOAD
 
 
+def test_previous_action_extraction_freeze_is_rebuilt_even_with_same_documents(tmp_path):
+    created = freeze.save_opinion_payload(
+        visit_id="v-1", documents=DOCUMENTS, payload=PAYLOAD, store_dir=tmp_path)
+    artifact = json.loads(created.path.read_text(encoding="utf-8"))
+    artifact["schema_version"] = "consultation-opinion-freeze-v2"
+    created.path.write_text(json.dumps(artifact), encoding="utf-8")
+    assert freeze.load_opinion_payload(visit_id="v-1", documents=DOCUMENTS, store_dir=tmp_path) is None
+    rebuilt = freeze.save_opinion_payload(
+        visit_id="v-1", documents=DOCUMENTS, payload=PAYLOAD, store_dir=tmp_path)
+    assert rebuilt.state == "rebuilt"
+
+
 def test_changed_document_invalidates_freeze(tmp_path):
     freeze.save_opinion_payload(
         visit_id="v-1", documents=DOCUMENTS, payload=PAYLOAD, store_dir=tmp_path

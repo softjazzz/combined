@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 
 import pytest
+from finding_selection_test_support import selection_answer
 
 from app.services.luxian_0609.customer_remediation import build_customer_remediation_suggestion
 from app.services.luxian_0609.customer_renderer import render_luxian_0609_customer_result
@@ -31,7 +32,7 @@ class _Client:
         self.answer = answer
 
     async def generate(self, prompt, **kwargs):
-        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(self.answer, ensure_ascii=False)}}],
+        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(selection_answer(self.answer, prompt), ensure_ascii=False)}}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 

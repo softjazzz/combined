@@ -30,6 +30,7 @@ from .exam_lab_fact_extraction import (
     events_for_family,
     exam_reason_anchor_time,
 )
+from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
@@ -44,6 +45,84 @@ MAX_QUOTE_CHARS = 80
 MAX_REPORT_HINT_CHARS = 200
 MAX_COMPLETION_TOKENS = 2048
 
+
+
+@dataclass(frozen=True)
+class _RetryIssue:
+    reason: str
+    location: str
+    field: str
+    value: str
+    hint: str
+
+
+class _RetryViolation(ValueError):
+    """收集同份应答的可修正项，异常字符串仍为首个失败原因。"""
+
+    def __init__(self, issues: Sequence[_RetryIssue]) -> None:
+        # 失败项为空（如目标无候选病程且应答为空）时沿用原覆盖失败原因。
+        super().__init__(issues[0].reason if issues else "invalid doc coverage")
+        self.issues = tuple(issues)
+
+
+class _TruncatedResponse(ValueError):
+    def __init__(self) -> None:
+        super().__init__("incomplete response")
+
+
+def _response_content(response: Mapping[str, Any]) -> Any:
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        return message.get("content") if isinstance(message, Mapping) else None
+    return response.get("content", response.get("text"))
+
+
+def _retry_prompt(
+    prompt: str, error: Exception, response: Mapping[str, Any],
+    *, pending: Mapping[int, tuple[str, ...]] | None = None,
+) -> str:
+    if isinstance(error, _TruncatedResponse):
+        hint = "输出超长被截断。请输出完整JSON，引文只取最短必要的连续原文，编号只选最短必要证明，避免重复。"
+    elif isinstance(error, _RetryViolation):
+        details = []
+        for issue in error.issues[:8]:
+            # 回显先脱敏再限长，避免裁掉身份标签后泄漏身份值。
+            value = redact_luxian_0609_patient_privacy(issue.value)
+            value_ref = (f"以「{value[:60]}」开头的{issue.field}" if len(value) > 60
+                         else f"{issue.field}「{value}」")
+            location = redact_luxian_0609_patient_privacy(issue.location)
+            details.append(f"{location}的{value_ref}：{issue.hint}")
+        hint = "；".join(details) + "。请修正以上失败项并补齐覆盖，其余已核验判断不因补核改变。"
+        try:
+            payload = json.loads(_response_content(response))
+            if pending is not None and isinstance(payload, dict) and isinstance(payload.get("docs"), list):
+                payload = {**payload, "docs": [item for item in payload["docs"]
+                           if isinstance(item, dict) and type(item.get("event_position")) is int
+                           and item["event_position"] in pending]}
+            previous = json.dumps(payload, ensure_ascii=False)
+        except (ValueError, TypeError):
+            previous = ""
+        if previous and len(previous) <= 24000:
+            previous = redact_luxian_0609_patient_privacy(previous)
+            if len(previous) <= 24000:
+                hint += "\n上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + previous
+    else:
+        hint = "每个事件的每份病程必须且仅输出一次，字段取规定值。请修正后重新输出完整JSON。"
+    return prompt.replace("\nEVENTS_JSON=", "\n上一次输出未通过校验：" + hint + "\nEVENTS_JSON=", 1)
+
+
+def _coverage_issue(index: int | None, position: Any, ref: Any, *, count: int = 0) -> _RetryIssue:
+    location = (f"docs第{index}项 " if index is not None else "遗漏项 ")
+    location += f"event_position={position} course_doc_ref={ref}"
+    return _RetryIssue("invalid doc coverage", location, "event_position/course_doc_ref", "",
+                       f"该配对出现{count}次；每个给定事件的每份病程必须且仅输出一次，不得引用集合外配对")
+
+
+def _pair_count(docs: Sequence[Any], key: tuple[Any, Any]) -> int:
+    """应答中同一事件×病程配对的实际出现次数，用于补核回显。"""
+    return sum(1 for item in docs if isinstance(item, dict)
+               and (item.get("event_position"), item.get("course_doc_ref")) == key)
 
 @dataclass(frozen=True)
 class ExamReasonOutcome:
@@ -133,6 +212,8 @@ def _parse(
 ) -> dict[int, tuple[str, ...]]:
     choices = response.get("choices")
     if choices is not None:
+        if choices[0].get("finish_reason") == "length":
+            raise _TruncatedResponse()
         if choices[0].get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = choices[0]["message"]["content"]
@@ -143,37 +224,51 @@ def _parse(
             or payload["schema_version"] != SCHEMA_VERSION or not isinstance(payload["docs"], list)):
         raise ValueError("invalid response schema")
     seen: set[tuple[int, str]] = set()
+    issues: list[_RetryIssue] = []
+    expected = {position: target.refs for position, target in targets.items()}
     stated: dict[int, list[str]] = {position: [] for position in targets}
-    for item in payload["docs"]:
+    for index, item in enumerate(payload["docs"], 1):
         if not isinstance(item, dict) or set(item) != {"event_position", "course_doc_ref", "quote_type", "quote"}:
             raise ValueError("invalid doc schema")
         position, ref = item["event_position"], item["course_doc_ref"]
         kind, quote = item["quote_type"], item["quote"]
-        key = (position, ref)
-        if type(position) is not int or position not in targets or ref not in targets[position].refs or key in seen:
-            raise ValueError("invalid doc coverage")
+
         if kind not in QUOTE_TYPES or type(quote) is not str:
             raise ValueError("invalid quote type")
+        if type(position) is not int or type(ref) is not str:
+            raise ValueError("invalid doc coverage")
+        key = (position, ref)
+        if position not in expected or ref not in expected[position] or key in seen:
+            issues.append(_coverage_issue(index, position, ref, count=_pair_count(payload["docs"], key)))
+            continue
         seen.add(key)
+        location = f"docs第{index}项 event_position={position} course_doc_ref={ref}"
+        before = len(issues)
         if kind == "none":
             if quote.strip():
-                raise ValueError("quote without element")
+                issues.append(_RetryIssue("quote without element", location, "quote", quote,
+                                          _RETRY_HINTS["quote without element"]))
             continue
         normalized_quote = _normalize(quote)
         if not normalized_quote or len(quote) > MAX_QUOTE_CHARS:
-            raise ValueError("missing quote")
-        if normalized_quote not in _normalize(_course_text(projection, ref)):
-            raise ValueError("quote not in course")
+            issues.append(_RetryIssue("missing quote", location, "quote", quote, _RETRY_HINTS["missing quote"]))
+        elif normalized_quote not in _normalize(_course_text(projection, ref)):
+            issues.append(_RetryIssue("quote not in course", location, "quote", quote,
+                                     _RETRY_HINTS["quote not in course"]
+                                     + "；须逐字复制单个连续片段，不得删去中间文字后拼接"))
+
+        if len(issues) != before:
+            continue
         if kind in REASON_TYPES:
             stated[position].append(ref)
-    if not seen:
-        raise ValueError("invalid doc coverage")
-    complete = {
-        position for position, target in targets.items()
-        if all((position, ref) in seen for ref in target.refs)
-    }
-    if not allow_partial and len(complete) != len(targets):
-        raise ValueError("invalid doc coverage")
+    evidence_failed = bool(issues)
+    for position, refs in expected.items():
+        for ref in refs:
+            if (position, ref) not in seen:
+                issues.append(_coverage_issue(None, position, ref))
+    if evidence_failed or not seen or (issues and not allow_partial):
+        raise _RetryViolation(issues)
+    complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
     return {position: tuple(refs) for position, refs in stated.items() if refs or position in complete}
 
 
@@ -224,9 +319,7 @@ async def check_exam_reason(projection: ExamLabTextProjection, llm_client: Any) 
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return ExamReasonOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                          total_tokens, api_time or perf_counter() - started)
-            hint = _RETRY_HINTS.get(str(error), "每个事件的每份病程必须且仅输出一次，字段取规定值")
-            attempt_prompt = prompt.replace(
-                "\nEVENTS_JSON=", f"\n上一次输出未通过校验：{hint}。请修正后重新输出完整JSON。\nEVENTS_JSON=", 1)
+            attempt_prompt = _retry_prompt(prompt, error, response)
     reason_refs.update(stated)
     return ExamReasonOutcome("ready", reason_refs, calls, prompt_tokens, completion_tokens, total_tokens,
                              api_time or perf_counter() - started)

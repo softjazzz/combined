@@ -217,7 +217,9 @@ def build_luxian_0609_identity_provider(
                     # 受控事实来源只产出有/无事实、不入材料库，没有可发送的原始行。
                     if _is_controlled_fact_source(observation.source_key):
                         continue
-                    for _, row in materials.document_rows(observation.source_key, snapshot=snapshot):
+                    # 截断影响临床完整性，不应阻止核验实际已加载、可能发送的行。
+                    # 同一快照与逐行摘要仍由材料仓核验；不跳过任何前缀身份。
+                    for _, row in materials.identity_document_rows(observation.source_key, snapshot=snapshot):
                         row_values(row, observation.source_key)
             if not values:
                 raise PrivacyIdentityContextUnavailable()

@@ -2,7 +2,10 @@
   <section
     v-if="criteria.length"
     class="detail-block criterion-block"
-    :class="{ 'compliant-criterion-block': variant === 'compliant' }"
+    :class="{
+      'compliant-criterion-block': variant === 'compliant',
+      'mq-soft': variant === 'decision',
+    }"
     :data-testid="variant === 'compliant' ? 'single-record-compliant-criteria' : undefined"
   >
     <h4>{{ variant === 'compliant' ? '合规依据' : '逐项判定' }}</h4>
@@ -10,30 +13,33 @@
       v-for="criterion in criteria"
       :key="criterion.criterion_id"
       class="criterion-row"
+      :class="`is-${criterion.status}`"
     >
-      <div class="criterion-head">
-        <strong>{{ criterionLabel(criterion.criterion_id) }}</strong>
-        <span :class="`is-${criterion.status}`">{{ criterionStatusText(criterion.status) }}</span>
+      <MqIcon class="criterion-icon" :name="criterionIcon(criterion.status)" :size="18" />
+      <div class="criterion-body">
+        <div class="criterion-head">
+          <strong>{{ criterionLabel(criterion.criterion_id) }}</strong>
+          <span :class="`is-${criterion.status}`">{{ criterionStatusText(criterion.status) }}</span>
+        </div>
+        <p>{{ criterionFactText(criterion) }}</p>
+        <p v-if="variant === 'compliant' && criterion.medical_analysis" class="criterion-analysis">
+          {{ criterion.medical_analysis }}
+        </p>
+        <details
+          v-if="variant === 'decision' && criterion.medical_analysis"
+          class="medical-analysis"
+        >
+          <summary>查看医学分析</summary>
+          <p>{{ criterion.medical_analysis }}</p>
+        </details>
       </div>
-      <p>{{ criterionFactText(criterion) }}</p>
-      <p
-        v-if="variant === 'compliant' && criterion.medical_analysis"
-        class="criterion-analysis"
-      >
-        {{ criterion.medical_analysis }}
-      </p>
-      <details
-        v-if="variant === 'decision' && criterion.medical_analysis"
-        class="medical-analysis"
-      >
-        <summary>医学分析</summary>
-        <p>{{ criterion.medical_analysis }}</p>
-      </details>
     </article>
   </section>
 </template>
 
 <script setup lang="ts">
+import MqIcon from '@/components/icons/MqIcon.vue'
+import type { MqIconName } from '@/components/icons/mqIcons'
 import type { SingleRecordQcCriterionResult } from './single-record-result-model'
 
 defineProps<{
@@ -53,6 +59,12 @@ function criterionStatusText(status: string) {
   if (status === 'passed') return '通过'
   if (status === 'failed') return '未通过'
   return '待确认'
+}
+
+function criterionIcon(status: string): MqIconName {
+  if (status === 'passed') return 'success'
+  if (status === 'failed') return 'failed'
+  return 'pending'
 }
 
 function criterionFactText(criterion: SingleRecordQcCriterionResult) {
@@ -80,99 +92,107 @@ function criterionFactText(criterion: SingleRecordQcCriterionResult) {
   margin: 0;
 }
 
+/* 子项结论靠图标表达，分组标题与状态文字只留给读屏 */
 .detail-block h4,
-.medical-analysis summary {
-  margin: 0 0 5px;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 18px;
+.criterion-head span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .detail-block p,
 .medical-analysis p {
   margin: 0;
-  color: rgba(29, 29, 31, 0.82);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   line-height: 20px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.compliant-criterion-block {
-  padding-top: 1px;
+.criterion-block {
+  position: relative;
+  display: grid;
+  gap: 10px;
 }
 
-.criterion-block {
-  display: grid;
+.criterion-block.mq-soft {
+  padding: 12px 14px;
 }
 
 .criterion-row {
-  padding: 8px 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.criterion-row:first-of-type {
-  border-top: 0;
-}
-
-.criterion-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  min-width: 0;
+  align-items: flex-start;
   gap: 8px;
 }
 
+/* 图标颜色继承 currentColor，按子项状态取语义色 */
+.criterion-icon {
+  margin-top: 1px;
+  color: var(--mq-warning-text);
+}
+
+.criterion-row.is-passed .criterion-icon {
+  color: var(--mq-success-text);
+}
+
+.criterion-row.is-failed .criterion-icon {
+  color: var(--mq-danger-text);
+}
+
+.criterion-body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
 .criterion-head strong {
-  font-size: 12px;
-  line-height: 19px;
+  color: var(--mq-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
 }
 
-.criterion-head span {
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 17px;
+/* 已通过的子项压成一行：名称 + 核对依据 */
+.criterion-row.is-passed .criterion-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
 }
 
-.criterion-head .is-passed {
-  background: #ecfdf3;
-  color: #087443;
-}
-
-.criterion-head .is-failed {
-  background: #fff0f0;
-  color: #d92d20;
-}
-
-.criterion-head .is-unknown {
-  background: #fff7e8;
-  color: #b26a00;
-}
-
-.criterion-row > p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 12px;
-  line-height: 19px;
-}
-
-.criterion-row > .criterion-analysis {
-  margin-top: 5px;
-  color: rgba(29, 29, 31, 0.82);
-}
-
-.criterion-row .medical-analysis {
-  margin-top: 7px;
+.criterion-row > .criterion-body > .criterion-analysis {
+  margin-top: 2px;
 }
 
 .medical-analysis summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--mq-info-text);
+  font-size: 13px;
+  font-weight: 600;
+  list-style: none;
   cursor: pointer;
-  color: #0066cc;
-  list-style-position: inside;
+}
+
+.medical-analysis summary::-webkit-details-marker {
+  display: none;
 }
 
 .medical-analysis[open] summary {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+}
+
+.medical-analysis[open] > p {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
 }
 </style>

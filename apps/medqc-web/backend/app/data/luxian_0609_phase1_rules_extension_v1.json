@@ -337,7 +337,7 @@
     "dependency_type": "医嘱触发时限",
     "executor_type": "program",
     "rule_version": "2026-08-02-provisional",
-    "prompt_version": "lx0609-antimicrobial-effect-facts-v1",
+    "prompt_version": "lx0609-antimicrobial-effect-pair-repair-v1",
     "mapped_rule_ids": ["LX0609-05-01-03"],
     "primary_execution_rule_id": "LX0609-05-01-03"
   },
@@ -764,5 +764,23 @@
     "mapped_rule_ids": ["LX0609-08-01-05"],
     "primary_execution_rule_id": "LX0609-08-01-05",
     "allowed_result_statuses": ["compliant", "non_compliant", "not_applicable", "data_gap"]
+  },
+  {
+    "rule_id": "LX0609-03-01-05",
+    "rule_code": "LX0609-03-01-05",
+    "name": "会诊处置记录：未逐项具体说明会诊意见的处置情况",
+    "description": "核对会诊执行记录正文中本科室是否逐项具体记载对所引会诊建议的处理、安排或不采纳原因。",
+    "positive_example": "引述检查及用药建议后，具体记载检查安排、药物调整及不采纳项目的原因。",
+    "negative_example": "引述具体会诊建议后，只写以上遵照执行或其余遵嘱执行。",
+    "category": "会诊记录",
+    "applicable_documents": ["consultation_record"],
+    "applicable_document_labels": ["会诊执行记录"],
+    "data_dependencies": ["执行记录内引用的会诊意见", "本科室处置反馈"],
+    "dependency_type": "单文书语义事实",
+    "executor_type": "llm_fact",
+    "rule_version": "2026-10-15",
+    "prompt_version": "consultation-disposition-record-v4",
+    "mapped_rule_ids": ["LX0609-03-01-05"],
+    "primary_execution_rule_id": "LX0609-03-01-05"
   }
 ]

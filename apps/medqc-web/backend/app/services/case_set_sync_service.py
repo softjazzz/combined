@@ -23,6 +23,7 @@ from .etl_sync import (
     upsert_to_local,
 )
 from .visit_index_service import ingest_sync_rows
+from .homology_sync import resolve_homology_source
 
 
 PRIMARY_CASE_TABLES = ("mr", "inpat_registration", "admission_record")
@@ -174,6 +175,13 @@ class CaseSetSyncService:
         if not remote_url:
             raise ValueError("REMOTE_DB_URL 未配置")
         remote_schema = str(config.get("remote_schema") or "public").strip() or "public"
+        homology_sources = {
+            name: resolve_homology_source(table_name=name, remote_url=remote_url)
+            for name in normalized_tables
+        }
+        for source in homology_sources.values():
+            if source is not None:
+                source.source_case_refs(normalized_refs)
         catalog = {
             str(item.get("name") or "").strip(): item
             for item in self._table_catalog_loader()
@@ -216,14 +224,27 @@ class CaseSetSyncService:
                     error_category="source_config_missing",
                 )
             source_table = str(table_config.get("source_table") or table_name).strip()
-            try:
-                rows = self._row_fetcher(
-                    remote_url=remote_url,
-                    remote_schema=remote_schema,
-                    source_table=source_table,
-                    case_refs=list(target_case_refs),
-                    default_institute_id=default_institute_id,
+            source = homology_sources[table_name]
+            fetch_kwargs: dict[str, Any] = {
+                "remote_url": remote_url,
+                "remote_schema": remote_schema,
+                "source_table": source_table,
+                "case_refs": list(target_case_refs),
+                "default_institute_id": default_institute_id,
+            }
+            if source is not None:
+                source_table = source.table
+                fetch_kwargs.update(
+                    remote_url=source.remote_url,
+                    remote_schema=source.schema,
+                    source_table=source.table,
+                    case_refs=source.source_case_refs(target_case_refs),
+                    # 此来源已有机构列；缺列时应报告缺资料，不能绕过机构过滤。
+                    default_institute_id="",
+                    readonly=True,
                 )
+            try:
+                rows = self._row_fetcher(**fetch_kwargs)
             except (psycopg2.errors.UndefinedColumn, psycopg2.errors.UndefinedTable):
                 return _unavailable_result(
                     table_name=table_name,
@@ -248,6 +269,8 @@ class CaseSetSyncService:
                     source_table=source_table,
                     error_category="source_table_missing",
                 )
+            if source is not None:
+                rows = source.adapt_rows(rows, target_case_refs)
             normalized_source_rows = stamp_source_rows_institute_id(
                 rows,
                 default_institute_id=default_institute_id,
@@ -262,7 +285,9 @@ class CaseSetSyncService:
                 ],
                 "batch_size": self._upsert_batch_size,
             }
-            if (
+            if source is not None:
+                upsert_kwargs["required_columns"] = source.required_target_columns
+            if source is not None or (
                 str(
                     table_config.get("incremental_strategy")
                     or "full_visit_reload"
@@ -283,6 +308,11 @@ class CaseSetSyncService:
                     "rows_pulled": len(normalized_rows),
                     "rows_upserted": int(upserted),
                     "sync_status": "synced",
+                    **({
+                        "source_profile": "homology",
+                        "source_database": source.database,
+                        "source_schema": source.schema,
+                    } if source is not None else {}),
                 },
             )
 

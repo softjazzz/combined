@@ -218,6 +218,23 @@ def bind_transfer_evidence(
     """绑定唯一转科医嘱及既有判定器实际匹配的转入、转出文书。"""
 
     orders = select_transfer_order_rows(nondrug_order_rows)
+    if len(orders) > 1 and isinstance(display_facts, Mapping) and (
+        isinstance(display_facts.get("event_checks"), list) or display_facts.get("transfer_order_time")
+    ):
+        # 主控代定口径（2026-10-18，待客户复核），基线072/073：
+        # 合并台次仍绑定所有原始转科医嘱，文书只绑定执行器实际匹配时间。
+        consumed = [("inpat_nondrug_order", row) for row in orders]
+        for event in display_facts.get("event_checks", [display_facts]):
+            for source_key, rows, time_key in (
+                ("transfer_in_record", transfer_in_rows, "transfer_in_time"),
+                ("transfer_out_record", transfer_out_rows, "transfer_out_time"),
+            ):
+                consumed.extend((source_key, row) for row in rows
+                                if (value := _parse_datetime(authoritative_document_time_value(row))) is not None
+                                and value.isoformat(sep=" ") == event.get(time_key))
+        return bind_consumed_continuity_document_rows(
+            snapshot=snapshot, materials=materials, consumed_rows=[pair for index, pair in enumerate(consumed) if pair not in consumed[:index]],
+        )
     if len(orders) != 1:
         is_multi_event_gap = (
             len(orders) > 1

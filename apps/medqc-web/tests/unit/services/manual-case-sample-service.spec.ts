@@ -403,3 +403,75 @@ describe('editable medical-record document normalization', () => {
     })
   })
 })
+
+describe('医嘱投影完整性字段规范化', () => {
+  it('保留医嘱未完整标志和接口提示', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            key: 'order-projection',
+            document_type: 'temporary_order',
+            title: '临时医嘱',
+            content: '临时医嘱：合成检查项目',
+            projection_incomplete: true,
+            projection_notice: '已展示700条，仍有更多。',
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('synthetic-visit')
+    expect(result.data?.documents[0]).toMatchObject({
+      projection_incomplete: true,
+      projection_notice: '已展示700条，仍有更多。',
+    })
+  })
+
+  it.each([undefined, false, 'true', 1, null])(
+    '未完整标志为 %s 时严格规范化为 false',
+    async (flag) => {
+      mocks.requestRaw.mockResolvedValue({
+        data: {
+          documents: [
+            {
+              key: 'order-complete',
+              document_type: 'temporary_order',
+              title: '临时医嘱',
+              content: '临时医嘱：合成检查项目',
+              projection_incomplete: flag,
+            },
+          ],
+        },
+      })
+      const result = await getEditableMedicalRecordDocuments('synthetic-visit')
+      expect(result.data?.documents[0]).toMatchObject({
+        projection_incomplete: false,
+        projection_notice: '',
+      })
+    },
+  )
+})
+
+describe('医嘱投影提示类型规范化', () => {
+  it.each([null, false, 700, {}])('非字符串提示 %s 规范化为空字符串', async (notice) => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            key: 'order-notice-type',
+            document_type: 'temporary_order',
+            title: '临时医嘱',
+            content: '临时医嘱：合成检查项目',
+            projection_incomplete: true,
+            projection_notice: notice,
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('synthetic-visit')
+    expect(result.data?.documents[0]).toMatchObject({
+      projection_incomplete: true,
+      projection_notice: '',
+    })
+  })
+})

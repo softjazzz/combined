@@ -107,11 +107,11 @@ def test_all_kinds_typed_and_published_status_matrix(rule, expected, facts, stat
 
 
 @pytest.mark.parametrize("raw", [None, {}])
-@pytest.mark.parametrize("status,reason", [("data_gap", "required_field_missing"), ("not_applicable", "trigger_absent_complete"), ("not_applicable", "eligibility_not_met")])
+@pytest.mark.parametrize("status,reason", [("compliant", "requirement_satisfied"), ("data_gap", "required_field_missing"), ("not_applicable", "trigger_absent_complete"), ("not_applicable", "eligibility_not_met")])
 def test_017_approved_absent_history(raw, status, reason):
     assert published(raw_result(COPY, status, raw, reason)) is None
 
-@pytest.mark.parametrize("status,reason", [("compliant", "requirement_satisfied"), ("non_compliant", "requirement_violated"), ("data_gap", "wrong_reason"), ("", "required_field_missing"), ("technical_error", "required_field_missing")])
+@pytest.mark.parametrize("status,reason", [("non_compliant", "requirement_violated"), ("data_gap", "wrong_reason"), ("", "required_field_missing"), ("technical_error", "required_field_missing")])
 def test_017_absent_outside_approved_combinations(status, reason):
     with pytest.raises(ValueError):
         published(raw_result(COPY, status, None, reason))

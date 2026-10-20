@@ -29,9 +29,9 @@ from typing import Any, Mapping, Sequence
 
 logger = logging.getLogger(__name__)
 
-# v2：新增落盘前逐字落地校验。校验合同属于冻结语义的一部分，版本变化时旧
-# 冻结必须自动失效重抽，否则改动前落盘的不可落地摘录会被继续复用。
-FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v2"
+# v3：区分治疗动作与施治部位、会诊建议与原科室执行反馈。
+# 抽取口径变化时旧冻结自动失效，避免重新运行仍复用旧的错误建议清单。
+FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v3"
 _ENV_STORE_DIR = "LUXIAN_0609_OPINION_FREEZE_DIR"
 _PAYLOAD_KEYS = ("episodes", "consultation_event_facts")
 _SAFE_NAME = re.compile(r"[^0-9A-Za-z_.-]+")

@@ -1,8 +1,10 @@
-"""012 分析要素核对（用户口径 2026-10-12）：单句归类，罗列后下诊断不算分析，照抄报告的引文不算分析。"""
+"""012 分析要素核对：按同一病程的连续语义归类，罗列后下诊断仍不算分析。"""
 
+import asyncio
 import json
 
 import pytest
+from finding_selection_test_support import selection_answer
 
 from app.services.luxian_0609.exam_finding_analysis import (
     SCHEMA_VERSION,
@@ -43,6 +45,7 @@ class _Client:
     async def generate(self, prompt, **kwargs):
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
+        output = selection_answer(output, prompt)
         content = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
         return {"choices": [{"finish_reason": "stop", "message": {"content": content}}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
@@ -68,7 +71,7 @@ async def test_listing_then_diagnosis_is_not_analysis_and_pre_report_note_is_exc
     client = _Client([_answer(ref, "diagnosis_only", "目前考虑诊断：腰椎间盘突出症")])
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
-    assert outcome.llm_call_count == 1
+    assert outcome.llm_call_count == 2  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
     sent = json.loads(client.prompts[0].split("EVENTS_JSON=", 1)[1])
     assert [doc["course_doc_ref"] for doc in sent[0]["course_docs"]] == [ref]
     assert "罗列后直接列出诊断" in client.prompts[0] and "diagnosis_only" in client.prompts[0]
@@ -84,8 +87,8 @@ async def test_linked_finding_with_verbatim_quote_counts_as_analysis():
 
 
 @pytest.mark.asyncio
-async def test_differential_naming_this_exam_site_is_attributed_by_linked_order():
-    """真实样本：“结合颈椎MRI故不考虑该诊断”只指向检查本身；检查名称仅在关联医嘱上。"""
+async def test_differential_naming_only_exam_site_without_finding_is_not_analysis():
+    """用户口径：只写“结合某 MRI 故不考虑”而未写所见，即使模型误归类也不算分析。"""
     from dataclasses import replace
 
     from app.services.luxian_0609.exam_lab_fact_extraction import events_for_family as _events
@@ -95,15 +98,50 @@ async def test_differential_naming_this_exam_site_is_attributed_by_linked_order(
     projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
     ref = _report_ref(projection)
     answer = _answer(ref, "targeted_differential", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
-    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
-    assert outcome.analysed_refs == {1: (ref,)}
-    # 非鉴别类（如把“结合腰椎MRI可诊断”误归为异常联系）不能靠部位对应放行。
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
+    assert outcome.analysed_refs == {1: ()}
+    # 非鉴别类同样不能靠部位对应放行。
     misfiled = _answer(ref, "finding_linked", "结合腰椎MRI故不考虑该诊断", span="椎管狭窄")
-    assert (await check_exam_finding_analysis(projection, _Client([misfiled]))).analysed_refs == {1: ()}
+    assert (await check_exam_finding_analysis(projection, _Client([misfiled, misfiled]))).analysed_refs == {1: ()}
     event = replace(event, order_names=("MRI左膝关节平扫",))
     projection = type(projection)(**{**projection.__dict__, "imaging_events": (event,), "imaging_event": event})
-    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
     assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_prompt_preserves_same_course_multisentence_basis_chain_with_positive_and_negative_examples():
+    """C19/C24 形状：同病程跨句写症状体征、影像、承接判断与处置时必须整体核对。"""
+    course = (
+        "患者腰痛伴右下肢放射痛，L4/5右侧压痛。"
+        "腰椎MRI示L4/5椎间盘右侧椎间孔型突出并椎间孔狭窄。"
+        "结合患者病史、查体及辅助检查结果分析，考虑腰椎间盘突出症。"
+        "治疗后疼痛减轻，继续当前治疗。"
+    )
+    projection = _projection(course)
+    ref = _report_ref(projection)
+    quote = course[: course.index("治疗后")]
+    client = _Client([_answer(ref, "finding_linked", quote)])
+
+    outcome = await check_exam_finding_analysis(projection, client)
+
+    assert outcome.analysed_refs == {1: (ref,)}
+    prompt = client.prompts[0]
+    assert "核对整份病程的上下文" in prompt
+    assert "连续多句或同一逻辑段" in prompt
+    assert "不超过200字" in prompt
+    assert "症状/体征→影像所见→明确承接→诊断判断或处置" in prompt
+    for protected_negative in (
+        "L4/5椎间盘突出，拟行手术",
+        "排除L1椎体压缩性骨折",
+        "请胸外科会诊评估结节性质",
+        "结合颈椎MRI故不考虑该诊断",
+    ):
+        assert protected_negative in prompt
+    # 用户口径（2026-10-19）：报告后修正/补充诊断并针对处置算分析；处置针对别的问题或照常罗列仍不算。
+    assert "‘修正诊断’‘补充诊断’‘新增诊断’" in prompt
+    assert "处置只写补白蛋白、利尿纠正心衰" in prompt
+    assert "照常罗列原有诊断而没有修正、补充之意，仍归diagnosis_only" in prompt
 
 
 @pytest.mark.asyncio
@@ -111,16 +149,19 @@ async def test_quote_about_another_exam_does_not_count_for_this_event():
     """真实样本：共用病程里“胸部CT提示右肺小结节，请胸外科会诊”被挂到膝关节MRI名下。"""
     projection = _projection(LINKED + "胸部CT提示右肺小结节，请胸外科会诊评估。")
     ref = _report_ref(projection)
-    outcome = await check_exam_finding_analysis(projection, _Client([
-        _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="椎管狭窄")]))
+    wrong = _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="椎管狭窄")
+    client = _Client([wrong, wrong])
+    outcome = await check_exam_finding_analysis(projection, client)
+    # 引文与所选异常对不上：定向补核一次，仍对不上则不算分析。
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
+    assert outcome.llm_call_count == 3 and "不能选“较某日片”" in client.prompts[1]  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
 
     client = _Client([
         _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="右肺小结节"),
         _answer(ref, "none"),
     ])
     outcome = await check_exam_finding_analysis(projection, client)
-    assert outcome.llm_call_count == 2 and "report_span必须逐字摘自" in client.prompts[1]
+    assert outcome.llm_call_count == 3 and "report_fragment_id只选当前事件" in client.prompts[1]  # 含单独复核一次
     assert outcome.analysed_refs == {1: ()}
 
 
@@ -275,3 +316,267 @@ async def test_final_attempt_unverifiable_quote_skips_only_that_course():
     outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
     # 该事件有一份病程未核到：不固定为“未分析”，沿用主抽取；整步不再失败。
     assert outcome.state == "ready" and outcome.llm_call_count == 2 and outcome.analysed_refs == {}
+
+
+def _chest_projection(course_text):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:30:00",
+                 "report_time": "2026-08-18 13:30:00", "exam_conclusion": "慢支炎、肺气肿；双肺感染，建议治疗后复查。"},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-18 15:00:00", "record_content": course_text},
+            ),
+        }
+    )
+    return apply_relevance_hints(projection, {1: "positive"})
+
+
+INFECTION_PLAN = "患者仍呼吸困难，双肺闻及较多湿啰音，肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗。"
+
+
+@pytest.mark.asyncio
+async def test_same_clinical_problem_without_naming_this_exam_is_not_analysis():
+    """用户口径（2026-10-19）：病程未提本次检查、也未写报告所见，只与报告共用“感染”二字，不算分析；PCT 不是 CT。"""
+
+    projection = _chest_projection(INFECTION_PLAN)
+    ref = _report_ref(projection)
+    answer = _answer(ref, "management_linked", "肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗", span="双肺感染")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
+    assert outcome.gap_refs == {1: ((ref, "plan_without_basis"),)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lead", ["胸部CT提示双肺感染，", "复查影像示双肺感染，", "双肺感染，"])
+async def test_naming_this_exam_or_echoing_report_finding_keeps_analysis(lead):
+    projection = _chest_projection(lead + INFECTION_PLAN)
+    ref = _report_ref(projection)
+    answer = _answer(ref, "management_linked", "肺部感染控制差，PCT 1.32ng/ml，建议转重症监护室行纤支镜肺泡灌洗", span="双肺感染")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.analysed_refs == {1: (ref,)}
+
+
+def _two_event_projection():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:30:00",
+                 "report_time": "2026-08-18 13:30:00", "exam_conclusion": "双肺感染，建议治疗后复查。"},
+                {"exam_id": "EX-2", "exam_name": "腰椎MRI平扫", "exam_time": "2026-08-20 12:30:00",
+                 "report_time": "2026-08-20 13:30:00", "exam_conclusion": "L4/5椎间盘突出，椎管狭窄。"},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-18 15:00:00", "record_content": "胸部CT提示双肺感染，与发热咳嗽相符，予抗感染治疗。"},
+                {"record_time": "2026-08-20 15:00:00", "record_content": LINKED},
+            ),
+        }
+    )
+    return apply_relevance_hints(projection, {1: "positive", 2: "positive"})
+
+
+def _batch_answers(projection):
+    times = projection.course_times
+    first, second = sorted(times, key=lambda ref: times[ref])
+    chest = {"schema_version": SCHEMA_VERSION, "docs": [{
+        "event_position": 1, "course_doc_ref": first, "quote_type": "finding_linked",
+        "quote": "胸部CT提示双肺感染，与发热咳嗽相符", "report_span": "双肺感染"}, {
+        "event_position": 1, "course_doc_ref": second, "quote_type": "none", "quote": "", "report_span": ""}]}
+    spine = {"schema_version": SCHEMA_VERSION, "docs": [{
+        "event_position": 2, "course_doc_ref": second, "quote_type": "finding_linked",
+        "quote": "L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符", "report_span": "L4/5椎间盘突出"}]}
+    return first, second, chest, spine
+
+
+@pytest.mark.asyncio
+async def test_events_are_checked_in_batches_when_whole_prompt_exceeds_limit(monkeypatch):
+    """多事件病例整批提示词超限时按事件分批，各批结论合并，不再整体放弃核验。"""
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    projection = _two_event_projection()
+    first, second, chest, spine = _batch_answers(projection)
+    targets = module._targets(projection)
+    single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
+    client = _Client([chest, spine])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert len(client.prompts) == 2 and all(len(prompt) <= single for prompt in client.prompts)
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,), 2: (second,)}
+    assert outcome.llm_call_count == 2 and outcome.total_tokens == 30
+
+
+@pytest.mark.asyncio
+async def test_failed_batch_leaves_only_its_events_to_main_extraction(monkeypatch):
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    projection = _two_event_projection()
+    first, _second, chest, _spine = _batch_answers(projection)
+    targets = module._targets(projection)
+    single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
+    outcome = await check_exam_finding_analysis(projection, _Client([chest, "不是JSON", "不是JSON"]))
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,)}
+    assert outcome.llm_call_count == 3
+    # 单事件仍超限时不调用模型，整体沿用主抽取。
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", 10)
+    client = _Client([])
+    assert (await check_exam_finding_analysis(projection, client)).state == "failed" and client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_comparison_lead_span_gets_one_targeted_retry_to_pick_the_finding():
+    """C04 形状：归为对比分析却选了“较某日片”引导语，补核一次改选具体异常后成立。"""
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-18 12:30:00",
+                 "report_time": "2026-08-18 13:30:00",
+                 "exam_conclusion": "双肺多发感染。较2026-08-10片，右肺上叶病灶吸收减少。"},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-18 15:00:00",
+                 "record_content": "仍有间断发热，复查胸部CT提示右肺上叶病灶吸收减少，考虑抗感染有效，继续当前方案。"},
+            ),
+        }
+    )
+    projection = apply_relevance_hints(projection, {1: "positive"})
+    ref = _report_ref(projection)
+    quote = "仍有间断发热，复查胸部CT提示右肺上叶病灶吸收减少，考虑抗感染有效"
+    lead = _answer(ref, "prior_comparison", quote, span="较2026-08-10片")
+    fixed = _answer(ref, "prior_comparison", quote, span="右肺上叶病灶吸收减少")
+    client = _Client([lead, fixed])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.analysed_refs == {1: (ref,)} and outcome.llm_call_count == 2
+    retry = client.prompts[1]
+    assert "span not attributed" in retry or "对比引导语" in retry
+    assert "PREVIOUS_OUTPUT=" in retry and f"course_doc_ref={ref}" in retry
+
+
+def _followup_projection(course_text, conclusion="双肺下叶少许渗出或感染，较2026-08-06片，双肺病灶减少。"):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {"exam_id": "EX-1", "exam_name": "胸部CT平扫", "exam_time": "2026-08-11 12:30:00",
+                 "report_time": "2026-08-11 13:30:00", "exam_conclusion": conclusion},
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-08-11 15:00:00", "record_content": course_text},
+            ),
+        }
+    )
+    return apply_relevance_hints(projection, {1: "positive"})
+
+
+@pytest.mark.asyncio
+async def test_restated_report_with_generic_improvement_and_normal_exam_is_not_analysis():
+    """C15 形状（用户口径 2026-10-11）：复述报告 + “CT提示较前好转” + 正常查体，即使模型归为对比分析也不成立。"""
+    course = ("患者今日复查胸部CT平扫 双肺下叶少许渗出或感染，较2026-08-06片，双肺病灶减少。"
+              "查体：双肺未闻及干湿啰音，心律齐，腹软。患者目前胸部ct检查提示较前好转，继续补钾治疗。")
+    projection = _followup_projection(course)
+    ref = _report_ref(projection)
+    answer = _answer(ref, "prior_comparison",
+                     "双肺下叶少许渗出或感染，较2026-08-06片，双肺病灶减少。查体：双肺未闻及干湿啰音，心律齐，腹软。患者目前胸部ct检查提示较前好转",
+                     span="双肺下叶少许渗出或感染")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
+    assert outcome.analysed_refs == {1: ()}
+
+
+@pytest.mark.asyncio
+async def test_generic_symptom_improvement_and_routine_plan_do_not_attribute_to_finding():
+    """C02 形状：只有“较前减少/好转、继续目前对症处理”与报告共用笼统变化词，不算针对本次异常。"""
+    projection = _followup_projection("复查胸部CT示双肺渗出减少。痰较前减少，症状好转，继续目前对症处理。",
+                                      conclusion="双肺散在渗出、纤维灶，较前片双肺渗出减少。")
+    ref = _report_ref(projection)
+    answer = _answer(ref, "finding_linked", "痰较前减少，症状好转，继续目前对症处理", span="双肺渗出减少")
+    client = _Client([answer, answer])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.analysed_refs == {1: ()} and outcome.llm_call_count == 3  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
+
+
+@pytest.mark.asyncio
+async def test_specific_symptoms_and_targeted_treatment_after_followup_ct_still_count():
+    """C04 形状（2026-10-12 口径）：阳性症状 + 复查 CT 所见 + 具体抗感染方案，去除笼统词后仍成立。"""
+    projection = _followup_projection(
+        "痰量较前无明显增加，但仍有间断发热。今日复查胸部CT提示右肺上叶病灶较前吸收减少，暂继续目前抗感染治疗方案。",
+        conclusion="双肺多发感染。较2026-04-13片，右肺上叶病灶吸收减少。")
+    ref = _report_ref(projection)
+    answer = _answer(ref, "prior_comparison",
+                     "痰量较前无明显增加，但仍有间断发热。今日复查胸部CT提示右肺上叶病灶较前吸收减少，暂继续目前抗感染治疗方案",
+                     span="右肺上叶病灶吸收减少")
+    outcome = await check_exam_finding_analysis(projection, _Client([answer]))
+    assert outcome.analysed_refs == {1: (ref,)}
+
+
+class _ConcurrentStrictClient(_Client):
+    """支持结构化输出；第一批在第二批发出前不返回，串行调用会超时失败。"""
+
+    def __init__(self, outputs, expected_in_flight):
+        super().__init__(outputs)
+        self.kwargs, self.expected_in_flight = [], expected_in_flight
+        self.all_sent = asyncio.Event()
+
+    def supports_strict_json_schema(self):
+        return True
+
+    async def generate(self, prompt, **kwargs):
+        self.kwargs.append(kwargs)
+        if len(self.kwargs) >= self.expected_in_flight:
+            self.all_sent.set()
+        await asyncio.wait_for(self.all_sent.wait(), timeout=2)
+        return await super().generate(prompt, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_batches_run_concurrently_with_thinking_enabled_only_here(monkeypatch):
+    """用户决定（2026-10-19）：分析核验调用点开思考（预算 1000），各批并发，耗时不随批数累加。"""
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    projection = _two_event_projection()
+    first, second, chest, spine = _batch_answers(projection)
+    targets = module._targets(projection)
+    single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
+    monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
+    client = _ConcurrentStrictClient([chest, spine], expected_in_flight=2)
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,), 2: (second,)}
+    assert all(item["enable_thinking"] is True and item["thinking_budget"] == module.ANALYSIS_THINKING_BUDGET
+               for item in client.kwargs)
+    # 不支持结构化输出的替身不附加思考参数。
+    assert module._analysis_output_kwargs(_Client([])) == {}
+
+
+@pytest.mark.parametrize("quote, report", [
+    # C02 形状：逐字抄录报告对比句，句中日期、检查标签与“伤后48小时复查”不是自有分析。
+    ("伤后48小时复查头颅CT提示:2025-10-07 颅脑螺旋CT平扫 双侧额颞叶少许脑挫伤，较2025-10-06片颅内出血稍吸收减少，",
+     "双侧额颞叶少许脑挫伤，硬膜下出血。较2025-10-06片颅内出血稍吸收减少，头皮肿胀减轻。"),
+    # C01 形状：诊断依据只复述 CTA 所见再接序号诊断与“故考虑”。
+    ("2026-07-31 颅内+颈动脉CT造影成像 头颈部CTA：双侧颈内动脉C6段管腔轻-中度狭窄，12.双侧颈内动脉狭窄，故考虑。",
+     "双侧颈内动脉C6段管腔轻-中度狭窄，余管腔轻度狭窄。"),
+])
+def test_restated_report_with_labels_and_connectors_has_no_own_analysis(quote, report):
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    assert module._own_chars(quote, report) < module.MIN_OWN_CHARS
+
+
+def test_real_analysis_keeps_own_content_after_label_stripping():
+    import app.services.luxian_0609.exam_finding_analysis as module
+
+    quote = "患者右侧肢体无力，结合CTA双侧颈内动脉C6段狭窄，考虑脑供血不足，加用阿托伐他汀稳定斑块"
+    assert module._own_chars(quote, "双侧颈内动脉C6段管腔轻-中度狭窄。") >= module.MIN_OWN_CHARS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recheck_kind, expected_analysed", [("finding_linked", True), ("none", False)])
+async def test_negative_event_is_rechecked_alone_and_only_confirmed_analysis_flips(recheck_kind, expected_analysed):
+    """用户决定（2026-10-19）：整批判为未分析的事件单独复核一次；复核证实有分析才改判（C08、C04 漏看）。"""
+    linked = "腰椎MRI示L4/5椎间盘突出压迫右侧神经根，右下肢放射痛明显，直腿抬高试验阳性，与本次报告所见相符，拟行手术。"
+    projection = _projection(linked)
+    ref = _report_ref(projection)
+    recheck = _answer(ref, "finding_linked", linked) if recheck_kind == "finding_linked" else _answer(ref, "none")
+    client = _Client([_answer(ref, "none"), recheck])
+    outcome = await check_exam_finding_analysis(projection, client)
+    assert outcome.state == "ready" and outcome.llm_call_count == 2
+    assert outcome.analysed_refs == ({1: (ref,)} if expected_analysed else {1: ()})
+    assert outcome.total_tokens == 30

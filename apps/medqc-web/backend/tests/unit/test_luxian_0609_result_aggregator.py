@@ -376,6 +376,45 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
         envelope_item_from_rule_result(item)
 
 
+def test_canonical_projection_keeps_controlled_recommendation_text():
+    item = {
+        "rule_id": "LX0609-03-01-04",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": False,
+        "customer_display_facts": {
+            "verification_kind": "consultation_execution_quality_check",
+            "completed_opinion_episode_count": 1,
+            "recommendation_count": 1,
+            "specific_execution_count": 0,
+            "generic_execution_count": 0,
+            "missing_execution_count": 1,
+            "relation_state": "execution_missing_or_generic",
+            "recommendation_evidence": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "recommendation_text": "复查血常规",
+                    "execution_state": "missing",
+                    "opinion_evidence": [
+                        {
+                            "source_type": "consultation_record",
+                            "source_ref": "src_" + "a" * 24,
+                        }
+                    ],
+                    "execution_evidence": [],
+                }
+            ],
+        },
+    }
+
+    projected = envelope_item_from_rule_result(item)
+
+    assert projected["customer_display_facts"]["recommendation_evidence"][0][
+        "recommendation_text"
+    ] == "复查血常规"
+
+
 def test_native_display_facts_never_reproject_private_document_refs() -> None:
     facts = {
         "failure_kind": "level4_mdt_absent",
@@ -489,7 +528,7 @@ def test_058_safe_projection_rejects_inconsistent_timed_expert_support_facts() -
         "special_antimicrobials": ["美罗培南"],
         "expert_support_present": True,
         "first_antimicrobial_time": "2026-06-01 10:00:00",
-        "expert_support_time": "2026-06-01 11:00:00",
+        "expert_support_time": "2026-06-02 11:00:00",
         "support_before_use": True,
         "unmatched_special_antimicrobials": [],
         "association_ambiguous": False,
@@ -506,7 +545,7 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
         "special_antimicrobials": ["美罗培南"],
         "expert_support_present": True,
         "first_antimicrobial_time": "2026-06-01 10:00:00",
-        "expert_support_time": "2026-06-01 11:00:00",
+        "expert_support_time": "2026-06-02 11:00:00",
         "support_before_use": False,
         "unmatched_special_antimicrobials": ["美罗培南"],
         "association_ambiguous": False,
@@ -531,7 +570,7 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
 
     expected_finding = (
         "已确认特殊级抗菌药物 美罗培南 的计划开始/启用时间为 2026-06-01 10:00:00，"
-        "但专家支持记录时间 2026-06-01 11:00:00 晚于该时间，不满足计划启用前支持要求。"
+        "但专家支持记录时间 2026-06-02 11:00:00 晚于启用后24小时，不满足专家支持（含紧急使用24小时内补办）要求。"
     )
     assert result["customer_display_facts"] == facts
     assert result["findings"] == expected_finding
@@ -3304,7 +3343,7 @@ def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
         fromlist=["aggregate_luxian_0609_results"],
     )
     result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-07-01-01", "name": "输血前九项"}],
+        wrapper_rules=[{"rule_id": "LX0609-07-01-01", "name": "输血前常规检查"}],
         execution_results=[],
         reduced_decisions=(
             _reduced_decision("LX0609-07-01-01", direction=QcDirection.DEFECT),
@@ -3314,16 +3353,16 @@ def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
             {
                 "failure_kind": "pretransfusion_items_incomplete",
                 "performed_transfusion_confirmed": True,
-                "missing_items": ["hiv", "syphilis", "alt"],
+                "missing_items": ["hiv", "syphilis", "antibody_screen"],
                 "required_items": [
                     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
-                    "hcv", "hiv", "syphilis", "alt",
+                    "hcv", "hiv", "syphilis", "abo", "rh", "antibody_screen",
                 ],
             },
         ),),
     )[0]
 
-    assert result["findings"] == "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。"
+    assert result["findings"] == "输血前常规检查缺少：艾滋病病毒抗体、梅毒筛查、不规则抗体筛查。"
     assert result["status"] == "non_compliant"
 
 
@@ -5838,7 +5877,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
                 "performed_transfusion_confirmed": True,
                 "checked_items": [
                     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
-                    "hcv", "hiv", "syphilis", "alt",
+                    "hcv", "hiv", "syphilis", "abo", "rh", "antibody_screen",
                 ],
                 "latest_test_time": "2026-06-05 08:00:00",
                 "transfusion_time": "2026-06-05 14:20:00",
@@ -5852,7 +5891,7 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
                 "performed_transfusion_confirmed": True,
                 "checked_items": [
                     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
-                    "hcv", "hiv", "syphilis", "alt",
+                    "hcv", "hiv", "syphilis", "abo", "rh", "antibody_screen",
                 ],
                 "latest_test_time": "2026-06-05 08:00:00",
                 "transfusion_time": "2026-06-05 14:20:00",
@@ -7234,3 +7273,41 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
             ],
         },
     ) is None
+
+
+def _023_canonical_item(**entry_extra):
+    return {
+        "rule_id": "LX0609-03-01-04",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": False,
+        "customer_display_facts": {
+            "verification_kind": "consultation_execution_quality_check",
+            "completed_opinion_episode_count": 1,
+            "recommendation_count": 1,
+            "specific_execution_count": 1,
+            "generic_execution_count": 0,
+            "missing_execution_count": 0,
+            "relation_state": "execution_missing_or_generic",
+            "recommendation_evidence": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "execution_state": "specific",
+                    "opinion_evidence": [],
+                    "execution_evidence": [],
+                    **entry_extra,
+                }
+            ],
+        },
+    }
+
+
+def test_canonical_projection_keeps_023_opinion_time_and_missing_measures():
+    # 2026-10-20：会诊记录时间和当日未开医嘱的措施须能保存到交付结果，供医生看清原因。
+    envelope_item_from_rule_result(
+        _023_canonical_item(opinion_time="2026-08-24 15:07:30", missing_measures=["心衰指标"])
+    )
+    for extra in ({"opinion_time": "昨天"}, {"missing_measures": []}, {"unexpected": 1}):
+        with pytest.raises(ValueError, match="invalid recommendation evidence"):
+            envelope_item_from_rule_result(_023_canonical_item(**extra))

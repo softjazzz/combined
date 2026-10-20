@@ -187,3 +187,38 @@ def test_auto_retry_plan_does_not_repeat_non_model_failure() -> None:
 
     assert plan["status"] == "not_retryable"
     assert plan["should_retry"] is False
+
+
+@pytest.mark.parametrize(("rule", "reason"), [
+    ("LX0609-05-01-03", "model_invalid_output"),
+    ("LX0609-05-01-03", "model_timeout"),
+    ("LX0609-03-01-04", "execution_program_error"),
+    ("LX0609-03-01-04", "model_configuration_error"),
+    ("LX0609-03-01-04", "model_invalid_output"),
+])
+def test_terminal_failure_is_not_whole_rule_automatically_retried(rule, reason):
+    failure = {**_row(rule), "reason_code": reason, "error_phase": "result_status"}
+    plan = build_failed_rule_auto_retry_plan(summary={"execution_status": "partial_failed"}, failures=[failure])
+    assert plan["status"] == "not_retryable"
+    assert plan["should_retry"] is False
+    job = {"status": "failed", "summary": {"execution_status": "partial_failed"}, "failed_records": [failure]}
+    assert build_failed_rule_retry_scope(job, automatic_only=True) is None
+    assert build_failed_rule_retry_scope(job) is not None  # 人工明确发起仍可定向重跑。
+
+
+def test_mixed_terminal_and_transient_failures_retry_only_transient_and_retain_both():
+    terminal = {**_row("LX0609-05-01-03"), "reason_code": "model_invalid_output", "error_phase": "result_status"}
+    transient = {**_row("LX0609-03-01-04"), "reason_code": "model_timeout", "error_phase": "result_status"}
+    job = {"status": "failed", "summary": {"execution_status": "partial_failed"},
+           "failed_records": [terminal, transient]}
+    scope, failures = build_failed_rule_retry_scope(job, automatic_only=True)
+    assert scope["rule_ids"] == ["LX0609-03-01-04"]
+    assert scope["pending_count"] == 1
+    assert len(failures) == 2
+    plan = build_failed_rule_auto_retry_plan(summary=job["summary"], failures=failures)
+    assert plan["should_retry"] is True
+    recovered = {**transient, "status": "compliant"}
+    items, remaining = merge_failed_rule_retry_results(base_items=[], base_failures=failures,
+                                                       retry_items=[recovered], retry_failures=[])
+    assert items == [recovered]
+    assert remaining == [failures[0]]

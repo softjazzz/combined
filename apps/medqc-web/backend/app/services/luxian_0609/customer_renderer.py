@@ -218,8 +218,9 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-03-01-02": ("会诊申请中的具体临床问题、会诊理由或明确目的",),
     "LX0609-03-01-03": ("会诊记录中的明确诊疗意见",),
     "LX0609-03-01-04": (
-        f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}、后续执行记录或两者的关联信息",
+        f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}、会诊记录前3天至当天的住院医嘱或二者关联",
     ),
+    "LX0609-03-01-05": ("会诊执行记录正文中引用的会诊意见或本科室逐条处置记载",),
     "LX0609-04-02-01": ("手术结束时间、手术记录时间或单台手术关联信息",),
     "LX0609-04-01-01": ("术前小结与具体手术的单台关联信息",),
     "LX0609-04-02-02": ("已实施手术与手术记录的关联信息",),
@@ -230,7 +231,7 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-04-01-03": ("手术编码、有效手术等级或多学科讨论参加信息",),
     "LX0609-11-03-01": ("输血事实与同次住院输血知情同意书的关联信息",),
     "LX0609-11-03-02": ("输血知情同意书告知内容、签名或签署时间",),
-    "LX0609-07-01-01": ("输血前九项检查结果、报告时间或输血开始时间",),
+    "LX0609-07-01-01": ("输血前常规检查结果、报告时间或输血开始时间",),
     "LX0609-07-01-02": ("输血前评估的指征、检验指标、输血风险、既往输血情况或患者当前情况",),
     "LX0609-07-02-01": ("输血事实与对应输血病程记录",),
     "LX0609-07-02-02": ("输血病程的原因、起止时间、成分、剂量、过程观察或反应处理",),
@@ -243,11 +244,6 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-05-01-02": ("每条抗菌药物医嘱与使用/调整动作、理由及关联时间",),
     "LX0609-05-01-03": ("每条抗菌药物的计划开始/启用时间及48～72小时效果评价关联",),
     "LX0609-05-01-04": ("重点抗菌药物医嘱开立时间或病原学送检申请时间",),
-    "LX0609-05-01-04": (
-        "暂无法核对重点抗菌药物使用前病原学送检",
-        "当前缺少重点抗菌药物医嘱开立时间，或检验申请资料不可读取。",
-        "请确认药品医嘱与检验申请已完整同步后重新评估。",
-    ),
     "LX0609-05-01-05": ("经验用药事实、用药理由或无样可采原因",),
     "LX0609-05-01-06": ("特殊级抗菌药物计划开始/启用时间与专家支持记录的关联",),
     "LX0609-04-02-06": ("住院结局、死亡时间或死亡记录",),
@@ -329,10 +325,15 @@ _RULE_DATA_GAP_MESSAGES = {
         "请确认至少两份病程记录及其文书时间、实质正文已完整同步后重新评估。",
     ),
     "LX0609-03-01-04": (
-        f"暂无法核对会诊意见执行记录是否具体（{_CONSULTATION_023_BODY_EXTRACTION_NOTE}）",
+        f"暂无法核对会诊建议是否已开立住院医嘱（{_CONSULTATION_023_BODY_EXTRACTION_NOTE}）",
         f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；当前缺少可唯一关联的会诊意见、"
-        "后续执行记录，或两者之间的关联信息。",
-        "请确认会诊意见和后续执行记录已完整同步并可相互关联后重新评估。",
+        "会诊记录前3天至当天的住院医嘱，或两者之间的关联信息。",
+        "请确认会诊意见和住院医嘱已完整同步并可相互关联后重新评估。",
+    ),
+    "LX0609-03-01-05": (
+        "暂无法逐条核对会诊意见的处置记录",
+        "当前会诊执行记录正文中引用的会诊意见无法可靠识别，或本科室逐条处置记载无法与建议对应；这不等同于记录不具体。",
+        "请确认会诊执行记录正文已完整同步后重新评估。",
     ),
     "LX0609-06-01-04": (
         "暂无法核对 CT/MRI 报告后 24 小时内是否记录病程",
@@ -440,8 +441,8 @@ _RULE_DATA_GAP_MESSAGES = {
         "请确认输血知情同意书全部必填内容已同步后重新评估。",
     ),
     "LX0609-07-01-01": (
-        "暂无法完整核对输血前九项检查",
-        "当前缺少乙肝五项、丙肝、艾滋、梅毒、谷丙转氨酶中的检查结果、报告时间，或输血开始时间。",
+        "暂无法完整核对输血前常规检查",
+        "当前缺少ABO血型、Rh血型、不规则抗体筛查、乙肝五项、丙肝、艾滋或梅毒的检查结果、报告时间，或输血开始时间。",
         "请补充缺失的输血前检查结果及权威时间后重新评估。",
     ),
     "LX0609-07-01-02": (
@@ -528,6 +529,11 @@ _RULE_DATA_GAP_MESSAGES = {
         "暂无法核对48～72小时抗菌药物效果评价",
         "当前缺少计划开始/启用时间、效果评价记录或评价时间。",
         "请确认抗菌药物计划开始/启用时间和效果评价病程已完整同步后重新评估。",
+    ),
+    "LX0609-05-01-04": (
+        "暂无法核对重点抗菌药物使用前病原学送检",
+        "当前缺少重点抗菌药物医嘱开立时间，或检验申请资料不可读取。",
+        "请确认药品医嘱与检验申请已完整同步后重新评估。",
     ),
     "LX0609-05-01-05": (
         "暂无法核对经验用药理由",
@@ -617,6 +623,8 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-08-02-01", "candidate_scope_incomplete")],
         "请复核现有材料或联系质控系统支持。",
     ),
+    ("LX0609-07-01-01", "source_unavailable"): ('输血前检验结果未取得或不可读', '本次质控未取得可读的输血前常规检验结果，暂无法核对项目是否齐全。', '请核对检验结果及同步情况后重新评估。'),
+    ("LX0609-07-01-03", "source_unavailable"): ('输血前检验结果未取得或不可读', '本次质控未取得可读的输血前九项检验结果，暂无法核对项目是否齐全。', '请核对检验结果及同步情况后重新评估。'),
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): ('输血实施事实暂无法确认', '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。', '请复核现有输血正文或重试质控；不要据此补写或改写记录。'),
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): ('输血实施事实暂无法确认', '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。', '请复核现有记录及实际输血事件；不要据此补写输血或检验记录。'),
     ("LX0609-07-01-03", "source_readiness_unproven"): ('输血记录正文暂不可读取', '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。', '请核对源记录正文及同步映射后重新质控；不要据此补写或改写记录。'),
@@ -815,6 +823,11 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-03-01-05": (
+        "会诊意见的处置记录不具体：存在建议仅作笼统遵嘱回应，或未记载对应处置情况。",
+        "已逐条核对正文中引用的会诊建议及本科室反馈；会诊建议本身不作为处置反馈，医嘱与实际执行情况不参与本项判定。",
+        "请依据实际情况逐条说明采取的具体处理、检查安排，或不采纳、暂缓的具体事项及原因；不要仅写遵照执行，不得补造已执行事实。",
+    ),
     "LX0609-08-01-05": (
         "出院记录诊疗经过不全面或不详细",
         "已根据可核对材料确认内容缺项；各阶段是否完成及其余不确定内容见判定明细。",
@@ -917,8 +930,8 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "请按结果列出的缺失字段补充输血知情同意书。",
     ),
     "LX0609-07-01-01": (
-        "输血前九项检查未全部在输血前完成",
-        "已逐项核对乙肝五项、丙肝、艾滋、梅毒和谷丙转氨酶的结果及报告时间。",
+        "输血前常规检查未全部在输血前完成",
+        "已逐项核对ABO血型、Rh血型、不规则抗体筛查、乙肝五项、丙肝、艾滋和梅毒的结果及报告时间。",
         "请按结果列出的缺失或超时项目完善输血前检查。",
     ),
     "LX0609-07-01-02": (
@@ -1039,7 +1052,7 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "无需按本质控点处理。",
     ),
     ("LX0609-02-01-02", "evaluation_window_not_mature"): (
-        "入院尚未满72小时，暂不判定最高级别医师首次查房缺失",
+        "入院尚未满72小时，暂不判定上级医师首次查房缺失",
         "截至本次冻结评价时点，入院后72小时观察窗口尚未结束。",
         "无需提前补写；请在观察窗口结束后按届时病历资料重新评估。",
     ),
@@ -1506,13 +1519,14 @@ _RULE_UNCERTAIN_MESSAGES = {
 # 合规结果也必须回答“为什么合规”。这里仅使用规则目录身份和 reducer 已确认的
 # 终态生成受控短句，不读取病历原文，也不在展示层重新判断规则。
 _RULE_COMPLIANT_FINDINGS = {
+    "LX0609-03-01-05": "已逐条核对正文所引会诊建议，本科室均具体记录了处理、安排或有原因的不采纳决定；本项不代表措施已经实际执行。",
     "LX0609-08-01-05": "已核对出院诊疗经过的具体措施、病情演变及疗效转归，未发现所核查重要事件遗漏。",
     "LX0609-01-01-01": "已确认入院记录在入院后 24 小时内完成。",
     "LX0609-01-02-01": "已确认首次病程记录在入院后 8 小时内完成。",
     "LX0609-04-02-01": "已确认手术记录在手术后 24 小时内完成。",
     "LX0609-09-01-01": "已确认抢救记录在抢救结束后 6 小时内完成。",
     "LX0609-02-01-01": "已确认主治医师首次查房记录在入院后 48 小时内完成。",
-    "LX0609-02-01-02": "已确认最高级别医师首次查房记录在入院后 72 小时内完成。",
+    "LX0609-02-01-02": "已确认上级医师首次查房记录在入院后 72 小时内完成。",
     "LX0609-02-01-03": "已核对病情稳定期间的查房记录，未发现超过 3 天的记录缺口。",
     "LX0609-02-01-04": "已核对病重期间的查房记录，未发现超过 2 天的记录缺口。",
     "LX0609-02-01-05": "已核对病危期间的查房记录，未发现应记录日期缺失。",
@@ -1792,11 +1806,15 @@ _TRANSFUSION_FIELD_LABELS = {
     "dose": "输注量",
     "process_observation": "输血过程观察",
     "reaction_and_handling": "输血反应及处理",
+    "clinical_effect": "输注效果",
     "effect": "输血效果",
     "components": "血液成分",
     "doses": "输注量",
 }
 _TRANSFUSION_ITEM_LABELS = {
+    "abo": "ABO血型",
+    "rh": "Rh血型",
+    "antibody_screen": "不规则抗体筛查",
     "hbsag": "乙肝表面抗原",
     "hbsab": "乙肝表面抗体",
     "hbeag": "乙肝e抗原",
@@ -1969,6 +1987,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-03-01-01",
         "LX0609-03-01-02",
         "LX0609-03-01-03",
+        "LX0609-03-01-04",
         "LX0609-04-02-04",
         "LX0609-11-01-01",
         "LX0609-05-02-01",
@@ -2106,7 +2125,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-01-02-01": ("首次病程记录", "入院后", "入院时间"),
         "LX0609-09-01-01": ("抢救记录", "抢救结束后", "抢救结束时间"),
         "LX0609-02-01-01": ("主治医师及以上首次查房记录", "入院后", "入院时间"),
-        "LX0609-02-01-02": ("副主任医师或主任医师首次查房记录", "入院后", "入院时间"),
+        "LX0609-02-01-02": ("上级医师首次查房记录", "入院后", "入院时间"),
     }
     if (
         rule_id in basic_timeliness_labels
@@ -2166,6 +2185,12 @@ def customer_finding_from_controlled_facts(
             return "已确认实施手术，文书未记载为紧急抢救手术，但未找到术前讨论记录。"
         if kind == "surgeon_not_in_preop_discussion":
             return "已确认实施手术并找到术前讨论记录，文书未记载为紧急抢救手术，但术者未在讨论参加人员中。"
+
+    if rule_id == "LX0609-04-02-01" and kind == "surgery_record_missing":
+        surgery_time = facts.get("surgery_time")
+        label = "手术结束时间" if facts.get("surgery_time_kind") == "end" else "手术开始时间"
+        detail = f"（{label} {surgery_time}）" if isinstance(surgery_time, str) and surgery_time else ""
+        return f"已确认实施手术{detail}，评价时点已超过术后 24 小时，未找到对应的正式手术记录。"
 
     if rule_id == "LX0609-04-02-01" and kind in {"surgery_record_late", "surgery_record_within_threshold"}:
         end_time = facts.get("surgery_end_time")
@@ -2668,6 +2693,14 @@ def customer_finding_from_controlled_facts(
     if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}:
         subject = "CT/MRI" if rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"} else "细菌培养"
         analysis_rule = rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
+
+        def report_result_note(source: Mapping[str, Any]) -> str:
+            values = source.get("report_result_texts")
+            if rule_id != "LX0609-06-01-05" or not isinstance(values, list):
+                return ""
+            texts = [str(value) for value in values if isinstance(value, str) and value]
+            return f"；对应报告结果：{'；'.join(texts)}" if texts else ""
+
         event_results = facts.get("event_results")
         if isinstance(event_results, list) and len(event_results) > 1:
             requirement_label = "阳性结果分析或处置" if analysis_rule else "报告结果记录"
@@ -2740,7 +2773,9 @@ def customer_finding_from_controlled_facts(
                     )
                 else:
                     return ""
-                details.append(f"{index}）报告时间 {report_time}：{conclusion}")
+                details.append(
+                    f"{index}）报告时间 {report_time}：{conclusion}{report_result_note(item)}"
+                )
             return f"共核对{len(details)}次{subject}检查：" + "；".join(details) + "。"
         report_time = facts.get("report_time")
         response_count = facts.get("response_record_count")
@@ -2757,7 +2792,8 @@ def customer_finding_from_controlled_facts(
                 late_label = "阳性结果已分析或处置" if analysis_rule else "报告结果已记录"
                 return (
                     f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                    f"{late_label}但超过 24 小时：最早相关病程时间 {response_time}，间隔 {interval:g} 小时。"
+                    f"{late_label}但超过 24 小时：最早相关病程时间 {response_time}，间隔 {interval:g} 小时"
+                    f"{report_result_note(facts)}。"
                 )
             if isinstance(response_count, int) and response_count > 0:
                 timing = (
@@ -2772,12 +2808,13 @@ def customer_finding_from_controlled_facts(
                 )
                 return (
                     f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                    f"找到 {response_count} 份报告后相关病程{timing}，{missing_content}。"
+                    f"找到 {response_count} 份报告后相关病程{timing}，{missing_content}"
+                    f"{report_result_note(facts)}。"
                 )
             requirement = "阳性结果分析记录" if analysis_rule else "报告结果记录"
             return (
                 f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
-                f"未找到报告后 24 小时内的{requirement}。"
+                f"未找到报告后 24 小时内的{requirement}{report_result_note(facts)}。"
             )
 
     if rule_id == "LX0609-06-02-03" and kind == "pathology_result_documentation_check":
@@ -2804,6 +2841,123 @@ def customer_finding_from_controlled_facts(
         else:
             return ""
         return f"已确认存在病理取材事件；已核对{checked_scope}，均未找到取材情况记录。"
+
+    if rule_id == "LX0609-03-01-04" and kind == "consultation_execution_quality_check":
+        recommendation_evidence = facts.get("recommendation_evidence")
+        if not isinstance(recommendation_evidence, list):
+            return ""
+        excluded_recommendations = facts.get("excluded_recommendations", [])
+        if not isinstance(excluded_recommendations, list):
+            return ""
+        labels_by_state: dict[str, list[str]] = {
+            "specific": [],
+            "generic": [],
+            "missing": [],
+            "partial": [],
+        }
+        for item in recommendation_evidence:
+            if (
+                not isinstance(item, Mapping)
+                or type(item.get("episode_index")) is not int
+                or not 1 <= item["episode_index"] <= 100
+                or type(item.get("recommendation_index")) is not int
+                or not 1 <= item["recommendation_index"] <= 100
+            ):
+                return ""
+            state = item.get("execution_state")
+            if state not in labels_by_state:
+                continue
+            opinion_time = item.get("opinion_time")
+            window_start = item.get("window_start_date")
+            when_parts = []
+            if isinstance(window_start, str) and window_start.strip():
+                when_parts.append(f"医嘱核对自{window_start[:10]}起")
+            if isinstance(opinion_time, str) and opinion_time.strip():
+                when_parts.append(f"会诊记录{opinion_time[:16]}")
+            when = f"（{'，'.join(when_parts)}）" if when_parts else ""
+            label = (
+                f"第{item['episode_index']}次会诊{when}的"
+                f"第{item['recommendation_index']}条建议"
+            )
+            recommendation_text = item.get("recommendation_text")
+            if isinstance(recommendation_text, str) and recommendation_text.strip():
+                label += f"“{recommendation_text.strip()}”"
+            declined_measures = item.get("declined_measures")
+            if isinstance(declined_measures, list):
+                declined = "、".join(
+                    value.strip() for value in declined_measures
+                    if isinstance(value, str) and value.strip()
+                )
+                if declined:
+                    label += f"（会诊记录写明不执行“{declined}”，该项不核对）"
+            missing_measures = item.get("missing_measures")
+            if state == "specific" and isinstance(missing_measures, list) and missing_measures:
+                measures = "、".join(
+                    f"“{value.strip()}”" for value in missing_measures
+                    if isinstance(value, str) and value.strip()
+                )
+                if not measures:
+                    return ""
+                labels_by_state["partial"].append(f"{label}中的{measures}")
+                continue
+            labels_by_state[state].append(label)
+        if (
+            not labels_by_state["missing"]
+            and not labels_by_state["generic"]
+            and not labels_by_state["partial"]
+        ):
+            return ""
+
+        finding_parts = [
+            f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；"
+            "执行证据按会诊记录前3天至会诊记录当天开立的住院医嘱核对（系统无结构化会诊日期，"
+            "固定回看3天；“继续/维持”原治疗的建议也认此前已开立的医嘱），"
+            "会诊记录次日起开立的不算；"
+            f"共核对{len(recommendation_evidence)}条建议。"
+        ]
+        if labels_by_state["missing"]:
+            finding_parts.append(
+                f"未执行：{'；'.join(labels_by_state['missing'])}。"
+                "会诊记录前3天至当天未开立与上述建议对应的医嘱。"
+            )
+        if labels_by_state["partial"]:
+            finding_parts.append(
+                f"部分措施未执行：{'；'.join(labels_by_state['partial'])}，"
+                "会诊记录前3天至当天未开立对应医嘱。"
+            )
+        if labels_by_state["generic"]:
+            finding_parts.append(
+                f"执行医嘱不具体：{'；'.join(labels_by_state['generic'])}。"
+                "会诊记录前3天至当天仅有与建议笼统相关的医嘱，不能确认具体落实。"
+            )
+        if labels_by_state["specific"]:
+            finding_parts.append(
+                f"其余{len(labels_by_state['specific'])}条建议已开立对应医嘱。"
+            )
+        exclusion_notes = {
+            "execution_condition_not_defined": "未说明何时达到执行条件",
+            "non_order_recommendation": "不通过开立医嘱落实",
+            "home_medication": "属院外自带药",
+            "condition_not_met": "条件式建议在核对期间未开医嘱，视为条件未成立",
+            "declined_in_record": "会诊记录写明患者或家属拒绝、或暂缓执行",
+        }
+        excluded_labels: list[str] = []
+        for item in excluded_recommendations:
+            if (
+                not isinstance(item, Mapping)
+                or type(item.get("episode_index")) is not int
+                or not isinstance(item.get("recommendation_text"), str)
+                or item.get("exclusion_reason") not in exclusion_notes
+            ):
+                return ""
+            excluded_labels.append(
+                f"第{item['episode_index']}次会诊建议"
+                f"“{item['recommendation_text'].strip()}”"
+                f"（{exclusion_notes[item['exclusion_reason']]}）"
+            )
+        if excluded_labels:
+            finding_parts.append(f"未纳入核对：{'；'.join(excluded_labels)}。")
+        return "".join(finding_parts)
 
     if rule_id == "LX0609-03-01-01":
         if kind == "consultation_execution_relation_check":
@@ -3292,27 +3446,49 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-05-01-03" and kind == "antimicrobial_effect_evaluation_check":
+        separate_dimensions = "unmatched_safety_antimicrobials" in facts
+        evaluation_label = "疗效和安全性评价" if separate_dimensions else "疗效评价"
         resolution = facts.get("evaluation_resolution")
         if resolution == "time_unresolved":
-            return "治疗起始、病程或评价截止时间缺失或冲突，暂不能核对48～72小时疗效评价窗口。"
+            return f"治疗起始、病程或评价截止时间缺失或冲突，暂不能核对48～72小时{evaluation_label}窗口。"
         if resolution == "unknown":
-            return "目标抗菌药的疗效评价语义或归属尚无法确认，暂不能判断评价是否完成。"
+            return f"目标抗菌药的{evaluation_label}语义或归属尚无法确认，暂不能判断评价是否完成。"
         if resolution == "capacity_exceeded":
-            return "完整病程材料超出本次疗效事实抽取预算，尚未完成核对。"
+            return f"完整病程材料超出本次{evaluation_label}事实抽取预算，尚未完成核对。"
         if resolution == "unavailable":
-            return "病程正文缺失或不可读，暂不能核对抗菌药疗效评价。"
+            return f"病程正文缺失或不可读，暂不能核对抗菌药{evaluation_label}。"
         if resolution == "invalid":
-            return "疗效事实抽取未取得有效响应，暂不能完成核对。"
+            return f"{evaluation_label}事实抽取未取得有效响应，暂不能完成核对。"
         medicines = joined("antimicrobials")
         intervals = joined("evaluation_intervals")
         unmatched = joined("unmatched_antimicrobials")
         window_state = facts.get("window_state")
+        window_label = evaluation_label if separate_dimensions else "效果评价"
         if window_state == "evaluation_window_not_started":
-            return f"已核对抗菌药物 {medicines}；尚未进入48～72小时效果评价窗口。"
+            return f"已核对抗菌药物 {medicines}；尚未进入48～72小时{window_label}窗口。"
         if window_state == "evaluation_window_not_mature":
-            return f"已核对抗菌药物 {medicines}；效果评价窗口尚未结束。"
+            return f"已核对抗菌药物 {medicines}；{window_label}窗口尚未结束。"
         if facts.get("association_ambiguous") is True:
-            return f"已核对抗菌药物 {medicines}；现有效果评价未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"
+            return f"已核对抗菌药物 {medicines}；现有{window_label}未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"
+        if separate_dimensions:
+            missing = []
+            for key, label in (
+                ("unmatched_effect_antimicrobials", "疗效评价"),
+                ("unmatched_safety_antimicrobials", "安全性评价"),
+            ):
+                names = joined(key)
+                if names:
+                    missing.append(f"{names} 缺少{label}")
+            if missing:
+                return (
+                    f"已核对抗菌药物 {medicines} 计划开始/启用后48～72小时内的评价记录；"
+                    + "；".join(missing) + "。"
+                )
+            return (
+                f"已核对抗菌药物 {medicines}；疗效评价距计划开始/启用 "
+                f"{joined('effect_evaluation_intervals')} 小时，安全性评价距计划开始/启用 "
+                f"{joined('safety_evaluation_intervals')} 小时，要求两项均在48～72小时内完成。"
+            )
         if unmatched:
             return f"已核对抗菌药物 {medicines}；其中 {unmatched} 未找到计划开始/启用后 48～72 小时内的效果评价记录。"
         if not intervals:
@@ -3333,26 +3509,26 @@ def customer_finding_from_controlled_facts(
         planned_start_time = facts.get("first_antimicrobial_time")
         support_time = facts.get("expert_support_time")
         if facts.get("association_ambiguous") is True:
-            return f"已核对特殊级抗菌药物 {medicines}；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"
+            return f"已核对特殊级抗菌药物 {medicines}；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前或启用后24小时内的支持。"
         if unmatched and len(facts.get("special_antimicrobials") or ()) > 1:
-            return f"已核对特殊级抗菌药物 {medicines}；其中 {unmatched} 未找到可关联的计划启用前专家支持记录。"
+            return f"已核对特殊级抗菌药物 {medicines}；其中 {unmatched} 未找到可关联的计划启用前或启用后24小时内的专家支持记录。"
         if not planned_start_time:
             return (
                 f"已识别特殊级抗菌药物 {medicines} 计划，但缺少计划开始/启用时间，"
-                "暂无法判断专家支持记录是否在用药前完成。"
+                "暂无法判断专家支持记录是否在用药前或24小时内完成。"
             )
         if facts.get("support_before_use") is True:
             if len(facts.get("special_antimicrobials") or ()) > 1:
-                return f"已逐项确认特殊级抗菌药物 {medicines} 各自计划启用前或同刻有可关联的专家支持记录。"
+                return f"已逐项确认特殊级抗菌药物 {medicines} 各自计划启用前或启用后24小时内有可关联的专家支持记录。"
             return (
                 f"已确认特殊级抗菌药物 {medicines} 计划开始/启用时间为 "
-                f"{planned_start_time}，并在该时间前或同刻找到专家支持记录（{support_time}）。"
+                f"{planned_start_time}，并在该时间前或其后24小时内找到专家支持记录（{support_time}）。"
             )
         if facts.get("expert_support_present") is True and support_time and planned_start_time:
             return (
                 f"已确认特殊级抗菌药物 {medicines} 的计划开始/启用时间为 "
-                f"{planned_start_time}，但专家支持记录时间 {support_time} 晚于该时间，"
-                "不满足计划启用前支持要求。"
+                f"{planned_start_time}，但专家支持记录时间 {support_time} 晚于启用后24小时，"
+                "不满足专家支持（含紧急使用24小时内补办）要求。"
             )
         if facts.get("expert_support_present") is True:
             return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"
@@ -3790,9 +3966,10 @@ def customer_finding_from_controlled_facts(
             return f"输血知情同意书缺少：{missing}。" if missing else ""
 
     if rule_id in {"LX0609-07-01-01", "LX0609-07-01-03"}:
+        item_label = "输血前常规检查" if rule_id == "LX0609-07-01-01" else "输血前九项"
         if kind == "pretransfusion_items_complete":
             return (
-                "输血前九项均已完成，最晚检验时间为 "
+                f"{item_label}均已完成，最晚检验时间为 "
                 f"{facts.get('latest_test_time')}，早于输血时间 {facts.get('transfusion_time')}。"
             )
         key = {
@@ -3805,7 +3982,7 @@ def customer_finding_from_controlled_facts(
         if key:
             items = labels(key, _TRANSFUSION_ITEM_LABELS)
             prefix = {
-                "pretransfusion_items_incomplete": "输血前九项缺少",
+                "pretransfusion_items_incomplete": f"{item_label}缺少",
                 "pretransfusion_tests_after_transfusion": "以下检验晚于输血时间",
                 "pretransfusion_test_time_missing": "以下检验缺少可核对的报告时间",
                 "pretransfusion_tests_outside_current_stay": "以下检验不属于本次住院可用的输血前九项",
@@ -3886,6 +4063,7 @@ def customer_finding_from_controlled_facts(
                     "dose": "缺少输注量",
                     "process_observation": "缺少输血过程观察",
                     "reaction_and_handling": "缺少输血反应及处理",
+                    "clinical_effect": "缺少输注效果",
                 }
                 details = [
                     f"{raw_counts[field]} 份{field_phrases[field]}"
@@ -4005,8 +4183,27 @@ def _emit_safe_trace(
         return
 
 
-def not_applicable_customer_message(*, rule_id: str, reason_code: str) -> tuple[str, str, str]:
+def not_applicable_customer_message(
+    *, rule_id: str, reason_code: str, facts: Mapping[str, Any] | None = None,
+) -> tuple[str, str, str]:
     """查询既有不适用文案；离线诊断无需因此加载目录背后的执行/资料组件。"""
+    if (
+        rule_id == "LX0609-06-01-05"
+        and reason_code == "trigger_absent_complete"
+        and isinstance(facts, Mapping)
+        and facts.get("verification_kind") == "exam_lab_requirement_checked"
+    ):
+        # 同一不适用原因也用于已有报告但没有本规则需分析的阳性结果。
+        # 只解释执行器已确认的事实，不重新判定阳性或业务状态。
+        event_finding = customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
+        if event_finding:
+            return event_finding, "已逐次核对CT/MRI报告及各次检查的适用情况。", "本项不适用，无需据此补写分析记录。"
+        if facts.get("report_time") and facts.get("positive_state") in {"negative", "not_relevant"}:
+            return (
+                "已核对CT/MRI报告，未检出需分析的阳性结果，本项不适用。",
+                "已核对CT/MRI报告；本次判定未发现属于本规则分析范围的阳性结果。",
+                "本项不适用，无需据此补写分析记录。",
+            )
     return _RULE_NOT_APPLICABLE_MESSAGES.get(
         (rule_id, reason_code), _CUSTOMER_MESSAGES[CustomerFinalState.NOT_APPLICABLE],
     )
@@ -4545,6 +4742,14 @@ def render_luxian_0609_customer_result(
             decision.rule_id,
             (findings, evidence, suggestion),
         )
+        if decision.rule_id == "LX0609-03-01-04":
+            controlled_finding = customer_finding_from_controlled_facts(
+                rule_id=decision.rule_id,
+                facts=safe_customer_display_facts,
+            )
+            if controlled_finding:
+                findings = controlled_finding
+                evidence = controlled_finding
         if (
             decision.rule_id == "LX0609-04-02-02"
             and isinstance(safe_customer_display_facts, Mapping)
@@ -4582,6 +4787,7 @@ def render_luxian_0609_customer_result(
     elif decision.final_state is CustomerFinalState.NOT_APPLICABLE:
         findings, evidence, suggestion = not_applicable_customer_message(
             rule_id=decision.rule_id, reason_code=decision.reason_code,
+            facts=safe_customer_display_facts,
         )
     elif decision.final_state is CustomerFinalState.EVALUATION_UNKNOWN:
         findings, evidence, suggestion = _RULE_UNCERTAIN_MESSAGES.get(

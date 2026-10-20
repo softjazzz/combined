@@ -11,18 +11,28 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, time
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    classify_luxian_0609_llm_call_failure,
+    describe_luxian_0609_llm_parse_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from ..native_preop_content_execution import _usage
 from ..structured_output import structured_output_kwargs
-from ..transfusion_order_trigger import _json_response_object
+from ..transfusion_order_trigger import (
+    _RecheckIssue, _RecheckViolation, _json_response_object, _recheck_prompt,
+)
 from .shared import _parse_datetime
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609-transfusion-performance-v2"
 MAX_DOCUMENTS = 8
+MAX_BATCHES = 16
 MAX_BODY_CHARS = 6000
 MAX_TOTAL_BODY_CHARS = 12000
 MAX_COMPLETION_TOKENS = 2048
@@ -32,6 +42,11 @@ _CLOCK_PATTERN = re.compile(
     r"(?P<hour>\d{1,2})\s*(?::|：|时|点)\s*(?P<minute>\d{1,2})\s*分?(?:\s*(?::|：)\s*(?P<second>\d{1,2})\s*秒?)?"
 )
 _DATE_PATTERN = re.compile(r"(?:(?P<year>\d{4})\s*[年/.-]\s*)?(?P<month>\d{1,2})\s*[月/.-]\s*(?P<day>\d{1,2})\s*日?")
+# 模型调用本身失败（无客户端、调用异常、输出不合合同）的原因码；不代表病历缺资料。
+TECHNICAL_FAILURE_REASONS = frozenset({
+    "model_transport_error", "model_timeout", "model_invalid_output",
+    "privacy_guard_blocked", "execution_program_error",
+})
 
 
 @dataclass(frozen=True)
@@ -48,6 +63,11 @@ class PerformanceExtraction:
     # 模型原文引用仅在本次内部校验使用，不发布或记录原始响应。
     assertions: tuple[Mapping[str, Any], ...] = field(default=(), repr=False)
 
+    @property
+    def technical_failure(self) -> bool:
+        """模型调用失败：调用方须交付技术错误，不能当作资料不足要求医院补写记录。"""
+        return self.reason_code in TECHNICAL_FAILURE_REASONS
+
 
 def _grounded(quote: Any, doc: Mapping[str, Any]) -> str:
     if not isinstance(quote, str) or not quote.strip():
@@ -61,8 +81,6 @@ def _grounded(quote: Any, doc: Mapping[str, Any]) -> str:
 def _start_time(quote: str, record_time: datetime | None) -> datetime | None:
     """解析实际开始时刻；不能可靠确定日期时返回 None（由调用方判未知）。"""
 
-    if record_time is None:
-        return None
     candidate = _parse_datetime(quote)
     if candidate is None:
         matches = list(_CLOCK_PATTERN.finditer(quote))
@@ -74,7 +92,11 @@ def _start_time(quote: str, record_time: datetime | None) -> datetime | None:
             return None
         try:
             clock = time(int(match["hour"]), int(match["minute"]), int(match["second"] or 0))
-            day = record_time.date()
+            if record_time is None and (not dates or not dates[0]["year"]):
+                return None
+            day = record_time.date() if record_time is not None else datetime(
+                int(dates[0]["year"]), int(dates[0]["month"]), int(dates[0]["day"])
+            ).date()
             if dates:
                 # 原文写了日期（可省略年份，按记录年份补全）时以原文日期为准。
                 day = day.replace(year=int(dates[0]["year"] or day.year), month=int(dates[0]["month"]),
@@ -83,7 +105,7 @@ def _start_time(quote: str, record_time: datetime | None) -> datetime | None:
             return None
         candidate = datetime.combine(day, clock)
     # 记录不早于实际开始；晚于记录时间说明可能跨日或并非已发生的开始，不推测。
-    return candidate if candidate <= record_time else None
+    return candidate if record_time is None or candidate <= record_time else None
 
 
 def _parsed(
@@ -97,35 +119,62 @@ def _parsed(
         raise ValueError("invalid extraction schema")
     items = payload["documents"]
     expected = {doc["document_ref"]: doc for doc in documents}
-    if not isinstance(items, list) or len(items) != len(expected):
+    if not isinstance(items, list):
         raise ValueError("invalid extraction coverage")
+    issues: list[_RecheckIssue] = []
+    if len(items) != len(expected):
+        issues.append(_RecheckIssue("invalid extraction coverage", "documents", "document_ref", "",
+            correction="每份输入文书必须且仅输出一次，补齐遗漏文书并删除重复项"))
+    seen: set[str] = set()
     resolved: dict[str, str] = {}
     times: dict[str, datetime | None] = {}
     assertions: dict[str, Mapping[str, Any]] = {}
-    for item in items:
+    for position, item in enumerate(items, 1):
         if not isinstance(item, dict) or set(item) != _DOCUMENT_KEYS:
             raise ValueError("invalid extraction document")
         ref, state = item["document_ref"], item["state"]
-        if not isinstance(ref, str) or ref not in expected or ref in resolved or not isinstance(state, str) or state not in _STATES:
+        if not isinstance(ref, str) or not isinstance(state, str) or state not in _STATES:
             raise ValueError("invalid extraction identity/state")
+        if ref not in expected or ref in seen:
+            issues.append(_RecheckIssue("invalid extraction identity/state", f"documents第{position}项", "document_ref", ref,
+                correction="document_ref须来自本批输入，且每份仅输出一次"))
+        seen.add(ref)
+        # 即使本项身份错误，仍检查后项结构与枚举；不借用其他文书校验引文。
+        if ref not in expected:
+            continue
         doc = expected[ref]
         start_quote = item["start_time_quote"]
         event_time = None
         if state == "unknown":
             if item["quote"] is not None or start_quote is not None:
-                raise ValueError("unknown must not assert action")
+                issues.append(_RecheckIssue("unknown must not assert action", ref, "quote/start_time_quote", item["quote"],
+                    correction="unknown时quote和start_time_quote均须为null，不能断言实施动作"))
         else:
-            _grounded(item["quote"], doc)
+            try:
+                _grounded(item["quote"], doc)
+            except ValueError as error:
+                issues.append(_RecheckIssue(str(error), ref, "quote", item["quote"]))
             if start_quote is not None:
                 if state != "performed":
-                    raise ValueError("nonperformed must not assert actual start time")
-                event_time = _start_time(_grounded(start_quote, doc), _parse_datetime(doc["record_time"]))
-                if event_time is None:
-                    # 有实际开始时刻却无法确定其日期：实施事件时间不明。
-                    state = "unknown"
+                    issues.append(_RecheckIssue("nonperformed must not assert actual start time", ref, "start_time_quote", start_quote,
+                        correction="非performed状态不得断言实际开始时刻，start_time_quote须为null"))
+                try:
+                    grounded_start = _grounded(start_quote, doc)
+                except ValueError as error:
+                    issues.append(_RecheckIssue(str(error), ref, "start_time_quote", start_quote))
+                else:
+                    event_time = _start_time(grounded_start, _parse_datetime(doc["record_time"]))
+                    if event_time is None:
+                        # 有实际开始时刻却无法确定其日期：实施事件时间不明。
+                        state = "unknown"
         resolved[ref] = state
         times[ref] = event_time
         assertions[ref] = item
+    for ref in expected.keys() - seen:
+        issues.append(_RecheckIssue("invalid extraction coverage", ref, "document_ref", "",
+            correction="该文书遗漏，须补齐该文书并逐字引用本批对应正文"))
+    if issues:
+        raise _RecheckViolation(issues)
     refs = [doc["document_ref"] for doc in documents]
     return (tuple(resolved[ref] for ref in refs), tuple(times[ref] for ref in refs),
             tuple(assertions[ref] for ref in refs))
@@ -142,6 +191,7 @@ def _prompt(documents: Sequence[Mapping[str, Any]]) -> str:
         "quote为能体现该state的连续原文，逐字复制；unknown时quote为null。"
         "start_time_quote仅在performed时填写：正文中本次实际开始输注时刻的连续原文（如“14:20”“2026-06-02 14:20”），"
         "逐字复制、不得改写；一份记录有多次输注时取最早一次开始时刻；结束时刻、检验时刻、计划时刻不是开始时刻；"
+        "正文开始时刻写明年月日时，引用必须保留年月日，不能只截取时分而丢失跨日事实；"
         "正文没有写开始时刻时为null。"
         "只输出严格JSON对象，顶层仅schema_version和documents；documents每项仅document_ref、state、quote、start_time_quote，"
         "全部记录恰各一次。schema_version=" + SCHEMA_VERSION
@@ -150,19 +200,65 @@ def _prompt(documents: Sequence[Mapping[str, Any]]) -> str:
 
 
 async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm_client: Any) -> PerformanceExtraction:
+    """按单次预算完整分批核验；任一批失败时不发布部分实施事实。"""
     if not rows:
         return PerformanceExtraction()
     unknown = tuple("unknown" for _ in rows)
     no_times = tuple(None for _ in rows)
-    if (len(rows) > MAX_DOCUMENTS or any(isinstance(row.get("record_content"), str) and len(row["record_content"]) > MAX_BODY_CHARS for row in rows)
-            or sum(len(row["record_content"]) for row in rows if isinstance(row.get("record_content"), str)) > MAX_TOTAL_BODY_CHARS):
+    if any(isinstance(row.get("record_content"), str) and len(row["record_content"]) > MAX_BODY_CHARS for row in rows):
         return PerformanceExtraction(unknown, "candidate_scope_incomplete", event_times=no_times)
     if any(not isinstance(row.get("record_content"), str) or not row["record_content"].strip() for row in rows):
         return PerformanceExtraction(unknown, "source_readiness_unproven", event_times=no_times)
+    batches: list[list[Mapping[str, Any]]] = []
+    batch: list[Mapping[str, Any]] = []
+    chars = 0
+    for row in rows:
+        size = len(row["record_content"])
+        if batch and (len(batch) == MAX_DOCUMENTS or chars + size > MAX_TOTAL_BODY_CHARS):
+            batches.append(batch)
+            batch, chars = [], 0
+        batch.append(row)
+        chars += size
+    batches.append(batch)
+    if len(batches) > MAX_BATCHES:
+        return PerformanceExtraction(unknown, "candidate_scope_incomplete", event_times=no_times)
+
+    states: list[str] = []
+    event_times: list[datetime | None] = []
+    assertions: list[Mapping[str, Any]] = []
+    calls = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    for batch in batches:
+        result = await _extract_performance_batch(batch, llm_client, offset=len(states))
+        calls += result.llm_call_count
+        prompt_tokens += result.prompt_tokens
+        completion_tokens += result.completion_tokens
+        total_tokens += result.total_tokens
+        api_time += result.api_time
+        if result.reason_code not in {"", "positive_assertion_not_explicit"}:
+            return PerformanceExtraction(
+                unknown, result.reason_code, calls, prompt_tokens, completion_tokens,
+                total_tokens, api_time, no_times,
+            )
+        states.extend(result.states)
+        event_times.extend(result.event_times)
+        assertions.extend(result.assertions)
+    return PerformanceExtraction(
+        tuple(states), "positive_assertion_not_explicit" if "unknown" in states else "",
+        calls, prompt_tokens, completion_tokens, total_tokens, api_time,
+        tuple(event_times), tuple(assertions),
+    )
+
+
+async def _extract_performance_batch(
+    rows: Sequence[Mapping[str, Any]], llm_client: Any, *, offset: int,
+) -> PerformanceExtraction:
+    unknown = tuple("unknown" for _ in rows)
+    no_times = tuple(None for _ in rows)
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
-        return PerformanceExtraction(unknown, "semantic_extraction_unresolved", event_times=no_times)
+        return PerformanceExtraction(unknown, "model_transport_error", event_times=no_times)
     documents = []
-    for index, row in enumerate(rows, 1):
+    for index, row in enumerate(rows, offset + 1):
         parsed_time = _parse_datetime(row.get("record_time"))
         documents.append({
             "document_ref": f"d{index}",
@@ -171,22 +267,39 @@ async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm
             "record_time": str(row.get("record_time") or ""),
             "record_time_text": parsed_time.isoformat(sep=" ") if parsed_time is not None else None,
         })
-    started = perf_counter()
-    usage = (0, 0, 0, 0.0)
-    try:
-        response = await llm_client.generate(
-            _prompt(documents), max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
-            **structured_output_kwargs(llm_client),
-        )
-    except Exception:
-        return PerformanceExtraction(unknown, "semantic_extraction_unresolved", llm_call_count=1,
-                                     api_time=perf_counter() - started, event_times=no_times)
-    try:
-        usage = _usage(response)
-        states, event_times, assertions = _parsed(response, documents)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError):
-        return PerformanceExtraction(unknown, "semantic_extraction_unresolved", llm_call_count=1,
-            prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
-            api_time=perf_counter() - started, event_times=no_times)
+    prompt = _prompt(documents)
+    attempt_prompt = prompt
+    prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    for attempt in range(2):
+        started = perf_counter()
+        try:
+            response = await llm_client.generate(
+                attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
+                **structured_output_kwargs(llm_client),
+            )
+        except Exception as error:
+            return PerformanceExtraction(unknown, classify_luxian_0609_llm_call_failure(error), llm_call_count=attempt + 1,
+                prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
+                api_time=api_time + perf_counter() - started, event_times=no_times)
+        try:
+            usage = _usage(response)
+            prompt_tokens += usage[0]
+            completion_tokens += usage[1]
+            total_tokens += usage[2]
+            api_time += usage[3] or perf_counter() - started
+            states, event_times, assertions = _parsed(response, documents)
+            break
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+            logger.warning(
+                "LX0609 输血实施抽取输出无效: document_count=%s %s",
+                len(documents), describe_luxian_0609_llm_parse_failure(error, response),
+            )
+            if isinstance(error, _RecheckViolation) and attempt == 0:
+                attempt_prompt = _recheck_prompt(prompt, error, response)
+                continue
+            return PerformanceExtraction(unknown, "model_invalid_output", llm_call_count=attempt + 1,
+                prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
+                api_time=api_time, event_times=no_times)
     return PerformanceExtraction(states, "positive_assertion_not_explicit" if "unknown" in states else "",
-        1, usage[0], usage[1], usage[2], usage[3] or perf_counter() - started, event_times, assertions)
+        attempt + 1, prompt_tokens, completion_tokens, total_tokens, api_time, event_times, assertions)

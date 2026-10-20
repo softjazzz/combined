@@ -29,6 +29,7 @@ from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from .case_scope_service import ACTIVE_ADMISSION_LOOKBACK_DAYS
+from .homology_sync import HOMOLOGY_TABLE_KEYS, resolve_homology_source
 
 logger = logging.getLogger(__name__)
 
@@ -281,11 +282,20 @@ _GLOBAL_COLUMN_ALIASES: Dict[str, Tuple[str, ...]] = {
     "settle_datetime": ("settle_datetime", "settle_time", "settlement_time"),
 }
 
-# 部分手术相关源表以结构化章节保存正文。CDM 当前只保留通用文书列和
+# 部分文书源表以结构化章节保存正文。CDM 当前只保留通用文书列和
 # record_content；若同步时不组装正文，这些章节会在列过滤阶段被静默丢弃。
-# 术前小结的结构化章节与叙述正文互补，必须合并保留；其他文书仍仅在正文
-# 为空时回填。字段顺序必须稳定，便于展示、质控和真实病例回放。
+# 结构化章节与叙述正文互补，按稳定顺序合并保留；空字段不生成章节，
+# 便于展示、质控和真实病例回放。
 _STRUCTURED_DOCUMENT_CONTENT_FIELDS: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
+    # 客户死亡记录的 record_content 常为空，正文在这些独立字段中；
+    # 必须在目标列过滤之前合并保存，死亡时间不能用文书完成时间代替。
+    "death_record": (
+        ("入院时间", ("admission_datetime", "admission_time")),
+        ("入院情况", ("admission_condition",)),
+        ("诊疗经过", ("treatment_course",)),
+        ("死亡时间", ("death_datetime", "death_time")),
+        ("死亡原因", ("death_reason",)),
+    ),
     "presurg_summary": (
         ("术前诊断", ("preoperative_diagnosis", "preop_diagnosis", "surgery_diagnosis", "diagnosis")),
         ("简要病情", ("condition_summary",)),
@@ -1357,6 +1367,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
             "exam_master",
             "exam_item_report",
             "labtest_master",
+            "labtest_item",
             "labtest_item_report",
             "pathology_exam_master",
             "pathology_exam_report",
@@ -1435,6 +1446,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
             "exam_master",
             "exam_item_report",
             "labtest_master",
+            "labtest_item",
             "labtest_item_report",
             "pathology_exam_master",
             "pathology_exam_report",
@@ -1765,6 +1777,13 @@ SYNC_TABLES = [
         "params": 1,
         # 客户源库以 test_id 标识检验申请。
         "key_fields": ["patient_id", "visit_id", "test_id"],
+    },
+    {
+        "name": "labtest_item",
+        "label": "检验项目",
+        "procedure": "web.labtest_item",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "test_id", "test_item_id"],
     },
     {
         "name": "labtest_item_report",
@@ -2687,6 +2706,7 @@ def fetch_remote_rows_by_case_refs(
     source_table: str,
     case_refs: List[Any],
     default_institute_id: str = "",
+    readonly: bool = False,
 ) -> List[Dict]:
     """按病例集合读取源库；单院源表缺机构列时使用固定机构标识。"""
 
@@ -2696,8 +2716,11 @@ def fetch_remote_rows_by_case_refs(
     schema_ident = _safe_identifier(remote_schema)
     table_ident = _safe_identifier(source_table)
     conn = psycopg2.connect(remote_url, connect_timeout=10)
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = None
     try:
+        if readonly:
+            conn.set_session(readonly=True)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         has_patient_id = _remote_column_exists(
             cursor, remote_schema, source_table, "patient_id"
         )
@@ -2751,7 +2774,8 @@ def fetch_remote_rows_by_case_refs(
             default_institute_id=fallback,
         )
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
         conn.close()
 
 
@@ -2828,6 +2852,7 @@ def validate_pg_sync_plan(
     local_session: Optional[Session] = None
     remote_conn = None
     remote_cursor = None
+    homology_connections: Dict[str, Tuple[Any, Any]] = {}
     try:
         local_session = Session(engine)
         remote_conn = psycopg2.connect(remote_url, connect_timeout=10)
@@ -2837,21 +2862,42 @@ def validate_pg_sync_plan(
             source_table = _safe_identifier(str(item.get("source_table") or table_name))
             row_blockers: List[str] = []
             resolved_date_field: Optional[str] = None
+            homology = resolve_homology_source(table_name=table_name, remote_url=remote_url)
+            table_cursor, table_schema = remote_cursor, remote_schema
+            if homology is not None:
+                source_table, table_schema = homology.table, homology.schema
+                if homology.remote_url not in homology_connections:
+                    conn = psycopg2.connect(homology.remote_url, connect_timeout=10)
+                    homology_connections[homology.remote_url] = (conn, None)
+                    conn.set_session(readonly=True)
+                    homology_connections[homology.remote_url] = (conn, conn.cursor())
+                table_cursor = homology_connections[homology.remote_url][1]
+                if sync_mode != "table":
+                    row_blockers.append("homology 同步仅支持表直连模式")
 
             local_schema, local_columns, local_primary_keys = _get_local_table_meta(local_session, table_name)
             if not local_schema or not local_columns:
                 row_blockers.append("本地目标表不存在")
             if not local_primary_keys:
                 row_blockers.append("本地目标表缺少主键")
+            if homology is not None:
+                if set(homology.required_target_columns) - set(local_columns):
+                    row_blockers.append("本地缺少 homology 证据字段，请先升级数据库")
 
             if sync_mode == "table":
-                if not _remote_table_exists(remote_cursor, remote_schema, source_table):
+                if not _remote_table_exists(table_cursor, table_schema, source_table):
                     row_blockers.append("远端源表不存在")
                 else:
-                    if not _remote_column_exists(remote_cursor, remote_schema, source_table, "patient_id") or not _remote_column_exists(
-                        remote_cursor, remote_schema, source_table, "visit_id"
+                    if not _remote_column_exists(table_cursor, table_schema, source_table, "patient_id") or not _remote_column_exists(
+                        table_cursor, table_schema, source_table, "visit_id"
                     ):
                         row_blockers.append("远端缺少 patient_id/visit_id，无法按病例集合抽取")
+                    if homology is not None:
+                        required = ("institute_id", *HOMOLOGY_TABLE_KEYS[table_name])
+                        if any(not _remote_column_exists(
+                            table_cursor, table_schema, source_table, column
+                        ) for column in required):
+                            row_blockers.append("homology 源表缺少机构或稳定行标识字段")
                     # 当前固定病例锚点口径：discharge_record 负责日期过滤能力。
                     if source_table == "discharge_record":
                         date_field = str(item.get("date_field") or "update_time")
@@ -2874,7 +2920,9 @@ def validate_pg_sync_plan(
                 if not _remote_procedure_exists(remote_cursor, _safe_identifier(proc_schema), _safe_identifier(proc_name)):
                     row_blockers.append(f"远端过程不存在: {proc_schema}.{proc_name}")
 
-            source = f"{remote_schema}.{source_table}" if sync_mode == "table" else str(item.get("procedure") or "")
+            source = f"{table_schema}.{source_table}" if sync_mode == "table" else str(item.get("procedure") or "")
+            if homology is not None:
+                source = f"{homology.database}.{source}"
             table_validations.append(
                 {
                     "table": table_name,
@@ -2889,6 +2937,7 @@ def validate_pg_sync_plan(
                     "local_primary_keys": local_primary_keys,
                     "executable": len(row_blockers) == 0,
                     "blockers": row_blockers,
+                    **({"source_profile": "homology"} if homology is not None else {}),
                 }
             )
 
@@ -2906,6 +2955,10 @@ def validate_pg_sync_plan(
             "matrix_scope": "all" if include_disabled else "enabled",
         }
     finally:
+        for conn, cursor in homology_connections.values():
+            if cursor is not None:
+                cursor.close()
+            conn.close()
         if remote_cursor is not None:
             remote_cursor.close()
         if remote_conn is not None:
@@ -2922,6 +2975,7 @@ def upsert_to_local(
     batch_size: int = 1,
     session: Optional[Session] = None,
     replace_case_refs: Optional[Sequence[CaseRefInput]] = None,
+    required_columns: Sequence[str] = (),
 ) -> int:
     """将数据写入本地 PG；整次住院重载时按三坐标原子替换旧快照。"""
     if not records and replace_case_refs is None:
@@ -2960,6 +3014,8 @@ def upsert_to_local(
 
         table_ident = f"{_safe_identifier(local_schema)}.{_safe_identifier(table_name)}"
         existing_columns = set(local_columns)
+        if set(required_columns) - existing_columns:
+            raise ValueError(f"表 {table_name} 缺少 homology 证据字段，请先升级本地数据库")
         if normalized_replace_refs:
             identity_columns = {"institute_id", "patient_id", "visit_id"}
             if not identity_columns.issubset(existing_columns):

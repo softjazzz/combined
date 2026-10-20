@@ -1,5 +1,6 @@
 """044申请来源缺口保持资料不足，正式Finalizer不误映射技术错误。"""
 
+import json
 from datetime import datetime
 
 import pytest
@@ -302,3 +303,103 @@ async def test_explicit_missing_assessment_uses_record_absence_not_fabricated_fi
     assert final["status"] == "non_compliant"
     assert final["customer_display_facts"]["failure_kind"] == "transfusion_requirement_not_documented"
     assert "missing_fields" not in final["customer_display_facts"]
+
+
+async def _execute_without_event_table(rows, *, performance_state, rule_ids=(RULE,)):
+    """首页输血表缺失：07-01-02 的实际输血时间只能来自专用输血记录的实施抽取。"""
+
+    def reader(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"], rows=rows.get(kwargs["source_key"], []),
+            truncated=False, limit_rows=500,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=rule_ids, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, created_at="2026-07-20T12:00:00+08:00", row_reader=reader,
+    )
+    client = FrozenTransfusionProtocolClient(performance_state=performance_state)
+    execution = await execute_luxian_0609_native_transfusion_rules(
+        rule_ids=rule_ids, wrapper_rules=[{"rule_id": rule_id} for rule_id in rule_ids],
+        evidence_payload=None, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client, evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot, decision_rule_ids=rule_ids,
+    )
+    performance_calls = sum(
+        1 for prompt in client.protocol_prompts
+        if set(json.loads(prompt.split("INPUT_JSON=", 1)[1])) == {"documents"}
+    )
+    reduced_items = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions, expected_rule_ids=rule_ids,
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    facts = dict(execution.customer_display_facts)
+    statuses = {
+        reduced.rule_id: finalize_luxian_0609_reduced_customer_result(
+            decision=reduced, raw_customer_display_facts=facts.get(reduced.rule_id),
+            evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        )
+        for reduced in reduced_items
+    }
+    return statuses, performance_calls
+
+
+def _rows_without_event_table():
+    rows = sources()
+    rows["mr_bloodtrans"] = []
+    return rows
+
+
+@pytest.mark.asyncio
+async def test_missing_event_table_uses_dedicated_record_performance_time():
+    # 申请 09:00 早于专用输血记录的实施时间 12:10，按结构化申请单判定，不再判缺实际输血时间。
+    statuses, performance_calls = await _execute_without_event_table(
+        _rows_without_event_table(), performance_state="performed",
+    )
+    assert statuses[RULE]["status"] == "compliant"
+    assert performance_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_missing_event_table_late_application_against_performance_time():
+    rows = _rows_without_event_table()
+    rows["blood_application"][0]["request_datetime"] = "2026-07-16 13:00:00"
+    statuses, _ = await _execute_without_event_table(rows, performance_state="performed")
+    assert statuses[RULE]["status"] == "non_compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("performance_state", ["plan", "cancel"])
+async def test_missing_event_table_without_performed_record_keeps_time_gap(performance_state):
+    statuses, _ = await _execute_without_event_table(
+        _rows_without_event_table(), performance_state=performance_state,
+    )
+    assert statuses[RULE]["status"] == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_missing_event_table_extraction_failure_is_technical_error():
+    # 冻结替身未给实施标注即模拟抽取模型调用失败，不能交付为资料不足。
+    statuses, _ = await _execute_without_event_table(
+        _rows_without_event_table(), performance_state=None,
+    )
+    assert statuses[RULE]["status"] == "technical_error"
+
+
+@pytest.mark.asyncio
+async def test_missing_event_table_extraction_is_shared_with_043():
+    statuses, performance_calls = await _execute_without_event_table(
+        _rows_without_event_table(), performance_state="performed",
+        rule_ids=("LX0609-07-01-01", RULE),
+    )
+    assert statuses[RULE]["status"] == "compliant"
+    assert performance_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_event_table_present_does_not_call_performance_extraction():
+    statuses, performance_calls = await _execute_without_event_table(
+        sources(), performance_state=None,
+    )
+    assert statuses[RULE]["status"] == "compliant"
+    assert performance_calls == 0

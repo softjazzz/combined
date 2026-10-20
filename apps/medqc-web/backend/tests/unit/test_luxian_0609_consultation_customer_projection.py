@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.luxian_0609.consultation_customer_projection import (
     safe_consultation_customer_display_facts,
+    validate_published_consultation_facts,
 )
 
 
@@ -251,6 +254,7 @@ def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evid
             {
                 "episode_index": 1,
                 "recommendation_index": 1,
+                "recommendation_text": "复查血常规",
                 "execution_state": "missing",
                 "opinion_refs": [],
                 "execution_refs": [],
@@ -275,9 +279,17 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
             {
                 "episode_index": 1,
                 "recommendation_index": 1,
+                "recommendation_text": "复查血常规",
                 "execution_state": "missing",
                 "opinion_refs": [],
                 "execution_refs": [],
+            }
+        ],
+        "excluded_recommendations": [
+            {
+                "episode_index": 1,
+                "recommendation_text": "必要时完善TCD检查",
+                "exclusion_reason": "execution_condition_not_defined",
             }
         ],
     }
@@ -290,6 +302,39 @@ def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
     assert facts["relation_state"] == "execution_missing_or_generic"
     assert facts["missing_execution_count"] == 1
     assert facts["recommendation_evidence"][0]["execution_state"] == "missing"
+    assert facts["recommendation_evidence"][0]["recommendation_text"] == "复查血常规"
+    assert facts["excluded_recommendations"] == [
+        {
+            "episode_index": 1,
+            "recommendation_text": "必要时完善TCD检查",
+            "exclusion_reason": "execution_condition_not_defined",
+        }
+    ]
+
+
+def test_023_projection_rejects_uncontrolled_exclusion_reason() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 0,
+        "recommendation_count": 0,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "not_triggered",
+        "source_document_ids": [],
+        "recommendation_evidence": [],
+        "excluded_recommendations": [
+            {
+                "episode_index": 1,
+                "recommendation_text": "必要时完善TCD检查",
+                "exclusion_reason": "other_reason",
+            }
+        ],
+    }
+
+    assert safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04", raw=raw
+    ) is None
 
 
 def test_023_projection_accepts_no_triggered_recommendation_set() -> None:
@@ -338,3 +383,83 @@ def test_non_consultation_rule_is_not_owned_by_consultation_projection() -> None
         )
         is None
     )
+
+
+def _023_reason_raw(**item_extra) -> dict:
+    return {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 1,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "execution_missing_or_generic",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_evidence": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "recommendation_text": "完善血气分析、乳酸、心衰指标",
+                "execution_state": "specific",
+                "opinion_refs": [],
+                "execution_refs": [],
+                **item_extra,
+            }
+        ],
+        "excluded_recommendations": [
+            {"episode_index": 1, "recommendation_text": "卧床休息", "exclusion_reason": "non_order_recommendation"},
+            {"episode_index": 1, "recommendation_text": "继续服用原降压药", "exclusion_reason": "home_medication"},
+            {"episode_index": 1, "recommendation_text": "若病情加重可转科", "exclusion_reason": "condition_not_met"},
+        ],
+    }
+
+
+def test_023_projection_publishes_opinion_time_missing_measures_and_exclusion_reasons() -> None:
+    # 2026-10-20：不合规原因须能逐条说明会诊记录时间、当日未开医嘱的措施和不核对的原因。
+    facts = safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04",
+        raw=_023_reason_raw(opinion_time="2026-08-24 15:07:30", missing_measures=["心衰指标"]),
+    )
+
+    assert facts is not None
+    item = facts["recommendation_evidence"][0]
+    assert item["opinion_time"] == "2026-08-24 15:07:30"
+    assert item["missing_measures"] == ["心衰指标"]
+    assert [row["exclusion_reason"] for row in facts["excluded_recommendations"]] == [
+        "non_order_recommendation", "home_medication", "condition_not_met",
+    ]
+    assert validate_published_consultation_facts(rule_id="LX0609-03-01-04", raw=facts) == facts
+
+
+def test_023_projection_publishes_window_start_and_declined_measures() -> None:
+    # 2026-10-20：写明会诊日期（医嘱核对起点）与会诊记录写明拒绝、因而不核对的措施。
+    raw = _023_reason_raw(window_start_date="2026-08-22", declined_measures=["纤支镜检查"])
+    raw["excluded_recommendations"].append(
+        {"episode_index": 1, "recommendation_text": "建议行胃镜检查", "exclusion_reason": "declined_in_record"}
+    )
+    facts = safe_consultation_customer_display_facts(rule_id="LX0609-03-01-04", raw=raw)
+
+    assert facts is not None
+    item = facts["recommendation_evidence"][0]
+    assert item["window_start_date"] == "2026-08-22"
+    assert item["declined_measures"] == ["纤支镜检查"]
+    assert facts["excluded_recommendations"][-1]["exclusion_reason"] == "declined_in_record"
+    assert validate_published_consultation_facts(rule_id="LX0609-03-01-04", raw=facts) == facts
+
+
+@pytest.mark.parametrize(
+    "extra",
+    (
+        {"opinion_time": "8月24日下午"},
+        {"missing_measures": []},
+        {"missing_measures": ["措" * 41]},
+        {"missing_measures": [1]},
+        {"window_start_date": "2026-08-22 08:00:00"},
+        {"window_start_date": "2026-02-30"},
+        {"declined_measures": []},
+    ),
+)
+def test_023_projection_rejects_malformed_reason_fields(extra) -> None:
+    assert safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04", raw=_023_reason_raw(**extra)
+    ) is None

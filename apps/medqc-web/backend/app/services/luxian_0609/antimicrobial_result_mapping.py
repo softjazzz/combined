@@ -75,6 +75,12 @@ _055_REQUIRED_KEYS = frozenset({
     "association_ambiguous",
     "event_windows",
 })
+_055_DIMENSION_KEYS = frozenset({
+    "effect_evaluation_intervals",
+    "safety_evaluation_intervals",
+    "unmatched_effect_antimicrobials",
+    "unmatched_safety_antimicrobials",
+})
 _055_EVENT_BASE_KEYS = frozenset({
     "antimicrobial",
     "event_state",
@@ -202,7 +208,10 @@ def _safe_054(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    allowed_keys = _055_REQUIRED_KEYS | {"window_state", "evaluation_resolution"}
+    allowed_keys = (
+        _055_REQUIRED_KEYS | _055_DIMENSION_KEYS
+        | {"window_state", "evaluation_resolution"}
+    )
     if not _055_REQUIRED_KEYS <= frozenset(raw) <= allowed_keys:
         return None
     antimicrobials = _controlled_names(raw.get("antimicrobials"))
@@ -211,6 +220,15 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     )
     window_hours = _controlled_number_list(raw.get("window_hours"))
     intervals = _controlled_number_list(raw.get("evaluation_intervals"))
+    has_dimension_facts = bool(_055_DIMENSION_KEYS.intersection(raw))
+    effect_intervals = _controlled_number_list(raw.get("effect_evaluation_intervals"))
+    safety_intervals = _controlled_number_list(raw.get("safety_evaluation_intervals"))
+    unmatched_effect = _controlled_names(
+        raw.get("unmatched_effect_antimicrobials"), require_nonempty=False
+    )
+    unmatched_safety = _controlled_names(
+        raw.get("unmatched_safety_antimicrobials"), require_nonempty=False
+    )
     association_ambiguous = raw.get("association_ambiguous")
     raw_events = raw.get("event_windows")
     window_state = raw.get("window_state")
@@ -227,6 +245,22 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or not isinstance(raw_events, (list, tuple))
         or len(raw_events) > 100
         or ("window_state" in raw and window_state not in _055_WINDOW_STATES)
+        or (
+            has_dimension_facts
+            and (
+                not _055_DIMENSION_KEYS <= frozenset(raw)
+                or effect_intervals is None
+                or safety_intervals is None
+                or unmatched_effect is None
+                or unmatched_safety is None
+                or effect_intervals != intervals
+                or len(set(unmatched_effect)) != len(unmatched_effect)
+                or len(set(unmatched_safety)) != len(unmatched_safety)
+                or any(name not in antimicrobials for name in unmatched_effect)
+                or any(name not in antimicrobials for name in unmatched_safety)
+                or set(unmatched) != set(unmatched_effect).union(unmatched_safety)
+            )
+        )
     ):
         return None
     resolution = raw.get("evaluation_resolution", "ready")
@@ -249,6 +283,13 @@ def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
     if "evaluation_resolution" in raw:
         facts["evaluation_resolution"] = resolution
+    if has_dimension_facts:
+        facts.update({
+            "effect_evaluation_intervals": effect_intervals,
+            "safety_evaluation_intervals": safety_intervals,
+            "unmatched_effect_antimicrobials": unmatched_effect,
+            "unmatched_safety_antimicrobials": unmatched_safety,
+        })
     if "window_state" in raw:
         facts["window_state"] = window_state
     return facts
@@ -271,6 +312,10 @@ def _safe_057(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "empiric_use_confirmed": True,
         "reason_or_no_specimen_documented": reason_or_no_specimen_documented,
     }
+
+
+# support_before_use 沿用字段名，语义为“启用前或启用后 24 小时内有专家支持”（用户口径 2026-10-17）。
+_058_SUPPORT_WINDOW = timedelta(hours=24)
 
 
 def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -318,7 +363,7 @@ def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 not expert_present
                 or first_dt is None
                 or support_dt is None
-                or support_dt > first_dt
+                or support_dt > first_dt + _058_SUPPORT_WINDOW
                 or unmatched
                 or association_ambiguous
             )
@@ -328,7 +373,7 @@ def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             and not association_ambiguous
             and first_dt is not None
             and support_dt is not None
-            and support_before_use != (support_dt <= first_dt)
+            and support_before_use != (support_dt <= first_dt + _058_SUPPORT_WINDOW)
         )
     ):
         return None
@@ -397,6 +442,17 @@ def antimicrobial_customer_fact_status_is_valid(
         unmatched = safe_facts.get("unmatched_antimicrobials")
         events = safe_facts.get("event_windows")
         intervals = safe_facts.get("evaluation_intervals")
+        effect_intervals = safe_facts.get("effect_evaluation_intervals")
+        safety_intervals = safe_facts.get("safety_evaluation_intervals")
+        unmatched_effect = safe_facts.get("unmatched_effect_antimicrobials")
+        unmatched_safety = safe_facts.get("unmatched_safety_antimicrobials")
+        has_dimension_facts = all(
+            value is not None
+            for value in (
+                effect_intervals, safety_intervals,
+                unmatched_effect, unmatched_safety,
+            )
+        )
         window_state = safe_facts.get("window_state")
         if (
             not isinstance(events, list)
@@ -416,11 +472,21 @@ def antimicrobial_customer_fact_status_is_valid(
             in_window_interval_count = sum(
                 48 <= float(value) <= 72 for value in intervals
             )
+            effect_count = sum(
+                48 <= float(value) <= 72 for value in effect_intervals
+            ) if has_dimension_facts else in_window_interval_count
+            safety_count = sum(
+                48 <= float(value) <= 72 for value in safety_intervals
+            ) if has_dimension_facts else in_window_interval_count
             return (
                 unmatched == []
+                and (not has_dimension_facts or (
+                    unmatched_effect == [] and unmatched_safety == []
+                ))
                 and bool(events)
                 and all(state == "mature" for state in event_states)
-                and in_window_interval_count >= len(events)
+                and effect_count >= len(events)
+                and safety_count >= len(events)
                 and window_state is None
             )
         if normalized_status == "non_compliant":
@@ -428,6 +494,14 @@ def antimicrobial_customer_fact_status_is_valid(
                 isinstance(unmatched, list)
                 and bool(unmatched)
                 and all(name in mature_names for name in unmatched)
+                and (
+                    not has_dimension_facts
+                    or (
+                        set(unmatched) == set(unmatched_effect).union(unmatched_safety)
+                        and all(name in mature_names for name in unmatched_effect)
+                        and all(name in mature_names for name in unmatched_safety)
+                    )
+                )
                 and window_state is None
             )
         if normalized_status == "not_applicable":
@@ -443,11 +517,21 @@ def antimicrobial_customer_fact_status_is_valid(
             in_window_interval_count = sum(
                 48 <= float(value) <= 72 for value in intervals
             )
+            effect_count = sum(
+                48 <= float(value) <= 72 for value in effect_intervals
+            ) if has_dimension_facts else in_window_interval_count
+            safety_count = sum(
+                48 <= float(value) <= 72 for value in safety_intervals
+            ) if has_dimension_facts else in_window_interval_count
             return (
                 unmatched == []
+                and (not has_dimension_facts or (
+                    unmatched_effect == [] and unmatched_safety == []
+                ))
                 and bool(immature_states.intersection(event_states))
                 and set(event_states) <= {"mature", *immature_states}
-                and in_window_interval_count >= mature_count
+                and effect_count >= mature_count
+                and safety_count >= mature_count
                 and window_state == expected_window_state
             )
         # 时间缺失/冲突等 data_gap 可合法携带空或部分窗口；只接受已验证形状，

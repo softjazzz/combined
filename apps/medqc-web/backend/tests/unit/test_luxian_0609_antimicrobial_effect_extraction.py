@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import httpx
 
 import pytest
 
@@ -12,6 +13,12 @@ from app.services.luxian_0609.extended_document.antimicrobial_effect_extraction 
 
 BODY = "美罗培南抗感染治疗效果评价：体温下降。"
 TARGET = "美罗培南"
+
+
+def fact(effect=("absent", "", ""), safety=("absent", "", "")):
+    quotes = [value for value in (effect[1], safety[1]) if value]
+    quote = max(quotes, key=len, default="")
+    return effect[0], safety[0], quote, effect[2] or safety[2]
 
 
 class Client:
@@ -30,9 +37,13 @@ class Client:
         for document in inputs["documents"]:
             for target in inputs["targets"]:
                 row, index = document["row_index"], target["target_index"]
-                state, quote, target_quote = self.facts.get((row, index), ("absent", "", ""))
-                items.append(dict(row_index=row, target_index=index, state=state,
-                                  quote=quote, target_quote=target_quote))
+                values = self.facts.get((row, index), fact())
+                effect_state, safety_state, quote, target_quote = values
+                items.append(dict(
+                    row_index=row, target_index=index,
+                    effect_state=effect_state, safety_state=safety_state,
+                    quote=quote, target_quote=target_quote,
+                ))
         payload = {"schema_version": SCHEMA_VERSION, "assertions": items}
         if self.mutate:
             self.mutate(payload)
@@ -55,20 +66,21 @@ def run(client, documents=None, targets=None, **budgets):
 
 @pytest.mark.parametrize("choices", [False, True])
 def test_present_is_bound_to_exact_body_target_and_usage(choices):
-    client = Client({(0, 0): ("present", BODY, TARGET)}, choices=choices)
+    client = Client({(0, 0): fact(("present", BODY, TARGET))}, choices=choices)
     result = run(client)
     assert result.state == "ready"
-    assert result.assertions[0].state == "present"
+    assert result.assertions[0].effect_state == "present"
     assert result.assertions[0].quote == BODY
+    assert result.assertions[0].safety_state == "absent"
     assert (result.llm_call_count, result.prompt_tokens, result.completion_tokens,
             result.total_tokens, result.api_time) == (1, 11, 13, 24, .25)
     assert client.calls[0][1] == {"max_completion_tokens": 1_000_000, "allow_length_retry": False}
 
 
 def test_unknown_is_a_fact_not_failure_or_absent():
-    result = run(Client({(0, 0): ("unknown", "", "")}))
+    result = run(Client({(0, 0): fact(("unknown", "", ""))}))
     assert result.state == "ready"
-    assert result.assertions[0].state == "unknown"
+    assert result.assertions[0].effect_state == "unknown"
 
 
 def test_complete_cartesian_coverage_is_sorted():
@@ -78,12 +90,60 @@ def test_complete_cartesian_coverage_is_sorted():
     assert [(a.row_index, a.target_index) for a in result.assertions] == [(0, 0), (0, 1), (1, 0), (1, 1)]
 
 
+class RecoveringClient(Client):
+    def __init__(self, *, never_complete=False, overwrite=False):
+        super().__init__({(0, 0): fact(("present", BODY, TARGET))})
+        self.never_complete = never_complete
+        self.overwrite = overwrite
+
+    async def generate(self, prompt, **kwargs):
+        response = await super().generate(prompt, **kwargs)
+        payload = json.loads(response["content"])
+        if len(self.calls) == 1:
+            payload["assertions"].pop()
+        else:
+            payload["assertions"] = ([] if self.never_complete else [dict(
+                row_index=1, target_index=1, effect_state="absent", safety_state="absent",
+                quote="", target_quote="")])
+            if self.overwrite:
+                payload["assertions"].insert(0, dict(row_index=0, target_index=0,
+                    effect_state="absent", safety_state="absent", quote="", target_quote=""))
+        response["content"] = json.dumps(payload, ensure_ascii=False)
+        return response
+
+
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_repairs_only_missing_pair_without_changing_valid_first_facts(overwrite):
+    client = RecoveringClient(overwrite=overwrite)
+    result = run(client, [{"content": BODY}, {"content": "无相关评价。"}], [TARGET, "头孢曲松"])
+    assert result.state == "ready"
+    assert result.llm_call_count == 2
+    assert result.assertions[0].effect_state == "present"
+    assert result.assertions[0].quote == BODY
+    retry_input = json.loads(client.calls[1][0].split("\nINPUT_JSON=", 1)[1])
+    assert retry_input["requested_pairs"] == [{"row_index": 1, "target_index": 1}]
+    assert retry_input["documents"] == [{"row_index": 1, "content": "无相关评价。"}]
+    assert retry_input["targets"] == [{"target_index": 1, "name": "头孢曲松"}]
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (22, 26, 48)
+
+
+def test_unrecovered_missing_pair_preserves_valid_facts_and_never_becomes_absent():
+    result = run(RecoveringClient(never_complete=True),
+                 [{"content": BODY}, {"content": "无相关评价。"}], [TARGET, "头孢曲松"])
+    assert result.state == "technical_error"
+    assert result.llm_call_count == 2
+    assert result.reason_code == "model_invalid_output"
+    assert len(result.assertions) == 3
+    assert result.unresolved_pairs == ((1, 1),)
+    assert (1, 1) not in {(a.row_index, a.target_index) for a in result.assertions}
+
+
 @pytest.mark.parametrize("mutation", [
     lambda p: p["assertions"].clear(),
     lambda p: p["assertions"].append(p["assertions"][0]),
     lambda p: p["assertions"][0].update(row_index=True),
     lambda p: p["assertions"][0].update(target_index=1),
-    lambda p: p["assertions"][0].update(state="invalid"),
+    lambda p: p["assertions"][0].update(safety_state="invalid"),
     lambda p: p["assertions"][0].update(extra="field"),
     lambda p: p.update(extra="field"),
     lambda p: p.update(schema_version="other"),
@@ -93,11 +153,11 @@ def test_strict_schema_and_coverage_fail_without_partial_facts(mutation):
     assert result.state == "technical_error"
     assert result.reason_code == "model_invalid_output"
     assert result.assertions == ()
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 24
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 48
 
 
-@pytest.mark.parametrize("fact", [
+@pytest.mark.parametrize("dimension_fact", [
     ("present", "", ""),
     ("present", "体温下降。", TARGET),
     ("present", BODY, "美罗"),
@@ -106,12 +166,12 @@ def test_strict_schema_and_coverage_fail_without_partial_facts(mutation):
     ("unknown", "他文中的引用", ""),
     ("unknown", "", TARGET),
 ])
-def test_invalid_quote_and_target_binding(fact):
-    assert run(Client({(0, 0): fact})).reason_code == "model_invalid_output"
+def test_invalid_quote_and_target_binding(dimension_fact):
+    assert run(Client({(0, 0): fact(effect=dimension_fact)})).reason_code == "model_invalid_output"
 
 
 def test_cross_document_quote_and_duplicate_pairs_are_rejected():
-    client = Client({(1, 0): ("present", BODY, TARGET)})
+    client = Client({(1, 0): fact(("present", BODY, TARGET))})
     assert run(client, [{"content": BODY}, {"content": "仅有趋势。"}]).state == "technical_error"
     client = Client(mutate=lambda p: p["assertions"].__setitem__(1, p["assertions"][0]))
     assert run(client, [{"content": BODY}, {"content": BODY}]).state == "technical_error"
@@ -121,12 +181,14 @@ def test_cross_document_quote_and_duplicate_pairs_are_rejected():
 def test_only_stop_completion_is_accepted(finish):
     client = Client(finish=finish)
     assert run(client).reason_code == "model_invalid_output"
-    assert len(client.calls) == 1
+    assert len(client.calls) == 2
 
 
 def test_whole_json_fence_allowed_but_explanation_and_duplicate_json_keys_rejected():
     payload = json.dumps({"schema_version": SCHEMA_VERSION, "assertions": [
-        dict(row_index=0, target_index=0, state="unknown", quote="", target_quote="")]})
+        dict(row_index=0, target_index=0,
+             effect_state="unknown", safety_state="absent",
+             quote="", target_quote="")]})
     assert run(Client(content="```json\n" + payload + "\n```")).state == "ready"
     assert run(Client(content="说明：" + payload)).state == "technical_error"
     duplicate = payload.replace('"row_index": 0', '"row_index": 0, "row_index": 0')
@@ -167,7 +229,7 @@ def test_unavailable_body_never_uses_title_or_fabricates_absent(document):
 
 
 def test_privacy_view_preserves_medical_fact_without_sending_metadata():
-    client = Client({(0, 0): ("present", BODY, TARGET)})
+    client = Client({(0, 0): fact(("present", BODY, TARGET))})
     result = run(client, [{"record_content": "姓名：张三\n" + BODY, "title": "张三", "patient_id": "secret"}])
     assert result.state == "ready"
     assert "张三" not in client.calls[0][0]
@@ -183,8 +245,17 @@ def test_no_client_and_transport_failure_are_technical_errors():
             raise RuntimeError("transport")
 
     result = run(Broken())
-    assert result.reason_code == "model_transport_error"
+    assert result.reason_code == "execution_program_error"
     assert result.llm_call_count == 1
+
+
+def test_transient_timeout_retries_once_and_preserves_correct_reason():
+    class Timeout:
+        async def generate(self, prompt, **kwargs):
+            raise httpx.ReadTimeout("SYNTHETIC_SECRET")
+    result = run(Timeout())
+    assert result.reason_code == "model_timeout"
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.parametrize("usage", [{"prompt_tokens": True}, {"completion_tokens": -1}, {"total_tokens": 1.2}])
@@ -204,7 +275,7 @@ def test_invalid_usage_is_not_silently_accepted(usage):
     (BODY, TARGET, "technical_error"),
 ])
 def test_regimen_is_explicit_unassigned_fact(quote, target_quote, state):
-    result = run(Client({(0, 0): ("regimen", quote, target_quote)}))
+    result = run(Client({(0, 0): fact(("regimen", quote, target_quote))}))
     assert result.state == state
 
 
@@ -220,7 +291,7 @@ class _StructuredClient(Client):
 
 
 def test_capable_client_extracts_with_thinking_disabled():
-    client = _StructuredClient({(0, 0): ("present", BODY, TARGET)})
+    client = _StructuredClient({(0, 0): fact(("present", BODY, TARGET))})
     result = run(client)
     assert result.state == "ready"
     assert client.calls[0][1] == {

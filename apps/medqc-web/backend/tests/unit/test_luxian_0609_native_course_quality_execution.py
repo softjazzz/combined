@@ -40,6 +40,7 @@ def _severity_session(
     daily_rows: list[dict] | None = None,
     senior_rows: list[dict] | None = None,
     external_rows: dict[str, list[dict]] | None = None,
+    external_limit_rows: int = 50,
     external_failures: dict[str, Exception] | None = None,
     external_truncated: frozenset[str] = frozenset(),
     course_failure: Exception | None = None,
@@ -105,7 +106,7 @@ def _severity_session(
                 source_key=source_key,
                 rows=(external_rows or {})[source_key],
                 truncated=source_key in external_truncated,
-                limit_rows=50,
+                limit_rows=external_limit_rows,
             )
         if source_key in (external_failures or {}):
             raise (external_failures or {})[source_key]
@@ -316,6 +317,10 @@ class _Client:
                         for ref in expected_refs
                     ],
                 }
+        if isinstance(output, dict) and "chief_signal_kind" in output:
+            complaint = re.search(r"\[主诉原文\] ([^\n]*)", prompt)
+            output.setdefault("chief_complaint_signals", [] if output["chief_signal_kind"] == "unknown"
+                              else [complaint.group(1)[:20]] if complaint else [])
         content = (
             output
             if isinstance(output, str)
@@ -453,13 +458,13 @@ async def test_course_017_consumes_shared_material_without_live_reader(
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=_CopyReviewClient("substantial_copy"),
+        llm_client=_UnexpectedLLMClient(),
         evidence_materials=session.materials,
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 48
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
     assert "private-a" not in repr(result)
 
 
@@ -742,9 +747,10 @@ async def test_typed_017_python_path_matches_raw_state_and_keeps_privacy():
 
     assert typed.results == ()
     assert reduced[0].final_state.value == raw.results[0]["status"]
-    assert raw.llm_call_count == typed.llm_call_count == 1
-    assert raw.total_tokens == typed.total_tokens == 48
-    assert len(raw_client.calls) == len(typed_client.calls) == 1
+    # 用户口径（2026-10-20）：017 只按相似度阈值判定，不调用模型。
+    assert raw.llm_call_count == typed.llm_call_count == 0
+    assert raw.total_tokens == typed.total_tokens == 0
+    assert len(raw_client.calls) == len(typed_client.calls) == 0
     assert private_marker not in repr(typed)
     assert "private-left" not in repr(typed)
 
@@ -2941,7 +2947,8 @@ async def test_course_009_model_cannot_bind_event_to_course_before_event() -> No
 
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
+    # 主控代定口径（2026-10-18）：对应病程早于事件的非法引用补核一次，再次无效仍失败关闭。
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -3031,7 +3038,7 @@ async def test_course_009_negative_candidates_are_ignored_but_duplicate_positive
 
 
 @pytest.mark.asyncio
-async def test_course_009_more_than_twenty_change_events_fails_closed_without_truncation() -> None:
+async def test_course_009_more_than_twenty_change_events_decides_all_and_limits_display() -> None:
     daily_rows = [
         _row(
             f"第{index}日病危记录，出现明确病情变化并已处理。",
@@ -3068,11 +3075,11 @@ async def test_course_009_more_than_twenty_change_events_fails_closed_without_tr
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "candidate_scope_incomplete"
-    assert result.customer_display_facts == ()
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert len(dict(result.customer_display_facts)["LX0609-02-01-05"]["change_events"]) == 20
     assert result.llm_call_count == 1
-    assert "超过20个" in client.prompts[0]
+    assert "明确变化事件无数量截断" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -3129,7 +3136,8 @@ async def test_course_009_daily_complete_invalid_json_fails_closed() -> None:
 
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "model_invalid_output"
-    assert result.llm_call_count == 1
+    # 主控代定口径（2026-10-18）：JSON 解析失败的批次补核一次，再次失败仍失败关闭。
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -5286,7 +5294,7 @@ async def test_016_admission_preview_shell_is_data_gap_without_model():
 
 
 @pytest.mark.asyncio
-async def test_017_similarity_threshold_routes_ambiguous_pair_to_review():
+async def test_017_similarity_threshold_decides_without_review():
     one_record = course._copy_result(
         {"daily_course_record": [_row("患者病情稳定，继续观察治疗。")]},
         source_complete=True,
@@ -5337,8 +5345,9 @@ async def test_017_similarity_threshold_routes_ambiguous_pair_to_review():
         source_complete=True,
     )
     assert exact_threshold["metadata"]["maximum_similarity"] == 0.7
-    assert exact_threshold["status"] == "uncertain"
-    assert exact_threshold["metadata"]["reason_code"] == "semantic_low_confidence"
+    # 用户口径（2026-10-20）：达到阈值即不合规，不再交模型复核。
+    assert exact_threshold["status"] == "non_compliant"
+    assert exact_threshold["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 
 @pytest.mark.parametrize(
@@ -5380,12 +5389,12 @@ def test_017_same_day_records_are_compared_without_date_gate():
         source_complete=True,
     )
 
-    assert result["status"] == "uncertain"
-    assert result["metadata"]["reason_code"] == "semantic_low_confidence"
+    assert result["status"] == "non_compliant"
+    assert result["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 
-def test_017_template_shell_only_pair_is_compliant_without_llm():
-    """人工确认的纯模板壳不能形成复制问题。"""
+def test_017_identical_template_shell_pair_is_non_compliant_without_llm():
+    """用户口径（2026-10-20）：按客户原文“相似度大于70%”判定，模板句完全相同同样不合规。"""
     template_shell = (
         "患者病情稳定，生命体征平稳，查体无明显异常，"
         "继续当前治疗，观察病情。"
@@ -5401,13 +5410,13 @@ def test_017_template_shell_only_pair_is_compliant_without_llm():
         source_complete=True,
     )
 
-    assert result["status"] == "compliant"
-    assert result["metadata"]["reason_code"] == "copy_template_shell_only"
+    assert result["status"] == "non_compliant"
+    assert result["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
     assert result["metadata"]["maximum_similarity"] == 1.0
     assert result["metadata"]["template_shell_only"] is True
 
 
-def test_017_template_pair_does_not_hide_another_ambiguous_substantive_pair():
+def test_017_template_pair_and_substantive_pair_both_count_by_threshold():
     template_shell = (
         "患者病情稳定，生命体征平稳，查体无明显异常，"
         "继续当前治疗，观察病情。"
@@ -5426,8 +5435,8 @@ def test_017_template_pair_does_not_hide_another_ambiguous_substantive_pair():
         source_complete=True,
     )
 
-    assert result["status"] == "uncertain"
-    assert result["metadata"]["reason_code"] == "semantic_low_confidence"
+    assert result["status"] == "non_compliant"
+    assert result["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 
 def test_017_specific_content_repeat_remains_non_compliant_above_threshold():
@@ -5452,7 +5461,7 @@ def test_017_specific_content_repeat_remains_non_compliant_above_threshold():
     assert result["metadata"]["template_shell_only"] is False
 
 
-def test_017_similarity_above_point_70_requires_semantic_review():
+def test_017_similarity_above_point_70_is_non_compliant_without_review():
     result = course._copy_result(
         {
             "daily_course_record": [
@@ -5464,265 +5473,8 @@ def test_017_similarity_above_point_70_requires_semantic_review():
     )
 
     assert result["metadata"]["maximum_similarity"] == 0.71
-    assert result["status"] == "uncertain"
-    assert result["metadata"]["reason_code"] == "semantic_low_confidence"
-
-
-@pytest.mark.asyncio
-async def test_017_long_template_with_material_change_uses_one_review(monkeypatch):
-    """模板与实质变化难区分时只做一次候选复核。"""
-    template = "患者病情稳定生命体征平稳继续观察病情" * 12
-    left = (
-        f"{template}腹痛缓解，改口服药，准备出院。"
-        "safe-left PRIVATE-INSTITUTE PRIVATE-PATIENT PRIVATE-VISIT"
-    )
-    right = (
-        f"{template}突发高热，影像感染进展，恢复静脉抗感染。"
-        "safe-right PRIVATE-INSTITUTE PRIVATE-PATIENT PRIVATE-VISIT"
-    )
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {
-                **_row(left),
-                "document_id": "safe-left",
-                "document_title": "主治医师查房记录",
-            },
-            {
-                **_row(right, "2026-06-02 09:00:00"),
-                "document_id": "safe-right",
-                "document_title": "副主任医师查房记录",
-            },
-        ] if kwargs["source_key"] == "senior_course_record" else [],
-    )
-    client = _CopyReviewClient("substantial_copy")
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}), institute_id="PRIVATE-INSTITUTE",
-        patient_id="PRIVATE-PATIENT", visit_id="PRIVATE-VISIT",
-        source_schema=None, llm_client=client,
-    )
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
-    assert client.calls[0]["max_completion_tokens"] == 512
-    assert client.calls[0]["allow_length_retry"] is False
-    assert "safe-left" not in client.calls[0]["prompt"]
-    assert "safe-right" not in client.calls[0]["prompt"]
-    assert "PRIVATE-" not in client.calls[0]["prompt"]
-    assert '"pair_ref":"P01"' in client.calls[0]["prompt"]
-    assert '"left_ref":"D01"' in client.calls[0]["prompt"]
-    assert (
-        '"schema_version":"lx0609_017_v1","pair_results":['
-        '{"pair_ref":"P01","verdict":"uncertain",'
-        '"document_refs":["D01","D02"]}]'
-    ) in client.calls[0]["prompt"]
-    assert "禁止使用pair_ref作为JSON对象的键" in client.calls[0]["prompt"]
-    assert "不能只凭相似度或共同模板判为实质复制" in client.calls[0]["prompt"]
-    assert "症状、客观体征、检查、判断或处置呈可核对的纵向变化" in client.calls[0]["prompt"]
-    assert "不同文书角色为完成各自职责而复述稳定事实" in client.calls[0]["prompt"]
-    assert '"document_title":"主治医师查房记录"' in client.calls[0]["prompt"]
-    assert '"document_title":"副主任医师查房记录"' in client.calls[0]["prompt"]
-    assert '"was_truncated":false' in client.calls[0]["prompt"]
-    assert left not in repr(result)
-    assert right not in repr(result)
-
-
-def test_017_copy_review_excerpt_keeps_head_and_tail_within_budget():
-    content = "开头病情" + ("中段" * 800) + "尾部诊疗计划与签名"
-
-    excerpt, was_truncated = rules_016_017._copy_review_excerpt(content)
-
-    assert was_truncated is True
-    assert len(excerpt) <= 1200
-    assert excerpt.startswith("开头病情")
-    assert excerpt.endswith("尾部诊疗计划与签名")
-    assert "中段已裁剪" in excerpt
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("response", "case_id"),
-    [
-        (RuntimeError("transport"), "transport"),
-        (_copy_review_response([]), "missing_pair"),
-        (_copy_review_response([{"pair_ref": "P99", "verdict": "template_only", "document_refs": ["D01", "D02"]}]), "unknown_pair"),
-        (_copy_review_response([{"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D99"]}]), "unknown_document"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]},
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]},
-        ]), "duplicate_pair"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage=False), "missing_usage"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage={"prompt_tokens": True, "completion_tokens": 8, "total_tokens": 9}), "bool_usage"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage={"prompt_tokens": "40", "completion_tokens": 8, "total_tokens": 48}), "string_usage"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage={"prompt_tokens": -1, "completion_tokens": 8, "total_tokens": 7}), "negative_usage"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage={"prompt_tokens": 4097, "completion_tokens": 8, "total_tokens": 4105}), "prompt_limit"),
-        (_copy_review_response([
-            {"pair_ref": "P01", "verdict": "template_only", "document_refs": ["D01", "D02"]}
-        ], usage={"prompt_tokens": 40, "completion_tokens": 8, "total_tokens": 49}), "total_mismatch"),
-    ],
-    ids=lambda value: value if isinstance(value, str) else None,
-)
-async def test_017_semantic_review_invalid_response_fails_closed(
-    monkeypatch, response: object, case_id: str
-):
-    template = "患者病情稳定生命体征平稳继续观察病情" * 10
-    left = f"{template}今日腹痛缓解停止补液改为口服治疗。"
-    right = f"{template}今日高热影像进展恢复静脉抗感染。"
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "PRIVATE-LEFT"},
-            {**_row(right, "2026-06-02 09:00:00"), "document_id": "PRIVATE-RIGHT"},
-        ] if kwargs["source_key"] == "daily_course_record" else [],
-    )
-    client = _CopyReviewClient(response=response)
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}), institute_id="PRIVATE-I",
-        patient_id="PRIVATE-P", visit_id="PRIVATE-V", source_schema=None,
-        llm_client=client,
-    )
-
-    assert [item["status"] for item in result.results] == ["technical_error"], case_id
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
-    assert client.calls[0]["max_completion_tokens"] == 512
-    assert client.calls[0]["allow_length_retry"] is False
-    assert "PRIVATE-" not in client.calls[0]["prompt"]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("verdict", "expected_status", "expected_reason"),
-    [
-        ("template_only", "compliant", "copy_semantic_review_passed"),
-        ("uncertain", "uncertain", "semantic_low_confidence"),
-    ],
-)
-async def test_017_semantic_review_verdict_is_mapped_by_python_once(
-    monkeypatch, verdict: str, expected_status: str, expected_reason: str
-):
-    template = "患者病情稳定生命体征平稳继续观察病情" * 10
-    rows = [
-        {**_row(f"{template}今日腹痛缓解。", "2026-06-01 09:00:00"), "document_id": "PRIVATE-A"},
-        {**_row(f"{template}今日高热感染进展。", "2026-06-02 09:00:00"), "document_id": "PRIVATE-B"},
-        {**_row(f"{template}今日胸闷调整治疗。", "2026-06-03 09:00:00"), "document_id": "PRIVATE-C"},
-    ]
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: rows if kwargs["source_key"] == "daily_course_record" else [],
-    )
-    client = _CopyReviewClient(verdict)
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
-        visit_id="V", source_schema=None, llm_client=client,
-    )
-
-    assert [item["status"] for item in result.results] == [expected_status]
-    assert result.results[0]["metadata"]["reason_code"] == expected_reason
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
-    assert '"pair_ref":"P02"' in client.calls[0]["prompt"]
-    assert "PRIVATE-" not in client.calls[0]["prompt"]
-
-
-@pytest.mark.asyncio
-async def test_017_confirmed_substantial_copy_takes_priority_over_uncertain_pair(
-    monkeypatch,
-) -> None:
-    template = "患者病情稳定生命体征平稳继续观察病情" * 10
-    rows = [
-        {**_row(f"{template}今日腹痛减轻。", "2026-06-01 09:00:00"), "document_id": "PRIVATE-A"},
-        {**_row(f"{template}今日高热感染进展。", "2026-06-02 09:00:00"), "document_id": "PRIVATE-B"},
-        {**_row(f"{template}今日胸闷调整治疗。", "2026-06-03 09:00:00"), "document_id": "PRIVATE-C"},
-    ]
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: rows if kwargs["source_key"] == "daily_course_record" else [],
-    )
-    class _MixedReviewClient(_CopyReviewClient):
-        async def generate(self, prompt: str, **kwargs: Any) -> dict:
-            self.calls.append({"prompt": prompt, **kwargs})
-            pairs = re.findall(
-                r'"pair_ref":"(P\d+)","left_ref":"(D\d+)","right_ref":"(D\d+)"',
-                prompt,
-            )
-            assert len(pairs) >= 2
-            return _copy_review_response([
-                {
-                    "pair_ref": pair_ref,
-                    "verdict": "substantial_copy" if index == 0 else "uncertain",
-                    "document_refs": [left_ref, right_ref],
-                }
-                for index, (pair_ref, left_ref, right_ref) in enumerate(pairs)
-            ])
-
-    client = _MixedReviewClient()
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",),
-        wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}),
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        source_schema=None,
-        llm_client=client,
-    )
-
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == (
-        "copy_similarity_threshold_exceeded"
-    )
-    assert len(result.results[0]["metadata"]["best_match_pairs"]) == 1
-    assert result.llm_call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_017_high_similarity_uses_one_semantic_review(
-    monkeypatch,
-):
-    template = "患者病情稳定生命体征平稳继续观察病情" * 10
-    left = f"{template}今日腹痛减轻，停止补液改口服。"
-    right = f"{template}今日发热咳嗽，恢复静脉抗感染。"
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
-        ] if kwargs["source_key"] == "daily_course_record" else [],
-    )
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",), wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
-        visit_id="V", source_schema=None, llm_client=_CopyReviewClient(),
-    )
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
-    assert result.llm_call_count == 1
-    assert left not in repr(result)
-    assert right not in repr(result)
-
+    assert result["status"] == "non_compliant"
+    assert result["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 def test_017_copy_input_deduplicates_cross_source_document_id_and_excludes_long_term_order():
     copied = "患者病情平稳，查体无明显变化，继续当前治疗方案并观察。"
@@ -5808,167 +5560,6 @@ async def test_017_low_similarity_is_compliant_without_llm_call(monkeypatch):
     assert client.prompts == []
     assert left not in repr(result)
     assert right not in repr(result)
-
-
-@pytest.mark.asyncio
-async def test_017_high_similarity_with_material_change_is_reviewed_once(monkeypatch):
-    common_blocks = [
-        "患者神志清楚生命体征平稳腹部柔软无明显压痛",
-        "双肺呼吸音清心律齐双下肢无明显水肿",
-        "继续观察症状体征以及复查指标变化",
-        "已向患者及家属说明当前病情和后续安排",
-    ]
-    left = "。".join(
-        (
-            common_blocks[0],
-            "今日腹痛减轻进食改善复查炎症指标下降",
-            common_blocks[1],
-            "停止静脉补液改为口服药物准备出院",
-            common_blocks[2],
-            common_blocks[3],
-        )
-    )
-    right = "。".join(
-        (
-            common_blocks[0],
-            "今日仍有发热咳嗽复查胸部影像提示感染",
-            common_blocks[1],
-            "继续静脉抗感染并增加雾化治疗暂不出院",
-            common_blocks[2],
-            common_blocks[3],
-        )
-    )
-
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {
-                **_row(right, "2026-06-02 09:00:00"),
-                "document_id": "safe-right",
-            },
-        ]
-        if kwargs["source_key"] == "daily_course_record"
-        else [],
-    )
-    client = _CopyReviewClient()
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",),
-        wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}),
-        institute_id="safe-institute",
-        patient_id="safe-patient",
-        visit_id="safe-visit",
-        source_schema=None,
-        llm_client=client,
-    )
-
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
-    assert result.results[0]["metadata"]["executor_type"] == "llm"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 48
-    assert len(client.calls) == 1
-    assert left not in repr(result)
-    assert right not in repr(result)
-
-
-@pytest.mark.asyncio
-async def test_017_long_template_block_with_material_change_is_reviewed_once(
-    monkeypatch,
-):
-    template = (
-        "患者神志清楚，生命体征平稳，双肺呼吸音清，心律齐，腹部柔软，"
-        "双下肢无水肿，继续观察病情变化并复查相关指标。"
-    ) * 5
-    left = (
-        f"{template}今日腹痛明显缓解，炎症指标下降，停止静脉补液，"
-        "调整为口服治疗并准备出院。"
-    )
-    right = (
-        f"{template}今日出现发热咳嗽，胸部影像提示感染进展，"
-        "继续静脉抗感染并增加雾化治疗，暂缓出院。"
-    )
-
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {
-                **_row(right, "2026-06-02 09:00:00"),
-                "document_id": "safe-right",
-            },
-        ]
-        if kwargs["source_key"] == "senior_course_record"
-        else [],
-    )
-    client = _CopyReviewClient()
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",),
-        wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}),
-        institute_id="safe-institute",
-        patient_id="safe-patient",
-        visit_id="safe-visit",
-        source_schema=None,
-        llm_client=client,
-    )
-
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert 0.70 < result.results[0]["metadata"]["maximum_similarity"] < 0.95
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_017_high_similarity_nonidentical_current_update_is_reviewed_once(
-    monkeypatch,
-):
-    template = (
-        "患者神志清楚，生命体征平稳，双肺呼吸音清，心律齐，腹部柔软，"
-        "双下肢无水肿，继续观察病情变化并复查相关指标。"
-    ) * 8
-    left = f"{template}今日腹痛缓解，继续原治疗。"
-    right = f"{template}今日腹痛明显缓解，停止静脉补液，调整为口服治疗并准备出院。"
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {
-                **_row(right, "2026-06-02 09:00:00"),
-                "document_id": "safe-right",
-            },
-        ]
-        if kwargs["source_key"] == "daily_course_record"
-        else [],
-    )
-    client = _CopyReviewClient()
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",),
-        wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}),
-        institute_id="safe-institute",
-        patient_id="safe-patient",
-        visit_id="safe-visit",
-        source_schema=None,
-        llm_client=client,
-    )
-
-    assert result.results[0]["status"] == "non_compliant"
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
-    assert result.results[0]["metadata"]["maximum_similarity"] >= 0.95
-    assert result.llm_call_count == 1
-    assert len(client.calls) == 1
-    assert left not in repr(result)
-    assert right not in repr(result)
-
 
 @pytest.mark.asyncio
 async def test_017_high_similarity_does_not_call_llm_for_document_roles(monkeypatch):
@@ -6318,24 +5909,17 @@ def test_017_twenty_records_screen_all_pairs_but_precisely_compare_only_twenty()
         ),
         (
             0.7000,
-            "substantial_copy",
+            None,
             CustomerFinalState.NON_COMPLIANT,
             "threshold_exceeded",
             "copy_similarity_threshold_exceeded",
         ),
         (
             0.7001,
-            "substantial_copy",
+            None,
             CustomerFinalState.NON_COMPLIANT,
             "threshold_exceeded",
             "copy_similarity_threshold_exceeded",
-        ),
-        (
-            0.7001,
-            "template_only",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
-            "copy_semantic_review_passed",
         ),
     ],
 )
@@ -6347,7 +5931,7 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
     expected_reason,
     expected_failure_kind,
 ):
-    """017 的 70% 边界和高相似语义通过必须经公开 Native 入口成为受控终态。"""
+    """017 的 70% 边界经公开 Native 入口成为受控终态；用户口径（2026-10-20）不再调用模型复核。"""
 
     class _FixedSimilarityMatcher:
         def __init__(self, _isjunk, left, right, *, autojunk=False):
@@ -6424,7 +6008,7 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
         ],
         "copy_match_pairs": [],
     }
-    if verdict == "substantial_copy":
+    if expected_state is CustomerFinalState.NON_COMPLIANT:
         expected_facts["copy_match_pairs"] = [
             {
                 "source_types": ["daily_course_record", "daily_course_record"],
@@ -6438,69 +6022,8 @@ async def test_typed_017_similarity_threshold_and_semantic_pass(
     actual_facts = dict(result.customer_display_facts)["LX0609-12-01-02"]
     fingerprints = actual_facts.pop("copy_match_document_fingerprints", None)
     assert actual_facts == expected_facts
-    if verdict:
-        if verdict == "substantial_copy":
-            assert fingerprints and len(fingerprints) == 1
-            assert len(fingerprints[0]) == 2
-        else:
-            assert fingerprints is None
-        assert result.llm_call_count == 1
-        assert result.total_tokens == 48
-    else:
-        assert fingerprints is None
-        assert result.llm_call_count == result.prompt_tokens == result.total_tokens == 0
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "client",
-    [
-        _Client(["not-json"]),
-        _Client([RuntimeError("raw Bearer_secret 13800138000")]),
-    ],
-)
-async def test_017_high_similarity_fails_closed_when_semantic_review_fails(
-    monkeypatch, client: _Client
-):
-    common = "患者神志清楚生命体征平稳腹部柔软双肺呼吸音清继续观察病情变化"
-    left = f"{common}今日腹痛减轻复查指标下降停止静脉补液{common}"
-    right = f"{common}今日仍有发热复查提示感染继续静脉抗感染{common}"
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {
-                **_row(right, "2026-06-02 09:00:00"),
-                "document_id": "safe-right",
-            },
-        ]
-        if kwargs["source_key"] == "daily_course_record"
-        else [],
-    )
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",),
-        wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}),
-        institute_id="safe-institute",
-        patient_id="safe-patient",
-        visit_id="safe-visit",
-        source_schema=None,
-        llm_client=client,
-    )
-
-    assert [item["status"] for item in result.results] == ["technical_error"]
-    assert result.results[0]["metadata"]["reason_code"] in {
-        "model_invalid_output",
-        "model_transport_error",
-    }
-    assert result.llm_call_count == 1
-    assert "Bearer_secret" not in repr(result)
-    assert "13800138000" not in repr(result)
-    assert left not in repr(result)
-    assert right not in repr(result)
-
+    assert fingerprints is None
+    assert result.llm_call_count == result.prompt_tokens == result.total_tokens == 0
 
 @pytest.mark.asyncio
 async def test_017_uses_complete_current_visit_sources_instead_of_truncated_bundle(
@@ -6541,12 +6064,12 @@ async def test_017_uses_complete_current_visit_sources_instead_of_truncated_bund
         patient_id="safe-patient",
         visit_id="safe-visit",
         source_schema=None,
-        llm_client=_CopyReviewClient("substantial_copy"),
+        llm_client=_UnexpectedLLMClient(),
     )
 
     assert reader_calls == ["daily_course_record", "senior_course_record"]
     assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 0
     metadata = result.results[0]["metadata"]
     assert metadata["comparable_document_count"] == 11
     assert metadata["maximum_similarity"] == 1.0
@@ -6686,44 +6209,6 @@ async def test_017_does_not_treat_duplicate_database_rows_as_two_course_records(
     )
     assert result.results[0]["metadata"]["comparable_document_count"] == 1
     assert "safe-document-ref" not in repr(result)
-
-
-@pytest.mark.asyncio
-async def test_017_fast5_high_similarity_is_reviewed_once(
-    monkeypatch,
-):
-    """Fast5：模板与实质难区分的高相似病程只复核一次。"""
-    template = "患者一般情况可生命体征平稳继续当前治疗观察病情变化" * 8
-    left = f"{template}今日腹痛较前减轻，继续观察。"
-    right = (
-        f"{template}今日腹痛较前减轻，继续观察并复查，同时记录饮食睡眠、"
-        "排便排尿及后续门诊随访安排，未出现新的诊疗风险。"
-    )
-    monkeypatch.setattr(
-        course,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
-        ]
-        if kwargs["source_key"] == "daily_course_record"
-        else [],
-    )
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-12-01-02",),
-        wrapper_rules=[_wrapper("LX0609-12-01-02")],
-        evidence_payload=_payload(documents={}),
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        source_schema=None,
-        llm_client=_CopyReviewClient("substantial_copy"),
-    )
-
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.llm_call_count == 1
-
 
 @pytest.mark.asyncio
 async def test_017_fast5_missing_authoritative_course_time_is_data_gap(monkeypatch):
@@ -7162,7 +6647,7 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
 
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "data_gap",
+        "technical_error",
     ]
     assert result.llm_call_count == 1
     assert client.calls[-1] == {
@@ -7175,6 +6660,7 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
 def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     valid = {
         "chief_signal_kind": "localized_symptom_or_sign",
+        "chief_complaint_signals": ["胸痛"],
         "anatomic_relation": "supports",
         "laterality_relation": "not_applicable",
         "symptom_relation": "supports",
@@ -7184,7 +6670,7 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     }
 
     invalid_enum = {"content": json.dumps({**valid, "symptom_relation": "maybe"})}
-    assert rule_018_contract._parse_lx018_atomic_facts(invalid_enum) is None
+    assert rule_018_contract._parse_lx018_atomic_facts(invalid_enum, chief_complaint="胸痛1天") is None
 
     legacy_total_state = {
         "content": json.dumps({
@@ -7192,12 +6678,12 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
             "diagnostic_reason_dimensions": ["symptom_pattern"],
         })
     }
-    assert rule_018_contract._parse_lx018_atomic_facts(legacy_total_state) is None
+    assert rule_018_contract._parse_lx018_atomic_facts(legacy_total_state, chief_complaint="胸痛1天") is None
 
     conflict_response = {
         "content": json.dumps({**valid, "anatomic_relation": "conflicts"})
     }
-    conflict_facts = rule_018_contract._parse_lx018_atomic_facts(conflict_response)
+    conflict_facts = rule_018_contract._parse_lx018_atomic_facts(conflict_response, chief_complaint="胸痛1天")
     assert conflict_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(conflict_facts)[:2] == (
         "mismatch",
@@ -7207,7 +6693,7 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     unknown_response = {
         "content": json.dumps({**valid, "disease_direction_relation": "unknown"})
     }
-    unknown_facts = rule_018_contract._parse_lx018_atomic_facts(unknown_response)
+    unknown_facts = rule_018_contract._parse_lx018_atomic_facts(unknown_response, chief_complaint="胸痛1天")
     assert unknown_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(unknown_facts)[:2] == (
         "supported",
@@ -7225,7 +6711,7 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
         )
     }
     relevant_unknown_facts = rule_018_contract._parse_lx018_atomic_facts(
-        relevant_unknown_response
+        relevant_unknown_response, chief_complaint="胸痛1天"
     )
     assert relevant_unknown_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(
@@ -7327,8 +6813,8 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "source_readiness_unproven"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == criterion_reason
     assert result.results == ()
     assert result.llm_call_count == 1
     assert result.total_tokens == 45 if isinstance(model_output, str) else result.total_tokens == 0

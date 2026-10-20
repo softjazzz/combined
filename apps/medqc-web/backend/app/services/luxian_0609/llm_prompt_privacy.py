@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from typing import Any
 
 import httpx
 
+
+logger = logging.getLogger(__name__)
 
 _PERSON_NAME = r"(?:[\u4e00-\u9fff·]{2,12}|[A-Za-z][A-Za-z .'-]{1,48})"
 _CLINICIAN_NAME_LABEL = re.compile(
@@ -45,9 +48,10 @@ _PATIENT_INTRO = re.compile(
     rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
 )
 _DEMOGRAPHIC_NAME = re.compile(
-    rf"(?P<label>(?:(?<=^)|(?<=[\n\r；;。]))[ \t]*)"
+    rf"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:]))[ \t]*"
+    rf"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|男|女|\d{{1,3}}[ \t]*岁|年龄))",
+    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|(?:老年|中年|青年|成年|幼年)[男女]性|男|女|\d{{1,3}}[ \t]*岁|年龄))",
     flags=re.MULTILINE,
 )
 _CONTACT_NAME = re.compile(
@@ -114,15 +118,33 @@ def _protect_clinician_names(text: str) -> tuple[str, tuple[tuple[str, str], ...
     return _CLINICIAN_NAME_LABEL.sub(_replace, text), tuple(protected)
 
 
-def redact_luxian_0609_patient_privacy(prompt: str) -> str:
+def redact_luxian_0609_patient_privacy(
+    prompt: str, *, identity_values: Iterable[str] | None = None,
+) -> str:
     """删除LX0609模型prompt中的患者身份信息，保留医疗事实和医务人员姓名。"""
 
     if not isinstance(prompt, str):
         raise TypeError("prompt must be str")
+    if identity_values is None and any(label in prompt for label in ("患者", "病人", "患儿")):
+        from .privacy_request_scope import current_luxian_0609_redaction_identities
+
+        identity_values = current_luxian_0609_redaction_identities()
+    # 已知身份只补充明确患者介绍的识别，不靠扩充姓氏表猜测，也不盲删数字/无标签身份。
+    known_names = [
+        re.escape(value) for value in _freeze_identity_values(identity_values if identity_values is not None else ())
+        if re.fullmatch(r"[\u4e00-\u9fff·]{2,12}", value)
+    ]
+    name_patterns = (_PATIENT_NAME_LABEL, _PATIENT_INTRO, _DEMOGRAPHIC_NAME)
+    if known_names:
+        known_intro = re.compile(
+            r"(?P<label>(?:患者|病人|患儿)\s*)"
+            + r"(?P<value>" + "|".join(known_names) + r")(?=[\s，,、；;。]|因|$)"
+        )
+        name_patterns = (*name_patterns, known_intro)
     protected_prompt, protected_clinicians = _protect_clinician_names(prompt)
     patient_names = {
         match.group("value").strip()
-        for pattern in (_PATIENT_NAME_LABEL, _PATIENT_INTRO, _DEMOGRAPHIC_NAME)
+        for pattern in name_patterns
         for match in pattern.finditer(protected_prompt)
     }
     contact_names = {
@@ -145,6 +167,8 @@ def redact_luxian_0609_patient_privacy(prompt: str) -> str:
         redacted,
         _PATIENT_NAME_PLACEHOLDER,
     )
+    if known_names:
+        redacted = _replace_labelled(known_intro, redacted, _PATIENT_NAME_PLACEHOLDER)
     redacted = _replace_labelled(
         _CONTACT_NAME,
         redacted,
@@ -447,6 +471,73 @@ def _is_transient_transport_error(error: BaseException) -> bool:
     )
 
 
+# 程序自身缺陷（构造提示词、参数校验等）；同样输入重跑仍会失败。
+_PROGRAM_ERROR_TYPES = (TypeError, ValueError, LookupError, AttributeError, AssertionError)
+
+
+def classify_luxian_0609_llm_call_failure(error: BaseException) -> str:
+    """把模型调用处捕获的异常归为受控原因码，避免一律记成传输错误。
+
+    隐私护栏拦截与程序缺陷都是确定性失败，补跑不会改变结果；超时与上游/网络
+    错误仍按模型传输类原因交给既有补跑策略。
+    """
+
+    if isinstance(error, (PatientPrivacyViolation, PrivacyIdentityContextError)):
+        return "privacy_guard_blocked"
+    if isinstance(error, (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException)):
+        return "model_timeout"
+    if isinstance(error, _PROGRAM_ERROR_TYPES):
+        return "execution_program_error"
+    return "model_transport_error"
+
+
+def describe_luxian_0609_llm_parse_failure(error: BaseException, response: Any) -> str:
+    """模型输出解析失败的安全描述，供诊断日志使用：不含提示词、病历或模型原文。
+
+    只保留异常类型、解析器自身写死的英文失败类别、finish_reason 与输出 Token 数；
+    KeyError 等可能携带模型输出片段的异常信息一律不记录。
+    """
+
+    detail = "-"
+    if type(error) is ValueError:
+        message = str(error)
+        if message.isascii() and len(message) <= 80 and not any(ch.isdigit() for ch in message):
+            detail = message
+    finish_reason = completion_tokens = "-"
+    try:
+        choice = response["choices"][0]
+        finish_reason = str(choice.get("finish_reason") or "-")[:20]
+    except Exception:
+        pass
+    try:
+        completion_tokens = str(int(response["usage"]["completion_tokens"]))
+    except Exception:
+        pass
+    return (
+        f"error_kind={type(error).__name__} detail={detail} "
+        f"finish_reason={finish_reason} completion_tokens={completion_tokens}"
+    )
+
+
+def _log_privacy_guard_block(error: BaseException) -> None:
+    """隐私护栏拦截只记录异常类别与脱敏观测上下文，不记录提示词或身份值。"""
+
+    try:
+        from ..llm_observability import current_llm_observation_context
+
+        context = current_llm_observation_context()
+        executor_key = context.executor_key or "unknown"
+        record_key_hash = context.record_key_hash or "unknown"
+    except Exception:
+        executor_key = record_key_hash = "unknown"
+    logger.warning(
+        "LX0609 隐私护栏拦截模型请求: error_kind=%s executor_key=%s record_key_hash=%s",
+        type(error).__name__,
+        executor_key,
+        record_key_hash,
+    )
+
+
 @dataclass(frozen=True)
 class _Luxian0609PrivacyRedactingLLMClient:
     delegate: Any = field(repr=False)
@@ -456,17 +547,21 @@ class _Luxian0609PrivacyRedactingLLMClient:
     )
 
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
-        identities = set(self.identity_values)
-        for provider in self.identity_providers:
-            try:
-                identities.update(_freeze_identity_values(provider()))
-            except Exception:
-                raise PrivacyIdentityContextError(
-                    "Patient identity context is unavailable"
-                ) from None
-        redacted = redact_luxian_0609_patient_privacy(prompt)
-        assert_no_known_identity(redacted, identities)
-        assert_no_known_identity_in_model_request(kwargs, identities)
+        try:
+            identities = set(self.identity_values)
+            for provider in self.identity_providers:
+                try:
+                    identities.update(_freeze_identity_values(provider()))
+                except Exception:
+                    raise PrivacyIdentityContextError(
+                        "Patient identity context is unavailable"
+                    ) from None
+            redacted = redact_luxian_0609_patient_privacy(prompt, identity_values=identities)
+            assert_no_known_identity(redacted, identities)
+            assert_no_known_identity_in_model_request(kwargs, identities)
+        except (PatientPrivacyViolation, PrivacyIdentityContextError) as error:
+            _log_privacy_guard_block(error)
+            raise
         if "temperature" not in kwargs and _accepts_temperature(self.delegate):
             kwargs = {**kwargs, "temperature": EXTRACTION_TEMPERATURE}
         for _ in range(TRANSPORT_RETRY_ATTEMPTS):
@@ -477,6 +572,15 @@ class _Luxian0609PrivacyRedactingLLMClient:
                     raise
             await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
         return await self.delegate.generate(redacted, **kwargs)
+
+    def for_role(self, role: str) -> Any:
+        """按调用点换用 LLM_ROLE_MODELS 配置的模型；身份脱敏与护栏不变。"""
+        from .llm_role_routing import build_role_delegate
+
+        delegate = build_role_delegate(role)
+        if delegate is None:
+            return self
+        return _Luxian0609PrivacyRedactingLLMClient(delegate, self.identity_values, self.identity_providers)
 
     def supports_strict_json_schema(self) -> bool:
         capability = getattr(self.delegate, "supports_strict_json_schema", None)

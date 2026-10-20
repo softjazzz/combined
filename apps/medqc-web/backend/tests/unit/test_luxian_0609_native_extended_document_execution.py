@@ -558,6 +558,44 @@ def test_055_binds_evaluation_horizon_for_antimicrobial_effect_window() -> None:
     assert "evaluation_context.horizon" in sources
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("repair_succeeds", [True, False])
+async def test_055_recovery_runs_through_native_decision_chain_and_counts_both_calls(repair_succeeds):
+    body = "美罗培南疗效评价：抗感染治疗有效；安全性评价：未见药物不良反应。"
+
+    class PairClient:
+        def __init__(self):
+            self.inputs = []
+
+        async def generate(self, prompt, **kwargs):
+            data = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])
+            self.inputs.append(data)
+            facts = []
+            for pair in data["requested_pairs"]:
+                positive = pair["row_index"] == 0
+                facts.append({**pair, "effect_state": "present" if positive else "absent",
+                              "safety_state": "present" if positive else "absent",
+                              "quote": body if positive else "", "target_quote": "美罗培南" if positive else ""})
+            if len(self.inputs) == 1:
+                facts.pop()
+            elif not repair_succeeds:
+                facts = []
+            return {"finish_reason": "stop", "content": json.dumps({
+                "schema_version": "lx0609-antimicrobial-effect-safety-facts-v2", "assertions": facts}),
+                "usage": {"prompt_tokens": 11, "completion_tokens": 13, "total_tokens": 24}}
+
+    client = PairClient()
+    execution, decision = await _evaluate("LX0609-05-01-03", {
+        "inpat_drug_order": ({"generic_name": "美罗培南", "planned_start_datetime": "2026-06-01 10:00:00"},),
+        "daily_course_record": ({"document_id": "synthetic-evaluation", "record_time": "2026-06-03 10:00:00", "record_content": body},
+                                {"document_id": "synthetic-other", "record_time": "2026-06-03 12:00:00", "record_content": "日常巡视无新变化。"}),
+    }, llm_client=client)
+    assert execution.llm_call_count == 2
+    assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (22, 26, 48)
+    assert client.inputs[1]["requested_pairs"] == [{"row_index": 1, "target_index": 0}]
+    assert decision.final_state is (CustomerFinalState.COMPLIANT if repair_succeeds else CustomerFinalState.TECHNICAL_ERROR)
+
+
 def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-10-01-01",))
 
@@ -3814,8 +3852,9 @@ async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> Non
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
+    # 主控代定口径（2026-10-18，待客户复核），基线064/065/066：不同开始时间为独立台次。
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
 
 
 @pytest.mark.asyncio
@@ -4546,15 +4585,16 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         reduced=reduced_items,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "diagnosis_scope_uncertain"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "diagnosis_scope_uncertain"
-    assert "不能据此认定缺少疑难病例讨论" in canonical["findings"]
+    # 主控代定口径（2026-10-18，待客户复核），基线050：主诊断已明确，仅局部待查不触发。
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert canonical["status"] == "not_applicable"
+    assert canonical["reason_code"] == "trigger_absent_complete"
+    assert "本质控点不适用" in canonical["findings"]
     assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
-        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "verification_kind": "uncertain_diagnosis_discussion_check",
         "admission_time": "2026-06-01 08:00:00",
-        "uncertain_record_times": ["2026-06-09 09:00:00"],
+        "uncertain_record_times": [],
         "discussion_count": 0,
     }
     assert result.llm_call_count == 1
@@ -5937,7 +5977,8 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
             },),
             "daily_course_record": (
                 {"record_time": "2026-06-01 12:00:00", "record_content": "患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"},
-                {"record_time": "2026-06-04 09:00:00", "record_content": "由于抗感染治疗有效、体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "万古霉素疗效评价：有效；安全性评价：未见药物不良反应。"},
             ),
             "consultation_record": ({
                 "record_time": "2026-06-01 09:00:00",
@@ -6288,14 +6329,16 @@ def test_054_high_confidence_candidate_action_is_conservative(
             "trigger_absent_complete",
         ),
         (
+            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
             "考虑感染，不建议停用而继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
         ),
         (
+            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
             "考虑感染，未见不良反应继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
         ),
         (
             "考虑感染，并非不予以左氧氟沙星抗感染。",
@@ -6338,9 +6381,10 @@ def test_054_high_confidence_candidate_action_is_conservative(
             "trigger_absent_complete",
         ),
         (
+            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
             "考虑感染，暂不更换并继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
         ),
     ),
 )
@@ -6698,8 +6742,15 @@ async def test_antimicrobial_nearby_distinct_orders_remain_ambiguous(
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
+    if rule_id == "LX0609-05-01-02":
+        # 054 用户口径（2026-10-18）：同药多条医嘱且无停止时间时，存在同药医嘱即关联成立，
+        # 按病程理由判定。
+        assert reduced.final_state is CustomerFinalState.COMPLIANT
+        assert reduced.reason_code == "requirement_satisfied"
+    else:
+        # 主控代定口径（2026-10-18，待客户复核），基线057：同药存在即关联，理由按药名归属。
+        assert reduced.final_state is CustomerFinalState.COMPLIANT
+        assert reduced.reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio
@@ -6774,7 +6825,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
             "daily_course_record": (
                 {
                     "record_time": evaluation_time,
-                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降，白细胞降低。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降，白细胞降低；安全性评价：未见药物不良反应。",
                 },
             ),
         },
@@ -6798,7 +6849,7 @@ async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() ->
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 08:00:00",
-                "record_content": "抗菌药物效果评价：抗感染治疗有效。",
+                "record_content": "抗菌药物效果评价：抗感染治疗有效；安全性评价：未见药物不良反应。",
             },),
         },
     )
@@ -6828,7 +6879,7 @@ async def test_055_excludes_skin_test_order_from_treatment_event_windows() -> No
             ),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
-                "record_content": "美罗培南疗效评价：抗感染治疗有效，体温下降。",
+                "record_content": "美罗培南疗效评价：抗感染治疗有效，体温下降；安全性评价：未见药物不良反应。",
             },),
         },
     )
@@ -7070,7 +7121,7 @@ async def test_055_one_order_row_with_two_drugs_requires_each_named_evaluation()
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
-                "record_content": "美罗培南疗效评价：抗感染治疗有效。",
+                "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
             },),
         },
     )
@@ -7099,7 +7150,7 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
                 },
                 {
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞下降。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞下降；安全性评价：未见药物不良反应。",
                 },
                 {
                     "record_time": "2026-06-04 12:00:00",
@@ -7194,6 +7245,157 @@ async def test_055_non_antimicrobial_treatment_effect_is_not_antibiotic_evaluati
 
 
 @pytest.mark.asyncio
+async def test_055_effect_present_but_safety_absent_is_non_compliant() -> None:
+    """完整抽取确认疗效存在但安全性缺失时，055 必须判为不合规。"""
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；未记录用药安全性评价。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["unmatched_effect_antimicrobials"] == []
+    assert facts["unmatched_safety_antimicrobials"] == ["美罗培南"]
+
+
+@pytest.mark.asyncio
+async def test_055_safety_present_but_effect_absent_is_non_compliant() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南安全性评价：未见药物不良反应；未记录疗效评价。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["unmatched_effect_antimicrobials"] == ["美罗培南"]
+    assert facts["unmatched_safety_antimicrobials"] == []
+
+
+@pytest.mark.asyncio
+async def test_055_effect_and_safety_both_in_window_are_compliant() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["effect_evaluation_intervals"] == [48.0]
+    assert facts["safety_evaluation_intervals"] == [48.0]
+
+
+@pytest.mark.asyncio
+async def test_055_unresolved_safety_attribution_remains_data_gap() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；该药安全性评价归属不明确。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "semantic_extraction_unresolved"
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert facts["evaluation_resolution"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_055_known_dual_evaluation_is_not_overridden_by_other_unknown_candidate() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
+                },
+                {
+                    "record_time": "2026-06-03 12:00:00",
+                    "record_content": "美罗培南安全性评价归属不明确。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
+async def test_055_known_dual_evaluations_are_not_overridden_by_extra_regimen() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": (
+                {
+                    "generic_name": "美罗培南",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+                {
+                    "generic_name": "万古霉素",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "美罗培南疗效评价：有效；安全性评价：未见药物不良反应。",
+                },
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "万古霉素疗效评价：有效；安全性评价：未见药物不良反应。",
+                },
+                {
+                    "record_time": "2026-06-03 12:00:00",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效；安全性评价：未见药物不良反应。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
 async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant() -> None:
     """疗效不佳并拟调整方案属于真实的疗效评价，不能被误删。"""
     _, reduced = await _evaluate(
@@ -7205,7 +7407,7 @@ async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant(
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
-                "record_content": "抗感染治疗效果不佳，拟调整方案。",
+                "record_content": "抗感染治疗效果不佳，拟调整方案；安全性评价未见药物不良反应。",
             },),
         },
     )
@@ -7244,7 +7446,7 @@ async def test_055_timed_in_window_evaluation_remains_compliant_with_untimed_can
             "daily_course_record": (
                 {
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "抗感染治疗有效，继续原方案。",
+                    "record_content": "抗感染治疗有效，继续原方案；安全性评价未见药物不良反应。",
                 },
                 {"record_content": "抗感染治疗效果不佳，拟调整方案。"},
             ),
@@ -7264,7 +7466,7 @@ async def test_058_expert_support_after_special_antimicrobial_use_is_non_complia
                 "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
-                "record_time": "2026-06-01 11:00:00",
+                "record_time": "2026-06-02 11:00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -7452,7 +7654,7 @@ async def test_058_late_support_with_unavailable_senior_source_is_data_gap() -> 
                 "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
-                "record_time": "2026-06-01 11:00:00",
+                "record_time": "2026-06-02 11:00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -7596,8 +7798,8 @@ async def test_058_cross_timezone_late_support_is_non_compliant() -> None:
                 "planned_start_datetime": "2026-06-01T10:00:00+08:00",
             },),
             "consultation_record": ({
-                # 03:00 UTC == 11:00 Asia/Shanghai, after planned use.
-                "record_time": "2026-06-01T03:00:00+00:00",
+                # 次日 03:00 UTC == 11:00 Asia/Shanghai，晚于启用后 24 小时。
+                "record_time": "2026-06-02T03:00:00+00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -7912,6 +8114,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
             "mr_bloodtrans",
             "bloodtrans_record",
             "labtest_item_report",
+            "admission_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
         }
     }
     assert set(execution.decisions[0].fact_refs) == (
@@ -8025,6 +8228,7 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
             "mr_bloodtrans",
             "bloodtrans_record",
             "labtest_item_report",
+            "admission_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
         }
     }
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
@@ -8786,7 +8990,7 @@ async def test_055_fact_refs_only_include_matched_start_order_and_window_evaluat
                     "document_id": "COURSE-055-MATCH",
                     "related_order_id": "ORDER-055-M",
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "美罗培南抗感染治疗效果评价：有效。",
+                    "record_content": "美罗培南抗感染治疗效果评价：有效；安全性评价未见药物不良反应。",
                 },
                 {
                     "document_id": "COURSE-055-OTHER",
@@ -8945,7 +9149,7 @@ async def test_058_noncompliant_fact_refs_include_only_order_and_late_matched_su
                 {
                     "document_id": "CONSULT-058-LATE",
                     "related_order_id": "ORDER-058-MATCH",
-                    "record_time": "2026-06-01 11:00:00",
+                    "record_time": "2026-06-02 11:00:00",
                     "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
                 },
                 {
@@ -9470,8 +9674,8 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     )
 
     reduced_decision = reduced[0]
-    assert reduced_decision.final_state is CustomerFinalState.DATA_GAP
-    assert reduced_decision.reason_code == "source_empty"
+    assert reduced_decision.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced_decision.reason_code == "required_document_missing"
     assert dict(result.customer_display_facts)["LX0609-08-02-01"] == {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
@@ -9485,7 +9689,7 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
         result=result,
         reduced=reduced,
     )
-    assert canonical["status"] == "data_gap"
+    assert canonical["status"] == "non_compliant"
     assert "customer_evidence" not in canonical
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert result.llm_call_count == result.total_tokens == 0
@@ -10906,3 +11110,143 @@ def _056_rows(*orders, culture_time=None):
 async def test_056_counts_distinct_key_antimicrobials_from_hospital_list(orders, culture_time, expected) -> None:
     _result, reduced = await _evaluate("LX0609-05-01-04", _056_rows(*orders, culture_time=culture_time))
     assert reduced.final_state is expected
+
+
+@pytest.mark.asyncio
+async def test_056_defect_explanation_allows_partial_task_save_and_retry():
+    from app.services.qc_workspace.execution_failure import validate_failed_task_items
+    from app.services.qc_workspace.failed_rule_retry import build_failed_rule_auto_retry_plan
+
+    rule = "LX0609-05-01-04"
+    outcome, reduced = await _evaluate(rule, _056_rows(
+        ("注射用美罗培南", "2026-06-01 10:00:00"),
+        ("利奈唑胺注射液", "2026-06-02 10:00:00"),
+    ))
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    result = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced,
+        raw_customer_display_facts=dict(outcome.customer_display_facts).get(rule),
+        evidence_snapshot=None, evidence_materials=None,
+    )
+    result.update(institute_id="I", patient_id="P", visit_id="V")
+    failures = [{"rule_id": "LX0609-03-01-04", "reason_code": "model_transport_error", "error_phase": "result_status"}]
+    summary = {"execution_status": "partial_failed", "completed_rule_count": 1, "failed_rule_count": 1}
+    validate_failed_task_items(summary, [result], failures)
+    assert result["customer_display_facts"]["key_drug_count"] == 2
+    assert result["customer_display_facts"]["specimen_before_first_order"] is False
+    assert build_failed_rule_auto_retry_plan(summary=summary, failures=failures)["should_retry"] is True
+
+
+@pytest.mark.parametrize(("count", "before", "status"), [(True, False, "non_compliant"), (1, False, "non_compliant"), (2, True, "non_compliant"), (2, False, "compliant")])
+def test_056_explanation_rejects_invalid_counts_and_status_conflicts(count, before, status):
+    from app.services.luxian_0609.canonical_result_finalizer import validate_luxian_0609_published_customer_display_facts
+    with pytest.raises(ValueError):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id="LX0609-05-01-04", status=status, reason_code="requirement_violated",
+            raw={"verification_kind": "key_antimicrobial_specimen_check", "key_drug_count": count, "specimen_before_first_order": before},
+        )
+
+
+# 054 用户口径（2026-10-18）：同药存在即关联；延续原方案不触发；同句因果与病情依据可作理由。
+@pytest.mark.parametrize(
+    ("text", "drug", "expected"),
+    (
+        ("继续予以亚胺培南西司他丁联合莫西沙星抗感染。", "亚胺培南", True),
+        ("治疗上暂无调整，继续呼吸机辅助呼吸，美罗培南联合氟康唑抗感染。", "美罗培南", True),
+        ("继续予以心电监护、吸氧，头孢曲松抗感染。", "头孢曲松", True),
+        ("继续联用左氧氟沙星抗感染。", "左氧氟沙星", True),
+        ("暂不更换并继续使用左氧氟沙星抗感染。", "左氧氟沙星", True),
+        ("今日停用甲硝唑，余继续目前抗感染治疗。", "甲硝唑", False),
+        ("予以美罗培南降阶梯为哌拉西林他唑巴坦抗感染。", "美罗培南", False),
+        ("加用莫西沙星联合亚胺培南西司他丁加强抗感染。", "莫西沙星", False),
+        ("请示上级医师后予以头孢曲松抗感染、补液维持水电解质平衡。", "头孢曲松", False),
+        ("继续目前治疗，今日予以万古霉素加强阳性菌覆盖。", "万古霉素", False),
+        # 用药后病情回顾不是新动作（用户口径 2026-10-18，C05）。
+        ("诊疗计划：患者给予哌拉西林他唑巴坦钠抗感染后仍有反复发热。", "哌拉西林", True),
+        ("予以头孢曲松抗感染后体温恢复正常。", "头孢曲松", True),
+        ("予以头孢曲松抗感染，3天后复查血常规。", "头孢曲松", False),
+        ("停用美罗培南后仍有发热。", "美罗培南", False),
+    ),
+)
+def test_054_continuation_only_follows_drug_clause(text, drug, expected) -> None:
+    assert module._054_is_continuation_only({"record_content": text}, drug) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "drug", "expected"),
+    (
+        ("鉴于患者腹泻情况好转，故今日停用甲硝唑。", "甲硝唑", True),
+        ("复查炎症指标恢复正常，故停用哌拉西林他唑巴坦钠。", "哌拉西林", True),
+        ("患者肺部感染重，请临床药学会诊后建议更换抗生素。故更换头孢他啶。", "头孢他啶", True),
+        ("今日停用甲硝唑，患者腹泻好转。", "甲硝唑", False),
+        ("故停用甲硝唑。", "甲硝唑", False),
+        ("今日停用甲硝唑。", "甲硝唑", False),
+    ),
+)
+def test_054_reason_in_action_sentence_requires_basis_before_drug(text, drug, expected) -> None:
+    assert module._054_reason_in_action_sentence({"record_content": text}, drug) is expected
+
+
+def _two_metronidazole_orders() -> tuple[dict, dict]:
+    return (
+        {"order_id": "MET-1", "generic_name": "甲硝唑", "repeat_indicator": "长期",
+         "planned_start_datetime": "2026-06-01 10:00:00"},
+        {"order_id": "MET-2", "generic_name": "甲硝唑", "repeat_indicator": "长期",
+         "planned_start_datetime": "2026-06-05 10:00:00"},
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("course_text", "expected_state", "expected_reason"),
+    (
+        ("鉴于患者腹泻情况好转，故今日停用甲硝唑。", CustomerFinalState.COMPLIANT, "requirement_satisfied"),
+        ("今日停用甲硝唑。", CustomerFinalState.NON_COMPLIANT, "requirement_violated"),
+    ),
+)
+async def test_054_repeated_same_drug_orders_associate_and_judge_reason(
+    course_text, expected_state, expected_reason,
+) -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-02",
+        {
+            "inpat_drug_order": _two_metronidazole_orders(),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": course_text,
+            },),
+        },
+        llm_client=_AntimicrobialActionClient("affirmed"),
+    )
+
+    assert reduced.final_state is expected_state
+    assert reduced.reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+async def test_054_action_without_same_drug_order_remains_association_failed() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-05-01-02",
+        {
+            "inpat_drug_order": _two_metronidazole_orders(),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": "考虑感染加重，今日更换抗生素为哌拉西林他唑巴坦。",
+            },),
+        },
+        llm_client=_AntimicrobialActionClient("affirmed"),
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+def test_death_scope_falls_back_to_discharge_typed_diagnoses_only_without_death_type():
+    # 用户决定（2026-10-20）：死亡病例首页/出院记录只标“出院诊断”时以其作出院/死亡诊断比对。
+    from app.services.luxian_0609.native_extended_document_execution import _discharge_or_death_diagnosis_rows
+    discharge = {"diagnosis_type": "出院诊断", "diagnosis_name": "肺炎"}
+    admission = {"diagnosis_type": "入院诊断", "diagnosis_name": "发热"}
+    death = {"diagnosis_type": "死亡诊断", "diagnosis_name": "呼吸衰竭"}
+    assert _discharge_or_death_diagnosis_rows((admission, discharge), diagnosis_scope="death") == (discharge,)
+    assert _discharge_or_death_diagnosis_rows((discharge, death), diagnosis_scope="death") == (death,)
+    assert _discharge_or_death_diagnosis_rows((admission,), diagnosis_scope="death") == ()

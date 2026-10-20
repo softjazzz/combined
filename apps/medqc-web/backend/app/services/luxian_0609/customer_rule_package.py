@@ -54,7 +54,7 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "key": "consultation_quality",
         "name": "会诊质量",
-        "rule_ids": ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
+        "rule_ids": ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04", "LX0609-03-01-05"),
     },
     {
         "key": "surgery_anesthesia",

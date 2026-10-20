@@ -29,6 +29,9 @@ _PRETRANSFUSION_ALLOWED_ITEMS = {
     "hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"
 }
 
+# 043 现按血型、抗体筛查加八项感染筛查核对；仍接受 alt，旧版九项口径已保存的结果读取时不被判为非法事实。
+_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS = _PRETRANSFUSION_ALLOWED_ITEMS | {"abo", "rh", "antibody_screen"}
+
 _SYSTEM_GAP_REASONS = {
     "LX0609-11-03-01": "consent_source_unavailable",
     "LX0609-11-03-02": "consent_signature_contract_unavailable",
@@ -84,10 +87,10 @@ def _safe_system_gap(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         raw = {key: value for key, value in raw.items() if key != "transfusion_order_present"}
     # Finalizer 已剥离文案后的公开形状仍须能通过保存/读取时的同一校验。
     # 只接受精确字段及本规则原因；不接收任意宽松子集。
+    # 所有登记了系统缺口原因的规则都会被 Finalizer 剥离成同一公开形状，不能只放行部分规则。
     public_keys = {"failure_kind", "system_gap_reason", "gap_owner"}
     if (
-        rule_id in {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
-        and set(raw) == public_keys
+        set(raw) == public_keys
         and raw.get("system_gap_reason") == expected_reason
         and raw.get("gap_owner") == "system_integration"
     ):
@@ -174,7 +177,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("verification_kind") or raw.get("failure_kind")
     if kind == "pretransfusion_items_complete":
         checked = _controlled_list(
-            raw.get("checked_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+            raw.get("checked_items"), allowed=_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS
         )
         if (
             checked is None
@@ -204,7 +207,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }.get(str(kind))
     if list_key is None:
         return None
-    values = _controlled_list(raw.get(list_key), allowed=_PRETRANSFUSION_ALLOWED_ITEMS)
+    values = _controlled_list(raw.get(list_key), allowed=_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS)
     if values is None:
         return None
     result: dict[str, Any] = {"failure_kind": str(kind), list_key: values}
@@ -214,7 +217,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         result["transfusion_time"] = raw["transfusion_time"]
     if kind == "pretransfusion_items_incomplete":
         required = _controlled_list(
-            raw.get("required_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+            raw.get("required_items"), allowed=_PRETRANSFUSION_REGULAR_ALLOWED_ITEMS
         )
         if required is None:
             return None
@@ -462,7 +465,7 @@ def _safe_046(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     allowed_fields = {
         "reason_or_indication", "start_and_end_time", "component", "dose",
-        "process_observation", "reaction_and_handling",
+        "process_observation", "reaction_and_handling", "clinical_effect",
     }
     checked = _controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
     missing = _controlled_list(raw.get("missing_fields"), allowed=allowed_fields)

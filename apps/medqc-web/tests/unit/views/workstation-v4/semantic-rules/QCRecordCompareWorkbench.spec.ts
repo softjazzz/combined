@@ -82,6 +82,39 @@ describe('QCRecordCompareWorkbench', () => {
     })
   })
 
+  it('结果对照读取当前完整文书，历史目录为空也能显示原文', async () => {
+    getDocumentsMock.mockImplementation(async (_visit, params) => ({
+      success: true,
+      data: {
+        documents:
+          params.source_view === 'current' && params.view === 'full'
+            ? [
+                {
+                  key: 'current-admission',
+                  title: '入院记录',
+                  document_type: 'admission_record',
+                  content: '当前文书完整正文及末尾内容',
+                },
+              ]
+            : [],
+      },
+    }))
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'V1',
+        instituteId: 'H1',
+        patientId: 'P1',
+        issues: [],
+        sourceView: 'current',
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.record-content-column').text()).toContain('当前文书完整正文及末尾内容')
+    expect(wrapper.text()).toContain('当前病历可能已更新，质控结果仍为执行时结果')
+    expect(getDocumentMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('只读文书复用目录与正文，优先入院记录并禁止回退历史接口', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {

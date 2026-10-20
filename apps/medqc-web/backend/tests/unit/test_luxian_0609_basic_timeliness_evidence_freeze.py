@@ -255,7 +255,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
         "LX0609-02-01-02": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "senior_course_record",
-            "source_label": "副主任医师或主任医师首次查房记录",
+            "source_label": "上级医师首次查房记录",
             "timeliness_state": "within",
             "threshold_hours": 72,
             "anchor_time": "2026-06-01 08:00:00",
@@ -275,7 +275,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
         ("compliant", "requirement_within_threshold", "已确认入院记录在入院后 24 小时内完成。"),
         ("compliant", "requirement_within_threshold", "已确认首次病程记录在入院后 8 小时内完成。"),
         ("compliant", "requirement_within_threshold", "已确认主治医师首次查房记录在入院后 48 小时内完成。"),
-        ("compliant", "requirement_within_threshold", "已确认最高级别医师首次查房记录在入院后 72 小时内完成。"),
+        ("compliant", "requirement_within_threshold", "已确认上级医师首次查房记录在入院后 72 小时内完成。"),
     ]
     assert [_coordinates(item) for item in results] == [
         [("admission_record", "ADM-SELECTED", "chief_complaint", "2026-06-01 11:00:00")],

@@ -92,6 +92,62 @@ async def test_title_matches_whole_physician_identity(title, expected):
 
 
 @pytest.mark.asyncio
+async def test_senior_course_title_recognizes_explicit_matching_primary_surgeon():
+    materials = _materials()
+    materials["surgery_record"][0]["surgeon"] = "周启航"
+    materials["senior_course_record"][0]["author_name"] = "周启航"
+    for row in materials["daily_course_record"]:
+        row["author_name"] = "赵医生"
+    materials["senior_course_record"] += ({
+        "document_id": "POST",
+        "record_time": "2026-07-08 09:30:00",
+        "document_title": "陈立主任医师联合周启航主治医师（主刀医师）查房记录",
+        "record_content": "术后第一天，患者恢复平稳，继续观察。",
+        "author_name": "赵医生",
+    },)
+
+    result, reduced = await _evaluate(RULE, materials)
+
+    assert dict(result.customer_display_facts)[RULE]["surgeon_round_present"] is True
+    assert reduced.final_state.value == "compliant"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("title", "record_time", "expected"), (
+    ("陈立主任医师联合周启航主刀医师查房记录", "2026-07-08 18:30:00", True),
+    ("陈立主任医师联合周启航主刀医师查房记录", "2026-07-08 18:30:01", False),
+    ("陈立主任医师联合孙远航主刀医师查房记录", "2026-07-08 09:30:00", False),
+    ("陈立主任医师联合王周启航主刀医师查房记录", "2026-07-08 09:30:00", False),
+    ("陈立主任医师联合孙远航主治医师（主刀医师）查房记录", "2026-07-08 09:30:00", False),
+    ("陈立主任医师联合王周启航主治医师（主刀医师）查房记录", "2026-07-08 09:30:00", False),
+    ("陈立主任医师联合周启航第一助手查房记录", "2026-07-08 09:30:00", False),
+    ("陈立主任医师查房记录，周启航主刀医师", "2026-07-08 09:30:00", False),
+))
+async def test_primary_surgeon_title_requires_matching_identity_role_and_window(
+    title, record_time, expected,
+):
+    materials = _materials()
+    materials["surgery_record"][0]["surgeon"] = "周启航"
+    materials["senior_course_record"][0]["author_name"] = "周启航"
+    for row in materials["daily_course_record"]:
+        row["author_name"] = "赵医生"
+    materials["senior_course_record"] += ({
+        "document_id": "POST",
+        "record_time": record_time,
+        "document_title": title,
+        "record_content": "术后病情平稳，继续观察。",
+        "author_name": "赵医生",
+    },)
+
+    result, reduced = await _evaluate(RULE, materials)
+
+    assert dict(result.customer_display_facts)[RULE]["surgeon_round_present"] is expected
+    assert reduced.final_state.value == ("compliant" if expected else "non_compliant")
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_undated_course_does_not_fill_multiple_surgery_windows():
     materials = _materials()
     second = deepcopy(materials["surgery_record"][0])

@@ -41,14 +41,16 @@ _PLANNED_SURGERY_DATE_LABEL = re.compile(
 class SurgeryEvent:
     """已实施手术的受控事件视图，仅在原生执行器内部使用。"""
 
-    __slots__ = ("event_index", "source_key", "row")
+    __slots__ = ("event_index", "source_key", "row", "component_rows")
 
     def __init__(
-        self, *, event_index: int, source_key: str, row: Mapping[str, Any]
+        self, *, event_index: int, source_key: str, row: Mapping[str, Any],
+        component_rows: Sequence[Mapping[str, Any]] | None = None,
     ) -> None:
         self.event_index = event_index
         self.source_key = source_key
         self.row = row
+        self.component_rows = tuple(component_rows) if component_rows is not None else (row,)
 
     @property
     def surgery_name(self) -> str:
@@ -252,9 +254,8 @@ def count_associated_performed_surgery_events(
 ) -> tuple[int | None, str]:
     """返回可逐台计数的已实施手术数及无法计数时的受控原因。
 
-    单来源仅依据自己的稳定主键去重。两来源同时存在时，优先按手术编码（或
-    完整手术名称）与严格的实际手术时间做双射匹配；若唯一实质正式手术记录
-    对应同日复合组件，则按自然日收拢为一台事件。绝不比较不同来源的物理主键。
+    单来源先按稳定主键去重，再按同一开始时间合并组件。两来源仍须证明
+    事件对应，禁止用同日掩盖不同开始时间或来源日期冲突。
     """
 
     try:
@@ -297,8 +298,12 @@ def count_associated_performed_surgery_events(
         surgery_records = _remove_confirmed_unmatched_sparse_time_shells(
             surgery_records, mr_surgeries
         )
-    if not surgery_records:
-        return len(mr_surgeries), ""
+    record_groups = group_surgery_rows_by_start("surgery_record", surgery_records)
+    mr_groups = group_surgery_rows_by_start("mr_surgery", mr_surgeries)
+    if record_groups is None or mr_groups is None:
+        return None, "association_failed"
+    surgery_records = tuple(merge_surgery_component_rows(group) for group in record_groups)
+    mr_surgeries = tuple(merge_surgery_component_rows(group) for group in mr_groups)
     trusted_mr_ids = {
         _clean(row.get("surgery_id")) for row in mr_surgery_events
     }
@@ -311,6 +316,8 @@ def count_associated_performed_surgery_events(
         for row in qualified_mr_surgery_rows
     ):
         return None, "association_failed"
+    if not surgery_records:
+        return len(mr_surgeries), ""
     if not mr_surgeries:
         return len(surgery_records), ""
     if _has_strict_cross_source_bijection(surgery_records, mr_surgeries):
@@ -319,6 +326,74 @@ def count_associated_performed_surgery_events(
     if _is_single_composite_event(surgery_records, mr_surgeries):
         return 1, ""
     return None, "association_failed"
+
+
+def group_surgery_rows_by_start(
+    source_key: str, rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[Mapping[str, Any], ...], ...] | None:
+    """主控代定口径（2026-10-18，待客户复核），基线029/038/003/078。
+
+    同日且开始时间相同的组件为一台；不同开始时间不合并。缺开始时间或
+    同行开始时间冲突时保留资料不足，不以结束时间或同日猜测台次。
+    返回原始组件行供逐份证据引用，不能用合并视图替代源文书。
+    """
+    groups: dict[datetime, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        begin, conflict = _boundary_time(source_key, row, "begin")
+        if conflict or begin is None:
+            return None
+        groups.setdefault(begin, []).append(row)
+    return tuple(tuple(groups[begin]) for begin in sorted(groups))
+
+
+def merge_surgery_component_rows(
+    rows: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    """生成内部台次视图；术式及术者取并集，不补写或合成源文书正文。"""
+    if len(rows) == 1:
+        return rows[0]
+    merged = dict(rows[0])
+    for field in ("surgery_name", "surgery_code", "surgeon", "surgeon_physician_code"):
+        values = dict.fromkeys(
+            part.strip()
+            for row in rows
+            for part in re.split(r"[+＋、，,;；|｜]", _clean(row.get(field)))
+            if part.strip()
+        )
+        merged[field] = "、".join(sorted(values))
+    # 结束时间不参与台次合并；不一致时不得任取一行作为全台结束锚点。
+    for field in ("surgery_end_time", "surgery_end_datetime"):
+        values = {row.get(field) for row in rows if row.get(field) is not None}
+        merged[field] = next(iter(values)) if len(values) == 1 else None
+    return merged
+
+
+def build_surgery_document_events(
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[tuple[SurgeryEvent, ...] | None, str]:
+    """029 使用经过跨来源一致性核对的台次；运行期078仍仅读正式手术记录。"""
+    count, reason = count_associated_performed_surgery_events(materials)
+    if count is None:
+        return None, reason
+    events, reason = build_performed_surgery_events(materials)
+    if events is None:
+        return None, reason
+    if len(events) == count:
+        return events, ""
+    rows = tuple(
+        row for row in materials.rows("mr_surgery")
+        if has_qualified_traditional_surgery_row(row)
+        and has_trusted_performed_surgery(source_key="mr_surgery", row=row)
+    )
+    deduplicated = _deduplicated_source_events("mr_surgery", rows)
+    groups = group_surgery_rows_by_start("mr_surgery", deduplicated or ())
+    if groups is None or len(groups) != count:
+        return None, "association_failed"
+    return tuple(
+        SurgeryEvent(event_index=index, source_key="mr_surgery",
+                     row=merge_surgery_component_rows(group), component_rows=group)
+        for index, group in enumerate(groups, start=1)
+    ), ""
 
 
 def build_performed_surgery_events(
@@ -343,16 +418,18 @@ def build_performed_surgery_events(
         )
         if deduplicated is None:
             return None, "association_failed"
+        groups = group_surgery_rows_by_start("surgery_record", deduplicated)
+        if groups is None:
+            return None, "association_failed"
     except EvidenceMaterialTruncated:
         return None, "source_truncated"
     except EvidenceMaterialUnavailable:
         return None, "source_unavailable"
     return (
         tuple(
-            SurgeryEvent(event_index=index, source_key="surgery_record", row=row)
-            for index, row in enumerate(
-                _ordered_event_rows("surgery_record", deduplicated), start=1
-            )
+            SurgeryEvent(event_index=index, source_key="surgery_record",
+                         row=merge_surgery_component_rows(group), component_rows=group)
+            for index, group in enumerate(groups, start=1)
         ),
         "",
     )
@@ -762,6 +839,17 @@ def _is_single_composite_event(
     for component in mr_surgeries:
         if _natural_day("mr_surgery", component) != record_day:
             return False
+    # 主控代定口径（2026-10-18，待客户复核），基线029：同日不等于同台。
+    component_groups = group_surgery_rows_by_start("mr_surgery", mr_surgeries)
+    if component_groups is None or len(component_groups) != 1:
+        return False
+    record_begin, conflict = _boundary_time("surgery_record", record, "begin")
+    component_begin, _ = _boundary_time("mr_surgery", mr_surgeries[0], "begin")
+    if conflict or record_begin is None or component_begin is None:
+        return False
+    # 保留首页日期精度与同日唯一正式记录的既有关联；精确时刻不同时拒绝。
+    if component_begin.time() != datetime.min.time() and component_begin != record_begin:
+        return False
     return True
 
 

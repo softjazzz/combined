@@ -267,3 +267,17 @@ async def test_resolver_reports_transport_failure_separately_from_invalid_output
         _source("肺恶性肿瘤待排")
     )
     assert (result.state, result.reason_code) == ("technical_error", "malignancy_llm_transport_error")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name, expected", [
+    ("肿瘤性贫血", "unknown"),
+    ("肿瘤相关性发热", "unknown"),
+    ("肺癌伴肿瘤性贫血", "confirmed"),
+    ("恶性淋巴瘤", "confirmed"),
+])
+async def test_tumor_modifier_without_named_malignancy_is_not_explicit(name, expected):
+    # 用户口径（2026-10-19）：“肿瘤性/肿瘤相关”只修饰表现、未写明具体恶性肿瘤时不算明确恶性。
+    resolver = MalignancyFactResolver(_SequentialClient(["explicit_malignant"]))
+    resolution = await resolver.resolve(_source(name))
+    assert resolution.state == expected

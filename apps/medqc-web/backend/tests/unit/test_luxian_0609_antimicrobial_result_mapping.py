@@ -167,7 +167,7 @@ _FACTS_BY_CASE = {
             "special_antimicrobials": ["美罗培南"],
             "expert_support_present": True,
             "first_antimicrobial_time": "2026-06-01 10:00:00",
-            "expert_support_time": "2026-06-01 11:00:00",
+            "expert_support_time": "2026-06-02 11:00:00",
             "support_before_use": False,
             "unmatched_special_antimicrobials": ["美罗培南"],
             "association_ambiguous": False,
@@ -260,6 +260,65 @@ def _055_facts(*events: dict[str, object]) -> dict[str, object]:
         "association_ambiguous": False,
         "event_windows": list(events),
     }
+
+
+def _055_dimension_facts(*events: dict[str, object]) -> dict[str, object]:
+    facts = _055_facts(*events)
+    facts.update({
+        "effect_evaluation_intervals": [],
+        "safety_evaluation_intervals": [],
+        "unmatched_effect_antimicrobials": [],
+        "unmatched_safety_antimicrobials": [],
+    })
+    return facts
+
+
+def test_055_dual_dimension_facts_require_effect_and_safety_for_compliance() -> None:
+    raw = _055_dimension_facts(deepcopy(_MATURE_EVENT))
+    raw["evaluation_intervals"] = raw["effect_evaluation_intervals"] = [48.0]
+    raw["safety_evaluation_intervals"] = [48.0]
+    safe = safe_antimicrobial_customer_display_facts(
+        rule_id="LX0609-05-01-03", raw=raw
+    )
+
+    assert safe == raw
+    assert antimicrobial_customer_fact_status_is_valid(
+        rule_id="LX0609-05-01-03", status="compliant", safe_facts=safe
+    )
+    safe["safety_evaluation_intervals"] = []
+    assert not antimicrobial_customer_fact_status_is_valid(
+        rule_id="LX0609-05-01-03", status="compliant", safe_facts=safe
+    )
+
+
+def test_055_dual_dimension_non_compliance_identifies_missing_safety() -> None:
+    raw = _055_dimension_facts(deepcopy(_MATURE_EVENT))
+    raw["evaluation_intervals"] = raw["effect_evaluation_intervals"] = [48.0]
+    raw["unmatched_antimicrobials"] = ["美罗培南"]
+    raw["unmatched_safety_antimicrobials"] = ["美罗培南"]
+    safe = safe_antimicrobial_customer_display_facts(
+        rule_id="LX0609-05-01-03", raw=raw
+    )
+
+    assert safe == raw
+    assert antimicrobial_customer_fact_status_is_valid(
+        rule_id="LX0609-05-01-03", status="non_compliant", safe_facts=safe
+    )
+
+
+@pytest.mark.parametrize("missing_key", sorted({
+    "effect_evaluation_intervals",
+    "safety_evaluation_intervals",
+    "unmatched_effect_antimicrobials",
+    "unmatched_safety_antimicrobials",
+}))
+def test_055_partial_dual_dimension_contract_is_rejected(missing_key: str) -> None:
+    raw = _055_dimension_facts(deepcopy(_MATURE_EVENT))
+    raw.pop(missing_key)
+
+    assert safe_antimicrobial_customer_display_facts(
+        rule_id="LX0609-05-01-03", raw=raw
+    ) is None
 
 
 def test_055_c03_three_mature_event_windows_survive_mapping_and_envelope() -> None:

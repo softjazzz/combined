@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from datetime import date, datetime
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 from sqlalchemy import inspect, text
 
@@ -2620,7 +2620,9 @@ def assemble_domain_bundle(
     policy_version: str = "",
     source_schema: str | None = None,
     material_snapshot: _MaterialSnapshot | None = None,
+    projection_limits: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
+    """projection_limits 仅供只读展示路径覆盖个别表的展示上限；质控 Bundle 不传，保持既有上限。"""
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; domain bundle assembly unavailable.")
     if execution_domain not in _DOMAIN_DOC_PRIORITY:
@@ -2631,7 +2633,7 @@ def assemble_domain_bundle(
     docs: dict[str, list[dict[str, Any]]] = {}
     domain_projection_per_source: dict[str, dict[str, Any]] = {}
     for table_name in priority:
-        projection_limit = _DOMAIN_FETCH_LIMITS.get(table_name, 50)
+        projection_limit = (projection_limits or {}).get(table_name) or _DOMAIN_FETCH_LIMITS.get(table_name, 50)
         fetched_rows = _material_rows(
             material_snapshot=material_snapshot,
             source_schema=effective_schema,

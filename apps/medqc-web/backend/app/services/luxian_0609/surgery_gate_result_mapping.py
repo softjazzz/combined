@@ -87,6 +87,23 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             or (not fields and reason != "authoritative_time_conflict")):
             return None
         return {"failure_kind": kind, "gap_reason": reason, "missing_fields": list(dict.fromkeys(fields))}
+    if kind == "surgery_record_missing":
+        surgery_time = raw.get("surgery_time")
+        if (
+            raw.get("performed_surgery_confirmed") is not True
+            or raw.get("threshold_hours") != 24
+            or raw.get("surgery_time_kind") not in {"end", "begin"}
+            or not (surgery_time is None or isinstance(surgery_time, str) and len(surgery_time) <= 32)
+        ):
+            return None
+        return {
+            "failure_kind": kind,
+            "performed_surgery_confirmed": True,
+            "surgery_time": surgery_time,
+            "surgery_time_kind": raw["surgery_time_kind"],
+            "threshold_hours": 24,
+            "source_label": "手术记录",
+        }
     if kind in {"qualified_surgery_absent", "surgery_not_performed"}:
         return (
             {"failure_kind": kind, "performed_surgery_confirmed": False}
@@ -446,6 +463,7 @@ def surgery_gate_customer_fact_status_is_valid(*, rule_id: str, status: str, rea
         expected = {
             "qualified_surgery_absent": "not_applicable", "surgery_not_performed": "not_applicable",
             "surgery_record_late": "non_compliant", "surgery_record_within_threshold": "compliant",
+            "surgery_record_missing": "non_compliant",
         }.get(str(safe_facts.get("verification_kind") or safe_facts.get("failure_kind") or ""))
         return expected is None or status == expected
     if rule_id == "LX0609-05-01-01" and isinstance(safe_facts, Mapping):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import re
 from typing import Any, Mapping
@@ -318,6 +318,8 @@ class FamilyExecutionValidation:
     valid: bool
     reason_code: str
     envelope: FamilyExecutionEnvelope
+    # 逐点修复后仍有效的信封中，被单独改判技术错误的规则。
+    repaired_rule_ids: tuple[str, ...] = ()
 
 
 def build_family_technical_envelope(
@@ -383,51 +385,123 @@ def validate_family_execution_envelope(
     ):
         raise ValueError("invalid expected_rule_ids")
 
-    actual_result_rule_ids: list[str] = []
-    reason_code = ""
+    if envelope.planned_rule_ids != expected_rule_ids:
+        # 执行器声明的范围与调度范围不一致属于整族结构错误，不能逐点修补。
+        return FamilyExecutionValidation(
+            False,
+            "family_result_scope_mismatch",
+            build_family_technical_envelope(
+                expected_rule_ids=expected_rule_ids,
+                reason_code="family_result_scope_mismatch",
+                source_envelope=envelope,
+            ),
+        )
+
+    results_by_rule: dict[str, list[Any]] = {}
+    unattributable_result_count = 0
     for result in envelope.results:
-        if not isinstance(result, Mapping):
-            reason_code = "family_result_invalid"
-            break
-        rule_id = result.get("rule_id")
+        rule_id = result.get("rule_id") if isinstance(result, Mapping) else None
         if not isinstance(rule_id, str) or not rule_id.strip():
-            reason_code = "family_result_invalid"
-            break
-        actual_result_rule_ids.append(rule_id)
+            unattributable_result_count += 1
+            continue
+        results_by_rule.setdefault(rule_id, []).append(result)
+    decisions_by_rule: dict[str, list[RuleDecision]] = {}
+    for decision in envelope.decisions:
+        decisions_by_rule.setdefault(decision.rule_id, []).append(decision)
 
-    if not reason_code:
-        actual_results = tuple(actual_result_rule_ids)
-        actual_decisions = tuple(item.rule_id for item in envelope.decisions)
-        if len(actual_results) != len(set(actual_results)) or len(
-            actual_decisions
-        ) != len(set(actual_decisions)):
-            reason_code = "family_result_duplicate"
-        elif set(actual_results).intersection(actual_decisions):
-            reason_code = "family_result_duplicate"
-        elif any(
-            rule_id not in expected_rule_ids
-            for rule_id in (*actual_results, *actual_decisions)
-        ):
-            reason_code = "family_result_extra"
-        elif set(actual_results).union(actual_decisions) != set(expected_rule_ids):
-            reason_code = "family_result_missing"
-        elif actual_results != tuple(
-            rule_id for rule_id in expected_rule_ids if rule_id in set(actual_results)
-        ) or actual_decisions != tuple(
-            rule_id for rule_id in expected_rule_ids if rule_id in set(actual_decisions)
-        ):
-            reason_code = "family_result_order_mismatch"
-        elif envelope.planned_rule_ids != expected_rule_ids:
-            reason_code = "family_result_scope_mismatch"
+    expected_rule_id_set = set(expected_rule_ids)
+    extra_rule_ids = {
+        rule_id
+        for rule_id in (*results_by_rule, *decisions_by_rule)
+        if rule_id not in expected_rule_id_set
+    }
+    repaired_reasons: dict[str, str] = {}
+    for rule_id in expected_rule_ids:
+        delivered_count = len(results_by_rule.get(rule_id, ())) + len(
+            decisions_by_rule.get(rule_id, ())
+        )
+        if delivered_count > 1:
+            repaired_reasons[rule_id] = "family_result_duplicate"
+        elif delivered_count == 0:
+            repaired_reasons[rule_id] = (
+                "family_result_invalid"
+                if unattributable_result_count
+                else "family_result_missing"
+            )
 
-    if not reason_code:
+    if len(repaired_reasons) == len(expected_rule_ids):
+        # 没有任何可保留的结果时仍按整族合同失败处理，保持既有失败统计与用量语义。
+        reason_code = next(iter(repaired_reasons.values()))
+        return FamilyExecutionValidation(
+            False,
+            reason_code,
+            build_family_technical_envelope(
+                expected_rule_ids=expected_rule_ids,
+                reason_code=reason_code,
+                source_envelope=envelope,
+            ),
+        )
+
+    kept_results = tuple(
+        results_by_rule[rule_id][0]
+        for rule_id in expected_rule_ids
+        if rule_id not in repaired_reasons and rule_id in results_by_rule
+    )
+    kept_decisions = tuple(
+        decisions_by_rule[rule_id][0]
+        for rule_id in expected_rule_ids
+        if rule_id not in repaired_reasons and rule_id in decisions_by_rule
+    )
+    if (
+        not repaired_reasons
+        and not extra_rule_ids
+        and not unattributable_result_count
+        and kept_results == envelope.results
+        and kept_decisions == envelope.decisions
+    ):
         return FamilyExecutionValidation(True, "", envelope)
+
+    # 只把缺失、重复的规则改判技术错误；多余或无法归属的条目丢弃，顺序按调度
+    # 范围重排。其余规则已形成的结果与展示事实原样保留，不因同族一个点连坐。
+    technical_results = {
+        rule_id: build_luxian_0609_native_result(
+            rule_id=rule_id,
+            final_state="technical_error",
+            finding_kind="technical_failure",
+            reason_code=reason,
+        )
+        for rule_id, reason in repaired_reasons.items()
+    }
+    kept_result_by_rule = {str(item["rule_id"]): item for item in kept_results}
+    repaired_results = tuple(
+        kept_result_by_rule.get(rule_id) or technical_results[rule_id]
+        for rule_id in expected_rule_ids
+        if rule_id in kept_result_by_rule or rule_id in technical_results
+    )
+    repaired_display_facts = tuple(
+        item
+        for item in envelope.customer_display_facts
+        if item[0] in expected_rule_id_set and item[0] not in repaired_reasons
+    )
+    reason_code = (
+        next(iter(repaired_reasons.values()))
+        if repaired_reasons
+        else "family_result_extra"
+        if extra_rule_ids
+        else "family_result_invalid"
+        if unattributable_result_count
+        else "family_result_order_mismatch"
+    )
     return FamilyExecutionValidation(
-        False,
+        True,
         reason_code,
-        build_family_technical_envelope(
-            expected_rule_ids=expected_rule_ids,
-            reason_code=reason_code,
-            source_envelope=envelope,
+        replace(
+            envelope,
+            results=repaired_results,
+            decisions=kept_decisions,
+            customer_display_facts=repaired_display_facts,
+        ),
+        repaired_rule_ids=tuple(
+            rule_id for rule_id in expected_rule_ids if rule_id in repaired_reasons
         ),
     )

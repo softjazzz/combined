@@ -1,16 +1,10 @@
 <template>
-  <section
-    class="exam-event-block"
-    data-testid="exam-event-facts"
-  >
+  <section class="exam-event-block" data-testid="exam-event-facts">
     <header class="exam-event-header">
       <h4>逐次检查核对</h4>
       <span>按报告时间展示适用性与分析记录</span>
     </header>
-    <div
-      class="exam-event-summary"
-      data-testid="exam-event-summary"
-    >
+    <div class="exam-event-summary" data-testid="exam-event-summary">
       <span>{{ presentation.totalLabel }}</span>
       <span>{{ presentation.positiveLabel }}</span>
       <span class="is-danger">{{ presentation.issueLabel }}</span>
@@ -26,19 +20,27 @@
         <div class="exam-event-row-head">
           <span class="exam-event-position">第 {{ event.eventPosition }} 次</span>
           <time>{{ event.reportTime }}</time>
-          <span
-            class="exam-event-status"
-            :class="`is-${event.tone}`"
-          >{{ event.statusLabel }}</span>
+          <span class="exam-event-status" :class="`is-${event.tone}`">{{ event.statusLabel }}</span>
         </div>
         <p>{{ event.description }}</p>
+        <div
+          v-if="event.reportResultTexts.length"
+          class="exam-event-report-result"
+          :class="`is-${event.tone}`"
+        >
+          <strong>{{ event.reportResultLabel }}</strong>
+          <ul>
+            <li
+              v-for="(text, index) in event.reportResultTexts"
+              :key="`${event.eventPosition}-${index}`"
+            >
+              {{ text }}
+            </li>
+          </ul>
+        </div>
       </article>
     </div>
-    <details
-      v-if="otherEvents.length"
-      class="exam-event-more"
-      data-testid="exam-event-more"
-    >
+    <details v-if="otherEvents.length" class="exam-event-more" data-testid="exam-event-more">
       <summary>另有 {{ otherEvents.length }} 次：{{ otherSummary }}</summary>
       <div class="exam-event-list">
         <article
@@ -50,12 +52,26 @@
           <div class="exam-event-row-head">
             <span class="exam-event-position">第 {{ event.eventPosition }} 次</span>
             <time>{{ event.reportTime }}</time>
-            <span
-              class="exam-event-status"
-              :class="`is-${event.tone}`"
-            >{{ event.statusLabel }}</span>
+            <span class="exam-event-status" :class="`is-${event.tone}`">{{
+              event.statusLabel
+            }}</span>
           </div>
           <p>{{ event.description }}</p>
+          <div
+            v-if="event.reportResultTexts.length"
+            class="exam-event-report-result"
+            :class="`is-${event.tone}`"
+          >
+            <strong>{{ event.reportResultLabel }}</strong>
+            <ul>
+              <li
+                v-for="(text, index) in event.reportResultTexts"
+                :key="`${event.eventPosition}-${index}`"
+              >
+                {{ text }}
+              </li>
+            </ul>
+          </div>
         </article>
       </div>
     </details>
@@ -259,6 +275,45 @@ const otherSummary = computed(() => {
   font-size: 13px;
   font-weight: 400;
   line-height: 21px;
+}
+
+.exam-event-report-result {
+  display: grid;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(100, 116, 139, 0.3);
+  border-radius: 0 6px 6px 0;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.exam-event-report-result.is-danger {
+  border-left-color: rgba(198, 40, 40, 0.62);
+  background: rgba(239, 68, 68, 0.045);
+}
+
+.exam-event-report-result.is-success {
+  border-left-color: rgba(8, 116, 67, 0.52);
+}
+
+.exam-event-report-result strong {
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.exam-event-report-result ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.exam-event-report-result li {
+  color: #344256;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 @container (max-width: 560px) {

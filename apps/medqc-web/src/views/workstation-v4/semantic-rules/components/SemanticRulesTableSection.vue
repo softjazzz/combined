@@ -2,15 +2,8 @@
   <section class="table-shell">
     <!-- 当前规则集主卡（v7.1 蓝色主卡）：切换规则集、开始评估、进入自定义工作台 -->
     <div class="table-shell-head rule-set-hero">
-      <span
-        class="rule-set-hero__mark"
-        aria-hidden="true"
-      >
-        <MqIcon
-          name="rules"
-          color="#FFFFFF"
-          :size="28"
-        />
+      <span class="rule-set-hero__mark" aria-hidden="true">
+        <MqIcon name="rules" color="#FFFFFF" :size="28" />
       </span>
       <div class="rule-set-hero__copy">
         <span class="rule-set-hero__eyebrow">当前规则集</span>
@@ -42,27 +35,18 @@
         </div>
       </div>
       <div class="table-shell-actions">
-        <a-button
-          class="table-secondary-btn"
-          @click="emit('openCustomWorkspace')"
-        >
+        <a-button class="table-secondary-btn" @click="emit('openCustomWorkspace')">
           <SlidersHorizontal class="button-icon" />
           自定义规则工作台
         </a-button>
-        <a-button
-          class="table-primary-btn"
-          @click="emit('openQcEvaluation')"
-        >
+        <a-button class="table-primary-btn" @click="emit('openQcEvaluation')">
           <Play class="button-icon" />
           开始质控评估
         </a-button>
       </div>
     </div>
 
-    <p
-      v-if="ruleSetKey === 'luxian_0609_qc_v1'"
-      class="execution-summary"
-    >
+    <p v-if="ruleSetKey === 'luxian_0609_qc_v1'" class="execution-summary">
       当前筛选范围：{{ executionSummary }}。目录数量不等于实际执行数量。
     </p>
 
@@ -88,11 +72,7 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:defectLevel', String($event || ''))"
         >
-          <a-select-option
-            v-for="item in defectOptions"
-            :key="item"
-            :value="item"
-          >
+          <a-select-option v-for="item in defectOptions" :key="item" :value="item">
             {{ item }}
           </a-select-option>
         </a-select>
@@ -105,11 +85,7 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:complexity', String($event || ''))"
         >
-          <a-select-option
-            v-for="item in complexityOptions"
-            :key="item"
-            :value="item"
-          >
+          <a-select-option v-for="item in complexityOptions" :key="item" :value="item">
             {{ item }}
           </a-select-option>
         </a-select>
@@ -122,11 +98,7 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:documentType', String($event || ''))"
         >
-          <a-select-option
-            v-for="item in documentOptions"
-            :key="item"
-            :value="item"
-          >
+          <a-select-option v-for="item in documentOptions" :key="item" :value="item">
             {{ getDocTypeZh(item) }}
           </a-select-option>
         </a-select>
@@ -141,12 +113,8 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:releaseScope', String($event || ''))"
         >
-          <a-select-option value="acceptance_only">
-            待验收
-          </a-select-option>
-          <a-select-option value="default">
-            已上线
-          </a-select-option>
+          <a-select-option value="acceptance_only"> 待验收 </a-select-option>
+          <a-select-option value="default"> 已上线 </a-select-option>
         </a-select>
       </template>
     </ProQueryBar>
@@ -159,7 +127,6 @@
         :pagination="pagination"
         row-key="rule_id"
         :custom-row="buildCustomRow"
-        :scroll="{ x: 980 }"
         :locale="{ emptyText: '暂无匹配规则' }"
         @change="handleTableChange"
       >
@@ -176,7 +143,11 @@
 
           <template v-if="column.key === 'release_scope'">
             <span
-              :class="record.release_scope === 'acceptance_only' ? 'mq-status mq-status--warning' : 'mq-status mq-status--success'"
+              :class="
+                record.release_scope === 'acceptance_only'
+                  ? 'mq-status mq-status--warning'
+                  : 'mq-status mq-status--success'
+              "
               data-testid="release-scope"
             >
               {{ record.release_scope === 'acceptance_only' ? '待验收' : '已上线' }}
@@ -190,7 +161,9 @@
           </template>
 
           <template v-if="column.key === 'execution_status'">
-            <span :title="executionStatusHint(record as SemanticRuleItem)">{{ executionStatus(record as SemanticRuleItem) }}</span>
+            <span :title="executionStatusHint(record as SemanticRuleItem)">{{
+              executionStatus(record as SemanticRuleItem)
+            }}</span>
           </template>
 
           <template v-if="column.key === 'name'">
@@ -202,6 +175,28 @@
                 >
                   {{ record.name }}
                 </button>
+                <div class="rule-main-meta">
+                  <span
+                    v-if="record.release_scope"
+                    :class="
+                      record.release_scope === 'acceptance_only'
+                        ? 'mq-status mq-status--warning'
+                        : 'mq-status mq-status--success'
+                    "
+                  >
+                    {{ record.release_scope === 'acceptance_only' ? '待验收' : '已上线' }}
+                  </span>
+                  <span class="doc-type-pill">
+                    {{ getDocTypeZh((record.applicable_documents || [])[0] || '未知文书') }}
+                  </span>
+                  <span
+                    v-if="ruleSetKey === 'luxian_0609_qc_v1'"
+                    class="rule-execution-meta"
+                    :title="executionStatusHint(record as SemanticRuleItem)"
+                  >
+                    {{ executionStatus(record as SemanticRuleItem) }}
+                  </span>
+                </div>
               </div>
               <div class="rule-inline-actions">
                 <a-button
@@ -225,7 +220,10 @@
                   v-if="record.release_scope === 'acceptance_only'"
                   class="ant-btn ant-btn-sm action-secondary"
                   data-testid="go-rule-validation"
-                  :to="{ name: 'WorkstationV4RuleValidationDetail', params: { ruleId: record.rule_id } }"
+                  :to="{
+                    name: 'WorkstationV4RuleValidationDetail',
+                    params: { ruleId: record.rule_id },
+                  }"
                 >
                   去验收
                 </router-link>
@@ -241,13 +239,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import {
-  ClipboardCheck,
-  FileSearch,
-  Play,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-vue-next'
+import { ClipboardCheck, FileSearch, Play, Search, SlidersHorizontal } from 'lucide-vue-next'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
@@ -292,15 +284,20 @@ const emit = defineEmits<{
 }>()
 
 /** 只有 LX0609 规则带目录发布范围；其他规则集不显示发布范围列与筛选 */
-const hasReleaseScope = computed(() => props.rules.some((rule) => Boolean(rule.release_scope)) || Boolean(props.releaseScope))
+const hasReleaseScope = computed(
+  () => props.rules.some((rule) => Boolean(rule.release_scope)) || Boolean(props.releaseScope),
+)
 const columns = computed(() => [
-  { title: '序号', key: 'index', width: 64, fixed: 'left' as const, align: 'center' as const },
-  { title: '编号', key: 'rule_id', width: 160, fixed: 'left' as const },
-  ...(hasReleaseScope.value ? [{ title: '发布范围', key: 'release_scope', width: 110 }] : []),
-  { title: '适用文书', key: 'applicable_documents', width: 150 },
+  { title: '序号', key: 'index', width: 56, align: 'center' as const, responsive: ['md'] },
+  { title: '编号', key: 'rule_id', width: 158 },
+  { title: '规则名称', key: 'name' },
+  ...(hasReleaseScope.value
+    ? [{ title: '发布范围', key: 'release_scope', width: 108, responsive: ['lg'] }]
+    : []),
+  { title: '适用文书', key: 'applicable_documents', width: 140, responsive: ['lg'] },
   ...(props.ruleSetKey === 'luxian_0609_qc_v1'
-    ? [{ title: '执行状态', key: 'execution_status', width: 120 }] : []),
-  { title: '规则名称', key: 'name', width: 760 },
+    ? [{ title: '执行状态', key: 'execution_status', width: 118, responsive: ['lg'] }]
+    : []),
 ])
 
 const executionSummary = computed(() => {
@@ -364,7 +361,12 @@ function buildCustomRow(record: SemanticRuleItem) {
 </script>
 
 <style scoped>
-.execution-summary { margin: 12px 20px; color: var(--mq-text-secondary); font-size: 14px; line-height: 22px; }
+.execution-summary {
+  margin: 12px 20px;
+  color: var(--mq-text-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
 </style>
 
 <style scoped src="./styles/semantic-rules-table.css"></style>

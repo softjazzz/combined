@@ -151,7 +151,7 @@ def test_basic_timeliness_family_canonical_behavior_is_frozen_without_sha_assert
         "已确认首次病程记录在入院后 8 小时内完成。",
         "本次未发现有效抢救事件，不启动抢救记录6小时时限核对",
         "已确认主治医师首次查房记录在入院后 48 小时内完成。",
-        "已确认最高级别医师首次查房记录在入院后 72 小时内完成。",
+        "已确认上级医师首次查房记录在入院后 72 小时内完成。",
     ]
     assert [
         item.get("customer_display_facts", {}).get("elapsed_hours")

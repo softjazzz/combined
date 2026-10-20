@@ -22,13 +22,24 @@ def migration(monkeypatch):
     columns = {}
     emitted = []
     state = SimpleNamespace(
-        columns=columns, emitted=emitted, table_exists=True, schemas=[]
+        columns=columns, emitted=emitted, table_exists=True, schemas=[],
+        resolved_schema=None, connection_calls=[],
     )
+
+    def execute(statement, parameters=None):
+        state.connection_calls.append((str(statement), parameters))
+        schema = state.resolved_schema or (
+            "qc" if module.os.getenv("DB_SCHEMA_MODE", "single").strip().lower() == "split"
+            else "public"
+        )
+        return SimpleNamespace(scalar=lambda: schema if state.table_exists else None)
 
     def has_table(table, *, schema):
         assert table == "visit_index"
         state.schemas.append(schema)
-        return state.table_exists
+        return state.table_exists and (
+            state.resolved_schema is None or schema == state.resolved_schema
+        )
 
     inspector = SimpleNamespace(
         has_table=has_table,
@@ -55,11 +66,12 @@ def migration(monkeypatch):
     monkeypatch.setattr(
         module,
         "op",
-        SimpleNamespace(get_bind=lambda: object(), add_column=add_column),
+        SimpleNamespace(get_bind=lambda: SimpleNamespace(execute=execute), add_column=add_column),
         raising=False,
     )
     monkeypatch.setattr(sa, "inspect", lambda bind: inspector)
     monkeypatch.setenv("DB_SCHEMA_MODE", "split")
+    monkeypatch.delenv("DB_SEARCH_PATH", raising=False)
     return module, state
 
 
@@ -160,7 +172,7 @@ def test_upgrade_missing_table_fails_without_ddl(migration, monkeypatch, mode, s
     module, state = migration
     monkeypatch.setenv("DB_SCHEMA_MODE", mode)
     state.table_exists = False
-    with pytest.raises(RuntimeError, match=f"{schema}.visit_index"):
+    with pytest.raises(RuntimeError, match="visit_index"):
         module.upgrade()
     assert state.emitted == []
 
@@ -189,3 +201,30 @@ def test_downgrade_refuses_automatic_deletion(migration):
     with pytest.raises(RuntimeError, match="不支持自动降级"):
         module.downgrade()
     assert state.emitted == []
+
+
+def test_split_uses_actual_public_table_without_ddl_when_columns_exist(migration, monkeypatch):
+    module, state = migration
+    state.resolved_schema = "public"
+    monkeypatch.setenv("DB_SEARCH_PATH", "public,qc,sys,cdm,legacy")
+    state.columns.update({name: existing(name) for name in NAMES})
+    module.upgrade()
+    assert state.schemas == ["public"]
+    assert state.emitted == []
+    assert state.connection_calls[0][1] == {"search_path": "public,qc,sys,cdm,legacy"}
+
+
+def test_adds_only_to_search_path_resolved_table(migration, monkeypatch):
+    module, state = migration
+    state.resolved_schema = "tenant_qc"
+    monkeypatch.setenv("DB_SEARCH_PATH", "tenant_qc,public,qc")
+    module.upgrade()
+    assert state.schemas == ["tenant_qc"]
+    assert len(state.emitted) == 3
+    assert all("ALTER TABLE tenant_qc.visit_index" in sql for sql in state.emitted)
+
+
+def test_split_default_search_path_matches_application(migration):
+    module, state = migration
+    module.upgrade()
+    assert state.connection_calls[0][1] == {"search_path": "public,qc,sys,cdm,legacy"}

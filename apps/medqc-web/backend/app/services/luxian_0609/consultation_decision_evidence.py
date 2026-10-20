@@ -243,7 +243,11 @@ def select_consultation_rule_material_refs(
                 and not assessment.execution_refs
             ) or (
                 rule_id == "LX0609-03-01-04"
-                and record_state in {"generic_trace", "copied_opinion"}
+                and (
+                    record_state in {"generic_trace", "copied_opinion"}
+                    # 用户口径（2026-10-20）：023 只认会诊当日医嘱，找不到医嘱即为缺陷。
+                    or (record_state == "no_trace" and not assessment.execution_refs)
+                )
             )
             if not offending:
                 continue

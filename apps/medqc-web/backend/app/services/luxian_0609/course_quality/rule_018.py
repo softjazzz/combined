@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 import re
+import unicodedata
 from typing import Any, Mapping, Sequence
 
 from ..decision_model import CriterionResult, CriterionStatus
@@ -263,7 +264,7 @@ def _lx018_prompt(*, context: str) -> str:
     """模型只抽取主诉与第一诊断之间的原子事实，不输出最终状态。"""
 
     return (
-        "你只从本次入院记录的主诉和受控第一诊断中抽取医学关系原子事实。"
+        "你只从本次入院记录的主诉原文与受控第一诊断中抽取医学关系原子事实。只按主诉原文提供的症状线索判断能否导出第一诊断。现病史仅用于第一诊断未标侧别时核实病灶侧别、识别规范列明的例外（同病反复入院、肿瘤再次放化疗、无症状检查异常）、理解主诉里的缩写或术语。只出现在现病史而未写进主诉的症状、体征或事件不得作为主诉线索，不得据此判supports。下述侧别与症状组合规则只作用于主诉原文中的症状。"
         "不要评价主诉字数，不要输出整条质控规则是否合规，也不要引入出院诊断或后续病程诊断。\n"
         "chief_signal_kind只能取event_or_etiology、localized_symptom_or_sign、"
         "nonspecific_symptom_or_sign、unknown。event_or_etiology只在外伤、暴露、操作等明确事件或病因"
@@ -275,6 +276,14 @@ def _lx018_prompt(*, context: str) -> str:
         "仅写身体部位并不自动算有定位价值，必须结合本次第一诊断判断。以下边界必须严格执行："
         "单独心悸对冠心病、单独咳嗽对肺占位，均应将chief_signal_kind判为"
         "nonspecific_symptom_or_sign，关系字段不得判supports。"
+        "症状组合应整体判断，不能拆成孤立咳嗽后套用上述边界；不要求特异性确诊。"
+        "例如咳嗽合并咯血可提供肺部感染方向，反复咳嗽咳痰合并痰血可提供肺部占位方向，"
+        "胸痛可提供冠脉疾病方向；不能因为还可能存在其他病因就否定这些方向线索。"
+        "主诉症状指向第一诊断所在的器官系统或急症类别即可判localized_symptom_or_sign："
+        "例如急性意识障碍对脑出血、脑卒中等颅内急症，呼吸困难对心力衰竭或肺部疾病，均提供方向线索。"
+        "头痛、头晕、头昏、乏力、全身不适等全身性非特异症状单独或组合出现时判nonspecific_symptom_or_sign；"
+        "全身性症状不能为以病因命名的诊断提供方向，例如头昏、乏力伴心累、气促对缺铁性贫血，"
+        "头痛、头晕对脑梗死，均判nonspecific_symptom_or_sign。"
         "主诉已经直接写出与第一诊断相同"
         "或明确同义的疾病/检查发现时，应判localized_symptom_or_sign且disease_direction_relation=supports。"
         "第一诊断本身是以症状命名的待诊/待查（如抽搐待诊、发热待查）时，主诉写出该症状即属相同表述，"
@@ -284,12 +293,17 @@ def _lx018_prompt(*, context: str) -> str:
         "not_applicable、unknown。supports表示材料明确支持该关系，conflicts表示明确冲突；"
         "没有对应维度用not_applicable，材料不足用unknown。解剖和侧别按临床生理关系判断，"
         "不能机械比较字面同侧：例如右侧大脑半球病变与左侧肢体无力是典型对侧定位，应判supports。"
+        "第一诊断未标侧别时，应结合本次入院现病史已确认的致病病灶核实侧别，"
+        "不能把未标侧别当作不存在冲突；现病史只作入院病灶关系核实，不替代受控第一诊断。"
         "当核心只是缺少相符定位或疾病方向的非特异症状时，关系字段应使用nonspecific或not_applicable，"
         "不能仅因该症状可能出现在第一诊断中就判supports。不要补造病历没有的事实。\n"
+        "反例：主诉“头痛、头晕1天”，现病史另有“伴左手乏力”，第一诊断脑梗死；主诉线索只有头痛、头晕，属nonspecific_symptom_or_sign，不得因现病史判supports。\n"
+        "chief_complaint_signals为必填字符串数组，逐字摘自[主诉原文]中实际采信的症状、体征或事件，1–6项，每项不超过20字；chief_signal_kind=unknown时可为空数组。\n"
         "medical_analysis只能作展示说明，不能决定状态；用中文说明采用的原子事实，"
         "不得复述姓名、住院号等身份信息，最多80个汉字，不要解释枚举定义。\n"
         "严格输出JSON对象："
         '{"chief_signal_kind":"event_or_etiology|localized_symptom_or_sign|nonspecific_symptom_or_sign|unknown",'
+        '"chief_complaint_signals":["主诉原文线索"],'
         '"anatomic_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
         '"laterality_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
         '"symptom_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
@@ -404,6 +418,8 @@ def _lx018_unknown_semantic_result(reason_code: str) -> CriterionResult:
 
 def _parse_lx018_atomic_facts(
     response: Mapping[str, Any],
+    *,
+    chief_complaint: str,
 ) -> dict[str, str] | None:
     """严格解析 018 的原子事实输出；旧的总状态字段不再作为输入。"""
 
@@ -412,6 +428,27 @@ def _parse_lx018_atomic_facts(
         return None
     signal_kind = _clean(payload.get("chief_signal_kind"))
     if signal_kind not in LX018_CHIEF_SIGNAL_KINDS:
+        return None
+    signals = payload.get("chief_complaint_signals")
+
+    # 原文锚定仅用于输入合同校验，不能进入客户展示事实。
+    def normalize(value: str) -> str:
+        return "".join(
+            char for char in value
+            if not char.isspace() and not unicodedata.category(char).startswith("P")
+        )
+
+    normalized_complaint = normalize(chief_complaint)
+    if (
+        not isinstance(signals, list)
+        or len(signals) > 6
+        or (signal_kind != "unknown" and not signals)
+        or any(
+            not isinstance(item, str) or not 1 <= len(item) <= 20
+            or not normalize(item) or normalize(item) not in normalized_complaint
+            for item in signals
+        )
+    ):
         return None
     facts: dict[str, str] = {"chief_signal_kind": signal_kind}
     for field_name in LX018_ATOMIC_RELATION_FIELDS:
@@ -479,6 +516,8 @@ def _aggregate_lx018_atomic_facts(
         return "supported", "supported", dimensions
     if any(relations[field_name] == "unknown" for field_name in support_fields):
         return "unknown", "insufficient_information", dimensions
+    if relations["disease_direction_relation"] == "supports":
+        return "supported", "supported", dimensions
     return (
         "unsupported",
         "site_symptom_not_specific"
@@ -490,10 +529,12 @@ def _aggregate_lx018_atomic_facts(
 
 def _lx018_atomic_semantic_result(
     response: Mapping[str, Any],
+    *,
+    chief_complaint: str,
 ) -> tuple[CriterionResult, str] | None:
     """返回原子事实汇总结果；``None`` 表示模型输出不符合原子合同。"""
 
-    facts = _parse_lx018_atomic_facts(response)
+    facts = _parse_lx018_atomic_facts(response, chief_complaint=chief_complaint)
     if facts is None:
         return None
     relation_state, rationale_code, dimensions = _aggregate_lx018_atomic_facts(facts)

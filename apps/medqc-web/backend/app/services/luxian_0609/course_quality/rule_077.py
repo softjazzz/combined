@@ -20,6 +20,7 @@ from ..evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
+from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .shared import clean_text, response_json_payload
 
 
@@ -28,7 +29,9 @@ SOURCE_KEYS = (
     "first_course_record",
     "first_course_record_diagnosis",
 )
-ALLOWED_RESULT_STATUSES = frozenset({"compliant", "non_compliant", "data_gap"})
+ALLOWED_RESULT_STATUSES = frozenset(
+    {"compliant", "non_compliant", "data_gap", "technical_error"}
+)
 _DELIVERABLE_DATA_GAP_REASONS = frozenset(
     {
         "source_unavailable",
@@ -121,7 +124,9 @@ def _diagnosis_items(value: Any) -> tuple[str, ...]:
     return numbered or (text,)
 
 
-def _first_course_row_diagnosis(row: Mapping[str, Any]) -> tuple[str, ...]:
+def _first_course_row_diagnosis(
+    row: Mapping[str, Any], *, allow_basis: bool = False,
+) -> tuple[str, ...]:
     value = clean_text(
         row.get("first_diagnosis")
         or row.get("primary_diagnosis")
@@ -130,7 +135,16 @@ def _first_course_row_diagnosis(row: Mapping[str, Any]) -> tuple[str, ...]:
     if value:
         return _diagnosis_items(value)
     body_match = _FIRST_DIAGNOSIS_IN_BODY.search(_row_text(row))
-    return _diagnosis_items(body_match.group("diagnosis")) if body_match else ()
+    if body_match:
+        return _diagnosis_items(body_match.group("diagnosis"))
+    # 诊断依据只用于选择已有结构化候选，不能把编号病史叙述新增为诊断。
+    if not allow_basis:
+        return ()
+    basis = clean_text(row.get("diagnose_based_on"))
+    match = re.match(
+        r"^1\s*[、.．]\s*([^：:；;。\n]+?)(?=\s|[:：；;。]|2\s*[、.．]|$)", basis,
+    )
+    return (match.group(1).strip(),) if match else ()
 
 
 def _first_diagnosis_evidence(
@@ -154,6 +168,11 @@ def _first_diagnosis_evidence(
             "diagnosis_binding_conflict",
         )
 
+    diagnosis_pairs = tuple(
+        (reference, row) for reference, row in diagnosis_pairs
+        if clean_text(row.get("diagnosis_type")) == "初步诊断"
+        and _diagnosis_items(row.get("diagnosis_name") or row.get("diagnosis"))
+    )
     structured_refs = tuple(reference for reference, _row in diagnosis_pairs)
     bound_rows: list[tuple[str, Mapping[str, Any]]] = []
     unbound_rows = False
@@ -175,6 +194,23 @@ def _first_diagnosis_evidence(
         )
 
     if bound_rows:
+        # 主诊断标志或显式序号优先；其余非首项不构成第一诊断冲突。
+        main_rows = [
+            (ref, row) for ref, row in bound_rows
+            if clean_text(row.get("diagnosis_main")) in {"是", "1", "true", "True"}
+        ]
+        ordered_rows = []
+        for ref, row in bound_rows:
+            order = clean_text(row.get("diagnosis_no"))
+            if order.isdigit():
+                ordered_rows.append((int(order), ref, row))
+        if main_rows:
+            bound_rows = main_rows
+        elif ordered_rows:
+            first_order = min(order for order, _ref, _row in ordered_rows)
+            bound_rows = [
+                (ref, row) for order, ref, row in ordered_rows if order == first_order
+            ]
         candidates: list[tuple[str, tuple[str, ...]]] = []
         for _reference, row in bound_rows:
             if clean_text(row.get("diagnosis_type")) != "初步诊断":
@@ -193,6 +229,14 @@ def _first_diagnosis_evidence(
                 "diagnosis_field_missing",
             )
         first_values = {first for first, _items in candidates}
+        if len(first_values) > 1:
+            body_candidates = [
+                _first_course_row_diagnosis(row, allow_basis=True)
+                for _ref, row in first_course_pairs
+            ]
+            body_first = {items[0] for items in body_candidates if items}
+            if len(body_first) == 1 and body_first <= first_values:
+                first_values = body_first
         if len(first_values) != 1:
             return _FirstDiagnosisEvidence(
                 "unknown",
@@ -286,6 +330,12 @@ def _decision(
             QcDirection.UNKNOWN,
             None,
         ),
+        "technical_error": (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            None,
+        ),
     }
     applicability, evidence_state, direction, confidence = dimensions[status]
     return RuleDecision(
@@ -340,6 +390,24 @@ async def evaluate_rule_077(
         )
 
     first_course_pairs = material_rows["first_course_record"]
+    # 拆行可能保留一个不含鉴别内容的文书壳。仅在鉴别文书唯一时选择该文书，
+    # 同 ID 的章节仍一起读取；不同有效文书不得交叉拼接诊断与鉴别。
+    differential_ids = {
+        clean_text(row.get("document_id")) for _ref, row in first_course_pairs
+        if _differential_text(row)
+    }
+    if len(differential_ids) == 1 and next(iter(differential_ids)):
+        selected_id = next(iter(differential_ids))
+        all_course_ids = {clean_text(row.get("document_id")) for _ref, row in first_course_pairs}
+        first_course_pairs = tuple(
+            (ref, row) for ref, row in first_course_pairs
+            if clean_text(row.get("document_id")) == selected_id
+        )
+        material_rows["first_course_record_diagnosis"] = tuple(
+            (ref, row) for ref, row in material_rows["first_course_record_diagnosis"]
+            if clean_text(row.get("document_id")) == selected_id
+            or clean_text(row.get("document_id")) not in all_course_ids
+        )
     first_course_rows = tuple(row for _reference, row in first_course_pairs)
     first_course_diagnosis_pairs = material_rows["first_course_record_diagnosis"]
 
@@ -388,8 +456,8 @@ async def evaluate_rule_077(
             _decision(
                 snapshot=snapshot,
                 refs=refs,
-                status="data_gap",
-                reason_code="source_readiness_unproven",
+                status="technical_error",
+                reason_code="model_transport_error",
                 criterion=criterion,
             )
         )
@@ -415,25 +483,26 @@ async def evaluate_rule_077(
             _decision(
                 snapshot=snapshot,
                 refs=refs,
-                status="data_gap",
-                reason_code="source_readiness_unproven",
+                status="technical_error",
+                reason_code="model_timeout",
                 criterion=criterion,
             ),
             llm_call_count=1,
         )
-    except Exception:
+    except Exception as error:
+        failure_reason = classify_luxian_0609_llm_call_failure(error)
         criterion = _criterion(
             status=CriterionStatus.UNKNOWN,
-            reason_code="model_transport_error",
+            reason_code=failure_reason,
             refs=refs,
-            actual="model_transport_error",
+            actual=failure_reason,
         )
         return Rule077Execution(
             _decision(
                 snapshot=snapshot,
                 refs=refs,
-                status="data_gap",
-                reason_code="source_readiness_unproven",
+                status="technical_error",
+                reason_code=failure_reason,
                 criterion=criterion,
             ),
             llm_call_count=1,

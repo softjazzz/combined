@@ -275,6 +275,179 @@ function text(value: unknown): string {
   return String(value || '').trim()
 }
 
+export type ConsultationRecommendationState =
+  | 'specific'
+  | 'generic'
+  | 'missing'
+  | 'unknown'
+  | 'partial'
+  | 'excluded'
+
+export interface ConsultationRecommendationRow {
+  key: string
+  episodeIndex: number
+  recommendationIndex?: number
+  /** 会诊记录时间：医嘱核对窗口的终点（当天结束） */
+  opinionTime?: string
+  /** 医嘱核对窗口的起点（会诊记录前3天） */
+  windowStartDate?: string
+  /** 会诊记录写明患者/家属拒绝或暂缓、因而不核对的措施 */
+  declinedMeasures?: string[]
+  text: string
+  state: ConsultationRecommendationState
+  statusLabel: string
+  detail: string
+}
+
+export interface ConsultationRecommendationPresentation {
+  comparedCount: number
+  excludedCount: number
+  rows: ConsultationRecommendationRow[]
+  checkedSources: string[]
+}
+
+// 用户口径（2026-10-20）：023 只认会诊记录前3天至会诊记录当天开立的住院医嘱，不看病程；
+// 系统无可靠会诊日期，固定回看3天。
+const CONSULTATION_EXECUTION_STATE_PRESENTATION: Record<
+  Exclude<ConsultationRecommendationState, 'excluded' | 'partial'>,
+  { statusLabel: string; detail: string }
+> = {
+  specific: {
+    statusLabel: '已执行',
+    detail: '会诊记录前3天至当天已开立对应医嘱',
+  },
+  generic: {
+    statusLabel: '执行医嘱不具体',
+    detail: '会诊记录前3天至当天仅有与建议笼统相关的医嘱，不能确认具体落实',
+  },
+  missing: {
+    statusLabel: '未执行',
+    detail: '会诊记录前3天至当天未开立与建议对应的医嘱',
+  },
+  unknown: {
+    statusLabel: '资料待核实',
+    detail: '本条建议的执行情况尚未形成可靠结论',
+  },
+}
+
+const CONSULTATION_EXECUTION_SOURCES = [
+  '会诊记录前3天至当天开立的住院药品医嘱',
+  '会诊记录前3天至当天开立的住院非药品医嘱（“继续/维持”原治疗的建议也认此前已开立的医嘱）',
+]
+
+const CONSULTATION_EXCLUSION_DETAILS: Record<string, string> = {
+  execution_condition_not_defined: '建议未说明何时达到执行条件，不能据未找到记录判定未落实',
+  non_order_recommendation: '卧床、体位、饮食营养、护理宣教等建议不通过开立医嘱落实，不核对',
+  home_medication: '院外自带药建议不核对',
+  condition_not_met: '条件式建议在核对期间未开立对应医嘱，视为条件未成立，不核对',
+  declined_in_record: '会诊记录写明患者或家属拒绝、或暂缓执行，不核对',
+}
+
+function dateOnly(value: unknown): string {
+  const raw = text(value)
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''
+}
+
+function recordTime(value: unknown): string {
+  const raw = text(value)
+  const matched = raw.match(/^(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}):\d{2})?$/)
+  if (!matched) return ''
+  return matched[2] ? `${matched[1]} ${matched[2]}` : matched[1]
+}
+
+function measureList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => text(item))
+    .filter(Boolean)
+    .slice(0, 8)
+}
+
+function positiveInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+}
+
+export function buildConsultationRecommendationPresentation(
+  item: Pick<SingleRecordQcResultItem, 'rule_id' | 'customer_display_facts'>,
+): ConsultationRecommendationPresentation | null {
+  if (text(item.rule_id).toUpperCase() !== 'LX0609-03-01-04') return null
+  const facts = item.customer_display_facts
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return null
+
+  const rows: ConsultationRecommendationRow[] = []
+  const evidence = (facts as Record<string, unknown>).recommendation_evidence
+  if (Array.isArray(evidence)) {
+    for (const entry of evidence) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const record = entry as Record<string, unknown>
+      const episodeIndex = positiveInteger(record.episode_index)
+      const recommendationIndex = positiveInteger(record.recommendation_index)
+      const recommendationText = text(record.recommendation_text)
+      const state = text(record.execution_state) as Exclude<
+        ConsultationRecommendationState,
+        'excluded'
+      >
+      const statePresentation = CONSULTATION_EXECUTION_STATE_PRESENTATION[state]
+      if (!episodeIndex || !recommendationIndex || !recommendationText || !statePresentation)
+        continue
+      const opinionTime = recordTime(record.opinion_time)
+      const windowStartDate = dateOnly(record.window_start_date)
+      const missingMeasures = measureList(record.missing_measures)
+      const declinedMeasures = measureList(record.declined_measures)
+      const partial = state === 'specific' && missingMeasures.length > 0
+      const presentation = partial
+        ? {
+            state: 'partial' as const,
+            statusLabel: '部分措施未执行',
+            detail: `会诊记录前3天至当天未开立以下措施的医嘱：${missingMeasures.join('、')}`,
+          }
+        : { state, ...statePresentation }
+      rows.push({
+        key: `compared-${episodeIndex}-${recommendationIndex}`,
+        episodeIndex,
+        recommendationIndex,
+        ...(opinionTime ? { opinionTime } : {}),
+        ...(windowStartDate ? { windowStartDate } : {}),
+        ...(declinedMeasures.length ? { declinedMeasures } : {}),
+        text: recommendationText,
+        ...presentation,
+        detail: declinedMeasures.length
+          ? `${presentation.detail}；会诊记录写明不执行：${declinedMeasures.join('、')}，该项不核对`
+          : presentation.detail,
+      })
+    }
+  }
+
+  const comparedCount = rows.length
+  const excluded = (facts as Record<string, unknown>).excluded_recommendations
+  if (Array.isArray(excluded)) {
+    for (const [index, entry] of excluded.entries()) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const record = entry as Record<string, unknown>
+      const episodeIndex = positiveInteger(record.episode_index)
+      const recommendationText = text(record.recommendation_text)
+      const detail = CONSULTATION_EXCLUSION_DETAILS[text(record.exclusion_reason)]
+      if (!episodeIndex || !recommendationText || !detail) continue
+      rows.push({
+        key: `excluded-${episodeIndex}-${index}`,
+        episodeIndex,
+        text: recommendationText,
+        state: 'excluded',
+        statusLabel: '未纳入核对',
+        detail,
+      })
+    }
+  }
+
+  if (!rows.length) return null
+  return {
+    comparedCount,
+    excludedCount: rows.length - comparedCount,
+    rows,
+    checkedSources: [...CONSULTATION_EXECUTION_SOURCES],
+  }
+}
+
 export function toSingleRecordQcResultViewItem(
   item: SingleRecordQcResultItem,
   index: number,

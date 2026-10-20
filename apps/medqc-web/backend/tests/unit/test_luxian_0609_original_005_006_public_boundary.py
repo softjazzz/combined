@@ -128,7 +128,7 @@ def test_005_006_existing_executor_results_project_once(monkeypatch):
     )
     expected_findings = (
         "已确认主治医师首次查房记录在入院后 48 小时内完成。",
-        "已确认最高级别医师首次查房记录在入院后 72 小时内完成。",
+        "已确认上级医师首次查房记录在入院后 72 小时内完成。",
     )
     assert results == [
         {
@@ -140,7 +140,7 @@ def test_005_006_existing_executor_results_project_once(monkeypatch):
                 "failure_kind": "timeliness_requirement_satisfied",
                 "observed_time": "2026-06-02 08:00:00",
                 "remaining_hours": threshold - 24.0,
-                "source_label": label,
+                "source_label": label if index == 0 else "上级医师首次查房记录",
                 "target_document": target,
                 "threshold_hours": threshold,
                 "timeliness_state": "within",
@@ -233,10 +233,7 @@ def test_005_006_frozen_executor_branches_keep_status_reason_and_fact_source(
     expected = {
         "within": ("compliant", "requirement_within_threshold", "within"),
         "late": ("non_compliant", "threshold_exceeded", "late"),
-        "missing": (
-            ("data_gap", "source_empty", None) if rule_id == CASES[0][0]
-            else ("non_compliant", "required_document_missing", "missing")
-        ),
+        "missing": ("non_compliant", "required_document_missing", "missing"),
         "no_anchor": ("data_gap", "authoritative_time_missing", None),
         "date_anchor": ("compliant", "requirement_within_threshold", "within"),
     }[case]
@@ -245,7 +242,7 @@ def test_005_006_frozen_executor_branches_keep_status_reason_and_fact_source(
         facts = result["customer_display_facts"]
         assert (facts["target_document"], facts["threshold_hours"]) == (target, threshold)
         assert facts["timeliness_state"] == expected[2]
-        assert facts["source_label"] == label
+        assert facts["source_label"] == (label if rule_id == CASES[0][0] else "上级医师首次查房记录")
         assert ("anchor_date" in facts) == (case == "date_anchor")
     else:
         assert not result.get("customer_display_facts")
@@ -253,24 +250,14 @@ def test_005_006_frozen_executor_branches_keep_status_reason_and_fact_source(
     assert getattr(execution, "total_tokens", 0) == 0
 
 
-@pytest.mark.asyncio
-async def test_006_fixed_semantic_role_response_keeps_same_published_fact_shape(monkeypatch):
-    class _FixedModel:
+def test_006_standard_round_preserves_published_fact_shape_without_model(monkeypatch):
+    class _ForbiddenModel:
         def __init__(self):
             self.prompts = []
 
         async def generate(self, prompt):
             self.prompts.append(prompt)
-            return {
-                "choices": [{"message": {"content": (
-                    '{"schema_version":"lx0609-006-round-role-v1",'
-                    '"documents":[{"position":1,"role":"senior",'
-                    '"physician_name":"彭中","physician_title":"主任医师",'
-                    '"evidence_quote":"今日彭中主任医师联合神经疾病"}]}'
-                )}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 40, "completion_tokens": 12, "total_tokens": 52},
-                "response_time": 0.2,
-            }
+            raise AssertionError("标准上级查房文书不得调用身份核验模型")
 
     rule_id = CASES[1][0]
     session = _typed_basic_session(
@@ -279,13 +266,13 @@ async def test_006_fixed_semantic_role_response_keeps_same_published_fact_shape(
             "senior_course_record": [{
                 "document_id": "safe-upper-round-ref", "document_title": "上级医师查房记录",
                 "record_time": "2026-07-16 10:30:02",
-                "record_content": "今日彭中主任医师联合神经疾病相关专业医师查房。",
+                "record_content": "今日上级医师查房，分析病情与治疗计划。",
             }],
         },
         selected_rule_ids=(rule_id,), evaluation_as_of_date="2026-07-20",
     )
-    model = _FixedModel()
-    execution = await execute_luxian_0609_native_basic_timeliness(
+    model = _ForbiddenModel()
+    execution = execute_luxian_0609_native_basic_timeliness(
         rule_ids=(rule_id,), decision_rule_ids=(rule_id,), evidence_payload=None,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
         llm_client=model,
@@ -308,8 +295,8 @@ async def test_006_fixed_semantic_role_response_keeps_same_published_fact_shape(
         customer_display_facts=execution.customer_display_facts, format_evidence=False,
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
-    assert len(model.prompts) == execution.llm_call_count == 1
-    assert execution.total_tokens == 52
+    assert len(model.prompts) == getattr(execution, "llm_call_count", 0) == 0
+    assert getattr(execution, "total_tokens", 0) == 0
     assert calls == [rule_id]
     assert (result["status"], result["reason_code"]) == (
         "compliant", "requirement_within_threshold",
@@ -317,7 +304,7 @@ async def test_006_fixed_semantic_role_response_keeps_same_published_fact_shape(
     assert result["customer_display_facts"] == {
         "failure_kind": "timeliness_requirement_satisfied",
         "target_document": "senior_course_record",
-        "source_label": "副主任医师或主任医师首次查房记录",
+        "source_label": "上级医师首次查房记录",
         "timeliness_state": "within",
         "threshold_hours": 72,
         "anchor_time": "2026-07-15 13:48:49",

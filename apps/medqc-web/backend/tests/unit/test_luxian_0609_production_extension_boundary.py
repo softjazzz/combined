@@ -440,12 +440,12 @@ async def test_existing_native_and_semantic_rules_use_production_plan_binding_an
     ] == [
         {
             "executor_key": "basic_timeliness",
-            "llm_call_count": 1,
-            "prompt_tokens": 40,
-            "completion_tokens": 12,
-            "total_tokens": 52,
+            "llm_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
             "covered_customer_rule_ids": ["LX0609-01-01-01", "LX0609-02-01-02"],
-            "latency_ms": 200.0,
+            "latency_ms": 0.0,
         }
     ]
     assert [item.rule_id for item in context.reduced_decisions] == [
@@ -457,9 +457,9 @@ async def test_existing_native_and_semantic_rules_use_production_plan_binding_an
         "compliant",
     ]
     assert all(item.fact_refs for item in context.reduced_decisions)
-    assert len(client.prompts) == 1
-    assert context.native_llm_call_count == 1
-    assert context.native_total_tokens == 52
+    assert len(client.prompts) == 0
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
     assert [item["rule_id"] for item in results] == [
         "LX0609-01-01-01",
         "LX0609-02-01-02",
@@ -510,12 +510,12 @@ async def test_single_rule_and_combined_selection_keep_canonical_and_semantic_in
     ] == ["basic_timeliness", "basic_timeliness", "basic_timeliness"]
     assert client_001.prompts == []
     assert client_006.prompts == client_both.prompts
-    assert len(client_006.prompts) == 1
+    assert len(client_006.prompts) == 0
     assert context_001.native_llm_call_count == 0
     assert context_001.native_prompt_tokens == 0
-    assert context_006.native_llm_call_count == context_both.native_llm_call_count == 1
-    assert context_006.native_prompt_tokens == context_both.native_prompt_tokens == 40
-    assert context_006.native_total_tokens == context_both.native_total_tokens == 52
+    assert context_006.native_llm_call_count == context_both.native_llm_call_count == 0
+    assert context_006.native_prompt_tokens == context_both.native_prompt_tokens == 0
+    assert context_006.native_total_tokens == context_both.native_total_tokens == 0
 
     canonical_001 = _normalized_canonical_item(results_001[0])
     canonical_006 = _normalized_canonical_item(results_006[0])

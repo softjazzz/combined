@@ -1,7 +1,11 @@
-"""023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施既无医嘱也无病程记录即不合规。"""
+"""023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施无执行证据即不合规。
+
+用户口径（2026-10-20）：执行证据只认会诊记录当天开立的医嘱。
+"""
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -22,6 +26,92 @@ BASE_ORDERS = ("电针；治疗", "头皮针；治疗", "低频脉冲治疗(功�
 FULL_ORDERS = (*BASE_ORDERS, "关节松动术；治疗", "偏瘫肢体综合训练；治疗")
 
 
+def test_specific_order_proves_execution_even_when_course_only_says_follow_advice():
+    completed, _, _, _ = _setup(("中药敷贴",))
+    completed = (replace(completed[0], recommendation=replace(
+        completed[0].recommendation, source_quote="中药贴敷", normalized_action="中药贴敷")),)
+    assessment = episode._ExecutionAssessment(
+        completed[0].recommendation.recommendation_ref, "linked_specific", ("inpat_nondrug_order-1",),
+        "high", (), "generic_trace", ("daily_course_record-1",), ("daily_course_record-1",))
+    assert episode._execution_quality_outcome(
+        assessments=(assessment,), completed_recommendations=completed,
+        source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
+
+
+def test_only_consultation_day_orders_are_execution_candidates():
+    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱算执行，前一天的不算；
+    # 病程不作执行证据（同日早于记录的病程本就不在候选内）。
+    completed, _, _, _ = _setup()
+    completed = (replace(completed[0], opinion_time=episode._ObservedTime(datetime(2026, 7, 20, 15, 59), True)),)
+    candidates = tuple(episode._CandidateDocument(
+        ref, source, episode._ObservedTime(time, True), text)
+        for ref, source, time, text in (
+            ("inpat_nondrug_order-1", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 56, 46), "中药贴敷"),
+            ("inpat_nondrug_order-2", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 55, 22), "中药贴敷"),
+            ("inpat_nondrug_order-3", "inpat_nondrug_order", datetime(2026, 7, 19, 15, 59), "中药贴敷"),
+            ("daily_course_record-1", "daily_course_record", datetime(2026, 7, 20, 15, 55), "遵照执行"),
+            ("inpat_nondrug_order-4", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 59), "中药贴敷"),
+        ))
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset(
+        {"inpat_nondrug_order-1", "inpat_nondrug_order-2", "inpat_nondrug_order-4"})
+
+
+async def _check_clinical_decision(text, candidate_text, measures, generic=()):
+    completed, candidates, _, _ = _setup((candidate_text,))
+    recommendation = replace(completed[0].recommendation, action_type="test",
+                             source_quote=text, normalized_action=text)
+    completed = (replace(completed[0], recommendation=recommendation),)
+    # 本组只验证逐项核对器对“暂不执行及原因”等语义的处理，病程放在会诊之后。
+    candidates = (replace(candidates[0], source_key="daily_course_record",
+                          observed_time=episode._ObservedTime(datetime(2026, 7, 20, 20), True)),)
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    aliases = episode._prompt_alias_by_ref(candidates, allowed)
+    answer = {"schema_version": SCHEMA_VERSION, "generic": [
+        {"recommendation_ref": recommendation.recommendation_ref, "text": value} for value in generic
+    ], "measures": [dict(recommendation_ref=recommendation.recommendation_ref,
+                         evidence_ref=("" if measure["action_relation"] == "not_found" else aliases[candidates[0].ref]),
+                         **measure) for measure in measures]}
+    client = _Client([answer, answer])
+    result = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=aliases, llm_client=client)
+    return result, client
+
+
+@pytest.mark.asyncio
+async def test_reasoned_non_execution_is_not_missing_but_other_actions_still_checked():
+    text = "完善血气分析、肺功能、痰培养"
+    quote = "现无气紧症状，暂不考虑血气分析、肺功能检查"
+    measures = [dict(measure=measure, quote=quote, executed_action=measure,
+                     action_relation="reasoned_non_execution", non_execution_reason="现无气紧症状")
+                for measure in ("血气分析", "肺功能")]
+    measures.append(dict(measure="痰培养", quote="", executed_action="", action_relation="not_found"))
+    # 未执行项不允许借用另一项的证据。
+    result, _ = await _check_clinical_decision(text, quote, measures)
+    assert result.state == "ready"
+    assert result.missing_measures == {"consultation_record-1#r1": ("痰培养",)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["", "存在禁忌证"])
+async def test_non_execution_without_grounded_reason_is_not_accepted(reason):
+    result, _ = await _check_clinical_decision("完善血气分析", "暂不考虑血气分析", [dict(
+        measure="血气分析", quote="暂不考虑血气分析", executed_action="血气分析",
+        action_relation="reasoned_non_execution", non_execution_reason=reason)])
+    assert result.state == "failed"
+
+
+@pytest.mark.asyncio
+async def test_topical_treatment_locations_are_not_independent_actions():
+    text = "中药贴敷天突、双肺俞清热化痰止咳"
+    result, client = await _check_clinical_decision(text, "中药敷贴", [dict(
+        measure="中药贴敷", quote="中药敷贴", executed_action="中药敷贴", action_relation="matched")],
+        generic=("天突", "双肺俞清热化痰止咳"))
+    assert result.state == "ready" and not result.has_missing
+    assert "中药贴敷与中药敷贴" in client.prompts[0]
+    assert "施治部位" in client.prompts[0]
+
+
 def _setup(orders=BASE_ORDERS):
     completed = (
         episode._CompletedRecommendation(
@@ -29,7 +119,8 @@ def _setup(orders=BASE_ORDERS):
             episode._Recommendation(
                 "consultation_record-1#r1", "procedure", RECOMMENDATION, RECOMMENDATION, "consultation_record-1"
             ),
-            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+            # 用户口径（2026-10-20）：只认会诊记录当天开立的医嘱。
+            episode._ObservedTime(datetime(2026, 7, 20, 18), True),
         ),
     )
     candidates = tuple(
@@ -64,15 +155,15 @@ UNEXECUTED = ("关节松动术", "偏瘫肢体综合训练")
 def _measures(alias, *, include_missing=True, bad=None, generic=()):
     items = [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "电针",
-         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针"},
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针", "executed_action": "电针", "action_relation": "matched"},
         {"recommendation_ref": "consultation_record-1#r1", "measure": "头皮针",
-         "evidence_ref": alias["inpat_nondrug_order-2"], "quote": "头皮针"},
+         "evidence_ref": alias["inpat_nondrug_order-2"], "quote": "头皮针", "executed_action": "头皮针", "action_relation": "matched"},
         {"recommendation_ref": "consultation_record-1#r1", "measure": "低频",
-         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗"},
+         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗", "executed_action": "低频脉冲治疗", "action_relation": "matched"},
     ]
     if include_missing:
         items += [{"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-                   "evidence_ref": "", "quote": ""} for measure in UNEXECUTED]
+                   "evidence_ref": "", "quote": "", "executed_action": "", "action_relation": "not_found"} for measure in UNEXECUTED]
     if bad == "measure":
         items[0]["measure"] = "针刺疗法"
     elif bad == "scope":
@@ -105,11 +196,35 @@ async def test_unexecuted_measure_turns_compliant_into_non_compliant():
     assert gap == ("data_gap", "candidate_scope_incomplete")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("opinion_day", [20, 21])
+async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution(opinion_day):
+    from dataclasses import replace
+    completed, candidates, allowed, aliases = _setup(("动态心电图检查",))
+    recommendation = replace(completed[0].recommendation, source_quote="关节松动术", normalized_action="关节松动术")
+    completed = (replace(completed[0], recommendation=recommendation,
+                         opinion_time=episode._ObservedTime(datetime(2026, 7, opinion_day, 1), True)),)
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    aliases = episode._prompt_alias_by_ref(candidates, allowed)
+    answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [{
+        "recommendation_ref": recommendation.recommendation_ref, "measure": "关节松动术",
+        "evidence_ref": aliases.get(candidates[0].ref, ""), "quote": "动态心电图检查" if aliases else "",
+        "executed_action": "动态心电图检查" if aliases else "", "action_relation": "unrelated" if aliases else "not_found",
+    }]}
+    result = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed,
+        alias_by_ref=aliases, llm_client=_Client([answer, answer]),
+    )
+    assert result.state == "ready"
+    assert result.missing_measures == {recommendation.recommendation_ref: ("关节松动术",)}
+    assert _final(result) == ("non_compliant", "requirement_violated")
+
+
 def _fully_evidenced(alias):
     answer = _measures(alias, include_missing=False)
     answer["measures"] += [
         {"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure}
+         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure, "executed_action": measure, "action_relation": "matched"}
         for index, measure in enumerate(UNEXECUTED, start=4)
     ]
     return answer
@@ -238,7 +353,7 @@ async def test_purpose_clause_in_recommendation_is_not_an_omission():
     completed = (episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation("consultation_record-1#r1", "procedure", text, text, "consultation_record-1"),
-        episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        episode._ObservedTime(datetime(2026, 7, 20, 18), True),
     ),)
     candidates = (episode._CandidateDocument(
         "inpat_nondrug_order-1", "inpat_nondrug_order", episode._ObservedTime(datetime(2026, 7, 20, 9), True),
@@ -247,9 +362,34 @@ async def test_purpose_clause_in_recommendation_is_not_an_omission():
     alias = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "红光照射",
-         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗"}]}
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗", "executed_action": "红光治疗", "action_relation": "matched"}]}
     client = _Client([answer])
     outcome = await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias, llm_client=client)
     assert outcome.state == "ready" and outcome.llm_call_count == 1 and not outcome.has_missing
     assert "以促进伤口愈合" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action,relation", [("虚构的动作", "matched"), ("电针", "uncertain")])
+async def test_invalid_or_uncertain_action_never_keeps_compliant(action, relation):
+    _, _, _, alias = _setup(FULL_ORDERS)
+    answer = _fully_evidenced(alias)
+    answer["measures"][0].update(executed_action=action, action_relation=relation)
+    result = await _check(_Client([answer, answer]), FULL_ORDERS)
+    assert result.state == "failed" and result.llm_call_count == 2
+    assert _final(result) == ("data_gap", "semantic_extraction_unresolved")
+
+
+@pytest.mark.asyncio
+async def test_combined_procedures_cannot_share_one_action_as_full_execution():
+    _, _, _, alias = _setup()
+    bad = _measures(alias)
+    bad["measures"] = [dict(bad["measures"][0], measure=RECOMMENDATION)]
+    client = _Client([bad, _measures(alias)])
+    result = await _check(client)
+    assert result.state == "ready" and result.llm_call_count == 2
+    assert result.missing_measures == {"consultation_record-1#r1": UNEXECUTED}
+    assert "逐项拆开" in client.prompts[1]
+    failed = await _check(_Client([bad, bad]))
+    assert _final(failed) == ("data_gap", "semantic_extraction_unresolved")

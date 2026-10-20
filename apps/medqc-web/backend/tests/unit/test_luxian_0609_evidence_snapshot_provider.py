@@ -2242,7 +2242,7 @@ def test_exam_lab_order_reader_filters_before_limit_and_keeps_complete_state(
     assert 'FROM "cdm"."inpat_nondrug_order"' in sql
     assert 'UPPER("order_name") LIKE :ct_name' in sql
     assert '"order_name" LIKE :culture_name' in sql
-    assert params["limit_rows"] == 51
+    assert params["limit_rows"] == 301  # 检查检验医嘱读取上限 300（多读 1 行判截断）
 
 
 @pytest.mark.parametrize(

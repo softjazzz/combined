@@ -24,12 +24,24 @@ def _default_is_30(value: object) -> bool:
 
 
 def upgrade() -> None:
-    schema = (
-        "qc"
-        if os.getenv("DB_SCHEMA_MODE", "single").strip().lower() == "split"
-        else "public"
-    )
-    inspector = sa.inspect(op.get_bind())
+    connection = op.get_bind()
+    # 历史客户库的索引表可能在 public；与应用一样按实际搜索路径解析。
+    search_path = os.getenv("DB_SEARCH_PATH", "").strip()
+    if not search_path and os.getenv("DB_SCHEMA_MODE", "single").strip().lower() == "split":
+        search_path = "public,qc,sys,cdm,legacy"
+    if search_path:
+        connection.execute(
+            sa.text("SELECT set_config('search_path', :search_path, true)"),
+            {"search_path": search_path},
+        )
+    schema = connection.execute(sa.text(
+        "SELECT n.nspname FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE c.oid=to_regclass('visit_index') AND c.relkind IN ('r', 'p')"
+    )).scalar()
+    if schema is None:
+        raise RuntimeError("缺少迁移目标表：visit_index (search_path)")
+    inspector = sa.inspect(connection)
     if not inspector.has_table("visit_index", schema=schema):
         raise RuntimeError(f"缺少迁移目标表：{schema}.visit_index")
     existing = {

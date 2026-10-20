@@ -274,3 +274,22 @@ def test_guidance_role_does_not_accept_invalid_model_output(invalid):
                 selected_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
                 projection=projection,
             )
+
+
+def test_late_only_analysis_is_data_gap_when_course_times_incomplete():
+    """C02：病程时间不完整时，只见超 24 小时的分析与“未见分析”同口径判资料不足，不认定超时。"""
+    projection = build_exam_lab_text_projection(rows_by_source={
+        "exam_master": ({"exam_id": "MR-1", "exam_name": "腰椎MRI", "exam_time": "2026-04-26 10:00:00",
+                         "report_time": "2026-04-26 11:00:00"},),
+        "exam_item_report": ({"exam_id": "MR-1", "impression": "L4/5椎间盘突出。",
+                              "report_time": "2026-04-26 11:00:00"},),
+        "daily_course_record": ({"record_time": "2026-04-28 12:00:00",
+                                 "record_content": "腰椎MRI示L4/5椎间盘突出，与右下肢放射痛相符，拟行手术。"},),
+    })
+    ref = next(iter(projection.course_times))
+    fact = ExamLabEventFact("LX0609-06-01-05", "applicable", "present", "positive", (ref,), (ref,), 1)
+    complete = native._single_text_fact_outcome(rule_id=fact.rule_id, fact=fact, projection=projection)
+    assert complete.status == "non_compliant"
+    incomplete = native._single_text_fact_outcome(
+        rule_id=fact.rule_id, fact=fact, projection=replace(projection, course_time_incomplete=True))
+    assert (incomplete.status, incomplete.reason_code) == ("data_gap", "course_projection_incomplete")
