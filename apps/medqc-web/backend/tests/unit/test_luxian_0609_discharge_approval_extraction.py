@@ -57,6 +57,18 @@ class Client:
 
 
 @pytest.mark.asyncio
+async def test_invalid_approval_logs_check_without_model_quote(caplog) -> None:
+    result = await extract_discharge_approval(
+        (DischargeApprovalInput("doc_01", "senior_course_record", SENIOR_TEXT),),
+        Client(_payload(_item("doc_01", quote="private-sentinel-123"))),
+    )
+    assert result.reason_code == "model_invalid_output"
+    assert "discharge_approval_invalid" in caplog.text
+    assert "unverified opinion quote" in caplog.text
+    assert "private-sentinel-123" not in caplog.text and SENIOR_TEXT not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_extracts_all_documents_once_with_one_bounded_private_call() -> None:
     client = Client(_payload(
         _item("doc_01"),

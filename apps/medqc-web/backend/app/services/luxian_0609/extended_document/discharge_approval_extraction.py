@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 import json
+import logging
 import math
 import re
 from time import perf_counter
@@ -12,11 +13,13 @@ from typing import Any, Literal, Mapping, Protocol, Sequence
 from ...llm_observability import safe_status_for_exception
 from ..llm_prompt_privacy import (
     classify_luxian_0609_llm_call_failure,
+    describe_luxian_0609_llm_parse_failure,
     redact_luxian_0609_patient_privacy,
 )
 
 
 SCHEMA_VERSION = "lx0609_discharge_approval_v3"
+logger = logging.getLogger(__name__)
 MAX_DOCUMENTS = 12
 MAX_TEXT_CHARS = 12000
 MAX_COMPLETION_TOKENS = 2048
@@ -295,7 +298,9 @@ async def _extract_discharge_approval_once(
         if not isinstance(content, str):
             raise ValueError("invalid extraction content")
         assertions = _parse(content, safe_documents)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+        logger.warning("LX0609 discharge_approval_invalid %s",
+                       describe_luxian_0609_llm_parse_failure(error, response))
         return DischargeApprovalExtraction(
             "technical_error",
             "model_invalid_output",

@@ -89,6 +89,22 @@ async def test_persistent_quote_failure_keeps_failure_contract(site):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fixed", [False, True])
+async def test_performance_missing_start_time_field_is_rechecked_not_assumed(fixed):
+    good, run, key, _ = fixture("performance")
+    bad = deepcopy(good)
+    del bad[key][0]["start_time_quote"]
+    client = Client([bad, good if fixed else bad])
+    result = await run(client)
+    assert result.llm_call_count == len(client.prompts) == 2
+    assert result.total_tokens == 30
+    assert result.reason_code == ("" if fixed else "model_invalid_output")
+    assert result.states == (("performed", "performed") if fixed else ("unknown", "unknown"))
+    assert "d1" in client.prompts[1] and "start_time_quote" in client.prompts[1]
+    assert "不得省略" in client.prompts[1]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("site", ["orders", "performance", "intra"])
 async def test_retry_decodes_unicode_identity_before_redaction(site):
     good, run, key, _ = fixture(site)
@@ -147,7 +163,7 @@ async def test_order_missing_coverage_retry_stays_narrow_and_explains_missing_ro
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["application", "course", "component"])
 @pytest.mark.parametrize("mode", ["repair", "persistent", "privacy", "structure"])
-async def test_native_semantic_recheck_preserves_source_and_contract(monkeypatch, source, mode):
+async def test_native_semantic_recheck_preserves_source_and_contract(monkeypatch, source, mode, caplog):
     monkeypatch.setattr(native, "read_luxian_0609_native_source_rows", support._reader)
     if source == "component":
         rule = "LX0609-07-02-02"
@@ -185,6 +201,9 @@ async def test_native_semantic_recheck_preserves_source_and_contract(monkeypatch
         assert result.results[0]["metadata"]["reason_code"] == "model_invalid_output"
     assert result.llm_call_count == len(client.prompts) + support._protocol_calls(result)
     assert result.total_tokens == 15 * len(client.prompts)
+    if mode == "privacy":
+        assert "transfusion_recheck_invalid" in caplog.text
+        assert "ZY123456" not in caplog.text and "改写片段" not in caplog.text
     if len(client.prompts) == 2:
         retry = client.prompts[1]
         assert field in retry and "PREVIOUS_OUTPUT=" in retry and "连续" in retry

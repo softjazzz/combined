@@ -6,16 +6,21 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Literal, Protocol
 
 from ..structured_output import structured_output_kwargs
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    describe_luxian_0609_llm_parse_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from ..transfusion_order_trigger import _json_response_object, _usage
 
 
 SCHEMA_VERSION = "lx0609-diagnosis-scope-facts-v1"
+logger = logging.getLogger(__name__)
 Scope = Literal["diagnosis", "treatment_plan", "local_problem", "unknown"]
 DiagnosisState = Literal["explicit", "unresolved", "undetermined", "unknown"]
 Polarity = Literal["affirmed", "negated", "unknown"]
@@ -501,6 +506,10 @@ async def extract_diagnosis_scope(
                 raise ValueError("invalid usage total or budget")
             facts = _parse(response, originals, bodies)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+            # 仅记录程序定义的校验类别，不记录引文、问题名称或完整模型输出。
+            checks = sorted({issue.reason for issue in error.issues}) if isinstance(error, _GroundingViolation) else []
+            logger.warning("LX0609 diagnosis_scope_invalid attempt=%s checks=%s %s", attempt + 1,
+                           checks, describe_luxian_0609_llm_parse_failure(error, response))
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return DiagnosisScopeResult("technical_error", (), calls, *totals, reason_code="model_invalid_output")
             attempt_prompt = _retry_prompt(prompt, error, _response_content(response))

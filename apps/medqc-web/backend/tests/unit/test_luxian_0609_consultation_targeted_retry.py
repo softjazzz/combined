@@ -116,6 +116,36 @@ def episode_answer(quote="复查血常规"):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("field,value", [("confidence", "medium"), ("opinion_state", "vague")])
+@pytest.mark.parametrize("fixed", [False, True])
+async def test_episode_inconsistent_recommendations_get_one_review(
+    monkeypatch, tmp_path, compact, field, value, fixed,
+):
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: ep._rows("专科会诊意见"))
+    if compact:
+        original = episode._documents
+        monkeypatch.setattr(episode, "_documents", lambda *a, **kw: tuple(
+            {**doc, "event_identity_mode": "document", "event_group_ref": doc["ref"]}
+            for doc in original(*a, **kw)))
+        good = ep._document_payload(ep._document_fact("consultation_record-1"))
+        key = "consultation_event_facts"
+    else:
+        good, key = episode_answer(), "episodes"
+    bad = json.loads(json.dumps(good))
+    bad[key][0][field] = value
+    client = Client({"content": json.dumps(bad)}, {"content": json.dumps(good if fixed else bad)})
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p",
+        visit_id="synthetic-consistency", source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path)
+    assert result.llm_call_count == 2 and result.total_tokens == 32
+    assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"technical_error"})
+    assert field in client.prompts[1] and "recommendations" in client.prompts[1]
+    assert "不能直接提高置信度" in client.prompts[1]
+    assert bool(list(tmp_path.glob("*.json"))) == fixed
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("fixed", [True, False])
 async def test_episode_retry_is_grounded_before_freezing(monkeypatch, tmp_path, fixed):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: ep._rows("专科会诊意见"))

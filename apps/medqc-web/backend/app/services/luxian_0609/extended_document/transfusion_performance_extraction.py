@@ -130,6 +130,13 @@ def _parsed(
     times: dict[str, datetime | None] = {}
     assertions: dict[str, Mapping[str, Any]] = {}
     for position, item in enumerate(items, 1):
+        if isinstance(item, dict) and set(item) == _DOCUMENT_KEYS - {"start_time_quote"}:
+            # 缺字段不等于原文没有开始时刻；复用本批一次补核，不能擅自补 null。
+            raise _RecheckViolation((_RecheckIssue(
+                "missing start time field", f"documents第{position}项 document_ref={item['document_ref']}",
+                "start_time_quote", "",
+                correction="start_time_quote不得省略：须重新核对本份正文，逐字引用实际开始时刻；正文确无时刻才用null",
+            ),))
         if not isinstance(item, dict) or set(item) != _DOCUMENT_KEYS:
             raise ValueError("invalid extraction document")
         ref, state = item["document_ref"], item["state"]

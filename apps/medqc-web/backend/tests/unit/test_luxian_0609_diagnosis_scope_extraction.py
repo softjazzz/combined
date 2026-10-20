@@ -82,6 +82,14 @@ def test_grounded_fact_positions_and_observed_usage(choices):
     assert client.calls[0][1] == dict(max_completion_tokens=16384, allow_length_retry=False)
 
 
+def test_invalid_scope_logs_check_without_model_quote(caplog):
+    client = Client([dict(row_index=0, coverage="complete", assertions=[claim("private-sentinel-123")])])
+    result = run(client)
+    assert result.reason_code == "model_invalid_output"
+    assert "diagnosis_scope_invalid" in caplog.text and "quote not uniquely grounded" in caplog.text
+    assert "private-sentinel-123" not in caplog.text and BODY not in caplog.text
+
+
 def test_multi_problem_overlapping_contexts_do_not_cancel():
     body = "肺炎已明确；贫血病因仍未明确。"
     facts = [claim(body, "肺炎", diagnosis_state="explicit"), claim(body, "贫血病因")]

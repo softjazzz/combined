@@ -1830,7 +1830,11 @@ def _parse_compact_document_facts(
                 )
             )
         if recommendations and (opinion != "clear" or confidence != "high"):
-            raise _SemanticInvalid()
+            raise _EpisodeGroundingViolation((_ReviewIssue(
+                "inconsistent recommendation state", f"ref={ref}.opinion_state/confidence/recommendations",
+                "", "建议清单与opinion_state/confidence矛盾：重新核对所属原文，不能直接提高置信度；"
+                "仅意见明确且高置信时保留recommendations，否则清空建议并如实保留意见状态和置信度",
+            ),))
         if _is_explicit_opinion_only_document(documents_by_ref[ref]):
             application = "absent"
         if application in {"vague", "missing", "unknown"} and _has_specific_application_purpose(
@@ -2068,7 +2072,11 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
                 opinion_ref,
             ))
         if raw_recommendations and (opinion != "clear" or confidence != "high"):
-            raise _SemanticInvalid()
+            raise _EpisodeGroundingViolation((_ReviewIssue(
+                "inconsistent recommendation state", f"episode_ref={episode_ref}.opinion_state/confidence/recommendations",
+                "", "建议清单与opinion_state/confidence矛盾：重新核对所属原文，不能直接提高置信度；"
+                "仅意见明确且高置信时保留recommendations，否则清空建议并如实保留意见状态和置信度",
+            ),))
         original_application_refs = tuple(application_refs)
         application_refs = [
             ref
@@ -4885,7 +4893,10 @@ async def _execute_consultation_episode_rules(
                 api_time += usage[3] or (time.perf_counter() - started)
                 payload = dict(_payload(response))
                 issues: list[_ReviewIssue] = []
-                episodes = _parse(payload, documents, review_issues=issues)
+                try:
+                    episodes = _parse(payload, documents, review_issues=issues)
+                except _EpisodeGroundingViolation as error:
+                    issues.extend(error.issues)
                 if not issues:
                     issues.extend(_episode_recommendations_are_grounded(episodes, documents))
                 if not issues:

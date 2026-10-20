@@ -1962,9 +1962,13 @@ async def _recheck_transfusion_semantics(
             try:
                 state = validate(payload)
             except _RecheckViolation as error:
+                logger.warning("LX0609 transfusion_recheck_invalid checks=%s",
+                               sorted({(issue.field, issue.reason) for issue in error.issues}))
                 if attempt == 0:
                     attempt_prompt = _recheck_prompt(prompt, error, response)
                     continue
+        else:
+            logger.warning("LX0609 transfusion_recheck_invalid phase=response_shape")
         return _SemanticRecheck(state, "" if state is not None else "model_invalid_output", attempt + 1,
             (prompt_tokens, completion_tokens, total_tokens, api_time))
     raise AssertionError("输血语义补核未结束")
