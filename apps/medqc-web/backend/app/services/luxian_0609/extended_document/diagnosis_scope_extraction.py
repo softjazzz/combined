@@ -199,6 +199,11 @@ def _anchor_problem_by_uncertainty(quote: str, problem: str, uncertainty: Any) -
     return quote.find(uncertainty) + uncertainty.find(problem)
 
 
+def _is_self_qualified_repeat(quote: str, problem: str) -> bool:
+    """problem 原话自带不确定性标记（如“…粘液栓可能”）且在 quote 内重复：每一处都是同一未明确表述。"""
+    return bool(problem.strip()) and _occurrences(quote, problem) > 1 and _has_uncertainty_marker(problem)
+
+
 def _has_uncertainty_marker(text: str) -> bool:
     return (any(marker in text for marker in UNCERTAINTY_MARKERS)
             or any(re.search(pattern, text) for pattern in UNCERTAINTY_PATTERNS))
@@ -324,6 +329,11 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
                     problem_start = start + _unique_position(quote, problem)
                 except ValueError:
                     problem_start = _anchor_problem_by_uncertainty(quote, problem, claim.get("uncertainty_quote"))
+                    if problem_start is None and _is_self_qualified_repeat(quote, problem):
+                        # 病程常把报告结论粘贴后在分析里再复述一遍（C08“…粘液栓可能”两处）。problem 原话
+                        # 自带不确定性标记时每处含义相同，下游只按状态/范围判定、不用病名坐标，取首处不改变
+                        # 结论；不带标记、靠上下文定性的病名（如“不排除X……明确是否存在X”）仍须唯一定位。
+                        problem_start = quote.index(problem)
                     if problem_start is None:
                         count = _occurrences(quote, problem)
                         issues.append(_GroundingIssue("problem not uniquely grounded", row, quote, problem, count,

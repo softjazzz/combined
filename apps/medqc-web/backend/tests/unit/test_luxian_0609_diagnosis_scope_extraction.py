@@ -6,7 +6,7 @@ import json
 import pytest
 
 from app.services.luxian_0609.extended_document.diagnosis_scope_extraction import (
-    SCHEMA_VERSION, _prompt, extract_diagnosis_scope,
+    SCHEMA_VERSION, _is_self_qualified_repeat, _prompt, extract_diagnosis_scope,
 )
 
 
@@ -625,3 +625,17 @@ def test_prompt_treats_cause_speculation_of_a_finding_as_not_unresolved():
     prompt = _prompt(["病程正文"])
     assert "‘考虑重症感染所致可能’" in prompt and "不是诊断尚未明确，不输出unresolved" in prompt
     assert "病因待查、原因不明或诊断待明确的仍按上文保留" in prompt
+
+
+def test_self_qualified_repeated_problem_is_anchored_to_first_occurrence():
+    # C08：报告结论“…粘液栓可能”粘贴后在分析里再复述，problem 自带不确定性标记时取首处。
+    body = "气管内少许粘液栓可能。右肺结节，建议随诊。请会诊协助诊治；气管内少许粘液栓可能，注意排痰。"
+    quote = body[:-1]
+    problem = "气管内少许粘液栓可能"
+    assert _is_self_qualified_repeat(quote, problem)
+    fact = claim(quote, problem, scope="local_problem", uncertainty_quote=problem)
+    result = run(Client([dict(row_index=0, coverage="complete", assertions=[fact])]), [{"content": body}])
+    assert result.state == "ready" and result.llm_call_count == 1
+    assert result.documents[0].assertions[0].problem_start == 0
+    # 不带标记、靠上下文定性的病名重复仍须唯一定位。
+    assert not _is_self_qualified_repeat("不排除尿崩症，复查尿比重，明确是否存在尿崩症", "尿崩症")
