@@ -3605,8 +3605,27 @@ def customer_finding_from_controlled_facts(
             "technical_error": "出院带药信息提取未成功，本次无法完成核对，请重试；不能据此认定病历缺少带药信息。",
         }.get(facts.get("extraction_state"), "")
 
+    if rule_id == "LX0609-08-01-02" and kind == "discharge_medication_prescription_identity_gap":
+        if facts.get("gap_reason") == "too_many_items":
+            return "正式出院处方药物超过本次有界核对上限，暂无法完成药物集合一致性核对。"
+        return (
+            "已读取出院记录中的具体带药，但正式出院处方存在缺少药物名称的明细，"
+            "暂无法完成药物集合一致性核对。"
+            if facts.get("gap_reason") == "identity_missing"
+            else "已读取出院记录中的具体带药，但正式出院处方资料不可用，暂无法完成药物集合一致性核对。"
+        )
+
     if rule_id == "LX0609-08-01-02" and kind == "discharge_medication_completeness_check":
         missing = labels("missing_fields", _DISCHARGE_MEDICATION_FIELD_LABELS)
+        missing_drug_names = facts.get("missing_drug_names") or []
+        if missing_drug_names:
+            details = "出院记录漏写正式出院处方药物：" + "、".join(missing_drug_names) + "。"
+            other_missing = [
+                _DISCHARGE_MEDICATION_FIELD_LABELS[item]
+                for item in (facts.get("missing_fields") or [])
+                if item != "drug_name"
+            ]
+            return details + ("另缺少字段：" + "、".join(other_missing) + "。" if other_missing else "")
         return (
             f"共核对 {facts.get('medication_count')} 项出院带药，药名、剂量、途径及用药时间均完整。"
             if not missing

@@ -94,6 +94,8 @@ def _session(
         "transfer_in_record": "snapshot-provider-transfer_in_record-v1",
         "transfer_out_record": "snapshot-provider-transfer_out_record-v1",
         "inpat_nondrug_order": "snapshot-provider-inpat_nondrug_order-v1",
+        "inpat_prescription": "snapshot-provider-inpat_prescription-v1",
+        "inpat_prescription_item": "snapshot-provider-inpat_prescription_item-v1",
         "diagnosis": "snapshot-provider-diagnosis-v1",
         # 063 的病案首页出院/死亡诊断决策支持来源；保持与旧 diagnosis
         # 兼容夹具独立，避免两份来源在测试中被隐式合并。
@@ -4564,7 +4566,7 @@ async def test_050_confirmed_diagnosis_does_not_cancel_undetermined_treatment_pl
 
 
 @pytest.mark.asyncio
-async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain() -> None:
+async def test_050_local_reason_pending_keeps_scope_gap_despite_another_clear_diagnosis() -> None:
     snapshot, materials, result, reduced_items = await _evaluate_selected(
         ("LX0609-03-02-01",),
         {
@@ -4585,16 +4587,16 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         reduced=reduced_items,
     )
 
-    # 主控代定口径（2026-10-18，待客户复核），基线050：主诊断已明确，仅局部待查不触发。
-    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced.reason_code == "trigger_absent_complete"
-    assert canonical["status"] == "not_applicable"
-    assert canonical["reason_code"] == "trigger_absent_complete"
-    assert "本质控点不适用" in canonical["findings"]
+    # 官方依据不支持主诊断明确即豁免；局部待查范围不清也不能直接判缺讨论。
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "diagnosis_scope_uncertain"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "diagnosis_scope_uncertain"
+    assert "本质控点不适用" not in canonical["findings"]
     assert dict(result.customer_display_facts)["LX0609-03-02-01"] == {
-        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
         "admission_time": "2026-06-01 08:00:00",
-        "uncertain_record_times": [],
+        "uncertain_record_times": ["2026-06-09 09:00:00"],
         "discussion_count": 0,
     }
     assert result.llm_call_count == 1

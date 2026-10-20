@@ -1930,6 +1930,13 @@ _DISCHARGE_MEDICATION_REQUIRED_GROUPS = (
 _ORAL_DOSAGE_FORM_PATTERN = re.compile(r"(?:片|胶囊|糖浆|口服液|口服溶液|颗粒)")
 _NON_ORAL_TABLET_PATTERN = re.compile(r"(?:舌下片|含片|阴道片|泡腾片|贴片)")
 _NON_ORAL_GRANULE_PATTERN = re.compile(r"(?:外用|外洗|冲洗|含漱|漱口|灌肠|阴道|直肠|外敷|湿敷)")
+_SAFE_MEDICATION_IDENTITY_SUFFIX = r"(?:钙|钠|镁)?(?:肠溶|缓释|控释|软)?(?:片|胶囊|颗粒|糖浆|口服液)"
+
+
+@dataclass(frozen=True)
+class _FormalDischargeMedication:
+    display_name: str
+    identity_names: tuple[str, ...]
 
 
 def _with_dosage_form_oral_route(
@@ -1969,7 +1976,7 @@ def _medication_has_oral_form(item: Mapping[str, Any], prescription_names: Seque
     # 仅补剂型缩写：品牌/规格括号去掉后，药物名称及已知剂型后缀须完整对应。
     for prescribed_name in prescription_names:
         normalized = re.sub(r"[（(][^）)]*[）)]", "", prescribed_name).strip()
-        if re.fullmatch(re.escape(name) + r"(?:钙|钠|镁)?(?:肠溶|缓释|控释|软)?(?:片|胶囊|颗粒|糖浆|口服液)", normalized):
+        if re.fullmatch(re.escape(name) + _SAFE_MEDICATION_IDENTITY_SUFFIX, normalized):
             return True
     return False
 
@@ -1995,6 +2002,112 @@ def _discharge_oral_prescription_names(materials: Luxian0609EvidenceMaterialStor
         grouped.setdefault(name, []).append(item)
     return tuple(name for name, rows in grouped.items() if name and _oral_dosage_form(name)
                  and all(_clean(row.get("drug_apply_method")).lower() in {"口服", "po"} for row in rows))
+
+
+def _formal_discharge_prescription_medications(
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[tuple[_FormalDischargeMedication, ...], str, int]:
+    """读取同次就诊正式有效出院处方；名称缺失时保守返回资料缺口。"""
+
+    try:
+        prescriptions = materials.rows("inpat_prescription")
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return (), "source_unavailable", 0
+    eligible = {
+        _clean(row.get("prescription_id")) for row in prescriptions
+        if _clean(row.get("prescription_id"))
+        and _clean(row.get("order_type")) == "出院带药"
+        and _clean(row.get("order_status")) in {"新开", "执行", "执行中", "核实", "完成"}
+        and _clean(row.get("is_deleted")).lower() not in {"1", "true"}
+    }
+    if not eligible:
+        return (), "", 0
+    try:
+        items = materials.rows("inpat_prescription_item")
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return (), "source_unavailable", 0
+    result: list[_FormalDischargeMedication] = []
+    seen_item_ids: set[str] = set()
+    unnamed = 0
+    for item in items:
+        if (
+            _clean(item.get("prescription_id")) not in eligible
+            or _clean(item.get("is_deleted")).lower() in {"1", "true"}
+        ):
+            continue
+        item_id = _clean(item.get("prescription_item_id"))
+        if item_id and item_id in seen_item_ids:
+            continue
+        if item_id:
+            seen_item_ids.add(item_id)
+        names = tuple(dict.fromkeys(
+            name for name in (
+                _clean(item.get("generic_name")), _clean(item.get("brand_name")),
+            ) if name and len(name) <= 160 and "\n" not in name and "\r" not in name
+        ))
+        if not names:
+            unnamed += 1
+            continue
+        existing_index = next((
+            index for index, existing in enumerate(result)
+            if set(existing.identity_names) & set(names)
+        ), None)
+        if existing_index is None:
+            result.append(_FormalDischargeMedication(names[0], names))
+        else:
+            existing = result[existing_index]
+            result[existing_index] = _FormalDischargeMedication(
+                existing.display_name, tuple(dict.fromkeys((*existing.identity_names, *names))),
+            )
+    if unnamed:
+        return tuple(result), "identity_missing", unnamed
+    if len(result) > 20:
+        return (), "too_many_items", len(result)
+    return tuple(result), "", 0
+
+
+def _medication_identity_matches(documented_name: Any, prescription_name: Any) -> bool:
+    """只接受精确药名或现有有限盐型/剂型后缀，不做泛品牌、片段或相似匹配。"""
+
+    documented = _clean(documented_name)
+    prescribed = re.sub(r"[（(][^）)]*[）)]", "", _clean(prescription_name)).strip()
+    if not documented or not prescribed:
+        return False
+    if documented == prescribed:
+        return True
+    if len(documented) < 3:
+        return False
+    return bool(re.fullmatch(
+        re.escape(documented) + _SAFE_MEDICATION_IDENTITY_SUFFIX, prescribed,
+    ))
+
+
+def _unmatched_formal_discharge_medication_names(
+    medications: Sequence[Mapping[str, Any]],
+    prescriptions: Sequence[_FormalDischargeMedication],
+) -> tuple[str, ...]:
+    """一对一绑定正文药物与正式处方，返回处方中未写入正文的受控单药名。"""
+
+    available_documented = set(range(len(medications)))
+    missing: list[str] = []
+    for prescription in prescriptions:
+        matched_index = next((
+            index for index in available_documented
+            if any(
+                _medication_identity_matches(
+                    next((_clean(medications[index].get(key)) for key in ("drug_name", "generic_name", "name")
+                          if _clean(medications[index].get(key))), ""),
+                    identity_name,
+                )
+                for identity_name in prescription.identity_names
+            )
+        ), None)
+        if matched_index is None:
+            if prescription.display_name not in missing:
+                missing.append(prescription.display_name)
+        else:
+            available_documented.remove(matched_index)
+    return tuple(missing)
 
 
 def _oral_dosage_form(name: Any) -> bool:
@@ -3030,29 +3143,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         else "unavailable" if diagnosis_scope_extraction.state == "data_gap" else "invalid"
                     )
                 else:
-                    explicit_main_rows = tuple(
-                        scope_rows[document.row_index]
-                        for document in diagnosis_scope_extraction.documents
-                        if document.coverage == "complete" and any(
-                            assertion.scope == "diagnosis"
-                            and assertion.diagnosis_state == "explicit"
-                            and assertion.polarity == "affirmed"
-                            and assertion.temporal_scope == "current"
-                            and assertion.association == "explicit"
-                            for assertion in document.assertions
-                        )
-                    )
                     for document in diagnosis_scope_extraction.documents:
                         row = scope_rows[document.row_index]
-                        # 主控代定口径（2026-10-18，待客户复核），基线050：
-                        # 主诊断已明确时，局部问题未明不触发；不能证明主次范围仍保留缺口。
-                        main_diagnosis_explicit = any(
-                            main_row is row or (
-                                (main_time := _row_time(main_row)) is not None
-                                and (local_time := _row_time(row)) is not None
-                                and main_time <= local_time
-                            ) for main_row in explicit_main_rows
-                        )
+                        # 2026-10-20按用户要求核对国家核心制度：某一诊断明确不能
+                        # 抵消另一当前诊疗疑难。局部问题范围不明仍按既有合同交付
+                        # 资料不足，不据主诊断明确豁免，也不强行认定已触发。
                         if document.coverage == "unknown":
                             unknown_candidates.append(row)
                         for assertion in document.assertions:
@@ -3072,7 +3167,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     if row not in strong_candidates:
                                         strong_candidates.append(row)
                                 elif assertion.scope == "local_problem":
-                                    if not main_diagnosis_explicit and row not in local_candidates:
+                                    if row not in local_candidates:
                                         local_candidates.append(row)
                                 else:
                                     unknown_candidates.append(row)
@@ -3343,8 +3438,9 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not rule_antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-05-01-03":
-                # 主控代定口径（2026-10-18，待客户复核），基线055：
-                # 同药医嘱合为一个疗程，首次实际执行起算；续开不另建48–72小时窗。
+                # 客户确认口径（2026-10-20），基线055：
+                # 同药医嘱合为一个疗程，按客户允许的计划开始/开医嘱时间起算；
+                # 沿用计划优先、缺失才回退的顺序，续开不另建48–72小时窗。
                 course_orders: dict[str, list[Mapping[str, Any]]] = {}
                 for order in rule_antimicrobial_orders:
                     for name in _antimicrobial_names_in(order):
@@ -4585,6 +4681,11 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-08-01-02":
             oral_prescription_names = _discharge_oral_prescription_names(evidence_materials)
+            (
+                formal_prescription_medications,
+                formal_prescription_error,
+                affected_prescription_item_count,
+            ) = _formal_discharge_prescription_medications(evidence_materials)
             if discharge_error:
                 decisions.append(
                     _decision(
@@ -4731,38 +4832,67 @@ async def execute_luxian_0609_native_extended_document_rules(
             else:
                 required_groups = _DISCHARGE_MEDICATION_REQUIRED_GROUPS
                 medications = _with_dosage_form_oral_route(medications, oral_prescription_names=oral_prescription_names)
-                complete = _discharge_medications_complete(medications)
-                final_state = "compliant" if complete else "non_compliant"
-                reason_code = (
-                    "requirement_satisfied" if complete else "requirement_violated"
-                )
                 missing_fields = sorted({
                     group[0]
                     for item in medications
                     for group in required_groups
                     if not any(_clean(item.get(key)) for key in group)
                 })
-                display.append(
-                    (
-                        rule_id,
-                        {
-                            "verification_kind": "discharge_medication_completeness_check",
-                            "medication_count": len(medications),
-                            "required_fields": [
-                                "drug_name",
-                                "dose",
-                                "route",
-                                "duration",
-                            ],
-                            "missing_fields": missing_fields,
-                        },
+                if not missing_fields and formal_prescription_error:
+                    final_state, reason_code = "data_gap", "required_field_missing"
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_medication_prescription_identity_gap",
+                        "gap_reason": formal_prescription_error,
+                        "affected_prescription_item_count": affected_prescription_item_count,
+                    }))
+                elif formal_prescription_error:
+                    # 正文已有确定缺项即可判不合规；处方范围未知时不发布“处方0项”等伪完整事实。
+                    final_state, reason_code = "non_compliant", "requirement_violated"
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_medication_completeness_check",
+                        "medication_count": len(medications),
+                        "required_fields": ["drug_name", "dose", "route", "duration"],
+                        "missing_fields": missing_fields,
+                    }))
+                else:
+                    missing_drug_names = _unmatched_formal_discharge_medication_names(
+                        medications, formal_prescription_medications,
                     )
-                )
+                    if missing_drug_names and "drug_name" not in missing_fields:
+                        missing_fields.append("drug_name")
+                        missing_fields.sort()
+                    complete = not missing_fields
+                    final_state = "compliant" if complete else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied" if complete else "requirement_violated"
+                    )
+                    display.append(
+                        (
+                            rule_id,
+                            {
+                                "verification_kind": "discharge_medication_completeness_check",
+                                "medication_count": len(medications),
+                                "prescription_medication_count": len(formal_prescription_medications),
+                                "required_fields": [
+                                    "drug_name",
+                                    "dose",
+                                    "route",
+                                    "duration",
+                                ],
+                                "missing_fields": missing_fields,
+                                "missing_drug_names": list(missing_drug_names),
+                            },
+                        )
+                    )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
-                    source_keys=("discharge_record",),
+                    source_keys=(
+                        ("discharge_record",)
+                        if reason_code == "trigger_absent_complete"
+                        else ("discharge_record", "inpat_prescription", "inpat_prescription_item")
+                    ),
                     final_state=final_state,
                     reason_code=reason_code,
                     document_refs=(

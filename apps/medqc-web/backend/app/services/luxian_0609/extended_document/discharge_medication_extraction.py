@@ -39,6 +39,17 @@ _MIN_QUOTE_SEGMENT_CHARS = 2
 # 间隔里出现这些字符说明跨到了别的药物条目或段落，不能还原。
 _QUOTE_GAP_BOUNDARY = frozenset(";；。\n\r")
 _QUOTE_GAP_SEPARATORS = frozenset(",，、 ")
+# 明确比例剂量：条件量与实际一次用量之间必须有给药动作，且不得跨药物条目。
+# 例如“按每500ml排出液体口服1g”中的 1g 是明确剂量；两个孤立数量不据此推断。
+_PROPORTIONAL_DOSE_PATTERN = re.compile(
+    r"(?:每|按(?:照)?|根据)?\s*\d+(?:\.\d+)?\s*"
+    r"(?:m[lL]|毫升|[lL]|升|kg|公斤|g|克|小时|天|日|次|单位)"
+    r"[^；;。\n]{0,12}?"
+    r"(?:口服|服用|服|补充|补|给予|给|予|使用|用|加用|加)\s*"
+    r"(?P<dose>\d+(?:\.\d+)?\s*(?:μg|ug|mcg|mg|g|m[lL]|毫克|克|微克|毫升|片|粒|袋|支|丸|滴|单位))"
+    r"(?!\s*/)",
+    re.IGNORECASE,
+)
 
 
 def _restore_from(quote: str, text: str, start: int) -> int | None:
@@ -383,6 +394,48 @@ def _with_explicit_list_course(
     return state, tuple(updated), tuple(checked)
 
 
+def _with_explicit_proportional_dose(
+    state: str,
+    medications: tuple[Mapping[str, str | None], ...],
+    assertions: tuple[Mapping[str, str], ...],
+    text: str,
+) -> tuple[str, tuple[Mapping[str, str | None], ...], tuple[Mapping[str, str], ...]]:
+    """核验同一药物条目内唯一的“条件量 + 给药动作 + 一次量”，不跨项猜剂量。"""
+
+    if not medications or len(medications) != len(assertions):
+        return state, medications, assertions
+    names = tuple(item.get("drug_name") for item in medications)
+    if any(
+        assertion.get("drug_name") != "present"
+        or not isinstance(name, str)
+        or not name
+        or text.count(name) != 1
+        for name, assertion in zip(names, assertions)
+    ):
+        return state, medications, assertions
+    positions = tuple(text.index(name) for name in names)
+    updated = [dict(item) for item in medications]
+    checked = [dict(item) for item in assertions]
+    for index, (name, start) in enumerate(zip(names, positions)):
+        if checked[index].get("dose") not in {"missing", "uncertain"}:
+            continue
+        boundaries = [position for position in positions if position > start]
+        for boundary in "；;。\n":
+            at = text.find(boundary, start + len(name))
+            if at >= 0:
+                boundaries.append(at)
+        end = min(boundaries, default=len(text))
+        matches = tuple(_PROPORTIONAL_DOSE_PATTERN.finditer(text[start:end]))
+        if len(matches) != 1:
+            continue
+        updated[index]["dose"] = matches[0].group("dose")
+        checked[index]["dose"] = "present"
+    state = "unknown" if any(
+        value == "uncertain" for item in checked for value in item.values()
+    ) else "ready"
+    return state, tuple(updated), tuple(checked)
+
+
 def _merge_uncertain_recheck(
     initial_medications: Sequence[Mapping[str, str | None]],
     initial_assertions: Sequence[Mapping[str, str]],
@@ -488,6 +541,9 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
                 continue
             return Extraction("technical_error", "model_invalid_output", (), calls, *totals, api_time)
         api_time += call_time
+        state, medications, field_assertions = _with_explicit_proportional_dose(
+            state, medications, field_assertions, safe_text,
+        )
         state, medications, field_assertions = _with_explicit_list_course(
             state, medications, field_assertions, safe_text,
         )

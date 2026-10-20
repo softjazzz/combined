@@ -108,6 +108,60 @@ async def test_targeted_recheck_keeps_persistent_uncertainty_unknown():
 
 
 @pytest.mark.asyncio
+async def test_explicit_proportional_dose_resolves_without_another_model_call():
+    text = "出院带药：合成药甲，按每500ml排出液体口服1g，每日一次。"
+    first = _payload(medication_time="present", medication_time_quote="每日一次")
+    first["items"][0]["dose"] = _assertion("uncertain")
+    client = SequenceClient([first])
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.state == "ready"
+    assert result.medications[0]["dose"] == "1g"
+    assert result.field_assertions[0]["dose"] == "present"
+    assert result.llm_call_count == len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", [
+    "出院带药：合成药甲，500ml排出液体，1g包装，每日一次。",
+    "出院带药：合成药甲，按每500ml排出液体；口服1g，每日一次。",
+    "出院带药：合成药甲；合成药乙按每500ml排出液体口服1g。",
+    "出院带药：合成药甲，按每500ml排出液体口服1g，按每1000ml排出液体口服2g。",
+    "出院带药：合成药甲，按每500ml排出液体口服1g/天，每日一次。",
+])
+async def test_proportional_dose_does_not_cross_item_or_guess_ambiguous_amount(text):
+    first = _payload(medication_time="present", medication_time_quote="每日一次" if "每日一次" in text else None)
+    if "每日一次" not in text:
+        first["items"][0]["medication_time"] = _assertion("missing")
+    if "口服" not in text:
+        first["items"][0]["route"] = _assertion("missing")
+    first["items"][0]["dose"] = _assertion("uncertain")
+    client = SequenceClient([first, first])
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.state == "unknown"
+    assert result.medications[0]["dose"] is None
+    assert result.field_assertions[0]["dose"] == "uncertain"
+    assert result.llm_call_count == len(client.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_explicit_proportional_dose_does_not_overwrite_verified_dose():
+    text = "出院带药：合成药甲，每次2g；按每500ml排出液体口服1g，每日一次。"
+    first = _payload(medication_time="present", medication_time_quote="每日一次")
+    first["items"][0]["dose"] = _assertion("present", "每次2g")
+    client = SequenceClient([first])
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.medications[0]["dose"] == "每次2g"
+    assert result.field_assertions[0]["dose"] == "present"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_targeted_recheck_accepts_explicit_course_after_the_whole_medication_list():
     text = "出院带药：合成药甲，每次一片，口服；以上药物使用7天。"
     second = _payload(medication_time="present")

@@ -277,6 +277,17 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 or raw.get("extraction_state") not in ("unknown", "data_gap", "technical_error")):
             return None
         return dict(raw)
+    if raw.get("verification_kind") == "discharge_medication_prescription_identity_gap":
+        if (
+            set(raw) != {"verification_kind", "gap_reason", "affected_prescription_item_count"}
+            or raw.get("gap_reason") not in {"source_unavailable", "identity_missing", "too_many_items"}
+            or type(raw.get("affected_prescription_item_count")) is not int
+            or not 0 <= raw["affected_prescription_item_count"] <= 500
+            or (raw["gap_reason"] == "identity_missing" and raw["affected_prescription_item_count"] <= 0)
+            or (raw["gap_reason"] == "too_many_items" and raw["affected_prescription_item_count"] <= 20)
+        ):
+            return None
+        return dict(raw)
     required = ["drug_name", "dose", "route", "duration"]
     if (
         not set(raw).issubset(
@@ -285,6 +296,8 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "medication_count",
             "required_fields",
             "missing_fields",
+            "prescription_medication_count",
+            "missing_drug_names",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -297,12 +310,28 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     missing = _safe_text_list(raw.get("missing_fields"), maximum=len(required))
     if missing is None or any(item not in required for item in missing):
         return None
-    return {
+    safe = {
         "verification_kind": "discharge_medication_completeness_check",
         "medication_count": raw["medication_count"],
         "required_fields": required,
         "missing_fields": missing,
     }
+    has_prescription_count = "prescription_medication_count" in raw
+    has_missing_names = "missing_drug_names" in raw
+    if has_prescription_count != has_missing_names:
+        return None
+    if has_prescription_count:
+        count = raw.get("prescription_medication_count")
+        names = _safe_text_list(raw.get("missing_drug_names"), maximum=20)
+        if (
+            type(count) is not int or not 0 <= count <= 20 or names is None
+            or len(names) > count or len(names) != len(set(names))
+            or (names and "drug_name" not in missing)
+        ):
+            return None
+        safe["prescription_medication_count"] = count
+        safe["missing_drug_names"] = names
+    return safe
 
 
 def _safe_main_diagnosis_check(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -653,14 +682,34 @@ def validate_published_discharge_facts(
                     or type(raw.get("extraction_state")) is not str
                     or raw["extraction_state"] not in {"unknown", "data_gap", "technical_error"}):
                 return None
+        elif raw.get("verification_kind") == "discharge_medication_prescription_identity_gap":
+            if (keys != {"verification_kind", "gap_reason", "affected_prescription_item_count"}
+                    or raw.get("gap_reason") not in {"source_unavailable", "identity_missing", "too_many_items"}
+                    or type(raw.get("affected_prescription_item_count")) is not int
+                    or not 0 <= raw["affected_prescription_item_count"] <= 500
+                    or (raw["gap_reason"] == "identity_missing"
+                        and raw["affected_prescription_item_count"] <= 0)
+                    or (raw["gap_reason"] == "too_many_items"
+                        and raw["affected_prescription_item_count"] <= 20)):
+                return None
         else:
             required = ["drug_name", "dose", "route", "duration"]
             missing = _safe_text_list(raw.get("missing_fields"), maximum=4)
-            if (keys != {"verification_kind", "medication_count", "required_fields", "missing_fields"}
+            legacy_keys = {"verification_kind", "medication_count", "required_fields", "missing_fields"}
+            prescription_keys = {"prescription_medication_count", "missing_drug_names"}
+            names = (_safe_text_list(raw.get("missing_drug_names"), maximum=20)
+                     if prescription_keys <= keys else None)
+            count = raw.get("prescription_medication_count")
+            if (keys not in (legacy_keys, legacy_keys | prescription_keys)
                     or raw.get("verification_kind") != "discharge_medication_completeness_check"
                     or type(raw.get("medication_count")) is not int or raw["medication_count"] <= 0
                     or raw.get("required_fields") != required or missing is None
-                    or any(item not in required for item in missing)):
+                    or any(item not in required for item in missing)
+                    or (prescription_keys <= keys and (
+                        type(count) is not int or not 0 <= count <= 20 or names is None
+                        or len(names) > count or len(names) != len(set(names))
+                        or (names and "drug_name" not in missing)
+                    ))):
                 return None
     elif rid == "LX0609-08-01-03":
         if "diagnosis_scope" in raw and (type(raw["diagnosis_scope"]) is not str or raw["diagnosis_scope"] not in {"death", "discharge"}):
@@ -784,6 +833,8 @@ def discharge_customer_fact_status_is_valid(
             return normalized_status == {
                 "unknown": "uncertain", "data_gap": "data_gap", "technical_error": "technical_error",
             }.get(safe_facts.get("extraction_state"))
+        if safe_facts.get("verification_kind") == "discharge_medication_prescription_identity_gap":
+            return normalized_status == "data_gap"
         return normalized_status == (
             "compliant" if not safe_facts.get("missing_fields") else "non_compliant"
         )

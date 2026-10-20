@@ -82,8 +82,8 @@ NATIVE_CASES = [
     ("N08_exact_nc", {"time": "2026-06-08 08:00:00", "count": 0}, "non_compliant", "required_document_missing", OLD),
     ("N09_exact_c", {"time": "2026-06-08 08:00:00"}, "compliant", "requirement_satisfied", OLD),
     ("N10_time_gap", {"time": None}, "data_gap", "authoritative_time_missing", "uncertain_diagnosis_course_time_gap"),
-    # 主控代定口径（2026-10-18，待客户复核），基线050：已明确主诊断的局部问题不触发。
-    ("N11_local", {"time": MATURE, "text": "患者发热原因待查，当前诊断为社区获得性肺炎。"}, "not_applicable", "trigger_absent_complete", OLD),
+    # 另一诊断明确不能抵消当前局部待查；诊疗范围不能确认时保留资料不足。
+    ("N11_local", {"time": MATURE, "text": "患者发热原因待查，当前诊断为社区获得性肺炎。"}, "data_gap", "diagnosis_scope_uncertain", "uncertain_diagnosis_scope_unverified"),
     ("N12_body_gap", {"time": MATURE, "body": " "}, "data_gap", "required_field_missing", "uncertain_diagnosis_discussion_body_gap"),
 ]
 

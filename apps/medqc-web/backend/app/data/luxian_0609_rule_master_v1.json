@@ -422,7 +422,7 @@
       "qc_point": "诊断不明确（入院后7天）未书写疑难病历讨论",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《疑难病历讨论记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "沿用项目入院满7天阈值，核对仍未解决的当前诊断或治疗疑难；另一诊断明确不豁免当前疑难，局部待查的诊疗范围无法确认时按资料不足处理。"
     },
     {
       "rule_id": "LX0609-09-02-01",
@@ -462,7 +462,7 @@
       "qc_point": "48至72小时内无效果评价",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "客户确认055以计划开始时间起算，计划开始时间缺失时回退开医嘱时间，不要求首次实际执行时间；48至72小时内应有疗效和安全性评价。"
     },
     {
       "rule_id": "LX0609-05-01-04",
@@ -521,7 +521,7 @@
       "qc_point": "出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《出院记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "客户确认：出院带药四字段应完整，并核对正式有效出院处方；漏写处方药物须报不合规并点名药物。原文明示的条件量与给药量比例按剂量已记录处理。"
     },
     {
       "rule_id": "LX0609-08-01-03",

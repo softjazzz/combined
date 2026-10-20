@@ -1,7 +1,7 @@
 [
   {
     "rule_id": "LX0609-03-02-01",
-    "contract_version": "v2",
+    "contract_version": "v3",
     "family_key": "extended_document",
     "executor_key": "extended_document",
     "execution_mode": "native_async",
@@ -56,7 +56,7 @@
   },
   {
     "rule_id": "LX0609-05-01-03",
-    "contract_version": "v3",
+    "contract_version": "v4",
     "family_key": "extended_document",
     "executor_key": "extended_document",
     "execution_mode": "native_async",
@@ -133,7 +133,7 @@
   },
   {
     "rule_id": "LX0609-08-01-02",
-    "contract_version": "v1",
+    "contract_version": "v2",
     "family_key": "extended_document",
     "executor_key": "extended_document",
     "execution_mode": "native_async",
