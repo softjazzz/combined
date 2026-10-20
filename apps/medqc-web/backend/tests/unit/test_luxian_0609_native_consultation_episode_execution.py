@@ -9753,3 +9753,37 @@ def test_023_display_facts_explain_time_missing_measures_and_exclusions():
     assert [row["exclusion_reason"] for row in facts["excluded_recommendations"]] == [
         "non_order_recommendation", "home_medication", "condition_not_met",
     ]
+
+
+def test_lexical_order_match_upgrades_model_absent_to_same_day_order():
+    # C02：会诊当日已开“小牛血去蛋白提取物眼用凝胶”，模型在长输入中偶尔漏判；药名对上由程序认定。
+    def completed(text):
+        return episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation("r1", "medication", text, text, "consultation_record-1"),
+            episode._ObservedTime(datetime(2026, 1, 22, 16, 18), True),
+        )
+    candidates = (
+        episode._CandidateDocument(
+            "inpat_drug_order-1", "inpat_drug_order",
+            episode._ObservedTime(datetime(2026, 1, 22, 11, 58), True),
+            "小牛血去蛋白提取物眼用凝胶(5g:1g)；小牛血去蛋白提取物眼用凝胶(5g:1g)；其他眼科用药；滴眼；Tid",
+        ),
+        episode._CandidateDocument(
+            "inpat_drug_order-2", "inpat_drug_order",
+            episode._ObservedTime(datetime(2026, 1, 23, 9, 0), True),
+            "(JC)伏立康唑片(50mg*10片)(临购)；伏立康唑片；三唑类衍生物；口服；Q12h",
+        ),
+    )
+    absent = episode._ExecutionAssessment("r1", "absent", (), "high", ())
+
+    [upgraded] = episode._apply_lexical_order_matches(
+        (absent,), completed=(completed("予小牛血去蛋白提取物眼用凝胶涂双眼后包扎"),), candidates=candidates,
+    )
+    assert (upgraded.execution_state, upgraded.execution_refs) == ("linked_specific", ("inpat_drug_order-1",))
+    # 次日医嘱不在窗口内；停用类建议开着同名药不算执行；名称对不上不补。
+    for text in ("加用伏立康唑抗真菌", "停用小牛血去蛋白提取物眼用凝胶", "予玻璃酸钠滴眼液滴眼"):
+        [kept] = episode._apply_lexical_order_matches(
+            (absent,), completed=(completed(text),), candidates=candidates,
+        )
+        assert kept is absent

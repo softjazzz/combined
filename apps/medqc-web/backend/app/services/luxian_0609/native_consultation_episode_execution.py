@@ -3804,6 +3804,77 @@ def _measure_check_scope(
     return tuple(item for item in in_scope if item.recommendation.recommendation_ref in with_orders)
 
 
+# 药名/检查名能否对上是结构化比对，由程序确定性判定（真实样本 C02“小牛血去蛋白提取物眼用凝胶”
+# 医嘱在候选内，模型在长输入中两轮一找到一漏掉）。只把模型的“未找到”补成已开立，不改其他判断；
+# 停用、减量类建议开着同名医嘱恰不算执行，不适用。
+_ORDER_NAME_NOISE_PATTERN = re.compile(r"[（(][^（）()]*[）)]")
+_ORDER_LEXICAL_EXCLUDED_PATTERN = re.compile(r"停用|停止|停药|暂停|减量|减停|禁用|避免|慎用|不宜")
+_ORDER_LEXICAL_MIN_CHARS = 4
+_ORDER_LEXICAL_MIN_COVERAGE = 0.6
+
+
+def _order_core_name(candidate_text: str) -> str:
+    name = _clean(candidate_text).split("；", 1)[0]
+    return _ORDER_NAME_NOISE_PATTERN.sub("", name).strip()
+
+
+def _longest_common_run(left: str, right: str) -> int:
+    best = 0
+    previous = [0] * (len(right) + 1)
+    for left_char in left:
+        current = [0] * (len(right) + 1)
+        for index, right_char in enumerate(right, start=1):
+            if left_char == right_char:
+                current[index] = previous[index - 1] + 1
+                best = max(best, current[index])
+        previous = current
+    return best
+
+
+def _order_name_matches(recommendation_text: str, candidate_text: str) -> bool:
+    core = _order_core_name(candidate_text)
+    if len(core) < _ORDER_LEXICAL_MIN_CHARS:
+        return False
+    run = _longest_common_run(core, recommendation_text)
+    return run >= _ORDER_LEXICAL_MIN_CHARS and run >= len(core) * _ORDER_LEXICAL_MIN_COVERAGE
+
+
+def _apply_lexical_order_matches(
+    assessments: Sequence["_ExecutionAssessment"],
+    *,
+    completed: Sequence["_CompletedRecommendation"],
+    candidates: Sequence["_CandidateDocument"],
+) -> tuple["_ExecutionAssessment", ...]:
+    by_ref = {item.recommendation.recommendation_ref: item for item in completed}
+    upgraded: list[_ExecutionAssessment] = []
+    for assessment in assessments:
+        item = by_ref.get(assessment.recommendation_ref)
+        if (
+            item is None
+            or assessment.execution_state != "absent"
+            or assessment.execution_refs
+            or assessment.trace_refs
+            or _ORDER_LEXICAL_EXCLUDED_PATTERN.search(_recommendation_text(item.recommendation))
+        ):
+            upgraded.append(assessment)
+            continue
+        _, allowed = _execution_prompt(completed=(item,), candidates=candidates)
+        allowed_refs = allowed.get(assessment.recommendation_ref, frozenset())
+        text = _recommendation_text(item.recommendation)
+        matched = tuple(
+            candidate.ref for candidate in candidates
+            if candidate.ref in allowed_refs
+            and candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+            and _order_name_matches(text, candidate.text)
+        )[:8]
+        upgraded.append(
+            replace(assessment, execution_state="linked_specific", execution_refs=matched)
+            if matched
+            else assessment
+        )
+    return tuple(upgraded)
+
+
 def _order_execution_view(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
@@ -5297,6 +5368,12 @@ async def _execute_consultation_episode_rules(
                 completed=completed_recommendations,
                 embedded_refs=embedded_decision_refs,
             )
+            if execution_candidate_projection is not None:
+                execution_assessments = _apply_lexical_order_matches(
+                    execution_assessments,
+                    completed=completed_recommendations,
+                    candidates=execution_candidate_projection.candidates,
+                )
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,
