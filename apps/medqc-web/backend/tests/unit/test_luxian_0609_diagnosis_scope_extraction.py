@@ -616,3 +616,12 @@ def test_suffix_possibility_variants_count_as_uncertainty(text, expected):
     from app.services.luxian_0609.extended_document.diagnosis_scope_extraction import _has_uncertainty_marker
 
     assert _has_uncertainty_marker(text) is expected
+
+
+def test_prompt_treats_cause_speculation_of_a_finding_as_not_unresolved():
+    """用户口径（2026-10-19）：主要诊断已明确时，“考虑…所致可能/考虑与…有关”不算诊断未明确（C06）。"""
+    from app.services.luxian_0609.extended_document.diagnosis_scope_extraction import _prompt
+
+    prompt = _prompt(["病程正文"])
+    assert "‘考虑重症感染所致可能’" in prompt and "不是诊断尚未明确，不输出unresolved" in prompt
+    assert "病因待查、原因不明或诊断待明确的仍按上文保留" in prompt

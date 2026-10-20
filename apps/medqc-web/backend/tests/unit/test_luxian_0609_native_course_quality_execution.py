@@ -7507,3 +7507,22 @@ def test_077_prompt_requires_no_related_item_for_unrelated() -> None:
     assert "没有任何一项与第一诊断的临床问题相关" in prompt
     assert "no_related_item" in prompt
     assert "至少一项明显无关" not in prompt
+
+
+def test_copy_review_usage_cap_excludes_reasoning_tokens_and_requests_thinking():
+    """用户决定（2026-10-19）：12-01-02 复制判定开思考预算 1000；用量上限只核对正文输出，思考 Token 不计入。"""
+    from app.services.luxian_0609.course_quality import rules_016_017 as module
+
+    usage = {"prompt_tokens": 4978, "completion_tokens": 1124, "total_tokens": 6102,
+             "completion_tokens_details": {"reasoning_tokens": 1000}}
+    assert module._strict_copy_review_usage({"usage": usage})[:3] == (4978, 1124, 6102)
+    over = {**usage, "completion_tokens_details": {"reasoning_tokens": 100}}
+    assert module._strict_copy_review_usage({"usage": over}) is None
+
+    class Strict:
+        def supports_strict_json_schema(self):
+            return True
+
+    assert module._copy_review_thinking_kwargs(Strict()) == {
+        "enable_thinking": True, "thinking_budget": module._COPY_REVIEW_THINKING_BUDGET}
+    assert module._copy_review_thinking_kwargs(object()) == {}

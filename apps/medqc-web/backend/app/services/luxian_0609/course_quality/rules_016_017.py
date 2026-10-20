@@ -64,6 +64,9 @@ _COPY_REVIEW_SCHEMA_VERSION = "lx0609_017_v1"
 # 输入用量门槛须覆盖现有有界提示词，不能把完整且合法的响应误判为输出无效。
 _COPY_REVIEW_MAX_PROMPT_TOKENS = 8192
 _COPY_REVIEW_MAX_COMPLETION_TOKENS = 512
+# 用户决定（2026-10-19）：复制判定是纯语义判断，默认思考预算 256 时同一病例两次结论不一（C03/C08/C14）；
+# 本调用点显式开思考、预算 1000（1019 资料 27 例两轮 26 例一致）。思考 Token 计入 completion，上限只核对正文输出。
+_COPY_REVIEW_THINKING_BUDGET = 1000
 _COPY_REVIEW_DOCUMENT_CHARS = 1200
 _COPY_REVIEW_VERDICTS = frozenset(
     {"substantial_copy", "template_only", "uncertain"}
@@ -802,6 +805,16 @@ def _copy_review_prompt(
     )
 
 
+def _copy_review_thinking_kwargs(llm_client: Any) -> dict[str, Any]:
+    """支持结构化输出的真实客户端才附加思考参数；测试替身保持原参数。"""
+    capability = getattr(llm_client, "supports_strict_json_schema", None)
+    try:
+        supported = bool(capability()) if callable(capability) else False
+    except Exception:
+        supported = False
+    return {"enable_thinking": True, "thinking_budget": _COPY_REVIEW_THINKING_BUDGET} if supported else {}
+
+
 def _strict_copy_review_usage(
     response: Mapping[str, Any],
 ) -> tuple[int, int, int, float] | None:
@@ -815,10 +828,14 @@ def _strict_copy_review_usage(
     if any(type(value) is not int or value < 0 for value in values):
         return None
     prompt_tokens, completion_tokens, total_tokens = values
+    details = usage.get("completion_tokens_details")
+    reasoning = details.get("reasoning_tokens") if isinstance(details, Mapping) else 0
+    if type(reasoning) is not int or not 0 <= reasoning <= completion_tokens:
+        return None
     if (
         total_tokens != prompt_tokens + completion_tokens
         or prompt_tokens > _COPY_REVIEW_MAX_PROMPT_TOKENS
-        or completion_tokens > _COPY_REVIEW_MAX_COMPLETION_TOKENS
+        or completion_tokens - reasoning > _COPY_REVIEW_MAX_COMPLETION_TOKENS
     ):
         return None
     api_time = response.get("_api_time", 0.0)
@@ -867,6 +884,7 @@ async def _review_copy_candidates(
             _copy_review_prompt(candidates, redaction_terms),
             max_completion_tokens=_COPY_REVIEW_MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
+            **_copy_review_thinking_kwargs(llm_client),
         )
     except Exception:
         return _technical_copy_review_outcome(outcome, "model_transport_error")
