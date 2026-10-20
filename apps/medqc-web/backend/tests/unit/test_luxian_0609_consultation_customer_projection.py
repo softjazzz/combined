@@ -447,6 +447,95 @@ def test_023_projection_publishes_window_start_and_declined_measures() -> None:
     assert validate_published_consultation_facts(rule_id="LX0609-03-01-04", raw=facts) == facts
 
 
+@pytest.mark.parametrize("extra", [
+    {"window_start_date": "2026-08-22"},
+    {"declined_measures": ["纤支镜检查"]},
+    {"window_start_date": "2026-08-22", "declined_measures": ["纤支镜检查"]},
+])
+def test_023_new_fields_survive_canonical_save_projection(extra) -> None:
+    """正式投影通过的字段必须能通过保存层，不能在任务收尾时整单失败。"""
+    from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+
+    raw = _023_reason_raw(**extra)
+    if "declined_measures" in extra:
+        raw["excluded_recommendations"].append({
+            "episode_index": 1, "recommendation_text": "建议行胃镜检查",
+            "exclusion_reason": "declined_in_record",
+        })
+    facts = safe_consultation_customer_display_facts(rule_id="LX0609-03-01-04", raw=raw)
+    assert facts is not None
+    item = envelope_item_from_rule_result({
+        "rule_id": "LX0609-03-01-04", "status": "non_compliant",
+        "result_status": "non_compliant", "is_compliant": False,
+        "customer_display_facts": facts,
+    })
+    assert item["customer_display_facts"] == facts
+
+    import json
+    from datetime import datetime
+    from sqlalchemy import MetaData, create_engine
+    from sqlalchemy.orm import Session
+    from app.services.custom_qc_workspace_service import _record_result_envelopes_table
+    from app.services.qc_workspace.canonical_result_store import CanonicalResultStore
+
+    table = _record_result_envelopes_table().to_metadata(MetaData(), schema=None)
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    ref = {"institute_id": "inst-test", "patient_id": "case-test", "visit_id": "visit-test"}
+    source = {**item, **ref}
+    filters = {
+        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+        "record_refs": [ref], "scoped_customer_rule_ids": [source["rule_id"]],
+    }
+    with Session(engine) as session:
+        store.replace_for_job(
+            session, job_row={"id": "job-test", "created_by": "test-user", "filters_json": json.dumps(filters)},
+            items=[source], now=datetime(2026, 10, 20),
+            projector=envelope_item_from_rule_result, projection_key="test-key",
+        )
+        session.commit()
+        saved = store.load_selected(session, root_job_id="job-test", **ref,
+                                    rule_set_key=filters["rule_set_key"], rule_set_version=filters["rule_set_version"])
+        assert saved["items"][0]["customer_display_facts"] == facts
+    engine.dispose()
+
+
+@pytest.mark.parametrize("extra", [
+    {"window_start_date": "2026-02-30"},
+    {"window_start_date": "2026-08-22 08:00:00"},
+    {"window_start_date": None},
+    {"declined_measures": []},
+    {"declined_measures": ["措" * 41]},
+    {"declined_measures": [1]},
+    {"declined_measures": ["措施"] * 9},
+    {"declined_measures": None},
+    {"uncontrolled_field": "不可放行"},
+])
+def test_canonical_save_still_rejects_invalid_new_consultation_fields(extra) -> None:
+    from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+
+    facts = safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04", raw=_023_reason_raw(),
+    )
+    facts["recommendation_evidence"][0].update(extra)
+    with pytest.raises(ValueError, match="invalid recommendation evidence"):
+        envelope_item_from_rule_result({
+            "rule_id": "LX0609-03-01-04", "customer_display_facts": facts,
+        })
+
+
+def test_new_order_window_fields_are_not_allowed_on_other_consultation_contracts() -> None:
+    from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+
+    facts = safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04", raw=_023_reason_raw(window_start_date="2026-08-22"),
+    )
+    facts["verification_kind"] = "consultation_execution_relation_check"
+    with pytest.raises(ValueError, match="invalid recommendation evidence"):
+        envelope_item_from_rule_result({"rule_id": "LX0609-03-01-01", "customer_display_facts": facts})
+
+
 @pytest.mark.parametrize(
     "extra",
     (

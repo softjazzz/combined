@@ -5,7 +5,7 @@ import hmac
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 import sqlalchemy as sa
@@ -204,8 +204,10 @@ def _validate_recommendation_evidence_facts(value: Any) -> None:
             "opinion_evidence",
             "execution_evidence",
         }
-        # 023 逐条另带会诊记录时间与当日未开立医嘱的措施（2026-10-20）。
+        # 与 023 的已发布投影合同对齐；其他会诊结果不接受新增核对窗口字段。
         optional_keys = {"recommendation_text", "opinion_time", "missing_measures"}
+        if value.get("verification_kind") == "consultation_execution_quality_check":
+            optional_keys |= {"window_start_date", "declined_measures"}
         if not isinstance(entry, dict) or not expected_keys <= set(entry) <= (
             expected_keys | optional_keys
         ):
@@ -216,16 +218,30 @@ def _validate_recommendation_evidence_facts(value: Any) -> None:
             or re.fullmatch(r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2})?", opinion_time) is None
         ):
             raise ValueError("invalid recommendation evidence")
-        missing_measures = entry.get("missing_measures")
-        if missing_measures is not None and (
-            type(missing_measures) is not list
-            or not 1 <= len(missing_measures) <= 8
-            or any(
-                type(item) is not str or not item.strip() or len(item) > 40
-                for item in missing_measures
-            )
-        ):
-            raise ValueError("invalid recommendation evidence")
+        if "window_start_date" in entry:
+            window_start = entry["window_start_date"]
+            if (
+                type(window_start) is not str
+                or re.fullmatch(r"\d{4}-\d{2}-\d{2}", window_start) is None
+            ):
+                raise ValueError("invalid recommendation evidence")
+            try:
+                date.fromisoformat(window_start)
+            except ValueError:
+                raise ValueError("invalid recommendation evidence") from None
+        for field in ("missing_measures", "declined_measures"):
+            if field not in entry or (field == "missing_measures" and entry[field] is None):
+                continue
+            measures = entry[field]
+            if (
+                type(measures) is not list
+                or not 1 <= len(measures) <= 8
+                or any(
+                    type(item) is not str or not item.strip() or len(item) > 40
+                    for item in measures
+                )
+            ):
+                raise ValueError("invalid recommendation evidence")
         recommendation_text = entry.get("recommendation_text")
         if recommendation_text is not None and (
             type(recommendation_text) is not str
