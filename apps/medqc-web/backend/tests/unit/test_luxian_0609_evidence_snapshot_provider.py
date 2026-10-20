@@ -1736,6 +1736,8 @@ def test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_q
             "inpat_drug_order",
             "inpat_nondrug_order",
             "inpat_registration",
+            "inpat_prescription",
+            "inpat_prescription_item",
             "labtest_master",
             "pathology_exam_master",
             "pathology_exam_report",
@@ -1767,6 +1769,8 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
     }
     assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == {
         *expected,
+        "inpat_prescription",
+        "inpat_prescription_item",
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
         CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
         CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,

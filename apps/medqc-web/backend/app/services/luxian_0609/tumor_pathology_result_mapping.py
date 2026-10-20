@@ -197,7 +197,12 @@ def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     triggers = _safe_sources(
         raw.get("pathology_trigger_sources"), allowed=_PATHOLOGY_SOURCES, required=True
     )
-    checked = _safe_checked_sources(raw.get("checked_target_sources"))
+    raw_checked = raw.get("checked_target_sources")
+    checked = _safe_checked_sources(
+        raw_checked,
+        expected=(*_TARGET_SOURCES, "senior_course_record")
+        if isinstance(raw_checked, list) and len(raw_checked) == 3 else _TARGET_SOURCES,
+    )
     if (
         raw.get("verification_kind") != "pathology_result_documentation_check"
         or triggers is None

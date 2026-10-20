@@ -1943,18 +1943,67 @@ _NON_ORAL_GRANULE_PATTERN = re.compile(r"(?:外用|外洗|冲洗|含漱|漱口|�
 
 def _with_dosage_form_oral_route(
     medications: Sequence[Mapping[str, Any]],
+    *, oral_prescription_names: Sequence[str] = (), source_text: str = "",
 ) -> list[Mapping[str, Any]]:
     result: list[Mapping[str, Any]] = []
     for item in medications:
-        name = " ".join(_clean(item.get(key)) for key in ("drug_name", "generic_name", "name"))
         if (
             not any(_clean(item.get(key)) for key in ("route", "drug_apply_method"))
-            and _oral_dosage_form(name)
+            and _medication_has_oral_form(item, oral_prescription_names, source_text)
         ):
             result.append({**item, "route": "口服（按剂型推定）"})
         else:
             result.append(item)
     return result
+
+
+def _medication_has_oral_form(item: Mapping[str, Any], prescription_names: Sequence[str], source_text: str = "") -> bool:
+    name = _clean(" ".join(_clean(item.get(key)) for key in ("drug_name", "generic_name", "name")))
+    if _NON_ORAL_GRANULE_PATTERN.search(name) or re.search(r"注射|滴眼|滴耳|舌下|含片|贴片|泡腾", name):
+        return False
+    if _oral_dosage_form(name):
+        return True
+    # 最短药名引文可能不带紧随其后的“(5mg/片)”规格，仍以同一药名的唯一原文为准。
+    if name and source_text.count(name) == 1 and re.search(
+        re.escape(name) + r"\s*[（(][^）)；;。\n]{0,35}/片\s*[）)]", source_text,
+    ):
+        return True
+    # 原文计量单位明确为片剂时也可应用默认口服；不覆盖外用或特殊给药剂型。
+    if re.search(r"\d\s*片", _clean(item.get("dose"))) and not re.search(
+        r"外用|外敷|阴道|舌下|含服|含片|贴片|泡腾", name
+    ):
+        return True
+    if len(name) < 3 or re.search(r"注射|外用|滴眼|滴耳|舌下|含片|复方", name):
+        return False
+    # 仅补剂型缩写：品牌/规格括号去掉后，药物名称及已知剂型后缀须完整对应。
+    for prescribed_name in prescription_names:
+        normalized = re.sub(r"[（(][^）)]*[）)]", "", prescribed_name).strip()
+        if re.fullmatch(re.escape(name) + r"(?:钙|钠|镁)?(?:肠溶|缓释|控释|软)?(?:片|胶囊|颗粒|糖浆|口服液)", normalized):
+            return True
+    return False
+
+
+def _discharge_oral_prescription_names(materials: Luxian0609EvidenceMaterialStore) -> tuple[str, ...]:
+    """只读同次就诊正式出院处方，仅用于确定口服剂型，不补剂量或频次。"""
+    try:
+        prescriptions = materials.rows("inpat_prescription")
+        items = materials.rows("inpat_prescription_item")
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return ()
+    eligible = {
+        _clean(row.get("prescription_id")) for row in prescriptions
+        if _clean(row.get("prescription_id")) and _clean(row.get("order_type")) == "出院带药"
+        and _clean(row.get("order_status")) in {"新开", "执行", "执行中", "核实", "完成"}
+        and _clean(row.get("is_deleted")).lower() not in {"1", "true"}
+    }
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for item in items:
+        if _clean(item.get("prescription_id")) not in eligible or _clean(item.get("is_deleted")).lower() in {"1", "true"}:
+            continue
+        name = _clean(item.get("generic_name") or item.get("brand_name"))
+        grouped.setdefault(name, []).append(item)
+    return tuple(name for name, rows in grouped.items() if name and _oral_dosage_form(name)
+                 and all(_clean(row.get("drug_apply_method")).lower() in {"口服", "po"} for row in rows))
 
 
 def _oral_dosage_form(name: Any) -> bool:
@@ -1966,24 +2015,25 @@ def _oral_dosage_form(name: Any) -> bool:
     )
 
 
-def _with_oral_route_uncertainty_resolved(extraction: Any) -> Any:
+def _with_oral_route_uncertainty_resolved(extraction: Any, *, oral_prescription_names: Sequence[str] = (), source_text: str = "") -> Any:
     """口服剂型未写途径按院方口径推定口服，模型对途径的“不确定”不再阻断判定。
 
     仅当全部不确定字段都是口服剂型药物的给药途径时升级为 ready；药名、剂量、
     用药时间不确定或非口服剂型的途径不确定，仍保持 unknown。
+    同时纠正明确口服剂型的 route=missing，避免其他字段不确定时提前报错缺给药途径。
     """
 
-    if extraction.state != "unknown" or not extraction.field_assertions:
+    if extraction.state not in {"unknown", "ready"} or not extraction.field_assertions:
         return extraction
-    for medication, assertions in zip(extraction.medications, extraction.field_assertions):
-        for name, assertion in assertions.items():
-            if assertion == "uncertain" and not (
-                name == "route"
-                and assertions.get("drug_name") == "present"
-                and _oral_dosage_form(medication.get("drug_name"))
-            ):
-                return extraction
-    return replace(extraction, state="ready", reason_code="discharge_medications_extracted")
+    medications = _with_dosage_form_oral_route(extraction.medications, oral_prescription_names=oral_prescription_names, source_text=source_text)
+    assertions = tuple(
+        {**fields, "route": "present"} if _clean(medication.get("route")) else fields
+        for medication, fields in zip(medications, extraction.field_assertions)
+    )
+    unresolved = any(value == "uncertain" for fields in assertions for value in fields.values())
+    return replace(extraction, medications=tuple(medications), field_assertions=assertions,
+                   state="unknown" if unresolved else "ready",
+                   reason_code=extraction.reason_code if unresolved else "discharge_medications_extracted")
 
 
 def _discharge_medications_complete(medications: Sequence[Mapping[str, Any]]) -> bool:
@@ -4528,6 +4578,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-08-01-02":
+            oral_prescription_names = _discharge_oral_prescription_names(evidence_materials)
             if discharge_error:
                 decisions.append(
                     _decision(
@@ -4616,7 +4667,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 medication_extraction = _with_oral_route_uncertainty_resolved(
                     await extract_discharge_medications(
                         str(discharge_rows[0]["discharge_order"]), llm_client
-                    )
+                    ), oral_prescription_names=oral_prescription_names,
+                    source_text=str(discharge_rows[0]["discharge_order"]),
                 )
                 # 已确认药物的明确缺项足以证明不完整；未知字段不可冒充缺项。
                 if medication_extraction.state == "unknown":
@@ -4672,7 +4724,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
                 required_groups = _DISCHARGE_MEDICATION_REQUIRED_GROUPS
-                medications = _with_dosage_form_oral_route(medications)
+                medications = _with_dosage_form_oral_route(medications, oral_prescription_names=oral_prescription_names)
                 complete = _discharge_medications_complete(medications)
                 final_state = "compliant" if complete else "non_compliant"
                 reason_code = (

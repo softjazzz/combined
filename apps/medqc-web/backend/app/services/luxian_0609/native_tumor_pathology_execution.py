@@ -37,6 +37,7 @@ from .pathology_documentation_extraction import (
     extract_pathology_documentation_facts,
 )
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
 )
@@ -69,6 +70,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "pathology_exam_report",
         "surgery_record",
         "daily_course_record",
+        "senior_course_record",
     ),
     "LX0609-06-02-02": (
         "pathology_exam_master",
@@ -98,6 +100,7 @@ _TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
 
 _PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
 _PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
+_PATHOLOGY_RESULT_TARGET_SOURCES = (*_PATHOLOGY_TARGET_SOURCES, "senior_course_record")
 # 院方口径（2026-10-10）：病理取材只核对手术记录和日常病程，不看上级医师查房记录。
 _LX019_PATHOLOGY_TARGET_SOURCES = _PATHOLOGY_TARGET_SOURCES
 _CHEMO_TARGET_SOURCES = ("inpat_drug_order", "daily_course_record")
@@ -994,6 +997,7 @@ def _pathology_result_display_facts(
     pathology_report: SourceMaterial,
     surgery_record: SourceMaterial,
     daily_course_record: SourceMaterial,
+    senior_course_record: SourceMaterial | None = None,
 ) -> Mapping[str, Any] | None:
     trigger_sources, target_sources = _pathology_checked_sources(
         pathology_master=pathology_master,
@@ -1003,6 +1007,10 @@ def _pathology_result_display_facts(
     )
     if not trigger_sources or len(target_sources) != 2:
         return None
+    if senior_course_record is not None:
+        if senior_course_record.state not in {"present", "empty"}:
+            return None
+        target_sources.append({"source": "senior_course_record", "state": senior_course_record.state})
     report_times = {
         value
         for row in pathology_report.rows
@@ -1119,6 +1127,7 @@ def _lx019_typed_display_facts(
 _TARGET_SOURCE_LABELS = {
     "surgery_record": "手术记录",
     "daily_course_record": "日常病程记录",
+    "senior_course_record": "上级医师查房记录",
 }
 
 
@@ -1198,12 +1207,13 @@ async def _typed_pathology_documentation(
             )))
             if not body:
                 continue
-            moment = _pathology_link_time(
-                (row.get("surgery_begin_time") if sampling else None)
-                or row.get("record_time") or row.get("record_datetime")
-            )
+            document_time = row.get("record_time") or row.get("record_datetime")
             if not sampling:
-                # 013 只认报告之后的记录；无记录时间的文书无法核对先后。
+                document_time = authoritative_document_time_value(row)
+            moment = _pathology_link_time((row.get("surgery_begin_time") if sampling else None) or document_time)
+            if not sampling:
+                # 013 核对结果是否写入文书；记录时间优先，缺失时正式提交时间可证明文书存在。
+                # 不使用修改时间，不借提交时间改写检查或手术事件的发生时间。
                 if moment is None:
                     untimed = True
                     continue
@@ -2104,7 +2114,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 )
                 continue
             target_context_sources = (
-                _LX019_PATHOLOGY_TARGET_SOURCES
+                _PATHOLOGY_RESULT_TARGET_SOURCES
+                if typed_rule and rule_id == "LX0609-06-02-03"
+                else _LX019_PATHOLOGY_TARGET_SOURCES
                 if rule_id == "LX0609-06-02-02"
                 else _PATHOLOGY_TARGET_SOURCES
             )
@@ -2394,7 +2406,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             for source_key in context_sources
         }
         required_sources = (
-            _LX019_PATHOLOGY_TARGET_SOURCES
+            _PATHOLOGY_RESULT_TARGET_SOURCES
+            if typed_rule and rule_id == "LX0609-06-02-03"
+            else _LX019_PATHOLOGY_TARGET_SOURCES
             if rule_id == "LX0609-06-02-02" and typed_rule
             else _PATHOLOGY_TARGET_SOURCES
             if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}
@@ -2441,6 +2455,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     pathology_report=report,
                     surgery_record=materials["surgery_record"],
                     daily_course_record=materials["daily_course_record"],
+                    senior_course_record=materials.get("senior_course_record"),
                 ),
                 fact_refs=(
                         typed_document_refs(
@@ -2547,6 +2562,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         status="compliant", pathology_master=master, pathology_report=report,
                         surgery_record=target_materials["surgery_record"],
                         daily_course_record=target_materials["daily_course_record"],
+                        senior_course_record=target_materials["senior_course_record"],
                     )
                 )
                 selected_rows = documentation.cited
@@ -2561,6 +2577,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         status="non_compliant", pathology_master=master, pathology_report=report,
                         surgery_record=target_materials["surgery_record"],
                         daily_course_record=target_materials["daily_course_record"],
+                        senior_course_record=target_materials["senior_course_record"],
                     )
                 )
                 selected_rows = documentation.checked

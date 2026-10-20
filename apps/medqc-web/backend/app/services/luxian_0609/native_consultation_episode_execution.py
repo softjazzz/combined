@@ -21,6 +21,7 @@ from typing import Any, Mapping, Protocol, Sequence
 from .consultation_measure_check import apply_measure_check, check_consultation_measures
 from .consultation_order_scope import (
     declined_measure_objects,
+    current_checks_declined_after_communication,
     measure_is_declined,
     order_window_start,
     recommendation_decline,
@@ -3987,6 +3988,19 @@ def _annotate_order_scope(
             declined_objects,
             is_conditional=_is_conditional_clause,
         )
+        # 泛称拒绝只在该会诊仅有一条检查类建议、且本科室反馈明确沟通后拒绝时回指。
+        # 不扩展到其他会诊、用药或含多条建议的记录。
+        if (
+            not fully_declined
+            and item.recommendation.action_type == "test"
+            and sum(other.recommendation.opinion_ref == opinion_ref for other in completed) == 1
+            and current_checks_declined_after_communication(
+                _clean(documents_by_ref.get(opinion_ref, {}).get("text")),
+                is_conditional=_is_conditional_clause,
+            )
+        ):
+            fully_declined = True
+            declined_measures = (item.recommendation.source_quote,)
         annotated.append(replace(
             item,
             window_start=order_window_start(item.opinion_time.day),

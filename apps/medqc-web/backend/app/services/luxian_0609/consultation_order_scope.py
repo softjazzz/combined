@@ -166,3 +166,18 @@ def order_window_start(opinion_day: date) -> date:
     """医嘱核对窗口起点：会诊记录日期前 3 天（含当天共 4 个自然日）。"""
 
     return opinion_day - timedelta(days=ORDER_WINDOW_LOOKBACK_DAYS)
+
+
+def current_checks_declined_after_communication(
+    text: str, *, is_conditional: Callable[[str], bool],
+) -> bool:
+    """单一检查建议的本科室反馈：与患方沟通后实际拒绝进一步检查。"""
+    sections = list(re.finditer(r"(?:处理|会诊执行|执行情况)\s*[:：;；]", text or ""))
+    if not sections:
+        return False
+    feedback = text[sections[-1].end():]
+    match = re.search(
+        r"(?:患者|家属|患方|病人)[^。；;\n]{0,12}沟通后\s*[,，]\s*拒绝进一步检查",
+        feedback,
+    )
+    return bool(match and not is_conditional(feedback[:match.end()]))

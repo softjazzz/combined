@@ -234,6 +234,8 @@ _REGISTRY_ENTRIES = (
 )
 
 _INTERNAL_SOURCE_ENTRIES = (
+    _entry("inpat_prescription", access_mode=_BOUNDED),
+    _entry("inpat_prescription_item", access_mode=_BOUNDED),
     # 第一阶段扩展规则在目录整体切换前先作为内部受控来源注册。
     # 输血记录、申请与收费是三个不同的资料合同，不能继续把收费行合并到
     # bloodtrans_record 后再由规则猜测来源。
@@ -418,7 +420,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
-    "LX0609-06-02-03": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-06-02-03": ("pathology_exam_master", "pathology_exam_report", "senior_course_record"),
     "LX0609-06-02-02": (
         "pathology_exam_master",
         "pathology_exam_report",
@@ -659,7 +661,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_registration",
         "death_record",
     ),
-    "LX0609-08-01-02": ("inpat_registration",),
+    "LX0609-08-01-02": ("inpat_registration", "inpat_prescription", "inpat_prescription_item"),
     "LX0609-08-02-01": ("evaluation_context.horizon", "inpat_registration"),
     "LX0609-08-02-02": (
         "evaluation_context.horizon",

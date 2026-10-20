@@ -422,6 +422,7 @@ async def test_typed_013_complete_empty_target_sources_are_non_compliant_without
         "checked_target_sources": [
             {"source": "surgery_record", "state": "empty"},
             {"source": "daily_course_record", "state": "empty"},
+            {"source": "senior_course_record", "state": "empty"},
         ],
         "requirement_met": False,
         "report_time": "2026-04-26 10:00:00",

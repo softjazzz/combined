@@ -366,6 +366,13 @@ _NATIVE_SOURCE_FIELDS = {
         "report_status",
         "record_content",
     ),
+    "inpat_prescription": (
+        "prescription_id", "order_type", "order_status", "is_deleted",
+    ),
+    "inpat_prescription_item": (
+        "prescription_id", "prescription_item_id", "generic_name", "brand_name",
+        "drug_apply_method", "dose_form", "is_deleted",
+    ),
     "inpat_drug_order": (
         "order_id",
         "drug_code",
@@ -649,6 +656,8 @@ for _source_key, _source_fields in tuple(_NATIVE_SOURCE_FIELDS.items()):
 _SNAPSHOT_SOURCE_FIELDS = {
     source_key: _NATIVE_SOURCE_FIELDS[source_key]
     for source_key in (
+        "inpat_prescription",
+        "inpat_prescription_item",
         "inpat_registration",
         "admission_record",
         "admission_record_diagnosis",
