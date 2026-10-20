@@ -1,6 +1,6 @@
 """023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施无执行证据即不合规。
 
-用户口径（2026-10-20）：执行证据只认会诊记录当天、记录时间之前（含）开立的医嘱。
+用户口径（2026-10-20）：执行证据只认会诊记录当天开立的医嘱。
 """
 
 import asyncio
@@ -38,9 +38,9 @@ def test_specific_order_proves_execution_even_when_course_only_says_follow_advic
         source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
 
 
-def test_only_same_day_orders_up_to_consultation_record_are_execution_candidates():
-    # 用户口径（2026-10-20）：会诊记录是对当天所开医嘱的总结，记录前（含）的当天医嘱算执行；
-    # 前一天的医嘱不算；病程不作执行证据（同日早于记录的病程本就不在候选内）。
+def test_only_consultation_day_orders_are_execution_candidates():
+    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱算执行，前一天的不算；
+    # 病程不作执行证据（同日早于记录的病程本就不在候选内）。
     completed, _, _, _ = _setup()
     completed = (replace(completed[0], opinion_time=episode._ObservedTime(datetime(2026, 7, 20, 15, 59), True)),)
     candidates = tuple(episode._CandidateDocument(
@@ -119,7 +119,7 @@ def _setup(orders=BASE_ORDERS):
             episode._Recommendation(
                 "consultation_record-1#r1", "procedure", RECOMMENDATION, RECOMMENDATION, "consultation_record-1"
             ),
-            # 用户口径（2026-10-20）：只认会诊记录当天、记录时间之前开立的医嘱。
+            # 用户口径（2026-10-20）：只认会诊记录当天开立的医嘱。
             episode._ObservedTime(datetime(2026, 7, 20, 18), True),
         ),
     )

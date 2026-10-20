@@ -3243,7 +3243,7 @@ def test_execution_prompt_exposes_exact_allowed_refs_per_recommendation():
             episode._ObservedTime(datetime(2026, 7, 20, 10), True),
             "安全检查记录",
         ),
-        # 用户口径（2026-10-20）：医嘱须在会诊记录当天、记录时间之前（含）开立。
+        # 用户口径（2026-10-20）：医嘱须在会诊记录当天开立。
         episode._CandidateDocument(
             "inpat_drug_order-1",
             "inpat_drug_order",
@@ -4830,11 +4830,12 @@ def test_023_order_candidates_remain_inside_current_stay_when_documentation_is_l
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("order_time", "expected"), [
-    # 用户口径（2026-10-20）：会诊记录当天、记录时间之前开立的医嘱算执行；前几天的不算。
+    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱都算执行（记录前后均可）；前几天的不算。
     ("2026-07-20 15:56:46", "compliant"), ("2026-07-20 15:55:22", "compliant"),
+    ("2026-07-20 18:30:00", "compliant"),
     ("2026-07-19 15:56:46", "non_compliant"), ("2026-07-17 15:55:22", "non_compliant"),
 ])
-async def test_023_only_same_day_order_before_consultation_record_counts(monkeypatch, order_time, expected):
+async def test_023_only_consultation_day_order_counts(monkeypatch, order_time, expected):
     rows = _no_course_source_rows(
         consultation_text="会诊意见：中药贴敷天突、双肺俞。处理：遵照执行。",
         source_key="inpat_nondrug_order", source_rows=[{
@@ -9490,8 +9491,8 @@ async def test_typed_consultation_stage_two_privacy_failure_is_legal_and_not_ret
 
 
 @pytest.mark.parametrize("source,action_type", [("inpat_drug_order", "medication"), ("inpat_nondrug_order", "procedure")])
-def test_execution_orders_must_be_same_day_up_to_consultation_record(source, action_type):
-    # 用户口径（2026-10-20）：只认会诊记录当天、记录时间之前（含）开立的医嘱。
+def test_execution_orders_must_be_on_consultation_record_day(source, action_type):
+    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱都算（记录前后均可），次日起不算。
     completed = (episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation("r1", action_type, "合成建议", "合成建议", "consultation_record-1"),
@@ -9499,16 +9500,17 @@ def test_execution_orders_must_be_same_day_up_to_consultation_record(source, act
     ),)
     candidates = tuple(episode._CandidateDocument(
         f"{source}-{index}", source,
-        episode._ObservedTime(datetime(2026, 7, 20, hour), True), "合成治疗医嘱",
-    ) for index, hour in enumerate((9, 10, 11), 1))
+        episode._ObservedTime(moment, True), "合成治疗医嘱",
+    ) for index, moment in enumerate(
+        (datetime(2026, 7, 20, 9), datetime(2026, 7, 20, 23), datetime(2026, 7, 21, 8)), 1))
     prompt, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
     assert allowed["r1"] == frozenset({f"{source}-1", f"{source}-2"})
     payload = json.loads(prompt.rsplit("输入：", 1)[1])
     assert len(payload["candidate_documents"]) == 2
 
 
-def test_order_candidate_budget_excludes_post_record_orders_before_limiting():
-    # 用户口径（2026-10-20）：记录之后才开的医嘱先剔除，再按名额截断。
+def test_order_candidate_budget_excludes_next_day_orders_before_limiting():
+    # 用户口径（2026-10-20）：会诊次日起开立的医嘱先剔除，再按名额截断。
     completed = (episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation("r1", "procedure", "给予合成气压治疗", "气压治疗", "consultation_record-1"),
@@ -9516,7 +9518,7 @@ def test_order_candidate_budget_excludes_post_record_orders_before_limiting():
     ),)
     candidates = tuple(episode._CandidateDocument(
         f"inpat_nondrug_order-{index}", "inpat_nondrug_order",
-        episode._ObservedTime(datetime(2026, 7, 20, 9 if index < 25 else 7, index), True),
+        episode._ObservedTime(datetime(2026, 7, 21 if index < 25 else 20, 9, index), True),
         "合成其他处置" if index < 25 else "气压治疗费",
     ) for index in range(26))
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
@@ -9557,3 +9559,52 @@ def test_023_ignores_non_order_recommendations():
         assessments=(), completed_recommendations=(rec("r1", "other"),)[:0],
         source_incomplete_keys=frozenset(),
     ) == ("not_applicable", "trigger_absent_complete")
+
+
+def test_023_keyword_non_order_recommendations_are_not_checked():
+    # 模型把“改前臂吊带”“骨盆骨折卧床”归为操作类时，按关键词剔除；含明确药物/检查的仍核对。
+    rec = lambda ref, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, "procedure", quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "改前臂吊带悬吊患肢"),
+        rec("r2", "骨盆骨折需卧床2个月"),
+        rec("r3", "卧床期间复查骨盆CT"),
+        rec("r4", "行气管切开术"),
+    )
+    in_scope, _ = episode._order_execution_view(completed, None)
+    assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
+
+
+def test_023_conditional_recommendation_without_order_is_not_checked():
+    # 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对；当天有医嘱即按已执行。
+    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "transfer", "若病情加重及家属同意可转科"),
+        rec("r2", "test", "若均阴性则行气管镜检查"),
+        rec("r3", "procedure", "凝血无异常后行气管切开"),
+        rec("r4", "medication", "予以亚胺培南抗感染"),
+    )
+    absent = lambda ref: episode._ExecutionAssessment(ref, "absent", (), "high", ())
+    assessments = (
+        absent("r1"),
+        absent("r2"),
+        episode._ExecutionAssessment(
+            "r3", "linked_specific", ("inpat_nondrug_order-1",), "high", ()
+        ),
+        absent("r4"),
+    )
+    kept, view = episode._order_execution_view(completed, assessments)
+    assert [item.recommendation.recommendation_ref for item in kept] == ["r3", "r4"]
+    assert [(item.recommendation_ref, item.execution_state) for item in view] == [
+        ("r3", "linked_specific"),
+        ("r4", "absent"),
+    ]
+    assert episode._is_conditional_recommendation(completed[0].recommendation)
+    assert not episode._is_conditional_recommendation(completed[3].recommendation)

@@ -3612,10 +3612,24 @@ def _every_recommendation_has_trace(
 
 _RECORDED_TRACE_LEVELS = frozenset({"specific_trace", "generic_trace"})
 _ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
-# 用户口径（2026-10-20）：023 会诊执行只认医嘱，不看病程；只核对需通过医嘱落实的建议
+# 用户口径（2026-10-20）：023 会诊执行只认会诊记录当天开立的医嘱，不看病程；只核对需通过医嘱落实的建议
 # （药物、检查检验、操作治疗、转科），卧床/活动/体位/饮食营养目标/护理宣教等不属于医嘱，不核对。
 _ORDER_RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer"})
 _CONTINUATION_RECOMMENDATION_PATTERN = re.compile(r"^\s*(?:暂)?(?:继续|维持|续用|仍予|仍用)")
+# 模型偶把“改前臂吊带”“骨盆骨折卧床”等归为操作类，这里按关键词兜底剔除；
+# 同一建议含明确药物、检查或手术操作时仍按医嘱核对。
+_NON_ORDER_RECOMMENDATION_PATTERN = re.compile(
+    r"吊带|悬吊|夹板|卧床|体位|制动|饮食|营养目标|护理|宣教|功能锻炼|随诊"
+)
+_ORDER_RECOMMENDATION_HINT_PATTERN = re.compile(
+    r"药|mg|片|注射|输注|静滴|口服|检查|复查|CT|MRI|彩超|手术|穿刺|切开|置管|转科"
+)
+# 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对。当天有对应医嘱即视为
+# 条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
+_CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
+    r"若|如果|假如|倘若|如[^，,。；;]{1,16}(?:则|时|者)|待[^，,。；;]{1,24}后"
+    r"|(?:同意|稳定|好转|平稳|无异常|正常|允许|阴性|阳性)(?:后|则)|必要时|酌情|视情况"
+)
 
 
 def _order_in_execution_window(
@@ -3624,19 +3638,12 @@ def _order_in_execution_window(
     *,
     continuation: bool,
 ) -> bool:
-    """用户口径（2026-10-20）：会诊记录是对会诊当天所开医嘱的总结，不是计划。
+    """用户口径（2026-10-20）：只认会诊记录当天开立的医嘱，记录前后都算；次日起开立的不算。
 
-    只认会诊记录当天、记录时间之前（含）开立的医嘱；记录之后才开的不算执行。
-    “继续/维持”原治疗的建议，记录时间之前已开立的医嘱即为执行。
+    “继续/维持”原治疗的建议，会诊当天之前已开立的医嘱也即为执行。
     """
 
     if order_time.day > opinion_time.day:
-        return False
-    if (
-        order_time.precise
-        and opinion_time.precise
-        and order_time.value > opinion_time.value
-    ):
         return False
     return continuation or order_time.day == opinion_time.day
 
@@ -3648,6 +3655,24 @@ def _is_continuation_recommendation(recommendation: "_Recommendation") -> bool:
     )
 
 
+def _recommendation_text(recommendation: "_Recommendation") -> str:
+    return f"{_clean(recommendation.source_quote)}；{_clean(recommendation.normalized_action)}"
+
+
+def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
+    if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
+        return False
+    text = _recommendation_text(recommendation)
+    return not (
+        _NON_ORDER_RECOMMENDATION_PATTERN.search(text)
+        and not _ORDER_RECOMMENDATION_HINT_PATTERN.search(text)
+    )
+
+
+def _is_conditional_recommendation(recommendation: "_Recommendation") -> bool:
+    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(_recommendation_text(recommendation)))
+
+
 def _order_execution_view(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
@@ -3655,18 +3680,20 @@ def _order_execution_view(
     """023 只按医嘱核对：剔除非医嘱类建议，并把病程痕迹从执行证据中去掉。
 
     同次会诊文书内明确暂缓/拒绝的闭环决定仍按已处理保留；医嘱候选在二阶段
-    已按会诊当日窗口过滤，这里只保留医嘱引用。
+    已按会诊当日窗口过滤，这里只保留医嘱引用。条件式建议没有对应医嘱时视为
+    条件未成立，不纳入核对。
     """
 
     in_scope = tuple(
-        item for item in completed
-        if _clean(item.recommendation.action_type).lower() in _ORDER_RECOMMENDATION_TYPES
+        item for item in completed if _is_order_recommendation(item.recommendation)
     )
     if assessments is None:
         return in_scope, None
     by_ref = {item.recommendation_ref: item for item in assessments}
     view: list[_ExecutionAssessment] = []
+    kept: list[_CompletedRecommendation] = []
     for item in in_scope:
+        kept.append(item)
         assessment = by_ref.get(item.recommendation.recommendation_ref)
         if assessment is None:
             view.append(_unknown_execution_assessment(item.recommendation.recommendation_ref))
@@ -3688,12 +3715,14 @@ def _order_execution_view(
                 assessment, execution_record_state="unknown", trace_refs=(), context_only_refs=(),
                 execution_refs=(),
             ))
+        elif _is_conditional_recommendation(item.recommendation):
+            kept.pop()
         else:
             view.append(replace(
                 assessment, execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
                 execution_refs=(), execution_state="absent",
             ))
-    return in_scope, tuple(view)
+    return tuple(kept), tuple(view)
 
 
 def _execution_quality_outcome(
