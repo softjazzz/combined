@@ -362,9 +362,9 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         "LX0609-12-02-01",
     }
     assert typed_source_rule_ids - typed_contract_rule_ids == typed_source_only_rule_ids
-    # 截至 2026-10-12 合同文件，已有 55 条规则使用非 v1 决策合同；
+    # 截至 2026-10-15 合同文件（新增 03-01-05），已有 56 条规则使用非 v1 决策合同；
     # 这里验证合同成熟度及尚待升级的精确成员，不等同于正式可执行规则数量。
-    assert result["metrics"]["rule_decision_count"] == 55
+    assert result["metrics"]["rule_decision_count"] == 56
     assert result["metrics"]["typed_shadow_adapter_count"] == len(
         typed_source_only_rule_ids
     )

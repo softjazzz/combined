@@ -38,14 +38,14 @@ FACT_REF = "b" * 64
 
 
 def test_every_active_non_compliant_rule_has_structured_action() -> None:
-    # 正式范围以规则总表为准：active 与 pending 必须无交集且完整覆盖 86 条（2026-10-12），
+    # 正式范围以规则总表为准：active 与 pending 必须无交集且完整覆盖 87 条（2026-10-15 新增 03-01-05），
     # 避免硬编码数量掩盖规则丢失或分区遗漏。
     master_rule_ids = tuple(entry.rule_id for entry in load_luxian_0609_rule_master())
-    assert len(master_rule_ids) == 86
+    assert len(master_rule_ids) == 87
     assert len(master_rule_ids) == len(set(master_rule_ids))
     assert set(ACTIVE_FORMAL_RULE_IDS).isdisjoint(PENDING_RULE_IDS)
     assert set(ACTIVE_FORMAL_RULE_IDS) | set(PENDING_RULE_IDS) == set(master_rule_ids)
-    assert len(ACTIVE_FORMAL_RULE_IDS) + len(PENDING_RULE_IDS) == 86
+    assert len(ACTIVE_FORMAL_RULE_IDS) + len(PENDING_RULE_IDS) == 87
 
     for rule_id in ACTIVE_FORMAL_RULE_IDS:
         suggestion = build_customer_remediation_suggestion(

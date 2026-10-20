@@ -54,21 +54,21 @@ _CATALOG_RULE_IDS = tuple(
 def test_rule_attestations_use_authoritative_executable_phase_scope():
     rule_ids, executor_types = benchmark20._rule_attestations()
 
-    # 以当前规则合同目录为准（2026-10-12：目录 85 条，可执行 72 条）。
+    # 以当前规则合同目录为准（2026-10-15 新增 03-01-05：目录 86 条，可执行 73 条）。
     assert rule_ids == tuple(
         rule_id
         for rule_id in _CATALOG_RULE_IDS
         if rule_id not in _WITHHELD_RULE_IDS
         and rule_id not in _CUSTOMER_EXCLUDED_RULE_IDS
     )
-    assert len(rule_ids) == 72
+    assert len(rule_ids) == 73
     assert not set(rule_ids).intersection(
         _WITHHELD_RULE_IDS | _CUSTOMER_EXCLUDED_RULE_IDS
     )
     assert set(executor_types) == set(rule_ids)
     # 006按客户口径改为纯程序判定，其余规则执行类型不变。
     assert sum(item == "program" for item in executor_types.values()) == 40
-    assert sum(item == "llm" for item in executor_types.values()) == 32
+    assert sum(item == "llm" for item in executor_types.values()) == 33
     assert executor_types["LX0609-02-01-02"] == "program"
 
 
@@ -153,9 +153,9 @@ def test_default_benchmark_output_exposes_full_customer_rule_scope() -> None:
     # The benchmark builder is exercised through its normal default scope helper;
     # 输出必须区分当前完整目录、客户交付、可执行与冻结范围。
     assert benchmark20._rule_scope_summary() == {
-        "catalog_count": 85,
-        "customer_delivery_count": 80,
-        "executable_count": 72,
+        "catalog_count": 86,
+        "customer_delivery_count": 81,
+        "executable_count": 73,
         "withheld_count": 8,
     }
 
@@ -280,7 +280,7 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
 
     rows = candidate["rows"]
     assert len(_DETERMINISTIC_RULE_IDS) == 40
-    assert len(_SEMANTIC_RULE_IDS) == 32
+    assert len(_SEMANTIC_RULE_IDS) == 33
     assert len(rows) == 20 * len(_RULE_IDS)
     decision_kinds = [row["decision_kind"] for row in rows]
     assert decision_kinds.count("deterministic") == (
@@ -376,15 +376,15 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert batch["summary"]["latency_ms"]["p50"] == 10.5
     assert batch["summary"]["latency_ms"]["p95"] == 19.05
     assert batch["summary"]["rule_maturity"] == {
-        "rule_decision_count": 72,
+        "rule_decision_count": 73,
         "typed_shadow_adapter_count": 0,
         "legacy_projection_count": 0,
     }
     assert batch["summary"]["rule_scope"] == {
         "mode": "full_customer",
-        "catalog_count": 85,
-        "customer_delivery_count": 80,
-        "executable_count": 72,
+        "catalog_count": 86,
+        "customer_delivery_count": 81,
+        "executable_count": 73,
         "withheld_count": 8,
     }
     assert len(batch["selector_digest"]) == 64
