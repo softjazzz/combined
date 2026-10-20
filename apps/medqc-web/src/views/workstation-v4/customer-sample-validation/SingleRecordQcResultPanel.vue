@@ -117,38 +117,42 @@
           v-if="isDocumentGroupExpandedForItem(item.key)"
           type="button"
           class="result-trigger"
-          :class="{ 'is-static': !isExpandable(item) }"
-          :aria-expanded="isExpandable(item) ? expandedKey === item.key : undefined"
-          :aria-label="
-            isExpandable(item)
-              ? `${expandedKey === item.key ? '收起' : '展开'}${item.rule_name}详情`
-              : undefined
-          "
-          :data-testid="isExpandable(item) ? 'single-record-result-toggle' : undefined"
+          :aria-expanded="expandedKey === item.key"
+          :aria-label="`${expandedKey === item.key ? '收起' : '展开'}${item.rule_name}详情`"
+          data-testid="single-record-result-toggle"
           @click="handleContentClick($event, item)"
         >
           <span class="result-main">
             <span class="result-title-row">
-              <strong class="rule-name" :title="item.rule_name">{{
-                displayRuleTitle(item)
-              }}</strong>
-              <span class="status-cell status-pill" :class="`is-${item.tone}`">{{
-                item.status === 'data_gap' ? '资料待核实' : item.displayStatus
-              }}</span>
-            </span>
-            <span class="result-row-header" data-testid="single-record-result-row-header">
-              <span class="result-row-meta">
-                <span v-if="item.source_document" class="result-source"
-                  >{{ item.source_document }} ·</span
-                >
-                <span class="rule-code">{{ item.rule_id }}</span>
-                <span
-                  v-if="isGroupedPresentation && displayEvidence(item).length"
-                  class="result-evidence-count"
-                >
-                  {{ displayEvidence(item).length }}处证据
-                </span>
+              <span v-if="isCompliantResult(item)" class="status-cell compliant-dot">
+                <span class="visually-hidden">合规</span>
               </span>
+              <strong class="rule-name" :title="item.rule_name">{{ shortRuleTitle(item) }}</strong>
+              <span v-if="isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
+                shortRuleCode(item.rule_id)
+              }}</span>
+              <span
+                v-else
+                class="status-cell status-pill mq-status"
+                :class="[`is-${item.tone}`, statusModifierClass(item)]"
+                >{{ item.status === 'data_gap' ? '资料待核实' : item.displayStatus }}</span
+              >
+            </span>
+            <span
+              v-if="!isCompliantResult(item) || expandedKey === item.key"
+              class="result-row-header"
+              data-testid="single-record-result-row-header"
+            >
+              <span
+                v-if="!copyMatchHeadline(item)"
+                class="rule-conclusion"
+                data-testid="single-record-result-conclusion"
+                >{{ resultHeadline(item) }}</span
+              >
+              <span v-else class="rule-conclusion-spacer" aria-hidden="true" />
+              <span v-if="!isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
+                shortRuleCode(item.rule_id)
+              }}</span>
             </span>
             <span
               v-if="copyMatchHeadline(item)"
@@ -164,7 +168,7 @@
                   <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.leftTime }}</time>
                 </span>
-                <ArrowRight aria-hidden="true" :size="16" :stroke-width="2" />
+                <ArrowRight aria-hidden="true" :size="16" :stroke-width="1.6" />
                 <span>
                   <strong>{{ copyMatchHeadline(item)?.rightLabel }}</strong>
                   <i aria-hidden="true">·</i>
@@ -183,110 +187,86 @@
                 </span>
               </span>
             </span>
-            <span
-              v-else-if="!consultationRecommendationPresentation(item)"
-              class="rule-conclusion-block"
-              :class="{
-                'is-text-expanded': expandedTextKey === item.key || expandedKey === item.key,
-              }"
-            >
-              <span class="rule-conclusion" data-testid="single-record-result-conclusion">{{
-                resultHeadline(item)
-              }}</span>
-            </span>
           </span>
         </button>
 
-        <ConsultationRecommendationSummary
-          v-if="
-            isDocumentGroupExpandedForItem(item.key) && consultationRecommendationPresentation(item)
-          "
-          :presentation="consultationRecommendationPresentation(item)!"
-        />
+        <template v-if="isDocumentGroupExpandedForItem(item.key) && expandedKey === item.key">
+          <ConsultationRecommendationSummary
+            v-if="consultationRecommendationPresentation(item)"
+            :presentation="consultationRecommendationPresentation(item)!"
+          />
 
-        <ExamLabEventResultBlock
-          v-if="
-            isDocumentGroupExpandedForItem(item.key) &&
-            expandedKey === item.key &&
-            examLabEventPresentation(item)
-          "
-          class="result-event-overview"
-          :presentation="examLabEventPresentation(item)!"
-        />
+          <ExamLabEventResultBlock
+            v-if="examLabEventPresentation(item)"
+            class="result-event-overview"
+            :presentation="examLabEventPresentation(item)!"
+          />
 
-        <section
-          v-if="
-            isDocumentGroupExpandedForItem(item.key) &&
-            expandedKey === item.key &&
-            isExpandable(item)
-          "
-          class="result-detail"
-        >
-          <div
-            v-if="
-              isCompliantResult(item) &&
-              (hasTimelinessResult(item) ||
-                item.criterion_results?.length ||
-                hasCompliantNarrative(item))
-            "
-            class="compliant-detail"
-            data-testid="single-record-compliant-detail"
-          >
-            <div v-if="hasCompliantNarrative(item)" class="summary-narrative compliant-narrative">
-              <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
-              <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
-              <DetailBlock
-                v-if="item.standard"
-                :title="standardTitle(item)"
-                :content="item.standard"
+          <section class="result-detail">
+            <div
+              v-if="
+                isCompliantResult(item) &&
+                (hasTimelinessResult(item) ||
+                  item.criterion_results?.length ||
+                  hasCompliantNarrative(item))
+              "
+              class="compliant-detail"
+              data-testid="single-record-compliant-detail"
+            >
+              <div v-if="hasCompliantNarrative(item)" class="summary-narrative compliant-narrative">
+                <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
+                <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
+                <DetailBlock
+                  v-if="item.standard"
+                  :title="standardTitle(item)"
+                  :content="item.standard"
+                />
+              </div>
+              <TimelinessResultBlock
+                v-if="hasTimelinessResult(item)"
+                :item="item"
+                variant="compliant"
               />
-            </div>
-            <TimelinessResultBlock
-              v-if="hasTimelinessResult(item)"
-              :item="item"
-              variant="compliant"
-            />
-            <CriterionResultBlock
-              v-if="item.criterion_results?.length"
-              :criteria="item.criterion_results || []"
-              variant="compliant"
-            />
-          </div>
-
-          <div
-            v-if="
-              !isCompliantResult(item) &&
-              (item.detail || item.actual || item.standard || hasTimelinessResult(item))
-            "
-            class="decision-summary"
-          >
-            <div v-if="item.detail || item.actual || item.standard" class="summary-narrative">
-              <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
-              <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
-              <DetailBlock
-                v-if="item.standard"
-                :title="standardTitle(item)"
-                :content="item.standard"
+              <CriterionResultBlock
+                v-if="item.criterion_results?.length"
+                :criteria="item.criterion_results || []"
+                variant="compliant"
               />
             </div>
 
-            <TimelinessResultBlock
-              v-if="hasTimelinessResult(item)"
-              :item="item"
-              variant="decision"
-            />
-          </div>
+            <div
+              v-if="
+                !isCompliantResult(item) &&
+                (item.detail || item.actual || item.standard || hasTimelinessResult(item))
+              "
+              class="decision-summary"
+            >
+              <div v-if="item.detail || item.actual || item.standard" class="summary-narrative">
+                <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
+                <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
+                <DetailBlock
+                  v-if="item.standard"
+                  :title="standardTitle(item)"
+                  :content="item.standard"
+                />
+              </div>
 
-          <div
-            v-if="!isCompliantResult(item) || hasCompliantSupportingDetails(item)"
-            class="detail-grid"
-            :class="{
-              'is-compliant': isCompliantResult(item),
-              'has-main-details': remainingDisplayFactRows(item).length,
-            }"
-            data-testid="single-record-detail-grid"
-          >
-            <div class="detail-column detail-column-main">
+              <TimelinessResultBlock
+                v-if="hasTimelinessResult(item)"
+                :item="item"
+                variant="decision"
+              />
+            </div>
+
+            <div
+              v-if="!isCompliantResult(item) || hasCompliantSupportingDetails(item)"
+              class="detail-grid"
+              :class="{
+                'is-compliant': isCompliantResult(item),
+                'has-main-details': remainingDisplayFactRows(item).length,
+              }"
+              data-testid="single-record-detail-grid"
+            >
               <section
                 v-if="implantEventFacts(item).length"
                 class="detail-block implant-event-block"
@@ -356,7 +336,7 @@
                     </div>
                     <div class="copy-pair-documents">
                       <span>{{ pair.leftLabel }} · {{ pair.leftTime }}</span>
-                      <ArrowRight aria-hidden="true" :size="14" :stroke-width="1.8" />
+                      <ArrowRight aria-hidden="true" :size="14" :stroke-width="1.6" />
                       <span>{{ pair.rightLabel }} · {{ pair.rightTime }}</span>
                     </div>
                   </article>
@@ -367,7 +347,7 @@
               </section>
               <section
                 v-if="!isCompliantResult(item) && dataGapRows(item).length"
-                class="detail-block fact-block"
+                class="detail-block fact-block data-gap-block"
               >
                 <h4>待补资料</h4>
                 <dl class="fact-list">
@@ -382,82 +362,51 @@
                 :criteria="item.criterion_results || []"
                 variant="decision"
               />
-            </div>
 
-            <div class="detail-column detail-column-evidence">
-              <details
+              <div
                 v-if="displayEvidence(item).length"
-                class="detail-disclosure evidence-disclosure"
+                class="evidence-chips"
                 data-testid="single-record-evidence-disclosure"
               >
-                <summary>
-                  <span class="result-section-title"
-                    ><FileSearch :size="16" aria-hidden="true" />关键证据</span
-                  >
-                  <small v-if="displayEvidence(item).length">
-                    {{ displayEvidence(item).length }} 份，可查看相关文书
-                  </small>
-                </summary>
-                <div v-if="displayEvidence(item).length" class="evidence-list">
-                  <button
-                    v-for="evidence in displayEvidence(item)"
-                    :key="evidence.source_ref"
-                    type="button"
-                    class="evidence-link evidence-row"
-                    data-testid="single-record-evidence"
-                    @click="emit('locate-evidence', evidence)"
-                  >
-                    <span class="evidence-content">
-                      <strong>{{ evidenceLabel(evidence) }}</strong>
-                      <span
-                        v-if="evidence.evidence_excerpt && evidence.excerpt_kind !== '文书级依据'"
-                        class="evidence-excerpt"
-                      >
-                        <em>{{ evidence.excerpt_kind || '病历原文依据' }}</em>
-                        <span>{{ evidence.evidence_excerpt }}</span>
-                      </span>
-                      <span
-                        v-else-if="evidence.excerpt_kind === '文书级依据'"
-                        class="evidence-path"
-                      >
-                        已定位到文书，未定位到具体片段
-                      </span>
-                      <span v-else-if="evidence.field_path" class="evidence-path">{{
-                        evidence.field_path
-                      }}</span>
-                    </span>
-                    <span class="evidence-action">
-                      查看相关文书
-                      <ChevronRight aria-hidden="true" :size="14" :stroke-width="2" />
-                    </span>
-                  </button>
-                </div>
-                <p v-else class="muted">
-                  {{ emptyEvidenceText(item) }}
-                </p>
-              </details>
+                <span class="evidence-chips-label">关键证据</span>
+                <button
+                  v-for="evidence in displayEvidence(item)"
+                  :key="evidence.source_ref"
+                  type="button"
+                  class="evidence-chip"
+                  data-testid="single-record-evidence"
+                  :title="evidenceHint(evidence)"
+                  @click="emit('locate-evidence', evidence)"
+                >
+                  {{ evidenceLabel(evidence) }}
+                </button>
+              </div>
               <p v-else class="empty-evidence-note" data-testid="single-record-empty-evidence">
-                暂无可定位证据
-                <span>{{ emptyEvidenceText(item) }}</span>
+                暂无可定位证据<span>{{ emptyEvidenceText(item) }}</span>
               </p>
 
               <details v-if="item.model_analysis" class="medical-analysis model-analysis">
-                <summary>模型分析 / 医学判断</summary>
+                <summary>查看模型分析</summary>
                 <p>{{ item.model_analysis }}</p>
               </details>
             </div>
-          </div>
+          </section>
 
-          <details
-            v-if="feedbackEnabled"
-            class="detail-disclosure feedback-disclosure"
+          <QcRemediationSuggestion
+            v-if="!isCompliantResult(item) && item.suggestion"
+            class="result-suggestion"
+            compact
+            :suggestion="item.suggestion"
+            :status="item.status"
+            :rule-id="item.rule_id"
+            :record-context="debugContext"
+          />
+
+          <section
+            v-if="feedbackEnabled && feedbackOpenKey === item.key"
+            class="result-feedback-panel mq-soft"
             data-testid="single-record-feedback-disclosure"
           >
-            <summary>
-              <span class="result-section-title"
-                ><MessageSquare :size="16" aria-hidden="true" />反馈此结果</span
-              >
-            </summary>
             <QcResultFeedbackControl
               :feedback="feedbackByRule[item.rule_id]"
               :loading="feedbackLoading"
@@ -465,58 +414,61 @@
               :error-message="feedbackError"
               @submit="emit('submit-feedback', item.rule_id, $event)"
             />
-          </details>
-        </section>
-        <QcRemediationSuggestion
-          v-if="
-            isDocumentGroupExpandedForItem(item.key) &&
-            expandedKey === item.key &&
-            !isCompliantResult(item) &&
-            item.suggestion
-          "
-          class="result-suggestion"
-          compact
-          :suggestion="item.suggestion"
-          :status="item.status"
-          :rule-id="item.rule_id"
-          :record-context="debugContext"
-        />
-        <footer v-if="isDocumentGroupExpandedForItem(item.key)" class="result-card-actions">
-          <button
-            v-if="expandedKey !== item.key && needsTextExpansion(item) && !copyMatchHeadline(item)"
-            type="button"
-            class="text-expand-action"
-            :aria-expanded="expandedTextKey === item.key"
-            @click="toggleText(item.key)"
+          </section>
+
+          <dl
+            v-if="ruleTextOpenKey === item.key"
+            class="rule-fulltext mq-soft"
+            data-testid="single-record-rule-fulltext"
           >
-            {{ expandedTextKey === item.key ? '收起判定说明' : '展开判定说明' }}
-          </button>
-          <button
-            v-if="feedbackEnabled"
-            type="button"
-            class="result-feedback-action"
-            data-testid="single-record-feedback-entry-hint"
-            :aria-expanded="expandedKey === item.key"
-            @click="toggle(item.key)"
-          >
-            {{ expandedKey === item.key ? '收起详情' : '反馈与详情' }}
-          </button>
-          <button
-            v-if="isDocumentGroupExpandedForItem(item.key)"
-            type="button"
-            class="result-row-debug-copy"
-            data-testid="copy-single-qc-debug-result"
-            title="复制本条脱敏调试信息"
-            :aria-label="`复制${item.rule_name}的脱敏调试信息`"
-            :disabled="Boolean(debugCopyingKey)"
-            @click="copySingleDebugResult(item)"
-          >
-            <Copy aria-hidden="true" :size="13" :stroke-width="2" />
-            <span class="visually-hidden">{{
-              debugCopyingKey === item.key ? '复制中' : '复制调试信息'
-            }}</span>
-          </button>
-        </footer>
+            <dt>规则</dt>
+            <dd>{{ item.rule_name }}</dd>
+            <template v-if="item.source_document">
+              <dt>文书</dt>
+              <dd>{{ item.source_document }}</dd>
+            </template>
+            <dt>编号</dt>
+            <dd class="rule-fulltext-code">
+              {{ item.rule_id }}
+            </dd>
+          </dl>
+
+          <footer class="result-card-actions">
+            <button
+              v-if="feedbackEnabled"
+              type="button"
+              class="result-action-pill"
+              data-testid="single-record-feedback-entry-hint"
+              :aria-expanded="feedbackOpenKey === item.key"
+              @click="toggleFeedback(item.key)"
+            >
+              反馈此结果
+            </button>
+            <button
+              type="button"
+              class="result-action-link"
+              data-testid="single-record-rule-fulltext-toggle"
+              :aria-expanded="ruleTextOpenKey === item.key"
+              @click="toggleRuleText(item.key)"
+            >
+              规则全文
+            </button>
+            <button
+              type="button"
+              class="result-row-debug-copy"
+              data-testid="copy-single-qc-debug-result"
+              title="复制本条脱敏调试信息"
+              :aria-label="`复制${item.rule_name}的脱敏调试信息`"
+              :disabled="Boolean(debugCopyingKey)"
+              @click="copySingleDebugResult(item)"
+            >
+              <MqIcon name="copy" :size="16" />
+              <span class="visually-hidden">{{
+                debugCopyingKey === item.key ? '复制中' : '复制调试信息'
+              }}</span>
+            </button>
+          </footer>
+        </template>
       </article>
     </div>
   </aside>
@@ -524,17 +476,9 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import {
-  ArrowRight,
-  ChevronRight,
-  ChevronUp,
-  Copy,
-  ClipboardCheck,
-  FileSearch,
-  MessageSquare,
-  ListFilter,
-} from 'lucide-vue-next'
+import { ArrowRight, ChevronRight, ChevronUp, ClipboardCheck, ListFilter } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import QcResultFeedbackControl from './QcResultFeedbackControl.vue'
 import type {
   QcResultFeedbackRecord,
@@ -793,12 +737,6 @@ function resultHeadline(item: SingleRecordQcResultViewItem) {
   return item.conclusionText
 }
 
-function needsTextExpansion(item: SingleRecordQcResultViewItem) {
-  if (consultationRecommendationPresentation(item)) return false
-  const text = resultHeadline(item)
-  return text.length > 60 || text.includes('\n')
-}
-
 type DisplayFactRow = ReturnType<typeof displayFactRows>[number]
 
 function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
@@ -1023,7 +961,8 @@ const documentGroupByItemKey = computed(() => {
 })
 const hasVisibleResults = computed(() => renderedItems.value.length > 0)
 const expandedKey = ref('')
-const expandedTextKey = ref('')
+const feedbackOpenKey = ref('')
+const ruleTextOpenKey = ref('')
 const collapsedDocumentGroupKeys = ref<Set<string>>(new Set())
 
 function documentGroupForItem(itemKey: string) {
@@ -1087,25 +1026,61 @@ function handleContentClick(event: MouseEvent, item: SingleRecordQcResultViewIte
     (target.contains(selection.anchorNode) || target.contains(selection.focusNode))
   )
     return
-  if (isExpandable(item)) toggle(item.key)
+  toggle(item.key)
 }
 
-function toggleText(key: string) {
-  expandedTextKey.value = expandedTextKey.value === key ? '' : key
+function toggleFeedback(key: string) {
+  feedbackOpenKey.value = feedbackOpenKey.value === key ? '' : key
 }
 
-function displayRuleTitle(item: SingleRecordQcResultViewItem): string {
-  const source = isGroupedPresentation.value
-    ? documentGroupForItem(item.key)?.sourceDocument
-    : undefined
-  if (!source) return item.rule_name
-  for (const separator of ['：', ':']) {
-    const prefix = `${source}${separator}`
-    if (item.rule_name.startsWith(prefix)) {
-      return item.rule_name.slice(prefix.length).trim() || item.rule_name
-    }
+function toggleRuleText(key: string) {
+  ruleTextOpenKey.value = ruleTextOpenKey.value === key ? '' : key
+}
+
+function splitRuleTitle(title: string): { head: string; tail: string } | null {
+  const index = title.search(/[：:]/)
+  if (index <= 0) return null
+  const head = title.slice(0, index).trim()
+  const tail = title.slice(index + 1).trim()
+  return head && tail ? { head, tail } : null
+}
+
+// 规则名多为「文书：具体要求」，同一文书下有多条规则；冒号前只在不重复时才能区分规则。
+const ruleTitleHeadCounts = computed(() => {
+  const counts = new Map<string, number>()
+  viewItems.value.forEach((item) => {
+    const head = splitRuleTitle(item.rule_name)?.head
+    if (head) counts.set(head, (counts.get(head) || 0) + 1)
+  })
+  return counts
+})
+
+/**
+ * 卡片短标题：冒号前在本病历结果中唯一时取冒号前，否则取冒号后（分组标题已给出文书名）。
+ * 完整规则名放在 title 与「规则全文」中，不修改原始规则名称。
+ */
+function shortRuleTitle(item: SingleRecordQcResultViewItem): string {
+  const parts = splitRuleTitle(item.rule_name)
+  if (!parts) return item.rule_name
+  return (ruleTitleHeadCounts.value.get(parts.head) || 0) > 1 ? parts.tail : parts.head
+}
+
+/** 同一页面的规则都属于同一目录，编号去掉目录前缀，完整编号放在 title 中。 */
+function shortRuleCode(ruleId: string): string {
+  return ruleId.replace(/^[A-Z]+\d+-(?=\d)/, '')
+}
+
+function statusModifierClass(item: SingleRecordQcResultViewItem): string {
+  return item.tone === 'neutral' ? '' : `mq-status--${item.tone}`
+}
+
+/** 证据胶囊只显示文书名，原文摘录放在悬停提示中；点击后在左侧病历中定位高亮。 */
+function evidenceHint(evidence: SingleRecordQcEvidence): string {
+  if (evidence.excerpt_kind === '文书级依据') return '已定位到文书，未定位到具体片段'
+  if (evidence.evidence_excerpt) {
+    return `${evidence.excerpt_kind || '病历原文依据'}：${evidence.evidence_excerpt}`
   }
-  return item.rule_name
+  return '在病历中定位相关文书'
 }
 
 function evidenceLabel(evidence: SingleRecordQcEvidence) {
@@ -1155,17 +1130,6 @@ function displayEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence
 
 function isCompliantResult(item: SingleRecordQcResultItem) {
   return item.status === 'compliant'
-}
-
-function isExpandable(item: SingleRecordQcResultViewItem) {
-  if (props.feedbackEnabled) return true
-  if (!isCompliantResult(item)) return true
-  return Boolean(
-    hasTimelinessResult(item) ||
-      item.criterion_results?.length ||
-      hasCompliantNarrative(item) ||
-      hasCompliantSupportingDetails(item),
-  )
 }
 
 function hasCompliantNarrative(item: SingleRecordQcResultItem) {
@@ -1279,56 +1243,6 @@ watch(
   min-width: 0;
   padding: 4px 12px 8px;
 }
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.045);
-  padding: 2px 8px;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 17px;
-  white-space: nowrap;
-}
-
-.status-pill::before {
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(29, 29, 31, 0.28);
-  content: '';
-}
-
-.is-danger.status-pill {
-  background: rgba(239, 68, 68, 0.08);
-  color: #d92d20;
-}
-
-.is-danger.status-pill::before {
-  background: #ef4444;
-}
-
-.is-warning.status-pill {
-  background: rgba(245, 158, 11, 0.1);
-  color: #a86500;
-}
-
-.is-warning.status-pill::before {
-  background: #d99512;
-}
-
-.is-success.status-pill {
-  background: rgba(16, 185, 129, 0.09);
-  color: #087443;
-}
-
-.is-success.status-pill::before {
-  background: #15966a;
-}
-
 .result-tab {
   display: inline-flex;
   align-items: center;
@@ -1479,26 +1393,6 @@ watch(
     box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
-
-.result-row::before {
-  display: none;
-  position: absolute;
-  z-index: 0;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: #0a6cff;
-  content: '';
-  opacity: 0;
-  transform: scaleY(0.35);
-  transform-origin: center;
-  transition:
-    opacity 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
 .result-row.is-document-group-collapsed {
   border-color: rgba(0, 0, 0, 0.06);
   background: rgba(255, 255, 255, 0.72);
@@ -1511,7 +1405,6 @@ watch(
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
-.result-row:hover::before,
 .result-row.is-expanded::before {
   opacity: 1;
   transform: scaleY(1);
@@ -1541,11 +1434,6 @@ watch(
 .result-trigger:hover {
   background: transparent;
 }
-
-.result-trigger.is-static {
-  cursor: default;
-}
-
 .result-row:not(.is-expanded) .result-trigger {
   padding: 9px 14px 7px;
 }
@@ -1625,24 +1513,6 @@ watch(
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-
-.result-row-meta {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.result-source {
-  color: #748195;
-  font-size: 12px;
-}
-
-.result-row-header > .status-pill {
-  flex-shrink: 0;
-}
-
 .rule-code {
   padding: 1px 0;
   color: rgba(29, 29, 31, 0.46);
@@ -1652,33 +1522,6 @@ watch(
   line-height: 18px;
   white-space: nowrap;
 }
-
-.result-evidence-count {
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 11px;
-  font-weight: 550;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.toggle-mark {
-  display: inline-flex;
-  min-width: 0;
-  height: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.42);
-}
-
-.result-row.is-expanded .toggle-mark {
-  background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .result-row,
   .result-row::before {
@@ -1714,11 +1557,6 @@ watch(
   flex: 1;
   margin: 0;
 }
-.result-title-row .status-pill {
-  flex: none;
-  margin-top: 2px;
-}
-
 .rule-conclusion {
   display: block;
   color: #526071;
@@ -1729,34 +1567,6 @@ watch(
   word-break: break-word;
   white-space: normal;
 }
-
-.rule-conclusion-block {
-  display: block;
-  margin-top: 7px;
-  padding: 0;
-  border-top: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-/* 问题证据沿用面板系统字体，保留紧凑的正文排版。 */
-.result-row.is-danger .rule-conclusion {
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 2;
-}
-
-.rule-conclusion-label {
-  display: block;
-  margin-bottom: 4px;
-  color: #627187;
-  font-size: 12px;
-  line-height: 17px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-}
-
 .empty-evidence-note {
   margin: 0;
   padding: 12px 0;
@@ -1768,14 +1578,6 @@ watch(
   display: block;
   font-size: 12px;
 }
-
-.rule-conclusion-block:not(.is-text-expanded) .rule-conclusion {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
-
 .result-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1785,27 +1587,6 @@ watch(
   padding: 5px 0 6px;
   border-top: 1px solid #edf0f4;
 }
-
-.text-expand-action,
-.result-feedback-action {
-  display: inline-block;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-  color: #0a6cff;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 400;
-  cursor: pointer;
-}
-
-.text-expand-action:hover,
-.text-expand-action:focus-visible {
-  color: #0055aa;
-  text-decoration: underline;
-  outline: none;
-}
-
 .copy-match-headline {
   display: grid;
   gap: 8px;
@@ -1931,59 +1712,6 @@ watch(
   min-width: 0;
   margin: 0;
 }
-
-.detail-disclosure {
-  min-width: 0;
-  margin: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.065);
-}
-
-.detail-disclosure summary {
-  display: flex;
-  min-height: 30px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 0;
-  color: rgba(29, 29, 31, 0.72);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 20px;
-  list-style-position: inside;
-}
-
-.detail-disclosure summary small {
-  margin-left: auto;
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.detail-disclosure summary::after {
-  content: '+';
-  margin-left: auto;
-  color: #6c819a;
-  font-size: 17px;
-  font-weight: 400;
-}
-
-.detail-disclosure[open] > summary::after {
-  content: '−';
-}
-
-.detail-disclosure summary:hover {
-  color: #0a6cff;
-}
-
-.detail-disclosure[open] summary {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.evidence-disclosure {
-  padding-top: 0 !important;
-}
-
 .detail-block h4,
 .medical-analysis summary {
   margin: 0 0 5px;
@@ -2011,34 +1739,6 @@ watch(
 .detail-grid.is-compliant:not(.has-main-details) {
   grid-template-columns: minmax(0, 1fr);
 }
-
-.detail-grid.is-compliant:not(.has-main-details) .detail-column-main {
-  display: none;
-}
-
-.detail-grid.is-compliant .detail-column-evidence {
-  border-left: 0;
-}
-
-.detail-column {
-  min-width: 0;
-  padding: 0 12px 8px;
-}
-
-.detail-column-evidence {
-  border-left: 1px solid rgba(0, 0, 0, 0.07);
-}
-
-.detail-column > .detail-block,
-.detail-column > .medical-analysis {
-  padding: 8px 0 0;
-}
-
-.detail-column > :not(:first-child) {
-  margin-top: 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.065);
-}
-
 .fact-list {
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr);
@@ -2246,78 +1946,6 @@ watch(
 .medical-analysis[open] summary {
   margin-bottom: 6px;
 }
-
-.evidence-list {
-  display: grid;
-}
-
-.evidence-link {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.evidence-link:first-child {
-  border-top: 0;
-}
-
-.evidence-link:hover {
-  background: rgba(10, 108, 255, 0.035);
-}
-
-.evidence-content {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.evidence-link strong {
-  color: rgba(29, 29, 31, 0.88);
-  font-size: 12px;
-  line-height: 19px;
-}
-
-.evidence-path,
-.evidence-excerpt {
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 11px;
-  line-height: 17px;
-}
-
-.evidence-excerpt {
-  display: grid;
-  gap: 1px;
-  margin-top: 1px;
-  text-align: left;
-}
-
-.evidence-excerpt em {
-  color: rgba(29, 29, 31, 0.45);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 600;
-}
-
-.evidence-action {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 3px;
-  color: #0a6cff;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 17px;
-}
-
 .model-analysis p {
   color: rgba(29, 29, 31, 0.68);
   font-size: 12px;
@@ -2426,31 +2054,6 @@ watch(
   background: var(--mq-info-bg);
   color: var(--mq-info-text);
 }
-.status-pill {
-  background: var(--mq-neutral-bg);
-  color: var(--mq-text-secondary);
-}
-.is-danger.status-pill {
-  background: var(--mq-danger-bg);
-  color: var(--mq-danger-text);
-}
-.is-danger.status-pill::before {
-  background: var(--mq-danger-icon);
-}
-.is-warning.status-pill {
-  background: var(--mq-warning-bg);
-  color: var(--mq-warning-text);
-}
-.is-warning.status-pill::before {
-  background: var(--mq-warning-icon);
-}
-.is-success.status-pill {
-  background: var(--mq-success-bg);
-  color: var(--mq-success-text);
-}
-.is-success.status-pill::before {
-  background: var(--mq-success-icon);
-}
 .result-row {
   border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 18px;
@@ -2473,12 +2076,6 @@ watch(
   border-bottom: 0;
   background: transparent;
 }
-
-.result-detail .detail-column {
-  padding-right: 0;
-  padding-left: 0;
-}
-
 .result-detail :deep(.timeliness-metrics) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2535,11 +2132,6 @@ watch(
 .result-detail .decision-fact-block {
   padding-top: 6px !important;
 }
-
-.result-detail .detail-disclosure {
-  border-radius: 0;
-}
-
 .result-detail .decision-fact-block .fact-list {
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 6px 10px;
@@ -2553,29 +2145,6 @@ watch(
   border-bottom: 0;
   text-align: left;
 }
-
-.result-detail .detail-disclosure > summary {
-  min-height: 36px;
-  padding: 7px 0;
-  color: #4a5468;
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.result-detail .detail-disclosure > summary small {
-  color: #8a93a3;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.result-detail .detail-disclosure > summary::after {
-  color: #8a93a3;
-  font-size: 15px;
-}
-
-.result-detail .detail-disclosure .result-section-title :deep(svg) {
-  width: 14px;
-  height: 14px;
-  color: #8a93a3;
-}
 </style>
+
+<style scoped src="../styles/single-record-result-card.css"></style>

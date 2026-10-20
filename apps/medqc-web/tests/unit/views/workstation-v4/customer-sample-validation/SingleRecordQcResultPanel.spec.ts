@@ -203,6 +203,9 @@ describe('SingleRecordQcResultPanel', () => {
     })
 
     expect(wrapper.find('[data-testid="copy-qc-debug-results"]').exists()).toBe(false)
+    // 调试复制只给实施人员用，收在展开后的底部操作栏
+    expect(wrapper.find('[data-testid="copy-single-qc-debug-result"]').exists()).toBe(false)
+    await wrapper.findAll('[data-testid="single-record-result-toggle"]')[0]!.trigger('click')
     await wrapper.findAll('[data-testid="copy-single-qc-debug-result"]')[0]!.trigger('click')
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
 
@@ -231,7 +234,10 @@ describe('SingleRecordQcResultPanel', () => {
       props: { items: [items[0]!], feedbackEnabled: true },
     })
 
-    expect(wrapper.get('.rule-code').text()).toBe(selectedRuleId)
+    // 卡片只显示去掉目录前缀的短编号，完整编号保留在悬停提示中
+    expect(wrapper.get('.rule-code').text()).toBe('01-01-02')
+    expect(wrapper.get('.rule-code').attributes('title')).toBe(selectedRuleId)
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
     await wrapper.get('[data-testid="qc-result-feedback-correct"]').trigger('click')
     expect(wrapper.emitted('submit-feedback')).toEqual([
@@ -269,6 +275,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-result-conclusion"]').text()).not.toContain(
       analysis,
     )
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     await wrapper.get('[data-testid="copy-single-qc-debug-result"]').trigger('click')
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
 
@@ -335,19 +342,42 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 
-  it('反馈入口位于卡片底部，点击只展开详情而不提交反馈', async () => {
+  it('反馈入口位于展开后的底部操作栏，点击只展开反馈区而不提交反馈', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: { items: [items[0]!], feedbackEnabled: true },
     })
 
+    expect(wrapper.find('.result-card-actions').exists()).toBe(false)
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     const feedback = wrapper.get(
       '.result-card-actions [data-testid="single-record-feedback-entry-hint"]',
     )
-    expect(feedback.text()).toBe('反馈与详情')
-    expect(wrapper.find('[data-testid="qc-result-feedback"]').exists()).toBe(false)
+    expect(feedback.text()).toBe('反馈此结果')
+    expect(feedback.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('[data-testid="single-record-feedback-disclosure"]').exists()).toBe(false)
     await feedback.trigger('click')
-    expect(wrapper.find('.result-detail').exists()).toBe(true)
+    expect(feedback.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('[data-testid="single-record-feedback-disclosure"]').exists()).toBe(true)
     expect(wrapper.emitted('submit-feedback')).toBeUndefined()
+  })
+
+  it('规则全文收在底部链接中，展示完整规则名、文书和完整编号', async () => {
+    const item = {
+      ...items[0]!,
+      source_document: '主诉能导出第一诊断',
+      rule_name: '主诉能导出第一诊断：主诉书写不规范或不能导出第一诊断。',
+    }
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
+
+    expect(wrapper.get('.rule-name').text()).toBe('主诉能导出第一诊断')
+    expect(wrapper.get('.rule-name').attributes('title')).toBe(item.rule_name)
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    expect(wrapper.find('[data-testid="single-record-rule-fulltext"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="single-record-rule-fulltext-toggle"]').trigger('click')
+    const fulltext = wrapper.get('[data-testid="single-record-rule-fulltext"]').text()
+    expect(fulltext).toContain(item.rule_name)
+    expect(fulltext).toContain('主诉能导出第一诊断')
+    expect(fulltext).toContain('LX0609-01-01-02')
   })
 
   it('资料缺口卡片不重复分组、不提供空证据折叠栏，反馈默认收起', async () => {
@@ -371,52 +401,60 @@ describe('SingleRecordQcResultPanel', () => {
       '暂无可定位证据',
     )
     expect(wrapper.find('.suggestion-disclosure').exists()).toBe(false)
-    expect(
-      wrapper.get('[data-testid="single-record-feedback-disclosure"]').attributes('open'),
-    ).toBeUndefined()
+    expect(wrapper.find('[data-testid="single-record-feedback-disclosure"]').exists()).toBe(false)
     expect(wrapper.emitted('submit-feedback')).toBeUndefined()
   })
 
-  it('仅在分组标题重复时简化展示标题，不修改原始规则名称', () => {
-    const item = { ...items[0]!, source_document: '手术记录', rule_name: '手术记录：完成时限核对' }
-    const wrapper = mount(SingleRecordQcResultPanel, {
-      props: { items: [item], presentationMode: 'grouped' },
-    })
-    expect(wrapper.get('.rule-name').text()).toBe('完成时限核对')
-    expect(wrapper.get('.rule-name').attributes('title')).toBe(item.rule_name)
-    expect(item.rule_name).toBe('手术记录：完成时限核对')
-    const flat = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
-    expect(flat.get('.rule-name').text()).toBe(item.rule_name)
+  it('短标题：冒号前唯一时取冒号前，同一文书有多条规则时取冒号后，不修改原始规则名称', () => {
+    const surgeryItems = [
+      { ...items[0]!, source_document: '手术记录', rule_name: '手术记录：完成时限核对' },
+      {
+        ...items[0]!,
+        rule_id: 'LX0609-04-02-02',
+        source_document: '手术记录',
+        rule_name: '手术记录：术者签名核对',
+      },
+      { ...items[0]!, rule_id: 'LX0609-04-01-01', rule_name: '术前小结：无术前小结（有手术医嘱）' },
+    ]
+    for (const presentationMode of ['flat', 'grouped'] as const) {
+      const wrapper = mount(SingleRecordQcResultPanel, {
+        props: { items: surgeryItems, presentationMode },
+      })
+      const names = wrapper.findAll('.rule-name')
+      expect(names.map((name) => name.text())).toEqual(['完成时限核对', '术者签名核对', '术前小结'])
+      expect(names[0]!.attributes('title')).toBe('手术记录：完成时限核对')
+    }
+    expect(surgeryItems[0]!.rule_name).toBe('手术记录：完成时限核对')
   })
 
-  it('判定说明使用独立按钮展开，保留原文且不触发详情选择', async () => {
-    const conclusion = '完整判定说明。'.repeat(40)
+  it('收起时结论只占一行，展开后完整展示，操作栏位于所有详情之后', async () => {
+    const conclusion = '完整说明。'.repeat(50)
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: { items: [{ ...items[0]!, conclusion }] },
     })
-    const action = wrapper.get('button.text-expand-action')
-    expect(action.text()).toBe('展开判定说明')
-    await action.trigger('click')
-    expect(action.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.get('.rule-conclusion').text()).toBe(conclusion)
-    expect(wrapper.emitted('select')).toBeUndefined()
-    expect(wrapper.find('.result-detail').exists()).toBe(false)
-    await action.trigger('click')
-    expect(action.attributes('aria-expanded')).toBe('false')
-  })
-
-  it('展开报告后说明完整展示，操作栏位于所有详情之后', async () => {
-    const wrapper = mount(SingleRecordQcResultPanel, {
-      props: { items: [{ ...items[0]!, conclusion: '完整说明。'.repeat(50) }] },
-    })
-    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
-    expect(wrapper.get('.rule-conclusion-block').classes()).toContain('is-text-expanded')
     expect(wrapper.find('.text-expand-action').exists()).toBe(false)
+    expect(wrapper.get('.rule-conclusion').text()).toBe(conclusion)
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    expect(wrapper.get('[data-testid="single-record-result-row"]').classes()).toContain(
+      'is-expanded',
+    )
+    expect(wrapper.get('.rule-conclusion').text()).toBe(conclusion)
     const row = wrapper.get('[data-testid="single-record-result-row"]').element
     expect(row.lastElementChild?.classList.contains('result-card-actions')).toBe(true)
-    expect(
-      wrapper.get('[data-testid="single-record-evidence-disclosure"]').attributes('open'),
-    ).toBeUndefined()
+  })
+
+  it('合规项收起时只显示规则名和编号，不显示结论；展开后再显示结论', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [historicalCompliantItem] },
+    })
+    await wrapper.get('[data-testid="single-record-result-tab-compliant"]').trigger('click')
+    const row = wrapper.get('[data-testid="single-record-result-row"]')
+    expect(row.get('.rule-name').text()).toBe('术前小结')
+    expect(row.get('.rule-code').text()).toBe('04-01-01')
+    expect(row.get('.status-cell').text()).toBe('合规')
+    expect(row.find('[data-testid="single-record-result-conclusion"]').exists()).toBe(false)
+    await row.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    expect(row.get('[data-testid="single-record-result-conclusion"]').text()).toBe('未发现问题。')
   })
 
   it('直接展示 016 Canonical facts 中的实际相似度、阈值和比对范围', async () => {
@@ -606,15 +644,16 @@ describe('SingleRecordQcResultPanel', () => {
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
     expect(rows[0]!.get('[data-testid="single-record-result-row-header"]').text()).toContain(
-      'LX0609-01-01-02',
+      '01-01-02',
     )
     expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')
-    expect(rows[0]!.get('.result-row-meta').text()).toContain('LX0609-01-01-02')
+    expect(rows[0]!.get('.status-cell').classes()).toContain('mq-status--danger')
+    expect(rows[0]!.get('.rule-code').attributes('title')).toBe('LX0609-01-01-02')
     expect(rows[0]!.get('[data-testid="single-record-result-conclusion"]').text()).toContain(
       '主诉共14字，未达到不超过20字的要求；诊断指向性未通过。',
     )
-    expect(rows[1]!.text()).toContain('LX0609-04-02-01')
-    expect(rows[2]!.text()).toContain('LX0609-04-02-04')
+    expect(rows[1]!.get('.rule-code').attributes('title')).toBe('LX0609-04-02-01')
+    expect(rows[2]!.get('.rule-code').attributes('title')).toBe('LX0609-04-02-04')
     expect(wrapper.text()).toContain('全部')
     expect(wrapper.text()).toContain('确定问题')
     expect(wrapper.text()).toContain('待处理')
@@ -692,16 +731,18 @@ describe('SingleRecordQcResultPanel', () => {
       '1 条结果校验异常',
     )
     expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(0)
-    expect(wrapper.text()).toContain('1处证据')
+    // 证据数量不再挤在收起行中，展开后以证据胶囊列出
+    expect(wrapper.text()).not.toContain('处证据')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(1)
-    expect(wrapper.text()).not.toContain('LX0609-01-02-01')
+    const ruleCodes = () => wrapper.findAll('.rule-code').map((code) => code.attributes('title'))
+    expect(ruleCodes()).not.toContain('LX0609-01-02-01')
 
     await wrapper.get('[data-testid="single-record-report-tab-all"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
     expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('会诊记录')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(5)
-    expect(wrapper.text()).toContain('LX0609-01-02-01')
-    expect(wrapper.text()).toContain('LX0609-01-01-01')
+    expect(ruleCodes()).toContain('LX0609-01-02-01')
+    expect(ruleCodes()).toContain('LX0609-01-01-01')
 
     const surgeryGroupToggle = wrapper.findAll(
       '[data-testid="single-record-document-group-toggle"]',
@@ -813,11 +854,9 @@ describe('SingleRecordQcResultPanel', () => {
       '核对情况共核对3份输血病程记录，记录时间均在本次住院期间。',
     )
     const detailGrid = wrapper.get('[data-testid="single-record-detail-grid"]')
-    expect(detailGrid.text()).toContain('关键证据1 份，可查看相关文书')
-    await detailGrid
-      .get('[data-testid="single-record-evidence-disclosure"] summary')
-      .trigger('click')
-    expect(detailGrid.text()).toContain('输血病程记录')
+    const evidence = detailGrid.get('[data-testid="single-record-evidence-disclosure"]')
+    expect(evidence.text()).toContain('关键证据')
+    expect(evidence.get('[data-testid="single-record-evidence"]').text()).toBe('输血病程记录')
   })
 
   it('展示输血医嘱触发事实，不将医嘱显示为已实施输血', async () => {
@@ -964,9 +1003,8 @@ describe('SingleRecordQcResultPanel', () => {
 
     await wrapper.get('[data-testid="single-record-result-tab-pending"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(2)
-    expect(wrapper.text()).toContain('LX0609-01-01-01')
-    expect(wrapper.text()).toContain('LX0609-01-02-01')
-    expect(wrapper.text()).not.toContain('LX0609-04-02-04')
+    const pendingCodes = wrapper.findAll('.rule-code').map((code) => code.attributes('title'))
+    expect(pendingCodes).toEqual(['LX0609-01-01-01', 'LX0609-01-02-01'])
 
     await wrapper.get('[data-testid="single-record-result-tab-non_compliant"]').trigger('click')
     await wrapper
@@ -996,17 +1034,17 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('实际情况')
     expect(wrapper.text()).toContain('核对标准')
     expect(wrapper.text()).toContain('关键证据')
-    expect(wrapper.text()).toContain('医学分析')
-    expect(wrapper.text()).toContain('模型分析 / 医学判断')
+    expect(wrapper.text()).toContain('查看医学分析')
+    expect(wrapper.text()).toContain('查看模型分析')
     expect(wrapper.text()).toContain('当前主诉缺少可区分第一诊断的特异性线索')
     expect(wrapper.text()).toContain('修改建议')
     expect(wrapper.text()).toContain(items[0]!.suggestion)
-    // 规则级证据入口文案不宣称能定位到某一次检查
-    expect(wrapper.text()).toContain('查看相关文书')
     expect(wrapper.find('[data-testid="single-record-detail-grid"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="single-record-evidence"]').classes()).toContain(
-      'evidence-row',
-    )
+    // 证据以胶囊展示文书名，规则级入口不宣称能定位到某一次检查
+    const evidence = wrapper.get('[data-testid="single-record-evidence"]')
+    expect(evidence.classes()).toContain('evidence-chip')
+    expect(evidence.text()).toBe('入院记录—主诉')
+    expect(evidence.attributes('title')).toBe('在病历中定位相关文书')
   })
 
   it('证据点击只发出 locate-evidence，不在组件内定位文书', async () => {
@@ -1085,7 +1123,7 @@ describe('SingleRecordQcResultPanel', () => {
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
-    expect(wrapper.text()).toContain('模型分析 / 医学判断')
+    expect(wrapper.get('details.model-analysis summary').text()).toBe('查看模型分析')
     expect(wrapper.text()).toContain('缺少提示急性下呼吸道感染的特异性线索')
     expect(wrapper.text()).not.toContain('本次保存结果缺少具体判定说明')
   })
@@ -1593,7 +1631,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain(explainedCompliantItem.actual)
     expect(wrapper.text()).toContain('合规标准')
     expect(wrapper.text()).toContain(explainedCompliantItem.standard)
-    expect(wrapper.text()).toContain('模型分析 / 医学判断')
+    expect(wrapper.text()).toContain('查看模型分析')
     expect(wrapper.text()).not.toContain('无需处理。')
   })
 
@@ -1603,10 +1641,13 @@ describe('SingleRecordQcResultPanel', () => {
     })
     await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
+    // 合规项收起时不显示结论，展开后原样展示保存的结论，不补造依据
+    expect(wrapper.text()).not.toContain('未发现问题。')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     expect(wrapper.text()).toContain('未发现问题。')
     expect(wrapper.text()).not.toContain('历史结果缺少可核查通过依据')
-    expect(wrapper.find('.toggle-mark').exists()).toBe(false)
-    expect(wrapper.find('.result-detail').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="single-record-compliant-detail"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="single-record-detail-grid"]').exists()).toBe(false)
   })
 
   it('数据不足展示具体缺口、当前已知事实和可定位证据，不泛化为资料不足', async () => {
@@ -1644,7 +1685,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).not.toContain('历史数据不足结果未保存缺少的受控来源、字段或核对条件')
   })
 
-  it('字段级摘录显示在对应证据下，文书级依据只显示定位提示', async () => {
+  it('字段级摘录放在证据胶囊的悬停提示中，文书级依据只提示定位到文书', async () => {
     const item = {
       ...items[2]!,
       evidence: [
@@ -1661,10 +1702,27 @@ describe('SingleRecordQcResultPanel', () => {
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
     const evidence = wrapper.get('[data-testid="single-record-evidence"]')
-    expect(evidence.text()).toContain('已定位到文书，未定位到具体片段')
-    expect(evidence.text()).not.toContain('置入人工关节假体')
+    expect(evidence.text()).toBe('手术记录')
+    expect(evidence.attributes('title')).toBe('已定位到文书，未定位到具体片段')
+    expect(evidence.attributes('title')).not.toContain('置入人工关节假体')
     await evidence.trigger('click')
     expect(wrapper.emitted('locate-evidence')).toEqual([[item.evidence[0]]])
+
+    const fieldItem = {
+      ...item,
+      evidence: [
+        {
+          source_ref: 'src_1234567890abcdef12345679',
+          source_type: 'surgery_record',
+          evidence_excerpt: '植入物：钛网 1 块。',
+        },
+      ],
+    }
+    const fieldWrapper = mount(SingleRecordQcResultPanel, { props: { items: [fieldItem] } })
+    await fieldWrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+    expect(fieldWrapper.get('[data-testid="single-record-evidence"]').attributes('title')).toBe(
+      '病历原文依据：植入物：钛网 1 块。',
+    )
   })
 
   it('会诊执行问题将会诊证据显示为会诊记录而不是泛化来源文书', async () => {

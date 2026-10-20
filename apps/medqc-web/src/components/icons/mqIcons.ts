@@ -158,6 +158,15 @@ export const MQ_ICONS = {
     { kind: 'body', d: CIRCLE },
     { kind: 'stroke', d: 'm8.4 12.2 2.4 2.4 4.8-5' },
   ],
+  failed: [
+    { kind: 'body', d: CIRCLE },
+    { kind: 'stroke', d: 'm9.5 9.5 5 5M14.5 9.5l-5 5' },
+  ],
+  pending: [
+    { kind: 'body', d: CIRCLE },
+    { kind: 'stroke', d: 'M12 7.8v5' },
+    { kind: 'dot', cx: 12, cy: 15.9, r: 0.95 },
+  ],
   doc: [...PAPER],
   issue: [...PAPER, { kind: 'badge', mark: 'bang' }],
   data_gap: [...PAPER, { kind: 'badge', mark: 'question' }],

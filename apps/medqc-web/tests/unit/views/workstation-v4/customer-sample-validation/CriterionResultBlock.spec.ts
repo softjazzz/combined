@@ -65,7 +65,12 @@ describe('CriterionResultBlock', () => {
 
     const analysis = block.get('details.medical-analysis')
     expect(analysis.attributes('open')).toBeUndefined()
-    expect(analysis.get('summary').text()).toBe('医学分析')
+    expect(analysis.get('summary').text()).toBe('查看医学分析')
+    // 已通过子项压成一行，未通过子项完整展示；状态由定制图标表达
+    const rows = block.findAll('article.criterion-row')
+    expect(rows[0]!.classes()).toContain('is-passed')
+    expect(rows[1]!.classes()).toContain('is-failed')
+    expect(rows[0]!.find('svg.mq-icon').exists()).toBe(true)
     expect(analysis.get('p').text()).toBe('主诉缺少区分第一诊断的特异性表现与病程线索。')
   })
 
