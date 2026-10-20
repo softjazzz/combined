@@ -21,6 +21,7 @@ from .evaluation_horizon import (
     EVALUATION_HORIZON_POLICY_DISABLED,
     EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
     resolve_frozen_discharge_horizon,
+    resolve_snapshot_task_frozen_date,
 )
 from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
@@ -739,6 +740,7 @@ def build_luxian_0609_evidence_read_session(
         horizon_date: date | None = None
         horizon_datetime: datetime | None = None
         horizon_basis = ""
+        task_frozen_date: date | None = None
         resolved_horizon_reason = horizon_unavailable_reason or ""
         if (
             evaluation_horizon_policy
@@ -757,6 +759,7 @@ def build_luxian_0609_evidence_read_session(
             if horizon_datetime is not None:
                 horizon_date = horizon_datetime.date()
                 horizon_basis = "discharge_date"
+                task_frozen_date = resolve_snapshot_task_frozen_date(evaluation_horizon_snapshot)
         elif evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED:
             admission_material = material_sources.get("inpat_registration")
             admission_value = (
@@ -860,12 +863,18 @@ def build_luxian_0609_evidence_read_session(
                     else {}
                 ),
                 "basis": horizon_basis,
+                **(
+                    {"task_frozen_date": task_frozen_date.isoformat()}
+                    if task_frozen_date is not None
+                    else {}
+                ),
                 "row_ref": digest_source_evidence(
                     (
                         EVALUATION_HORIZON_SOURCE_KEY,
                         horizon_basis,
                         horizon_date.isoformat(),
                         horizon_datetime.isoformat() if horizon_datetime else "",
+                        *((task_frozen_date.isoformat(),) if task_frozen_date is not None else ()),
                     )
                 ),
             }

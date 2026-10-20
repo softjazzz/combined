@@ -11239,3 +11239,14 @@ async def test_054_action_without_same_drug_order_remains_association_failed() -
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "association_failed"
+
+
+def test_death_scope_falls_back_to_discharge_typed_diagnoses_only_without_death_type():
+    # 用户决定（2026-10-20）：死亡病例首页/出院记录只标“出院诊断”时以其作出院/死亡诊断比对。
+    from app.services.luxian_0609.native_extended_document_execution import _discharge_or_death_diagnosis_rows
+    discharge = {"diagnosis_type": "出院诊断", "diagnosis_name": "肺炎"}
+    admission = {"diagnosis_type": "入院诊断", "diagnosis_name": "发热"}
+    death = {"diagnosis_type": "死亡诊断", "diagnosis_name": "呼吸衰竭"}
+    assert _discharge_or_death_diagnosis_rows((admission, discharge), diagnosis_scope="death") == (discharge,)
+    assert _discharge_or_death_diagnosis_rows((discharge, death), diagnosis_scope="death") == (death,)
+    assert _discharge_or_death_diagnosis_rows((admission,), diagnosis_scope="death") == ()

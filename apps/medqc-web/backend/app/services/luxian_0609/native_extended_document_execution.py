@@ -484,6 +484,10 @@ def _discharge_or_death_diagnosis_rows(
         for row in rows
         if _clean(row.get("diagnosis_type")) in accepted_types
     )
+    if not selected and diagnosis_scope == "death":
+        # 用户决定（2026-10-20）：死亡病例病案首页与出院记录常把诊断标为“出院诊断”，
+        # 没有“死亡诊断”类型时以“出院诊断”作为该病例的出院/死亡诊断比对。
+        selected = tuple(row for row in rows if _clean(row.get("diagnosis_type")) == "出院诊断")
     if selected or not allow_untyped_legacy_rows:
         return selected
     if rows and all(not _clean(row.get("diagnosis_type")) for row in rows):
