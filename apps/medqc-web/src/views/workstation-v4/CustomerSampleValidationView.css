@@ -1331,20 +1331,7 @@
   overflow: hidden;
 }
 
-.customer-sample-page
-  :deep(.editable-copy-workstation-modal.is-readonly-fullscreen .ant-modal-content) {
-  height: 100vh;
-  border-radius: 0;
-}
-
-.customer-sample-page
-  :deep(.editable-copy-workstation-modal.is-readonly-fullscreen .ant-modal-body) {
-  height: 100vh;
-  max-height: none;
-  overflow-y: auto;
-}
-
-/* Modal is teleported outside `.customer-sample-page`; readonly fullscreen must scroll on its body. */
+/* 弹窗挂载在页面外；只读模式由正文内部滚动，外层保持完整视口高度。 */
 :global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen) {
   overflow: hidden;
 }
@@ -1356,17 +1343,17 @@
 }
 
 :global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-content) {
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  padding: 0;
   border-radius: 0;
 }
 
 :global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-body) {
-  height: 100vh;
-  max-height: 100vh;
-  overflow-y: auto;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 
 .customer-sample-page :deep(.editable-copy-workstation-modal .ant-modal-close) {
@@ -1387,10 +1374,10 @@
 }
 
 .editable-copy-workstation-modal.is-readonly-fullscreen .editable-copy-drawer {
-  min-height: 100vh;
-  height: auto;
+  min-height: 0;
+  height: 100%;
   gap: 0;
-  overflow: visible;
+  overflow: hidden;
   padding: 0;
 }
 
@@ -1400,6 +1387,46 @@
   min-height: auto;
   flex: 0 0 auto;
   flex-direction: column;
+}
+
+.editable-copy-workstation-modal.is-readonly-fullscreen .editable-copy-hero {
+  flex: 0 0 auto;
+  padding-right: 64px;
+}
+
+/* 穿过Spin和内容容器传递剩余高度，覆盖阅读组件在普通弹窗中的固定高度上限。 */
+.editable-copy-workstation-modal.is-readonly-fullscreen
+  .editable-copy-drawer
+  :deep(.ant-spin-nested-loading),
+.editable-copy-workstation-modal.is-readonly-fullscreen
+  .editable-copy-drawer
+  :deep(.ant-spin-container),
+.editable-copy-workstation-modal.is-readonly-fullscreen .editable-copy-content {
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.editable-copy-workstation-modal.is-readonly-fullscreen
+  .editable-copy-content
+  :deep(.record-compare-shell) {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editable-copy-workstation-modal.is-readonly-fullscreen
+  .editable-copy-content
+  :deep(.record-compare-grid) {
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 0;
+}
+
+.editable-copy-workstation-modal.is-readonly-fullscreen .editable-copy-footer {
+  padding: 12px 20px;
 }
 
 .editable-copy-hero {
