@@ -2922,9 +2922,11 @@ def _execution_prompt(
     *,
     completed: Sequence[_CompletedRecommendation],
     candidates: Sequence[_CandidateDocument],
+    share_visible_order_refs: bool = False,
 ) -> tuple[str, Mapping[str, frozenset[str]]]:
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
+    eligible_order_refs: dict[str, frozenset[str]] = {}
     documents_by_ref: dict[str, dict[str, object]] = {}
     # 候选的内部 ref 同时承载来源类型和序号，大批检验明细下会在
     # candidate_documents 与每条建议的 allowed 列表中重复占用大量预算。
@@ -2978,6 +2980,11 @@ def _execution_prompt(
                 include = True
             if include:
                 included.append(candidate)
+        eligible_order_refs[item.recommendation.recommendation_ref] = frozenset(
+            candidate.ref
+            for candidate in included
+            if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+        )
         # 医嘱是高频结构化事件，但源级前 N 条截断只反映源表自然顺序，会漏掉
         # 会诊后的真实执行医嘱。限额改到逐建议时序过滤之后：每个医嘱来源按
         # （距记录时间的绝对间隔, 原候选顺序）稳定排序，保留最近的候选。
@@ -3052,6 +3059,30 @@ def _execution_prompt(
                 )
             ),
         })
+    # 每条建议的医嘱上限只控制本批实际发送的候选正文，不应让已经因同批其他
+    # 建议而发送的合法医嘱在本建议中变成“可见但禁止引用”。用全局已发送医嘱
+    # 的并集回填逐建议白名单，同时仍按该建议原有的来源与时间窗集合校验。
+    # 这里只增加短别名，不增加候选正文或调用；若别名数组使总体提示超过预算，
+    # 下方现有字符上限仍按资料不足收敛。
+    if share_visible_order_refs:
+        visible_order_refs = frozenset(
+            ref
+            for ref in documents_by_ref
+            if candidates_by_ref[ref].source_key in _ORDER_EXECUTION_SOURCE_KEYS
+        )
+        for entry in entries:
+            recommendation_ref = str(entry["recommendation_ref"])
+            related_refs = list(entry["allowed_candidate_refs"])
+            related_ref_set = set(related_refs)
+            related_refs.extend(
+                candidate.ref
+                for candidate in prompt_candidates
+                if candidate.ref in visible_order_refs
+                and candidate.ref in eligible_order_refs[recommendation_ref]
+                and candidate.ref not in related_ref_set
+            )
+            entry["allowed_candidate_refs"] = related_refs
+            allowed_refs[recommendation_ref] = frozenset(related_refs)
     # 别名在本次实际渲染的候选上稠密编号；解析侧用同一函数重算，保证提示
     # 与解析共用一套编号。
     alias_by_ref = _prompt_alias_by_ref(candidates, allowed_refs)
@@ -5306,6 +5337,9 @@ async def _execute_consultation_episode_rules(
                             second_prompt, allowed_refs = _execution_prompt(
                                 completed=completed_recommendations,
                                 candidates=projection.candidates,
+                                share_visible_order_refs=(
+                                    "LX0609-03-01-04" in stage_two_rule_ids
+                                ),
                             )
                         except _SourceGap:
                             for rule_id in stage_two_rule_ids:
@@ -5476,6 +5510,10 @@ async def _execute_consultation_episode_rules(
                                             _execution_prompt(
                                                 completed=missing_completed,
                                                 candidates=projection.candidates,
+                                                share_visible_order_refs=(
+                                                    "LX0609-03-01-04"
+                                                    in stage_two_rule_ids
+                                                ),
                                             )
                                         )
                                         calls += 1
@@ -5599,6 +5637,10 @@ async def _execute_consultation_episode_rules(
                                         recheck_prompt, recheck_allowed_refs = _execution_prompt(
                                             completed=recheck_completed,
                                             candidates=projection.candidates,
+                                            share_visible_order_refs=(
+                                                "LX0609-03-01-04"
+                                                in stage_two_rule_ids
+                                            ),
                                         )
                                         calls += 1
                                         recheck_started = time.perf_counter()
