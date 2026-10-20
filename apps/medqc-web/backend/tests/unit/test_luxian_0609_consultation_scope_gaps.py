@@ -26,6 +26,8 @@ async def test_typed_consultation_prompt_scope_gap_is_deliverable_data_gap(monke
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
         "consultation_record": tuple(_rows("申请与明确会诊意见")),
         "daily_course_record": tuple(_rows("会诊后病程候选", hour_start=3)),
+        # 023 单独运行时二阶段只投医嘱（2026-10-20），须有医嘱候选才进入提示词构造。
+        "inpat_nondrug_order": ({"order_name": "会诊当日医嘱", "prescribed_datetime": "2026-07-20 12:00:00"},),
     }
     session = build_luxian_0609_evidence_read_session(
         selected_rule_ids=("LX0609-03-01-04",), institute_id="I", patient_id="P", visit_id="V",

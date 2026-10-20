@@ -290,8 +290,9 @@ async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_us
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
     assert projection_calls == [RULE_023]
-    # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程落实判不合规，不再逐项核对。
-    assert native.llm_call_count == 2 and native.total_tokens == 32
+    # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程落实判不合规；无医嘱候选时
+    # 二阶段不调用模型，确定性落为未执行。
+    assert native.llm_call_count == 1 and native.total_tokens == 16
     assert (reduced[0].final_state.value, reduced[0].reason_code) == ("non_compliant", "requirement_violated")
     assert (canonical["status"], canonical["reason_code"]) == ("non_compliant", "requirement_violated")
     assert canonical["customer_display_facts"] == consultation_projection.safe_consultation_customer_display_facts(

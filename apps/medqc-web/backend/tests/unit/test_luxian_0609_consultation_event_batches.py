@@ -60,12 +60,23 @@ def _event_session(*, oversize=False):
                                           "daily_course_record": courses}), _payload(episodes=events)
 
 
+class _Result:
+    """只取 023 结果；020 同批选入以保留病程候选（023 单独运行时二阶段只投医嘱）。"""
+
+    def __init__(self, raw):
+        self._raw = raw
+        self.results = tuple(item for item in raw.results if item["rule_id"] == "LX0609-03-01-04")
+
+    def __getattr__(self, name):
+        return getattr(self._raw, name)
+
+
 async def _run(session, client, tmp_path):
-    return await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-03-01-04",), institute_id="I", patient_id="P", visit_id="V",
+    return _Result(await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot,
         evidence_materials=session.materials, opinion_freeze_dir=tmp_path,
-    )
+    ))
 
 
 @pytest.mark.asyncio

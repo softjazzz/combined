@@ -9466,6 +9466,8 @@ async def test_typed_consultation_stage_two_privacy_failure_is_legal_and_not_ret
     session = _window_session(rows_by_source={
         "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
         "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+        # 023 单独运行时二阶段只投医嘱（2026-10-20），须有会诊当日医嘱才进入二阶段。
+        "inpat_nondrug_order": ({"order_name": "血常规", "prescribed_datetime": "2026-07-02 08:00:00"},),
     })
     client = _PlannedStageClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),

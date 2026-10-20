@@ -3140,7 +3140,19 @@ def _execution_event_batches(
     pending: tuple[_CompletedRecommendation, ...] = ()
     for items in grouped.values():
         event = tuple(items)
-        _execution_prompt(completed=event, candidates=candidates)
+        try:
+            _execution_prompt(completed=event, candidates=candidates)
+        except _SourceGap:
+            # 单次会诊建议多、每条各带当日及（继续类）此前医嘱时，整事件可超上限
+            # （真实 C01 一次会诊 13 条建议、571 条医嘱候选）。逐条建议单独成批，
+            # 候选与时序口径不变；单条仍超限才按资料不足。
+            for item in event:
+                _execution_prompt(completed=(item,), candidates=candidates)
+            if pending:
+                batches.append(pending)
+                pending = ()
+            batches.extend((item,) for item in event)
+            continue
         proposed = (*pending, *event)
         try:
             _execution_prompt(completed=proposed, candidates=candidates)
@@ -4887,6 +4899,18 @@ async def _execute_consultation_episode_rules(
                         projection,
                         candidates=projection.candidates + embedded_candidates,
                     )
+                if "LX0609-03-01-01" not in stage_two_rule_ids:
+                    # 用户口径（2026-10-20）：023 只认医嘱、不看病程。020 不在本次范围时，
+                    # 病程、检查检验、手术候选只会撑大输入（真实样本因超 64k 上限整例落资料不足），
+                    # 二阶段只保留医嘱和本次会诊文书（用于识别文书内写明的暂缓/拒绝决定）。
+                    projection = replace(
+                        projection,
+                        candidates=tuple(
+                            item for item in projection.candidates
+                            if item.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+                            or item.source_key == "consultation_record"
+                        ),
+                    )
                 execution_candidate_projection = projection
                 execution_source_technical = projection.source_technical
                 execution_source_incomplete_keys = projection.source_incomplete_keys
@@ -4906,7 +4930,8 @@ async def _execute_consultation_episode_rules(
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
                 elif (
-                    _COURSE_EXECUTION_SOURCE_KEYS.intersection(
+                    "LX0609-03-01-01" in stage_two_rule_ids
+                    and _COURSE_EXECUTION_SOURCE_KEYS.intersection(
                         projection.source_incomplete_keys
                     )
                     and not any(
