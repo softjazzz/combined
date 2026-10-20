@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Mapping
 
 from .luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
 from .luxian_0609.canonical_result_finalizer import (
+    CUSTOMER_RESULT_CONTRACT_VIOLATION,
+    enforce_luxian_0609_customer_result_contract,
     finalize_luxian_0609_canonical_result,
     finalize_luxian_0609_missing_decision_result,
     finalize_luxian_0609_reduced_customer_result,
@@ -25,6 +28,9 @@ from .luxian_0609_trigger_gate import Luxian0609GateDecision
 
 if TYPE_CHECKING:
     from .luxian_0609.customer_renderer import SafeTraceSink as DecisionTraceSink
+
+
+logger = logging.getLogger(__name__)
 
 
 # 旧单测和外部诊断脚本仍从本模块导入这些私有名称；真实兼容职责已经迁至
@@ -139,35 +145,49 @@ def aggregate_luxian_0609_results(
         if not wrapper_id:
             continue
         reduced = reduced_by_rule.get(wrapper_id)
-        if reduced is not None:
-            published = finalize_luxian_0609_reduced_customer_result(
-                decision=reduced,
-                raw_customer_display_facts=raw_display_facts_by_rule.get(wrapper_id),
-                evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
-                evidence_materials=(audit_context or {}).get("evidence_materials"),
-                trace_sink=decision_trace_sink,
+        try:
+            if reduced is not None:
+                published = finalize_luxian_0609_reduced_customer_result(
+                    decision=reduced,
+                    raw_customer_display_facts=raw_display_facts_by_rule.get(wrapper_id),
+                    evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
+                    evidence_materials=(audit_context or {}).get("evidence_materials"),
+                    trace_sink=decision_trace_sink,
+                )
+            elif delivery_mode == CANONICAL_RESULT_DELIVERY_MODE:
+                canonical = canonical_by_rule.get(wrapper_id)
+                published = (
+                    canonical
+                    if canonical is not None
+                    else finalize_luxian_0609_missing_decision_result(wrapper=wrapper)
+                )
+            else:
+                published = adapt_luxian_0609_legacy_customer_result(
+                    wrapper=wrapper,
+                    result_by_rule=result_by_rule,
+                    gate_decision=decisions.get(wrapper_id),
+                    format_evidence=format_evidence,
+                    audit_context=audit_context,
+                    raw_customer_display_facts=raw_display_facts_by_rule.get(wrapper_id),
+                )
+        except (TypeError, ValueError, KeyError) as error:
+            # 单条收口失败只隔离本条；身份/范围等整体结构错误已在循环前校验并继续阻断。
+            # 旧兼容交付模式保持原有 fail-closed 语义，不在兼容入口改变行为。
+            if delivery_mode != CANONICAL_RESULT_DELIVERY_MODE:
+                raise
+            logger.warning(
+                "LX0609 单条客户结果收口失败，按技术错误隔离: rule_id=%s error_kind=%s",
+                wrapper_id,
+                type(error).__name__,
             )
-            customer_results.append(published)
-            continue
-
-        if delivery_mode == CANONICAL_RESULT_DELIVERY_MODE:
-            canonical = canonical_by_rule.get(wrapper_id)
-            customer_results.append(
-                canonical
-                if canonical is not None
-                else finalize_luxian_0609_missing_decision_result(wrapper=wrapper)
-            )
-            continue
-
-        customer_results.append(
-            adapt_luxian_0609_legacy_customer_result(
+            published = finalize_luxian_0609_missing_decision_result(
                 wrapper=wrapper,
-                result_by_rule=result_by_rule,
-                gate_decision=decisions.get(wrapper_id),
-                format_evidence=format_evidence,
-                audit_context=audit_context,
-                raw_customer_display_facts=raw_display_facts_by_rule.get(wrapper_id),
+                reason_code=CUSTOMER_RESULT_CONTRACT_VIOLATION,
             )
+        customer_results.append(
+            enforce_luxian_0609_customer_result_contract(published, wrapper=wrapper)
+            if delivery_mode == CANONICAL_RESULT_DELIVERY_MODE
+            else published
         )
     return customer_results
 

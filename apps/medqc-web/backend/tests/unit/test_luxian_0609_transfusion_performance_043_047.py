@@ -76,6 +76,10 @@ NINE_ITEM_LABS = [
         ]
     )
 ]
+REGULAR_ITEM_LABS = [row for row in NINE_ITEM_LABS if row["item_name"] != "谷丙转氨酶"] + [
+    {"document_id": "LAB-ABO", "item_name": "*ABO血型鉴定", "result": "O", "report_datetime": "2026-06-05 10:00:00"},
+    {"document_id": "LAB-RH", "item_name": "*Rh血型鉴定", "result": "阳性", "report_datetime": "2026-06-05 10:00:00"},
+]
 BLOOD_APPLICATION = [
     {"document_id": "APP-043", "patient_bloodtype_abo": "O", "patient_bloodtype_rhd": "阳性"}
 ]
@@ -90,6 +94,7 @@ async def _run(
     course_labels: dict[str, str],
     *,
     horizon_date: str | None = None,
+    client=None,
 ) -> dict[str, Any]:
     def reader(**kwargs: Any) -> SnapshotSourceRows:
         return SnapshotSourceRows.create(
@@ -115,7 +120,7 @@ async def _run(
         row_reader=reader,
         **horizon_kwargs,
     )
-    client = FrozenTransfusionProtocolClient(course_labels=course_labels)
+    client = client or FrozenTransfusionProtocolClient(course_labels=course_labels)
     execution = await native.execute_luxian_0609_native_transfusion_rules(
         rule_ids=(rule_id,),
         decision_rule_ids=(rule_id,),
@@ -189,21 +194,21 @@ async def test_nonperformed_record_stops_at_performance_gate(kind: str, rule_id:
 
 
 @pytest.mark.asyncio
-async def test_043_nine_items_complete_before_structured_transfusion_is_compliant() -> None:
+async def test_043_regular_items_complete_before_structured_transfusion_is_compliant() -> None:
     result = await _run(
         RULE_043,
         {
             "mr_bloodtrans": STRUCTURED_EVENT,
             "bloodtrans_record": [{"document_id": "ACTUAL-043", "record_content": SHORT_ACTUAL}],
             "blood_application": BLOOD_APPLICATION,
-            "labtest_item_report": NINE_ITEM_LABS,
+            "labtest_item_report": REGULAR_ITEM_LABS,
         },
         {SHORT_ACTUAL: "record"},
     )
 
     _assert_layers(result, "compliant", "requirement_satisfied")
     facts = result["facts"]
-    assert len(facts["checked_items"]) == 9
+    assert len(facts["checked_items"]) == 11
     assert facts["latest_test_time"] == "2026-06-05 10:00:00"
     assert facts["transfusion_time"] == "2026-06-05 14:20:00"
     # 结构化实际输注时间已证明实施，043 不需要再调用语义核验。
@@ -219,13 +224,16 @@ async def test_short_actual_record_passes_gate_without_length_threshold() -> Non
         {
             "bloodtrans_record": [{"document_id": "ACTUAL-043", "record_content": SHORT_ACTUAL}],
             "blood_application": BLOOD_APPLICATION,
-            "labtest_item_report": NINE_ITEM_LABS,
+            "labtest_item_report": REGULAR_ITEM_LABS,
         },
         {SHORT_ACTUAL: "record"},
+        # 实施抽取确认已输注但正文未写开始时刻；模型失败另判技术错误，不在本用例。
+        client=FrozenTransfusionProtocolClient(course_labels={SHORT_ACTUAL: "record"}, performance_state="performed"),
     )
 
     _assert_layers(result, "data_gap", "required_field_missing")
-    assert result["client"].protocol_calls == 1
+    # 门控 1 次 + 结构化输血时间缺失时从专用记录正文抽取实际开始时刻 1 次。
+    assert result["client"].protocol_calls == 2
 
 
 @pytest.mark.asyncio

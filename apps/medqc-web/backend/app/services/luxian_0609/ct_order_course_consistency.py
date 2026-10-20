@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import re
 import unicodedata
@@ -34,8 +34,10 @@ REPORT_RULE_ID = "LX0609-06-01-03"
 COURSE_SOURCES = (
     "first_course_record", "daily_course_record", "senior_course_record", "rescue_record",
 )
-MAX_CONTEXT_CHARS = 32000
-MAX_CLAUSES = 512
+# 长住院的多份正常病程须完整核对；累计预算与异常长单分句的保护分开。
+MAX_CONTEXT_CHARS = 64000
+MAX_CLAUSES = 1024
+MAX_CLAUSE_CHARS = 32000
 MAX_EVENTS = 128
 SCHEMA_VERSION = "ct-order-course-facts-v3"
 _SPLIT = re.compile(r"[^。；;\n]+[。；;]?")
@@ -165,7 +167,8 @@ def build_ct_review_input(
                     if not text:
                         continue
                     total_chars += len(text)
-                    if len(clauses) >= MAX_CLAUSES or total_chars > MAX_CONTEXT_CHARS:
+                    if (len(clauses) >= MAX_CLAUSES or total_chars > MAX_CONTEXT_CHARS
+                            or len(text) > MAX_CLAUSE_CHARS):
                         complete = False
                         continue
                     start = match.start() + len(match.group()) - len(match.group().lstrip())
@@ -487,6 +490,26 @@ def _unique_temporal_anchor(
     return False
 
 
+_EXPLICIT_DATE = re.compile(r"(?<![0-9])((?:19|20)[0-9]{2})[-./年]([0-9]{1,2})[-./月]([0-9]{1,2})(?![0-9])")
+
+
+def _clause_dates(text: str) -> tuple[date, ...]:
+    found = []
+    for year, month, day_value in _EXPLICIT_DATE.findall(text):
+        try:
+            found.append(date(int(year), int(month), int(day_value)))
+        except ValueError:
+            continue
+    return tuple(found)
+
+
+def _before_current_stay(review: CtReviewInput, clause: CourseClause) -> bool:
+    """分句写明的完整日期全部早于本次住院最早病程日：属入院前检查，不是本次住院已执行检查。"""
+    record_days = [found for item in review.clauses for found in _clause_dates(item.record_time)[:1]]
+    mentioned = _clause_dates(clause.text)
+    return bool(record_days) and bool(mentioned) and max(mentioned) < min(record_days)
+
+
 def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None = None) -> HandbookEvaluation:
     """响应必须覆盖整批事件；不把模型失败当作资料缺失。"""
     if review.reference_budget_exceeded:
@@ -555,7 +578,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
             decisive = next(item for item in items if item.status == status)
             findings[position] = HandbookFinding(status, decisive.issue,
                 tuple(dict.fromkeys(ref for item in items for ref in item.refs)), decisive.name)
-        unmatched = cited(payload["unmatched_current_clause_ids"], maximum=MAX_CLAUSES)
+        unmatched = tuple(
+            clause for clause in cited(payload["unmatched_current_clause_ids"], maximum=MAX_CLAUSES)
+            if not _before_current_stay(review, clause)
+        )
         if unmatched:
             extras.append(HandbookFinding("data_gap", "course_without_order", tuple(dict.fromkeys(clause.document_ref for clause in unmatched))))
     else:

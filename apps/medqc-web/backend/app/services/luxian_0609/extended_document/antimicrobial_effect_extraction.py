@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import logging
 from time import perf_counter
@@ -18,6 +18,45 @@ from ..model_failure import classify_model_failure, log_model_failure
 
 SCHEMA_VERSION = "lx0609-antimicrobial-effect-safety-facts-v2"
 logger = logging.getLogger(__name__)
+
+
+class _EffectViolation(ValueError):
+    """逐项校验仍拒收，补核一次带回全部失败位置。"""
+
+    def __init__(self, issues: Sequence[tuple[str, int, int, str, str]]) -> None:
+        # 失败项为空时沿用通用覆盖失败原因，避免构造异常本身出错。
+        super().__init__(issues[0][0] if issues else "incomplete coverage")
+        self.issues = tuple(issues)
+
+
+def _retry_prompt(prompt: str, error: Exception, response: Mapping[str, Any],
+                  pending: Sequence[tuple[int, int]]) -> str:
+    choices = response.get("choices")
+    choice = (choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping)
+              else response if choices is None else {})
+    if choice.get("finish_reason") == "length":
+        hint = "输出超长被截断；引文只取最短必要的连续原文，同时完整保留评价语境与结果，输出全部未核验配对"
+    else:
+        details = []
+        for reason, row, target, field, quote in getattr(error, "issues", ())[:8]:
+            shown = redact_luxian_0609_patient_privacy(quote)[:60]
+            details.append(f"row_index={row}/target_index={target}的{field}「{shown}」：{reason}")
+        hint = ("；".join(details) if details else f"{str(error)}；请检查JSON字段、枚举和完整覆盖")
+        hint += ("。仅修正requested_pairs中的未核验项；quote须逐字复制所属文书的单个连续片段，"
+                 "不得删去中间文字后拼接；target_quote须等于给定目标且在quote内，状态与引文须一致；"
+                 "遗漏配对须补齐，重复配对须只保留一项")
+        try:
+            content = choice["message"]["content"] if "choices" in response else response.get("content", response.get("text"))
+            previous = json.loads(content)
+            if isinstance(previous, dict) and isinstance(previous.get("assertions"), list):
+                previous["assertions"] = [item for item in previous["assertions"] if not isinstance(item, dict)
+                    or any(item.get("row_index") == row and item.get("target_index") == target for row, target in pending)]
+            previous = json.dumps(previous, ensure_ascii=False)
+        except (ValueError, TypeError, KeyError):
+            previous = ""
+        if previous and len(previous) <= 24000:
+            hint += "。上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + redact_luxian_0609_patient_privacy(previous)
+    return prompt.replace("\nINPUT_JSON=", "\n上次校验失败：" + hint + "\nINPUT_JSON=", 1)
 
 
 @dataclass(frozen=True)
@@ -146,13 +185,20 @@ def _assertions(response: Mapping[str, Any], originals: Sequence[str], bodies: S
         raise ValueError("incomplete coverage")
     seen = set()
     result = []
+    issues = []
     for item in items:
-        assertion = _assertion(item, originals, bodies, targets)
+        try:
+            assertion = _assertion(item, originals, bodies, targets)
+        except _EffectViolation as error:
+            issues.extend(error.issues)
+            continue
         key = (assertion.row_index, assertion.target_index)
         if key in seen:
             raise ValueError("invalid binding")
         seen.add(key)
         result.append(assertion)
+    if issues:
+        raise _EffectViolation(issues)
     return tuple(sorted(result, key=lambda assertion: (assertion.row_index, assertion.target_index)))
 
 
@@ -179,16 +225,19 @@ def _assertion(item: Any, originals: Sequence[str], bodies: Sequence[str],
         or not isinstance(target_quote, str)
     ):
         raise ValueError("invalid fact")
+    issues = []
     if quote and (quote not in bodies[row] or quote not in originals[row]):
-        raise ValueError("invalid source quote")
+        issues.append(("invalid source quote", row, target, "quote", quote))
     if target_quote and (target_quote != targets[target] or target_quote not in quote):
-        raise ValueError("invalid target quote")
+        issues.append(("invalid target quote", row, target, "target_quote", target_quote))
     if "present" in states and (not quote or target_quote != targets[target]):
-        raise ValueError("missing positive quote")
+        issues.append(("missing positive quote", row, target, "quote/target_quote", quote))
     if "present" not in states and "regimen" in states and (not quote or target_quote):
-        raise ValueError("invalid regimen quote")
+        issues.append(("invalid regimen quote", row, target, "quote/target_quote", quote))
     if states == ("absent", "absent") and (quote or target_quote):
-        raise ValueError("unexpected negative quote")
+        issues.append(("unexpected negative quote", row, target, "quote/target_quote", quote))
+    if issues:
+        raise _EffectViolation(issues)
     return AntimicrobialEffectAssertion(
         row, target, effect_state, safety_state, quote, target_quote
     )
@@ -217,9 +266,13 @@ async def extract_antimicrobial_effects(
     prompt_tokens = completion_tokens = total_tokens = calls = 0
     api_time = 0.0
     reason = "model_invalid_output"
+    retry_error = None
+    previous_response = None
     for attempt in range(2):
         pending = tuple(pair for pair in expected if pair not in accepted)
         prompt = _prompt(bodies, targets, pending)
+        if retry_error is not None and previous_response is not None:
+            prompt = _retry_prompt(prompt, retry_error, previous_response, pending)
         if len(prompt.encode("utf-8")) > max_prompt_bytes or _completion_bound(bodies, targets, pending) > max_completion_tokens:
             break
         calls += 1
@@ -252,6 +305,7 @@ async def extract_antimicrobial_effects(
             items = _response_items(response)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             log_model_failure(logger, rule="LX0609-05-01-03", stage="validate", error=error)
+            retry_error, previous_response = error, response
             continue
         bindings = [
             (item["row_index"], item["target_index"])
@@ -259,6 +313,7 @@ async def extract_antimicrobial_effects(
             and type(item.get("row_index")) is int and type(item.get("target_index")) is int
         ]
         counts = Counter(bindings)
+        issues = []
         for item in items:
             if not isinstance(item, dict) or type(item.get("row_index")) is not int or type(item.get("target_index")) is not int:
                 continue
@@ -269,8 +324,17 @@ async def extract_antimicrobial_effects(
                 accepted[pair] = _assertion(item, originals, bodies, targets)
             except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
                 log_model_failure(logger, rule="LX0609-05-01-03", stage="validate", error=error)
+                issues.extend(error.issues if isinstance(error, _EffectViolation) else [
+                    (str(error), pair[0], pair[1], "assertion", "检查字段集合、类型及枚举")])
         if len(accepted) == len(expected):
             break
+        for row, target in pending:
+            if (row, target) not in accepted and counts[(row, target)] != 1:
+                count = counts[(row, target)]
+                issues.append(("invalid binding" if count else "incomplete coverage", row, target,
+                               "row_index/target_index", f"出现{count}次，须且仅输出一次"))
+        retry_error = _EffectViolation(issues)
+        previous_response = response
         logger.warning("LX0609_EFFECT_COVERAGE attempt=%s expected=%s accepted=%s pending=%s",
                        attempt + 1, len(expected), len(accepted), len(expected) - len(accepted))
     unresolved = tuple(pair for pair in expected if pair not in accepted)
@@ -279,4 +343,79 @@ async def extract_antimicrobial_effects(
         tuple(accepted[pair] for pair in expected if pair in accepted),
         calls, prompt_tokens, completion_tokens, total_tokens, max(0.0, api_time),
         reason if unresolved else "", unresolved,
+    )
+
+
+async def extract_antimicrobial_effect_pairs(
+    documents: Sequence[Mapping[str, Any]], targets: Sequence[str],
+    pairs: Sequence[tuple[int, int]], llm_client: Any,
+    *, max_prompt_bytes: int, max_completion_tokens: int,
+) -> AntimicrobialEffectResult:
+    """预算内逐批核对程序确定的候选；全文、引用及两次补缺合同沿用原抽取器。
+
+    每批仅一个目标药，局部编号核验后映射回原坐标；调用上限为候选配对数的两倍。
+    先完成全部分批预检，单份全文仍超限时不截断、不丢候选。
+    """
+    if (type(max_prompt_bytes) is not int or max_prompt_bytes <= 0
+            or type(max_completion_tokens) is not int or max_completion_tokens <= 0):
+        return AntimicrobialEffectResult("data_gap", reason_code="source_capacity_exceeded")
+    try:
+        _, bodies = _sources(documents, targets)
+        expected = tuple(pairs)
+        if any(
+            not isinstance(pair, tuple) or len(pair) != 2
+            or type(pair[0]) is not int or type(pair[1]) is not int
+            or not 0 <= pair[0] < len(bodies) or not 0 <= pair[1] < len(targets)
+            for pair in expected
+        ) or len(set(expected)) != len(expected):
+            raise ValueError("invalid candidate binding")
+    except (ValueError, TypeError, OverflowError):
+        return AntimicrobialEffectResult("data_gap", reason_code="required_field_missing")
+
+    batches: list[tuple[int, tuple[int, ...]]] = []
+    for target in range(len(targets)):
+        pending: list[int] = []
+
+        def fits(indexes: Sequence[int]) -> bool:
+            selected = [bodies[index] for index in indexes]
+            names = [targets[target]]
+            return (len(_prompt(selected, names).encode("utf-8")) <= max_prompt_bytes
+                    and _completion_bound(selected, names) <= max_completion_tokens)
+
+        for row, target_index in expected:
+            if target_index != target:
+                continue
+            if pending and not fits((*pending, row)):
+                batches.append((target, tuple(pending)))
+                pending = []
+            if not fits((row,)):
+                return AntimicrobialEffectResult("data_gap", reason_code="source_capacity_exceeded")
+            pending.append(row)
+        if pending:
+            batches.append((target, tuple(pending)))
+
+    accepted: dict[tuple[int, int], AntimicrobialEffectAssertion] = {}
+    calls = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    state, reason = "ready", ""
+    for target, indexes in batches:
+        result = await extract_antimicrobial_effects(
+            [documents[index] for index in indexes], [targets[target]], llm_client,
+            max_prompt_bytes=max_prompt_bytes, max_completion_tokens=max_completion_tokens,
+        )
+        calls += result.llm_call_count
+        prompt_tokens += result.prompt_tokens
+        completion_tokens += result.completion_tokens
+        total_tokens += result.total_tokens
+        api_time += result.api_time
+        for assertion in result.assertions:
+            row = indexes[assertion.row_index]
+            accepted[(row, target)] = replace(assertion, row_index=row, target_index=target)
+        if result.state != "ready":
+            state, reason = result.state, result.reason_code
+            break
+    unresolved = tuple(pair for pair in expected if pair not in accepted)
+    return AntimicrobialEffectResult(
+        state, tuple(accepted[pair] for pair in expected if pair in accepted),
+        calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason, unresolved,
     )

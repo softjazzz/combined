@@ -1,4 +1,7 @@
-"""023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施既无医嘱也无病程记录即不合规。"""
+"""023 会诊措施逐项核对（用户口径 2026-10-12）：任一措施无执行证据即不合规。
+
+用户口径（2026-10-20）：执行证据只认会诊记录当天开立的医嘱。
+"""
 
 import asyncio
 import json
@@ -35,7 +38,9 @@ def test_specific_order_proves_execution_even_when_course_only_says_follow_advic
         source_incomplete_keys=frozenset()) == ("compliant", "requirement_satisfied")
 
 
-def test_orders_before_documentation_are_candidates_but_earlier_courses_are_not():
+def test_only_consultation_day_orders_are_execution_candidates():
+    # 用户口径（2026-10-20）：会诊记录当天开立的医嘱算执行，前一天的不算；
+    # 病程不作执行证据（同日早于记录的病程本就不在候选内）。
     completed, _, _, _ = _setup()
     completed = (replace(completed[0], opinion_time=episode._ObservedTime(datetime(2026, 7, 20, 15, 59), True)),)
     candidates = tuple(episode._CandidateDocument(
@@ -48,8 +53,8 @@ def test_orders_before_documentation_are_candidates_but_earlier_courses_are_not(
             ("inpat_nondrug_order-4", "inpat_nondrug_order", datetime(2026, 7, 20, 15, 59), "中药贴敷"),
         ))
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
-    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset({
-        "inpat_nondrug_order-1", "inpat_nondrug_order-2", "inpat_nondrug_order-3", "inpat_nondrug_order-4"})
+    assert allowed[completed[0].recommendation.recommendation_ref] == frozenset(
+        {"inpat_nondrug_order-1", "inpat_nondrug_order-2", "inpat_nondrug_order-4"})
 
 
 async def _check_clinical_decision(text, candidate_text, measures, generic=()):
@@ -57,7 +62,9 @@ async def _check_clinical_decision(text, candidate_text, measures, generic=()):
     recommendation = replace(completed[0].recommendation, action_type="test",
                              source_quote=text, normalized_action=text)
     completed = (replace(completed[0], recommendation=recommendation),)
-    candidates = (replace(candidates[0], source_key="daily_course_record"),)
+    # 本组只验证逐项核对器对“暂不执行及原因”等语义的处理，病程放在会诊之后。
+    candidates = (replace(candidates[0], source_key="daily_course_record",
+                          observed_time=episode._ObservedTime(datetime(2026, 7, 20, 20), True)),)
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
     aliases = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [
@@ -112,7 +119,8 @@ def _setup(orders=BASE_ORDERS):
             episode._Recommendation(
                 "consultation_record-1#r1", "procedure", RECOMMENDATION, RECOMMENDATION, "consultation_record-1"
             ),
-            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+            # 用户口径（2026-10-20）：只认会诊记录当天开立的医嘱。
+            episode._ObservedTime(datetime(2026, 7, 20, 18), True),
         ),
     )
     candidates = tuple(
@@ -200,8 +208,8 @@ async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution(
     aliases = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [{
         "recommendation_ref": recommendation.recommendation_ref, "measure": "关节松动术",
-        "evidence_ref": aliases[candidates[0].ref], "quote": "动态心电图检查",
-        "executed_action": "动态心电图检查", "action_relation": "unrelated",
+        "evidence_ref": aliases.get(candidates[0].ref, ""), "quote": "动态心电图检查" if aliases else "",
+        "executed_action": "动态心电图检查" if aliases else "", "action_relation": "unrelated" if aliases else "not_found",
     }]}
     result = await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed,
@@ -345,7 +353,7 @@ async def test_purpose_clause_in_recommendation_is_not_an_omission():
     completed = (episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation("consultation_record-1#r1", "procedure", text, text, "consultation_record-1"),
-        episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        episode._ObservedTime(datetime(2026, 7, 20, 18), True),
     ),)
     candidates = (episode._CandidateDocument(
         "inpat_nondrug_order-1", "inpat_nondrug_order", episode._ObservedTime(datetime(2026, 7, 20, 9), True),

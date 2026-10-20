@@ -33,6 +33,7 @@ import re
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
+from .consultation_disposition_record import _ReviewIssue, _ReviewViolation, _review_retry_prompt
 from .transfusion_order_trigger import _json_response_object, _usage
 
 SCHEMA_VERSION = "lx0609-consultation-measure-check-v4"
@@ -101,6 +102,11 @@ class _CoverageGap(ValueError):
     def __init__(self, missing: Mapping[str, tuple[str, ...]], uncovered: Mapping[str, tuple[str, ...]]):
         super().__init__("measure coverage incomplete")
         self.missing, self.uncovered = missing, uncovered
+        self.issues = tuple(
+            _ReviewIssue("measure coverage incomplete", f"recommendation_ref={ref}.覆盖", segment,
+                         "该片段须拆为措施或列入generic；无执行证据时仍列项，evidence_ref与quote为空")
+            for ref, values in uncovered.items() for segment in values
+        )
 
 
 def _recommendation_text(recommendation: Any) -> str:
@@ -198,7 +204,8 @@ def _parse(
     counts: dict[str, int] = {ref: 0 for ref in texts}
     seen: set[tuple[str, str]] = set()
     covered: dict[str, list[str]] = {ref: [] for ref in texts}
-    for item in payload["generic"]:
+    issues: list[_ReviewIssue] = []
+    for index, item in enumerate(payload["generic"], 1):
         if not isinstance(item, dict) or set(item) != {"recommendation_ref", "text"}:
             raise ValueError("invalid generic schema")
         ref, text = item["recommendation_ref"], item["text"]
@@ -206,11 +213,12 @@ def _parse(
             raise ValueError("invalid generic schema")
         normalized_text = _normalize(text)
         if not normalized_text or len(text) > MAX_MEASURE_CHARS or normalized_text not in texts[ref]:
-            raise ValueError("generic not in recommendation")
+            issues.append(_ReviewIssue("generic not in recommendation", f"recommendation_ref={ref}.generic第{index}项.text", text,
+                                       _RETRY_HINTS["generic not in recommendation"]))
         covered[ref].append(normalized_text)
         if len(covered[ref]) > MAX_GENERIC_PER_RECOMMENDATION:
             raise ValueError("too many generic items")
-    for item in payload["measures"]:
+    for index, item in enumerate(payload["measures"], 1):
         if not isinstance(item, dict):
             raise ValueError("invalid measure schema")
         expected_fields = {
@@ -226,12 +234,13 @@ def _parse(
         if (ref not in texts or not all(isinstance(value, str) for value in (measure, evidence, quote, action, relation))
                 or relation not in {"matched", "unrelated", "uncertain", "not_found", "reasoned_non_execution"}):
             raise ValueError("invalid measure identity")
+        position = f"recommendation_ref={ref}.measures第{index}项"
         normalized_measure = _normalize(measure)
         if (not normalized_measure or len(measure) > MAX_MEASURE_CHARS
                 or normalized_measure not in texts[ref]):
-            raise ValueError("measure not in recommendation")
+            issues.append(_ReviewIssue("measure not in recommendation", position + ".measure", measure, _RETRY_HINTS["measure not in recommendation"]))
         if action_types[ref] != "medication" and "、" in measure:
-            raise ValueError("multiple actions in one measure")
+            issues.append(_ReviewIssue("multiple actions in one measure", position + ".measure", measure, _RETRY_HINTS["multiple actions in one measure"]))
         if (ref, normalized_measure) in seen:
             continue
         seen.add((ref, normalized_measure))
@@ -241,18 +250,19 @@ def _parse(
             raise ValueError("too many measures")
         if not evidence.strip():
             if quote.strip() or action.strip() or relation != "not_found":
-                raise ValueError("quote without evidence")
+                issues.append(_ReviewIssue("quote without evidence", position + ".evidence_ref/quote", quote, _RETRY_HINTS["quote without evidence"]))
             missing[ref].append(measure)
             continue
         internal = ref_by_alias.get(evidence, evidence)
         if internal not in allowed_refs.get(ref, frozenset()) or internal not in candidates_by_ref:
-            raise ValueError("evidence out of scope")
+            issues.append(_ReviewIssue("evidence out of scope", position + ".evidence_ref", evidence, _RETRY_HINTS["evidence out of scope"]))
+            continue
         normalized_quote = _normalize(quote)
         if (not normalized_quote or len(quote) > MAX_QUOTE_CHARS
                 or normalized_quote not in _normalize(candidates_by_ref[internal].text)):
-            raise ValueError("quote not in candidate")
+            issues.append(_ReviewIssue("quote not in candidate", position + ".quote", quote, _RETRY_HINTS["quote not in candidate"]))
         if not _normalize(action) or len(action) > MAX_MEASURE_CHARS or _normalize(action) not in normalized_quote:
-            raise ValueError("action not in evidence")
+            issues.append(_ReviewIssue("action not in evidence", position + ".executed_action", action, _RETRY_HINTS["action not in evidence"]))
         if relation == "reasoned_non_execution":
             reason = item["non_execution_reason"]
             if (candidates_by_ref[internal].source_key not in {
@@ -260,13 +270,15 @@ def _parse(
                     or not isinstance(reason, str) or not _normalize(reason)
                     or len(reason) > MAX_MEASURE_CHARS or _normalize(reason) not in normalized_quote
                     or not re.search(r"暂不|暂缓|不考虑|不予|无需|拒绝|不同意|停用|取消", normalized_quote)):
-                raise ValueError("non execution reason not grounded")
+                issues.append(_ReviewIssue("non execution reason not grounded", position + ".non_execution_reason", str(reason), _RETRY_HINTS["non execution reason not grounded"]))
         if relation in {"uncertain", "not_found"}:
-            raise ValueError("action relation unresolved")
+            issues.append(_ReviewIssue("action relation unresolved", position + ".action_relation", relation, _RETRY_HINTS["action relation unresolved"]))
         if relation == "unrelated":
             missing[ref].append(measure)
-    if any(count == 0 for count in counts.values()):
-        raise ValueError("recommendation without measure")
+    for ref, count in counts.items():
+        if count == 0:
+            issues.append(_ReviewIssue("recommendation without measure", f"recommendation_ref={ref}.覆盖", "",
+                                       _RETRY_HINTS["recommendation without measure"]))
     result = {ref: tuple(values) for ref, values in missing.items()}
     uncovered = {
         item.recommendation.recommendation_ref: tuple(_uncovered_segments(
@@ -274,7 +286,13 @@ def _parse(
         for item in completed
     }
     if any(uncovered.values()):
-        raise _CoverageGap(result, uncovered)
+        gap = _CoverageGap(result, uncovered)
+        if issues:
+            issues.extend(gap.issues)
+        else:
+            raise gap
+    if issues:
+        raise _ReviewViolation(issues)
     return result
 
 
@@ -333,15 +351,8 @@ async def check_consultation_measures(
                 state = "unresolved" if isinstance(error, _CoverageGap) else "failed"
                 return MeasureCheckOutcome(state, {}, calls, prompt_tokens, completion_tokens,
                                            total_tokens, api_time or perf_counter() - started)
-            if isinstance(error, _CoverageGap):
-                segments = "；".join(dict.fromkeys(
-                    segment for values in error.uncovered.values() for segment in values))
-                hint = f"以下建议内容既未拆为措施也未列入generic：{segments}；每项措施都必须输出，没有执行证据时evidence_ref与quote为空"
-            else:
-                hint = _RETRY_HINTS.get(str(error), "字段取规定值，按要求输出完整JSON")
-            attempt_prompt = prompt.replace(
-                "\nRECOMMENDATIONS_JSON=",
-                f"\n上一次输出未通过校验：{hint}。请修正后重新输出完整JSON。\nRECOMMENDATIONS_JSON=", 1)
+            attempt_prompt = _review_retry_prompt(prompt, error, response, "\nRECOMMENDATIONS_JSON=")
+
     return MeasureCheckOutcome("ready", missing, calls, prompt_tokens, completion_tokens, total_tokens,
                                api_time or perf_counter() - started)
 

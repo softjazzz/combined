@@ -154,6 +154,10 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "family_result_extra",
             "family_result_order_mismatch",
             "family_result_scope_mismatch",
+            # 以下三类为确定性失败，补跑同样输入不会改变结果，不自动补跑。
+            "customer_result_contract_violation",
+            "privacy_guard_blocked",
+            "execution_program_error",
         }
     ),
 })

@@ -315,6 +315,9 @@ function normalizeEditableDocumentsResponse(
         source_table: readStringField(row, ['source_table', 'table_name', 'doc_type']),
         document_type: documentType,
         execution_domain: readStringField(row, ['execution_domain']),
+        projection_incomplete: row.projection_incomplete === true,
+        projection_notice:
+          typeof row.projection_notice === 'string' ? row.projection_notice.trim() : '',
         title,
         sections: readDocumentSections(row),
         report_items: reportItems,

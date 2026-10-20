@@ -1569,10 +1569,7 @@ def _typed_basic_decisions(
             if missing_decision is not None:
                 decisions.append(missing_decision)
                 continue
-            # 005 暂保留既有空来源语义；006 已由成熟门确认到期，可交付确定缺失。
-            if rule_id == "LX0609-02-01-01":
-                decisions.append(gap(rule_id, "source_empty"))
-                continue
+            # 完整查询为空且已通过成熟门，表示目标缺失；不要求补充不存在的记录。
             decision = conclusive(
                 rule_id,
                 QcDirection.DEFECT,

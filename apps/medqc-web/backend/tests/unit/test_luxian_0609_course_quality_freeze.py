@@ -401,7 +401,8 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
         assert result.get("customer_display_facts") == dict(execution.customer_display_facts).get(rule_id)
     assert _fact_ref_sources(session.snapshot, decision.fact_refs)
     assert _evidence_coordinates(result) == expected_evidence
-    expected_llm_calls = 1 if rule_id == "LX0609-12-01-02" else 0
+    # 用户口径（2026-10-20）：017 只按相似度阈值判定，不调用模型。
+    expected_llm_calls = 0
     assert execution.llm_call_count == expected_llm_calls
     if expected_llm_calls:
         assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (41, 7, 48)
@@ -415,6 +416,7 @@ async def test_course_quality_freezes_lx018_semantic_stub_prompt_usage_and_canon
     client = _StubClient(
         {
             "chief_signal_kind": "localized_symptom_or_sign",
+            "chief_complaint_signals": ["反复胸痛"],
             "anatomic_relation": "not_applicable",
             "laterality_relation": "not_applicable",
             "symptom_relation": "supports",
@@ -545,6 +547,7 @@ async def test_lx018_atomic_facts_disable_thinking_for_capable_client() -> None:
     client = _StructuredStubClient(
         {
             "chief_signal_kind": "localized_symptom_or_sign",
+            "chief_complaint_signals": ["反复胸痛"],
             "anatomic_relation": "not_applicable",
             "laterality_relation": "not_applicable",
             "symptom_relation": "supports",

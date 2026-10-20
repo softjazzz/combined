@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import json
+import logging
 import math
 import re
 from time import perf_counter
@@ -13,10 +14,14 @@ from typing import Any, Literal, Mapping, Protocol, Sequence
 from zoneinfo import ZoneInfo
 
 from ...llm_observability import safe_status_for_exception
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    describe_luxian_0609_llm_parse_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from ..structured_output import structured_output_kwargs
 from .shared import _clean
 
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609_antimicrobial_actions_v1"
 MAX_CANDIDATES = 30
@@ -35,6 +40,8 @@ class AntimicrobialAction(str, Enum):
     CHANGE_TO = "改为"
     COMBINE = "联合"
     START = "启用"
+    # 第六轮 C02/C03：“加用莫西沙星”“拟加用美罗培南”不在词表，模型引文必被拒收。
+    ADD = "加用"
     INFUSE = "输注"
     USE = "使用"
     GIVE = "给予"
@@ -59,6 +66,9 @@ ANTIMICROBIALS = SPECIAL_ANTIMICROBIALS + (
     "头孢唑林", "头孢呋辛", "头孢曲松", "头孢他啶", "头孢西丁", "厄他培南",
     "阿米卡星", "阿奇霉素", "莫西沙星", "左氧氟沙星", "环丙沙星",
     "甲硝唑", "替硝唑", "奥硝唑", "克林霉素", "氟康唑",
+)
+_SHORT_ADMINISTER_PATTERN = re.compile(
+    r"(?<![给不未])予(?!以)(?=\s*(?:" + "|".join(map(re.escape, ANTIMICROBIALS)) + r"))"
 )
 ANTIMICROBIAL_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
 _ACTION_STRONG_BOUNDARY_PATTERN = re.compile(r"[。；;！!？?\r\n]+")
@@ -116,6 +126,7 @@ def _row_text(row: Mapping[str, Any]) -> str:
         _clean(row.get(key))
         for key in (
             "record_content", "document_title", "order_name", "generic_name",
+            "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
             "item_code", "item_name", "item_abbreviation", "result", "result_flag",
             "abnormal_flag", "diagnosis_name", "labtest_subject", "specimen",
         )
@@ -308,7 +319,7 @@ def _text_spans(text: str, boundary: re.Pattern[str]) -> tuple[tuple[int, int], 
 
 
 def _has_action_marker(text: str) -> bool:
-    return any(
+    return bool(_SHORT_ADMINISTER_PATTERN.search(text)) or any(
         action.value in text
         for action in AntimicrobialAction
         if action is not AntimicrobialAction.RECOMMEND
@@ -419,7 +430,11 @@ def _high_confidence_action_in_candidate(
         and action.value in prefix
     )
     if not matches:
-        return None
+        return (
+            AntimicrobialAction.GIVE
+            if _SHORT_ADMINISTER_PATTERN.search(candidate_text[:target_index + len(antimicrobial)])
+            else None
+        )
     action_index, action = max(matches)
     if target_index - action_index > 80:
         return None
@@ -459,9 +474,81 @@ def _action_inputs(
     return confirmed, tuple(candidates), identity
 
 
+# 共用动作的长句被模型用省略号略去中段（第六轮 C05：“继续当前...伏立康唑”）。
+_QUOTE_ELLIPSIS = re.compile(r"\.{2,}|…+|。{3,}|·{3,}")
+_MIN_ELIDED_PIECE_CHARS = 2
+
+
+def _restore_elided_quote(quote: Any, text: str) -> Any:
+    """省略号两侧各段按顺序逐字出现在本项原文时，还原为原文连续段；否则原样交校验拒收。"""
+
+    if not isinstance(quote, str) or quote in text or not _QUOTE_ELLIPSIS.search(quote):
+        return quote
+    pieces = [piece for piece in _QUOTE_ELLIPSIS.split(quote) if piece.strip()]
+    if len(pieces) < 2 or any(len(piece.strip()) < _MIN_ELIDED_PIECE_CHARS for piece in pieces):
+        return quote
+    start = text.find(pieces[0])
+    if start < 0 or text.find(pieces[0], start + 1) >= 0:
+        return quote
+    cursor = start + len(pieces[0])
+    for piece in pieces[1:]:
+        found = text.find(piece, cursor)
+        if found < 0:
+            return quote
+        cursor = found + len(piece)
+    return text[start:cursor]
+
+
+# 并列药名共用前方动作（第七轮 C08：“联合万古霉素及氟康唑抗感染”中氟康唑被引作“及氟康唑抗感染”）。
+_COORDINATION_CONNECTORS = re.compile(r"[及和与、\s]+")
+_ANTIMICROBIAL_NAME_PATTERN = re.compile(
+    "|".join(map(re.escape, sorted(ANTIMICROBIALS, key=len, reverse=True)))
+)
+
+
+def _restore_shared_action_quote(quote: Any, text: str) -> Any:
+    """缺动作词的引文若与前方动作之间只隔并列药名与连接词，还原为含该动作的原文连续段。
+
+    动作与引文之间出现药名、连接词以外的文字，或扩展片段含否定、拟行、既往等标记时，
+    原样交校验拒收。
+    """
+
+    if (
+        not isinstance(quote, str)
+        or not quote.strip()
+        or _ACTION_PATTERN.search(quote)
+        or _SHORT_ADMINISTER_PATTERN.search(quote)
+    ):
+        return quote
+    start = text.find(quote)
+    if start < 0 or text.find(quote, start + 1) >= 0:
+        return quote
+    prefix = text[:start]
+    action = None
+    for action in _ACTION_PATTERN.finditer(prefix):
+        pass
+    if action is None:
+        return quote
+    between = prefix[action.end():]
+    if _COORDINATION_CONNECTORS.sub("", _ANTIMICROBIAL_NAME_PATTERN.sub("", between)):
+        return quote
+    # 否定或拟行可能写在动作之前并作用于整个分句，按所在分句整体检查。
+    clause_start = max(prefix.rfind(mark) for mark in "，,。；;：:") + 1
+    clause = text[clause_start:start + len(quote)]
+    if (
+        "未" in clause
+        or "不" in clause
+        or _has_plan_marker(clause)
+        or any(marker in clause for marker in _ACTION_HISTORICAL_MARKERS)
+    ):
+        return quote
+    return text[action.start():start + len(quote)]
+
+
 def _action_in_quote(quote: str) -> AntimicrobialAction | None:
     return next(
-        (action for action in AntimicrobialAction if action.value in quote), None
+        (action for action in AntimicrobialAction if action.value in quote),
+        AntimicrobialAction.GIVE if _SHORT_ADMINISTER_PATTERN.search(quote) else None,
     )
 
 
@@ -602,6 +689,10 @@ def _parse(
         if not isinstance(state, str) or state not in _ITEM_STATES:
             raise ValueError("invalid action state")
         candidate = expected[identity]
+        if state != "no_action":
+            quote = _restore_shared_action_quote(
+                _restore_elided_quote(quote, candidate.text), candidate.text
+            )
         action: AntimicrobialAction | None = None
         if state == "no_action":
             if quote is not None:
@@ -611,7 +702,7 @@ def _parse(
             or not quote.strip()
             or quote not in candidate.text
             or candidate.antimicrobial.casefold() not in quote.casefold()
-            or _ACTION_PATTERN.search(quote) is None
+            or (_ACTION_PATTERN.search(quote) is None and not _SHORT_ADMINISTER_PATTERN.search(quote))
         ):
             raise ValueError("unverified action quote")
         else:
@@ -695,7 +786,11 @@ async def extract_antimicrobial_actions(
         if not isinstance(message, Mapping) or not isinstance(message.get("content"), str):
             raise ValueError("invalid content")
         items = _parse(message["content"], safe_candidates)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+        logger.warning(
+            "LX0609 抗菌药动作抽取输出无效: candidate_count=%s %s",
+            len(safe_candidates), describe_luxian_0609_llm_parse_failure(error, response),
+        )
         return AntimicrobialActionExtraction(
             "technical_error",
             "model_invalid_output",

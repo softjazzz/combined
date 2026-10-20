@@ -37,6 +37,8 @@ from .source_evidence_reader import (
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
+from .surgery_event_association import group_surgery_rows_by_start, merge_surgery_component_rows
+from .surgery_record_coverage import definitely_uncovered_surgery_rows, surgery_event_time
 from .prophylactic_antimicrobial_duration import (
     SurgeryEventInput as _ProphylaxisSurgeryEvent,
     evaluate_prophylactic_antimicrobial_duration,
@@ -961,6 +963,20 @@ def _labeled_anesthesia_surgery_time(
     return unique[0] if len(unique) == 1 else None
 
 
+def _surgery_record_missing_facts(*, end: datetime | None, begin: datetime | None) -> dict[str, Any]:
+    """003 缺正式手术记录的受控展示事实；保存层要求确定问题必须可解释。"""
+
+    anchor, time_kind = (end, "end") if end is not None else (begin, "begin")
+    return {
+        "failure_kind": "surgery_record_missing",
+        "performed_surgery_confirmed": True,
+        "surgery_time": anchor.isoformat(sep=" ", timespec="minutes") if anchor else None,
+        "surgery_time_kind": time_kind,
+        "threshold_hours": 24,
+        "source_label": "手术记录",
+    }
+
+
 def _typed_003_decision(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -1074,15 +1090,54 @@ def _typed_003_decision(
             return decision("technical_error", "snapshot_mismatch")
 
     mr_rows = support_rows["mr_surgery"]
+    # 先核对正式记录覆盖。已有一份记录或另一台时间缺失，均不能遮蔽已证实的缺失。
+    missing_rows = definitely_uncovered_surgery_rows(mr_rows, surgery_rows)
+    horizon_rows = support_rows["evaluation_context.horizon"]
+    if missing_rows and len(horizon_rows) == 1:
+        try:
+            horizon_date = datetime.fromisoformat(str(horizon_rows[0]["horizon_date"])).date()
+            horizon_value = horizon_rows[0].get("horizon_datetime")
+            horizon_time = datetime.fromisoformat(str(horizon_value)) if horizon_value else None
+        except (KeyError, TypeError, ValueError):
+            horizon_date, horizon_time = None, None
+        for row in missing_rows:
+            end = surgery_event_time(row, end=True)
+            begin = surgery_event_time(row)
+            mature = False
+            if end is not None and horizon_date is not None:
+                mature = (
+                    horizon_time.tzinfo is None and horizon_time - end >= timedelta(hours=24)
+                    if horizon_time is not None
+                    else horizon_date > (end + timedelta(hours=24)).date()
+                )
+            elif begin is not None and horizon_date is not None:
+                # 无结束时间时不计算精确时差；仅在事件日后完整跨过24小时再报缺失。
+                mature = horizon_date > begin.date() + timedelta(days=1)
+            if mature:
+                reference = _material_document_ref_for_row(
+                    materials=materials, snapshot=snapshot,
+                    source_key="mr_surgery", selected_row=row,
+                )
+                return decision(
+                    "non_compliant", "required_document_missing",
+                    _surgery_record_missing_facts(end=end, begin=begin),
+                    selected_document_refs=(reference,) if reference else (),
+                )
     if not surgery_rows:
         qualified_mr_rows = tuple(
             row for row in mr_rows if _qualified_traditional_surgery_present((row,))
         )
         if qualified_mr_rows:
-            # 003 缺正式手术记录时，只能由唯一一台主表手术形成“应有记录”的
-            # 结论。同一结束时间不能把多行不同手术事件压成一个时间点。
-            if len(qualified_mr_rows) != 1:
+            # 主控代定口径（2026-10-18，待客户复核），基线003：同开始时间组件
+            # 先合为一台；结束时间缺失仍不能计算24小时窗口。
+            groups = group_surgery_rows_by_start("mr_surgery", qualified_mr_rows)
+            if groups is None:
                 return decision("data_gap", "association_failed")
+            # 003 缺正式手术记录时，只能由唯一一台主表手术形成“应有记录”的
+            # 结论。同一结束时间不能把不同开始时间的手术压成一个时间点。
+            if len(groups) != 1:
+                return decision("data_gap", "association_failed")
+            selected_event = merge_surgery_component_rows(groups[0])
             selected_mr_ref = _material_document_ref_for_row(
                 materials=materials,
                 snapshot=snapshot,
@@ -1090,7 +1145,7 @@ def _typed_003_decision(
                 selected_row=qualified_mr_rows[0],
             )
             surgery_end_time = _authoritative_surgery_end_time(
-                source_key="mr_surgery", row=qualified_mr_rows[0]
+                source_key="mr_surgery", row=selected_event
             )
             if surgery_end_time is None:
                 return decision("data_gap", "authoritative_time_missing")
@@ -1143,6 +1198,7 @@ def _typed_003_decision(
                 "required_document_missing"
                 if mature
                 else "evaluation_window_not_mature",
+                _surgery_record_missing_facts(end=surgery_end_time, begin=None) if mature else None,
                 selected_document_refs=(
                     (selected_mr_ref,) if mature and selected_mr_ref else ()
                 ),

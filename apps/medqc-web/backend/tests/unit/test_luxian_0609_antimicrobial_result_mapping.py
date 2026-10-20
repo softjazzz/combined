@@ -167,7 +167,7 @@ _FACTS_BY_CASE = {
             "special_antimicrobials": ["美罗培南"],
             "expert_support_present": True,
             "first_antimicrobial_time": "2026-06-01 10:00:00",
-            "expert_support_time": "2026-06-01 11:00:00",
+            "expert_support_time": "2026-06-02 11:00:00",
             "support_before_use": False,
             "unmatched_special_antimicrobials": ["美罗培南"],
             "association_ambiguous": False,

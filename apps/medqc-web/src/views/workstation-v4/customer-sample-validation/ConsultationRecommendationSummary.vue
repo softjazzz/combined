@@ -3,7 +3,7 @@
     <header class="consultation-summary-header">
       <div class="consultation-summary-heading">
         <h4>逐条建议核对</h4>
-        <p>展示建议原文及对应的执行证据核对结果</p>
+        <p>按会诊记录当天开立的医嘱逐条核对会诊建议是否执行</p>
       </div>
       <p class="consultation-summary-counts" aria-label="会诊建议核对统计">
         <strong>{{ presentation.comparedCount }}</strong> 条纳入核对
@@ -32,14 +32,14 @@
               <span class="consultation-recommendation-position">
                 第{{ row.episodeIndex }}次会诊<span v-if="row.recommendationIndex">
                   · 第{{ row.recommendationIndex }}条建议</span
-                >
+                ><span v-if="row.opinionTime"> · 会诊记录 {{ row.opinionTime }}</span>
               </span>
               <span
                 class="mq-status consultation-recommendation-status"
                 :class="{
                   'mq-status--success': row.state === 'specific',
                   'mq-status--warning': row.state === 'generic' || row.state === 'unknown',
-                  'mq-status--danger': row.state === 'missing',
+                  'mq-status--danger': row.state === 'missing' || row.state === 'partial',
                 }"
               >
                 {{ row.statusLabel }}
@@ -65,9 +65,7 @@
         <h5 id="consultation-excluded-title">不作为缺陷依据</h5>
         <span>{{ excludedRows.length }} 条</span>
       </div>
-      <p class="consultation-excluded-intro">
-        条件是否成立无法从现有记录确认，因此不参与执行证据对比。
-      </p>
+      <p class="consultation-excluded-intro">以下建议按质控口径不核对执行医嘱，原因见各条说明。</p>
       <div
         v-for="row in excludedRows"
         :key="row.key"

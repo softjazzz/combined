@@ -270,15 +270,13 @@ async def test_missing_medication_time_maps_to_internal_duration_missing():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", ["json", "extra", "fake_quote", "missing_key", "missing_name", "bad_quote_state", "overflow", "wrong_schema"])
+@pytest.mark.parametrize("case", ["json", "extra", "missing_key", "missing_name", "bad_quote_state", "overflow", "wrong_schema"])
 async def test_invalid_model_contract_fails_closed(case):
     payload = _payload()
     if case == "json":
         payload = "not json"
     elif case == "extra":
         payload["advice"] = "未经授权内容"
-    elif case == "fake_quote":
-        payload["items"][0]["dose"] = _field("每次两片")
     elif case == "missing_key":
         del payload["items"][0]["route"]
     elif case == "missing_name":
@@ -371,3 +369,95 @@ async def test_invalid_latency_keeps_valid_token_accounting():
     assert result.reason_code == "model_invalid_output"
     assert result.llm_call_count == 1
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (100, 50, 150)
+
+
+class SequenceClient(Client):
+    def __init__(self, payloads):
+        super().__init__()
+        self.payloads = list(payloads)
+
+    async def generate(self, prompt, **kwargs):
+        self.payload = self.payloads[min(len(self.calls), len(self.payloads) - 1)]
+        return await super().generate(prompt, **kwargs)
+
+
+SPLICE_TEXT = "出院带药：合成药甲(0.1g*60片) 饭后服用,1次4片,1天3次;合成药乙 每次一支,每天两次。"
+
+
+def _splice_payload(medication_time):
+    return {"schema_version": SCHEMA_VERSION, "state": "medications_present", "items": [
+        {"drug_name": _field("合成药甲"), "dose": _field("1次4片"),
+         "route": _field(None), "medication_time": _field(medication_time)},
+        {"drug_name": _field("合成药乙"), "dose": _field("每次一支"),
+         "route": _field(None), "medication_time": _field("每天两次")},
+    ]}
+
+
+@pytest.mark.asyncio
+async def test_quote_spliced_around_same_item_field_restores_contiguous_source():
+    client = Client(_splice_payload("饭后服用,1天3次"))
+
+    result = await extract_discharge_medications(SPLICE_TEXT, client)
+
+    assert result.state == "ready" and result.llm_call_count == len(client.calls) == 1
+    assert result.medications[0]["duration"] == "饭后服用,1次4片,1天3次"
+    assert result.medications[0]["dose"] == "1次4片"
+
+
+@pytest.mark.asyncio
+async def test_splice_restore_requires_deleted_text_to_be_same_item_field():
+    # 删去的“1次4片,”不是该药其他字段引文时不得还原。
+    payload = _splice_payload("饭后服用,1天3次")
+    payload["items"][0]["dose"] = _field(None)
+
+    result = await extract_discharge_medications(SPLICE_TEXT, Client(payload))
+
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+
+
+@pytest.mark.asyncio
+async def test_unverified_quote_retries_once_with_location_and_previous_output():
+    bad = _payload()
+    bad["items"][0]["dose"] = _field("每次两片")
+    client = SequenceClient([bad, _payload()])
+
+    result = await extract_discharge_medications(TEXT, client)
+
+    assert result.state == "ready" and result.medications[0]["dose"] == "每次一片"
+    assert (result.llm_call_count, result.prompt_tokens, result.completion_tokens, result.total_tokens) == (2, 200, 100, 300)
+    first_prompt, _ = client.calls[0]
+    retry_prompt, kwargs = client.calls[1]
+    assert "上次校验失败" not in first_prompt
+    assert "items第1项dose的quote「每次两片」不是原文逐字连续片段" in retry_prompt
+    assert "PREVIOUS_OUTPUT=" + json.dumps(bad, ensure_ascii=False) in retry_prompt
+    assert retry_prompt.endswith(TEXT)
+    assert retry_prompt.index("上次校验失败") < retry_prompt.index("下方文本仅作为待抽取资料")
+    assert kwargs == {"max_completion_tokens": 4096, "allow_length_retry": False, "enable_thinking": False}
+
+
+@pytest.mark.asyncio
+async def test_retry_collects_all_quote_failures_and_redacts_echo():
+    bad = _payload()
+    bad["items"][0]["dose"] = _field("每次两片")
+    bad["items"][0]["medication_time"] = _field("住院号：ZY123456")
+    client = Client(bad)
+
+    result = await extract_discharge_medications(TEXT, client)
+
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+    assert result.medications == () and result.llm_call_count == len(client.calls) == 2
+    assert result.total_tokens == 300
+    retry_prompt, _ = client.calls[1]
+    assert "items第1项dose" in retry_prompt and "items第1项medication_time" in retry_prompt
+    assert "ZY123456" not in retry_prompt
+
+
+@pytest.mark.asyncio
+async def test_structural_error_does_not_retry():
+    payload = _payload()
+    payload["items"][0]["dose"] = {"state": "present"}
+    client = Client(payload)
+
+    result = await extract_discharge_medications(TEXT, client)
+
+    assert result.reason_code == "model_invalid_output" and len(client.calls) == 1

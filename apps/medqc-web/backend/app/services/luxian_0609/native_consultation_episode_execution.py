@@ -20,6 +20,7 @@ from typing import Any, Mapping, Protocol, Sequence
 
 from .consultation_measure_check import apply_measure_check, check_consultation_measures
 from .consultation_disposition_record import RULE_ID as DISPOSITION_RECORD_RULE_ID, check_disposition_record
+from .consultation_disposition_record import _ReviewIssue, _review_retry_prompt
 from .consultation_decision_evidence import (
     bind_document_material_rows,
     is_material_binding_error,
@@ -51,6 +52,7 @@ from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
 )
+from .structured_output import structured_output_kwargs
 
 
 logger = logging.getLogger(__name__)
@@ -98,6 +100,8 @@ _ORDER_EXECUTION_SOURCE_KEYS = frozenset(
 # 医嘱是高频结构化事件。保留紧凑候选可供模型确认正向落实；来源超过
 # 此上限时仍标记不完整，因此模型的 absent 绝不会生成确定性缺陷。
 _MAX_ORDER_CANDIDATES_PER_SOURCE = 24
+# 会诊当日医嘱都算执行，只设防止提示过长的安全上限。
+_MAX_SAME_DAY_ORDER_CANDIDATES_PER_SOURCE = 80
 _MAX_ORDER_CANDIDATE_CHARS = 180
 _EXECUTION_SOURCE_KEYS = (
     "daily_course_record",
@@ -251,7 +255,8 @@ _PLANNED_ONLY_TRACE_PATTERN = re.compile(
 _EXECUTION_TRACE_BOUNDARY_PROMPT = (
     "会诊执行记录是事后总结，文书记录时间不代表实际会诊发生时间，医嘱可先开立、隔日再补写记录。"
     "对已提供的本次住院医嘱，不得仅因早于执行记录时间或日期就否认；仍须核对本次建议与具体治疗动作是否相符，"
-    "并结合原文确认对应本次建议，既往治疗、无关医嘱、仅同次住院或仅同科室均不能证明执行。"
+    "并结合原文确认对应本次建议，既往治疗、无关医嘱、仅同次住院或仅同科室均不能证明执行；"
+    "但建议本身写明“继续/维持”原有治疗时，会诊前已开立的同一药物或治疗医嘱就是执行证据，不属于既往治疗。"
     "‘遵会诊意见 + 明确具体动作’属于specific_trace；只有未写任何具体动作的裸句"
     "‘遵会诊意见执行’才属于generic_trace。"
     "execution_record_state只评价所选病程写法是否具体，不评价整条建议是否全部落实；"
@@ -1275,6 +1280,38 @@ def _candidate_documents(
         if evidence_materials is not None and evidence_snapshot is not None
         else _EXECUTION_SOURCE_KEYS
     )
+    # 无正文主表头还可由同一检查/检验的完整报告代表。只接受同一快照内、
+    # 本次住院窗口中可投递的报告，不能用另一检查、截断来源或缺时报告补足。
+    covered_master_ids: dict[str, set[str]] = {}
+    if evidence_materials is not None and evidence_snapshot is not None:
+        for master, report, identity_field in (
+            ("exam_master", "exam_item_report", "exam_id"),
+            ("labtest_master", "labtest_item_report", "test_id"),
+        ):
+            observation = next(
+                (item for item in evidence_snapshot.observations if item.source_key == report),
+                None,
+            )
+            if observation is None or observation.completeness is not SourceCompleteness.COMPLETE:
+                continue
+            try:
+                report_rows = _read_rows(
+                    source_key=report, institute_id=institute_id, patient_id=patient_id,
+                    visit_id=visit_id, source_schema=source_schema,
+                    evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot,
+                    allow_truncated=False,
+                )
+            except (_SourceGap, _SourceTechnical):
+                continue
+            covered_master_ids[master] = {
+                identity
+                for row in report_rows
+                if (identity := _clean(row.get(identity_field)))
+                and (observed_time := _row_time(row, source_key=report)) is not None
+                and stay_window.contains(observed_time)
+                and (text := _candidate_text(row=row, source_key=report))
+                and len(text) <= _MAX_CANDIDATE_CHARS
+            }
     preloaded_course_rows: dict[str, tuple[str, Sequence[Mapping[str, Any]]]] = {}
     for source_key in source_keys:
         if source_key not in _COURSE_EXECUTION_SOURCE_KEYS:
@@ -1391,11 +1428,23 @@ def _candidate_documents(
                 # 空工件，不能仅因它同时缺时间就把完整病程来源降为不完整。
                 continue
             if not text and source_key in _MASTER_HEADER_SOURCE_KEYS:
+                identity_field = "exam_id" if source_key == "exam_master" else "test_id"
+                if _clean(row.get(identity_field)) in covered_master_ids.get(source_key, set()):
+                    continue
                 linked_order_ids = {
                     part for part in re.split(r"[+^]", _clean(row.get("order_id"))) if part
                 }
                 if linked_order_ids and linked_order_ids <= observed_order_ids:
                     continue
+            if (
+                source_key == "labtest_master"
+                and observed_time is None
+                and text == _clean(row.get("labtest_subject"))
+                and _clean(row.get("test_id")) in covered_master_ids.get(source_key, set())
+            ):
+                # 只有检验项目名的主表头不另承载临床事实；同键完整、可定时的
+                # 报告已代表该事件。独立正文、无关报告或缺时报告仍保留缺口。
+                continue
             if observed_time is None or not text or len(text) > text_limit:
                 source_is_complete = False
                 continue
@@ -1586,7 +1635,8 @@ def _compact_document_prompt(
         + _RECOMMENDATION_ACTION_BOUNDARY_PROMPT +
         "recommendations仅用于ordinary且意见clear、confidence=high的可执行建议；不得把诊断、风险描述、"
         "既往史或泛化继续治疗当建议。建议身份由Python按数组顺序生成，禁止输出recommendation_ref；action_type只能是"
-        "medication/test/procedure/transfer/monitoring/other；source_quote优先返回该文书的连续支持原句，最长240字；"
+        "medication/test/procedure/transfer/monitoring/other（卧床、活动、体位、制动方式、饮食与营养目标、护理、宣教、"
+        "随诊及继续原科室治疗等不通过开立医嘱落实的建议一律为other）；source_quote优先返回该文书的连续支持原句，最长240字；"
         "normalized_action只做医学归一化，不得虚构。non_target/unknown的recommendations必须为空。"
         "每个输入ref必须恰好输出一次，禁止创造、改写、遗漏或重复ref。"
         "严格输出JSON对象：{consultation_event_facts:[{ref,scope,application_state,opinion_state,confidence,"
@@ -1668,7 +1718,8 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         + _RECOMMENDATION_ACTION_BOUNDARY_PROMPT +
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
-        "medication/test/procedure/transfer/monitoring/other。每项必须返回opinion_ref、source_quote和normalized_action："
+        "medication/test/procedure/transfer/monitoring/other（卧床、活动、体位、制动方式、饮食与营养目标、护理、宣教、"
+        "随诊及继续原科室治疗等不通过开立医嘱落实的建议一律为other）。每项必须返回opinion_ref、source_quote和normalized_action："
         "opinion_ref只能是本episode的opinion_refs之一；source_quote用于人工溯源，优先摘录该单一意见文书的支持性原句，"
         "不得拼接多个文书、删改否定词、剂量或数值，最长240字；normalized_action仅用于后续语义关联，"
         "允许source_quote和normalized_action作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
@@ -1684,6 +1735,7 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
 def _parse_compact_document_facts(
     payload: Mapping[str, Any],
     documents: Sequence[Mapping[str, str]],
+    *, review_issues: list[_ReviewIssue] | None = None,
 ) -> tuple[_Episode, ...]:
     raw_facts = payload.get("consultation_event_facts")
     if not isinstance(raw_facts, list):
@@ -1735,6 +1787,8 @@ def _parse_compact_document_facts(
                 or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
             ):
                 raise _SemanticInvalid()
+            if not isinstance(source_quote, str):
+                raise _SemanticInvalid()
             grounded_source_quote = ""
             if (
                 isinstance(source_quote, str)
@@ -1746,6 +1800,13 @@ def _parse_compact_document_facts(
                 )
             ):
                 grounded_source_quote = source_quote
+            if not grounded_source_quote and review_issues is not None:
+                review_issues.append(_ReviewIssue(
+                    "recommendation quote not grounded",
+                    f"recommendation_ref={recommendation_ref} opinion_ref={ref}.source_quote",
+                    source_quote,
+                    "须逐字摘取所属文书的支持原句，不得改写或跨文书拼接，最长240字",
+                ))
             recommendations.append(
                 _Recommendation(
                     recommendation_ref,
@@ -1914,9 +1975,10 @@ def _merge_authoritative_event_group_splits(
     return tuple(normalized)
 
 
-def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -> tuple[_Episode, ...]:
+def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *,
+           review_issues: list[_ReviewIssue] | None = None) -> tuple[_Episode, ...]:
     if _uses_compact_document_contract(documents):
-        return _parse_compact_document_facts(payload, documents)
+        return _parse_compact_document_facts(payload, documents, review_issues=review_issues)
     raw_episodes = payload.get("episodes")
     non_target = payload.get("non_target_refs")
     unresolved = payload.get("unresolved_refs")
@@ -2088,10 +2150,18 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     return tuple(episodes)
 
 
+class _EpisodeGroundingViolation(_SemanticInvalid):
+    """第一阶段逐条落地问题；异常种类与原技术错误合同一致。"""
+
+    def __init__(self, issues: Sequence[_ReviewIssue]) -> None:
+        super().__init__()
+        self.issues = tuple(issues)
+
+
 def _episode_recommendations_are_grounded(
     episodes: Sequence[_Episode],
     documents: Sequence[Mapping[str, str]],
-) -> bool:
+) -> tuple[_ReviewIssue, ...]:
     """已解析建议的 source_quote 必须能由该建议所属意见文书逐字支持。
 
     问题证据：第一阶段模型可能给出 schema 完全合法、但在意见原文中并不存在
@@ -2100,21 +2170,25 @@ def _episode_recommendations_are_grounded(
     不再调用模型，错误会长期固化。
 
     具体判据见 _recommendation_quote_is_grounded（复用同一归一化，不做同义
-    替换或医学解释）；任何一条不通过即整体不通过。
+    替换或医学解释）；收集全部失败项，补核后仍须全部通过才能冻结。
     """
 
     documents_by_ref = {str(item["ref"]): item for item in documents}
+    issues: list[_ReviewIssue] = []
     for episode in episodes:
         for recommendation in episode.recommendations:
             document = documents_by_ref.get(recommendation.opinion_ref)
-            if document is None:
-                return False
-            if not _recommendation_quote_is_grounded(
+            if document is None or not _recommendation_quote_is_grounded(
                 quote=recommendation.source_quote,
                 source=str(document.get("text") or ""),
             ):
-                return False
-    return True
+                issues.append(_ReviewIssue(
+                    "recommendation quote not grounded",
+                    f"recommendation_ref={recommendation.recommendation_ref} opinion_ref={recommendation.opinion_ref}.source_quote",
+                    recommendation.source_quote,
+                    "source_quote须按该opinion_ref原文逐字摘录，不得改写；仅可引用给定文书，不得跨文书拼接",
+                ))
+    return tuple(issues)
 
 
 def _consultation_semantic_display_facts(
@@ -2310,6 +2384,8 @@ def _consultation_execution_display_facts(
     documents: Sequence[Mapping[str, str]],
     candidates: Sequence[_CandidateDocument] = (),
     excluded_recommendations: Sequence[_CompletedRecommendation] = (),
+    order_scope_excluded: Sequence[_CompletedRecommendation] = (),
+    missing_measures_by_ref: Mapping[str, Sequence[str]] | None = None,
 ) -> Mapping[str, Any]:
     """解释020的关联结果或023的执行质量结果。"""
 
@@ -2616,6 +2692,23 @@ def _consultation_execution_display_facts(
                     "execution_refs": execution_evidence[:8],
                 }
             )
+            if rule_id == "LX0609-03-01-04":
+                # 告诉医生按哪一天去核对医嘱；逐项核对缺失的措施逐字摘自建议原文。
+                if item.opinion_time is not None:
+                    recommendation_evidence[-1]["opinion_time"] = (
+                        item.opinion_time.value.strftime("%Y-%m-%d %H:%M:%S")
+                        if item.opinion_time.precise
+                        else item.opinion_time.value.strftime("%Y-%m-%d")
+                    )
+                missing_measures = [
+                    redact_luxian_0609_patient_privacy(_clean(measure))[:40]
+                    for measure in (missing_measures_by_ref or {}).get(
+                        item.recommendation.recommendation_ref, ()
+                    )
+                    if _clean(measure)
+                ][:8]
+                if missing_measures:
+                    recommendation_evidence[-1]["missing_measures"] = missing_measures
         if rule_id == "LX0609-03-01-01":
             facts["recommendation_results"] = recommendation_results
         facts["recommendation_evidence"] = recommendation_evidence[:96]
@@ -2630,6 +2723,18 @@ def _consultation_execution_display_facts(
                 }
                 for item in excluded_recommendations[:96]
             ]
+        if rule_id == "LX0609-03-01-04" and order_scope_excluded:
+            facts.setdefault("excluded_recommendations", []).extend(
+                {
+                    "episode_index": episode_indexes[item.episode_ref],
+                    "recommendation_text": redact_luxian_0609_patient_privacy(
+                        _clean(item.recommendation.normalized_action)
+                    ),
+                    "exclusion_reason": _order_scope_exclusion_reason(item.recommendation),
+                }
+                for item in order_scope_excluded[:96]
+            )
+            facts["excluded_recommendations"] = facts["excluded_recommendations"][:96]
     return facts
 
 
@@ -2821,8 +2926,11 @@ def _execution_prompt(
             if embedded_same_episode:
                 include = True
             elif candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
-                # 医嘱已受本次住院窗口约束；执行记录是总结，不能用其书写时间作医嘱下限。
-                include = True
+                include = _order_in_execution_window(
+                    candidate.observed_time,
+                    item.opinion_time,
+                    continuation=_is_continuation_recommendation(item.recommendation),
+                )
             elif candidate.observed_time.day > item.opinion_time.day:
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:
@@ -2845,17 +2953,35 @@ def _execution_prompt(
                 order_candidates_by_source.setdefault(candidate.source_key, []).append(
                     candidate
                 )
+        # “继续”类建议会纳入会诊前的全部医嘱，按时间远近截断会丢掉数日前开立的
+        # 长期医嘱；与建议原文有连续三字重合（如药名）的医嘱优先保留，其次会诊当日。
+        # 用户口径（2026-10-20）会诊当日医嘱都算，当日医嘱只受较宽的安全上限约束，
+        # 不能被 24 条名额截掉（真实病例当日非药品医嘱可达 58 条）。
+        recommendation_trigrams = _cjk_trigrams(_recommendation_text(item.recommendation))
         kept_order_refs: set[str] = set()
         for per_source in order_candidates_by_source.values():
+            ordered = sorted(
+                per_source,
+                key=lambda candidate: (
+                    0 if recommendation_trigrams & _cjk_trigrams(candidate.text) else 1,
+                    abs(candidate.observed_time.value - item.opinion_time.value),
+                    candidate_rank[candidate.ref],
+                ),
+            )
+            same_day = [
+                candidate for candidate in ordered
+                if candidate.observed_time.day == item.opinion_time.day
+            ]
+            earlier = [
+                candidate for candidate in ordered
+                if candidate.observed_time.day != item.opinion_time.day
+            ]
             kept_order_refs.update(
                 candidate.ref
-                for candidate in sorted(
-                    per_source,
-                    key=lambda candidate: (
-                        abs(candidate.observed_time.value - item.opinion_time.value),
-                        candidate_rank[candidate.ref],
-                    ),
-                )[:_MAX_ORDER_CANDIDATES_PER_SOURCE]
+                for candidate in (
+                    *same_day[:_MAX_SAME_DAY_ORDER_CANDIDATES_PER_SOURCE],
+                    *earlier[:_MAX_ORDER_CANDIDATES_PER_SOURCE],
+                )
             )
         kept_refs = {
             candidate.ref
@@ -2990,6 +3116,54 @@ def _execution_prompt(
         + payload
     )
     return prompt, allowed_refs
+
+
+def _execution_event_batches(
+    *,
+    completed: Sequence[_CompletedRecommendation],
+    candidates: Sequence[_CandidateDocument],
+) -> tuple[tuple[_CompletedRecommendation, ...], ...]:
+    """按完整会诊意见事件分批，沿用原有后续时序过滤，不裁短正文。
+
+    保留可容纳的原单批路径；全部分批先做容量预检，任一事件仍超限即
+    资料不足，不能跳过事件或把下一次会诊当成未经确认的执行截止点。
+    """
+    try:
+        _execution_prompt(completed=completed, candidates=candidates)
+        return (tuple(completed),)
+    except _SourceGap:
+        pass
+    grouped: dict[tuple[str, str], list[_CompletedRecommendation]] = {}
+    for item in completed:
+        grouped.setdefault((item.episode_ref, item.recommendation.opinion_ref), []).append(item)
+    batches: list[tuple[_CompletedRecommendation, ...]] = []
+    pending: tuple[_CompletedRecommendation, ...] = ()
+    for items in grouped.values():
+        event = tuple(items)
+        try:
+            _execution_prompt(completed=event, candidates=candidates)
+        except _SourceGap:
+            # 单次会诊建议多、每条各带当日及（继续类）此前医嘱时，整事件可超上限
+            # （真实 C01 一次会诊 13 条建议、571 条医嘱候选）。逐条建议单独成批，
+            # 候选与时序口径不变；单条仍超限才按资料不足。
+            for item in event:
+                _execution_prompt(completed=(item,), candidates=candidates)
+            if pending:
+                batches.append(pending)
+                pending = ()
+            batches.extend((item,) for item in event)
+            continue
+        proposed = (*pending, *event)
+        try:
+            _execution_prompt(completed=proposed, candidates=candidates)
+        except _SourceGap:
+            batches.append(pending)
+            pending = event
+        else:
+            pending = proposed
+    if pending:
+        batches.append(pending)
+    return tuple(batches)
 
 
 def _generic_trace_conflicts_with_completed_action(
@@ -3502,6 +3676,300 @@ def _every_recommendation_has_trace(
 
 _RECORDED_TRACE_LEVELS = frozenset({"specific_trace", "generic_trace"})
 _ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
+# 用户口径（2026-10-20）：023 会诊执行只认会诊记录当天开立的医嘱，不看病程；只核对需通过医嘱落实的建议
+# （药物、检查检验、操作治疗、转科），卧床/活动/体位/饮食营养目标/护理宣教等不属于医嘱，不核对。
+_ORDER_RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer"})
+_CONTINUATION_RECOMMENDATION_PATTERN = re.compile(
+    r"^\s*(?:建议|可|暂|拟|予)*(?:继续|维持|续用|仍予|仍用)"
+)
+# 模型偶把“改前臂吊带”“骨盆骨折卧床”等归为操作类，这里按关键词兜底剔除；
+# 同一建议含明确药物、检查或手术操作时仍按医嘱核对。
+_NON_ORDER_RECOMMENDATION_PATTERN = re.compile(
+    r"吊带|悬吊|夹板|卧床|体位|制动|饮食|营养目标|护理|宣教|功能锻炼|随诊"
+)
+_ORDER_RECOMMENDATION_HINT_PATTERN = re.compile(
+    r"药|mg|片|注射|输注|静滴|口服|检查|复查|CT|MRI|彩超|手术|穿刺|切开|置管|转科"
+)
+# 用户口径（2026-10-20）：院外自带药（“继续服用原降压药”等）不核对。
+_HOME_MEDICATION_PATTERN = re.compile(
+    r"自备|自带|院外|家中|原(?![发则因])(?:有|来|口服)?[^，,。；;]{0,8}药"
+)
+# 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对。当天有对应医嘱即视为
+# 条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
+_CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
+    r"若|如果|假如|倘若|如[^，,。；;]{1,16}(?:则|时|者)|待[^，,。；;]{1,24}后"
+    r"|(?:同意|稳定|好转|平稳|缓解|无[^，,。；;]{0,4}异常|正常|允许|阴性|阳性)[^，,。；;]{0,6}?(?:后|则)"
+    r"|必要时|酌情|视情况"
+)
+_CLAUSE_SPLIT_PATTERN = re.compile(r"[，,；;。\n]")
+
+
+def _order_in_execution_window(
+    order_time: "_ObservedTime",
+    opinion_time: "_ObservedTime",
+    *,
+    continuation: bool,
+) -> bool:
+    """用户口径（2026-10-20）：只认会诊记录当天开立的医嘱，记录前后都算；次日起开立的不算。
+
+    “继续/维持”原治疗的建议，会诊当天之前已开立的医嘱也即为执行。
+    """
+
+    if order_time.day > opinion_time.day:
+        return False
+    return continuation or order_time.day == opinion_time.day
+
+
+def _is_continuation_recommendation(recommendation: "_Recommendation") -> bool:
+    return bool(
+        _CONTINUATION_RECOMMENDATION_PATTERN.match(_clean(recommendation.source_quote))
+        or _CONTINUATION_RECOMMENDATION_PATTERN.match(_clean(recommendation.normalized_action))
+    )
+
+
+def _recommendation_text(recommendation: "_Recommendation") -> str:
+    return f"{_clean(recommendation.source_quote)}；{_clean(recommendation.normalized_action)}"
+
+
+_CJK_RUN_PATTERN = re.compile(r"[一-鿿]{3,}")
+
+
+def _cjk_trigrams(text: str) -> frozenset[str]:
+    return frozenset(
+        run[index:index + 3]
+        for run in _CJK_RUN_PATTERN.findall(text or "")
+        for index in range(len(run) - 2)
+    )
+
+
+def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
+    if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
+        return False
+    text = _recommendation_text(recommendation)
+    if _HOME_MEDICATION_PATTERN.search(text):
+        return False
+    return not (
+        _NON_ORDER_RECOMMENDATION_PATTERN.search(text)
+        and not _ORDER_RECOMMENDATION_HINT_PATTERN.search(text)
+    )
+
+
+def _order_scope_exclusion_reason(recommendation: "_Recommendation") -> str:
+    """023 未纳入核对的原因：非医嘱类建议、院外自带药，或条件未成立。"""
+
+    if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
+        return "non_order_recommendation"
+    text = _recommendation_text(recommendation)
+    if _HOME_MEDICATION_PATTERN.search(text):
+        return "home_medication"
+    if not _is_order_recommendation(recommendation):
+        return "non_order_recommendation"
+    return "condition_not_met"
+
+
+def _is_conditional_recommendation(recommendation: "_Recommendation") -> bool:
+    """整条建议以条件开头才算条件式；“先查A，若阴性则行B”前半句仍须执行。"""
+
+    text = _clean(recommendation.source_quote) or _clean(recommendation.normalized_action)
+    first_clause = _CLAUSE_SPLIT_PATTERN.split(text, maxsplit=1)[0]
+    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(first_clause))
+
+
+def _measure_in_conditional_clause(recommendation: "_Recommendation", measure: str) -> bool:
+    """措施所在分句带条件（如“无明显异常后行气管切开”）时，未见医嘱视为条件未成立。"""
+
+    target = _clean(measure)
+    for text in (_clean(recommendation.source_quote), _clean(recommendation.normalized_action)):
+        for clause in _CLAUSE_SPLIT_PATTERN.split(text):
+            if target and target in clause and _CONDITIONAL_RECOMMENDATION_PATTERN.search(clause):
+                return True
+    return False
+
+
+def _drop_conditional_missing_measures(
+    outcome: Any, completed: Sequence["_CompletedRecommendation"],
+) -> Any:
+    by_ref = {item.recommendation.recommendation_ref: item.recommendation for item in completed}
+    missing = {
+        ref: tuple(
+            measure for measure in measures
+            if ref not in by_ref or not _measure_in_conditional_clause(by_ref[ref], measure)
+        )
+        for ref, measures in outcome.missing_measures.items()
+    }
+    return replace(outcome, missing_measures=missing)
+
+
+def _measure_check_scope(
+    completed: Sequence["_CompletedRecommendation"],
+    assessments: Sequence["_ExecutionAssessment"] | None,
+) -> tuple["_CompletedRecommendation", ...]:
+    """逐项核对只针对已由医嘱证明执行的建议；会诊文书内的暂缓/拒绝决定不再逐项要求医嘱。"""
+
+    in_scope, view = _order_execution_view(completed, assessments)
+    if view is None:
+        return in_scope
+    with_orders = {
+        item.recommendation_ref for item in view
+        if any(ref.startswith(_ORDER_EXECUTION_REF_PREFIXES) for ref in item.execution_refs)
+    }
+    return tuple(item for item in in_scope if item.recommendation.recommendation_ref in with_orders)
+
+
+# 药名/检查名能否对上是结构化比对，由程序确定性判定（真实样本 C02“小牛血去蛋白提取物眼用凝胶”
+# 医嘱在候选内，模型在长输入中两轮一找到一漏掉）。只把模型的“未找到”补成已开立，不改其他判断；
+# 停用、减量类建议开着同名医嘱恰不算执行，不适用。
+_ORDER_NAME_NOISE_PATTERN = re.compile(r"[（(][^（）()]*[）)]")
+_ORDER_LEXICAL_EXCLUDED_PATTERN = re.compile(r"停用|停止|停药|暂停|减量|减停|禁用|避免|慎用|不宜")
+_ORDER_LEXICAL_MIN_CHARS = 4
+_ORDER_LEXICAL_MIN_COVERAGE = 0.6
+
+
+def _order_core_name(candidate_text: str) -> str:
+    name = _clean(candidate_text).split("；", 1)[0]
+    return _ORDER_NAME_NOISE_PATTERN.sub("", name).strip()
+
+
+def _longest_common_run(left: str, right: str) -> int:
+    best = 0
+    previous = [0] * (len(right) + 1)
+    for left_char in left:
+        current = [0] * (len(right) + 1)
+        for index, right_char in enumerate(right, start=1):
+            if left_char == right_char:
+                current[index] = previous[index - 1] + 1
+                best = max(best, current[index])
+        previous = current
+    return best
+
+
+def _order_name_matches(recommendation_text: str, candidate_text: str) -> bool:
+    core = _order_core_name(candidate_text)
+    if len(core) < _ORDER_LEXICAL_MIN_CHARS:
+        return False
+    run = _longest_common_run(core, recommendation_text)
+    return run >= _ORDER_LEXICAL_MIN_CHARS and run >= len(core) * _ORDER_LEXICAL_MIN_COVERAGE
+
+
+def _settle_recommendations_without_any_candidate(
+    assessments: Sequence["_ExecutionAssessment"],
+    *,
+    completed: Sequence["_CompletedRecommendation"],
+    candidates: Sequence["_CandidateDocument"],
+    source_incomplete_keys: frozenset[str],
+) -> tuple["_ExecutionAssessment", ...]:
+    """执行窗口内没有任何候选（如会诊当日无医嘱）且医嘱来源完整时，确定性判为未执行。
+
+    真实 C02 11-17 会诊当日医嘱为 0 条，二阶段只投医嘱后该建议候选为空，模型答 unknown
+    使整例落资料不足；用户口径（2026-10-20）当日确实没有医嘱即判不合规。
+    """
+
+    if _ORDER_EXECUTION_SOURCE_KEYS & source_incomplete_keys:
+        return tuple(assessments)
+    by_ref = {item.recommendation.recommendation_ref: item for item in completed}
+    settled: list[_ExecutionAssessment] = []
+    for assessment in assessments:
+        item = by_ref.get(assessment.recommendation_ref)
+        if item is None or assessment.execution_state != "unknown":
+            settled.append(assessment)
+            continue
+        _, allowed = _execution_prompt(completed=(item,), candidates=candidates)
+        if allowed.get(assessment.recommendation_ref):
+            settled.append(assessment)
+            continue
+        settled.append(replace(
+            assessment, execution_state="absent", execution_refs=(), confidence="high",
+            execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
+        ))
+    return tuple(settled)
+
+
+def _apply_lexical_order_matches(
+    assessments: Sequence["_ExecutionAssessment"],
+    *,
+    completed: Sequence["_CompletedRecommendation"],
+    candidates: Sequence["_CandidateDocument"],
+) -> tuple["_ExecutionAssessment", ...]:
+    by_ref = {item.recommendation.recommendation_ref: item for item in completed}
+    upgraded: list[_ExecutionAssessment] = []
+    for assessment in assessments:
+        item = by_ref.get(assessment.recommendation_ref)
+        if (
+            item is None
+            or assessment.execution_state != "absent"
+            or assessment.execution_refs
+            or assessment.trace_refs
+            or _ORDER_LEXICAL_EXCLUDED_PATTERN.search(_recommendation_text(item.recommendation))
+        ):
+            upgraded.append(assessment)
+            continue
+        _, allowed = _execution_prompt(completed=(item,), candidates=candidates)
+        allowed_refs = allowed.get(assessment.recommendation_ref, frozenset())
+        text = _recommendation_text(item.recommendation)
+        matched = tuple(
+            candidate.ref for candidate in candidates
+            if candidate.ref in allowed_refs
+            and candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+            and _order_name_matches(text, candidate.text)
+        )[:8]
+        upgraded.append(
+            replace(assessment, execution_state="linked_specific", execution_refs=matched)
+            if matched
+            else assessment
+        )
+    return tuple(upgraded)
+
+
+def _order_execution_view(
+    completed: Sequence["_CompletedRecommendation"],
+    assessments: Sequence["_ExecutionAssessment"] | None,
+) -> tuple[tuple["_CompletedRecommendation", ...], tuple["_ExecutionAssessment", ...] | None]:
+    """023 只按医嘱核对：剔除非医嘱类建议，并把病程痕迹从执行证据中去掉。
+
+    同次会诊文书内明确暂缓/拒绝的闭环决定仍按已处理保留；医嘱候选在二阶段
+    已按会诊当日窗口过滤，这里只保留医嘱引用。条件式建议没有对应医嘱时视为
+    条件未成立，不纳入核对。
+    """
+
+    in_scope = tuple(
+        item for item in completed if _is_order_recommendation(item.recommendation)
+    )
+    if assessments is None:
+        return in_scope, None
+    by_ref = {item.recommendation_ref: item for item in assessments}
+    view: list[_ExecutionAssessment] = []
+    kept: list[_CompletedRecommendation] = []
+    for item in in_scope:
+        kept.append(item)
+        assessment = by_ref.get(item.recommendation.recommendation_ref)
+        if assessment is None:
+            view.append(_unknown_execution_assessment(item.recommendation.recommendation_ref))
+            continue
+        opinion_ref = item.recommendation.opinion_ref
+        if assessment.execution_record_state == "specific_trace" and opinion_ref in assessment.trace_refs:
+            view.append(assessment)
+            continue
+        order_refs = tuple(
+            ref for ref in assessment.execution_refs if ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
+        )
+        if order_refs and assessment.execution_state in {"linked_specific", "linked_vague"}:
+            view.append(replace(
+                assessment, execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
+                execution_refs=order_refs,
+            ))
+        elif assessment.execution_state == "unknown":
+            view.append(replace(
+                assessment, execution_record_state="unknown", trace_refs=(), context_only_refs=(),
+                execution_refs=(),
+            ))
+        elif _is_conditional_recommendation(item.recommendation):
+            kept.pop()
+        else:
+            view.append(replace(
+                assessment, execution_record_state="no_trace", trace_refs=(), context_only_refs=(),
+                execution_refs=(), execution_state="absent",
+            ))
+    return tuple(kept), tuple(view)
 
 
 def _execution_quality_outcome(
@@ -3637,10 +4105,13 @@ def _execution_outcome(
     if rule_id == "LX0609-03-01-01" and _every_recommendation_has_trace(assessments):
         return "compliant", "requirement_satisfied"
     if rule_id == "LX0609-03-01-04":
+        order_completed, order_assessments = _order_execution_view(
+            completed_recommendations, assessments,
+        )
         return _execution_quality_outcome(
-            assessments=assessments,
-            completed_recommendations=completed_recommendations,
-            source_incomplete_keys=source_incomplete_keys,
+            assessments=order_assessments,
+            completed_recommendations=order_completed,
+            source_incomplete_keys=source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
         )
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
@@ -3839,6 +4310,10 @@ def _decision(
     snapshot: Luxian0609EvidenceSnapshot,
     fact_refs: Sequence[str] = (),
 ) -> RuleDecision:
+    # 正式决策中，候选未能完整投递是资料不足，并非证据相互冲突。
+    # 兼容入口的旧状态仍保留，typed 路径按本规则允许的资料不足合同交付。
+    if status == "evaluation_unknown" and reason_code == "candidate_scope_incomplete":
+        status = "data_gap"
     if status == "compliant":
         dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.SATISFIED)
     elif status == "non_compliant":
@@ -3852,6 +4327,15 @@ def _decision(
     else:
         dimensions = (ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR, QcDirection.UNKNOWN)
     applicability, evidence_state, direction = dimensions
+    if status == "technical_error":
+        # 模型诊断码保留在兼容结果；typed 决策只映射已知分类，不放行未知码。
+        reason_code = {
+            "model_rate_limited": "model_transport_error",
+            "model_upstream_error": "model_transport_error",
+            "model_http_error": "executor_exception",
+            "model_configuration_error": "executor_exception",
+            "execution_program_error": "executor_exception",
+        }.get(reason_code, reason_code)
     return RuleDecision(
         rule_id=rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -4258,23 +4742,40 @@ async def _execute_consultation_episode_rules(
         if frozen is not None:
             payload = dict(frozen.payload)
         else:
-            started = time.perf_counter()
-            phase = "call"
-            calls += 1
-            response = await llm_client.generate(_prompt(documents))
-            phase = "validate"
-            if not isinstance(response, Mapping):
-                raise _SemanticInvalid()
-            prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
-            api_time = response_time or (time.perf_counter() - started)
-            payload = dict(_payload(response))
+            # 仅可确定识别的引文落地违规新增一次补核；结构错误沿用原失败路径。
+            first_prompt = _prompt(documents)
+            attempt_prompt = first_prompt
+            for attempt in range(2):
+                started = time.perf_counter()
+                phase = "call"
+                calls += 1
+                response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
+                phase = "validate"
+                if not isinstance(response, Mapping):
+                    raise _SemanticInvalid()
+                usage = _usage(response)
+                prompt_tokens += usage[0]
+                completion_tokens += usage[1]
+                total_tokens += usage[2]
+                api_time += usage[3] or (time.perf_counter() - started)
+                payload = dict(_payload(response))
+                issues: list[_ReviewIssue] = []
+                episodes = _parse(payload, documents, review_issues=issues)
+                if not issues:
+                    issues.extend(_episode_recommendations_are_grounded(episodes, documents))
+                if not issues:
+                    break
+                error = _EpisodeGroundingViolation(issues)
+                if attempt:
+                    raise error
+                attempt_prompt = _review_retry_prompt(first_prompt, error, response, "输入：")
         phase = "validate"
         episodes = _parse(payload, documents)
         if frozen is None:
-            # 不可逐字落地的事实不得冻结：否则伪造摘录会被长期复用，
-            # 且逐建议执行核对与客户证据定位都建立在摘录可复现之上。
-            if not _episode_recommendations_are_grounded(episodes, documents):
-                raise _SemanticInvalid()
+            # 补核后的事实同样先通过逐条落地校验，才能冻结复用。
+            issues = _episode_recommendations_are_grounded(episodes, documents)
+            if issues:
+                raise _EpisodeGroundingViolation(issues)
             phase = "opinion_freeze"
             freeze_state = save_opinion_payload(
                 visit_id=visit_id,
@@ -4335,6 +4836,8 @@ async def _execute_consultation_episode_rules(
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     excluded_conditional_recommendations: tuple[_CompletedRecommendation, ...] = ()
+    # 023 逐项核对查出的“当日未开立医嘱”措施，供客户展示逐条说明原因。
+    measure_missing_by_ref: dict[str, tuple[str, ...]] = {}
     embedded_decision_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -4429,6 +4932,18 @@ async def _execute_consultation_episode_rules(
                         projection,
                         candidates=projection.candidates + embedded_candidates,
                     )
+                if "LX0609-03-01-01" not in stage_two_rule_ids:
+                    # 用户口径（2026-10-20）：023 只认医嘱、不看病程。020 不在本次范围时，
+                    # 病程、检查检验、手术候选只会撑大输入（真实样本因超 64k 上限整例落资料不足），
+                    # 二阶段只保留医嘱和本次会诊文书（用于识别文书内写明的暂缓/拒绝决定）。
+                    projection = replace(
+                        projection,
+                        candidates=tuple(
+                            item for item in projection.candidates
+                            if item.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+                            or item.source_key == "consultation_record"
+                        ),
+                    )
                 execution_candidate_projection = projection
                 execution_source_technical = projection.source_technical
                 execution_source_incomplete_keys = projection.source_incomplete_keys
@@ -4448,7 +4963,8 @@ async def _execute_consultation_episode_rules(
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
                 elif (
-                    _COURSE_EXECUTION_SOURCE_KEYS.intersection(
+                    "LX0609-03-01-01" in stage_two_rule_ids
+                    and _COURSE_EXECUTION_SOURCE_KEYS.intersection(
                         projection.source_incomplete_keys
                     )
                     and not any(
@@ -4504,372 +5020,398 @@ async def _execute_consultation_episode_rules(
                         for item in completed_recommendations
                     )
                 else:
+                    all_completed_recommendations = completed_recommendations
                     try:
-                        second_prompt, allowed_refs = _execution_prompt(
-                            completed=completed_recommendations,
+                        execution_batches = _execution_event_batches(
+                            completed=all_completed_recommendations,
                             candidates=projection.candidates,
                         )
                     except _SourceGap:
+                        execution_batches = ()
                         for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = (
-                                "evaluation_unknown",
-                                "candidate_scope_incomplete",
+                            statuses[rule_id] = ("evaluation_unknown", "candidate_scope_incomplete")
+                    merged_assessments: list[_ExecutionAssessment] = []
+                    for completed_recommendations in execution_batches:
+                        execution_assessments = None
+                        try:
+                            second_prompt, allowed_refs = _execution_prompt(
+                                completed=completed_recommendations,
+                                candidates=projection.candidates,
                             )
-                        second_prompt = ""
-                        allowed_refs = {}
-                    candidate_by_ref = {
-                        item.ref: item for item in projection.candidates
-                    }
-                    recommendation_refs_without_course_candidates = frozenset(
-                        recommendation_ref
-                        for recommendation_ref, refs in allowed_refs.items()
-                        if not _COURSE_EXECUTION_SOURCE_KEYS.intersection(
-                            projection.source_incomplete_keys
+                        except _SourceGap:
+                            for rule_id in stage_two_rule_ids:
+                                statuses[rule_id] = (
+                                    "evaluation_unknown",
+                                    "candidate_scope_incomplete",
+                                )
+                            second_prompt = ""
+                            allowed_refs = {}
+                        candidate_by_ref = {
+                            item.ref: item for item in projection.candidates
+                        }
+                        recommendation_refs_without_course_candidates = frozenset(
+                            recommendation_ref
+                            for recommendation_ref, refs in allowed_refs.items()
+                            if not _COURSE_EXECUTION_SOURCE_KEYS.intersection(
+                                projection.source_incomplete_keys
+                            )
+                            and not any(
+                                ref in candidate_by_ref
+                                and candidate_by_ref[ref].source_key
+                                in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                                for ref in refs
+                            )
                         )
-                        and not any(
+                        allowed_context_candidate_present = any(
                             ref in candidate_by_ref
                             and candidate_by_ref[ref].source_key
                             in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                            for refs in allowed_refs.values()
                             for ref in refs
                         )
-                    )
-                    allowed_context_candidate_present = any(
-                        ref in candidate_by_ref
-                        and candidate_by_ref[ref].source_key
-                        in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
-                        for refs in allowed_refs.values()
-                        for ref in refs
-                    )
-                    allowed_order_candidate_present = any(
-                        ref in candidate_by_ref
-                        and candidate_by_ref[ref].source_key
-                        in _ORDER_EXECUTION_SOURCE_KEYS
-                        for refs in allowed_refs.values()
-                        for ref in refs
-                    )
-                    if (
-                        not allowed_context_candidate_present
-                        and not allowed_order_candidate_present
-                    ):
-                        if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
-                            # projection 里的会诊前病程会在逐建议时序过滤后失去
-                            # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需的
-                            # 会诊后病程记录，也没有可评价的医嘱动作，确定性
-                            # 收敛为 no_trace。
-                            execution_assessments = tuple(
-                                _ExecutionAssessment(
-                                    item.recommendation.recommendation_ref,
-                                    "absent",
-                                    (),
-                                    "high",
-                                    (),
-                                    "no_trace",
-                                    (),
-                                    (),
+                        allowed_order_candidate_present = any(
+                            ref in candidate_by_ref
+                            and candidate_by_ref[ref].source_key
+                            in _ORDER_EXECUTION_SOURCE_KEYS
+                            for refs in allowed_refs.values()
+                            for ref in refs
+                        )
+                        if (
+                            not allowed_context_candidate_present
+                            and not allowed_order_candidate_present
+                        ):
+                            if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
+                                # projection 里的会诊前病程会在逐建议时序过滤后失去
+                                # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需的
+                                # 会诊后病程记录，也没有可评价的医嘱动作，确定性
+                                # 收敛为 no_trace。
+                                execution_assessments = tuple(
+                                    _ExecutionAssessment(
+                                        item.recommendation.recommendation_ref,
+                                        "absent",
+                                        (),
+                                        "high",
+                                        (),
+                                        "no_trace",
+                                        (),
+                                        (),
+                                    )
+                                    for item in completed_recommendations
                                 )
-                                for item in completed_recommendations
-                            )
-                    else:
-                        exhausted_missing_refs: set[str] = set()
-                        calls += 1
-                        retry_attempted = False
-                        stage_two_phase = "call"
-                        try:
-                            started = time.perf_counter()
+                        else:
+                            exhausted_missing_refs: set[str] = set()
+                            calls += 1
+                            retry_attempted = False
+                            stage_two_phase = "call"
                             try:
-                                response = await llm_client.generate(second_prompt)
-                            except Exception as first_error:
-                                api_time += time.perf_counter() - started
-                                if not _is_retryable_execution_transport_failure(first_error):
-                                    raise
-                                calls += 1
-                                retry_attempted = True
-                                retry_started = time.perf_counter()
+                                started = time.perf_counter()
                                 try:
                                     response = await llm_client.generate(second_prompt)
-                                except Exception:
-                                    api_time += time.perf_counter() - retry_started
-                                    raise
-                                started = retry_started
-                            stage_two_phase = "validate"
-                            if not isinstance(response, Mapping):
-                                raise _SemanticInvalid()
-                            next_prompt, next_completion, next_total, response_time = _usage(response)
-                            prompt_tokens += next_prompt
-                            completion_tokens += next_completion
-                            total_tokens += next_total
-                            api_time += response_time or (time.perf_counter() - started)
-                            try:
-                                try:
-                                    execution_assessments = _parse_executions(
-                                        _stage_two_payload(response),
-                                        completed=completed_recommendations,
-                                        allowed_refs=allowed_refs,
-                                        candidates=projection.candidates,
-                                    )
-                                except _SemanticInvalid as semantic_error:
-                                    if (
-                                        not semantic_error.retryable_stage_two_shape
-                                        or retry_attempted
-                                    ):
+                                except Exception as first_error:
+                                    api_time += time.perf_counter() - started
+                                    if not _is_retryable_execution_transport_failure(first_error):
                                         raise
-                                    # 只对 HTTP 已成功、且 payload 的 executions
-                                    # 或条目对象形状错误做一次同 Prompt 重试。身份、
-                                    # 引用结构和候选集完整性错误始终直接失败。
                                     calls += 1
                                     retry_attempted = True
-                                    semantic_retry_started = time.perf_counter()
-                                    stage_two_phase = "call"
+                                    retry_started = time.perf_counter()
                                     try:
-                                        semantic_retry_response = (
-                                            await llm_client.generate(second_prompt)
-                                        )
+                                        response = await llm_client.generate(second_prompt)
                                     except Exception:
-                                        api_time += (
-                                            time.perf_counter()
-                                            - semantic_retry_started
-                                        )
+                                        api_time += time.perf_counter() - retry_started
                                         raise
-                                    stage_two_phase = "validate"
-                                    if not isinstance(
-                                        semantic_retry_response, Mapping
-                                    ):
-                                        api_time += (
-                                            time.perf_counter()
-                                            - semantic_retry_started
-                                        )
-                                        raise _SemanticInvalid()
-                                    (
-                                        semantic_prompt_tokens,
-                                        semantic_completion_tokens,
-                                        semantic_total_tokens,
-                                        semantic_response_time,
-                                    ) = _usage(semantic_retry_response)
-                                    prompt_tokens += semantic_prompt_tokens
-                                    completion_tokens += semantic_completion_tokens
-                                    total_tokens += semantic_total_tokens
-                                    api_time += semantic_response_time or (
-                                        time.perf_counter()
-                                        - semantic_retry_started
-                                    )
-                                    execution_assessments = _parse_executions(
-                                        _stage_two_payload(semantic_retry_response),
-                                        completed=completed_recommendations,
-                                        allowed_refs=allowed_refs,
-                                        candidates=projection.candidates,
-                                    )
-                            except _ExecutionCoverageIncomplete as incomplete:
-                                # 模型偶发只漏回一部分建议。只把缺失建议连同其
-                                # 受控候选重问一次；首轮合法结果不重复发送，也不
-                                # 把缺项默认解释为未执行。补问失败或仍不完整时，
-                                # 保留两轮已经通过合同的建议，只有未闭合项降为
-                                # unknown，避免一个缺项抹掉同批合法事实。
-                                missing_completed = tuple(
-                                    item
-                                    for item in completed_recommendations
-                                    if item.recommendation.recommendation_ref
-                                    in incomplete.missing_refs
-                                )
-                                completed_missing_assessments: tuple[
-                                    _ExecutionAssessment, ...
-                                ] = ()
-                                if not retry_attempted:
-                                    missing_prompt, missing_allowed_refs = (
-                                        _execution_prompt(
-                                            completed=missing_completed,
+                                    started = retry_started
+                                stage_two_phase = "validate"
+                                if not isinstance(response, Mapping):
+                                    raise _SemanticInvalid()
+                                next_prompt, next_completion, next_total, response_time = _usage(response)
+                                prompt_tokens += next_prompt
+                                completion_tokens += next_completion
+                                total_tokens += next_total
+                                api_time += response_time or (time.perf_counter() - started)
+                                try:
+                                    try:
+                                        execution_assessments = _parse_executions(
+                                            _stage_two_payload(response),
+                                            completed=completed_recommendations,
+                                            allowed_refs=allowed_refs,
                                             candidates=projection.candidates,
                                         )
-                                    )
-                                    calls += 1
-                                    missing_started = time.perf_counter()
-                                    missing_time_recorded = False
-                                    try:
+                                    except _SemanticInvalid as semantic_error:
+                                        if (
+                                            not semantic_error.retryable_stage_two_shape
+                                            or retry_attempted
+                                        ):
+                                            raise
+                                        # 只对 HTTP 已成功、且 payload 的 executions
+                                        # 或条目对象形状错误做一次同 Prompt 重试。身份、
+                                        # 引用结构和候选集完整性错误始终直接失败。
+                                        calls += 1
+                                        retry_attempted = True
+                                        semantic_retry_started = time.perf_counter()
                                         stage_two_phase = "call"
-                                        missing_response = await llm_client.generate(
-                                            missing_prompt
-                                        )
-                                        missing_elapsed = (
-                                            time.perf_counter() - missing_started
-                                        )
+                                        try:
+                                            semantic_retry_response = (
+                                                await llm_client.generate(second_prompt)
+                                            )
+                                        except Exception:
+                                            api_time += (
+                                                time.perf_counter()
+                                                - semantic_retry_started
+                                            )
+                                            raise
                                         stage_two_phase = "validate"
-                                        if not isinstance(missing_response, Mapping):
-                                            api_time += missing_elapsed
-                                            missing_time_recorded = True
+                                        if not isinstance(
+                                            semantic_retry_response, Mapping
+                                        ):
+                                            api_time += (
+                                                time.perf_counter()
+                                                - semantic_retry_started
+                                            )
                                             raise _SemanticInvalid()
                                         (
-                                            missing_prompt_tokens,
-                                            missing_completion_tokens,
-                                            missing_total_tokens,
-                                            missing_response_time,
-                                        ) = _usage(missing_response)
-                                        prompt_tokens += missing_prompt_tokens
-                                        completion_tokens += missing_completion_tokens
-                                        total_tokens += missing_total_tokens
-                                        api_time += (
-                                            missing_response_time or missing_elapsed
+                                            semantic_prompt_tokens,
+                                            semantic_completion_tokens,
+                                            semantic_total_tokens,
+                                            semantic_response_time,
+                                        ) = _usage(semantic_retry_response)
+                                        prompt_tokens += semantic_prompt_tokens
+                                        completion_tokens += semantic_completion_tokens
+                                        total_tokens += semantic_total_tokens
+                                        api_time += semantic_response_time or (
+                                            time.perf_counter()
+                                            - semantic_retry_started
                                         )
-                                        missing_time_recorded = True
+                                        execution_assessments = _parse_executions(
+                                            _stage_two_payload(semantic_retry_response),
+                                            completed=completed_recommendations,
+                                            allowed_refs=allowed_refs,
+                                            candidates=projection.candidates,
+                                        )
+                                except _ExecutionCoverageIncomplete as incomplete:
+                                    # 模型偶发只漏回一部分建议。只把缺失建议连同其
+                                    # 受控候选重问一次；首轮合法结果不重复发送，也不
+                                    # 把缺项默认解释为未执行。补问失败或仍不完整时，
+                                    # 保留两轮已经通过合同的建议，只有未闭合项降为
+                                    # unknown，避免一个缺项抹掉同批合法事实。
+                                    missing_completed = tuple(
+                                        item
+                                        for item in completed_recommendations
+                                        if item.recommendation.recommendation_ref
+                                        in incomplete.missing_refs
+                                    )
+                                    completed_missing_assessments: tuple[
+                                        _ExecutionAssessment, ...
+                                    ] = ()
+                                    if not retry_attempted:
+                                        missing_prompt, missing_allowed_refs = (
+                                            _execution_prompt(
+                                                completed=missing_completed,
+                                                candidates=projection.candidates,
+                                            )
+                                        )
+                                        calls += 1
+                                        missing_started = time.perf_counter()
+                                        missing_time_recorded = False
                                         try:
-                                            completed_missing_assessments = (
-                                                _parse_executions(
-                                                    _stage_two_payload(missing_response),
-                                                    completed=missing_completed,
-                                                    allowed_refs=missing_allowed_refs,
-                                                    candidates=projection.candidates,
-                                                )
+                                            stage_two_phase = "call"
+                                            missing_response = await llm_client.generate(
+                                                missing_prompt
                                             )
-                                        except _ExecutionCoverageIncomplete as retry_incomplete:
-                                            completed_missing_assessments = (
-                                                retry_incomplete.parsed
-                                            )
-                                    except Exception as error:
-                                        if not missing_time_recorded:
-                                            api_time += (
+                                            missing_elapsed = (
                                                 time.perf_counter() - missing_started
                                             )
-                                        if isinstance(error, _SemanticInvalid):
-                                            logger.warning("consultation_missing_repair_invalid kind=%s exception_line=%s",
-                                                           error.kind.value, _exception_line(error))
-                                        else:
-                                            log_model_failure(logger, rule="LX0609-03-01-04", stage=stage_two_phase, error=error)
-                                assessment_by_ref = {
-                                    item.recommendation_ref: item
-                                    for item in (
-                                        *incomplete.parsed,
-                                        *completed_missing_assessments,
+                                            stage_two_phase = "validate"
+                                            if not isinstance(missing_response, Mapping):
+                                                api_time += missing_elapsed
+                                                missing_time_recorded = True
+                                                raise _SemanticInvalid()
+                                            (
+                                                missing_prompt_tokens,
+                                                missing_completion_tokens,
+                                                missing_total_tokens,
+                                                missing_response_time,
+                                            ) = _usage(missing_response)
+                                            prompt_tokens += missing_prompt_tokens
+                                            completion_tokens += missing_completion_tokens
+                                            total_tokens += missing_total_tokens
+                                            api_time += (
+                                                missing_response_time or missing_elapsed
+                                            )
+                                            missing_time_recorded = True
+                                            try:
+                                                completed_missing_assessments = (
+                                                    _parse_executions(
+                                                        _stage_two_payload(missing_response),
+                                                        completed=missing_completed,
+                                                        allowed_refs=missing_allowed_refs,
+                                                        candidates=projection.candidates,
+                                                    )
+                                                )
+                                            except _ExecutionCoverageIncomplete as retry_incomplete:
+                                                completed_missing_assessments = (
+                                                    retry_incomplete.parsed
+                                                )
+                                        except Exception as error:
+                                            if not missing_time_recorded:
+                                                api_time += (
+                                                    time.perf_counter() - missing_started
+                                                )
+                                            if isinstance(error, _SemanticInvalid):
+                                                logger.warning("consultation_missing_repair_invalid kind=%s exception_line=%s",
+                                                               error.kind.value, _exception_line(error))
+                                            else:
+                                                log_model_failure(logger, rule="LX0609-03-01-04", stage=stage_two_phase, error=error)
+                                    assessment_by_ref = {
+                                        item.recommendation_ref: item
+                                        for item in (
+                                            *incomplete.parsed,
+                                            *completed_missing_assessments,
+                                        )
+                                    }
+                                    for missing_item in missing_completed:
+                                        missing_ref = (
+                                            missing_item.recommendation.recommendation_ref
+                                        )
+                                        if missing_ref not in assessment_by_ref:
+                                            assessment_by_ref[missing_ref] = (
+                                                _unknown_execution_assessment(missing_ref)
+                                            )
+                                            exhausted_missing_refs.add(missing_ref)
+                                    execution_assessments = tuple(
+                                        assessment_by_ref[
+                                            item.recommendation.recommendation_ref
+                                        ]
+                                        for item in completed_recommendations
+                                    )
+                                execution_assessments = (
+                                    _settle_recommendations_without_course_candidates(
+                                        execution_assessments,
+                                        recommendation_refs=(
+                                            recommendation_refs_without_course_candidates
+                                        ),
+                                    )
+                                )
+                                conflict_refs = {
+                                    item.recommendation_ref
+                                    for item in execution_assessments
+                                    if item.confidence == "high"
+                                    and _generic_trace_conflicts_with_completed_action(
+                                        item, projection.candidates
                                     )
                                 }
-                                for missing_item in missing_completed:
-                                    missing_ref = (
-                                        missing_item.recommendation.recommendation_ref
-                                    )
-                                    if missing_ref not in assessment_by_ref:
-                                        assessment_by_ref[missing_ref] = (
-                                            _unknown_execution_assessment(missing_ref)
-                                        )
-                                        exhausted_missing_refs.add(missing_ref)
-                                execution_assessments = tuple(
-                                    assessment_by_ref[
-                                        item.recommendation.recommendation_ref
-                                    ]
-                                    for item in completed_recommendations
-                                )
-                            execution_assessments = (
-                                _settle_recommendations_without_course_candidates(
-                                    execution_assessments,
-                                    recommendation_refs=(
-                                        recommendation_refs_without_course_candidates
-                                    ),
-                                )
-                            )
-                            conflict_refs = {
-                                item.recommendation_ref
-                                for item in execution_assessments
-                                if item.confidence == "high"
-                                and _generic_trace_conflicts_with_completed_action(
-                                    item, projection.candidates
-                                )
-                            }
-                            if conflict_refs:
-                                # 具体执行原文与“笼统记录”标签冲突时只复核该建议；
-                                # 复核失败保留中置信事实，由状态机收敛为 uncertain。
-                                execution_assessments = tuple(
-                                    replace(item, confidence="medium")
-                                    if item.recommendation_ref in conflict_refs
-                                    else item
-                                    for item in execution_assessments
-                                )
-                            low_confidence_refs = {
-                                item.recommendation_ref
-                                for item in execution_assessments
-                                if item.confidence != "high"
-                                and item.recommendation_ref
-                                not in exhausted_missing_refs
-                                and item.recommendation_ref
-                                not in recommendation_refs_without_course_candidates
-                            }
-                            if low_confidence_refs and not retry_attempted:
-                                # 只对首轮明确标为中/低信心的建议做一次
-                                # 最小上下文重问；已高信心的其他建议不重复投递。
-                                recheck_completed = tuple(
-                                    item
-                                    for item in completed_recommendations
-                                    if item.recommendation.recommendation_ref
-                                    in low_confidence_refs
-                                )
-                                try:
-                                    recheck_prompt, recheck_allowed_refs = _execution_prompt(
-                                        completed=recheck_completed,
-                                        candidates=projection.candidates,
-                                    )
-                                    calls += 1
-                                    recheck_started = time.perf_counter()
-                                    recheck_response = await llm_client.generate(recheck_prompt)
-                                    if not isinstance(recheck_response, Mapping):
-                                        raise _SemanticInvalid()
-                                    (
-                                        recheck_prompt_tokens,
-                                        recheck_completion_tokens,
-                                        recheck_total_tokens,
-                                        recheck_response_time,
-                                    ) = _usage(recheck_response)
-                                    prompt_tokens += recheck_prompt_tokens
-                                    completion_tokens += recheck_completion_tokens
-                                    total_tokens += recheck_total_tokens
-                                    api_time += recheck_response_time or (
-                                        time.perf_counter() - recheck_started
-                                    )
-                                    rechecked = _parse_executions(
-                                        _stage_two_payload(recheck_response),
-                                        completed=recheck_completed,
-                                        allowed_refs=recheck_allowed_refs,
-                                        candidates=projection.candidates,
-                                    )
-                                    rechecked_by_ref = {
-                                        item.recommendation_ref: item for item in rechecked
-                                    }
+                                if conflict_refs:
+                                    # 具体执行原文与“笼统记录”标签冲突时只复核该建议；
+                                    # 复核失败保留中置信事实，由状态机收敛为 uncertain。
                                     execution_assessments = tuple(
-                                        _merge_rechecked_execution_assessment(
-                                            item,
-                                            rechecked_by_ref[item.recommendation_ref],
-                                        )
-                                        if item.recommendation_ref in rechecked_by_ref
+                                        replace(item, confidence="medium")
+                                        if item.recommendation_ref in conflict_refs
                                         else item
                                         for item in execution_assessments
                                     )
-                                except Exception:
-                                    # 语义复核只用于提升个别低信心事实；其失败
-                                    # 不得覆盖首轮可交付的其他建议。
-                                    pass
-                        except _SemanticInvalid as semantic_error:
-                            logger.warning(
-                                "consultation_stage_two_invalid "
-                                "stage_two_invalid_kind=%s retry_attempted=%s",
-                                semantic_error.kind.value,
-                                retry_attempted,
-                            )
-                            for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = (
-                                    "technical_error",
-                                    "model_invalid_output",
+                                low_confidence_refs = {
+                                    item.recommendation_ref
+                                    for item in execution_assessments
+                                    if item.confidence != "high"
+                                    and item.recommendation_ref
+                                    not in exhausted_missing_refs
+                                    and item.recommendation_ref
+                                    not in recommendation_refs_without_course_candidates
+                                }
+                                if low_confidence_refs and not retry_attempted:
+                                    # 只对首轮明确标为中/低信心的建议做一次
+                                    # 最小上下文重问；已高信心的其他建议不重复投递。
+                                    recheck_completed = tuple(
+                                        item
+                                        for item in completed_recommendations
+                                        if item.recommendation.recommendation_ref
+                                        in low_confidence_refs
+                                    )
+                                    try:
+                                        recheck_prompt, recheck_allowed_refs = _execution_prompt(
+                                            completed=recheck_completed,
+                                            candidates=projection.candidates,
+                                        )
+                                        calls += 1
+                                        recheck_started = time.perf_counter()
+                                        recheck_response = await llm_client.generate(recheck_prompt)
+                                        if not isinstance(recheck_response, Mapping):
+                                            raise _SemanticInvalid()
+                                        (
+                                            recheck_prompt_tokens,
+                                            recheck_completion_tokens,
+                                            recheck_total_tokens,
+                                            recheck_response_time,
+                                        ) = _usage(recheck_response)
+                                        prompt_tokens += recheck_prompt_tokens
+                                        completion_tokens += recheck_completion_tokens
+                                        total_tokens += recheck_total_tokens
+                                        api_time += recheck_response_time or (
+                                            time.perf_counter() - recheck_started
+                                        )
+                                        rechecked = _parse_executions(
+                                            _stage_two_payload(recheck_response),
+                                            completed=recheck_completed,
+                                            allowed_refs=recheck_allowed_refs,
+                                            candidates=projection.candidates,
+                                        )
+                                        rechecked_by_ref = {
+                                            item.recommendation_ref: item for item in rechecked
+                                        }
+                                        execution_assessments = tuple(
+                                            _merge_rechecked_execution_assessment(
+                                                item,
+                                                rechecked_by_ref[item.recommendation_ref],
+                                            )
+                                            if item.recommendation_ref in rechecked_by_ref
+                                            else item
+                                            for item in execution_assessments
+                                        )
+                                    except Exception:
+                                        # 语义复核只用于提升个别低信心事实；其失败
+                                        # 不得覆盖首轮可交付的其他建议。
+                                        pass
+                            except _SemanticInvalid as semantic_error:
+                                logger.warning(
+                                    "consultation_stage_two_invalid "
+                                    "stage_two_invalid_kind=%s retry_attempted=%s",
+                                    semantic_error.kind.value,
+                                    retry_attempted,
                                 )
-                        except Exception as error:
-                            logger.warning(
-                                "consultation_stage_two_failed "
-                                "stage_two_failure_kind=%s retry_attempted=%s "
-                                "exception_type=%s exception_module=%s exception_origin=%s stage=%s exception_line=%s",
-                                classify_model_failure(error, stage=stage_two_phase)[0],
-                                retry_attempted,
-                                type(error).__name__,
-                                _stage_two_exception_module(error),
-                                _stage_two_exception_origin(error),
-                                stage_two_phase,
-                                _exception_line(error),
-                            )
-                            for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = (
-                                    "technical_error", classify_model_failure(error, stage=stage_two_phase)[1],
+                                for rule_id in stage_two_rule_ids:
+                                    statuses[rule_id] = (
+                                        "technical_error",
+                                        "model_invalid_output",
+                                    )
+                            except Exception as error:
+                                logger.warning(
+                                    "consultation_stage_two_failed "
+                                    "stage_two_failure_kind=%s retry_attempted=%s "
+                                    "exception_type=%s exception_module=%s exception_origin=%s stage=%s exception_line=%s",
+                                    classify_model_failure(error, stage=stage_two_phase)[0],
+                                    retry_attempted,
+                                    type(error).__name__,
+                                    _stage_two_exception_module(error),
+                                    _stage_two_exception_origin(error),
+                                    stage_two_phase,
+                                    _exception_line(error),
                                 )
+                                for rule_id in stage_two_rule_ids:
+                                    statuses[rule_id] = (
+                                        "technical_error", classify_model_failure(error, stage=stage_two_phase)[1],
+                                    )
+                        if any(rule_id in statuses for rule_id in stage_two_rule_ids):
+                            execution_assessments = None
+                            break
+                        if execution_assessments is not None:
+                            merged_assessments.extend(execution_assessments)
+                    else:
+                        if execution_batches:
+                            by_ref = {item.recommendation_ref: item for item in merged_assessments}
+                            execution_assessments = tuple(
+                                by_ref[item.recommendation.recommendation_ref]
+                                for item in all_completed_recommendations
+                            )
+                    completed_recommendations = all_completed_recommendations
             else:
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = _execution_outcome(
@@ -4884,6 +5426,18 @@ async def _execute_consultation_episode_rules(
                 completed=completed_recommendations,
                 embedded_refs=embedded_decision_refs,
             )
+            if execution_candidate_projection is not None:
+                execution_assessments = _settle_recommendations_without_any_candidate(
+                    execution_assessments,
+                    completed=completed_recommendations,
+                    candidates=execution_candidate_projection.candidates,
+                    source_incomplete_keys=execution_candidate_projection.source_incomplete_keys,
+                )
+                execution_assessments = _apply_lexical_order_matches(
+                    execution_assessments,
+                    completed=completed_recommendations,
+                    candidates=execution_candidate_projection.candidates,
+                )
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,
@@ -4902,36 +5456,52 @@ async def _execute_consultation_episode_rules(
             ):
                 # 用户口径（2026-10-12）：建议所列多项措施任一既无医嘱也无病程记录即判不合规。
                 # 只对原判合规者逐项核对；核对失败或漏拆改判资料不足，不沿用合规。
-                measure_candidates = execution_candidate_projection.candidates
-                _, measure_allowed_refs = _execution_prompt(
-                    completed=completed_recommendations,
-                    candidates=measure_candidates,
+                # 用户口径（2026-10-20）：逐项核对同样只认会诊当日医嘱、只核医嘱类建议。
+                measure_candidates = tuple(
+                    candidate for candidate in execution_candidate_projection.candidates
+                    if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS
                 )
-                measure_outcome = await check_consultation_measures(
-                    completed=completed_recommendations,
-                    candidates=measure_candidates,
-                    allowed_refs=measure_allowed_refs,
-                    alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
-                    llm_client=llm_client,
-                )
-                calls += measure_outcome.llm_call_count
-                prompt_tokens += measure_outcome.prompt_tokens
-                completion_tokens += measure_outcome.completion_tokens
-                total_tokens += measure_outcome.total_tokens
-                api_time += measure_outcome.api_time
-                action_types = {
-                    item.recommendation.recommendation_ref: item.recommendation.action_type
-                    for item in completed_recommendations
-                }
-                statuses["LX0609-03-01-04"] = apply_measure_check(
-                    statuses["LX0609-03-01-04"],
-                    measure_outcome,
-                    relevant_source_incomplete=lambda ref: bool(
-                        _ACTION_TYPE_SOURCE_KEYS.get(
-                            action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
-                        ).intersection(execution_source_incomplete_keys)
-                    ),
-                )
+                measure_scope = _measure_check_scope(completed_recommendations, execution_assessments)
+                for measure_completed in _execution_event_batches(
+                    completed=measure_scope, candidates=measure_candidates,
+                ):
+                    _, measure_allowed_refs = _execution_prompt(
+                        completed=measure_completed,
+                        candidates=measure_candidates,
+                    )
+                    measure_outcome = await check_consultation_measures(
+                        completed=measure_completed,
+                        candidates=measure_candidates,
+                        allowed_refs=measure_allowed_refs,
+                        alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
+                        llm_client=llm_client,
+                    )
+                    calls += measure_outcome.llm_call_count
+                    prompt_tokens += measure_outcome.prompt_tokens
+                    completion_tokens += measure_outcome.completion_tokens
+                    total_tokens += measure_outcome.total_tokens
+                    api_time += measure_outcome.api_time
+                    action_types = {
+                        item.recommendation.recommendation_ref: item.recommendation.action_type
+                        for item in measure_completed
+                    }
+                    measure_outcome = _drop_conditional_missing_measures(
+                        measure_outcome, measure_completed,
+                    )
+                    measure_missing_by_ref.update(
+                        (ref, measures)
+                        for ref, measures in measure_outcome.missing_measures.items()
+                        if measures
+                    )
+                    statuses["LX0609-03-01-04"] = apply_measure_check(
+                        statuses["LX0609-03-01-04"],
+                        measure_outcome,
+                        relevant_source_incomplete=lambda ref: bool(
+                            _ACTION_TYPE_SOURCE_KEYS.get(
+                                action_types.get(ref, "other"), frozenset(_EXECUTION_SOURCE_KEYS)
+                            ).intersection(execution_source_incomplete_keys)
+                        ),
+                    )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
         projection=execution_candidate_projection,
@@ -4960,14 +5530,19 @@ async def _execute_consultation_episode_rules(
             if rule_id not in typed:
                 continue
             try:
+                rule_completed, rule_assessments = (
+                    _order_execution_view(completed_recommendations, execution_assessments)
+                    if rule_id == "LX0609-03-01-04"
+                    else (completed_recommendations, execution_assessments)
+                )
                 fact_refs = select_consultation_rule_material_refs(
                     rule_id=rule_id,
                     status=statuses[rule_id][0],
                     reason_code=statuses[rule_id][1],
                     documents=documents,
                     episodes=episodes,
-                    completed_recommendations=completed_recommendations,
-                    assessments=execution_assessments,
+                    completed_recommendations=rule_completed,
+                    assessments=rule_assessments,
                     candidates=(
                         execution_candidate_projection.candidates
                         if execution_candidate_projection is not None
@@ -5018,6 +5593,11 @@ async def _execute_consultation_episode_rules(
     for rule_id in ("LX0609-03-01-01", "LX0609-03-01-04"):
         if rule_id not in selected or rule_id not in statuses:
             continue
+        rule_completed, rule_assessments = (
+            _order_execution_view(completed_recommendations, execution_assessments)
+            if rule_id == "LX0609-03-01-04"
+            else (completed_recommendations, execution_assessments)
+        )
         display_facts.append(
             (
                 rule_id,
@@ -5025,8 +5605,8 @@ async def _execute_consultation_episode_rules(
                     rule_id=rule_id,
                     status=statuses[rule_id][0],
                     episodes=episodes,
-                    completed_recommendations=completed_recommendations,
-                    assessments=execution_assessments,
+                    completed_recommendations=rule_completed,
+                    assessments=rule_assessments,
                     documents=documents,
                     candidates=(
                         execution_candidate_projection.candidates
@@ -5034,6 +5614,17 @@ async def _execute_consultation_episode_rules(
                         else ()
                     ),
                     excluded_recommendations=excluded_conditional_recommendations,
+                    order_scope_excluded=(
+                        tuple(
+                            item for item in completed_recommendations
+                            if item not in rule_completed
+                        )
+                        if rule_id == "LX0609-03-01-04"
+                        else ()
+                    ),
+                    missing_measures_by_ref=(
+                        measure_missing_by_ref if rule_id == "LX0609-03-01-04" else {}
+                    ),
                 ),
             )
         )
@@ -5127,6 +5718,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
             evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot))
         outcome = await check_disposition_record(documents=documents, llm_client=llm_client)
+        # 计数来自已核验的文书条目；一份文书可能映射到多个材料引用。
+        unspecific_document_count = len(outcome.fact_refs)
         if DISPOSITION_RECORD_RULE_ID in typed and outcome.fact_refs:
             from .consultation_decision_evidence import material_refs_for_internal_refs
 
@@ -5150,7 +5743,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         results=old.results + new.results,
         planned_rule_ids=old.planned_rule_ids + new.planned_rule_ids,
         decisions=old.decisions + new.decisions,
-        customer_display_facts=old.customer_display_facts + new.customer_display_facts,
+        customer_display_facts=old.customer_display_facts + new.customer_display_facts + (
+            ((DISPOSITION_RECORD_RULE_ID, {
+                "failure_kind": "consultation_disposition_unspecific",
+                "unspecific_document_count": unspecific_document_count,
+            }),) if outcome.status == "non_compliant" else ()
+        ),
         diagnostic_semantic_snapshot=old.diagnostic_semantic_snapshot,
         llm_call_count=old.llm_call_count + new.llm_call_count,
         prompt_tokens=old.prompt_tokens + new.prompt_tokens,

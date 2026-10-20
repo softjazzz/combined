@@ -79,6 +79,39 @@ class Client:
         return answer
 
 
+@pytest.mark.asyncio
+async def test_verified_generic_disposition_survives_action_extraction_failure():
+    docs = documents("建议给予合成治疗。以上已遵嘱执行。")
+    client = Client(opinions("建议给予合成治疗", "以上已遵嘱执行"), RuntimeError("模拟抽取失败"))
+    outcome = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert outcome.status == "non_compliant"
+    assert outcome.fact_refs == ("consultation_record-1",)
+
+
+@pytest.mark.asyncio
+async def test_transport_failure_does_not_claim_patient_material_is_missing():
+    outcome = await record.check_disposition_record(
+        documents=documents("建议给予合成治疗。"), llm_client=Client(RuntimeError("模拟网络失败")),
+    )
+    assert (outcome.status, outcome.reason) == ("technical_error", "model_transport_error")
+
+
+def test_valid_document_defect_survives_other_document_invalid_action_schema():
+    docs = documents("建议给予合成治疗。遵照执行。")
+    docs.append({"ref": "consultation_record-2", "text": "建议复查合成检查。"})
+    roles = record.parse_opinions(opinions("建议给予合成治疗", "遵照执行"), docs[:1])
+    roles["consultation_record-2"] = {
+        "ref": "consultation_record-2", "scope": "ordinary", "suggestion_state": "present",
+        "opinion_quotes": ["建议复查合成检查"], "feedback_quotes": [],
+    }
+    payload = json.loads(response(item("给予合成治疗", "遵照执行", "generic"))["content"])
+    payload["documents"].append({"ref": "consultation_record-2", "medications": [],
+                                 "examinations": [{}], "therapies": [], "other_actions": []})
+    assert record.parse_facts({"content": json.dumps(payload)}, docs, roles) == (
+        "non_compliant", "requirement_violated", ("consultation_record-1",),
+    )
+
+
 def parse(docs, opinion, feedback, *items, scope="ordinary", state="present"):
     frozen = record.parse_opinions(opinions(opinion, feedback, scope, state), docs)
     return record.parse_facts(response(*items), docs, frozen)
@@ -95,6 +128,13 @@ def test_bare_following_advice_does_not_count(feedback):
         )[0]
         == "non_compliant"
     )
+
+
+def test_short_generic_acknowledgement_cannot_be_upgraded_by_referent():
+    docs = documents("建议继续合成药物。遵执。")
+    assert parse(docs, "建议继续合成药物", "遵执", item(
+        "建议继续合成药物", "遵执", "generic", "建议继续合成药物",
+    ))[0] == "non_compliant"
 
 
 def test_each_action_requires_its_own_disposition():
@@ -344,15 +384,42 @@ async def test_two_stages_remain_bounded_and_do_not_send_internal_identity():
         documents=docs,
         llm_client=Client(opinions("建议完善痰培养"), {"content": "bad"}),
     )
-    assert broken.status == "data_gap" and broken.llm_call_count == 2
+    assert broken.status == "technical_error" and broken.llm_call_count == 2
+    assert broken.reason == "model_invalid_output"
 
 
 @pytest.mark.asyncio
-async def test_first_stage_invalid_output_is_unresolved():
+async def test_first_stage_invalid_output_is_technical_error_after_one_retry():
+    client = Client({"content": "bad"}, {"content": "bad"})
     result = await record.check_disposition_record(
-        documents=documents("建议完善痰培养。"), llm_client=Client({"content": "bad"})
+        documents=documents("建议完善痰培养。"), llm_client=client
     )
-    assert result.status == "data_gap" and result.llm_call_count == 1
+    assert result.status == "technical_error" and result.llm_call_count == 2
+    assert result.reason == "model_invalid_output"
+    assert len(client.prompts) == 2 and client.prompts[0] != client.prompts[1]
+    assert "上次校验失败" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_first_stage_protocol_violation_is_retried_once_then_continues():
+    docs = documents("建议完善痰培养。已完善痰培养。")
+    client = Client(
+        # 第一次复读原文，引文不能在原文中逐字找到。
+        opinions("建议完善痰培养建议完善痰培养", "已完善痰培养"),
+        opinions("建议完善痰培养", "已完善痰培养"),
+        response(item("完善痰培养", "已完善痰培养", "performed")),
+    )
+    result = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert result.status == "compliant" and result.llm_call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_second_stage_invalid_output_is_not_retried():
+    docs = documents("建议完善痰培养。已完善痰培养。")
+    client = Client(opinions("建议完善痰培养", "已完善痰培养"), {"content": "bad"}, {"content": "bad"})
+    result = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert (result.status, result.reason, result.llm_call_count) == ("technical_error", "model_invalid_output", 2)
+    assert len(client.prompts) == 2
 
 
 @pytest.mark.asyncio
@@ -438,10 +505,8 @@ async def test_supported_client_uses_existing_output_options_without_extra_calls
             return True
 
         async def generate(self, prompt, **kwargs):
-            expected = {"enable_thinking": False}
-            if self.prompts:
-                expected["response_format"] = {"type": "json_object"}
-            assert kwargs == expected
+            # 两阶段都不叠加 json_object：真实对照中它使第二阶段输出残缺对象。
+            assert kwargs == {"enable_thinking": False}
             return await super().generate(prompt)
 
     client = StructuredClient(
@@ -587,6 +652,16 @@ async def test_new_rule_binds_record_evidence_and_renders_independent_customer_r
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    result = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced[0],
+        raw_customer_display_facts=dict(outcome.customer_display_facts).get(record.RULE_ID),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    if not tamper_reference:
+        from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
+        facts, _ = validated_customer_explanation(result, rule_id=record.RULE_ID, status=result["status"])
+        assert facts["unspecific_document_count"] == 1
     result = render_luxian_0609_customer_result(decision=reduced[0])
     assert source_keys == ["consultation_record"]
     assert result["status"] == (
@@ -604,3 +679,89 @@ async def test_new_rule_binds_record_evidence_and_renders_independent_customer_r
         )
         is None
     )
+
+
+@pytest.mark.parametrize("raw", [
+    {"failure_kind": "consultation_disposition_unspecific", "unspecific_document_count": True},
+    {"failure_kind": "consultation_disposition_unspecific", "unspecific_document_count": 0},
+    {"failure_kind": "consultation_disposition_unspecific", "unspecific_document_count": 1, "patient_name": "合成患者"},
+])
+def test_disposition_explanation_rejects_invalid_counts_and_extra_fields(raw):
+    from app.services.luxian_0609.canonical_result_finalizer import validate_luxian_0609_published_customer_display_facts
+    with pytest.raises(ValueError):
+        validate_luxian_0609_published_customer_display_facts(
+            rule_id=record.RULE_ID, raw=raw, status="non_compliant", reason_code="requirement_violated",
+        )
+
+
+_LONG_OPINION = (
+    "呼吸科会诊意见:病史敬悉。患者咳嗽咳痰,活动后呼吸困难明显,结合辅助检查考虑慢性阻塞性肺病急性加重,"
+    "建议完善痰培养及药敏,继续抗感染、解痉平喘治疗,必要时转我科进一步治疗。"
+)
+_LONG_BODY = "患者高龄,目前持续经鼻高流量吸氧,故请呼吸科会诊。 " + _LONG_OPINION + " 遵会诊意见,已完善痰培养。"
+
+
+def _anchored_opinions(opinion_quotes, feedback_quotes=("遵会诊意见,已完善痰培养。",)):
+    return {
+        "content": json.dumps({
+            "schema_version": record.SCHEMA_VERSION + "-opinions",
+            "documents": [{
+                "ref": "consultation_record-1", "scope": "ordinary", "suggestion_state": "present",
+                "opinion_quotes": list(opinion_quotes), "feedback_quotes": list(feedback_quotes),
+            }],
+        }, ensure_ascii=False)
+    }
+
+
+def test_long_opinion_anchors_resolve_to_the_full_source_paragraph():
+    roles = record.parse_opinions(
+        _anchored_opinions([{"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转我科进一步治疗。"}]),
+        documents(_LONG_BODY),
+    )
+    assert roles["consultation_record-1"]["opinion_quotes"] == [_LONG_OPINION]
+    assert roles["consultation_record-1"]["feedback_quotes"] == ["遵会诊意见,已完善痰培养。"]
+
+
+@pytest.mark.parametrize("anchor", [
+    {"start": "呼吸科会诊意见:病史知悉", "end": "必要时转我科进一步治疗。"},  # 开头不是原文
+    {"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转外科进一步治疗。"},  # 结尾不是原文
+    {"start": "呼吸科", "end": "必要时转我科进一步治疗。"},  # 锚点过短
+    {"start": "遵会诊意见,已完善", "end": "呼吸科会诊意见:病史敬悉"},  # 结尾在开头之前
+    {"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转我科进一步治疗。", "text": "多余字段"},
+])
+def test_invalid_anchor_is_rejected_as_ungrounded(anchor):
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
+
+
+@pytest.mark.parametrize("anchor", [
+    {"start": "呼吸科会诊意见:病史敬悉。患者咳嗽...建议完善痰培养及药敏", "end": "必要时转我科进一步治疗。"},
+    {"start": "呼吸科会诊意见:病史敬悉……继续抗感染", "end": "建议完善……必要时转我科进一步治疗。"},
+])
+def test_anchor_ellipsis_keeps_only_the_verbatim_outer_parts(anchor):
+    roles = record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
+    assert roles["consultation_record-1"]["opinion_quotes"] == [_LONG_OPINION]
+
+
+@pytest.mark.parametrize("anchor", [
+    {"start": "呼吸...建议完善痰培养及药敏", "end": "必要时转我科进一步治疗。"},  # 省略号前过短
+    {"start": "呼吸科会诊意见:病史知悉...建议完善", "end": "必要时转我科进一步治疗。"},  # 省略号前非原文
+    {"start": "呼吸科会诊意见:病史敬悉", "end": "必要时转我科进一步...治疗"},  # 省略号后过短
+])
+def test_anchor_ellipsis_parts_must_still_be_grounded(anchor):
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        record.parse_opinions(_anchored_opinions([anchor]), documents(_LONG_BODY))
+
+
+def test_anchor_start_must_be_unique_in_the_document():
+    body = "建议完善痰培养及药敏。另建议完善痰培养及药敏复查,继续抗感染治疗。遵照执行。"
+    with pytest.raises(ValueError, match="role quotes not grounded"):
+        record.parse_opinions(
+            _anchored_opinions([{"start": "建议完善痰培养及药敏", "end": "继续抗感染治疗。"}], ["遵照执行。"]),
+            documents(body),
+        )
+
+
+def test_opinion_prompt_asks_for_anchors_on_long_paragraphs():
+    prompt = record.build_opinion_prompt(documents(_LONG_BODY))
+    assert '"start"' in prompt and '"end"' in prompt and "60字" in prompt

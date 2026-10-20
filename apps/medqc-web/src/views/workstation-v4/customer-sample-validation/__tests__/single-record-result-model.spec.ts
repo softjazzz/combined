@@ -48,17 +48,17 @@ describe('consultation recommendation presentation', () => {
       {
         text: '完善血脂检查',
         state: 'missing',
-        statusLabel: '未找到执行证据',
+        statusLabel: '未执行',
       },
       {
         text: '给予调脂治疗',
         state: 'generic',
-        statusLabel: '执行记录不具体',
+        statusLabel: '执行医嘱不具体',
       },
       {
         text: '复查血常规',
         state: 'specific',
-        statusLabel: '已找到具体执行证据',
+        statusLabel: '已执行',
       },
       {
         text: '必要时完善TCD检查',
@@ -67,10 +67,66 @@ describe('consultation recommendation presentation', () => {
       },
     ])
     expect(presentation?.checkedSources).toEqual([
-      '后续病程记录',
-      '上级医师查房记录',
-      '住院医嘱',
-      '相关检查、检验及手术记录',
+      '会诊记录当天开立的住院药品医嘱',
+      '会诊记录当天开立的住院非药品医嘱（“继续/维持”原治疗的建议也认此前已开立的医嘱）',
+    ])
+  })
+
+  it('names consultation time, measures without orders and why recommendations were not checked', () => {
+    const presentation = buildConsultationRecommendationPresentation({
+      rule_id: 'LX0609-03-01-04',
+      customer_display_facts: {
+        recommendation_evidence: [
+          {
+            episode_index: 1,
+            recommendation_index: 1,
+            recommendation_text: '完善血气分析、乳酸、心衰指标',
+            execution_state: 'specific',
+            opinion_time: '2026-08-24 15:07:30',
+            missing_measures: ['乳酸', '心衰指标'],
+          },
+          {
+            episode_index: 2,
+            recommendation_index: 2,
+            recommendation_text: '复查凝血功能',
+            execution_state: 'missing',
+            opinion_time: '2026-01-26',
+          },
+        ],
+        excluded_recommendations: [
+          {
+            episode_index: 1,
+            recommendation_text: '卧床休息',
+            exclusion_reason: 'non_order_recommendation',
+          },
+          {
+            episode_index: 1,
+            recommendation_text: '继续服用原降压药',
+            exclusion_reason: 'home_medication',
+          },
+          {
+            episode_index: 2,
+            recommendation_text: '若病情加重可转科',
+            exclusion_reason: 'condition_not_met',
+          },
+        ],
+      },
+    })
+
+    expect(presentation?.rows).toMatchObject([
+      {
+        state: 'partial',
+        opinionTime: '2026-08-24 15:07',
+        statusLabel: '部分措施未执行',
+        detail: '会诊记录当天未开立以下措施的医嘱：乳酸、心衰指标',
+      },
+      { state: 'missing', opinionTime: '2026-01-26', detail: '会诊记录当天未开立与建议对应的医嘱' },
+      {
+        state: 'excluded',
+        detail: '卧床、体位、饮食营养、护理宣教等建议不通过开立医嘱落实，不核对',
+      },
+      { state: 'excluded', detail: '院外自带药建议不核对' },
+      { state: 'excluded', detail: '条件式建议当天未开立对应医嘱，视为条件未成立，不核对' },
     ])
   })
 

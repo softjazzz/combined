@@ -166,6 +166,7 @@ def test_content_precedes_record_content_as_native_reader():
     lambda payload: payload["records"][0].update(index=True),
     lambda payload: payload["records"][0].update(index=42),
     lambda payload: payload["records"][0].update(quote="改写或截断正文"),
+    lambda payload: payload["records"][0].update(quote=None),
     lambda payload: payload["records"][0].update(kind="present"),
     lambda payload: payload["records"][0].update(kind=[]),
     lambda payload: payload.update(extra=True),
@@ -175,6 +176,27 @@ def test_malformed_protocol_is_technical_error(mutation):
     assert result.state == "technical_error"
     assert result.valid_document_ids == ()
     assert result.total_tokens == 30
+
+
+def test_quote_punctuation_and_whitespace_differences_keep_binding():
+    content = "输注去白悬浮红细胞2U、过程顺利，无输血反应。"
+    def mutate(payload):
+        payload["records"][0]["quote"] = "输注去白悬浮红细胞2U,过程顺利, 无输血反应"
+    result = _run([_row(content=content)], FakeClient(mutate=mutate))
+    assert result.state == "present"
+    assert result.valid_document_ids == ("D0",)
+
+
+@pytest.mark.parametrize("quote", [
+    "输注去白悬浮红细胞2U、过程顺利",  # 截断
+    "输注去白悬浮红细胞4U、过程顺利，无输血反应。",  # 改字
+    "输注去白悬浮红细胞2U、过程顺利，有输血反应。",
+])
+def test_quote_character_differences_still_break_binding(quote):
+    content = "输注去白悬浮红细胞2U、过程顺利，无输血反应。"
+    def mutate(payload):
+        payload["records"][0]["quote"] = quote
+    assert _run([_row(content=content)], FakeClient(mutate=mutate)).state == "technical_error"
 
 
 def test_duplicate_indices_with_matching_length_rejected():

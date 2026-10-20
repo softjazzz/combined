@@ -407,6 +407,8 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   execution_domain?: string
   has_content?: boolean
   content_loaded?: boolean
+  projection_incomplete?: boolean
+  projection_notice?: string
   source_ref?: string
   source_document_id?: string
   source_document_aliases?: Array<{

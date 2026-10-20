@@ -128,6 +128,7 @@ def _record_state(
     *,
     records: Sequence[Mapping[str, Any]],
     order_time: datetime,
+    early_out_order: Mapping[str, Any] | None = None,
 ) -> tuple[str, datetime | None]:
     """返回单类文书与唯一转科医嘱的关联状态及唯一时间。"""
 
@@ -136,6 +137,20 @@ def _record_state(
     candidates = tuple(_candidate_for_order(row, order_time=order_time) for row in records)
     current = tuple(item for item in candidates if item.state == "current")
     has_unknown = any(item.state == "time_unknown" for item in candidates)
+    # 主控代定口径（2026-10-18，待客户复核），基线072/073：
+    # 提前不超过24小时的转出须科室对应且为唯一候选，不能只凭时间接受。
+    early = tuple((row, moment) for row in records
+                  if (moment := _precise_datetime(authoritative_document_time_value(row))) is not None
+                  and order_time - timedelta(hours=24) <= moment < order_time)
+    if current and early_out_order is not None:
+        # 已有当前记录时，不把科室不对应的历史文书新增为本次候选。
+        early = tuple(item for item in early if _departments_correspond(item[0], early_out_order))
+    if early_out_order is not None and early:
+        if current or len(early) > 1 or not _departments_correspond(early[0][0], early_out_order):
+            return "multiple", None
+        if has_unknown:
+            return "time_unknown", None
+        return "matched", early[0][1]
     if len(current) > 1:
         return "multiple", None
     if current and has_unknown:
@@ -159,6 +174,43 @@ def _unique_order_time(row: Mapping[str, Any]) -> tuple[datetime | None, bool]:
     if len(unique_values) > 1:
         return None, True
     return (unique_values[0] if unique_values else None), False
+
+
+def _target_department(order: Mapping[str, Any]) -> str:
+    value = order.get("transferin_department") or order.get("target_department")
+    if value:
+        return re.sub(r"\s+", "", _clean(value)).upper()
+    text = re.sub(r"\s+", "", _clean(order.get("order_name") or order.get("record_content")))
+    match = re.search(r"(?:转科至|转科到|转入|转往|转至)[:：]?([\u4e00-\u9fffA-Za-z0-9]+?科|ICU)(?=$|[，,。；;（(])", text, re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def _departments_correspond(record: Mapping[str, Any], order: Mapping[str, Any]) -> bool:
+    target = _target_department(order)
+    record_target = re.sub(r"\s+", "", _clean(record.get("transferin_department"))).upper()
+    current = _clean(order.get("current_department") or order.get("transferout_department"))
+    record_source = _clean(record.get("transferout_department"))
+    return bool((target and record_target == target) or (current and record_source == current))
+
+
+def _group_transfer_orders(
+    ordered: Sequence[tuple[datetime, Mapping[str, Any]]],
+    transfer_in_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[datetime, Mapping[str, Any]], ...]:
+    """主控代定口径（2026-10-18，待客户复核），基线072/073：相邻同目标合并。"""
+    groups = []
+    previous_time = None
+    previous_target = ""
+    in_times = tuple(_precise_datetime(authoritative_document_time_value(row)) for row in transfer_in_rows)
+    for moment, order in ordered:
+        target = _target_department(order)
+        merge = (previous_time is not None and target and target == previous_target
+                 and moment - previous_time <= timedelta(hours=24)
+                 and all(value is not None and not previous_time <= value <= moment for value in in_times))
+        if not merge:
+            groups.append((moment, order))
+        previous_time, previous_target = moment, target
+    return tuple(groups)
 
 
 def _display_facts(
@@ -242,7 +294,7 @@ def evaluate_transfer_documentation(
     evaluation_horizon_datetime: datetime | None = None,
     evaluation_horizon_error: str | None = None,
 ) -> TransferDocumentationOutcome:
-    """按唯一转科医嘱关联转入/转出记录，不以旧住院记录满足本次事件。"""
+    """逐次关联转科记录；不同事件不能复用同一份文书。"""
 
     source_error = nondrug_order_error or transfer_in_error or transfer_out_error
     if source_error:
@@ -251,6 +303,91 @@ def evaluate_transfer_documentation(
     if not orders:
         return TransferDocumentationOutcome("not_applicable", "trigger_absent_complete")
     if len(orders) != 1:
+        times = [_unique_order_time(order) for order in orders]
+        if any(conflict for _, conflict in times):
+            return TransferDocumentationOutcome("data_gap", "authoritative_time_conflict")
+        if any(value is None for value, _ in times):
+            return TransferDocumentationOutcome("data_gap", "authoritative_time_missing")
+        ordered = sorted(zip((value for value, _ in times), orders), key=lambda item: item[0])
+        grouped = _group_transfer_orders(ordered, transfer_in_rows)
+        if len(grouped) == 1:
+            return evaluate_transfer_documentation(
+                rule_id=rule_id, nondrug_order_error="", transfer_in_error="", transfer_out_error="",
+                nondrug_order_rows=(grouped[0][1],), transfer_in_rows=transfer_in_rows,
+                transfer_out_rows=transfer_out_rows, evaluation_horizon_date=evaluation_horizon_date,
+                evaluation_horizon_datetime=evaluation_horizon_datetime,
+                evaluation_horizon_error=evaluation_horizon_error,
+            )
+        # 不同目标或有中间转入记录均保留多次转科；缺时间时不能任意拆分近邻事件。
+        if len({value for value, _ in grouped}) == len(grouped) and (
+            all(later[0] > earlier[0] + timedelta(hours=24)
+                for earlier, later in zip(grouped, grouped[1:]))
+            or (all(_target_department(order) for _, order in grouped)
+                and all(_precise_datetime(authoritative_document_time_value(row)) is not None
+                        for row in (*transfer_in_rows, *transfer_out_rows))
+                # 窗口重叠的多次转科（如 2 分钟内改开不同目标）须每份记录按科室唯一对应
+                # 一次转科，否则不能拆分判缺文书（主控审查，避免把改开医嘱误判为漏写）。
+                and all(
+                    sum(_departments_correspond(row, order) for _, order in grouped) == 1
+                    for row in (*transfer_in_rows, *transfer_out_rows)
+                ))
+        ):
+            outcomes = []
+            out_records_by_event: list[list[Mapping[str, Any]]] = [[] for _ in grouped]
+            for row in transfer_out_rows:
+                moment = _precise_datetime(authoritative_document_time_value(row))
+                if moment is None:
+                    for selected_rows in out_records_by_event:
+                        selected_rows.append(row)
+                    continue
+                normal = next((index for index in reversed(range(len(grouped)))
+                               if _candidate_for_order(row, order_time=grouped[index][0]).state == "current"), None)
+                early_indexes = [index for index, (start, order) in enumerate(grouped)
+                                 if start - timedelta(hours=24) <= moment < start
+                                 and _departments_correspond(row, order)]
+                if len(early_indexes) > 1 or (early_indexes and normal is not None
+                        and _departments_correspond(row, grouped[normal][1])):
+                    return TransferDocumentationOutcome("data_gap", "association_failed", {
+                        "failure_kind": "transfer_event_association_gap", "transfer_order_count": len(orders),
+                        "transfer_in_count": len(transfer_in_rows), "transfer_out_count": len(transfer_out_rows),
+                    })
+                owner = early_indexes[0] if early_indexes else normal
+                if owner is None and grouped[0][0] - timedelta(hours=24) <= moment < grouped[0][0]:
+                    owner = 0
+                if owner is not None:
+                    out_records_by_event[owner].append(row)
+            for index, (start, order) in enumerate(grouped):
+                end = grouped[index + 1][0] if index + 1 < len(grouped) else None
+
+                def event_records(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+                    selected = []
+                    for row in rows:
+                        candidate = _candidate_for_order(row, order_time=start)
+                        if candidate.state == "time_unknown" or (
+                            candidate.state == "current"
+                            and (end is None or candidate.record_time < end)
+                        ):
+                            selected.append(row)
+                    return tuple(selected)
+
+                outcomes.append(evaluate_transfer_documentation(
+                    rule_id=rule_id, nondrug_order_error="", transfer_in_error="", transfer_out_error="",
+                    nondrug_order_rows=(order,),
+                    transfer_in_rows=event_records(transfer_in_rows),
+                    transfer_out_rows=tuple(out_records_by_event[index]),
+                    evaluation_horizon_date=evaluation_horizon_date,
+                    evaluation_horizon_datetime=evaluation_horizon_datetime,
+                    evaluation_horizon_error=evaluation_horizon_error,
+                ))
+            # 已明确的一次缺文书/超时足以证明不合规；其余事件仍逐项保留。
+            priority = {"non_compliant": 0, "data_gap": 1, "not_applicable": 2, "compliant": 3}
+            selected = min(outcomes, key=lambda outcome: priority[outcome.final_state])
+            return TransferDocumentationOutcome(
+                selected.final_state, selected.reason_code,
+                {**(selected.display_facts or {}), "transfer_order_count": len(orders),
+                 "event_checks": [{"status": outcome.final_state, "reason_code": outcome.reason_code,
+                                   **(outcome.display_facts or {})} for outcome in outcomes]},
+            )
         return TransferDocumentationOutcome(
             "data_gap",
             "association_failed",
@@ -272,7 +409,7 @@ def evaluate_transfer_documentation(
         records=transfer_in_rows, order_time=order_time
     )
     transfer_out_state, transfer_out_time = _record_state(
-        records=transfer_out_rows, order_time=order_time
+        records=transfer_out_rows, order_time=order_time, early_out_order=orders[0]
     )
     facts = _display_facts(
         rule_id=rule_id,
@@ -314,7 +451,7 @@ def evaluate_transfer_documentation(
         (transfer_in_time - order_time).total_seconds() / 3600,
         (transfer_out_time - order_time).total_seconds() / 3600,
     )
-    compliant = all(0 <= interval <= 24 for interval in intervals)
+    compliant = 0 <= intervals[0] <= 24 and -24 <= intervals[1] <= 24
     return TransferDocumentationOutcome(
         "compliant" if compliant else "non_compliant",
         "requirement_within_threshold" if compliant else "threshold_exceeded",

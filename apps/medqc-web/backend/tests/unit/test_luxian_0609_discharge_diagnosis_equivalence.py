@@ -41,9 +41,9 @@ def _run(authoritative, written, client):
 def test_same_pairs_are_returned_with_names_and_thinking_disabled():
     kwargs = {}
     client = _Client([{"id": "A1", "match": "W1", "relation": "same"}], kwargs_sink=kwargs)
-    result = _run(["高血压病"], ["高血压"], client)
+    result = _run(["原发性高血压"], ["高血压病"], client)
     assert result.state == "ready"
-    assert result.pairs == (("高血压病", "高血压"),)
+    assert result.pairs == (("原发性高血压", "高血压病"),)
     assert result.llm_call_count == 1
     assert kwargs["enable_thinking"] is False
     assert kwargs["allow_length_retry"] is False
@@ -104,3 +104,86 @@ def test_numbered_diagnosis_list_in_one_name_is_split_in_order():
     assert split_numbered_diagnoses(["2型糖尿病", "高血压3级", "1.肺炎", "1.甲 3.乙"]) == [
         "2型糖尿病", "高血压3级", "1.肺炎", "1.甲 3.乙",
     ]
+
+
+def test_written_name_contained_in_concatenated_authority_pairs_without_model():
+    # 用户口径（2026-10-19）：首页“标准名+补充描述”相连，出院记录只写其中诊断名视为同一诊断。
+    client = _Client([])
+    result = _run(
+        ["慢性浅表性胃炎胆汁反流", "胃溃疡胃窦溃疡（H2-S1期）", "抽动障碍肢体抽动原因待查"],
+        ["胆汁反流", "抽动障碍", "胃溃疡"], client,
+    )
+    assert result.state == "ready"
+    assert client.calls == 0
+    assert set(result.pairs) == {
+        ("慢性浅表性胃炎胆汁反流", "胆汁反流"),
+        ("胃溃疡胃窦溃疡（H2-S1期）", "胃溃疡"),
+        ("抽动障碍肢体抽动原因待查", "抽动障碍"),
+    }
+
+
+def test_contained_pairs_are_kept_and_only_rest_goes_to_model():
+    client = _Client([{"id": "A1", "match": "W1", "relation": "same"}])
+    result = _run(["慢性浅表性胃炎胆汁反流", "原发性高血压"], ["高血压病", "胆汁反流"], client)
+    assert result.state == "ready"
+    assert client.calls == 1
+    assert set(result.pairs) == {("慢性浅表性胃炎胆汁反流", "胆汁反流"), ("原发性高血压", "高血压病")}
+
+
+def test_ambiguous_containment_still_goes_to_model():
+    # 一条书写名称落入两条权威名称时不由程序配对。
+    client = _Client([
+        {"id": "A1", "match": "W1", "relation": "same"},
+        {"id": "A2", "match": None, "relation": "absent"},
+    ])
+    result = _run(["胃溃疡出血", "胃溃疡穿孔"], ["胃溃疡", "胃炎"], client)
+    assert client.calls == 1
+    assert result.pairs == (("胃溃疡出血", "胃溃疡"),)
+
+
+class _SequenceClient:
+    def __init__(self, *item_lists):
+        self.item_lists = list(item_lists)
+        self.prompts = []
+
+    def supports_strict_json_schema(self):
+        return True
+
+    async def generate(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        items = self.item_lists[min(len(self.prompts), len(self.item_lists)) - 1]
+        return {
+            "content": json.dumps({"schema_version": SCHEMA_VERSION, "items": items}),
+            "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
+        }
+
+
+def test_uncertain_with_match_gets_one_targeted_recheck():
+    # C25 类：relation=uncertain 却填了 match，补核指明条目并附上次输出，修正后按无法判定处理。
+    client = _SequenceClient(
+        [{"id": "A1", "match": "W1", "relation": "uncertain"}],
+        [{"id": "A1", "match": None, "relation": "uncertain"}],
+    )
+    result = _run(["孤立性肺结节"], ["双肺小结节"], client)
+    assert result.state == "unresolved"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 20
+    assert "A1的relation为uncertain，match必须为null" in client.prompts[1]
+    assert '"relation": "uncertain"' in client.prompts[1]
+
+
+def test_repeated_protocol_violation_after_recheck_is_technical_error():
+    client = _SequenceClient([{"id": "A1", "match": "W1", "relation": "absent"}])
+    result = _run(["孤立性肺结节"], ["双肺小结节"], client)
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+    assert result.llm_call_count == 2
+
+
+def test_prompt_marks_count_or_distribution_difference_as_uncertain():
+    # 用户口径（2026-10-19）：同一疾病仅数量或分布不同（C25 孤立性肺结节/双肺小结节）判无法确定。
+    from app.services.luxian_0609.extended_document.discharge_diagnosis_equivalence import _prompt
+
+    prompt = _prompt(["孤立性肺结节"], ["双肺小结节"])
+    assert "孤立/单发与多发、单侧与双侧" in prompt
+    assert "relation=uncertain、match=null，不要判absent" in prompt

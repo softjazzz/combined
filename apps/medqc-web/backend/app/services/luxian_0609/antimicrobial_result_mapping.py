@@ -314,6 +314,10 @@ def _safe_057(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+# support_before_use 沿用字段名，语义为“启用前或启用后 24 小时内有专家支持”（用户口径 2026-10-17）。
+_058_SUPPORT_WINDOW = timedelta(hours=24)
+
+
 def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     expected_keys = {
         "verification_kind",
@@ -359,7 +363,7 @@ def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 not expert_present
                 or first_dt is None
                 or support_dt is None
-                or support_dt > first_dt
+                or support_dt > first_dt + _058_SUPPORT_WINDOW
                 or unmatched
                 or association_ambiguous
             )
@@ -369,7 +373,7 @@ def _safe_058(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             and not association_ambiguous
             and first_dt is not None
             and support_dt is not None
-            and support_before_use != (support_dt <= first_dt)
+            and support_before_use != (support_dt <= first_dt + _058_SUPPORT_WINDOW)
         )
     ):
         return None

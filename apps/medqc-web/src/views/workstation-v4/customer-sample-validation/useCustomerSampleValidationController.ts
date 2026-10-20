@@ -743,11 +743,12 @@ export function useCustomerSampleValidationController() {
       filters.value.matchStatus ? `病历关联：${matchStatusLabel(filters.value.matchStatus)}` : '',
       !isSyncedOnlyValidationMode.value && filters.value.includeInBatch ? '仅看首批样本' : '',
     ].filter(Boolean)
+    const countScope = records.value.length < total ? `本页 ${records.value.length} 份中` : '其中'
     const base = isLuxian0609Mode.value
-      ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，可按全量或选定 LX0609 质控点发起验证。`
+      ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；${countScope}已关联 ${matched} 份，可按全量或选定 LX0609 质控点发起验证。`
       : isSyncedOnlyValidationMode.value
-        ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
-        : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
+        ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；${countScope}已关联 ${matched} 份、已同步 ${synced} 份。`
+        : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；${countScope}已关联 ${matched} 份，文书已就绪 ${ready} 份。`
     if (!filterLabels.length) {
       return `${base} ${runnableRequirementHint()}`
     }

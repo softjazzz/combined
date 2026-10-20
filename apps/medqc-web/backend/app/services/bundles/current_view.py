@@ -9,6 +9,14 @@ from typing import Any
 from . import assembly, emr_view
 from ..luxian_0609.basic_timeliness_facts import extract_admission_anchor
 
+# 查看当前病历时医嘱逐条列出，质控 Bundle 的上限（药品700/非药品1500）会让医嘱多的病例
+# 静默少显示（1016 样本最多 788/2156 条）。只读展示路径单独放宽；仍超出时由
+# projection_incomplete 标出，不能当成完整。
+CURRENT_VIEW_PROJECTION_LIMITS = {
+    "inpat_drug_order": 5000,
+    "inpat_nondrug_order": 5000,
+}
+
 # 仅合并进行中的同病例请求，结束立即移除；不缓存已完成的临床数据。
 _pending: dict[tuple[str, str, str], Future] = {}
 _pending_lock = Lock()
@@ -19,6 +27,9 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
     source_schema = assembly._default_source_schema()
     limits = assembly._material_limits_for_variants(scenes=(), domains=emr_view._DOMAIN_LOAD_ORDER)
     limits["inpat_registration"] = 2
+    for table_name, limit in CURRENT_VIEW_PROJECTION_LIMITS.items():
+        # 多取 1 行用于判断是否仍有未展示的医嘱。
+        limits[table_name] = max(limits.get(table_name, 0), limit + 1)
     snapshot = assembly._build_material_snapshot(source_schema=source_schema, table_limits=limits, **identity)
     # 读取失败不能冒充没有文书，更不能回退旧 Bundle。
     if snapshot.errors_by_table:
@@ -26,7 +37,7 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
     bundles = {
         domain: assembly.assemble_domain_bundle(
             execution_domain=domain, source_schema=source_schema,
-            material_snapshot=snapshot, **identity,
+            material_snapshot=snapshot, projection_limits=CURRENT_VIEW_PROJECTION_LIMITS, **identity,
         )
         for domain in emr_view._DOMAIN_LOAD_ORDER
     }

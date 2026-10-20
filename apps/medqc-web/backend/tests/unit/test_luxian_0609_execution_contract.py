@@ -115,7 +115,7 @@ def test_mixed_legacy_results_and_typed_decisions_preserve_partition_order():
 
 
 @pytest.mark.unit
-def test_result_and_decision_overlap_fails_closed_for_whole_family():
+def test_result_and_decision_overlap_isolates_only_the_duplicated_rule():
     envelope = FamilyExecutionEnvelope(
         results=(_result("LX0609-01-01-01"), _result("LX0609-01-02-01")),
         decisions=(_decision("LX0609-01-01-01"),),
@@ -127,23 +127,33 @@ def test_result_and_decision_overlap_fails_closed_for_whole_family():
         expected_rule_ids=EXPECTED,
     )
 
-    assert validated.valid is False
+    # 逐点修复：只有重复的规则改判技术错误，同族另一条已形成的结果保留。
+    assert validated.valid is True
     assert validated.reason_code == "family_result_duplicate"
+    assert validated.repaired_rule_ids == ("LX0609-01-01-01",)
     assert [item["status"] for item in validated.envelope.results] == [
         "technical_error",
-        "technical_error",
+        "compliant",
     ]
+    assert validated.envelope.results[1] is envelope.results[1]
     assert validated.envelope.decisions == ()
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    ("results", "reason_code"),
+    ("results", "reason_code", "repaired", "statuses"),
     [
-        ((_result("LX0609-01-01-01"),), "family_result_missing"),
+        (
+            (_result("LX0609-01-01-01"),),
+            "family_result_missing",
+            ("LX0609-01-02-01",),
+            ["compliant", "technical_error"],
+        ),
         (
             (_result("LX0609-01-01-01"), _result("LX0609-01-01-01")),
             "family_result_duplicate",
+            EXPECTED,
+            ["technical_error", "technical_error"],
         ),
         (
             (
@@ -152,26 +162,46 @@ def test_result_and_decision_overlap_fails_closed_for_whole_family():
                 _result("SC-002"),
             ),
             "family_result_extra",
+            (),
+            ["compliant", "compliant"],
         ),
         (
             (_result("LX0609-01-02-01"), _result("LX0609-01-01-01")),
             "family_result_order_mismatch",
+            (),
+            ["compliant", "compliant"],
         ),
-        (({"status": "compliant"}, _result("LX0609-01-02-01")), "family_result_invalid"),
-        (("not-a-result", _result("LX0609-01-02-01")), "family_result_invalid"),
+        (
+            ({"status": "compliant"}, _result("LX0609-01-02-01")),
+            "family_result_invalid",
+            ("LX0609-01-01-01",),
+            ["technical_error", "compliant"],
+        ),
+        (
+            ("not-a-result", _result("LX0609-01-02-01")),
+            "family_result_invalid",
+            ("LX0609-01-01-01",),
+            ["technical_error", "compliant"],
+        ),
         (
             (_result("lx0609-001"), _result("LX0609-01-02-01")),
-            "family_result_extra",
+            "family_result_missing",
+            ("LX0609-01-01-01",),
+            ["technical_error", "compliant"],
         ),
         (
             (_result(" LX0609-01-01-01 "), _result("LX0609-01-02-01")),
-            "family_result_extra",
+            "family_result_missing",
+            ("LX0609-01-01-01",),
+            ["technical_error", "compliant"],
         ),
     ],
 )
-def test_invalid_family_result_shape_fails_the_whole_family_safely(
+def test_invalid_family_result_shape_isolates_only_affected_rules(
     results,
     reason_code: str,
+    repaired: tuple[str, ...],
+    statuses: list[str],
 ):
     envelope = _envelope(*results)
 
@@ -180,21 +210,64 @@ def test_invalid_family_result_shape_fails_the_whole_family_safely(
         expected_rule_ids=EXPECTED,
     )
 
-    assert validated.valid is False
+    # 全部规则都需改判时没有可保留结果，仍按整族合同失败处理。
+    whole_family_failed = len(repaired) == len(EXPECTED)
+    assert validated.valid is not whole_family_failed
     assert validated.reason_code == reason_code
+    assert validated.repaired_rule_ids == (() if whole_family_failed else repaired)
     assert [item["rule_id"] for item in validated.envelope.results] == list(EXPECTED)
-    assert [item["status"] for item in validated.envelope.results] == [
-        "technical_error",
-        "technical_error",
-    ]
+    assert [item["status"] for item in validated.envelope.results] == statuses
     assert all(
-        item["metadata"]["reason_code"] == reason_code
+        item["metadata"]["reason_code"] in {reason_code, "family_result_missing", "family_result_duplicate"}
         for item in validated.envelope.results
+        if item["status"] == "technical_error"
     )
     assert validated.envelope.llm_call_count == envelope.llm_call_count
     assert validated.envelope.total_tokens == envelope.total_tokens
     assert "SC-002" not in repr(validated.envelope)
     assert "not-a-result" not in repr(validated.envelope)
+
+
+@pytest.mark.unit
+def test_repaired_rule_display_facts_are_dropped_and_others_kept():
+    envelope = FamilyExecutionEnvelope(
+        results=(_result("LX0609-01-02-01"),),
+        planned_rule_ids=EXPECTED,
+        customer_display_facts=(
+            ("LX0609-01-01-01", {"k": "v"}),
+            ("LX0609-01-02-01", {"k": "kept"}),
+        ),
+    )
+
+    validated = validate_family_execution_envelope(
+        envelope=envelope,
+        expected_rule_ids=EXPECTED,
+    )
+
+    assert validated.repaired_rule_ids == ("LX0609-01-01-01",)
+    assert validated.envelope.customer_display_facts == (
+        ("LX0609-01-02-01", {"k": "kept"}),
+    )
+
+
+@pytest.mark.unit
+def test_planned_scope_mismatch_still_fails_the_whole_family():
+    envelope = FamilyExecutionEnvelope(
+        results=(_result("LX0609-01-01-01"),),
+        planned_rule_ids=("LX0609-01-01-01",),
+    )
+
+    validated = validate_family_execution_envelope(
+        envelope=envelope,
+        expected_rule_ids=EXPECTED,
+    )
+
+    assert validated.valid is False
+    assert validated.reason_code == "family_result_scope_mismatch"
+    assert [item["status"] for item in validated.envelope.results] == [
+        "technical_error",
+        "technical_error",
+    ]
 
 
 @pytest.mark.unit

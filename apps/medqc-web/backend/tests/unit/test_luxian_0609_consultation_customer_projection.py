@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.luxian_0609.consultation_customer_projection import (
     safe_consultation_customer_display_facts,
+    validate_published_consultation_facts,
 )
 
 
@@ -380,3 +383,64 @@ def test_non_consultation_rule_is_not_owned_by_consultation_projection() -> None
         )
         is None
     )
+
+
+def _023_reason_raw(**item_extra) -> dict:
+    return {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 1,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "execution_missing_or_generic",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_evidence": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "recommendation_text": "完善血气分析、乳酸、心衰指标",
+                "execution_state": "specific",
+                "opinion_refs": [],
+                "execution_refs": [],
+                **item_extra,
+            }
+        ],
+        "excluded_recommendations": [
+            {"episode_index": 1, "recommendation_text": "卧床休息", "exclusion_reason": "non_order_recommendation"},
+            {"episode_index": 1, "recommendation_text": "继续服用原降压药", "exclusion_reason": "home_medication"},
+            {"episode_index": 1, "recommendation_text": "若病情加重可转科", "exclusion_reason": "condition_not_met"},
+        ],
+    }
+
+
+def test_023_projection_publishes_opinion_time_missing_measures_and_exclusion_reasons() -> None:
+    # 2026-10-20：不合规原因须能逐条说明会诊记录时间、当日未开医嘱的措施和不核对的原因。
+    facts = safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04",
+        raw=_023_reason_raw(opinion_time="2026-08-24 15:07:30", missing_measures=["心衰指标"]),
+    )
+
+    assert facts is not None
+    item = facts["recommendation_evidence"][0]
+    assert item["opinion_time"] == "2026-08-24 15:07:30"
+    assert item["missing_measures"] == ["心衰指标"]
+    assert [row["exclusion_reason"] for row in facts["excluded_recommendations"]] == [
+        "non_order_recommendation", "home_medication", "condition_not_met",
+    ]
+    assert validate_published_consultation_facts(rule_id="LX0609-03-01-04", raw=facts) == facts
+
+
+@pytest.mark.parametrize(
+    "extra",
+    (
+        {"opinion_time": "8月24日下午"},
+        {"missing_measures": []},
+        {"missing_measures": ["措" * 41]},
+        {"missing_measures": [1]},
+    ),
+)
+def test_023_projection_rejects_malformed_reason_fields(extra) -> None:
+    assert safe_consultation_customer_display_facts(
+        rule_id="LX0609-03-01-04", raw=_023_reason_raw(**extra)
+    ) is None

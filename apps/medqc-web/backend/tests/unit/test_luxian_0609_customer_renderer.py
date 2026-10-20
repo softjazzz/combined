@@ -246,7 +246,7 @@ def test_058_customer_finding_distinguishes_expert_support_after_special_use() -
             "special_antimicrobials": ["美罗培南"],
             "expert_support_present": True,
             "first_antimicrobial_time": "2026-06-01 10:00:00",
-            "expert_support_time": "2026-06-01 11:00:00",
+            "expert_support_time": "2026-06-02 11:00:00",
             "support_before_use": False,
             "unmatched_special_antimicrobials": ["美罗培南"],
             "association_ambiguous": False,
@@ -255,8 +255,8 @@ def test_058_customer_finding_distinguishes_expert_support_after_special_use() -
 
     assert finding == (
         "已确认特殊级抗菌药物 美罗培南 的计划开始/启用时间为 "
-        "2026-06-01 10:00:00，但专家支持记录时间 2026-06-01 11:00:00 "
-        "晚于该时间，不满足计划启用前支持要求。"
+        "2026-06-01 10:00:00，但专家支持记录时间 2026-06-02 11:00:00 "
+        "晚于启用后24小时，不满足专家支持（含紧急使用24小时内补办）要求。"
     )
 
 
@@ -277,7 +277,7 @@ def test_058_customer_finding_confirms_expert_support_before_or_at_special_use()
 
     assert finding == (
         "已确认特殊级抗菌药物 美罗培南 计划开始/启用时间为 "
-        "2026-06-01 10:00:00，并在该时间前或同刻找到专家支持记录（2026-06-01 10:00:00）。"
+        "2026-06-01 10:00:00，并在该时间前或其后24小时内找到专家支持记录（2026-06-01 10:00:00）。"
     )
 
 
@@ -296,7 +296,7 @@ def test_058_customer_finding_does_not_call_partial_support_late() -> None:
         },
     )
 
-    assert finding == "已核对特殊级抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到可关联的计划启用前专家支持记录。"
+    assert finding == "已核对特殊级抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到可关联的计划启用前或启用后24小时内的专家支持记录。"
 
 
 def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
@@ -331,7 +331,7 @@ def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
             "verification_kind": "special_antimicrobial_expert_support_check",
             "special_antimicrobials": ["美罗培南", "万古霉素"],
             "association_ambiguous": True,
-        }, "已核对特殊级抗菌药物 美罗培南、万古霉素；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"),
+        }, "已核对特殊级抗菌药物 美罗培南、万古霉素；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前或启用后24小时内的支持。"),
     ),
 )
 def test_antimicrobial_customer_finding_explains_ambiguous_association(
@@ -1004,7 +1004,7 @@ def test_surviving_consultation_rule_keeps_structured_action() -> None:
     assert "照抄" not in result["suggestion"]
     for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
         assert section in result["suggestion"]
-    assert "请在会诊意见执行记录中补充具体执行措施" in result["suggestion"]
+    assert "请在会诊记录当天按会诊建议开立对应医嘱" in result["suggestion"]
 
 
 def _023_facts(*states: str) -> dict:
@@ -1027,13 +1027,13 @@ def _023_facts(*states: str) -> dict:
     (
         (
             "missing",
-            "未找到执行证据：第1次会诊的第1条建议“具体建议1”",
-            "执行记录不具体",
+            "未执行：第1次会诊的第1条建议“具体建议1”",
+            "执行医嘱不具体",
         ),
         (
             "generic",
-            "执行记录不具体：第1次会诊的第1条建议“具体建议1”",
-            "未找到执行证据",
+            "执行医嘱不具体：第1次会诊的第1条建议“具体建议1”",
+            "未执行：",
         ),
     ),
 )
@@ -1047,10 +1047,11 @@ def test_023_finding_distinguishes_missing_and_generic_execution(
 
     assert expected in result["findings"]
     assert unexpected not in result["findings"]
+    assert "执行证据按会诊记录当天开立的住院医嘱核对" in result["findings"]
     if state == "missing":
-        assert "住院医嘱或相关检查、检验、手术记录" in result["findings"]
+        assert "会诊记录当天未开立与上述建议对应的医嘱" in result["findings"]
     else:
-        assert "未明确具体执行措施、执行结果或未执行原因" in result["findings"]
+        assert "仅有与建议笼统相关的医嘱" in result["findings"]
 
 
 def test_023_mixed_execution_lists_missing_and_generic_gaps_separately() -> None:
@@ -1059,9 +1060,9 @@ def test_023_mixed_execution_lists_missing_and_generic_gaps_separately() -> None
         facts=_023_facts("specific", "generic", "missing"),
     )
 
-    assert "未找到执行证据：第2次会诊的第3条建议“具体建议3”" in finding
-    assert "执行记录不具体：第1次会诊的第2条建议“具体建议2”" in finding
-    assert "其余1条建议已找到具体执行证据" in finding
+    assert "未执行：第2次会诊的第3条建议“具体建议3”" in finding
+    assert "执行医嘱不具体：第1次会诊的第2条建议“具体建议2”" in finding
+    assert "其余1条建议当天已开立对应医嘱" in finding
     assert "缺少执行证据或执行记录不具体" not in finding
 
 
@@ -1080,9 +1081,29 @@ def test_023_finding_lists_conditional_recommendation_outside_comparison() -> No
         facts=facts,
     )
 
-    assert "未纳入执行证据核对：第1次会诊建议“必要时完善TCD检查”" in finding
-    assert "上述建议未说明何时达到执行条件" in finding
-    assert "不能据未找到记录判定未落实" in finding
+    assert "未纳入核对：第1次会诊建议“必要时完善TCD检查”（未说明何时达到执行条件）" in finding
+
+
+def test_023_finding_names_consultation_time_partial_measures_and_exclusions() -> None:
+    # 让医生看清：哪次会诊（记录时间）、哪条建议、哪项措施当天没开医嘱，哪些建议为何不核对。
+    facts = _023_facts("missing", "specific")
+    facts["recommendation_evidence"][0]["opinion_time"] = "2026-01-26 11:13:00"
+    facts["recommendation_evidence"][1]["opinion_time"] = "2026-01-20 17:21:00"
+    facts["recommendation_evidence"][1]["missing_measures"] = ["乳酸", "心衰指标"]
+    facts["excluded_recommendations"] = [
+        {"episode_index": 1, "recommendation_text": "卧床休息", "exclusion_reason": "non_order_recommendation"},
+        {"episode_index": 1, "recommendation_text": "继续服用原降压药", "exclusion_reason": "home_medication"},
+        {"episode_index": 1, "recommendation_text": "若病情加重可转科", "exclusion_reason": "condition_not_met"},
+    ]
+
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-03-01-04", facts=facts)
+
+    assert "未执行：第1次会诊（会诊记录2026-01-26 11:13）的第1条建议“具体建议1”" in finding
+    assert "部分措施未执行：第1次会诊（会诊记录2026-01-20 17:21）的第2条建议“具体建议2”中的“乳酸”、“心衰指标”" in finding
+    assert "“卧床休息”（不通过开立医嘱落实）" in finding
+    assert "“继续服用原降压药”（属院外自带药）" in finding
+    assert "“若病情加重可转科”（条件式建议当天未开医嘱，视为条件未成立）" in finding
+    assert "其余" not in finding
 
 
 def test_023_precise_defect_finding_does_not_override_non_defect_states() -> None:
@@ -1423,9 +1444,9 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             "LX0609-07-01-01",
             {
                 "failure_kind": "pretransfusion_items_incomplete",
-                "missing_items": ["hiv", "syphilis", "alt"],
+                "missing_items": ["hiv", "syphilis", "antibody_screen"],
             },
-            "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。",
+            "输血前常规检查缺少：艾滋病病毒抗体、梅毒筛查、不规则抗体筛查。",
         ),
         (
             "LX0609-07-01-02",
@@ -1616,7 +1637,7 @@ def test_058_missing_drug_start_time_does_not_claim_expert_support_absent() -> N
 
     assert finding == (
         "已识别特殊级抗菌药物 美罗培南 计划，但缺少计划开始/启用时间，"
-        "暂无法判断专家支持记录是否在用药前完成。"
+        "暂无法判断专家支持记录是否在用药前或24小时内完成。"
     )
     assert "未找到专家" not in finding
 
@@ -2544,7 +2565,7 @@ def test_record_rule_multi_event_not_applicable_copy_is_unchanged(rule_id) -> No
         ),
         (
             "LX0609-07-01-01",
-            "暂无法完整核对输血前九项检查",
+            "暂无法完整核对输血前常规检查",
             "乙肝五项",
         ),
         (
@@ -2873,7 +2894,7 @@ def test_each_defined_rule_data_gap_names_customer_visible_missing_material(rule
     (
         ("LX0609-06-01-02", "CT/MRI"),
         ("LX0609-12-01-02", "病程记录"),
-        ("LX0609-03-01-04", "会诊意见"),
+        ("LX0609-03-01-04", "住院医嘱"),
     ),
 )
 def test_data_gap_for_event_rules_names_the_missing_customer_material(

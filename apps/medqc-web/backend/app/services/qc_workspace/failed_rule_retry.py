@@ -13,11 +13,34 @@ FAILED_RULE_RETRY_SCHEMA_VERSION = "failed-rule-retry-v1"
 FAILED_RULE_AUTO_RETRY_MAX_ATTEMPTS = 3
 _FAILED_RULE_AUTO_RETRY_DELAYS_SECONDS = (0.0, 1.0, 3.0)
 _FAILED_RULE_AUTO_RETRY_PHASES = frozenset({"result_status", "result_missing"})
+# 同样输入重跑仍会得到同样失败的确定性原因：隐私护栏拦截、程序缺陷、单条交付合同
+# 不满足，以及执行器输出缺失/重复等结构问题。不自动补跑，避免空耗模型调用。
+_DETERMINISTIC_FAILURE_REASON_CODES = frozenset({
+    "privacy_guard_blocked",
+    "execution_program_error",
+    "customer_result_contract_violation",
+    "family_result_invalid",
+    "family_result_missing",
+    "family_result_duplicate",
+    "family_result_extra",
+    "family_result_order_mismatch",
+    "family_result_scope_mismatch",
+    # 候选材料超出单次抽取规模上限（如 03-01-04 会诊措施逐项核对），由输入规模决定，重跑结果不变。
+    "candidate_scope_incomplete",
+})
+# 模型输出不合格式：结构化抽取按温度 0 调用，同样输入重跑得到同样输出（第四轮 3 次补跑 19 条
+# 未恢复）。不自动补跑；超时、网络、限流等偶发错误仍自动补跑，人工定向重跑不受影响。
+_OUTPUT_FORMAT_FAILURE_REASON_CODES = frozenset({
+    "model_invalid_output",
+    "model_parse_error",
+})
 
 
 def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
     rule = str(failure.get("rule_id") or failure.get("rule_code") or "").strip().upper()
     reason = str(failure.get("reason_code") or "")
+    if reason in _DETERMINISTIC_FAILURE_REASON_CODES or reason in _OUTPUT_FORMAT_FAILURE_REASON_CODES:
+        return False
     if rule == "LX0609-05-01-03" and reason in {
         "model_invalid_output", "model_parse_error", "model_transport_error", "model_timeout",
         "model_rate_limited", "model_upstream_error", "model_http_error",
@@ -26,6 +49,7 @@ def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
         # 055已在一次规则执行内消费最多两次抽取预算，不再整条自动重跑。
         return False
     if rule == "LX0609-03-01-04" and reason in {
+        "executor_exception",
         "model_invalid_output", "model_parse_error", "model_http_error",
         "model_configuration_error", "execution_program_error",
     }:

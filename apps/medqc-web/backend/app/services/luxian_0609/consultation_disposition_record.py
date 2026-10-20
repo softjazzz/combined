@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
+
+logger = logging.getLogger(__name__)
 
 RULE_ID = "LX0609-03-01-05"
 SCHEMA_VERSION = "consultation-disposition-record-v2"
@@ -20,7 +23,7 @@ _KINDS = frozenset(
 )
 _SPECIFIC = frozenset({"performed", "planned", "declined"})
 _GENERIC = re.compile(
-    r"^(?:以上|均|已|予以|予|现|其余|余|全部|一律|处理|治疗|继续|遵照|遵嘱|遵医嘱|遵会诊意见|遵意见|执行|按会诊意见|按意见|落实|办理|照办|同前|上述治疗|当前治疗|方案|康复理疗|康复治疗|对症|[，,。；;：:！!\s])+$"
+    r"^(?:以上|均|已|予以|予|现|其余|余|全部|一律|处理|治疗|继续|遵执|遵照|遵嘱|遵医嘱|遵会诊意见|遵意见|执行|按会诊意见|按意见|落实|办理|照办|同前|上述治疗|当前治疗|方案|康复理疗|康复治疗|对症|[，,。；;：:！!\s])+$"
 )
 _GENERIC_REMAINDER = re.compile(
     r"(?:其余|其他|余下|余)(?:建议|意见|处理|治疗)?(?:均|已|予以|予)?(?:遵嘱|遵照|遵医嘱|遵会诊意见|按会诊意见|按建议)"
@@ -43,6 +46,107 @@ def _normalized(value: str) -> str:
     return re.sub(r"\s+", "", value)
 
 
+_MIN_SPLIT_SEGMENT_CHARS = 4
+
+
+def _split_into_source_segments(quote: str, source: str) -> list[str] | None:
+    """把模型拼接的引文按原文顺序拆回若干逐字连续片段；无法完整拆分时返回 None。
+
+    模型偶尔把被其他文字隔开的两段意见拼成一条引文（中间跳过本科室回应）。
+    每段都从原文逐字截取、按位置递增且不少于 4 字，不接受原文没有的任何文字，
+    只把一条拼接引文还原为多条连续引文，引文须逐字来自原文的合同不变。
+    """
+
+    positions = [index for index, char in enumerate(source) if not char.isspace()]
+    compact_source = "".join(source[index] for index in positions)
+    compact_quote = _normalized(quote)
+    if not compact_quote or not compact_source:
+        return None
+    segments: list[str] = []
+    quote_at = source_at = 0
+    while quote_at < len(compact_quote):
+        best_start, best_length = -1, 0
+        # 在已用位置之后寻找能匹配的最长前缀，保证片段顺序与原文一致。
+        for length in range(len(compact_quote) - quote_at, _MIN_SPLIT_SEGMENT_CHARS - 1, -1):
+            found = compact_source.find(compact_quote[quote_at:quote_at + length], source_at)
+            if found >= 0:
+                best_start, best_length = found, length
+                break
+        if best_length < _MIN_SPLIT_SEGMENT_CHARS:
+            return None
+        start, end = positions[best_start], positions[best_start + best_length - 1] + 1
+        segments.append(source[start:end])
+        quote_at += best_length
+        source_at = best_start + best_length
+    return segments if len(segments) > 1 else None
+
+
+def _restore_contiguous_quotes(quotes: Any, source: str) -> Any:
+    """仅对不在原文中的拼接引文尝试拆分；其他输入原样返回交由原校验处理。"""
+
+    if not isinstance(quotes, list):
+        return quotes
+    restored: list[Any] = []
+    for quote in quotes:
+        if isinstance(quote, str) and quote and _normalized(quote) not in _normalized(source):
+            segments = _split_into_source_segments(quote, source)
+            if segments is not None:
+                restored.extend(segments)
+                continue
+        restored.append(quote)
+    return restored
+
+
+# 长段落由模型给出首尾锚点，程序在原文中取整段：flash 模型逐字照抄约 400 字的
+# 会诊意见时会混入前文句子并陷入复读（C11 真实复验 8 次失败 6 次）。
+# 锚点不设长度上限：模型常把整段原文放进 start，只要逐字且唯一即可定位。
+_MIN_ANCHOR_CHARS = 4
+# 模型把整段放进 start 时会用省略号略去中段（C09 会诊记录 9：start 149 字，
+# 省略号前 22 字、后 124 字均逐字来自原文）。开头锚点只取省略号之前、结尾锚点
+# 只取最后一个省略号之后，切出的部分仍须逐字、唯一且不少于 4 字。
+_ANCHOR_ELLIPSIS = re.compile(r"\.{2,}|…+|。{3,}|·{3,}")
+
+
+def _resolve_anchor_quote(anchor: Any, source: str) -> str | None:
+    """按首尾锚点从原文截取连续段落；锚点须逐字来自原文且开头锚点唯一，否则返回 None。
+
+    结尾锚点取开头之后第一次出现的位置，段落只会截短不会越界拼接；
+    截出的文字逐字来自原文，引文合同不变。
+    """
+
+    if not isinstance(anchor, dict) or set(anchor) != {"start", "end"}:
+        return None
+    start, end = (_normalized(anchor[key]) if isinstance(anchor[key], str) else "" for key in ("start", "end"))
+    start = _ANCHOR_ELLIPSIS.split(start)[0]
+    end = _ANCHOR_ELLIPSIS.split(end)[-1]
+    if not all(len(value) >= _MIN_ANCHOR_CHARS for value in (start, end)):
+        return None
+    positions = [index for index, char in enumerate(source) if not char.isspace()]
+    compact_source = "".join(source[index] for index in positions)
+    start_at = compact_source.find(start)
+    if start_at < 0 or compact_source.find(start, start_at + 1) >= 0:
+        return None
+    # 短段落首尾锚点可重叠，但结尾不能早于开头锚点的末尾。
+    end_at = compact_source.find(end, start_at)
+    while 0 <= end_at and end_at + len(end) < start_at + len(start):
+        end_at = compact_source.find(end, end_at + 1)
+    if end_at < 0:
+        return None
+    return source[positions[start_at]:positions[end_at + len(end) - 1] + 1]
+
+
+def _resolved_role_quotes(quotes: Any, source: str) -> Any:
+    """锚点项还原为原文段落；字符串项沿用拼接引文还原。无法解析的项交由原校验拒收。"""
+
+    if not isinstance(quotes, list):
+        return quotes
+    resolved = [
+        _resolve_anchor_quote(quote, source) if isinstance(quote, dict) else quote
+        for quote in quotes
+    ]
+    return _restore_contiguous_quotes(resolved, source)
+
+
 def _grounded(quote: str, source: str) -> bool:
     return bool(
         quote and len(quote) <= 240 and _normalized(quote) in _normalized(source)
@@ -63,6 +167,61 @@ def _model_documents(
 
 
 _ACTION_GROUPS = ("medications", "examinations", "therapies", "other_actions")
+# 第一阶段（角色与引文）协议违规时最多调用次数。
+_OPINION_ATTEMPTS = 2
+
+
+@dataclass(frozen=True)
+class _ReviewIssue:
+    reason: str
+    position: str
+    quote: str = ""
+    hint: str = "须逐字复制单个连续原文片段，不得删去中间文字后拼接或改写"
+
+
+class _ReviewViolation(ValueError):
+    """收集可修正的落地问题，异常文本沿用原失败原因。"""
+
+    def __init__(self, issues: Sequence[_ReviewIssue], *,
+                 fallback: tuple[str, str, tuple[str, ...]] | None = None) -> None:
+        super().__init__(issues[0].reason)
+        self.issues = tuple(issues)
+        self.fallback = fallback
+
+
+def _review_response_parts(response: Any) -> tuple[Any, Any]:
+    if not isinstance(response, Mapping):
+        return None, None
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        return (message.get("content") if isinstance(message, Mapping) else None,
+                choices[0].get("finish_reason"))
+    return response.get("content", response.get("text")), response.get("finish_reason")
+
+
+def _review_retry_prompt(prompt: str, error: Exception, response: Any, marker: str) -> str:
+    """仅补核附加有界、解码并脱敏的旧输出；首次提示不变。"""
+    content, finish = _review_response_parts(response)
+    if finish == "length":
+        hint = "上次输出超长被截断。请输出完整JSON，引文只取最短必要的连续原文，避免复读或长段照抄。"
+    else:
+        details = []
+        for issue in getattr(error, "issues", ())[:8]:
+            quote = redact_luxian_0609_patient_privacy(issue.quote)
+            shown = f"以「{quote[:60]}」开头" if len(quote) > 60 else f"「{quote}」"
+            details.append(redact_luxian_0609_patient_privacy(
+                f"{issue.position}：{shown}；{issue.reason}；{issue.hint}"))
+        hint = "上次校验失败：" + ("；".join(details) or
+            f"{str(error)}；检查规定的结构、字段和枚举，重新输出完整JSON")
+        try:
+            previous = json.dumps(json.loads(content), ensure_ascii=False)
+        except (ValueError, TypeError):
+            previous = ""
+        previous = redact_luxian_0609_patient_privacy(previous)
+        if previous and len(previous) <= 24000:
+            hint += "。上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + previous
+    return prompt.replace(marker, "\n" + hint + "\n" + marker, 1)
 
 
 def _required_followups(opinions: Sequence[str]) -> tuple[str, ...]:
@@ -138,6 +297,56 @@ def parse_facts(
     response: Mapping[str, Any],
     documents: Sequence[Mapping[str, str]],
     roles: Mapping[str, Mapping[str, Any]],
+    *, review_issues: list[_ReviewIssue] | None = None,
+) -> tuple[str, str, tuple[str, ...]]:
+    """身份和覆盖仍整批严格校验；独立文书失败不能覆盖已核验的缺陷。"""
+    payload = _payload(response)
+    if (not isinstance(payload, dict)
+        or set(payload) != {"schema_version", "documents"}
+        or payload["schema_version"] != SCHEMA_VERSION
+        or not isinstance(payload["documents"], list)):
+        raise ValueError("invalid response schema")
+    expected = {document["ref"]: document for document in documents}
+    items = payload["documents"]
+    if not all(isinstance(item, dict) and isinstance(item.get("ref"), str) for item in items):
+        raise ValueError("incomplete document coverage")
+    refs = [item["ref"] for item in items]
+    if len(items) != len(expected) or set(refs) != set(expected):
+        issues = [
+            _ReviewIssue("incomplete document coverage", f"documents.ref={ref}", ref,
+                         f"出现{refs.count(ref)}次；每个输入ref须恰好返回一次，补齐遗漏并删除重复或越界ref")
+            for ref in dict.fromkeys([*expected, *refs])
+            if refs.count(ref) != 1 or ref not in expected
+        ]
+        raise _ReviewViolation(issues)
+    outcomes = []
+    invalid = False
+    for item in items:
+        ref = item["ref"]
+        try:
+            outcomes.append(_parse_document_facts(
+                {"content": json.dumps({"schema_version": SCHEMA_VERSION, "documents": [item]})},
+                (expected[ref],), {ref: roles[ref]}, review_issues=review_issues,
+            ))
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            invalid = True
+    defects = tuple(dict.fromkeys(ref for status, _, refs in outcomes if status == "non_compliant" for ref in refs))
+    if defects:
+        return "non_compliant", "requirement_violated", defects
+    if invalid:
+        raise ValueError("invalid document facts")
+    for state, reason in (("data_gap", "semantic_extraction_unresolved"), ("compliant", "requirement_satisfied")):
+        refs = tuple(dict.fromkeys(ref for status, _, refs in outcomes if status == state for ref in refs))
+        if any(status == state for status, _, _ in outcomes):
+            return state, reason, refs
+    return "not_applicable", "trigger_absent_complete", ()
+
+
+def _parse_document_facts(
+    response: Mapping[str, Any],
+    documents: Sequence[Mapping[str, str]],
+    roles: Mapping[str, Mapping[str, Any]],
+    *, review_issues: list[_ReviewIssue] | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
     payload = _payload(response)
     if (
@@ -173,6 +382,9 @@ def parse_facts(
             continue
         applicable.append(ref)
         if not items:
+            if review_issues is not None:
+                review_issues.append(_ReviewIssue("incomplete action coverage", f"ref={ref}.actions", "",
+                    "逐项覆盖意见中的独立动作；无反馈的建议也须列项"))
             unresolved = True
             continue
         if len(items) > 24:
@@ -180,7 +392,7 @@ def parse_facts(
         actions: set[str] = set()
         required_followups = _required_followups(role["opinion_quotes"])
         covered_followups: set[str] = set()
-        for group, item in items:
+        for item_index, (group, item) in enumerate(items, 1):
             if (
                 not isinstance(item, dict)
                 or set(item)
@@ -200,6 +412,16 @@ def parse_facts(
             if kind not in _KINDS:
                 unresolved = True
                 continue
+            position = f"ref={ref}.{group}第{item_index}项"
+            if review_issues is not None:
+                for field, quote, valid in (
+                    ("action_quote", action, _in_quotes(action, role["opinion_quotes"]) or _in_quotes(action, role["feedback_quotes"])),
+                    ("feedback_quote", feedback, not feedback or _in_quotes(feedback, role["feedback_quotes"])),
+                    ("referent_quote", referent, not referent or _in_quotes(referent, role["opinion_quotes"])),
+                ):
+                    if not valid:
+                        review_issues.append(_ReviewIssue("role quotes not grounded", position + "." + field, quote,
+                            "须逐字摘自对应角色引文的单个连续片段，不得拼接、改写或跨说话者借用"))
             if not _in_quotes(action, role["opinion_quotes"]):
                 # 本科室后来新增的安排不属于本次会诊建议，不要求再次回应。
                 unresolved |= not _in_quotes(action, role["feedback_quotes"])
@@ -258,9 +480,13 @@ def parse_facts(
             if kind in {"generic", "missing"}:
                 defects.append(ref)
             unresolved |= kind == "unknown"
+        if review_issues is not None and set(required_followups) != covered_followups:
+            for target in set(required_followups) - covered_followups:
+                review_issues.append(_ReviewIssue("incomplete action coverage", f"ref={ref}.examinations", target,
+                    "显式复查须单独列入examinations，不得并入用药动作；无反馈时仍列项"))
         unresolved |= not actions or set(required_followups) != covered_followups
     if seen != set(sources):
-        raise ValueError("incomplete document coverage")
+        raise _ReviewViolation([_ReviewIssue("incomplete document coverage", "documents.ref", "", "每个输入ref恰好返回一次，补齐遗漏并删除重复或越界ref")])
     if defects:
         return "non_compliant", "requirement_violated", tuple(dict.fromkeys(defects))
     if unresolved:
@@ -282,7 +508,11 @@ def build_opinion_prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "即使没有已执行字样，也必须完整摘入feedback_quotes，不能将拟加用再列为新建议。"
         "相反，会诊医师自己说建议拟加用某药仍是opinion_quotes；不能仅凭拟、建议或药名判断说话者。"
         "两组引文在正文中的位置不得重叠；同一种药分别出现在建议和回应中时，应分别摘录对应位置。"
-        "两组引文都必须是正文中的连续原话，不得拼接；分别不超过4000/2400字，每组最多8段。\n"
+        "两组每段都必须对应正文中的一个连续段落，不得拼接；分别不超过4000/2400字，每组最多8段。"
+        "段落不超过60字时直接给原文字符串；超过60字时不要整段照抄，改给"
+        '{"start":"段落开头约15字原文","end":"段落结尾约15字原文"}，'
+        "start与end都须逐字复制原文、各至少4字（start只取开头约15字即可），start须在该份正文中只出现一次，"
+        "程序会从start截到其后第一次出现的end。\n"
         "scope取ordinary/non_target/unknown：普通专科会诊为ordinary，术前邀请但有具体诊治意见也算；"
         "纯麻醉耐受评估、MDT、空模板和非会诊为non_target，归属无法识别为unknown。混合正文只摘普通专科部分。"
         "suggestion_state取present/unavailable/no_action：有具体建议、意见内容缺失、仅诊断或无需具体措施。"
@@ -290,7 +520,8 @@ def build_opinion_prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "每个ref恰好返回一次，只输出JSON："
         f'{{"schema_version":"{SCHEMA_VERSION}-opinions","documents":['
         '{"ref":"输入ref","scope":"ordinary","suggestion_state":"present",'
-        '"opinion_quotes":["会诊医师的建议段落"],"feedback_quotes":["本科室的处置回应段落"]}]}。'
+        '"opinion_quotes":[{"start":"建议段落开头原文","end":"建议段落结尾原文"}],'
+        '"feedback_quotes":["本科室的60字以内回应原文"]}]}。'
         "\nDOCUMENTS_JSON="
         + json.dumps(
             _model_documents(documents), ensure_ascii=False, separators=(",", ":")
@@ -311,47 +542,68 @@ def parse_opinions(
         raise ValueError("invalid opinions schema")
     sources = {d["ref"]: d["text"] for d in _model_documents(documents)}
     output: dict[str, Mapping[str, Any]] = {}
-    for item in payload["documents"]:
+    issues: list[_ReviewIssue] = []
+    for index, item in enumerate(payload["documents"], 1):
         if not isinstance(item, dict) or set(item) != {
-            "ref",
-            "scope",
-            "suggestion_state",
-            "opinion_quotes",
-            "feedback_quotes",
+            "ref", "scope", "suggestion_state", "opinion_quotes", "feedback_quotes",
         }:
             raise ValueError("invalid opinion document")
         ref, scope, state = item["ref"], item["scope"], item["suggestion_state"]
-        if (
-            not isinstance(ref, str)
-            or ref not in sources
-            or ref in output
-            or scope not in {"ordinary", "non_target", "unknown"}
-            or state not in {"present", "unavailable", "no_action"}
-        ):
+        if (not isinstance(ref, str) or not isinstance(scope, str) or not isinstance(state, str)
+                or scope not in {"ordinary", "non_target", "unknown"}
+                or state not in {"present", "unavailable", "no_action"}):
             raise ValueError("invalid opinion identity")
+        position = f"documents第{index}项 ref={ref}"
+        if ref not in sources or ref in output:
+            issues.append(_ReviewIssue("invalid opinion identity", position + ".ref", ref,
+                                       "每个输入ref恰好返回一次，只能引用输入文书"))
+            continue
         for key, limit in (("opinion_quotes", 4000), ("feedback_quotes", 2400)):
-            quotes = item[key]
-            if (
-                not isinstance(quotes, list)
-                or len(quotes) > 8
-                or not all(
-                    isinstance(q, str)
-                    and q
-                    and len(q) <= limit
-                    and _normalized(q) in _normalized(sources[ref])
-                    for q in quotes
-                )
-                or len(set(map(_normalized, quotes))) != len(quotes)
-            ):
+            original = item[key]
+            if not isinstance(original, list):
                 raise ValueError("role quotes not grounded")
+            for value in original:
+                if not isinstance(value, (str, dict)) or (isinstance(value, dict) and
+                        (set(value) != {"start", "end"} or not all(isinstance(v, str) for v in value.values()))):
+                    raise ValueError("role quotes not grounded")
+            quotes = _resolved_role_quotes(original, sources[ref])
+            if len(quotes) > 8:
+                raise ValueError("role quotes not grounded")
+            item = {**item, key: quotes}
+            seen_quotes: set[str] = set()
+            for quote_index, (raw, quote) in enumerate(zip(original, [
+                    _resolve_anchor_quote(q, sources[ref]) if isinstance(q, dict) else q for q in original]), 1):
+                # 拼接引文沿用原有还原规则，不改变逐字落地合同。
+                restored = _restore_contiguous_quotes([quote], sources[ref])
+                valid = all(isinstance(q, str) and q and len(q) <= limit
+                            and _normalized(q) in _normalized(sources[ref]) for q in restored)
+                duplicate = valid and (any(_normalized(q) in seen_quotes for q in restored)
+                                       or len(set(map(_normalized, restored))) != len(restored))
+                if not valid or duplicate:
+                    hint = "须逐字复制单个连续原文片段，不得删去中间文字后拼接或改写"
+                    if isinstance(raw, dict):
+                        count = _normalized(sources[ref]).count(_ANCHOR_ELLIPSIS.split(_normalized(raw["start"]))[0]) if raw["start"] else 0
+                        hint += f"；start出现{count}次，首尾锚点各至少4字，start须唯一，end须位于其后"
+                    if duplicate:
+                        hint += "；删除重复引文"
+                    issues.append(_ReviewIssue("role quotes not grounded",
+                        f"{position}.{key}第{quote_index}项", json.dumps(raw, ensure_ascii=False) if isinstance(raw, dict) else raw, hint))
+                if valid:
+                    seen_quotes.update(_normalized(q) for q in restored)
         if scope == "ordinary" and state == "present":
             if not item["opinion_quotes"]:
-                raise ValueError("missing opinion text")
+                issues.append(_ReviewIssue("missing opinion text", position + ".opinion_quotes", "",
+                                           "有建议时须摘录该文书中的意见原文"))
         elif item["opinion_quotes"] or item["feedback_quotes"]:
             raise ValueError("unexpected role text")
         output[ref] = item
-    if set(output) != set(sources):
-        raise ValueError("incomplete opinion document coverage")
+    for ref in sources:
+        if ref in output:
+            continue
+        issues.append(_ReviewIssue("incomplete opinion document coverage", f"ref={ref}", "",
+                                   "补齐该文书，两组引文仍须来自该份原文"))
+    if issues:
+        raise _ReviewViolation(issues)
     return output
 
 
@@ -368,32 +620,43 @@ async def check_disposition_record(
     totals = [0, 0, 0]
     elapsed = 0.0
     frozen: dict[str, Mapping[str, Any]] = {}
-    for attempt in range(2):
+
+    def extraction_failure(calls: int, reason: str) -> DispositionRecordOutcome:
+        # 第一阶段角色和引文已严格核验；纯笼统回应无需再靠动作抽取证明。
+        refs = tuple(ref for ref, role in frozen.items()
+                     if role["scope"] == "ordinary" and role["suggestion_state"] == "present"
+                     and role["feedback_quotes"] and all(
+                         _GENERIC.fullmatch(_normalized(quote))
+                         for quote in role["feedback_quotes"]))
+        return DispositionRecordOutcome(
+            "non_compliant" if refs else "technical_error",
+            "requirement_violated" if refs else reason,
+            refs, calls, *totals, elapsed,
+        )
+
+    calls = 0
+    stage = "opinion"
+    stage_prompt = prompt
+    action_retried = False
+    action_fallback = None
+    while True:
         started = perf_counter()
         try:
-            options = structured_output_kwargs(llm_client)
-            if attempt == 1 and options:
-                # 本点第二阶段已真实复验 JSON 对象模式；不改其他规则的输出策略。
-                options["response_format"] = {"type": "json_object"}
+            # 两阶段都只关 thinking：真实对照（2026-10-17）中第二阶段叠加 json_object
+            # 5 次有 3 次输出残缺对象，不叠加 5 次全部合格。
             response = await llm_client.generate(
                 redact_luxian_0609_patient_privacy(prompt),
-                **options,
+                **structured_output_kwargs(llm_client),
             )
         except Exception:
-            return DispositionRecordOutcome(
-                "data_gap",
-                "semantic_extraction_unresolved",
-                llm_call_count=attempt + 1,
-                prompt_tokens=totals[0],
-                completion_tokens=totals[1],
-                total_tokens=totals[2],
-                api_time=elapsed + perf_counter() - started,
-            )
+            elapsed += perf_counter() - started
+            return extraction_failure(calls + 1, "model_transport_error")
+        calls += 1
         elapsed += perf_counter() - started
         try:
             usage = _usage(response)
             totals = [total + int(value) for total, value in zip(totals, usage[:3])]
-            if attempt == 0:
+            if stage == "opinion":
                 frozen = parse_opinions(response, documents)
                 if not any(
                     item["scope"] == "ordinary"
@@ -414,31 +677,49 @@ async def check_disposition_record(
                         else ("not_applicable", "trigger_absent_complete")
                     )
                     return DispositionRecordOutcome(
-                        status, reason, (), 1, *totals, elapsed
+                        status, reason, (), calls, *totals, elapsed
                     )
                 prompt = build_prompt(tuple(frozen.values()))
                 if len(prompt) > 60000:
                     return DispositionRecordOutcome(
-                        "data_gap", "source_truncated", (), 1, *totals, elapsed
+                        "data_gap", "source_truncated", (), calls, *totals, elapsed
                     )
+                stage_prompt = prompt
+                stage = "action"
                 continue
-            status, reason, refs = parse_facts(response, documents, frozen)
-            return DispositionRecordOutcome(status, reason, refs, 2, *totals, elapsed)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
-            return DispositionRecordOutcome(
-                "data_gap",
-                "semantic_extraction_unresolved",
-                (),
-                attempt + 1,
-                *totals,
-                elapsed,
+            issues: list[_ReviewIssue] = []
+            status, reason, refs = parse_facts(response, documents, frozen, review_issues=issues)
+            if issues and status == "data_gap":
+                raise _ReviewViolation(issues, fallback=(status, reason, refs))
+            return DispositionRecordOutcome(status, reason, refs, calls, *totals, elapsed)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+            logger.warning(
+                "LX0609 会诊处置记录抽取输出无效: stage=%s call=%s document_count=%s %s",
+                stage,
+                calls,
+                len(documents),
+                describe_luxian_0609_llm_parse_failure(error, response),
             )
-    return DispositionRecordOutcome(
-        "data_gap",
-        "semantic_extraction_unresolved",
-        llm_call_count=2,
-        prompt_tokens=totals[0],
-        completion_tokens=totals[1],
-        total_tokens=totals[2],
-        api_time=elapsed,
-    )
+            if stage == "opinion" and calls < _OPINION_ATTEMPTS:
+                prompt = _review_retry_prompt(stage_prompt, error, response, "\nDOCUMENTS_JSON=")
+                continue
+            if stage == "action" and isinstance(error, _ReviewViolation):
+                if not action_retried:
+                    action_retried = True
+                    action_fallback = error.fallback
+                    prompt = _review_retry_prompt(stage_prompt, error, response, "\nROLE_FACTS_JSON=")
+                    continue
+                fallback = error.fallback or action_fallback
+                if fallback is not None:
+                    return DispositionRecordOutcome(*fallback, calls, *totals, elapsed)
+            return extraction_failure(calls, "model_invalid_output")
+
+def safe_disposition_display_facts(raw: Any) -> dict[str, Any] | None:
+    """只发布已核验的不具体处置文书数量，不携带原文或身份。"""
+    if (not isinstance(raw, Mapping)
+        or set(raw) != {"failure_kind", "unspecific_document_count"}
+        or raw.get("failure_kind") != "consultation_disposition_unspecific"
+        or type(raw.get("unspecific_document_count")) is not int
+        or not 1 <= raw["unspecific_document_count"] <= 10000):
+        return None
+    return dict(raw)

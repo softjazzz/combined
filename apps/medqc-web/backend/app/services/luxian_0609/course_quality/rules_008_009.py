@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
+import logging
 import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -53,10 +54,25 @@ _RULE_009_CHANGE_CATEGORIES = frozenset(
     {"subjective", "objective", "exam_lab", "complication", "special_state"}
 )
 _RULE_009_CHANGE_WINDOW = timedelta(hours=24)
-_MAX_RULE_009_CHANGE_EVENTS = 20
+_MAX_RULE_009_DISPLAY_EVENTS = 20
 _RULE_009_TEMPLATE_VALUES = frozenset(
     {"", "模板", "空模板", "待补充", "暂无内容", "无内容", "未填写", "待完善", "null", "none"}
 )
+# 明确区分正常、阴性及异常方向；空白和未定义编码不能当成正常。
+_RULE_009_LAB_STATES = {
+    **dict.fromkeys(("N", "NORMAL", "正常"), "normal"),
+    **dict.fromkeys(("NEG", "NEGATIVE", "阴性", "-"), "negative"),
+    **dict.fromkeys(("H", "HIGH", "高", "偏高", "升高", "↑"), "high"),
+    **dict.fromkeys(("L", "LOW", "低", "偏低", "降低", "↓"), "low"),
+    **dict.fromkeys(("PH", "HH", "危急高"), "critical_high"),
+    **dict.fromkeys(("PL", "LL", "危急低"), "critical_low"),
+    **dict.fromkeys(("POS", "POSITIVE", "阳性", "+", "++", "+++", "++++"), "positive"),
+    **dict.fromkeys(("A", "ABNORMAL", "异常"), "abnormal"),
+    **dict.fromkeys(("CRITICAL", "危急", "危急值"), "critical"),
+}
+_RULE_009_LAB_NORMAL_STATES = frozenset({"normal", "negative"})
+_RULE_009_LAB_CRITICAL_STATES = frozenset({"critical_high", "critical_low", "critical"})
+_LOGGER = logging.getLogger(__name__)
 
 
 class Rule008009LLMClient(Protocol):
@@ -793,10 +809,11 @@ def _rule_009_external_event_text(
         for field_name, label in (
             ("item_name", "项目"),
             ("result", "结果"),
-            ("abnormal_flag", "异常标志"),
         ):
             if (value := _clean(row.get(field_name))):
                 parts.append(f"{label}={value}")
+        if (flag := _rule_009_lab_flag(row)):
+            parts.append(f"异常标志={flag}")
         if parts:
             return "；".join(parts)
 
@@ -858,6 +875,76 @@ def _rule_009_group_event_time(
     return None
 
 
+def _rule_009_lab_flag(row: Mapping[str, Any]) -> str:
+    """兼容规则输入名和生产快照字段名，不推断数值编码含义。"""
+
+    return _clean(row.get("abnormal_flag")) or _clean(row.get("abnormal_indicator"))
+
+
+def _rule_009_filter_lab_candidates(
+    *,
+    grouped_external_events: Mapping[tuple[str, str], Mapping[str, Any]],
+    lab_history_groups: Mapping[tuple[str, str], Mapping[str, Any]],
+) -> dict[tuple[str, str], Mapping[str, Any]]:
+    """纯函数：保留危急、状态变化、新出现异常或整单标志不可用的项目。
+
+    历史包含本次就诊病危期前的结果；同一权威报告时刻状态冲突时不猜测。
+    不改写输入，也不使用结果数值或正文判断异常。
+    """
+
+    history: dict[str, dict[datetime, set[str | None]]] = {}
+    for group in lab_history_groups.values():
+        report_time = _rule_009_group_event_time(
+            event_kind="lab", times_by_source=group["times_by_source"],
+        )
+        if report_time is None:
+            continue
+        for row in group["items"]:
+            name = _clean(row.get("item_name"))
+            if name:
+                state = _RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper())
+                history.setdefault(name, {}).setdefault(report_time, set()).add(state)
+
+    selected: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for identity, group in grouped_external_events.items():
+        items = group["items"]
+        # 检查不筛；无明细的检验主记录按无法判断保留。
+        if not items:
+            selected[identity] = group
+            continue
+        states = [_RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper()) for row in items]
+        all_unknown = all(state is None for state in states)
+        report_time = _rule_009_group_event_time(
+            event_kind="lab", times_by_source=lab_history_groups[identity]["times_by_source"],
+        )
+        texts: list[str] = []
+        for row, state in zip(items, states):
+            previous = history.get(_clean(row.get("item_name")), {})
+            prior_time = max(
+                (time for time in previous if report_time is not None and time < report_time),
+                default=None,
+            )
+            prior_states = previous.get(prior_time, set())
+            comparable = len(prior_states) == 1 and None not in prior_states
+            changed = (
+                state is not None and comparable and state not in prior_states
+            )
+            # 用户选定口径（2026-10-18，待客户复核）：持续普通异常不算变化；
+            # 没有可比较历史时，不能证明持续，仍按新出现异常保留。
+            new_abnormal = (
+                state is not None and state not in _RULE_009_LAB_NORMAL_STATES
+                and not comparable
+            )
+            if all_unknown or state in _RULE_009_LAB_CRITICAL_STATES or changed or new_abnormal:
+                content = _rule_009_external_event_text("labtest_item_report", row)
+                if content and content not in texts:
+                    texts.append(content)
+        if texts:
+            # 有明细时不附主记录正文，避免被排除的正常项目从主记录重新进入提示词。
+            selected[identity] = {**group, "texts": texts}
+    return selected
+
+
 def _rule_009_group_event_document_refs(
     *,
     event_kind: str,
@@ -906,6 +993,7 @@ def _rule_009_semantic_context(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    allow_large_context: bool = False,
 ) -> tuple[
     str,
     bool,
@@ -963,6 +1051,7 @@ def _rule_009_semantic_context(
 
     observation_by_source = {item.source_key: item for item in snapshot.observations}
     grouped_external_events: dict[tuple[str, str], dict[str, Any]] = {}
+    lab_history_groups: dict[tuple[str, str], dict[str, Any]] = {}
     for source_key in _RULE_009_EXTERNAL_EVENT_SOURCES:
         observation = observation_by_source.get(source_key)
         if (
@@ -981,23 +1070,31 @@ def _rule_009_semantic_context(
         except Exception:
             return "", False, False, {}, {}, {}, {}, evaluation_horizon
         for index, row in enumerate(source_rows):
+            event_kind, event_ref = _rule_009_external_event_identity(source_key, index, row)
+            event_time = _rule_009_external_event_time(source_key, row)
+            if source_key in {"labtest_master", "labtest_item_report"}:
+                history_group = lab_history_groups.setdefault(
+                    (event_kind, event_ref), {"items": [], "times_by_source": {}},
+                )
+                if source_key == "labtest_item_report":
+                    history_group["items"].append(row)
+                if event_time is not None:
+                    history_group["times_by_source"].setdefault(source_key, []).append(event_time)
             content = _rule_009_external_event_text(source_key, row)
             if not content:
                 continue
-            event_time = _rule_009_external_event_time(source_key, row)
             # 不能因为一条尚未被模型识别为病情变化的外部行缺时间，就把整条
             # 规则降级。只有模型明确引用的事件才进入后续权威时间校验。
             if event_time is not None and not _date_in_active_intervals(
                 event_time.date(), active_intervals
             ):
                 continue
-            event_kind, event_ref = _rule_009_external_event_identity(
-                source_key, index, row
-            )
             group = grouped_external_events.setdefault(
                 (event_kind, event_ref),
-                {"texts": [], "times_by_source": {}, "rows_by_source": {}},
+                {"texts": [], "times_by_source": {}, "rows_by_source": {}, "items": []},
             )
+            if source_key == "labtest_item_report":
+                group["items"].append(row)
             if content not in group["texts"]:
                 group["texts"].append(content)
             if event_time is not None:
@@ -1007,8 +1104,20 @@ def _rule_009_semantic_context(
                         (event_time, document_ref)
                     )
 
+    filtered_external_events = _rule_009_filter_lab_candidates(
+        grouped_external_events=grouped_external_events, lab_history_groups=lab_history_groups,
+    )
+    candidate_diagnostics = {
+        "candidates_before": len(grouped_external_events),
+        "candidates_after": len(filtered_external_events),
+    }
+    _LOGGER.info(
+        "02-01-05 检验候选筛选：筛前=%d，筛后=%d",
+        candidate_diagnostics["candidates_before"], candidate_diagnostics["candidates_after"],
+        extra={"rule_id": "LX0609-02-01-05", **candidate_diagnostics},
+    )
     external_events: list[tuple[datetime | None, str, str, tuple[str, ...]]] = []
-    for (event_kind, event_ref), group in grouped_external_events.items():
+    for (event_kind, event_ref), group in filtered_external_events.items():
         event_time = _rule_009_group_event_time(
             event_kind=event_kind,
             times_by_source=group["times_by_source"],
@@ -1129,7 +1238,7 @@ def _rule_009_semantic_context(
     context = "\n".join(parts)
     return (
         ("", True, False, {}, {}, {}, {}, evaluation_horizon)
-        if len(context) > _MAX_RULE_009_CONTEXT_CHARS
+        if len(context) > _MAX_RULE_009_CONTEXT_CHARS and not allow_large_context
         else (
             context,
             False,
@@ -1141,6 +1250,78 @@ def _rule_009_semantic_context(
             evaluation_horizon,
         )
     )
+
+
+def _rule_009_context_batches(
+    *,
+    context: str,
+    event_times: Mapping[str, datetime | None],
+    course_times: Mapping[str, datetime | None],
+) -> tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]:
+    """只在整体超限时按事件窗口分批，保留基线和后续24小时完整病程。
+
+    单条正文或单个完整窗口仍超限时失败关闭；未知时间不能参与窗口裁剪。
+    外部事件恰好投递一次，文书引用仍使用同一快照内的全局引用。
+    """
+    if len(context) <= _MAX_RULE_009_CONTEXT_CHARS:
+        return ((context, tuple(event_times), tuple(course_times)),)
+    blocks = re.split(r"(?m)(?=^\[(?:course|external)_event_ref=)", context)
+    courses: dict[str, str] = {}
+    events: dict[str, str] = {}
+    for block in blocks:
+        match = re.match(r"\[(course|external)_event_ref=([^\]]+)\]", block)
+        if match:
+            (courses if match[1] == "course" else events)[match[2]] = block.rstrip("\n")
+    if (
+        set(courses) != set(course_times)
+        or set(events) != set(event_times)
+        or len([block for block in blocks if block]) != len(courses) + len(events)
+    ):
+        return ()
+    # 单条材料不能被截短，也不能因没有外部事件而绕过既有容量合同。
+    if not events or any(len(block) > _MAX_RULE_009_CONTEXT_CHARS for block in (*courses.values(), *events.values())):
+        return ()
+
+    def course_refs_for(ref: str) -> set[str]:
+        event_time = event_times[ref]
+        if event_time is None or any(value is None for value in course_times.values()):
+            return set(courses)
+        selected = {
+            key for key, value in course_times.items()
+            if event_time <= value <= event_time + _RULE_009_CHANGE_WINDOW
+        }
+        # 保留事件及所选病程各自的最近基线；不依靠模型猜测窗口外内容。
+        for block in (events[ref], *(courses[key] for key in tuple(selected))):
+            baseline = re.search(r"baseline_course_ref=(C\d+)", block)
+            if baseline and baseline[1] in courses:
+                selected.add(baseline[1])
+        return selected
+
+    batches: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = []
+    batch_events: list[str] = []
+    batch_courses: set[str] = set()
+
+    def render(refs: Sequence[str], selected_courses: set[str]) -> str:
+        return "\n".join([
+            *(block for ref, block in courses.items() if ref in selected_courses),
+            *(events[ref] for ref in refs),
+        ])
+
+    for ref in event_times:
+        selected_courses = course_refs_for(ref)
+        proposed = render([*batch_events, ref], batch_courses | selected_courses)
+        if len(proposed) > _MAX_RULE_009_CONTEXT_CHARS and batch_events:
+            batches.append((render(batch_events, batch_courses), tuple(batch_events),
+                            tuple(key for key in courses if key in batch_courses)))
+            batch_events, batch_courses = [], set()
+        batch_events.append(ref)
+        batch_courses.update(selected_courses)
+        if len(render(batch_events, batch_courses)) > _MAX_RULE_009_CONTEXT_CHARS:
+            return ()
+    if batch_events:
+        batches.append((render(batch_events, batch_courses), tuple(batch_events),
+                        tuple(key for key in courses if key in batch_courses)))
+    return tuple(batches)
 
 
 def _rule_009_external_source_terminal_decision(
@@ -1183,6 +1364,7 @@ def _rule_009_semantic_prompt(
     context: str,
     event_refs: Sequence[str],
     course_refs: Sequence[str],
+    event_course_refs: Mapping[str, Sequence[str]],
 ) -> str:
     allowed_event_refs = json.dumps(
         list(event_refs),
@@ -1191,6 +1373,11 @@ def _rule_009_semantic_prompt(
     )
     allowed_course_refs = json.dumps(
         list(course_refs),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    allowed_by_event = json.dumps(
+        {ref: list(event_course_refs[ref]) for ref in event_refs},
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -1204,19 +1391,22 @@ def _rule_009_semantic_prompt(
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
 只判断每个受控外部检查/检验候选是否显示“相对既往基线发生明确改变”。“病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。
 只能引用材料中给出的 event_ref 和 course_ref，不得编造引用；事件发生时间由 Python 根据受控 event_ref 唯一确定。
-病程记录只作为变化后的对应记录候选，不是待分类事件；病程内已经记录的变化视为已由该病程同期记录，无需模型重复抽取为事件。
+病程记录用于既往基线比较及变化后的对应记录候选，不是待分类事件；病程内已经记录的变化视为已由该病程同期记录，无需模型重复抽取为事件。
 
 只能使用以下当前就诊、评价区间内的外部检查/检验候选与病程记录。event_ref 只能引用 external_event_ref，change_category 只能返回 exam_lab。
 对应病程只能引用下列 course_event_ref；Python 会按权威时间严格校验它是否位于事件发生后 24 小时内：
 {context}
 
 本次允许event_ref={allowed_event_refs}。
-本次允许corresponding_course_ref={allowed_course_refs}，也可以返回空字符串。
+本批可见病程引用={allowed_course_refs}，其中事件前病程仅供基线比较。
+本次逐事件允许corresponding_course_ref={allowed_by_event}。
+每个事件只能从自己的允许列表中选择对应病程，或返回空字符串；不得借用其他事件的列表。
+各列表仅包含本批权威时间不早于该事件的病程及时间待核验的病程；时间待核验仍由Python沿用既有规则校验。
 {external_ref_constraint}
 不得创建、改写或猜测列表以外的引用。
 必须对允许event_ref列表中的每个候选恰好返回一次，顺序与允许列表一致；明确变化返回is_explicit_change=true，非明确变化也必须返回is_explicit_change=false且corresponding_course_ref为空。不得遗漏候选。
 若同一事件涉及多个类别，只选择最主要的一个类别，禁止重复event_ref。
-若明确变化事件超过{_MAX_RULE_009_CHANGE_EVENTS}个，仍须全部返回，由Python失败关闭，禁止静默省略。
+明确变化事件无数量截断，必须全部返回，由Python合并全部批次后判定，禁止静默省略。
 只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","is_explicit_change":true或false,"corresponding_course_ref":"...或空字符串"}}]}}。"""
 
 
@@ -1335,6 +1525,7 @@ def _rule_009_change_event_decision(
     """模型仅抽取事件，逐事件24小时及时性由Python唯一裁决。"""
 
     facts: list[dict[str, Any]] = []
+    pending_window: dict[str, Any] | None = None
     for event in events:
         event_ref = str(event["event_ref"])
         event_time = event_times.get(event_ref)
@@ -1383,19 +1574,17 @@ def _rule_009_change_event_decision(
             else:
                 window_mature = evaluation_horizon > deadline.date()
             if not window_mature:
-                return (
-                    _rule_009_semantic_decision(
-                        base_decision=base_decision,
-                        semantic_state="window_not_mature",
-                    ),
-                    {
+                # 主控代定口径（2026-10-18，用户授权，待客户复核）：
+                # 未成熟事件不能掩盖已成熟事件缺陷，完成成熟事件汇总后再返回。
+                if pending_window is None:
+                    pending_window = {
                         "failure_kind": "critical_change_window_not_mature",
                         "event_ref": event_ref,
                         "event_time": event_time.strftime("%Y-%m-%d %H:%M:%S"),
                         "deadline_time": deadline.strftime("%Y-%m-%d %H:%M:%S"),
                         "threshold_hours": 24,
-                    },
-                )
+                    }
+                continue
         facts.append(
             {
                 "event_ref": event_ref,
@@ -1410,22 +1599,31 @@ def _rule_009_change_event_decision(
                 "timely": timely,
             }
         )
+    # 主控代定口径（2026-10-18，用户授权，待客户复核）：全部明确变化参与判定；
+    # 客户合同仍最多展示20条，优先保留不合规事件，不向客户增加字段。
     unmet = [item for item in facts if not item["timely"]]
     if unmet:
         return (
             _rule_009_semantic_decision(base_decision=base_decision, semantic_state="defect"),
             {
                 "failure_kind": "critical_change_course_not_timely",
-                "change_events": facts,
-                "unmet_events": unmet,
+                "change_events": sorted(facts, key=lambda item: item["timely"])[:_MAX_RULE_009_DISPLAY_EVENTS],
+                "unmet_events": unmet[:_MAX_RULE_009_DISPLAY_EVENTS],
                 "threshold_hours": 24,
             },
+        )
+    if pending_window is not None:
+        return (
+            _rule_009_semantic_decision(
+                base_decision=base_decision, semantic_state="window_not_mature",
+            ),
+            pending_window,
         )
     return (
         base_decision,
         {
             "failure_kind": "critical_change_course_timely",
-            "change_events": facts,
+            "change_events": facts[:_MAX_RULE_009_DISPLAY_EVENTS],
             "threshold_hours": 24,
         },
     )
@@ -1441,9 +1639,9 @@ def _rule_009_with_selected_event_document_refs(
     """将模型已完成语义核对的事件映射回对应的真实材料文书。
 
     E/C 是仅用于受控提示词和模型返回校验的临时引用；它们不能继续留给
-    聚合器按日期反查。模型对每一条 ``E`` 都给出了受控的“变化/未变化”判定，
-    所以两种结论都必须保留其实际检查检验文书；病程只保留确实作为对应记录的
-    ``C``，而病危期间日常覆盖所需病程已由基础确定性判定加入。
+    聚合器按日期反查。全部候选已在调用前完成判定，此处仅绑定客户展示的
+    事件文书，避免把展示之外的全部候选塞入有界的证据合同。病程只保留确实
+    作为对应记录的 ``C``；每日覆盖所需病程已由基础确定性判定加入。
     """
 
     selected = list(decision.fact_refs)
@@ -1513,7 +1711,13 @@ async def evaluate_rules_008_009_typed(
         event_document_refs,
         course_document_refs,
         evaluation_horizon,
-    ) = _rule_009_semantic_context(snapshot=snapshot, materials=materials)
+    ) = _rule_009_semantic_context(
+        snapshot=snapshot, materials=materials, allow_large_context=True
+    )
+    batches = _rule_009_context_batches(
+        context=context, event_times=event_times, course_times=course_times
+    ) if context_ready else ()
+    context_capacity_exceeded = context_capacity_exceeded or (context_ready and not batches)
     if context_capacity_exceeded:
         return Rule008009TypedExecution(
             decision=_rule_009_semantic_decision(
@@ -1544,42 +1748,130 @@ async def evaluate_rules_008_009_typed(
             customer_display_facts=tuple(base_display_facts),
         )
 
-    try:
-        response = await llm_client.generate(
-            _rule_009_semantic_prompt(
-                context=context,
-                event_refs=tuple(event_times),
-                course_refs=tuple(course_times),
-            )
-        )
-    except Exception:
-        return Rule008009TypedExecution(
-            decision=_rule_009_semantic_decision(
-                base_decision=base_decision,
-                error_reason="model_transport_error",
-            ),
-            customer_display_facts=tuple(base_display_facts),
-            llm_call_count=1,
-        )
-
-    prompt, completion, total, elapsed = usage_parser(response)
     usage = {
-        "llm_call_count": 1,
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": total,
-        "api_time": elapsed,
+        "llm_call_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "api_time": 0.0,
     }
-    events = _parse_rule_009_change_events(response)
-    if events is None:
-        return Rule008009TypedExecution(
-            decision=_rule_009_semantic_decision(
-                base_decision=base_decision,
-                error_reason="model_invalid_output",
-            ),
-            customer_display_facts=tuple(base_display_facts),
-            **usage,
-        )
+    all_events: list[Mapping[str, Any]] = []
+    for batch_context, batch_event_refs, batch_course_refs in batches:
+        # 基线病程仍供语义比较；对应记录候选则逐事件按既有时间校验条件投影。
+        event_course_refs = {
+            event_ref: tuple(
+                course_ref for course_ref in batch_course_refs
+                if event_times[event_ref] is None or course_times[course_ref] is None
+                or course_times[course_ref] >= event_times[event_ref]
+            )
+            for event_ref in batch_event_refs
+        }
+        pending_refs = batch_event_refs
+        verified: dict[str, Mapping[str, Any]] = {}
+        invalid_events: dict[str, Mapping[str, Any]] = {}
+        for attempt in range(2):
+            # 每批最多补核一次：解析失败重试本批，非法引用只补核对应事件；
+            # 已完整核验的事件和已通过的批次不重问、不覆盖。
+            active_context = "\n".join(
+                block.rstrip("\n")
+                for block in re.split(r"(?m)(?=^\[(?:course|external)_event_ref=)", batch_context)
+                if block and (
+                    not block.startswith("[external_event_ref=")
+                    or any(block.startswith(f"[external_event_ref={ref}]") for ref in pending_refs)
+                )
+            )
+            usage["llm_call_count"] += 1
+            try:
+                allowed_courses = batch_course_refs
+                if attempt and invalid_events:
+                    allowed_courses = tuple(
+                        ref for ref in batch_course_refs
+                        if course_times[ref] is None or any(
+                            event_times[event_ref] is None
+                            or course_times[ref] >= event_times[event_ref]
+                            for event_ref in pending_refs
+                        )
+                    )
+                semantic_prompt = _rule_009_semantic_prompt(
+                    context=active_context, event_refs=pending_refs, course_refs=allowed_courses,
+                    event_course_refs=event_course_refs,
+                )
+                if attempt and invalid_events:
+                    semantic_prompt += (
+                        "\n本次为唯一一次引用补核：上次对应病程不在允许范围或早于事件。"
+                        "请按原文时间重新核对，只能选事件发生后的对应病程；没有则返回空引用。"
+                        "这些事件已经判为明确变化，is_explicit_change必须保持true；本次只修正对应引用。"
+                        "不得为规避引用校验而省略事件或改判非明确变化。"
+                    )
+                    semantic_prompt += "\n" + "\n".join(
+                        f"event_ref={ref}：上次corresponding_course_ref="
+                        f"{invalid_events[ref]['corresponding_course_ref']}不在该事件允许列表。"
+                        for ref in pending_refs
+                    )
+                elif attempt:
+                    semantic_prompt += (
+                        "\n本次为唯一一次JSON解析补核：上次应答无法解析为JSON对象。"
+                        "请重新核对本批全部候选，仅按约定结构返回完整JSON对象，不得遗漏候选。"
+                    )
+                response = await llm_client.generate(semantic_prompt)
+            except Exception:
+                return Rule008009TypedExecution(
+                    decision=_rule_009_semantic_decision(
+                        base_decision=base_decision,
+                        error_reason="model_invalid_output" if attempt else "model_transport_error",
+                    ),
+                    customer_display_facts=tuple(base_display_facts), **usage,
+                )
+            prompt, completion, total, elapsed = usage_parser(response)
+            usage["prompt_tokens"] += prompt
+            usage["completion_tokens"] += completion
+            usage["total_tokens"] += total
+            usage["api_time"] += elapsed
+            if not attempt and _response_json_payload(response) is None:
+                continue
+            batch_events = _parse_rule_009_change_events(response)
+            if (
+                batch_events is None
+                or tuple(str(event["event_ref"]) for event in batch_events) != pending_refs
+                or any(
+                    event["change_category"] != "exam_lab"
+                    or (not event["is_explicit_change"] and event["corresponding_course_ref"])
+                    or (str(event["event_ref"]) in invalid_events
+                        and event["is_explicit_change"] != invalid_events[str(event["event_ref"])]["is_explicit_change"])
+                    for event in batch_events
+                )
+            ):
+                return Rule008009TypedExecution(
+                    decision=_rule_009_semantic_decision(
+                        base_decision=base_decision, error_reason="model_invalid_output",
+                    ),
+                    customer_display_facts=tuple(base_display_facts), **usage,
+                )
+            invalid_refs = []
+            for event in batch_events:
+                ref = str(event["event_ref"])
+                course_ref = str(event["corresponding_course_ref"])
+                if course_ref and (
+                    course_ref not in batch_course_refs
+                    or (course_times[course_ref] is not None and event_times[ref] is not None
+                        and course_times[course_ref] < event_times[ref])
+                ):
+                    invalid_refs.append(ref)
+                    invalid_events[ref] = event
+                else:
+                    verified[ref] = event
+            if not invalid_refs:
+                break
+            if attempt == 1:
+                return Rule008009TypedExecution(
+                    decision=_rule_009_semantic_decision(
+                        base_decision=base_decision, error_reason="model_invalid_output",
+                    ),
+                    customer_display_facts=tuple(base_display_facts), **usage,
+                )
+            pending_refs = tuple(invalid_refs)
+        all_events.extend(verified[ref] for ref in batch_event_refs)
+    events = tuple(all_events)
     returned_event_refs = tuple(str(event["event_ref"]) for event in events)
     if (
         len(set(returned_event_refs)) != len(events)
@@ -1602,20 +1894,11 @@ async def evaluate_rules_008_009_typed(
             **usage,
         )
     explicit_events = tuple(event for event in events if event["is_explicit_change"])
-    if len(explicit_events) > _MAX_RULE_009_CHANGE_EVENTS:
-        return Rule008009TypedExecution(
-            decision=_rule_009_semantic_decision(
-                base_decision=base_decision,
-                data_gap_reason="candidate_scope_incomplete",
-            ),
-            customer_display_facts=(),
-            **usage,
-        )
     if not explicit_events:
         return Rule008009TypedExecution(
             decision=_rule_009_with_selected_event_document_refs(
                 decision=base_decision,
-                events=events,
+                events=events[:_MAX_RULE_009_DISPLAY_EVENTS],
                 event_document_refs=event_document_refs,
                 course_document_refs=course_document_refs,
             ),
@@ -1654,9 +1937,18 @@ async def evaluate_rules_008_009_typed(
         course_times=course_times,
         evaluation_horizon=evaluation_horizon,
     )
+    display_event_refs = {
+        str(item["event_ref"]) for item in change_facts.get("change_events", ())
+    }
+    if change_facts.get("event_ref"):
+        display_event_refs.add(str(change_facts["event_ref"]))
+    display_events = (
+        tuple(event for event in events if event["event_ref"] in display_event_refs)
+        if display_event_refs else events[:_MAX_RULE_009_DISPLAY_EVENTS]
+    )
     semantic_decision = _rule_009_with_selected_event_document_refs(
         decision=semantic_decision,
-        events=events,
+        events=display_events,
         event_document_refs=event_document_refs,
         course_document_refs=course_document_refs,
     )

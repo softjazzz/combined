@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from collections import Counter
 
+import logging
 import re
+import sys
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
@@ -80,8 +82,12 @@ from .extended_document.antimicrobial_action_extraction import (
     extract_confirmed_antimicrobial_actions,
     linked_order_id as _linked_order_id,
 )
-from .extended_document.antimicrobial_effect_extraction import extract_antimicrobial_effects
+from .extended_document.antimicrobial_effect_extraction import (
+    extract_antimicrobial_effects,
+    extract_antimicrobial_effect_pairs,
+)
 from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
+from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
@@ -118,6 +124,11 @@ from .surgery_applicability import (
 )
 from .surgery_procedure_catalog import catalog_surgery_state
 
+logger = logging.getLogger(__name__)
+
+# 058（05-01-06）业务基线：紧急越级使用特殊级抗菌药须在 24 小时内补办专家会诊/查房。
+# 用户口径（2026-10-17）：启用前或启用后 24 小时内有可关联的专家支持即合规，指征不单独核对。
+_LX0609_058_SUPPORT_WINDOW = timedelta(hours=24)
 
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
@@ -234,9 +245,18 @@ _TARGETED_ANTIMICROBIAL_MARKERS = (
 _EMPIRIC_REASON_MARKERS = (
     "重症感染", "覆盖耐药菌", "感染证据", "感染可能", "疑似感染",
     "考虑感染", "因感染", "感染指标升高", "无样可采",
+    "有抗生素使用指征", "有抗菌药物使用指征",
+    "肺部感染", "社区获得性肺炎",
 )
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
+)
+# 感染科副主任医师及以上的会诊署名（用户口径 2026-10-17：主治医师、临床药师不算授权专家）。
+# 兼容“感染性疾病科”、署名括号、署名后直接接“会诊/意见/指出/建议/查房/冒号/逗号”等写法；
+# 科室与职称之间不得出现其他科室，避免把他科医师意见算作感染科。
+_SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN = re.compile(
+    r"感染(?:性疾病)?科[^。；;\n科]{0,24}?(?:副主任医师|主任医师)"
+    r"[\]】）)]?\s*(?:会诊|意见|指出|建议|查房|[:：,，])"
 )
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
     r"(?:拒绝|不同意|未(?:行|完成|进行)|尚未|无).{0,12}"
@@ -253,6 +273,9 @@ _DISCHARGE_APPROVAL_PATTERN = re.compile(
     r"|(?:建议|予以)(?:患者|其)?(?:于|拟于)?"
     r"(?:今日|明日|次日)?(?:安排|办理)?出院"
     r"|(?<!拟)(?<!计划)(?<!准备)于今日(?:办理)?出院"
+    # 院方口径（2026-10-17）：上级医师写明日期的出院安排（如拟明日带药出院）视为同意出院；
+    # 未写日期的“拟办理出院”及“考虑出院”仍不构成明确同意。
+    r"|(?P<dated_plan>(?:拟|计划|准备)(?:于)?(?:今日|明日|次日)(?:带药)?(?:办理)?出院)"
 )
 _DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
     r"(?:不|未|未获|未取得|未得到|尚未|尚不|暂不).{0,12}"
@@ -263,7 +286,10 @@ _DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
     r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
     r"|(?:病情|情况).{0,16}后再.{0,8}"
     r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
-    r"|(?:拟|计划|准备|考虑).{0,12}于今日(?:办理)?出院"
+    r"|考虑.{0,12}于今日(?:办理)?出院"
+)
+_SEMANTIC_DISCHARGE_DISPOSITION_PATTERN = re.compile(
+    r"(?:(?:今日|今天|明日|次日)(?:带药)?|办理|安排|予)出院(?!医嘱)"
 )
 _SENIOR_PHYSICIAN_REFERENCE_PATTERN = re.compile(
     r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
@@ -274,11 +300,11 @@ _SENIOR_PHYSICIAN_CONSULTED_PATTERN = re.compile(
     r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
 )
 _AUTOMATIC_DISCHARGE_SIGNED_PATTERN = re.compile(
-    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)[》\"”]?"
+    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书|告知书)[》\"”]?"
 )
 _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN = re.compile(
     r"(?:未|未予|尚未|拒绝|拒不).{0,8}"
-    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)"
+    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书|告知书)"
 )
 _BLOCKING_DISCHARGE_HORIZON_ERRORS = frozenset(
     {"authoritative_time_missing", "authoritative_time_conflict"}
@@ -336,10 +362,11 @@ def _discharge_approval_path(
     return None
 
 
-def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
-    """返回未被否定或条件短语约束的明确出院处置。"""
+def _unnegated_discharge_approvals(text: str) -> list[re.Match[str]]:
+    """未被否定或条件短语约束的全部出院处置匹配。"""
 
     value = str(text or "")
+    approvals = []
     for approval in _DISCHARGE_APPROVAL_PATTERN.finditer(value):
         local_start = max(0, approval.start() - 80)
         local_context = value[local_start: approval.end() + 40]
@@ -349,14 +376,44 @@ def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
             for negated in _DISCHARGE_APPROVAL_NEGATED_PATTERN.finditer(local_context)
         )
         if not is_bound_to_negation:
-            return approval
-    return None
+            approvals.append(approval)
+    return approvals
+
+
+def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
+    """返回未被否定或条件短语约束的明确出院处置。"""
+
+    approvals = _unnegated_discharge_approvals(text)
+    return approvals[0] if approvals else None
+
+
+def _is_dated_discharge_plan_only(text: str) -> bool:
+    """引文只有“拟/计划某日出院”的安排、没有同意或批准等明确表态。
+
+    写明日期的出院安排只在确认为上级医师所写时才视为同意；身份不明的此类安排
+    （如住院医师日常病程“拟明日出院”）不构成上级同意，不能当作未能确认的同意。
+    """
+
+    approvals = _unnegated_discharge_approvals(text)
+    return bool(approvals) and all(approval.group("dated_plan") for approval in approvals)
 
 
 def _has_confirmed_discharge_approval(text: str) -> bool:
     """模型的 approved 枚举也必须通过同一明确处置合同。"""
 
-    return _confirmed_discharge_approval_match(text) is not None
+    if _confirmed_discharge_approval_match(text) is not None:
+        return True
+    # 此补充只供已核验为 senior/approved 的语义事实使用，不扩大无模型的角色推断。
+    for approval in _SEMANTIC_DISCHARGE_DISPOSITION_PATTERN.finditer(text):
+        prefix = re.split(r"[。！？!?；;\r\n]", text[:approval.start()])[-1]
+        if re.search(r"(?:不|未|尚未|尚不|暂不|拟|计划|准备).{0,6}$", prefix):
+            continue
+        if re.search(r"(?:待|若|如果|如无|如有|如复查|如病情|考虑)", prefix):
+            continue
+        if re.search(r"(?:复查|检查|治疗|换药).{0,16}后(?:再)?.{0,8}$", prefix):
+            continue
+        return True
+    return False
 
 
 def _source_rows(
@@ -427,6 +484,10 @@ def _discharge_or_death_diagnosis_rows(
         for row in rows
         if _clean(row.get("diagnosis_type")) in accepted_types
     )
+    if not selected and diagnosis_scope == "death":
+        # 用户决定（2026-10-20）：死亡病例病案首页与出院记录常把诊断标为“出院诊断”，
+        # 没有“死亡诊断”类型时以“出院诊断”作为该病例的出院/死亡诊断比对。
+        selected = tuple(row for row in rows if _clean(row.get("diagnosis_type")) == "出院诊断")
     if selected or not allow_untyped_legacy_rows:
         return selected
     if rows and all(not _clean(row.get("diagnosis_type")) for row in rows):
@@ -584,8 +645,12 @@ def _070_document_refs(
     """只返回 070 判定实际消费的、同一快照验证过的逐行引用。"""
 
     try:
-        bloodtrans_record_rows = materials.document_rows(
-            "bloodtrans_record", snapshot=snapshot
+        bloodtrans_record_rows = tuple(
+            item for key in ("bloodtrans_record", "daily_course_record", "senior_course_record")
+            for item in materials.document_rows(key, snapshot=snapshot)
+            if key == "bloodtrans_record" or (
+                consumed_bloodtrans_rows is not None and item[1] in consumed_bloodtrans_rows
+            )
         )
         if not include_pretransfusion_materials:
             # 没有已确认实施事件时未核对九项，只引用实际用于抽取的专用资料。
@@ -593,8 +658,9 @@ def _070_document_refs(
                 reference for reference, row in bloodtrans_record_rows
                 if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows
             ))
-        registration_rows = materials.document_rows(
-            "inpat_registration", snapshot=snapshot
+        registration_rows = (
+            *materials.document_rows("inpat_registration", snapshot=snapshot),
+            *materials.document_rows("admission_record", snapshot=snapshot),
         )
         transfusion_rows = materials.document_rows(
             "mr_bloodtrans", snapshot=snapshot
@@ -768,6 +834,12 @@ def _decision(
     exact_document_refs: bool = False,
     criterion_results: Sequence[Any] = (),
 ) -> RuleDecision:
+    if final_state == "technical_error":
+        # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
+        logger.warning(
+            "LX0609 扩展文书族技术错误: rule_id=%s reason_code=%s call_line=%s",
+            rule_id, reason_code, sys._getframe(1).f_lineno,
+        )
     dimensions = {
         "compliant": (
             ApplicabilityState.APPLICABLE,
@@ -1091,6 +1163,7 @@ def _material_text(row: Mapping[str, Any]) -> str:
         _clean(row.get(key))
         for key in (
             "record_content", "document_title", "order_name", "generic_name",
+            "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
             "item_code", "item_name", "item_abbreviation", "result",
             "result_flag", "abnormal_flag", "diagnosis_name", "labtest_subject",
             "specimen",
@@ -1111,7 +1184,7 @@ def _has_performed_antimicrobial_administration(
     target = "|".join(re.escape(name) for name in names)
     action = re.compile(
         r"已给予|已使用|已启用|已输注|实际给予|实际使用"
-        + (rf"|(?:已予以|予以|已予|给予)(?=\s*(?:{target}))" if target else "")
+        + (rf"|(?:已予以|予以|已予|给予|(?<![给不未])予)(?=\s*(?:{target}))" if target else "")
     )
     for clause in re.split(r"[，,。；;！!？?\n]", text):
         for match in action.finditer(clause):
@@ -1236,6 +1309,28 @@ def _antimicrobial_start_datetime(row: Mapping[str, Any]) -> datetime | None:
     )
 
 
+def _lx0609_058_first_use_events(
+    events: Sequence[tuple[Mapping[str, Any], str, datetime | None]],
+) -> tuple[tuple[Mapping[str, Any], str, datetime | None], ...]:
+    """每种特殊级药物只保留首次启用事件。
+
+    用户口径（2026-10-17）：同一药物后续续开或调整剂量的医嘱沿用首次启用时的专家支持。
+    同药任一医嘱缺启用时间时无法确定首次启用，保留缺时间事件交由时间缺口出口处理。
+    """
+
+    first: dict[str, tuple[Mapping[str, Any], str, datetime | None]] = {}
+    for event in events:
+        _order, name, start = event
+        current = first.get(name)
+        if current is None:
+            first[name] = event
+        elif current[2] is None:
+            continue
+        elif start is None or start < current[2]:
+            first[name] = event
+    return tuple(first.values())
+
+
 def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
     value = authoritative_document_time_value(row)
     return _parse_lx0609_058_datetime(
@@ -1252,7 +1347,15 @@ def _is_special_antimicrobial_expert_support(row: Mapping[str, Any]) -> bool:
 
     text = _material_text(row)
     return (
-        _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
+        (
+            _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
+            or (
+                _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN.search(text)
+                and _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
+                and re.search(r"(?:建议|同意|予以|给予).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
+                and not re.search(r"(?:不同意|不建议|暂不|拒绝).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
+            )
+        )
         and not _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN.search(text)
     )
 
@@ -1270,6 +1373,120 @@ class _AntimicrobialReasonAction:
     action: str
     order_ids: tuple[str, ...]
     orders: tuple[Mapping[str, Any], ...]
+
+
+# 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作，
+# 只查使用/加用、停用、更换、新增联合、超说明书。
+_054_CHANGE_ACTION_PATTERN = re.compile(
+    r"加用|停用|停药|停止使用|更换|换用|改为|改用|调整为|降阶梯|升阶梯|启用|开始使用|首次使用|新加|超说明书"
+)
+_054_ADMINISTER_VERB_PATTERN = re.compile(r"予以|给予|使用|应用|静滴|口服|联用")
+_054_CONTINUATION_CLAUSE_PATTERN = re.compile(r"继续|维持|续用|仍予|仍用")
+_054_UNCHANGED_SENTENCE_PATTERN = re.compile(
+    r"暂无调整|暂不调整|未作调整|无调整|治疗同前|方案同前|维持原方案|方案不变|继续(?:目前|当前|原)"
+)
+
+
+# 054 用户口径（2026-10-18，C05）：“给予X抗感染后仍有反复发热”是用药后病情回顾，不是新动作。
+_054_RETROSPECTIVE_OUTCOME_PATTERN = re.compile(
+    r"后(?:仍|仍有|无|未见|未|好转|改善|缓解|效果|体温|症状|病情|出现|反复)"
+)
+
+
+def _054_governs_drug(gap: str) -> bool:
+    """延续标记与药名之间没有新的给药动词（紧跟标记的“继续予以”等复合写法除外）。"""
+
+    gap = re.sub(r"^\s*(?:予以|给予|使用|应用|联用)", "", gap)
+    return not _054_ADMINISTER_VERB_PATTERN.search(gap)
+
+
+def _054_is_continuation_only(row: Mapping[str, Any], antimicrobial: str) -> bool:
+    """该病程对目标药的所有提及都只是延续原方案时返回 True。
+
+    以目标药所在分句为准：分句有加用/停用/更换等变更词即为触发；分句自身写
+    “继续/维持”，或分句无给药动词而上一分句写“继续”（共用动词），视为延续；
+    句中药名之前有“暂无调整/治疗同前”等且其间没有新的给药动词，也视为延续。
+    分句在药名之后写“后仍有/后好转”等用药后病情，是既往用药回顾，同样不是新动作。
+    """
+
+    text = _material_text(row)
+    continuation = False
+    for sentence in re.split(r"[。；;！!？?\n]", text):
+        if antimicrobial not in sentence:
+            continue
+        clauses = re.split(r"[，,]", sentence)
+        offset = 0
+        for index, clause in enumerate(clauses):
+            clause_start = offset
+            offset += len(clause) + 1
+            if antimicrobial not in clause:
+                continue
+            if any(
+                not re.search(r"(?:不|未|无需|无须|勿)(?:建议|考虑|需要|需|予|再)?$", clause[:change.start()])
+                for change in _054_CHANGE_ACTION_PATTERN.finditer(clause)
+            ):
+                return False
+            clause_drug_at = clause.find(antimicrobial)
+            if _054_RETROSPECTIVE_OUTCOME_PATTERN.search(clause[clause_drug_at + len(antimicrobial):]):
+                continuation = True
+                continue
+            drug_at = clause_start + clause_drug_at
+            unchanged = any(
+                _054_governs_drug(sentence[marker.end():drug_at])
+                for marker in _054_UNCHANGED_SENTENCE_PATTERN.finditer(sentence[:drug_at])
+            )
+            if (
+                any(
+                    _054_governs_drug(clause[marker.end():clause_drug_at])
+                    for marker in _054_CONTINUATION_CLAUSE_PATTERN.finditer(clause[:clause_drug_at])
+                )
+                or (
+                    index > 0
+                    and not _054_ADMINISTER_VERB_PATTERN.search(clause)
+                    and _054_CONTINUATION_CLAUSE_PATTERN.search(clauses[index - 1])
+                )
+                or unchanged
+            ):
+                continuation = True
+                continue
+            return False
+    return continuation
+
+
+# 同一病程内与目标药同句的病情依据（用户口径 2026-10-18，程序判定）：
+# “鉴于…故/因此…”因果结构，或炎性指标、体温、症状等变化。
+_054_CAUSAL_CONNECTOR_PATTERN = re.compile(r"鉴于|故|因此|所以|遂|据此|结合")
+_054_CLINICAL_BASIS_PATTERN = re.compile(
+    r"(?:炎性|炎症|感染)指标[^，,。；;]{0,8}(?:下降|降低|好转|恢复正常|正常|升高|增高)"
+    r"|(?:体温|血象|白细胞|降钙素原|PCT|CRP|C反应蛋白)[^，,。；;]{0,8}(?:正常|下降|降低|好转|升高|增高)"
+    r"|(?:症状|病情|感染|腹泻|咳嗽|咳痰|发热)[^，,。；;]{0,6}(?:好转|缓解|控制|加重|无改善|未见好转)"
+)
+
+
+def _054_reason_in_action_sentence(row: Mapping[str, Any], antimicrobial: str) -> bool:
+    """理由须与目标药同句且位于药名之前：因果连接词前有内容，或写有病情依据。"""
+
+    sentences = re.split(r"[。；;！!？?\n]", _material_text(row))
+    for index, sentence in enumerate(sentences):
+        position = sentence.find(antimicrobial)
+        if position < 0:
+            continue
+        prefix = sentence[:position]
+        if _054_CLINICAL_BASIS_PATTERN.search(prefix):
+            return True
+        # “……。故更换X”：以“故/因此/遂”起句即声明理由在上一句。
+        if (
+            index > 0
+            and re.match(r"\s*(?:故|因此|所以|遂|据此)", prefix)
+            and re.search(r"[一-鿿]{4,}", sentences[index - 1])
+        ):
+            return True
+        connector = None
+        for connector in _054_CAUSAL_CONNECTOR_PATTERN.finditer(prefix):
+            pass
+        if connector is not None and re.search(r"[一-鿿]{4,}", prefix[:connector.start()]):
+            return True
+    return False
 
 
 def _054_action_events(
@@ -1293,6 +1510,8 @@ def _054_action_events(
                 action := confirmed_actions.get((row_index, antimicrobial))
             ) is None:
                 continue
+            if _054_is_continuation_only(row, antimicrobial):
+                continue
             mentioned_antimicrobials.append(antimicrobial)
             row_order_id = _linked_order_id(row)
             if row_order_id:
@@ -1308,17 +1527,26 @@ def _054_action_events(
                     for order_event in order_events
                     if antimicrobial in order_event.antimicrobials
                 )
-            if len(candidates) != 1:
-                # 病程动作本身不能证明属于本次哪条受控医嘱；不能凭 status 或
-                # update_time 补造关联，也不能让其他同名医嘱代为触发。
+            if row_order_id and len(candidates) != 1:
+                # 病程带医嘱号时必须唯一对上该医嘱，不能让其他同名医嘱代为触发。
                 association_failed = True
                 continue
+            if not candidates:
+                # 本次就诊没有同药受控医嘱，病程动作无法证明属于本次用药。
+                association_failed = True
+                continue
+            # 同药多次开立且源库无停止时间时无法定位具体哪条（用户口径 2026-10-18：
+            # 存在同药医嘱即关联成立）；不绑定医嘱号，理由归属按药名规则处理。
+            single = candidates[0] if len(candidates) == 1 else None
             events.append(_AntimicrobialReasonAction(
                 row=row,
                 antimicrobial=antimicrobial,
                 action=action,
-                order_ids=candidates[0].order_ids,
-                orders=candidates[0].orders,
+                order_ids=single.order_ids if single is not None else (),
+                orders=(
+                    single.orders if single is not None
+                    else tuple(order for candidate in candidates for order in candidate.orders)
+                ),
             ))
     return (
         tuple(events),
@@ -1348,7 +1576,9 @@ def _054_event_reason_state(
     共享给多次同名动作。
     """
 
-    if _054_reason_documented(event.row):
+    if _054_reason_documented(event.row) or _054_reason_in_action_sentence(
+        event.row, event.antimicrobial
+    ):
         return "documented", event.row
 
     same_name_events = tuple(
@@ -1411,26 +1641,69 @@ def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
     return True
 
 
+def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
+    """病原学项目身份只取检验名称，不把任意核酸检测等同于病原学。"""
+    text = " ".join(_clean(row.get(field)) for field in (
+        "labtest_subject", "lab_item_name", "item_name", "record_content",
+    ))
+    return bool(
+        re.search(r"培养|药敏|病原", text)
+        or re.search(r"(?:病毒|细菌|真菌|支原体|衣原体|结核|HBV|HCV|HIV).{0,20}(?:核酸|DNA|RNA)", text, re.I)
+    )
+
+
+@dataclass(frozen=True)
+class _EmpiricAntimicrobialEvent:
+    """057 已关联的同药医嘱集合；未绑定具体医嘱时号集合为空。"""
+    orders: tuple[Mapping[str, Any], ...]
+    antimicrobials: tuple[str, ...]
+    order_ids: tuple[str, ...]
+
+
 def _empiric_antimicrobial_event_contexts(
     *,
     antimicrobial_orders: Sequence[Mapping[str, Any]],
     candidate_rows: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[tuple[Mapping[str, Any], _AntimicrobialOrderEvent], ...], bool]:
-    """返回可唯一关联的经验用药事件；无法归属具体医嘱时由调用方交付资料缺口。"""
+    lab_master_rows: Sequence[Mapping[str, Any]] = (),
+    lab_item_rows: Sequence[Mapping[str, Any]] = (),
+    pathogen_sources_complete: bool = False,
+) -> tuple[tuple[tuple[Mapping[str, Any], _EmpiricAntimicrobialEvent], ...], bool]:
+    """返回按药名或唯一医嘱号关联的经验用药事件。"""
 
     order_events = _antimicrobial_order_events(antimicrobial_orders)
-    contexts: list[tuple[Mapping[str, Any], _AntimicrobialOrderEvent]] = []
+    contexts: list[tuple[Mapping[str, Any], _EmpiricAntimicrobialEvent]] = []
     association_ambiguous = False
     for row in candidate_rows:
-        if not _is_explicit_empiric_antimicrobial_use(row):
+        explicit = _is_explicit_empiric_antimicrobial_use(row)
+        text = _material_text(row)
+        names = _antimicrobial_names_in(row)
+        treatment_clauses = tuple(
+            clause for clause in re.split(r"[，,。；;\n]", text)
+            if re.search(r"抗感染|抗菌治疗", clause)
+            and not re.search(r"预防|围术期", clause)
+            and _has_performed_antimicrobial_administration(clause, names)
+        )
+        treatment_names = tuple(dict.fromkeys(
+            name for clause in treatment_clauses
+            for name in _antimicrobial_names_in({"record_content": clause})
+        ))
+        # 无“经验性”字样时，只接受有时间的本次已实施、明确治疗感染的
+        # 具体用药叙述；计划医嘱和预防用药不进入新增路径。
+        inferred_candidate = (
+            bool(treatment_names) and _row_time(row) is not None
+            and not re.search(r"根据.{0,12}(?:培养|药敏)|依据.{0,12}(?:培养|药敏)", text)
+            and not any(marker in text for marker in _TARGETED_ANTIMICROBIAL_MARKERS)
+        )
+        if not explicit and not inferred_candidate:
             continue
         linked_order_id = _linked_order_id(row)
-        mentioned_names = _antimicrobial_names_in(row)
+        mentioned_names = _antimicrobial_names_in(row) if explicit else treatment_names
         if linked_order_id:
             candidates = tuple(
                 event
                 for event in order_events
                 if linked_order_id in event.order_ids
+                and (not mentioned_names or all(name in event.antimicrobials for name in mentioned_names))
             )
         elif mentioned_names:
             candidates = tuple(
@@ -1442,17 +1715,77 @@ def _empiric_antimicrobial_event_contexts(
             candidates = order_events
         else:
             candidates = ()
-        if len(candidates) != 1:
-            association_ambiguous = True
+        if not explicit and not linked_order_id and len(candidates) > 1:
+            # 沿用经验用药推断的时序门槛；尚未启用的未来医嘱不能证明本次已实施。
+            document_time = _row_time(row)
+            candidates = tuple(
+                event for event in candidates
+                if document_time is not None
+                and any(
+                    (start := _antimicrobial_start_datetime(order)) is None
+                    or start <= document_time
+                    for order in event.orders
+                )
+            )
+        if not candidates or (linked_order_id and len(candidates) != 1):
+            association_ambiguous = association_ambiguous or explicit
             continue
-        contexts.append((row, candidates[0]))
+        if len(candidates) > 1 and len({
+            name for event in candidates for name in mentioned_names
+            if name in event.antimicrobials
+        }) > 1:
+            # 本轮只合并同药多医嘱；多种药物的原有事件归属边界不变。
+            association_ambiguous = association_ambiguous or explicit
+            continue
+        # 主控代定口径（2026-10-18，待客户复核），基线057：
+        # 同药存在即关联；多医嘱不绑定具体号，理由继续按药名归属。
+        if not linked_order_id and mentioned_names:
+            candidates = tuple(_EmpiricAntimicrobialEvent(
+                orders=tuple(order for event in candidates if name in event.antimicrobials
+                             for order in event.orders),
+                antimicrobials=(name,),
+                order_ids=(),
+            ) for name in mentioned_names if any(name in event.antimicrobials for event in candidates))
+            if len(candidates) != len(mentioned_names):
+                if explicit:
+                    association_ambiguous = True
+                    continue
+        if not explicit:
+            start = min((value for order in candidates[0].orders
+                         if (value := _antimicrobial_start_datetime(order)) is not None), default=None)
+            if not pathogen_sources_complete or start is None:
+                association_ambiguous = True
+                continue
+            # 只在完整检验来源中核对启用时已可获得的病原学结果；未知报告
+            # 时间不能当作“尚无结果”，已有结果时不推断为经验治疗。
+            pathogen_ids = {
+                _clean(item.get("test_id")) for item in (*lab_master_rows, *lab_item_rows)
+                if _clean(item.get("test_id")) and _is_pathogen_lab(item)
+            }
+            reports = tuple(item for item in (*lab_master_rows, *lab_item_rows)
+                            if _clean(item.get("test_id")) in pathogen_ids)
+            prior_basis = False
+            unknown_basis_time = False
+            for report in reports:
+                moment = _parse_datetime(report.get("report_datetime") or report.get("report_time"))
+                has_result = bool(_clean(report.get("result")))
+                prior_basis = prior_basis or (moment is not None and moment <= start)
+                unknown_basis_time = unknown_basis_time or (has_result and moment is None)
+            if prior_basis:
+                continue
+            if unknown_basis_time:
+                association_ambiguous = True
+                continue
+        contexts.extend((row, _EmpiricAntimicrobialEvent(
+            event.orders, event.antimicrobials, event.order_ids,
+        )) for event in candidates)
     return tuple(contexts), association_ambiguous
 
 
 def _empiric_reason_documented(
     *,
     event_row: Mapping[str, Any],
-    order_event: _AntimicrobialOrderEvent,
+    order_event: _EmpiricAntimicrobialEvent,
     course_rows: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
     """理由只能来自可归属该经验用药事件的病程，不以培养/药敏调整代替。"""
@@ -1474,8 +1807,10 @@ def _empiric_reason_documented(
         ):
             continue
         row_order_id = _linked_order_id(row)
-        if row_order_id and order_ids:
-            if row_order_id in order_ids:
+        if row_order_id:
+            matches = tuple(event for event in _antimicrobial_order_events(order_event.orders)
+                            if row_order_id in event.order_ids)
+            if len(matches) == 1 and (not order_ids or row_order_id in order_ids):
                 return row
             continue
         row_names = _antimicrobial_names_in(row)
@@ -1502,6 +1837,7 @@ def _antimicrobial_document_refs(
 
     allowed_sources = (
         "inpat_drug_order",
+        "first_course_record",
         "daily_course_record",
         "senior_course_record",
         "consultation_record",
@@ -1859,7 +2195,7 @@ def _performed_surgery_event_count(
 
 @dataclass(frozen=True)
 class _PostoperativeSurgeryEvent:
-    """064/065 的最小事件投影：正式手术记录一行即一台手术。"""
+    """064–066 的手术台次投影，保留组成台次的原始行以绑定证据。"""
 
     source_key: str
     row: Mapping[str, Any]
@@ -1871,6 +2207,7 @@ class _PostoperativeSurgeryEvent:
     surgery_begin_time: datetime | None = None
     # 院方口径（2026-10-10）：源库缺实际结束时间时以开始时间推算术后起点。
     surgery_time_estimated: bool = False
+    member_rows: tuple[Mapping[str, Any], ...] = ()
 
 
 # 064 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
@@ -2070,7 +2407,31 @@ def _postoperative_surgery_events(
             surgery_begin_time=begin_time,
             surgery_time_estimated=end_time is None and begin_time is not None,
         ))
-    return tuple(events)
+    # 主控代定口径（2026-10-18，待客户复核），基线064/065/066：
+    # 仅首页同日同开始时间术式行合台；无开始时间的行独立保留，不猜测关联。
+    grouped: list[_PostoperativeSurgeryEvent] = []
+    for event in events:
+        matching_index = next((
+            index for index, existing in enumerate(grouped)
+            if event.source_key == existing.source_key == "mr_surgery"
+            and event.surgery_begin_time is not None
+            and existing.surgery_begin_time == event.surgery_begin_time
+        ), None)
+        if matching_index is None:
+            grouped.append(replace(event, member_rows=(event.row,)))
+            continue
+        existing = grouped[matching_index]
+        grouped[matching_index] = replace(
+            existing,
+            member_rows=(*existing.member_rows, event.row),
+            surgeon_names=tuple(dict.fromkeys((*existing.surgeon_names, *event.surgeon_names))),
+            surgeon_tokens=existing.surgeon_tokens | event.surgeon_tokens,
+            # 同台结束字段冲突时不擅自择一；后续按权威时间不足关闭。
+            surgery_end_time=(existing.surgery_end_time
+                              if existing.surgery_end_time == event.surgery_end_time else None),
+            surgery_time_estimated=existing.surgery_time_estimated or event.surgery_time_estimated,
+        )
+    return tuple(grouped)
 
 
 def _postoperative_document_refs(
@@ -2123,7 +2484,12 @@ def _link_postoperative_first_course_records(
     缺时间时无法做安全归属，保持数据不足而不猜测。
     """
 
-    if any(event.surgery_end_time is None for event in surgery_events):
+    if any(event.surgery_end_time is None for event in surgery_events) or (
+        len(surgery_events) > 1
+        and any(event.source_key == "mr_surgery" and event.surgery_begin_time is None
+                for event in surgery_events)
+    ):
+        # 主控代定口径（2026-10-18，待客户复核），基线066：缺开始时间的首页行不能证明台次关联。
         return (), "authoritative_time_missing"
     ordered_events = tuple(sorted(surgery_events, key=lambda item: item.surgery_end_time))
     if len({item.surgery_end_time for item in ordered_events}) != len(ordered_events):
@@ -2343,6 +2709,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     diagnosis_equivalence_extraction = None
     invasive_extractions: list[Any] = []
     transfusion_performance_extraction = None
+    transfusion_course_extraction = None
     postoperative_time_estimated_rules: set[str] = set()
     selected = tuple(
         rule_id
@@ -2461,7 +2828,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     first_course_rows, first_course_error = (
         _source_rows(evidence_materials, "first_course_record")
-        if "LX0609-10-03-01" in selected
+        if set(selected).intersection({"LX0609-10-03-01", "LX0609-05-01-02", "LX0609-05-01-05"})
         else ((), "")
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
@@ -2617,8 +2984,29 @@ async def execute_luxian_0609_native_extended_document_rules(
                         else "unavailable" if diagnosis_scope_extraction.state == "data_gap" else "invalid"
                     )
                 else:
+                    explicit_main_rows = tuple(
+                        scope_rows[document.row_index]
+                        for document in diagnosis_scope_extraction.documents
+                        if document.coverage == "complete" and any(
+                            assertion.scope == "diagnosis"
+                            and assertion.diagnosis_state == "explicit"
+                            and assertion.polarity == "affirmed"
+                            and assertion.temporal_scope == "current"
+                            and assertion.association == "explicit"
+                            for assertion in document.assertions
+                        )
+                    )
                     for document in diagnosis_scope_extraction.documents:
                         row = scope_rows[document.row_index]
+                        # 主控代定口径（2026-10-18，待客户复核），基线050：
+                        # 主诊断已明确时，局部问题未明不触发；不能证明主次范围仍保留缺口。
+                        main_diagnosis_explicit = any(
+                            main_row is row or (
+                                (main_time := _row_time(main_row)) is not None
+                                and (local_time := _row_time(row)) is not None
+                                and main_time <= local_time
+                            ) for main_row in explicit_main_rows
+                        )
                         if document.coverage == "unknown":
                             unknown_candidates.append(row)
                         for assertion in document.assertions:
@@ -2638,7 +3026,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     if row not in strong_candidates:
                                         strong_candidates.append(row)
                                 elif assertion.scope == "local_problem":
-                                    if row not in local_candidates:
+                                    if not main_diagnosis_explicit and row not in local_candidates:
                                         local_candidates.append(row)
                                 else:
                                     unknown_candidates.append(row)
@@ -2790,13 +3178,19 @@ async def execute_luxian_0609_native_extended_document_rules(
                 if rule_id == "LX0609-05-01-03"
                 else antimicrobial_orders
             )
-            course_rows = (*daily_rows, *senior_rows)
+            course_rows = (
+                (*first_course_rows, *daily_rows, *senior_rows)
+                if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}
+                else (*daily_rows, *senior_rows)
+            )
             selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = list(
                 excluded_antimicrobial_evidence
             )
             source_error = drug_order_error or (
                 "" if rule_id == "LX0609-05-01-06" else daily_error or senior_error
             )
+            if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}:
+                source_error = source_error or first_course_error
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif rule_id == "LX0609-05-01-02":
@@ -2903,20 +3297,28 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not rule_antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-05-01-03":
+                # 主控代定口径（2026-10-18，待客户复核），基线055：
+                # 同药医嘱合为一个疗程，首次实际执行起算；续开不另建48–72小时窗。
+                course_orders: dict[str, list[Mapping[str, Any]]] = {}
+                for order in rule_antimicrobial_orders:
+                    for name in _antimicrobial_names_in(order):
+                        course_orders.setdefault(name, []).append(order)
                 order_events = tuple(
-                    (row, name, _antimicrobial_start_datetime(row))
-                    for row in rule_antimicrobial_orders
-                    for name in _antimicrobial_names_in(row)
+                    (_AntimicrobialOrderEvent(tuple(orders), (name,)), name,
+                     min(starts) if all(start is not None for start in starts) else None)
+                    for name, orders in course_orders.items()
+                    for starts in [tuple(_antimicrobial_start_datetime(order) for order in orders)]
                 )
                 # 即使评价窗尚未成熟，开始医嘱仍是这项否定结论实际消费的
                 # 业务事实；horizon 仅决定窗口状态，绝不成为客户证据。
                 selected_antimicrobial_evidence_rows.extend(
-                    order
-                    for order, _name, start in order_events
+                    row
+                    for event, _name, start in order_events
                     if start is not None
+                    for row in event.orders
                 )
                 event_windows: list[dict[str, Any]] = []
-                mature_events: list[tuple[Mapping[str, Any], str, datetime]] = []
+                mature_events: list[tuple[_AntimicrobialOrderEvent, str, datetime]] = []
                 immature_states: list[str] = []
                 if any(start is None for _, _, start in order_events):
                     final_state, reason_code = "data_gap", "authoritative_time_missing"
@@ -2965,6 +3367,23 @@ async def execute_luxian_0609_native_extended_document_rules(
                         course_rows, targets, llm_client,
                         max_prompt_bytes=65536, max_completion_tokens=16384,
                     )
+                    if antimicrobial_effect_extraction.reason_code == "source_capacity_exceeded":
+                        # 全住院笛卡尔配对超限时，按权威时间排除不可能满足窗口的配对。
+                        # 保留所有无时间病程及窗口内全文，不按药名或评价词筛选、截断正文。
+                        candidate_pairs = tuple(
+                            (row_index, target_index)
+                            for row_index, row in enumerate(course_rows)
+                            for target_index, target in enumerate(targets)
+                            if (value := _row_time(row)) is None
+                            or any(
+                                name == target and 48 <= (value - start).total_seconds() / 3600 <= 72
+                                for _order, name, start in mature_events
+                            )
+                        )
+                        antimicrobial_effect_extraction = await extract_antimicrobial_effect_pairs(
+                            course_rows, targets, candidate_pairs, llm_client,
+                            max_prompt_bytes=65536, max_completion_tokens=16384,
+                        )
                     extraction = antimicrobial_effect_extraction
                     if extraction.state != "ready":
                         final_state = extraction.state
@@ -3024,7 +3443,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     final_state, reason_code = "data_gap", "association_failed"
                 else:
                     for order, name, start in mature_events:
-                        order_id = _clean(order.get("order_id"))
+                        order_ids = order.order_ids
                         for (
                             rows_by_name,
                             unknown_rows_by_name,
@@ -3050,7 +3469,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             matching_rows = tuple(
                                 row for row in rows_by_name.get(name, ())
                                 if not _linked_order_id(row)
-                                or (bool(order_id) and _linked_order_id(row) == order_id)
+                                or _linked_order_id(row) in order_ids
                             )
                             event_intervals = [
                                 (value - start).total_seconds() / 3600
@@ -3068,7 +3487,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 matching_unknown_rows = tuple(
                                     row for row in unknown_rows_by_name.get(name, ())
                                     if not _linked_order_id(row)
-                                    or (bool(order_id) and _linked_order_id(row) == order_id)
+                                    or _linked_order_id(row) in order_ids
                                 )
                                 unknown_is_relevant = any(
                                     (value := _row_time(row)) is None
@@ -3160,10 +3579,21 @@ async def execute_luxian_0609_native_extended_document_rules(
                         is not None
                     )
                     first_order = min(special_order_times, default=None)
+                    # 项目身份常在明细、申请/采样时间在主表；只用同一 test_id
+                    # 关联，不能把其他检验的时间借给病原学项目。
+                    pathogen_test_ids = {
+                        _clean(row.get("test_id"))
+                        for row in lab_item_rows
+                        if _clean(row.get("test_id"))
+                        and _is_pathogen_lab(row)
+                    }
                     specimen_times = tuple(
                         value
                         for row in lab_master_rows
-                        if _has_any_text((row,), ("培养", "药敏", "病原"))
+                        if (
+                            _is_pathogen_lab(row)
+                            or _clean(row.get("test_id")) in pathogen_test_ids
+                        )
                         and (value := _parse_datetime(row.get("request_datetime") or row.get("sample_datetime")))
                         is not None
                     )
@@ -3173,11 +3603,19 @@ async def execute_luxian_0609_native_extended_document_rules(
                         complete = any(value <= first_order for value in specimen_times)
                         final_state = "compliant" if complete else "non_compliant"
                         reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                        display.append((rule_id, {
+                            "verification_kind": "key_antimicrobial_specimen_check",
+                            "key_drug_count": len(key_drugs),
+                            "specimen_before_first_order": complete,
+                        }))
             elif rule_id == "LX0609-05-01-05":
                 empiric_contexts, association_ambiguous = (
                     _empiric_antimicrobial_event_contexts(
                         antimicrobial_orders=antimicrobial_orders,
                         candidate_rows=(*antimicrobial_orders, *course_rows),
+                        lab_master_rows=lab_master_rows,
+                        lab_item_rows=lab_item_rows,
+                        pathogen_sources_complete=not (lab_master_error or lab_item_error),
                     )
                 )
                 if association_ambiguous:
@@ -3224,6 +3662,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for row in antimicrobial_orders
                     for name in _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
                 )
+                special_events = _lx0609_058_first_use_events(special_events)
                 special_names = tuple(dict.fromkeys(
                     name for _, name, _ in special_events
                 ))
@@ -3242,6 +3681,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
                 ambiguous_support = len(special_events) > 1 and any(
                     not _linked_order_id(row)
+                    # 晚于首个启用事件 24 小时的支持无论归属哪条续开医嘱，都不能
+                    # 补足首个事件；不能用无关的归属歧义遮蔽已确定的缺陷。
+                    and (
+                        (support_time := _lx0609_058_row_time(row)) is None
+                        or first_order_time is None
+                        or support_time <= first_order_time + _LX0609_058_SUPPORT_WINDOW
+                    )
                     and (
                         not (mentioned := _antimicrobial_names_in(row))
                         or any(
@@ -3289,7 +3735,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         selected_antimicrobial_evidence_rows.extend(matching_rows)
                         # 事实与精确证据共用实际关联行，不能借其他药支持时间。
                         associated_expert_support_rows.extend(matching_rows)
-                        if any(value <= start for value in matching_times):
+                        if any(value <= start + _LX0609_058_SUPPORT_WINDOW for value in matching_times):
                             continue
                         unmatched_names.append(name)
                         late_support = late_support or bool(matching_times)
@@ -3486,10 +3932,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                     content_consistent = sorted(authority) == sorted(written)
                     equivalent_pairs: tuple[tuple[str, str], ...] = ()
                     equivalence_state = "ready"
-                    if not content_consistent:
+                    authority_rest = list((Counter(authority) - Counter(written)).elements())
+                    written_rest = list((Counter(written) - Counter(authority)).elements())
+                    if not content_consistent and len(authority_rest) != len(written_rest):
+                        # 同义判定只做一对一配对：剩余条数不同时内容必不一致，不再调用模型
+                        # （第六轮 C07：21 对 23 条，模型偶发“无法判定”致缺陷被降为资料不足）。
+                        pass
+                    elif not content_consistent:
                         # 院方口径（2026-10-10）：逐字未匹配的剩余名称交模型判同义，程序裁定。
-                        authority_rest = list((Counter(authority) - Counter(written)).elements())
-                        written_rest = list((Counter(written) - Counter(authority)).elements())
                         diagnosis_equivalence_extraction = await extract_discharge_diagnosis_equivalence(
                             authority_rest, written_rest, llm_client,
                         )
@@ -3607,7 +4057,24 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-07-01-03":
             source_keys = (
-                "inpat_registration", "mr_bloodtrans", "bloodtrans_record", "labtest_item_report",
+                "inpat_registration", "admission_record", "mr_bloodtrans", "bloodtrans_record", "labtest_item_report",
+                "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
+            )
+            performance_rows = tuple(bloodtrans_record_rows)
+            dedicated_performance_source = bool(performance_rows)
+            if not performance_rows:
+                performance_rows = select_transfusion_course_candidates((*daily_rows, *senior_rows))
+                if performance_rows:
+                    transfusion_course_extraction = await classify_transfusion_course_records(performance_rows, llm_client)
+                    if transfusion_course_extraction.state in {"absent", "present"}:
+                        valid_ids = set(transfusion_course_extraction.valid_document_ids)
+                        performance_rows = tuple(row for row in performance_rows
+                                                 if str(row.get("document_id", row.get("id"))) in valid_ids)
+            pending_order = any(
+                re.search(r"输血|输(?:注|入)?(?:红细胞|悬浮红|去白|血浆|血小板|冷沉淀|全血)",
+                          _clean(row.get("order_name") or row.get("generic_name")))
+                for row in (*nondrug_order_rows, *drug_order_rows)
+                if not any(word in _clean(row.get("order_status")) for word in ("取消", "作废", "撤销", "未执行"))
             )
             transfusion_source_error = mr_bloodtrans_error or bloodtrans_record_error
             actual_transfusion_rows = tuple(mr_bloodtrans_rows)
@@ -3617,32 +4084,45 @@ async def execute_luxian_0609_native_extended_document_rules(
             performed_time_missing = False
             if transfusion_source_error:
                 final_state, reason_code = "data_gap", transfusion_source_error
-            elif not mr_bloodtrans_rows and not bloodtrans_record_rows:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif transfusion_course_extraction is not None and transfusion_course_extraction.state == "technical_error":
+                final_state, reason_code = "technical_error", transfusion_course_extraction.reason_code or "model_invalid_output"
+            elif transfusion_course_extraction is not None and transfusion_course_extraction.state == "data_gap":
+                final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+            elif not mr_bloodtrans_rows and not performance_rows:
+                final_state, reason_code = (
+                    ("data_gap", "positive_assertion_not_explicit") if pending_order
+                    else ("not_applicable", "trigger_absent_complete")
+                )
             else:
                 transfusion_performance_extraction = await extract_transfusion_performance(
-                    bloodtrans_record_rows, llm_client,
+                    [{**row, "record_time": _row_time(row)} for row in performance_rows], llm_client,
                 )
                 extraction_reason = transfusion_performance_extraction.reason_code
                 # 全部专用行均用于事实抽取或范围门控；否定资料不计入实施事件。
-                consumed_bloodtrans_rows = list(bloodtrans_record_rows)
+                consumed_bloodtrans_rows = list(performance_rows)
                 confirmed_records = []
                 for row, state, event_time in zip(
-                    bloodtrans_record_rows,
+                    performance_rows,
                     transfusion_performance_extraction.states,
                     transfusion_performance_extraction.event_times,
                 ):
-                    if state == "performed" and _parse_datetime(row.get("record_time")) is not None:
+                    if state == "performed" and (
+                        event_time is not None or (dedicated_performance_source and _row_time(row) is not None)
+                    ):
                         # 正文写明实际开始时刻时按开始时刻核对“输血前”；否则沿用记录时间合同。
                         confirmed_records.append(
                             {**row, "transfution_datetime": event_time.isoformat(sep=" ")}
-                            if event_time is not None else row
+                            if event_time is not None else {**row, "record_time": _row_time(row)}
                         )
                     elif state in {"performed", "unknown"}:
                         unconfirmed_record_count += 1
                         performed_time_missing = performed_time_missing or state == "performed"
                 actual_transfusion_rows = (*mr_bloodtrans_rows, *confirmed_records)
-                if not actual_transfusion_rows:
+                extraction_failed = transfusion_performance_extraction.technical_failure
+                if extraction_failed and not mr_bloodtrans_rows:
+                    # 实施抽取的模型调用失败不代表病历资料缺失，不能要求医院补写实施事实。
+                    final_state, reason_code = "technical_error", extraction_reason
+                elif not actual_transfusion_rows:
                     final_state = "data_gap"
                     reason_code = (
                         "authoritative_time_missing" if performed_time_missing
@@ -3655,7 +4135,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                 else:
                     final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
                         {
-                            "inpat_registration": list(registration_rows),
+                            "inpat_registration": list(registration_rows) if any(
+                                resolve_pretransfusion_admission_time(row) is not None for row in registration_rows
+                            ) else list(admission_rows),
                             "mr_bloodtrans": list(actual_transfusion_rows),
                             "labtest_item_report": list(lab_item_rows),
                             "blood_application": [],
@@ -3674,10 +4156,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "transfusion_time_unavailable": "authoritative_time_missing",
                         "admission_time_unavailable": "authoritative_time_missing",
                         "pretransfusion_item_contract_unavailable": "source_unavailable",
+                        "pretransfusion_lab_results_absent": "source_unavailable",
                         "pretransfusion_tests_outside_current_stay": "requirement_violated",
                         "source_query_error": "source_query_error",
                     }.get(detail_reason, "required_field_missing")
-                    if final_state == "compliant" and unconfirmed_record_count:
+                    if final_state == "compliant" and unconfirmed_record_count and extraction_failed:
+                        # 结构化输注已可核对，但其余记录因模型失败未核实实施，不能确认合规；
+                        # 不合规结论只依赖已确认事件，照常保留。
+                        final_state, reason_code, facts = "technical_error", extraction_reason, None
+                    elif final_state == "compliant" and unconfirmed_record_count:
                         final_state = "data_gap"
                         reason_code = "authoritative_time_missing" if performed_time_missing else extraction_reason or "positive_assertion_not_explicit"
                         facts = None
@@ -4300,19 +4787,20 @@ async def execute_luxian_0609_native_extended_document_rules(
             if surgery_events:
                 if linkage_error:
                     selected_postoperative_rows.extend(
-                        event.row for event in surgery_events
+                        row for event in surgery_events for row in event.member_rows
                     )
                 elif final_state == "non_compliant":
                     # 缺失首次病程时，客户证据只指向缺失的手术事件；已满足
                     # 事件的病程不应被这条缺陷结论顺带投影。
                     selected_postoperative_rows.extend(
-                        event.row
+                        row
                         for event, linked_rows in linked_events
                         if not linked_rows
+                        for row in event.member_rows
                     )
                 else:
                     selected_postoperative_rows.extend(
-                        event.row for event, _linked_rows in linked_events
+                        row for event, _linked_rows in linked_events for row in event.member_rows
                     )
                     selected_postoperative_rows.extend(
                         row
@@ -4362,13 +4850,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = gate_outcome
             elif not surgery_events:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
-            elif (
-                len(surgery_events) > 1
-                and all(event.source_key == "mr_surgery" for event in surgery_events)
+            elif len(surgery_events) > 1 and any(
+                event.source_key == "mr_surgery" and event.surgery_begin_time is None
+                for event in surgery_events
             ):
-                # 没有正式手术记录时，多个操作目录行仍无法安全证明逐台关联。
-                # 本轮仅收敛“正式手术记录一行即一事件”的主路径。
-                final_state, reason_code = "data_gap", "association_failed"
+                # 主控代定口径（2026-10-18，待客户复核），基线064/065：多首页行缺开始时间仍资料不足。
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif any(event.surgery_end_time is None for event in surgery_events):
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
                 display.append((rule_id, {
@@ -4478,7 +4965,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     unresolved_senior_body = False
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
-                        selected_postoperative_rows.append(event.row)
+                        selected_postoperative_rows.extend(event.member_rows)
                         deadline = event.surgery_end_time + timedelta(hours=72)
                         window_mature = (
                             evaluation_time >= deadline
@@ -4609,7 +5096,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
-                        selected_postoperative_rows.append(event.row)
+                        selected_postoperative_rows.extend(event.member_rows)
                         required_dates = {
                             (event.surgery_end_time + timedelta(days=offset)).date()
                             for offset in (1, 2, 3)
@@ -4909,6 +5396,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 consumed_source_keys = ("inpat_registration",)
             elif outcome.final_state == "not_applicable":
                 consumed_source_keys = ("inpat_registration", "discharge_record")
+            elif outcome.final_state == "non_compliant":
+                consumed_source_keys = ("inpat_registration", "discharge_record", "daily_course_record", "senior_course_record")
             else:
                 consumed_source_keys = ()
             decisions.append(
@@ -5087,7 +5576,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 row_time is not None
                                 and assertion.opinion == "approved"
                                 and (
-                                    assertion.role == "unknown"
+                                    (
+                                        assertion.role == "unknown"
+                                        and not _is_dated_discharge_plan_only(assertion.quote)
+                                    )
                                     or (
                                         assertion.role == "senior"
                                         and not _has_confirmed_discharge_approval(assertion.quote)
@@ -5859,6 +6351,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5877,6 +6370,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5895,6 +6389,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5913,6 +6408,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,
@@ -5931,6 +6427,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
                 transfusion_performance_extraction,
+                transfusion_course_extraction,
                 *course_body_extractions,
                 *other_medication_extractions,
                 *invasive_extractions,

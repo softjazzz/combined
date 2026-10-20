@@ -21,7 +21,7 @@ from .privacy_identity_context import build_luxian_0609_identity_provider
 from .privacy_request_scope import bind_luxian_0609_identity_provider
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
-from .decision_model import RuleDecision
+from .decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
 from .decision_reducer import ReducedRuleDecision
 from ..luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
 from ..qc_diagnostics.capture import capture_execution_inputs, capture_execution_context
@@ -530,6 +530,27 @@ async def prepare_luxian_0609_execution(
                     native_usage_unknown_executor_keys.append(outcome.executor_key)
                 native_results.extend(envelope.results)
                 native_rule_decisions.extend(envelope.decisions)
+                if isinstance(outcome, FamilyExecutionFailure) and outcome.failure_kind != "contract":
+                    # deadline/取消等由引擎直接生成旧结果，执行器来不及返回 typed
+                    # 决策。只转换已确认的运行失败，不修补成功信封中的缺项。
+                    native_rule_decisions.extend(
+                        RuleDecision(
+                            rule_id=rule_id,
+                            snapshot_hash=evidence_snapshot.snapshot_hash,
+                            applicability=ApplicabilityState.ERROR,
+                            evidence_state=EvidenceState.TECHNICAL_ERROR,
+                            qc_direction=QcDirection.UNKNOWN,
+                            reason_code=(
+                                "executor_timeout" if outcome.failure_kind == "timeout"
+                                else "executor_exception"
+                            ),
+                            fact_refs=(),
+                            evaluator_version="family-runtime-failure-v1",
+                            confidence=None,
+                        )
+                        for rule_id in outcome.selected_rule_ids
+                        if rule_id in typed_decision_rule_ids
+                    )
                 native_customer_display_facts.extend(envelope.customer_display_facts)
                 if envelope.diagnostic_semantic_snapshot is not None:
                     native_diagnostic_semantic_snapshots.extend(

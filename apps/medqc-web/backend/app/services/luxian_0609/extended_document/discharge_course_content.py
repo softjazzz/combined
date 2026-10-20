@@ -198,7 +198,10 @@ async def evaluate_discharge_course_content(*, snapshot: Any, materials: Any, ll
             except (ValueError, TypeError, KeyError, AttributeError, jsonschema.ValidationError) as error:
                 if attempt + 1 == PROTOCOL_ATTEMPTS:
                     return None, "failed"
-                attempt_prompt = stages.retry_prompt(stage_prompt, error)
+                choices = response.get("choices")
+                previous = (choices[0].get("message", {}).get("content") if choices
+                            else response.get("content", response.get("text")))
+                attempt_prompt = stages.retry_prompt(stage_prompt, error, previous)
         return None, "failed"
 
     events = _objective_events(docs)

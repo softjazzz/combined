@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import json
+import logging
 import re
+import sys
 from typing import Any, Mapping, Protocol, Sequence
 
 from .evidence_material import (
@@ -44,6 +46,9 @@ from .pathology_report_completeness import (
     evaluate_pathology_report_completeness,
 )
 
+
+
+logger = logging.getLogger(__name__)
 
 TUMOR_PATHOLOGY_RULE_IDS = (
     "LX0609-06-02-03",
@@ -183,7 +188,9 @@ _PATHOLOGY_RESULT_MISSING_PATTERN = re.compile(
 _PATHOLOGY_SAMPLING_MISSING_PATTERN = re.compile(
     r"(?:未记录.{0,12}(?:病理)?(?:取材|送检)|(?:病理)?(?:取材|送检).{0,12}未记录)"
 )
-_CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"(?:化疗|抗肿瘤)")
+# ATC 皮肤抗感染分类中的“化疗药物”不表示肿瘤化疗；非肿瘤类别
+# 不能仅凭包含该词触发。独立化疗分类及明确抗肿瘤分类仍保留。
+_CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"抗肿瘤|(?:^|[\s/、,，;；>])化疗(?:药物|药)?(?:$|[\s/、,，;；>])")
 _CHEMO_ORDER_VOID_STATUSES = frozenset({"取消", "撤销", "作废"})
 _CHEMO_ORDER_PENDING_STATUSES = frozenset({"拟执行"})
 _CHEMOTHERAPY_RELATIVE_DATE_PATTERN = re.compile(r"(?:今日|当日)")
@@ -1959,6 +1966,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         display_facts: Mapping[str, Any] | None = None,
         fact_refs: Sequence[str] = (),
     ) -> None:
+        if status == "technical_error":
+            # 诊断日志：只记规则、原因码、是否类型化与出错代码行，不含病历或模型内容。
+            logger.warning(
+                "LX0609 肿瘤病理族技术错误: rule_id=%s reason_code=%s typed=%s call_line=%s",
+                rule_id, reason_code, rule_id in typed_requested, sys._getframe(1).f_lineno,
+            )
         outcome = _TumorRuleOutcome(
             rule_id=rule_id,
             status=status,
@@ -2313,12 +2326,16 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         # （`tumor_pathology_result_mapping.py:247`），故可以带。
                         # 该事实仍是**纯展示事实**：不改变状态与原因码，只让客户文案
                         # 说出"恶性性质尚不明确、暂不能确定是否适用"。
+                        # 只有确有可疑诊断行时才携带“恶性性质未决”事实；来源不可用或诊断内容
+                        # 缺失时没有可展示的未决诊断，按普通资料不足交付，避免事实合同失败。
                         display_facts=(
                             {
                                 "verification_kind": "malignant_diagnosis_applicability_uncertain",
                                 "malignancy_state": "unknown",
                                 "uncertain_diagnosis_count": len(malignancy.uncertain_rows),
                             }
+                            if malignancy.uncertain_rows
+                            else None
                         ),
                         fact_refs=typed_document_refs(*(
                             (source_key, (row,)) for source_key, row in malignancy.uncertain_rows

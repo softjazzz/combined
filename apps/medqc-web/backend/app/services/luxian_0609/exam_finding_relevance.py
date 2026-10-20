@@ -11,9 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import json
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .exam_lab_fact_extraction import ExamLabTextProjection, events_for_family
+from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
@@ -32,6 +33,71 @@ RELEVANCE_TO_HINT = {
     "uncertain": "unknown",
 }
 
+
+
+@dataclass(frozen=True)
+class _RetryIssue:
+    reason: str
+    location: str
+    field: str
+    value: str
+    hint: str
+
+
+class _RetryViolation(ValueError):
+    """收集同份应答的可修正项，异常字符串仍为首个失败原因。"""
+
+    def __init__(self, issues: Sequence[_RetryIssue]) -> None:
+        # 失败项为空（如目标无候选病程且应答为空）时沿用原覆盖失败原因。
+        super().__init__(issues[0].reason if issues else "invalid doc coverage")
+        self.issues = tuple(issues)
+
+
+class _TruncatedResponse(ValueError):
+    def __init__(self) -> None:
+        super().__init__("incomplete response")
+
+
+def _response_content(response: Mapping[str, Any]) -> Any:
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        return message.get("content") if isinstance(message, Mapping) else None
+    return response.get("content", response.get("text"))
+
+
+def _retry_prompt(
+    prompt: str, error: Exception, response: Mapping[str, Any],
+    *, pending: Mapping[int, tuple[str, ...]] | None = None,
+) -> str:
+    if isinstance(error, _TruncatedResponse):
+        hint = "输出超长被截断。请输出完整JSON，引文只取最短必要的连续原文，编号只选最短必要证明，避免重复。"
+    elif isinstance(error, _RetryViolation):
+        details = []
+        for issue in error.issues[:8]:
+            # 回显先脱敏再限长，避免裁掉身份标签后泄漏身份值。
+            value = redact_luxian_0609_patient_privacy(issue.value)
+            value_ref = (f"以「{value[:60]}」开头的{issue.field}" if len(value) > 60
+                         else f"{issue.field}「{value}」")
+            location = redact_luxian_0609_patient_privacy(issue.location)
+            details.append(f"{location}的{value_ref}：{issue.hint}")
+        hint = "；".join(details) + "。请修正以上失败项并补齐覆盖，其余已核验判断不因补核改变。"
+        try:
+            payload = json.loads(_response_content(response))
+            if pending is not None and isinstance(payload, dict) and isinstance(payload.get("docs"), list):
+                payload = {**payload, "docs": [item for item in payload["docs"]
+                           if isinstance(item, dict) and type(item.get("event_position")) is int
+                           and item["event_position"] in pending]}
+            previous = json.dumps(payload, ensure_ascii=False)
+        except (ValueError, TypeError):
+            previous = ""
+        if previous and len(previous) <= 24000:
+            previous = redact_luxian_0609_patient_privacy(previous)
+            if len(previous) <= 24000:
+                hint += "\n上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + previous
+    else:
+        hint = "每个报告必须且仅输出一次，relevance只能取规定值。请修正后重新输出完整JSON。"
+    return prompt.replace("\n本次就诊背景=", "\n上一次输出未通过校验：" + hint + "\n本次就诊背景=", 1)
 
 @dataclass(frozen=True)
 class FindingRelevanceOutcome:
@@ -86,6 +152,8 @@ def _prompt(reports: Mapping[int, str], context: str) -> str:
 def _parse(response: Mapping[str, Any], expected: set[int]) -> dict[int, str]:
     choices = response.get("choices")
     if choices is not None:
+        if choices[0].get("finish_reason") == "length":
+            raise _TruncatedResponse()
         if choices[0].get("finish_reason") not in {None, "stop"}:
             raise ValueError("incomplete response")
         content = choices[0]["message"]["content"]
@@ -96,17 +164,25 @@ def _parse(response: Mapping[str, Any], expected: set[int]) -> dict[int, str]:
             or payload["schema_version"] != SCHEMA_VERSION or not isinstance(payload["events"], list)):
         raise ValueError("invalid response schema")
     result: dict[int, str] = {}
-    for item in payload["events"]:
+    issues: list[_RetryIssue] = []
+    for index, item in enumerate(payload["events"], 1):
         if not isinstance(item, dict) or set(item) != {"event_position", "relevance"}:
             raise ValueError("invalid event schema")
         position, relevance = item["event_position"], item["relevance"]
-        if type(position) is not int or position not in expected or position in result:
-            raise ValueError("invalid event coverage")
         if relevance not in RELEVANCE_TO_HINT:
             raise ValueError("invalid relevance")
+        if type(position) is not int or position not in expected or position in result:
+            count = sum(row.get("event_position") == position for row in payload["events"] if isinstance(row, dict))
+            issues.append(_RetryIssue("invalid event coverage", f"events第{index}项 event_position={position}",
+                                     "event_position/relevance", str(position),
+                                     f"该事件出现{count}次；只引用给定事件，每个报告必须且仅输出一次"))
+            continue
         result[position] = relevance
-    if set(result) != expected:
-        raise ValueError("invalid event coverage")
+    for position in sorted(expected - set(result)):
+        issues.append(_RetryIssue("invalid event coverage", f"遗漏项 event_position={position}", "relevance", "",
+                                 "该事件出现0次；须补齐该报告的relevance，取规定枚举值"))
+    if issues:
+        raise _RetryViolation(issues)
     return result
 
 
@@ -139,14 +215,12 @@ async def classify_exam_finding_relevance(
             api_time += usage[3]
             relevance = _parse(response, set(reports))
             break
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return FindingRelevanceOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                                total_tokens, api_time or perf_counter() - started)
-            # 提示放在资料之前，资料仍在末尾。
-            attempt_prompt = prompt.replace(
-                "\n本次就诊背景=", "\n上一次输出未通过校验：每个报告必须且仅输出一次，relevance只能取规定值。"
-                "请修正后重新输出完整JSON。\n本次就诊背景=", 1)
+            attempt_prompt = _retry_prompt(prompt, error, response)
+
     hints = {position: RELEVANCE_TO_HINT[value] for position, value in relevance.items()}
     return FindingRelevanceOutcome("ready", hints, calls, prompt_tokens, completion_tokens, total_tokens,
                                    api_time or perf_counter() - started)

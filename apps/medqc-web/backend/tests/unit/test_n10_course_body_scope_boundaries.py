@@ -203,9 +203,8 @@ async def test_native_no_window_candidates_keeps_zero_call_missing_contract(rule
     rows = _rows(rule, ({"record_time": "2026-07-06 09:00:00", "record_content": "合成窗口外待核材料"},))
     client = FrozenCourseBodyClient({})
     decision, execution = await _native(rule, rows, client)
-    expected_reason = "required_document_missing" if rule == RULES[0] else "source_empty"
-    expected_state = "non_compliant" if rule == RULES[0] else "data_gap"
-    assert (decision.final_state.value, decision.reason_code) == (expected_state, expected_reason)
+    # 08-02-01 自 2026-10-16（1016 核对 P1）起：完整病程来源在出院前一天与当天均无记录即判缺文书。
+    assert (decision.final_state.value, decision.reason_code) == ("non_compliant", "required_document_missing")
     assert execution.llm_call_count == execution.total_tokens == 0 and client.calls == []
 
 
