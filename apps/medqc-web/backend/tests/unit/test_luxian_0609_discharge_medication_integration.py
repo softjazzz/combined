@@ -123,3 +123,55 @@ async def test_multiple_discharge_records_do_not_guess_one_for_extraction():
     result, final = await _run(client, duplicate=True)
     assert final["status"] == "data_gap"
     assert not client.calls and result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_state", ["missing", "uncertain"])
+@pytest.mark.parametrize("name,expected", [
+    ("生血宝颗粒", "compliant"),
+    ("合成外用颗粒", "non_compliant"),
+    ("合成冲洗颗粒", "non_compliant"),
+])
+async def test_granule_route_policy_reaches_canonical_result(name, expected, route_state):
+    text = f"院外继续用药：{name}（每袋装4g），每次2袋，每天3次。"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "state": "medications_present",
+        "items": [{
+            "drug_name": {"state": "present", "quote": name},
+            "dose": {"state": "present", "quote": "每次2袋"},
+            "route": {"state": route_state, "quote": None},
+            "medication_time": {"state": "present", "quote": "每天3次"},
+        }],
+    }
+    client = FakeClient(payload)
+    result, final = await _run(client, text=text)
+    if route_state == "uncertain" and expected != "compliant":
+        assert final["status"] == "uncertain"
+    else:
+        assert final["status"] == expected
+        assert final["customer_display_facts"]["missing_fields"] == ([] if expected == "compliant" else ["route"])
+    assert len(client.calls) == result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing", ["dose", "duration"])
+async def test_granule_oral_route_does_not_fill_other_missing_fields(missing):
+    medication = {"drug_name": "生血宝颗粒", "dose": "每次2袋", "duration": "每天3次"}
+    medication.pop(missing)
+    client = FakeClient()
+    result, final = await _run(client, structured=[medication])
+    assert final["status"] == "non_compliant"
+    assert final["customer_display_facts"]["missing_fields"] == [missing]
+    assert result.llm_call_count == 0 and not client.calls
+
+
+@pytest.mark.asyncio
+async def test_written_nonoral_granule_route_is_preserved():
+    client = FakeClient()
+    result, final = await _run(client, structured=[{
+        "drug_name": "合成外用颗粒", "dose": "每次1袋", "route": "外用", "duration": "每天1次",
+    }])
+    assert final["status"] == "compliant"
+    assert final["customer_display_facts"]["missing_fields"] == []
+    assert result.llm_call_count == 0 and not client.calls

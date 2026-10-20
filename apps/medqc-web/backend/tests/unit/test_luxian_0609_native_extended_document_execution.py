@@ -10996,6 +10996,13 @@ async def test_064_missing_surgery_begin_time_cannot_verify_preoperative_round()
     ("阿司匹林肠溶片", True),
     ("大活络胶囊", True),
     ("复方福尔可定糖浆", True),
+    ("生血宝颗粒", True),
+    ("合成药颗粒剂", True),
+    ("合成药颗粒（外用）", False),
+    ("外用合成药颗粒", False),
+    ("合成冲洗颗粒", False),
+    ("阴道用合成药颗粒", False),
+    ("合成药颗粒（灌肠用）", False),
     ("依达拉奉舌下片", False),
     ("西地碘含片", False),
     ("注射用头孢曲松钠", False),
@@ -11040,6 +11047,9 @@ def _medication_extraction(*items):
 @pytest.mark.parametrize(("items", "expected"), [
     # 0910 真实样本：两种糖浆边界清楚，模型仍把途径报为不确定 → 按剂型推定口服。
     ((("合成糖浆甲", {"route": "uncertain"}), ("合成片乙", {"route": "uncertain"})), "ready"),
+    ((("生血宝颗粒", {"route": "uncertain"}),), "ready"),
+    ((("外用合成药颗粒", {"route": "uncertain"}),), "unknown"),
+    ((("合成冲洗颗粒", {"route": "uncertain"}),), "unknown"),
     ((("合成糖浆甲", {"route": "uncertain"}), ("注射用合成丙", {"route": "uncertain"})), "unknown"),
     ((("合成舌下片丁", {"route": "uncertain"}),), "unknown"),
     ((("合成糖浆甲", {"route": "uncertain", "dose": "uncertain"}),), "unknown"),

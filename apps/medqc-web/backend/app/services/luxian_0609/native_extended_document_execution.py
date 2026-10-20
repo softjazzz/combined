@@ -1935,9 +1935,10 @@ _DISCHARGE_MEDICATION_REQUIRED_GROUPS = (
 
 
 # 院方口径（2026-10-10）：片剂、胶囊、糖浆（及名称已写明口服的制剂）未写给药途径时按剂型
-# 默认口服；舌下、含化、阴道、泡腾、贴剂等非常规口服片剂不推定。
-_ORAL_DOSAGE_FORM_PATTERN = re.compile(r"(?:片|胶囊|糖浆|口服液|口服溶液)")
+# 默认口服；2026-10-20 用户确认口服颗粒剂沿用该口径，外用、冲洗等用途不推定。
+_ORAL_DOSAGE_FORM_PATTERN = re.compile(r"(?:片|胶囊|糖浆|口服液|口服溶液|颗粒)")
 _NON_ORAL_TABLET_PATTERN = re.compile(r"(?:舌下片|含片|阴道片|泡腾片|贴片)")
+_NON_ORAL_GRANULE_PATTERN = re.compile(r"(?:外用|外洗|冲洗|含漱|漱口|灌肠|阴道|直肠|外敷|湿敷)")
 
 
 def _with_dosage_form_oral_route(
@@ -1948,8 +1949,7 @@ def _with_dosage_form_oral_route(
         name = " ".join(_clean(item.get(key)) for key in ("drug_name", "generic_name", "name"))
         if (
             not any(_clean(item.get(key)) for key in ("route", "drug_apply_method"))
-            and _ORAL_DOSAGE_FORM_PATTERN.search(name)
-            and not _NON_ORAL_TABLET_PATTERN.search(name)
+            and _oral_dosage_form(name)
         ):
             result.append({**item, "route": "口服（按剂型推定）"})
         else:
@@ -1959,7 +1959,11 @@ def _with_dosage_form_oral_route(
 
 def _oral_dosage_form(name: Any) -> bool:
     text = _clean(name)
-    return bool(_ORAL_DOSAGE_FORM_PATTERN.search(text)) and not _NON_ORAL_TABLET_PATTERN.search(text)
+    return (
+        bool(_ORAL_DOSAGE_FORM_PATTERN.search(text))
+        and not _NON_ORAL_TABLET_PATTERN.search(text)
+        and not ("颗粒" in text and _NON_ORAL_GRANULE_PATTERN.search(text))
+    )
 
 
 def _with_oral_route_uncertainty_resolved(extraction: Any) -> Any:
