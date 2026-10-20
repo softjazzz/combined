@@ -182,8 +182,23 @@ def _configuration_error(profile: str, failure_kind: str) -> tuple[dict[str, Any
     )
 
 
+_PYTEST_SUMMARY_LINE = re.compile(
+    r"^=*\s*(?=.*\b\d+ (?:passed|failed|errors?)\b).*\bin \d+(?:\.\d+)?s\b"
+)
+
+
+def _pytest_summary_line(output: str) -> str:
+    """只取 pytest 最终汇总行；用例日志正文中的“N errors”等字样不能计入。"""
+
+    for raw in reversed(output.splitlines()):
+        line = raw.strip()
+        if _PYTEST_SUMMARY_LINE.match(line):
+            return line
+    return ""
+
+
 def _pytest_count(pattern: str, output: str) -> int:
-    matches = re.findall(pattern, output, flags=re.IGNORECASE)
+    matches = re.findall(pattern, _pytest_summary_line(output), flags=re.IGNORECASE)
     return sum(int(value) for value in matches)
 
 

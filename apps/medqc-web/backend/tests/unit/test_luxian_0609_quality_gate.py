@@ -250,3 +250,24 @@ def test_failed_test_lines_keep_node_and_error_type_without_message_body():
         "ERROR tests/unit/test_b.py::test_y [FileNotFoundError]",
         "FAILED tests/unit/test_c.py::test_z",
     ]
+
+
+@pytest.mark.unit
+def test_subprocess_gate_counts_only_final_pytest_summary_line() -> None:
+    class Completed:
+        returncode = 1
+        stdout = (
+            "WARNING merged 66 errors from replay\n"
+            "log: 66 failed attempts retried in 3s\n"
+            "FAILED tests/unit/test_x.py::test_a - AssertionError\n"
+            "===== 7 failed, 8207 passed, 1 skipped, 61 warnings in 395.44s (0:06:35) ======\n"
+        )
+        stderr = ""
+
+    result = run_gate_subprocess(
+        GateSpec(name="contract", args=("-m", "pytest", "example.py")),
+        process_runner=lambda command, **kwargs: Completed(),
+    )
+
+    assert result.passed_tests == 8207
+    assert result.failed_tests == 7
