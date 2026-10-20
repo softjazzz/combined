@@ -49,7 +49,6 @@ from .course_quality.rules_016_017 import (
     _assess_copy,
     _copy_customer_display_facts,
     _normalized_for_similarity as _normalized_for_similarity,  # noqa: F401
-    _review_copy_candidates,
     _RULE_016_EXACT_MATCH,
     _rule_016_comparison_material_state,
     _rule_016_copy_coverage,
@@ -1141,18 +1140,6 @@ async def execute_luxian_0609_native_course_quality_rules(
                 copy_documents,
                 source_complete=copy_documents is not documents,
             )
-            if copy_outcome.review_candidates:
-                if llm_client is not None:
-                    llm_call_count += 1
-                copy_outcome = await _review_copy_candidates(
-                    copy_outcome,
-                    llm_client,
-                    redaction_terms=(institute_id or "", patient_id or "", visit_id or ""),
-                )
-                prompt_tokens += copy_outcome.prompt_tokens
-                completion_tokens += copy_outcome.completion_tokens
-                total_tokens += copy_outcome.total_tokens
-                api_time += copy_outcome.api_time
             emit_copy(copy_outcome)
             continue
 
