@@ -2383,6 +2383,8 @@ def _consultation_execution_display_facts(
     documents: Sequence[Mapping[str, str]],
     candidates: Sequence[_CandidateDocument] = (),
     excluded_recommendations: Sequence[_CompletedRecommendation] = (),
+    order_scope_excluded: Sequence[_CompletedRecommendation] = (),
+    missing_measures_by_ref: Mapping[str, Sequence[str]] | None = None,
 ) -> Mapping[str, Any]:
     """解释020的关联结果或023的执行质量结果。"""
 
@@ -2689,6 +2691,23 @@ def _consultation_execution_display_facts(
                     "execution_refs": execution_evidence[:8],
                 }
             )
+            if rule_id == "LX0609-03-01-04":
+                # 告诉医生按哪一天去核对医嘱；逐项核对缺失的措施逐字摘自建议原文。
+                if item.opinion_time is not None:
+                    recommendation_evidence[-1]["opinion_time"] = (
+                        item.opinion_time.value.strftime("%Y-%m-%d %H:%M:%S")
+                        if item.opinion_time.precise
+                        else item.opinion_time.value.strftime("%Y-%m-%d")
+                    )
+                missing_measures = [
+                    redact_luxian_0609_patient_privacy(_clean(measure))[:40]
+                    for measure in (missing_measures_by_ref or {}).get(
+                        item.recommendation.recommendation_ref, ()
+                    )
+                    if _clean(measure)
+                ][:8]
+                if missing_measures:
+                    recommendation_evidence[-1]["missing_measures"] = missing_measures
         if rule_id == "LX0609-03-01-01":
             facts["recommendation_results"] = recommendation_results
         facts["recommendation_evidence"] = recommendation_evidence[:96]
@@ -2703,6 +2722,18 @@ def _consultation_execution_display_facts(
                 }
                 for item in excluded_recommendations[:96]
             ]
+        if rule_id == "LX0609-03-01-04" and order_scope_excluded:
+            facts.setdefault("excluded_recommendations", []).extend(
+                {
+                    "episode_index": episode_indexes[item.episode_ref],
+                    "recommendation_text": redact_luxian_0609_patient_privacy(
+                        _clean(item.recommendation.normalized_action)
+                    ),
+                    "exclusion_reason": _order_scope_exclusion_reason(item.recommendation),
+                }
+                for item in order_scope_excluded[:96]
+            )
+            facts["excluded_recommendations"] = facts["excluded_recommendations"][:96]
     return facts
 
 
@@ -3710,6 +3741,19 @@ def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
     )
 
 
+def _order_scope_exclusion_reason(recommendation: "_Recommendation") -> str:
+    """023 未纳入核对的原因：非医嘱类建议、院外自带药，或条件未成立。"""
+
+    if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
+        return "non_order_recommendation"
+    text = _recommendation_text(recommendation)
+    if _HOME_MEDICATION_PATTERN.search(text):
+        return "home_medication"
+    if not _is_order_recommendation(recommendation):
+        return "non_order_recommendation"
+    return "condition_not_met"
+
+
 def _is_conditional_recommendation(recommendation: "_Recommendation") -> bool:
     """整条建议以条件开头才算条件式；“先查A，若阴性则行B”前半句仍须执行。"""
 
@@ -4675,6 +4719,8 @@ async def _execute_consultation_episode_rules(
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     excluded_conditional_recommendations: tuple[_CompletedRecommendation, ...] = ()
+    # 023 逐项核对查出的“当日未开立医嘱”措施，供客户展示逐条说明原因。
+    measure_missing_by_ref: dict[str, tuple[str, ...]] = {}
     embedded_decision_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -5300,6 +5346,11 @@ async def _execute_consultation_episode_rules(
                     measure_outcome = _drop_conditional_missing_measures(
                         measure_outcome, measure_completed,
                     )
+                    measure_missing_by_ref.update(
+                        (ref, measures)
+                        for ref, measures in measure_outcome.missing_measures.items()
+                        if measures
+                    )
                     statuses["LX0609-03-01-04"] = apply_measure_check(
                         statuses["LX0609-03-01-04"],
                         measure_outcome,
@@ -5421,6 +5472,17 @@ async def _execute_consultation_episode_rules(
                         else ()
                     ),
                     excluded_recommendations=excluded_conditional_recommendations,
+                    order_scope_excluded=(
+                        tuple(
+                            item for item in completed_recommendations
+                            if item not in rule_completed
+                        )
+                        if rule_id == "LX0609-03-01-04"
+                        else ()
+                    ),
+                    missing_measures_by_ref=(
+                        measure_missing_by_ref if rule_id == "LX0609-03-01-04" else {}
+                    ),
                 ),
             )
         )

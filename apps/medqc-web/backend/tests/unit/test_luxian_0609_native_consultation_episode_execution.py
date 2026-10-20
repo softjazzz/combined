@@ -9713,3 +9713,43 @@ def test_same_day_orders_are_not_cut_by_order_budget():
     _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
     assert len(allowed["r1"]) == 58
     assert "inpat_nondrug_order-57" in allowed["r1"]
+
+
+def test_023_display_facts_explain_time_missing_measures_and_exclusions():
+    # 2026-10-20：不合规原因要让医生看清会诊记录时间、哪项措施当天没开医嘱、哪些建议为何不核对。
+    def rec(ref, kind, text):
+        return episode._Recommendation(ref, kind, text, text, "consultation_record-1")
+
+    checked = rec("consultation_record-1#r1", "test", "完善血气分析、乳酸、心衰指标")
+    excluded = (
+        rec("consultation_record-1#r2", "other", "卧床休息"),
+        rec("consultation_record-1#r3", "medication", "继续服用原降压药"),
+        rec("consultation_record-1#r4", "transfer", "若病情加重可转科"),
+    )
+    current_episode = episode._Episode(
+        "consultation_record-1", ("consultation_record-1",), ("consultation_record-1",),
+        ("consultation_record-1",), "clear", "clear", "high", (checked, *excluded),
+    )
+    when = episode._ObservedTime(datetime(2026, 8, 24, 15, 7, 30), True)
+    completed = episode._CompletedRecommendation("consultation_record-1", checked, when)
+    facts = episode._consultation_execution_display_facts(
+        rule_id="LX0609-03-01-04",
+        status="non_compliant",
+        episodes=(current_episode,),
+        completed_recommendations=(completed,),
+        assessments=(episode._ExecutionAssessment(
+            checked.recommendation_ref, "linked_specific", ("inpat_nondrug_order-1",), "high", (),
+        ),),
+        documents=({"ref": "consultation_record-1", "document_id": "CONSULT-1"},),
+        order_scope_excluded=tuple(
+            episode._CompletedRecommendation("consultation_record-1", item, when) for item in excluded
+        ),
+        missing_measures_by_ref={checked.recommendation_ref: ("心衰指标",)},
+    )
+
+    item = facts["recommendation_evidence"][0]
+    assert item["opinion_time"] == "2026-08-24 15:07:30"
+    assert item["missing_measures"] == ["心衰指标"]
+    assert [row["exclusion_reason"] for row in facts["excluded_recommendations"]] == [
+        "non_order_recommendation", "home_medication", "condition_not_met",
+    ]

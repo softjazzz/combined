@@ -192,7 +192,7 @@ def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() 
         reason_code="requirement_violated",
     )
 
-    assert "修改对象：会诊意见执行记录" in suggestion
+    assert "修改对象：会诊建议对应的住院医嘱" in suggestion
     assert "请依据本次实际诊疗事实补充" in suggestion
     assert "不要编造未核实事实" in suggestion
     assert "资料不足时应标记待核实" not in suggestion

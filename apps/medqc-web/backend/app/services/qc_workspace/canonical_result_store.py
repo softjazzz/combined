@@ -204,9 +204,26 @@ def _validate_recommendation_evidence_facts(value: Any) -> None:
             "opinion_evidence",
             "execution_evidence",
         }
-        if not isinstance(entry, dict) or set(entry) not in (
-            expected_keys,
-            expected_keys | {"recommendation_text"},
+        # 023 逐条另带会诊记录时间与当日未开立医嘱的措施（2026-10-20）。
+        optional_keys = {"recommendation_text", "opinion_time", "missing_measures"}
+        if not isinstance(entry, dict) or not expected_keys <= set(entry) <= (
+            expected_keys | optional_keys
+        ):
+            raise ValueError("invalid recommendation evidence")
+        opinion_time = entry.get("opinion_time")
+        if opinion_time is not None and (
+            type(opinion_time) is not str
+            or re.fullmatch(r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2})?", opinion_time) is None
+        ):
+            raise ValueError("invalid recommendation evidence")
+        missing_measures = entry.get("missing_measures")
+        if missing_measures is not None and (
+            type(missing_measures) is not list
+            or not 1 <= len(missing_measures) <= 8
+            or any(
+                type(item) is not str or not item.strip() or len(item) > 40
+                for item in missing_measures
+            )
         ):
             raise ValueError("invalid recommendation evidence")
         recommendation_text = entry.get("recommendation_text")

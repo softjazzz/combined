@@ -218,7 +218,7 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-03-01-02": ("会诊申请中的具体临床问题、会诊理由或明确目的",),
     "LX0609-03-01-03": ("会诊记录中的明确诊疗意见",),
     "LX0609-03-01-04": (
-        f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}、后续执行记录或两者的关联信息",
+        f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}、会诊记录当天的住院医嘱或两者的关联信息",
     ),
     "LX0609-04-02-01": ("手术结束时间、手术记录时间或单台手术关联信息",),
     "LX0609-04-01-01": ("术前小结与具体手术的单台关联信息",),
@@ -324,10 +324,10 @@ _RULE_DATA_GAP_MESSAGES = {
         "请确认至少两份病程记录及其文书时间、实质正文已完整同步后重新评估。",
     ),
     "LX0609-03-01-04": (
-        f"暂无法核对会诊意见执行记录是否具体（{_CONSULTATION_023_BODY_EXTRACTION_NOTE}）",
+        f"暂无法核对会诊建议是否已开立住院医嘱（{_CONSULTATION_023_BODY_EXTRACTION_NOTE}）",
         f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；当前缺少可唯一关联的会诊意见、"
-        "后续执行记录，或两者之间的关联信息。",
-        "请确认会诊意见和后续执行记录已完整同步并可相互关联后重新评估。",
+        "会诊记录当天的住院医嘱，或两者之间的关联信息。",
+        "请确认会诊意见和住院医嘱已完整同步并可相互关联后重新评估。",
     ),
     "LX0609-06-01-04": (
         "暂无法核对 CT/MRI 报告后 24 小时内是否记录病程",
@@ -2847,6 +2847,7 @@ def customer_finding_from_controlled_facts(
             "specific": [],
             "generic": [],
             "missing": [],
+            "partial": [],
         }
         for item in recommendation_evidence:
             if (
@@ -2860,55 +2861,84 @@ def customer_finding_from_controlled_facts(
             state = item.get("execution_state")
             if state not in labels_by_state:
                 continue
+            opinion_time = item.get("opinion_time")
+            when = (
+                f"（会诊记录{opinion_time[:16]}）"
+                if isinstance(opinion_time, str) and opinion_time.strip()
+                else ""
+            )
             label = (
-                f"第{item['episode_index']}次会诊的"
+                f"第{item['episode_index']}次会诊{when}的"
                 f"第{item['recommendation_index']}条建议"
             )
             recommendation_text = item.get("recommendation_text")
             if isinstance(recommendation_text, str) and recommendation_text.strip():
                 label += f"“{recommendation_text.strip()}”"
+            missing_measures = item.get("missing_measures")
+            if state == "specific" and isinstance(missing_measures, list) and missing_measures:
+                measures = "、".join(
+                    f"“{value.strip()}”" for value in missing_measures
+                    if isinstance(value, str) and value.strip()
+                )
+                if not measures:
+                    return ""
+                labels_by_state["partial"].append(f"{label}中的{measures}")
+                continue
             labels_by_state[state].append(label)
-        if not labels_by_state["missing"] and not labels_by_state["generic"]:
+        if (
+            not labels_by_state["missing"]
+            and not labels_by_state["generic"]
+            and not labels_by_state["partial"]
+        ):
             return ""
 
         finding_parts = [
             f"{_CONSULTATION_023_BODY_EXTRACTION_NOTE}；"
+            "执行证据按会诊记录当天开立的住院医嘱核对（“继续/维持”原治疗的建议"
+            "也认此前已开立的医嘱），次日起开立的不算；"
             f"共核对{len(recommendation_evidence)}条建议。"
         ]
-        if excluded_recommendations:
-            excluded_labels: list[str] = []
-            for item in excluded_recommendations:
-                if (
-                    not isinstance(item, Mapping)
-                    or type(item.get("episode_index")) is not int
-                    or not isinstance(item.get("recommendation_text"), str)
-                    or item.get("exclusion_reason")
-                    != "execution_condition_not_defined"
-                ):
-                    return ""
-                excluded_labels.append(
-                    f"第{item['episode_index']}次会诊建议"
-                    f"“{item['recommendation_text'].strip()}”"
-                )
-            finding_parts.append(
-                f"未纳入执行证据核对：{'、'.join(excluded_labels)}。"
-                "上述建议未说明何时达到执行条件，不能据未找到记录判定未落实。"
-            )
         if labels_by_state["missing"]:
             finding_parts.append(
-                f"未找到执行证据：{'、'.join(labels_by_state['missing'])}。"
-                "未匹配到后续病程记录、上级医师查房记录、住院医嘱或相关检查、"
-                "检验、手术记录中与上述建议相符的执行记录。"
+                f"未执行：{'；'.join(labels_by_state['missing'])}。"
+                "会诊记录当天未开立与上述建议对应的医嘱。"
+            )
+        if labels_by_state["partial"]:
+            finding_parts.append(
+                f"部分措施未执行：{'；'.join(labels_by_state['partial'])}，"
+                "会诊记录当天未开立对应医嘱。"
             )
         if labels_by_state["generic"]:
             finding_parts.append(
-                f"执行记录不具体：{'、'.join(labels_by_state['generic'])}。"
-                "已找到后续记录，但未明确具体执行措施、执行结果或未执行原因。"
+                f"执行医嘱不具体：{'；'.join(labels_by_state['generic'])}。"
+                "会诊记录当天仅有与建议笼统相关的医嘱，不能确认具体落实。"
             )
         if labels_by_state["specific"]:
             finding_parts.append(
-                f"其余{len(labels_by_state['specific'])}条建议已找到具体执行证据。"
+                f"其余{len(labels_by_state['specific'])}条建议当天已开立对应医嘱。"
             )
+        exclusion_notes = {
+            "execution_condition_not_defined": "未说明何时达到执行条件",
+            "non_order_recommendation": "不通过开立医嘱落实",
+            "home_medication": "属院外自带药",
+            "condition_not_met": "条件式建议当天未开医嘱，视为条件未成立",
+        }
+        excluded_labels: list[str] = []
+        for item in excluded_recommendations:
+            if (
+                not isinstance(item, Mapping)
+                or type(item.get("episode_index")) is not int
+                or not isinstance(item.get("recommendation_text"), str)
+                or item.get("exclusion_reason") not in exclusion_notes
+            ):
+                return ""
+            excluded_labels.append(
+                f"第{item['episode_index']}次会诊建议"
+                f"“{item['recommendation_text'].strip()}”"
+                f"（{exclusion_notes[item['exclusion_reason']]}）"
+            )
+        if excluded_labels:
+            finding_parts.append(f"未纳入核对：{'；'.join(excluded_labels)}。")
         return "".join(finding_parts)
 
     if rule_id == "LX0609-03-01-01":

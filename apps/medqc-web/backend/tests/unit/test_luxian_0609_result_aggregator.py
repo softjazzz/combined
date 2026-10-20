@@ -7273,3 +7273,41 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
             ],
         },
     ) is None
+
+
+def _023_canonical_item(**entry_extra):
+    return {
+        "rule_id": "LX0609-03-01-04",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "is_compliant": False,
+        "customer_display_facts": {
+            "verification_kind": "consultation_execution_quality_check",
+            "completed_opinion_episode_count": 1,
+            "recommendation_count": 1,
+            "specific_execution_count": 1,
+            "generic_execution_count": 0,
+            "missing_execution_count": 0,
+            "relation_state": "execution_missing_or_generic",
+            "recommendation_evidence": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "execution_state": "specific",
+                    "opinion_evidence": [],
+                    "execution_evidence": [],
+                    **entry_extra,
+                }
+            ],
+        },
+    }
+
+
+def test_canonical_projection_keeps_023_opinion_time_and_missing_measures():
+    # 2026-10-20：会诊记录时间和当日未开医嘱的措施须能保存到交付结果，供医生看清原因。
+    envelope_item_from_rule_result(
+        _023_canonical_item(opinion_time="2026-08-24 15:07:30", missing_measures=["心衰指标"])
+    )
+    for extra in ({"opinion_time": "昨天"}, {"missing_measures": []}, {"unexpected": 1}):
+        with pytest.raises(ValueError, match="invalid recommendation evidence"):
+            envelope_item_from_rule_result(_023_canonical_item(**extra))
