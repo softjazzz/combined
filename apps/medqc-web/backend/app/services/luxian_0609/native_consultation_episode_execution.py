@@ -2919,6 +2919,9 @@ def _execution_prompt(
                 order_candidates_by_source.setdefault(candidate.source_key, []).append(
                     candidate
                 )
+        # “继续”类建议会纳入会诊前的全部医嘱，按时间远近截断会丢掉数日前开立的
+        # 长期医嘱；与建议原文有连续三字重合（如药名）的医嘱优先保留，其次会诊当日。
+        recommendation_trigrams = _cjk_trigrams(_recommendation_text(item.recommendation))
         kept_order_refs: set[str] = set()
         for per_source in order_candidates_by_source.values():
             kept_order_refs.update(
@@ -2926,6 +2929,8 @@ def _execution_prompt(
                 for candidate in sorted(
                     per_source,
                     key=lambda candidate: (
+                        0 if recommendation_trigrams & _cjk_trigrams(candidate.text) else 1,
+                        0 if candidate.observed_time.day == item.opinion_time.day else 1,
                         abs(candidate.observed_time.value - item.opinion_time.value),
                         candidate_rank[candidate.ref],
                     ),
@@ -3615,7 +3620,9 @@ _ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
 # 用户口径（2026-10-20）：023 会诊执行只认会诊记录当天开立的医嘱，不看病程；只核对需通过医嘱落实的建议
 # （药物、检查检验、操作治疗、转科），卧床/活动/体位/饮食营养目标/护理宣教等不属于医嘱，不核对。
 _ORDER_RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer"})
-_CONTINUATION_RECOMMENDATION_PATTERN = re.compile(r"^\s*(?:暂)?(?:继续|维持|续用|仍予|仍用)")
+_CONTINUATION_RECOMMENDATION_PATTERN = re.compile(
+    r"^\s*(?:建议|可|暂|拟|予)*(?:继续|维持|续用|仍予|仍用)"
+)
 # 模型偶把“改前臂吊带”“骨盆骨折卧床”等归为操作类，这里按关键词兜底剔除；
 # 同一建议含明确药物、检查或手术操作时仍按医嘱核对。
 _NON_ORDER_RECOMMENDATION_PATTERN = re.compile(
@@ -3663,6 +3670,17 @@ def _is_continuation_recommendation(recommendation: "_Recommendation") -> bool:
 
 def _recommendation_text(recommendation: "_Recommendation") -> str:
     return f"{_clean(recommendation.source_quote)}；{_clean(recommendation.normalized_action)}"
+
+
+_CJK_RUN_PATTERN = re.compile(r"[一-鿿]{3,}")
+
+
+def _cjk_trigrams(text: str) -> frozenset[str]:
+    return frozenset(
+        run[index:index + 3]
+        for run in _CJK_RUN_PATTERN.findall(text or "")
+        for index in range(len(run) - 2)
+    )
 
 
 def _is_order_recommendation(recommendation: "_Recommendation") -> bool:

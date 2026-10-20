@@ -9674,3 +9674,28 @@ def test_023_measure_check_scope_and_conditional_missing_measures():
         MeasureCheckOutcome("ready", {"r1": ("诱导痰XPERT检测",)}), scope,
     )
     assert outcome.has_missing
+
+
+def test_continuation_keeps_matching_earlier_long_term_order_within_budget():
+    # “可继续亚胺培南”：数日前开立的同名长期医嘱不能因名额被更近的无关医嘱挤掉。
+    quote = "可继续亚胺培南西司它丁抗感染治疗"
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation("r1", "medication", quote, "继续亚胺培南西司他丁抗感染治疗", "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 1, 20, 17, 21), True),
+    ),)
+    assert episode._is_continuation_recommendation(completed[0].recommendation)
+    filler = tuple(episode._CandidateDocument(
+        f"inpat_drug_order-{index}", "inpat_drug_order",
+        episode._ObservedTime(datetime(2026, 1, 19 if index < 20 else 20, 8, index), True),
+        "氯化钠注射液",
+    ) for index in range(40))
+    target = episode._CandidateDocument(
+        "inpat_drug_order-99", "inpat_drug_order",
+        episode._ObservedTime(datetime(2026, 1, 13, 16, 10), True),
+        "注射用亚胺培南西司他丁钠(1.0g) 长期 Q8h",
+    )
+    _, allowed = episode._execution_prompt(completed=completed, candidates=(*filler, target))
+    assert "inpat_drug_order-99" in allowed["r1"]
+    assert len(allowed["r1"]) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert {f"inpat_drug_order-{index}" for index in range(20, 40)} <= allowed["r1"]
