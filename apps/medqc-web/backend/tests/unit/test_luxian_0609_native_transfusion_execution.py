@@ -29,6 +29,9 @@ from app.services.luxian_0609.decision_binding import (
 
 # 人工审阅的历史病例协议标签；仅用于冻结模型oracle，不由产品函数推断。
 _COURSE_LABELS = {
+    "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。": "record",
+    "普通病程仅提到拟输血和备血。": "not_record",
+    "输血过程及输血后评价记录。": "not_record",
     '16:00输血结束。未记录输血后评价。': 'record',
     '2026-01-01 16:10 输血结束。': 'record',
     '2026-01-01 16:10 输血结束后评价未见异常，生命体征平稳，无输血不良反应。': 'record',
@@ -63,7 +66,6 @@ _COURSE_LABELS = {
     '患者贫血，血红蛋白降低，具有输血指征及必要性；既往无输血不良反应，已评估输血风险和生命体征。': 'not_record',
     '既往无输血不良反应，已说明风险。': 'not_record',
     '明确未记录输血前评估。': 'not_record',
-    '普通病程仅提到拟输血和备血。': 'not_record',
     '未记录输血病程主要内容。': 'not_record',
     '术中出血约800ml，输注红细胞2U。': 'record',
     '术后记录术中输注红细胞2U。': 'record',
@@ -105,7 +107,6 @@ _COURSE_LABELS = {
     '输血记录：按评估及医嘱完成输注。': 'record',
     '输血记录：过程顺利，无输血不良反应。': 'record',
     '输血过程中患者生命体征平稳。': 'record',
-    '输血过程及输血后评价记录。': 'not_record',
     '预计2026-06-05 16:10输血结束。生命体征平稳。': 'not_record',
     '空模板': 'not_record',
     '输血结束，继续观察。': 'record',
@@ -117,11 +118,17 @@ _COURSE_LABELS = {
     **{f'2026-06-05 16:10输血结束。{text}': 'record' for text in (
         '未见输血后评价异常。', '无输血后评价异常。', '输血后评价未见异常。',
         '未记录输血后评价。', '缺少输血后评价。', '未书写输血后评价。')},
-    '2026-06-05 16:10记录：输血结束。生命体征平稳。': 'record',
-    '2026-06-05 16:10输血结束，输注过程顺利。': 'record',
-    '2026-06-05 10:00输血结束。输血后复查血红蛋白改善。': 'record',
-    '16:00输血结束。未记录输血后评价。': 'record',
-    '2026-06-05 16:00输血结束。未记录输血后评价。': 'record',
+    '输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，18:27输注完毕。输血过程顺利，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见寒战、发热及其他输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，结束时间19:00。输注过程中严密观察，过程顺利，未见皮疹、胸闷及输血反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间18:00，结束时间19:00。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，10时输毕，输注过程中生命体征平稳，未见不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。过程顺利，未见皮疹及输血反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，2026年07月07日18:27输注完毕。输血过程中严密观察，患者生命体征平稳，未见寒战、皮疹及输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
+    '输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。输血过程顺利，生命体征平稳，未见发热及输血不良反应。输血后复查血红蛋白提升，治疗有效。': 'record',
 }
 # 048 术中文书的人工原子事实标注：只有本次术中实际输注才是 present。
 _INTRAOPERATIVE_LABELS = {
@@ -315,8 +322,7 @@ def _typed_046_llm_session():
     return _typed_decision_session(
         selected_rule_ids=("LX0609-07-02-02",),
         bloodtrans_content=(
-            "输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，"
-            "18:27输注完毕。输血过程顺利，未见输血不良反应。"
+            '输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，18:27输注完毕。输血过程顺利，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。'
         ),
     )
 
@@ -392,8 +398,8 @@ def test_typed_transfusion_preserves_only_approved_canonical_reasons(
             },
             "technical_error",
             "model_invalid_output",
-            1,
-            110,
+            2,
+            220,
         ),
         (
             {
@@ -423,7 +429,7 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
         "read_luxian_0609_native_source_rows",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
     )
-    client = None if model_output is None else _Client([model_output])
+    client = None if model_output is None else _Client([model_output, model_output])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
@@ -468,7 +474,7 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
             },
             "technical_error",
             "model_invalid_output",
-            110,
+            220,
         ),
         (
             {
@@ -497,7 +503,7 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
         "read_luxian_0609_native_source_rows",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
     )
-    client = None if model_output is None else _Client([model_output])
+    client = None if model_output is None else _Client([model_output, model_output])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
@@ -521,7 +527,8 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
 
     assert result.results == ()
     assert result.customer_display_facts == ()
-    assert result.llm_call_count == 1 + _protocol_calls(result)
+    # 引文或绑定错误定向补核一次，调用与 Token 各计两次。
+    assert result.llm_call_count == (2 if expected_tokens == 220 else 1) + _protocol_calls(result)
     assert result.total_tokens == expected_tokens
     assert canonical[0].final_state.value == expected_final_state
     assert canonical[0].reason_code == expected_reason
@@ -980,7 +987,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
     assert states == {
         "LX0609-11-03-01": "non_compliant",
         "LX0609-11-03-02": "not_applicable",
-        "LX0609-07-01-01": "non_compliant",
+        "LX0609-07-01-01": "data_gap",
         "LX0609-07-01-02": "non_compliant",
         "LX0609-07-04-01": "not_applicable",
         "LX0609-07-04-02": "data_gap",
@@ -1082,7 +1089,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
-    ] == ["non_compliant", "not_applicable", "non_compliant", "not_applicable", "data_gap"]
+    ] == ["non_compliant", "not_applicable", "data_gap", "not_applicable", "data_gap"]
     assert result.llm_call_count == _protocol_calls(result)
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1383,9 +1390,10 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
     )
 
     assert result.results[0]["status"] == "data_gap"
+    # 截断与来源未接入区分开，客户看到的是“资料不完整”。
     assert (
         result.results[0]["metadata"]["reason_code"]
-        == "transfusion_source_unavailable"
+        == "transfusion_source_truncated"
     )
     assert result.llm_call_count == 0 + _protocol_calls(result)
 
@@ -1402,7 +1410,7 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
             inpat_nondrug_order=[],
             inpat_drug_order=[],
             bloodtrans_record=[],
-            daily_course_record=[{"content": "普通病程仅提到拟输血和备血。"}],
+            daily_course_record=[{"document_id": "synthetic-plan-only", "content": "普通病程仅提到拟输血和备血。"}],
             # 048 只看本次手术文书；无手术文书即无术中输血事实。
             surgery_record=[],
             anesthesia_record=[],
@@ -1505,7 +1513,7 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
     shell = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
-        evidence_payload=_documents(bloodtrans_record=[]),
+        evidence_payload=_documents(bloodtrans_record=[], daily_course_record=[{"document_id": "synthetic-course-shell", "content": "输血过程及输血后评价记录。"}]),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -1689,7 +1697,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
                     {
                         "content": (
                             "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
-                            "结束时间16:10。输血过程中严密观察，未见不良反应。"
+                            "结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。"
                         )
                     }
                 ]
@@ -1899,16 +1907,12 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
     complete_rows = [
         {
             "content": (
-                "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
-                "结束时间16:10。输血过程中严密观察，生命体征平稳，"
-                "未见寒战、发热及其他输血不良反应。"
+                '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见寒战、发热及其他输血不良反应。输血后复查血红蛋白提升，治疗有效。'
             )
         },
         {
             "content": (
-                "输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，"
-                "结束时间19:00。输注过程中严密观察，过程顺利，"
-                "未见皮疹、胸闷及输血反应。"
+                '输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，结束时间19:00。输注过程中严密观察，过程顺利，未见皮疹、胸闷及输血反应。输血后复查血红蛋白提升，治疗有效。'
             )
         },
     ]
@@ -1944,8 +1948,7 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     complete_content = (
-        "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
-        "结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。"
+        '输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     rows = [
         {"document_id": f"blood-046-complete-{index}", "content": complete_content}
@@ -1955,8 +1958,7 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
         {
             "document_id": "blood-046-incomplete-9",
             "content": (
-                "输血目的：纠正贫血；开始时间18:00，结束时间19:00。"
-                "输血过程中严密观察，生命体征平稳，未见输血不良反应。"
+                '输血目的：纠正贫血；开始时间18:00，结束时间19:00。输血过程中严密观察，生命体征平稳，未见输血不良反应。输血后复查血红蛋白提升，治疗有效。'
             ),
         }
     )
@@ -1998,8 +2000,7 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
             bloodtrans_record=[
                 {
                     "content": (
-                        "患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，"
-                        "10时输毕，输注过程中生命体征平稳，未见不良反应。"
+                        '患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，10时输毕，输注过程中生命体征平稳，未见不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 }
             ],
@@ -2034,14 +2035,12 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
             bloodtrans_record=[
                 {
                     "content": (
-                        "输血目的：纠正贫血；开始时间14:20，结束时间16:10。"
-                        "输血过程中严密观察，未见寒战及输血不良反应。"
+                        '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 },
                 {
                     "content": (
-                        "输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。"
-                        "过程顺利，未见皮疹及输血反应。"
+                        '输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。过程顺利，未见皮疹及输血反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 },
             ],
@@ -2078,9 +2077,7 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     record = (
-        "输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，"
-        "2026年07月07日18:27输注完毕。输血过程中严密观察，"
-        "患者生命体征平稳，未见寒战、皮疹及输血不良反应。"
+        '输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，2026年07月07日18:27输注完毕。输血过程中严密观察，患者生命体征平稳，未见寒战、皮疹及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     session = _typed_decision_session(
         selected_rule_ids=("LX0609-07-02-02",),
@@ -2194,11 +2191,9 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     record = (
-        "患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入"
-        "0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。"
-        "输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。"
+        '患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
-    client = _Client([model_output])
+    client = _Client([model_output, model_output])
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
@@ -2214,8 +2209,9 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
 
     assert result.results[0]["status"] == expected_status
     assert result.results[0]["metadata"]["reason_code"] == expected_reason
-    assert result.llm_call_count == 1 + _protocol_calls(result)
-    assert result.total_tokens == (0 if isinstance(model_output, Exception) else 110)
+    retried = expected_reason == "model_invalid_output"
+    assert result.llm_call_count == (2 if retried else 1) + _protocol_calls(result)
+    assert result.total_tokens == (0 if isinstance(model_output, Exception) else 220 if retried else 110)
     if expected_status == "non_compliant":
         assert dict(result.customer_display_facts)["LX0609-07-02-02"]["missing_fields"] == ["component"]
 
@@ -2228,8 +2224,7 @@ async def test_046_llm_accepts_component_that_includes_blood_type_but_not_type_o
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     record = (
-        "输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。"
-        "输血过程顺利，生命体征平稳，未见发热及输血不良反应。"
+        '输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。输血过程顺利，生命体征平稳，未见发热及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
     )
     client = _Client([
         {
@@ -2325,6 +2320,7 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
     ]
     assert display_facts["LX0609-07-01-02"]["missing_fields"] == []
     assert display_facts["LX0609-07-02-02"]["checked_fields"] == [
+        "clinical_effect",
         "component",
         "dose",
         "process_observation",
@@ -2409,6 +2405,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "record_count": 1,
             "incomplete_record_count": 1,
             "checked_fields": [
+                "clinical_effect",
                 "component",
                 "dose",
                 "process_observation",
@@ -2416,8 +2413,8 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
                 "reason_or_indication",
                 "start_and_end_time",
             ],
-            "missing_fields": ["reason_or_indication"],
-            "missing_field_record_counts": {"reason_or_indication": 1},
+            "missing_fields": ["clinical_effect", "reason_or_indication"],
+            "missing_field_record_counts": {"clinical_effect": 1, "reason_or_indication": 1},
             "source_document_ids": ["blood-record-1"],
         },
     }
@@ -3356,13 +3353,12 @@ async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypat
 @pytest.mark.asyncio
 async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    client = _Client(
-        [{
-            "reason_state": "present",
-            "evidence_quote": "原文中不存在的理由",
-            "application_ref": "BA-001",
-        }]
-    )
+    bad = {
+        "reason_state": "present",
+        "evidence_quote": "原文中不存在的理由",
+        "application_ref": "BA-001",
+    }
+    client = _Client([bad, bad])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
@@ -3391,7 +3387,10 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
     assert result.results[0]["metadata"]["reason_code"] == (
         "model_invalid_output"
     )
-    assert result.llm_call_count == 1 + _protocol_calls(result)
+    # 引文不在申请单正文：定向补核一次，补核提示指明失败字段并附上次输出。
+    assert result.llm_call_count == 2 + _protocol_calls(result)
+    assert client.prompts[0] != client.prompts[1]
+    assert "evidence_quote" in client.prompts[1] and "PREVIOUS_OUTPUT=" in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -3591,7 +3590,7 @@ def test_043_public_pretransfusion_row_resolvers_preserve_item_and_admission_con
 
 
 @pytest.mark.asyncio
-async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> None:
+async def test_043_checks_regular_items_before_transfusion_and_returns_times() -> None:
     selected = ("LX0609-07-01-01",)
     names = [
         "乙肝表面抗原",
@@ -3602,7 +3601,8 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
         "丙肝抗体",
         "HIV抗体",
         "梅毒抗体",
-        "谷丙转氨酶",
+        "*ABO血型鉴定",
+        "*Rh血型鉴定",
         "不规则抗体筛查",
     ]
 
@@ -3655,7 +3655,7 @@ async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> N
 
     assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "compliant"
     facts = dict(result.customer_display_facts)["LX0609-07-01-01"]
-    assert len(facts["checked_items"]) == 9
+    assert len(facts["checked_items"]) == 11
     assert facts["latest_test_time"] == "2026-06-05 10:00:00"
     assert facts["transfusion_time"] == "2026-06-05 14:20:00"
     assert facts["abo_present"] is True
@@ -3753,7 +3753,7 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
     result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01", "LX0609-07-04-02"),
         wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-07-04-02")],
-        evidence_payload=_documents(bloodtrans_record=[]),
+        evidence_payload=_documents(bloodtrans_record=[], daily_course_record=[{"document_id": "synthetic-course-shell", "content": "输血过程及输血后评价记录。"}]),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -3802,3 +3802,149 @@ def test_transfusion_consent_sources_never_alias_surgery_consent() -> None:
     )
     assert len(rows) == 1
     assert rows[0]["consent_type"] == "blood_transfusion"
+
+
+def _empty_reason_application(application_id="BA-EMPTY"):
+    # 接口未提供申请理由与正文，仅有申请时间与客观指标。
+    return {
+        "application_id": application_id,
+        "request_datetime": "2026-08-20 09:00:00",
+        "reason_for_blood": "",
+        "hemoglobin": "58",
+        "record_content": "",
+    }
+
+
+_PRE_COURSE = "患者贫血貌，血红蛋白较前下降，HGB 58g/L，有输血指征，拟输注红细胞悬液2u纠正贫血。"
+_POST_COURSE = "昨日输注红细胞后复查血红蛋白较前上升。"
+
+
+@pytest.mark.asyncio
+async def test_044_empty_application_reason_checks_pretransfusion_course(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client(
+        [{
+            "reason_state": "present",
+            "evidence_quote": "有输血指征，拟输注红细胞悬液2u纠正贫血",
+            "application_ref": "BA-EMPTY",
+        }]
+    )
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[_empty_reason_application()],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-1", "record_time": "2026-08-20 09:40:00", "content": _PRE_COURSE},
+                {"document_id": "SC-2", "record_time": "2026-08-21 10:00:00", "content": _POST_COURSE},
+                {"document_id": "SC-0", "record_time": "2026-08-17 10:00:00", "content": "三日前病程，必要时输血。"},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_complete"
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert "输血前病程" in prompt and "必要时输血" in prompt and _PRE_COURSE in prompt
+    assert _POST_COURSE not in prompt and "三日前病程" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_044_empty_application_reason_without_pretransfusion_course_stays_incomplete(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"reason_state": "present", "evidence_quote": "x", "application_ref": "BA-EMPTY"}])
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[_empty_reason_application()],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-2", "record_time": "2026-08-21 10:00:00", "content": _POST_COURSE},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_incomplete"
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_044_course_reason_quote_must_be_in_pretransfusion_course(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    bad = {
+        "reason_state": "present",
+        "evidence_quote": "昨日输注红细胞后复查血红蛋白较前上升",
+        "application_ref": "BA-EMPTY",
+    }
+    client = _Client([bad, bad])
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[_empty_reason_application()],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-1", "record_time": "2026-08-20 09:40:00", "content": _PRE_COURSE},
+                {"document_id": "SC-2", "record_time": "2026-08-21 10:00:00", "content": _POST_COURSE},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "technical_error"
+    assert result.results[0]["metadata"]["reason_code"] == "model_invalid_output"
+    assert len(client.prompts) == 2 and "输血前病程" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_044_application_text_keeps_application_reason_prompt_even_with_course(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    application_text = "因血红蛋白65g/L申请输注悬浮红细胞2U。"
+    client = _Client(
+        [{"reason_state": "present", "evidence_quote": "因血红蛋白65g/L申请输注", "application_ref": "BA-001"}]
+    )
+
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",),
+        wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[{**_empty_reason_application("BA-001"), "record_content": application_text}],
+            daily_course_record=[],
+            senior_course_record=[
+                {"document_id": "SC-1", "record_time": "2026-08-20 09:40:00", "content": _PRE_COURSE},
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert "输血申请单正文" in client.prompts[0] and _PRE_COURSE not in client.prompts[0]

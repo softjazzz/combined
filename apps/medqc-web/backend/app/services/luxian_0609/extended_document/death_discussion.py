@@ -152,13 +152,31 @@ def evaluate_death_discussion_timeliness(
     except ValueError:
         horizon_date = None
     deadline = death_time + timedelta(hours=168)
+    # 用户决定（2026-10-20）：死后文书按“死亡时间+7天”与任务冻结日中较早者评价；
+    # 冻结日已过截止日即视为窗口届满，否则以冻结日为评价日期报未到期。
+    try:
+        task_frozen_date = date.fromisoformat(str(horizon_row.get("task_frozen_date") or ""))
+    except ValueError:
+        task_frozen_date = None
+    frozen_mature = task_frozen_date is not None and task_frozen_date > deadline.date()
     if horizon_time is not None:
         if horizon_time < death_time:
             return _horizon_unavailable(
                 death_time=death_time,
                 issue="authoritative_time_conflict",
             )
-        if horizon_time < deadline:
+        if horizon_time < deadline and task_frozen_date is not None and not frozen_mature:
+            return DeathDiscussionOutcome(
+                "data_gap",
+                "evaluation_window_not_mature",
+                {
+                    "verification_kind": "death_discussion_window_not_mature",
+                    "death_time": death_time.isoformat(sep=" "),
+                    "deadline_time": deadline.isoformat(sep=" "),
+                    "evaluation_date": task_frozen_date.isoformat(),
+                },
+            )
+        if horizon_time < deadline and not frozen_mature:
             return DeathDiscussionOutcome(
                 "data_gap",
                 "evaluation_window_not_mature",
@@ -178,7 +196,7 @@ def evaluate_death_discussion_timeliness(
                 issue="authoritative_time_conflict",
             )
         # 只有日期时，截止日当天无法证明具体时刻已经越过截止点。
-        mature = horizon_date > deadline.date()
+        mature = horizon_date > deadline.date() or frozen_mature
         if not mature:
             return DeathDiscussionOutcome(
                 "data_gap",
@@ -187,7 +205,7 @@ def evaluate_death_discussion_timeliness(
                     "verification_kind": "death_discussion_window_not_mature",
                     "death_time": death_time.isoformat(sep=" "),
                     "deadline_time": deadline.isoformat(sep=" "),
-                    "evaluation_date": horizon_date.isoformat(),
+                    "evaluation_date": (task_frozen_date or horizon_date).isoformat(),
                 },
             )
     else:

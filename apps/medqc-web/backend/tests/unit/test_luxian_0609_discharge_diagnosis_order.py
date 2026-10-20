@@ -114,7 +114,8 @@ async def test_equivalent_wording_is_consistent_and_keeps_written_text():
         [{"diagnosis_no": 1, "diagnosis_name": "肺炎"}, {"diagnosis_no": 2, "diagnosis_name": "高血压"}],
         client,
     )
-    assert client.calls == 1
+    # 用户口径（2026-10-19）：书写名称逐字包含于权威名称时由程序配对，不调用模型。
+    assert client.calls == 0
     assert reduced.final_state.value == "compliant"
     assert facts["written_diagnoses"] == ["肺炎", "高血压"]
     assert facts["equivalent_pairs"] == [["高血压病", "高血压"]]
@@ -156,6 +157,21 @@ async def test_one_sided_extra_name_needs_no_model_call():
     )
     assert client.calls == 0
     assert reduced.final_state.value == "non_compliant"
+
+
+@pytest.mark.asyncio
+async def test_unequal_remaining_counts_are_defect_without_model_call():
+    # 第六轮 C07：两侧条数不同，一对一同义配对不可能使内容一致，模型偶发“无法判定”不得降级为资料不足。
+    client = DiagnosisEquivalenceClient(uncertain={"诊断乙", "诊断丙"})
+    reduced, facts = await _case(
+        [{"diagnosis_no": 1, "diagnosis_name": "诊断甲"}, {"diagnosis_no": 2, "diagnosis_name": "诊断乙"}],
+        [{"diagnosis_no": 1, "diagnosis_name": "诊断甲"}, {"diagnosis_no": 2, "diagnosis_name": "诊断丙"},
+         {"diagnosis_no": 3, "diagnosis_name": "诊断丁"}],
+        client,
+    )
+    assert client.calls == 0
+    assert reduced.final_state.value == "non_compliant"
+    assert facts["diagnoses_consistent"] is False
 
 
 

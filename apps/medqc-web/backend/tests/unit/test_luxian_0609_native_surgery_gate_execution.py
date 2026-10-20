@@ -611,8 +611,8 @@ async def test_typed_003_missing_document_uses_formal_horizon_after_independent_
 
 
 @pytest.mark.asyncio
-async def test_typed_003_multiple_mr_surgery_events_with_same_end_time_are_data_gap() -> None:
-    """没有正式手术记录时，同结束时间不能把两台手术伪装成唯一事件。"""
+async def test_typed_003_same_start_components_with_same_end_prove_missing_record() -> None:
+    """主控代定口径（2026-10-18，待客户复核），基线003：同开始时间组件合台。"""
 
     session = _typed_003_session(
         source_mode="empty",
@@ -642,8 +642,8 @@ async def test_typed_003_multiple_mr_surgery_events_with_same_end_time_are_data_
         evidence_materials=session.materials,
     )
 
-    assert reduced[0].final_state.value == "data_gap"
-    assert reduced[0].reason_code == "association_failed"
+    assert reduced[0].final_state.value == "non_compliant"
+    assert reduced[0].reason_code == "required_document_missing"
     assert result.llm_call_count == result.total_tokens == 0
 
 @pytest.mark.asyncio

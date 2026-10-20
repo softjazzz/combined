@@ -133,7 +133,8 @@ async def test_analysis_label_cannot_override_unrelated_or_unresolved_basis(rela
     result = await check_exam_finding_analysis(_projection(LINKED), client)
     assert result.state == state
     assert result.analysed_refs == ({1: ()} if state == "ready" else {})
-    assert client.calls == (1 if state == "ready" else 2)
+    # ready 时判为未分析的事件另单独复核一次（用户决定 2026-10-19）；协议失败不复核。
+    assert client.calls == 2
 
 
 @pytest.mark.asyncio
@@ -187,7 +188,8 @@ async def test_retry_keeps_fully_checked_event_and_only_rechecks_unresolved_even
 
     client = Client()
     result = await check_exam_finding_analysis(projection, client)
-    assert client.events == [[1, 2], [2]]
+    # 末两项为判未分析事件的单独复核（用户决定 2026-10-19）；补核仍失败的事件 2 未定，不复核。
+    assert client.events == [[1, 2], [2], [1]] + ([] if retry_fails else [[2]])
     assert result.state == "ready"
     assert result.analysed_refs == ({1: ()} if retry_fails else {1: (), 2: ()})
     # 重试虽只剩一次检查，共用病程仍对应两次检查；无报告片段时不能据此点名修改建议。

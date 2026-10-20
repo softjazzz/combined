@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
+import logging
 import math
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure
 from .structured_output import structured_output_kwargs
+
+logger = logging.getLogger(__name__)
 
 
 SCHEMA_VERSION = "lx0609_malignancy_v1"
@@ -22,6 +26,14 @@ _ALLOWED_ITEM_STATES = frozenset(
 )
 _MALIGNANT_CODE = re.compile(r"^C\d{2}(?:[.A-Z0-9-]*)$")
 _UNCERTAIN_NEOPLASM_CODE = re.compile(r"^D(?:0[0-9]|3[7-9]|4[0-8])")
+# 用户口径（2026-10-19）：“肿瘤性/肿瘤相关”只修饰贫血、发热等表现，且未写明具体恶性肿瘤时
+# 不算明确恶性（如“肿瘤性贫血”而骨髓活检证据不充分）。
+_TUMOR_MODIFIER_ONLY = re.compile(r"肿瘤(?:性|相关性?)")
+_EXPLICIT_MALIGNANT_TERM = re.compile(r"癌|恶性|肉瘤|淋巴瘤|白血病|骨髓瘤|母细胞瘤|黑色素瘤|间皮瘤|转移")
+
+
+def _tumor_modifier_only(name: str) -> bool:
+    return bool(_TUMOR_MODIFIER_ONLY.search(name)) and not _EXPLICIT_MALIGNANT_TERM.search(name)
 
 
 class MalignancyLLMClient(Protocol):
@@ -263,6 +275,39 @@ def _response_payload(response: Mapping[str, Any]) -> Mapping[str, Any]:
     return payload
 
 
+def _distinct_items(items: Sequence[_DiagnosisItem]) -> tuple[_DiagnosisItem, ...]:
+    """同类来源中名称与编码完全相同的诊断只送一次。
+
+    入院/出院诊断常整段重复；逐条重复送入时模型会合并相同诊断，返回条数与输入不符。
+    合并只按受控字段精确相等，结果再按同一分组映射回每一行，不改变判定口径。
+    """
+
+    seen: dict[tuple[str, str, str], _DiagnosisItem] = {}
+    for item in items:
+        seen.setdefault((item.source_kind, item.name, item.code), item)
+    return tuple(seen.values())
+
+
+def _expand_resolution(
+    resolution: MalignancyResolution, *, items: Sequence[_DiagnosisItem],
+) -> MalignancyResolution:
+    """把按代表项得到的不确定行展开到所有重复行，保持逐行引用完整。"""
+
+    if not resolution.uncertain_rows:
+        return resolution
+    uncertain_keys = {
+        (item.source_kind, item.name, item.code)
+        for item in items
+        if any(item.source_row is row for _, row in resolution.uncertain_rows)
+    }
+    rows = tuple(
+        (item.source_key, item.source_row)
+        for item in items
+        if (item.source_kind, item.name, item.code) in uncertain_keys
+    )
+    return replace(resolution, uncertain_rows=rows)
+
+
 def _parse_resolution(
     response: Mapping[str, Any], *, items: Sequence[_DiagnosisItem]
 ) -> MalignancyResolution:
@@ -287,6 +332,9 @@ def _parse_resolution(
         ):
             raise ValueError("malignancy result reference invalid")
         states_by_ref[ref] = state
+    for item in items:
+        if states_by_ref.get(item.ref) == "explicit_malignant" and _tumor_modifier_only(item.name):
+            states_by_ref[item.ref] = "uncertain"
     if set(states_by_ref) != expected_refs:
         raise ValueError("malignancy result references incomplete")
     states = set(states_by_ref.values())
@@ -315,7 +363,8 @@ def _prompt(items: Sequence[_DiagnosisItem]) -> str:
         "不得依据患者身份、坐标或文书编号推断。\n"
         f"schema_version固定为{SCHEMA_VERSION}。每个输入ref必须恰好返回一次，"
         "state只允许explicit_malignant、explicit_nonmalignant、uncertain。"
-        "疑似、待排、占位、肿物、性质待定必须返回uncertain。\n"
+        "疑似、待排、占位、肿物、性质待定必须返回uncertain；"
+        "“肿瘤性”“肿瘤相关”只修饰贫血、发热等表现而未写明具体恶性肿瘤时也返回uncertain。\n"
         "只能输出一个JSON对象，禁止输出顶层数组、Markdown、解释或额外字段。"
         "输出结构示例："
         f'{{"schema_version":"{SCHEMA_VERSION}","results":['
@@ -432,27 +481,36 @@ class MalignancyFactResolver:
             return resolution, empty_usage
         if self._llm_client is None:
             return MalignancyResolution("technical_error", "malignancy_llm_unavailable"), empty_usage
+        distinct_items = _distinct_items(items)
         usage = empty_usage
         try:
             # 严格 JSON 协议须关闭 thinking（与其他受控抽取一致）。
             response = await self._llm_client.generate(
-                _prompt(items),
+                _prompt(distinct_items),
                 max_completion_tokens=MAX_COMPLETION_TOKENS,
                 allow_length_retry=False,
                 **structured_output_kwargs(self._llm_client),
             )
-        except Exception:
+        except Exception as error:
+            logger.warning("LX0609 恶性诊断判定调用失败: error_kind=%s", type(error).__name__)
             # 传输失败与输出无效分开报告，避免下游归为执行器异常。
             return MalignancyResolution("technical_error", "malignancy_llm_transport_error"), usage
         try:
             usage = _strict_usage(response)
-            parsed = _parse_resolution(response, items=items)
+            parsed = _expand_resolution(
+                _parse_resolution(response, items=distinct_items), items=items,
+            )
             resolution = (
                 MalignancyResolution("unknown", "malignancy_source_unavailable")
                 if parsed.state == "absent" and required_source_incomplete
                 else parsed
             )
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "LX0609 恶性诊断判定输出无效: item_count=%s %s",
+                len(distinct_items),
+                describe_luxian_0609_llm_parse_failure(error, response),
+            )
             resolution = MalignancyResolution("technical_error", "malignancy_llm_invalid")
         return resolution, usage
 

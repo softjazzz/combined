@@ -17,7 +17,11 @@ from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_published_customer_display_facts,
 )
-from ..luxian_0609.rule_contracts import CRITERION_KINDS
+from ..luxian_0609.customer_explanation_contract import (
+    CUSTOMER_CRITERION_RESULT_LIMIT,
+    customer_explanation_satisfied,
+    is_deliverable_criterion_row,
+)
 from ..luxian_0609_result_schema import (
     CANONICAL_RESULT_DELIVERY_MODE,
     CANONICAL_RESULT_STATUSES,
@@ -200,9 +204,26 @@ def _validate_recommendation_evidence_facts(value: Any) -> None:
             "opinion_evidence",
             "execution_evidence",
         }
-        if not isinstance(entry, dict) or set(entry) not in (
-            expected_keys,
-            expected_keys | {"recommendation_text"},
+        # 023 逐条另带会诊记录时间与当日未开立医嘱的措施（2026-10-20）。
+        optional_keys = {"recommendation_text", "opinion_time", "missing_measures"}
+        if not isinstance(entry, dict) or not expected_keys <= set(entry) <= (
+            expected_keys | optional_keys
+        ):
+            raise ValueError("invalid recommendation evidence")
+        opinion_time = entry.get("opinion_time")
+        if opinion_time is not None and (
+            type(opinion_time) is not str
+            or re.fullmatch(r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2})?", opinion_time) is None
+        ):
+            raise ValueError("invalid recommendation evidence")
+        missing_measures = entry.get("missing_measures")
+        if missing_measures is not None and (
+            type(missing_measures) is not list
+            or not 1 <= len(missing_measures) <= 8
+            or any(
+                type(item) is not str or not item.strip() or len(item) > 40
+                for item in missing_measures
+            )
         ):
             raise ValueError("invalid recommendation evidence")
         recommendation_text = entry.get("recommendation_text")
@@ -333,25 +354,14 @@ def safe_criterion_results(item: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not isinstance(raw_rows, list):
         return []
     rows: List[Dict[str, Any]] = []
-    for raw in raw_rows[:8]:
-        if not isinstance(raw, dict):
-            continue
-        criterion_id = _safe_text(raw.get("criterion_id"))
-        kind = _safe_text(raw.get("kind"))
-        status = _safe_text(raw.get("status"))
-        reason_code = _safe_text(raw.get("reason_code"))
-        if (
-            not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", criterion_id)
-            or kind not in CRITERION_KINDS
-            or status not in {"passed", "failed", "unknown"}
-            or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", reason_code)
-        ):
+    for raw in raw_rows[:CUSTOMER_CRITERION_RESULT_LIMIT]:
+        if not isinstance(raw, dict) or not is_deliverable_criterion_row(raw):
             continue
         row: Dict[str, Any] = {
-            "criterion_id": criterion_id,
-            "kind": kind,
-            "status": status,
-            "reason_code": reason_code,
+            "criterion_id": _safe_text(raw.get("criterion_id")),
+            "kind": _safe_text(raw.get("kind")),
+            "status": _safe_text(raw.get("status")),
+            "reason_code": _safe_text(raw.get("reason_code")),
         }
         for key in ("source_fact", "left_fact", "right_fact"):
             value = _safe_text(raw.get(key))
@@ -402,12 +412,12 @@ def validated_customer_explanation(
 
     customer_display_facts = safe_customer_display_facts(item, rule_id=rule_id)
     criterion_results = safe_criterion_results(item)
-    has_failed_criterion = any(row.get("status") == "failed" for row in criterion_results)
-    if (
-        status == "non_compliant"
-        and rule_id.startswith("LX0609-")
-        and not customer_display_facts
-        and not has_failed_criterion
+    # Finalizer 已在单规则边界执行同一合同；这里仍保留为保存前最后断言。
+    if not customer_explanation_satisfied(
+        rule_id=rule_id,
+        status=status,
+        safe_display_facts=customer_display_facts,
+        criterion_results=criterion_results,
     ):
         raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
     return customer_display_facts, criterion_results

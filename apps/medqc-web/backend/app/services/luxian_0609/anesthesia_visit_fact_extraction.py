@@ -13,7 +13,7 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure, redact_luxian_0609_patient_privacy
 from .native_preop_content_execution import _usage
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object
@@ -165,8 +165,9 @@ async def extract_anesthesia_visit_facts(documents: Sequence[VisitDocument], llm
     candidates = [doc for doc in documents if doc.required_fields and doc.body.strip()]
     if not candidates:
         return VisitExtraction("ready", fields=automatic)
+    # 模型调用本身失败（无客户端、调用异常、输出不合合同）交付技术错误，不能要求医院补写访视记录。
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
-        return VisitExtraction("data_gap", "semantic_extraction_unresolved")
+        return VisitExtraction("technical_error", "model_transport_error")
     # 只发送本次请求内的短别名：材料引用是长哈希，可能被脱敏规则误当号码改写，也无需出境。
     inputs = [{"document_ref": f"d{index}", "source_type": doc.source_type,
                "body": redact_luxian_0609_patient_privacy(doc.body), "original_body": doc.body,
@@ -179,13 +180,14 @@ async def extract_anesthesia_visit_facts(documents: Sequence[VisitDocument], llm
             _prompt(inputs), max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
             **structured_output_kwargs(llm_client),
         )
-    except Exception:
-        return VisitExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=1, api_time=perf_counter() - started)
+    except Exception as error:
+        return VisitExtraction("technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=1,
+                               api_time=perf_counter() - started)
     try:
         usage = _usage(response)
         resolved = _parsed_fields(response, inputs)
     except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError):
-        return VisitExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=1,
+        return VisitExtraction("technical_error", "model_invalid_output", llm_call_count=1,
             prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2], api_time=perf_counter() - started)
     resolved = {ref_by_alias[alias]: states for alias, states in resolved.items()}
     return VisitExtraction("ready", fields={**automatic, **resolved}, llm_call_count=1,

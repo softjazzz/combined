@@ -138,6 +138,16 @@ def resolve_frozen_discharge_horizon(
     return discharge, ""
 
 
+def resolve_snapshot_task_frozen_date(snapshot: Mapping[str, Any] | None) -> date | None:
+    """读取快照随附的任务冻结日；仅供死后才产生的文书核对时限，不改变病例评价终点。"""
+    if not isinstance(snapshot, Mapping):
+        return None
+    try:
+        return date.fromisoformat(_normalized_text(snapshot.get("task_frozen_date")))
+    except ValueError:
+        return None
+
+
 def resolve_record_evaluation_horizon(
     *,
     record_id: str,
@@ -238,6 +248,10 @@ def build_record_evaluation_horizon_snapshot(
             ),
             task_frozen_date=frozen_date,
         ).to_dict()
+        # 用户决定（2026-10-20）：死亡讨论等死后文书的时限按“死亡时间+7天”与任务冻结日中较早者评价，
+        # 已出院病例的终点是出院日，故另随快照保存冻结日。
+        if frozen_date:
+            snapshot["task_frozen_date"] = frozen_date
         if all(record_ref):
             snapshot.update(
                 {

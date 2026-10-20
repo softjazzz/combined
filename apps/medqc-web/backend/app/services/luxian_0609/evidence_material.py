@@ -230,6 +230,22 @@ class Luxian0609EvidenceMaterialStore:
     ) -> tuple[tuple[str, Mapping[str, object]], ...]:
         """返回经同一 snapshot 证明的 ``(document_ref, 原始行)`` 对。"""
 
+        return self._validated_document_rows(source_key, snapshot=snapshot, require_complete=True)
+
+    def identity_document_rows(
+        self, source_key: str, *, snapshot: Luxian0609EvidenceSnapshot,
+    ) -> tuple[tuple[str, Mapping[str, object]], ...]:
+        """身份检查覆盖全部已冻结行，含截断前缀；不证明临床来源完整。"""
+
+        material = self._sources.get(str(source_key or "").strip().lower())
+        if material is None or not material.truncated:
+            return self.document_rows(source_key, snapshot=snapshot)
+        return self._validated_document_rows(source_key, snapshot=snapshot, require_complete=False)
+
+    def _validated_document_rows(
+        self, source_key: str, *, snapshot: Luxian0609EvidenceSnapshot, require_complete: bool,
+    ) -> tuple[tuple[str, Mapping[str, object]], ...]:
+
         if not isinstance(snapshot, Luxian0609EvidenceSnapshot):
             raise TypeError("snapshot must be Luxian0609EvidenceSnapshot")
         if self.snapshot_hash != snapshot.snapshot_hash:
@@ -245,7 +261,7 @@ class Luxian0609EvidenceMaterialStore:
             or material.source_key != normalized
         ):
             raise ValueError("invalid material source")
-        if material.truncated:
+        if material.truncated and require_complete:
             raise EvidenceMaterialTruncated()
         observation = next(
             (
@@ -259,7 +275,9 @@ class Luxian0609EvidenceMaterialStore:
             observation is None
             or observation.query_state
             not in (QueryStatus.AVAILABLE, QueryStatus.EMPTY)
-            or observation.completeness is not SourceCompleteness.COMPLETE
+            or observation.completeness is not (
+                SourceCompleteness.TRUNCATED if material.truncated else SourceCompleteness.COMPLETE
+            )
             or observation.record_count != len(material.rows)
         ):
             raise ValueError("material source does not match snapshot")

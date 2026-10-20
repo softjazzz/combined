@@ -38,7 +38,7 @@ def case(name):
 @pytest.mark.parametrize("name,present,time", [
     ("expert_other_drug", False, None),
     ("same_drug_before", True, "2026-04-01 07:00:00"),
-    ("same_drug_late", True, "2026-04-01 09:00:00"),
+    ("same_drug_late", True, "2026-04-02 09:00:00"),
     ("same_drug_missing_time", True, None),
 ])
 async def test_unrelated_earlier_support_does_not_supply_target_fact_time_or_evidence(name, present, time, reverse):
@@ -163,9 +163,9 @@ async def test_original_multiple_drug_half_covered_copy_never_calls_other_missin
     assert facts["first_antimicrobial_time"] == "2026-04-01 08:00:00"
     assert facts["support_before_use"] is False
     assert facts["unmatched_special_antimicrobials"] == ["万古霉素"]
-    assert "其中 万古霉素 未找到可关联的计划启用前专家支持记录" in result["findings"]
+    assert "其中 万古霉素 未找到可关联的计划启用前或启用后24小时内的专家支持记录" in result["findings"]
     assert "晚于该时间" not in result["findings"]
-    assert "时间前或同刻找到专家支持记录" not in result["findings"]
+    assert "时间前或其后24小时内找到专家支持记录" not in result["findings"]
     assert {e["source_document_id"] for e in result["customer_evidence"]} == {
         "synthetic-order", "synthetic-order-V", "synthetic-note-M",
     }

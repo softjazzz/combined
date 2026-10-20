@@ -107,3 +107,29 @@ async def test_rr_d02_formal_execution_reduction_and_finalizer_preserve_expected
     else:
         assert "超时48" not in canonical["findings"]
     assert execution.llm_call_count == execution.total_tokens == 0
+
+
+# 用户决定（2026-10-20）：死后文书按“死亡时间+7天”与任务冻结日中较早者评价。
+DISCHARGE_AT_DEATH = {"horizon_datetime": "2026-09-01 09:00:00", "horizon_date": "2026-09-01", "basis": "discharge_date"}
+
+
+def test_task_frozen_date_past_deadline_matures_window_for_missing_discussion():
+    outcome = _outcome((), horizon={**DISCHARGE_AT_DEATH, "task_frozen_date": "2026-10-18"})
+    assert (outcome.final_state, outcome.reason_code) == ("non_compliant", "required_document_missing")
+
+
+def test_task_frozen_date_before_deadline_keeps_window_open_and_reports_frozen_date():
+    outcome = _outcome((), horizon={**DISCHARGE_AT_DEATH, "task_frozen_date": "2026-09-05"})
+    assert (outcome.final_state, outcome.reason_code) == ("data_gap", "evaluation_window_not_mature")
+    assert outcome.display_facts["evaluation_date"] == "2026-09-05"
+
+
+def test_deadline_day_frozen_date_cannot_prove_window_passed():
+    outcome = _outcome((), horizon={**DISCHARGE_AT_DEATH, "task_frozen_date": "2026-09-08"})
+    assert (outcome.final_state, outcome.reason_code) == ("data_gap", "evaluation_window_not_mature")
+
+
+def test_discharge_horizon_without_frozen_date_keeps_previous_behaviour():
+    outcome = _outcome((), horizon=DISCHARGE_AT_DEATH)
+    assert (outcome.final_state, outcome.reason_code) == ("data_gap", "evaluation_window_not_mature")
+    assert "evaluation_time" in outcome.display_facts

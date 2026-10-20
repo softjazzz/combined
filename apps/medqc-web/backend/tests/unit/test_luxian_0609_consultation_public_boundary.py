@@ -290,13 +290,14 @@ async def test_023_fixed_native_binding_aggregate_keeps_decision_evidence_and_us
         audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
     assert projection_calls == [RULE_023]
-    assert native.llm_call_count == 3 and native.total_tokens == 32  # 含 023 会诊措施逐项核对调用（替身未按措施格式作答，沿用原判定）
-    assert (reduced[0].final_state.value, reduced[0].reason_code) == ("compliant", "requirement_satisfied")
-    assert (canonical["status"], canonical["reason_code"]) == ("compliant", "requirement_satisfied")
+    # 用户口径（2026-10-20）：023 只认会诊当日医嘱，仅有病程落实判不合规；无医嘱候选时
+    # 二阶段不调用模型，确定性落为未执行。
+    assert native.llm_call_count == 1 and native.total_tokens == 16
+    assert (reduced[0].final_state.value, reduced[0].reason_code) == ("non_compliant", "requirement_violated")
+    assert (canonical["status"], canonical["reason_code"]) == ("non_compliant", "requirement_violated")
     assert canonical["customer_display_facts"] == consultation_projection.safe_consultation_customer_display_facts(
         rule_id=RULE_023, raw=dict(native.customer_display_facts)[RULE_023],
     )
     assert {(item["source_type"], item["source_document_id"]) for item in canonical["customer_evidence"]} == {
         ("consultation_record", "CONSULT-OPINION-1"),
-        ("daily_course_record", "COURSE-EXECUTION-1"),
     }

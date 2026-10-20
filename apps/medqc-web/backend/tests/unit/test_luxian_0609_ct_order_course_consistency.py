@@ -230,6 +230,37 @@ def test_formal_report_proves_execution_despite_new_order_status_and_unnamed_mas
     assert evaluate_ct_review(review, _payload()).status == "compliant"
 
 
+@pytest.mark.parametrize("documents,body", [
+    (3, "病情平稳，继续观察。" * 200),
+    (10, "病情平稳，观察生命体征及治疗反应，继续现有诊疗安排，评估进食睡眠及活动情况，并根据病情变化及时调整治疗方案。" * 80),
+], ids=["many_short_clauses", "cumulative_course_text"])
+def test_complete_long_admission_keeps_all_course_clauses(documents, body):
+    """多份正常长度病程的累计资料不应被当作来源缺失。"""
+    rows = _rows()
+    rows["daily_course_record"] = [
+        {"document_id": f"COURSE-{index}", "record_content": body}
+        for index in range(documents)
+    ]
+    review = _project(rows)
+    assert review.complete
+    assert review.needs_model
+    assert len(review.clauses) == documents * body.count("。")
+    assert sum(len(clause.text) for clause in review.clauses) == documents * len(body)
+    assert len({clause.document_ref for clause in review.clauses}) == documents
+
+
+def test_course_scope_above_cumulative_budget_still_closes_without_model():
+    rows = _rows()
+    rows["daily_course_record"] = [
+        {"document_id": f"COURSE-{index}", "record_content": "病情平稳，继续观察。" * 400}
+        for index in range(20)
+    ]
+    review = _project(rows)
+    assert not review.complete
+    assert not review.needs_model
+    assert evaluate_ct_review(review).status == "data_gap"
+
+
 def _unmatched_only(*clause_ids):
     return {"schema_version": SCHEMA_VERSION, "events": [], "unmatched_current_clause_ids": list(clause_ids)}
 
@@ -786,3 +817,27 @@ async def test_capable_client_extracts_ct_facts_with_thinking_disabled():
     assert result.decisions[0].reason_code == "requirement_satisfied"
     assert client.kwargs["enable_thinking"] is False
     assert client.kwargs["response_format"]["type"] == "json_schema"
+
+
+def _dated_review(*texts):
+    clauses = tuple(
+        CourseClause(f"C{index}", "course:1", text, 1, "first_course_record", "2026-08-24 08:58:25",
+                     "record_content", 0, len(text))
+        for index, text in enumerate(texts, 1)
+    )
+    return CtReviewInput((), (), clauses, {}, True)
+
+
+def test_unmatched_clause_dated_before_current_stay_is_not_current_exam():
+    review = _dated_review("2025-10-25 胸部螺旋CT平扫 心脏增大，双肺轻度肺水肿。", "完善胸CT等辅查。")
+    assert review.needs_model
+    assert evaluate_ct_review(review, _unmatched_only("C1")).status == "not_applicable"
+
+
+@pytest.mark.parametrize("text", [
+    "2026-08-24 胸部CT示双肺水肿。",
+    "2025年10月25日及2026年8月25日胸部CT均示肺水肿。",
+    "本次胸部CT示双肺水肿。",
+])
+def test_unmatched_clause_on_or_after_stay_or_undated_still_blocks(text):
+    assert evaluate_ct_review(_dated_review(text), _unmatched_only("C1")).status == "data_gap"

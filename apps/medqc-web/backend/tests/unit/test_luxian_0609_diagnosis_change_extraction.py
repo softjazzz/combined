@@ -309,3 +309,83 @@ async def test_retry_rejects_rewritten_quote_and_requests_original_sentence():
     result = await extract_diagnosis_change_documentation([_document()], client)
     assert result.state == "ready" and result.llm_call_count == 2
     assert len(client.calls) == 2
+
+
+class _SequenceClient(_Client):
+    def __init__(self, responses):
+        super().__init__()
+        self.responses = list(responses)
+
+    async def generate(self, prompt, **kwargs):
+        payload, finish_reason = self.responses[min(len(self.calls), len(self.responses) - 1)]
+        self.calls.append((prompt, kwargs))
+        return {
+            "choices": [{
+                "message": {"content": payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)},
+                "finish_reason": finish_reason,
+            }],
+            "usage": {"prompt_tokens": 70, "completion_tokens": 20, "total_tokens": 90},
+            "_api_time": 0.2,
+        }
+
+
+@pytest.mark.asyncio
+async def test_truncated_first_response_retries_with_shorter_quote_hint():
+    client = _SequenceClient([('{"schema_version":"' + SCHEMA_VERSION + '","items":[{"local_doc_id":"doc_01","basis_quote":"动态', "length"),
+                              (_payload(_item()), "stop")])
+
+    result = await extract_diagnosis_change_documentation((_document(),), client)
+
+    assert result.state == "ready" and result.llm_call_count == 2 and result.total_tokens == 180
+    retry_prompt = client.calls[1][0]
+    assert "上次输出超出长度上限被截断" in retry_prompt
+    assert "不得整段复制检查检验清单" in retry_prompt
+    assert "PREVIOUS_OUTPUT" not in retry_prompt
+    assert retry_prompt.index("被截断") < retry_prompt.index("以下JSON仅是待抽取资料")
+    assert client.calls[0][1]["max_completion_tokens"] == 4096
+
+
+@pytest.mark.asyncio
+async def test_quote_failure_retry_lists_every_failed_quote_with_redacted_previous_output():
+    bad = _payload(
+        _item("doc_01", reason_quote="住院号：ZY123456不是原文"),
+        _item("doc_02", basis_quote="改写后的依据"),
+    )
+    client = _SequenceClient([(bad, "stop"), (_payload(_item("doc_01"), _item("doc_02")), "stop")])
+
+    result = await extract_diagnosis_change_documentation((_document("doc_01"), _document("doc_02")), client)
+
+    assert result.state == "ready" and result.llm_call_count == 2
+    first_prompt, retry_prompt = client.calls[0][0], client.calls[1][0]
+    assert "未通过的引文" not in first_prompt
+    assert "上次输出未通过逐字引用或字段校验" in retry_prompt
+    assert "doc_01的reason_quote" in retry_prompt
+    assert "doc_02的basis_quote「改写后的依据」不是该份文书的逐字连续原文" in retry_prompt
+    assert "PREVIOUS_OUTPUT=" in retry_prompt
+    assert "ZY123456" not in retry_prompt
+
+
+@pytest.mark.asyncio
+async def test_structural_failure_retry_keeps_generic_hint_without_previous_output():
+    client = _SequenceClient([({"schema_version": SCHEMA_VERSION, "items": []}, "stop"), (_payload(_item()), "stop")])
+
+    result = await extract_diagnosis_change_documentation((_document(),), client)
+
+    assert result.state == "ready" and result.llm_call_count == 2
+    retry_prompt = client.calls[1][0]
+    assert "上次输出未通过逐字引用或字段校验" in retry_prompt
+    assert "未通过的引文" not in retry_prompt and "PREVIOUS_OUTPUT" not in retry_prompt
+
+
+def test_retry_hint_points_to_break_and_rejects_ellipsis_splice():
+    """C07（2026-10-19）：引文用省略号跨段拼接时，补核指明断点并禁止省略号拼接，避免原样重复。"""
+    import app.services.luxian_0609.extended_document.diagnosis_change_extraction as module
+
+    text = "患者痰培养提示鲍曼不动杆菌。今日查房。结合会诊意见，目前修正诊断为：肺部感染。"
+    quote = "患者痰培养提示鲍曼不动杆菌。...结合会诊意见，目前修正诊断为：肺部感染。"
+    prefix = module._matched_prefix(quote, text)
+    assert prefix == len("患者痰培养提示鲍曼不动杆菌。")
+    error = module._QuoteViolation([module._QuoteIssue("doc_01", "reason", quote, prefix)])
+    hint = module._retry_hint(error, "{}")
+    assert f"前{prefix}字与原文一致" in hint and "从「...结合会诊意见" in hint
+    assert "省略号跨段拼接" in hint

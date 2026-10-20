@@ -39,3 +39,18 @@ def test_sample_list_does_not_publish_legacy_validation_data():
         "rule_validation": {"runs": [{"created_by": "other"}]}})}
     item = CustomQCSamplePoolService._row_to_item(None, row)
     assert item["raw_payload"] == {"golden_answers": [answer]}
+
+
+def test_snapshot_carries_task_frozen_date_without_changing_discharge_horizon():
+    # 用户决定（2026-10-20）：死后文书时限要用任务冻结日，出院病例终点仍是出院日。
+    from app.services.luxian_0609.evaluation_horizon import (
+        build_record_evaluation_horizon_snapshot,
+        resolve_snapshot_task_frozen_date,
+    )
+    record = {"record_id": "V9", "visit_id": "V9", "institute_id": "H", "patient_id": "P", "scope": "final",
+              "admission_datetime": "2026-07-01T08:00:00", "discharge_datetime": "2026-07-03T10:00:00"}
+    (snapshot,) = build_record_evaluation_horizon_snapshot([record], task_frozen_date="2026-10-18")
+    assert snapshot["evaluation_horizon"] == "2026-07-03"
+    assert snapshot["task_frozen_date"] == "2026-10-18"
+    assert resolve_snapshot_task_frozen_date(snapshot).isoformat() == "2026-10-18"
+    assert resolve_snapshot_task_frozen_date({"evaluation_horizon": "2026-07-03"}) is None

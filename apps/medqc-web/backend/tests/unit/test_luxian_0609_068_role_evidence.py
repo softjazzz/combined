@@ -217,9 +217,11 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "semantic_extraction_unresolved"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 100
-    assert len(client.calls) == 1
+    # “复查后可出院”类附条件批准引文按设计定向补核一次（c74ad1bb3）。
+    calls = 2 if "后可出院" in text else 1
+    assert result.llm_call_count == calls
+    assert result.total_tokens == 100 * calls
+    assert len(client.calls) == calls
     canonical = _canonical_extended_result(
         rule_id="LX0609-08-02-02",
         snapshot=snapshot,
@@ -228,3 +230,26 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
         reduced=reduced,
     )
     assert "customer_evidence" not in canonical
+
+
+@pytest.mark.asyncio
+async def test_unattributed_dated_discharge_plan_in_daily_course_is_not_senior_approval() -> None:
+    # 1016 第六轮 C27：住院医师日常病程只写“拟明日出院”，未提及上级医师；
+    # 模型称 approved，但写明日期的出院安排只有确认为上级医师所写才视为同意。
+    text = "查房后处置：患者术后恢复良好，拟明日出院，今日予以换药。"
+    client = _Client(_item("doc_01", opinion="approved", quote="拟明日出院"))
+    _snapshot, _materials, _result, reduced = await _evaluate_selected(
+        ("LX0609-08-02-02",),
+        {
+            **_base_rows(),
+            "daily_course_record": ({
+                "document_id": "resident-plan",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"

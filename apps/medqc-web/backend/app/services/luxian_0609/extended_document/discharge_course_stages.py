@@ -5,11 +5,14 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 from typing import Any
 
 import jsonschema
+
+from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
 
 VERSION = "lx0609-discharge-course-v5"
 FIELDS = ("treatment", "evolution", "outcome")
@@ -113,9 +116,35 @@ RETRY_HINTS = {
 }
 
 
-def retry_prompt(stage_prompt: str, error: Exception) -> str:
-    hint = RETRY_HINTS.get(str(error), "输出必须完全符合上述JSON合同")
-    return stage_prompt + "\n上一次输出未通过校验：" + hint + "。请修正后重新输出完整JSON。"
+class _StageViolation(ValueError):
+    """状态、覆盖等可修正错误保留原原因并汇总位置。"""
+
+    def __init__(self, error: Exception, issues: list[str]) -> None:
+        super().__init__(str(error))
+        self.issues = tuple(issues)
+
+
+class _StageSchemaViolation(jsonschema.ValidationError):
+    """动态编号错误仍属于原有 schema 校验错误。"""
+
+    def __init__(self, error: Exception, issues: list[str]) -> None:
+        super().__init__(str(error))
+        self.issues = tuple(issues)
+
+
+def retry_prompt(stage_prompt: str, error: Exception, previous_content: Any = None) -> str:
+    details = getattr(error, "issues", ())
+    hint = "；".join(details[:8]) if details else RETRY_HINTS.get(str(error), "输出必须完全符合上述JSON合同")
+    hint = redact_luxian_0609_patient_privacy(hint)
+    try:
+        previous = json.dumps(json.loads(previous_content), ensure_ascii=False)
+    except (ValueError, TypeError):
+        previous = ""
+    if previous and len(previous) <= 24000:
+        hint += "。上次输出仅作修正参考，不是原文资料：PREVIOUS_OUTPUT=" + redact_luxian_0609_patient_privacy(previous)
+    # 补核要求放在资料之前，首次提示不变。
+    return stage_prompt.replace("\n以下为受控资料：\n", "\n上一次输出未通过校验：" + hint
+        + "。请修正失败位置后重新输出完整JSON，其他已核验事实不因补核改变。\n以下为受控资料：\n", 1)
 
 
 def anchor(doc: dict, span_id: Any) -> dict:
@@ -145,41 +174,103 @@ def atom(raw: dict, doc: dict) -> tuple[dict, dict | None]:
 
 
 def validate_response(stage: str, payload: Any, docs: list[dict], events: list[dict]) -> Any:
-    jsonschema.validate(payload, schema(stage, docs, events))
+    contract = schema(stage, docs, events)
+    schema_error = None
+    try:
+        jsonschema.validate(payload, contract)
+    except jsonschema.ValidationError as error:
+        schema_error = error
+        # 仅暂缓动态编号和覆盖校验以收集位置；字段、类型和状态枚举仍立即拒收。
+        structural = copy.deepcopy(contract)
+
+        def defer(node: Any) -> None:
+            if isinstance(node, dict):
+                node.pop("minItems", None)
+                node.pop("maxItems", None)
+                for key, value in node.get("properties", {}).items():
+                    if key in {"document_index", "event_id", "span_id", "conflict_span_id"}:
+                        value.pop("enum", None)
+                for value in node.values():
+                    defer(value)
+            elif isinstance(node, list):
+                for value in node:
+                    defer(value)
+
+        defer(structural)
+        try:
+            jsonschema.validate(payload, structural)
+        except jsonschema.ValidationError:
+            raise error
     lookup = {d["document_index"]: d for d in docs}
     discharge_ids = {i for i, d in lookup.items() if d["source"] == "discharge_record"}
+    issues = []
+    first_error = schema_error
 
-    def coverage(items: list, key: str, expected: set) -> None:
+    def fail(error: Exception, location: str, values: Any) -> None:
+        nonlocal first_error
+        if first_error is None:
+            first_error = error
+        shown = redact_luxian_0609_patient_privacy(json.dumps(values, ensure_ascii=False))[:60]
+        issues.append(f"{location}：{RETRY_HINTS.get(str(error), str(error))}；上次值「{shown}」")
+
+    def coverage(items: list, key: str, expected: set, location: str) -> None:
         ids = [i[key] for i in items]
-        if any(type(i) is not int for i in ids) or len(ids) != len(set(ids)) or set(ids) != expected:
-            raise ValueError("incomplete or duplicate coverage")
+        if len(ids) != len(set(ids)) or set(ids) != expected:
+            fail(ValueError("incomplete or duplicate coverage"), location + "." + key,
+                 f"应覆盖{sorted(expected)}；" + "、".join(f"{i}出现{ids.count(i)}次" for i in sorted(set(ids) | expected)))
+
+    def checked_atom(raw: dict, index: int, location: str) -> tuple[dict, dict | None] | None:
+        if index not in discharge_ids:
+            fail(ValueError("invalid source span"), location + ".document_index", index)
+            return None
+        try:
+            return atom(raw, lookup[index])
+        except ValueError as error:
+            fail(error, location + ".span_id/conflict_span_id/state", raw)
+            return None
 
     if stage == "A":
-        coverage(payload["discharges"], "document_index", discharge_ids)
+        coverage(payload["discharges"], "document_index", discharge_ids, "discharges")
         checks, conflicts = [], []
         for d in payload["discharges"]:
             for field in FIELDS:
-                fact, conflict = atom(d["fields"][field], lookup[d["document_index"]])
+                location = f"document_index={d['document_index']}.fields.{field}"
+                checked = checked_atom(d["fields"][field], d["document_index"], location)
+                if checked is None:
+                    continue
+                fact, conflict = checked
                 checks.append({"document_index": d["document_index"], "field": field, **fact})
                 if conflict:
                     conflicts.append({"check_index": len(checks) - 1, "event_index": None,
                                       "document_index": d["document_index"], **conflict})
-        return checks, conflicts
-    coverage(payload["events"], "event_id", {e["event_id"] for e in events})
-    by_id = {e["event_id"]: e for e in payload["events"]}
-    matches, conflicts = [], []
-    for index, event in enumerate(events):
-        raw_matches = by_id[event["event_id"]]["matches"]
-        coverage(raw_matches, "document_index", discharge_ids)
-        row = []
-        for match in raw_matches:
-            fact, conflict = atom(match, lookup[match["document_index"]])
-            row.append({"document_index": match["document_index"], **fact})
-            if conflict:
-                conflicts.append({"check_index": None, "event_index": index,
-                                  "document_index": match["document_index"], **conflict})
-        matches.append(row)
-    return matches, conflicts
+        result = checks, conflicts
+    else:
+        expected_events = {e["event_id"] for e in events}
+        coverage(payload["events"], "event_id", expected_events, "events")
+        matches, conflicts = [], []
+        for entry in payload["events"]:
+            event_id = entry["event_id"]
+            raw_matches = entry["matches"]
+            coverage(raw_matches, "document_index", discharge_ids, f"event_id={event_id}.matches")
+            row = []
+            for match in raw_matches:
+                location = f"event_id={event_id}.document_index={match['document_index']}"
+                checked = checked_atom(match, match["document_index"], location)
+                if checked is None:
+                    continue
+                fact, conflict = checked
+                row.append({"document_index": match["document_index"], **fact})
+                if conflict and event_id in expected_events:
+                    event_index = next(i for i, e in enumerate(events) if e["event_id"] == event_id)
+                    conflicts.append({"check_index": None, "event_index": event_index,
+                                      "document_index": match["document_index"], **conflict})
+            matches.append((event_id, row))
+        by_id = dict(matches)
+        result = [by_id.get(e["event_id"], []) for e in events], conflicts
+    if first_error is not None:
+        violation = _StageSchemaViolation if schema_error is not None else _StageViolation
+        raise violation(first_error, issues)
+    return result
 
 
 def valid_review(review: Any, lookup: dict, checks: list, events: list) -> bool:

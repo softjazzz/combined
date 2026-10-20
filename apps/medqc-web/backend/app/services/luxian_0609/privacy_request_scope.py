@@ -153,13 +153,26 @@ def bind_luxian_0609_identity_provider(provider: Callable[[], Iterable[str]], *,
     return provider
 
 
-def _redact_strings(value: Any) -> Any:
+def current_luxian_0609_redaction_identities() -> Iterable[str]:
+    """让事实准备和发送边界使用同一病例身份；不缓存、不补查来源。"""
+    scope = _SCOPE.get()
+    if scope is None or scope.provider is None:
+        return ()
+    if not scope.lease.active or scope.identity_context_invalid:
+        raise PrivacyIdentityContextError("Patient identity context unavailable")
+    try:
+        return tuple(scope.provider())
+    except Exception:
+        raise PrivacyIdentityContextError("Patient identity context unavailable") from None
+
+
+def _redact_strings(value: Any, identity_values: tuple[str, ...]) -> Any:
     if isinstance(value, str):
-        return redact_luxian_0609_patient_privacy(value)
+        return redact_luxian_0609_patient_privacy(value, identity_values=identity_values)
     if isinstance(value, dict):
-        return {key: _redact_strings(item) for key, item in value.items()}
+        return {key: _redact_strings(item, identity_values) for key, item in value.items()}
     if isinstance(value, list):
-        return [_redact_strings(item) for item in value]
+        return [_redact_strings(item, identity_values) for item in value]
     return value
 
 
@@ -181,6 +194,6 @@ def protect_current_payload(payload: dict[str, Any]) -> dict[str, Any]:
     safe = dict(payload)
     for key in ("messages", "response_format"):
         if key in safe:
-            safe[key] = _redact_strings(safe[key])
+            safe[key] = _redact_strings(safe[key], values)
     assert_no_known_identity_in_model_request(safe, values)
     return safe

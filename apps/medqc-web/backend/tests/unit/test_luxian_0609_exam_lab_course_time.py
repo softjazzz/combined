@@ -146,6 +146,38 @@ def test_record_before_report_with_later_submit_and_result_text_is_time_conflict
     assert [(item.basis, item.kind) for item in assessed] == [("record", "conflict")]
 
 
+def test_uncited_verbatim_in_window_document_completes_present_claim():
+    """模型判已记录但只引用时间无法对账的一份，同事件目录内另一份逐字复述且在窗口内即可证明。"""
+
+    projection = _projection(
+        [
+            _course("a", record="2025-08-13 11:00:00", submit="2025-08-13 15:50:00"),
+            _course("b", record="2025-08-14 09:00:00", submit="2025-08-14 09:10:00"),
+        ]
+    )
+    result = _outcome(projection, _fact(projection, _ref(projection, "a")))
+    assert (result.status, result.reason_code) == ("compliant", "exam_lab_text_fact")
+    assert projection.safe_refs[_ref(projection, "b")] in result.fact_refs
+
+
+def test_uncited_paraphrase_or_late_document_does_not_complete_present_claim():
+    paraphrase = _projection(
+        [
+            _course("a", record="2025-08-13 11:00:00", submit="2025-08-13 15:50:00"),
+            _course("b", record="2025-08-14 09:00:00", text=PARAPHRASE),
+        ]
+    )
+    late = _projection(
+        [
+            _course("a", record="2025-08-13 11:00:00", submit="2025-08-13 15:50:00"),
+            _course("b", record="2025-08-14 11:01:29", submit="2025-08-14 11:05:00"),
+        ]
+    )
+    for projection in (paraphrase, late):
+        result = _outcome(projection, _fact(projection, _ref(projection, "a")))
+        assert (result.status, result.reason_code) == ("data_gap", "multiple_event_or_time_conflict")
+
+
 PARAPHRASE = "颅脑CT提示脑白质脱髓鞘改变，双肺有少量索条，主动脉壁钙化，胸椎退变，余无特殊，继续观察。"
 
 

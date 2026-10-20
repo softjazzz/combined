@@ -47,7 +47,9 @@ def rows(body=BODY):
 
 
 @pytest.mark.asyncio
-async def test_immature_same_drug_event_cannot_lend_evaluation_to_mature_event():
+async def test_same_drug_reorder_joins_one_course_and_does_not_reset_window():
+    # 主控代定口径（2026-10-18，用户授权，待客户复核）：同药多医嘱合为一个疗程，
+    # 48–72h 自最早实际执行时间起算，续开不重置，也不再因续开医嘱判关联失败。
     source = rows()
     source["inpat_drug_order"].append({"order_id": "B", "generic_name": "美罗培南",
                                        "planned_start_datetime": "2026-06-03 07:00:00"})
@@ -58,8 +60,8 @@ async def test_immature_same_drug_event_cannot_lend_evaluation_to_mature_event()
     _, result = await _evaluate(
         RULE, source, llm_client=Client({(0, 0): fact(present, present)})
     )
-    assert result.final_state.value == "data_gap"
-    assert result.reason_code == "association_failed"
+    assert result.final_state.value == "compliant"
+    assert result.reason_code == "requirement_within_threshold"
 
 
 @pytest.mark.asyncio

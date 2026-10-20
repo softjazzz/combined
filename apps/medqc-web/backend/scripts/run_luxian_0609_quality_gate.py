@@ -182,8 +182,23 @@ def _configuration_error(profile: str, failure_kind: str) -> tuple[dict[str, Any
     )
 
 
+_PYTEST_SUMMARY_LINE = re.compile(
+    r"^=*\s*(?=.*\b\d+ (?:passed|failed|errors?)\b).*\bin \d+(?:\.\d+)?s\b"
+)
+
+
+def _pytest_summary_line(output: str) -> str:
+    """只取 pytest 最终汇总行；用例日志正文中的“N errors”等字样不能计入。"""
+
+    for raw in reversed(output.splitlines()):
+        line = raw.strip()
+        if _PYTEST_SUMMARY_LINE.match(line):
+            return line
+    return ""
+
+
 def _pytest_count(pattern: str, output: str) -> int:
-    matches = re.findall(pattern, output, flags=re.IGNORECASE)
+    matches = re.findall(pattern, _pytest_summary_line(output), flags=re.IGNORECASE)
     return sum(int(value) for value in matches)
 
 
@@ -199,6 +214,25 @@ def gate_environment(base: dict[str, str], *, database_dir: str) -> dict[str, st
     env.setdefault("JWT_SECRET", "lx0609-quality-gate-test-secret-0123456789")
     env.setdefault("ENV", "development")
     return env
+
+
+_FAILED_TEST_LINE = re.compile(r"^(FAILED|ERROR) (tests/\S+)(?: - ([A-Za-z_][\w.]*(?:Error|Exception|Exit|Failed))\b)?")
+_MAX_FAILED_TEST_LINES = 400
+
+
+def failed_test_lines(output: str) -> list[str]:
+    """只提取失败用例节点名与异常类型，不回显断言或错误消息正文（可能含合成病历片段）。"""
+
+    lines: list[str] = []
+    for raw in output.splitlines():
+        match = _FAILED_TEST_LINE.match(raw.strip())
+        if match is None:
+            continue
+        kind, node, error_type = match.groups()
+        lines.append(f"{kind} {node}" + (f" [{error_type}]" if error_type else ""))
+        if len(lines) >= _MAX_FAILED_TEST_LINES:
+            break
+    return list(dict.fromkeys(lines))
 
 
 def run_gate_subprocess(
@@ -238,6 +272,8 @@ def run_gate_subprocess(
         database_dir.cleanup()
 
     output = f"{getattr(completed, 'stdout', '')}\n{getattr(completed, 'stderr', '')}"
+    for line in failed_test_lines(output):
+        print(f"[{gate.name}] {line}", file=sys.stderr)
     passed_tests = _pytest_count(r"(\d+)[ \t]+passed", output)
     failed_tests = _pytest_count(r"(\d+)[ \t]+failed", output) + _pytest_count(
         r"(\d+)[ \t]+errors?", output

@@ -211,6 +211,9 @@ class Settings(BaseSettings):
         default="qwen3.8-flash",
         validation_alias=AliasChoices("LLM_ADJUDICATOR_MODEL", "SICHUAN_ADJUDICATOR_MODEL"),
     )
+    # 按调用点覆盖裁决模型，逗号分隔的 role=provider/model（如 exam_finding_analysis=deepseek/deepseek-flash）；
+    # 未配置的调用点沿用 LLM_ADJUDICATOR_MODEL。
+    LLM_ROLE_MODELS: Optional[str] = None
     LLM_ENABLE_THINKING: bool = False
     LLM_THINKING_BUDGET: Optional[int] = Field(default=None, ge=1)
     LLM_TIMEOUT_SECONDS: int = Field(

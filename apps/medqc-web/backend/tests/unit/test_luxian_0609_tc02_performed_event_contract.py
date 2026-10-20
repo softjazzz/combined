@@ -12,6 +12,7 @@ from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_060
 from app.services.luxian_0609.evidence_material import build_material_document_refs
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows, build_luxian_0609_evidence_read_session
 from app.services.luxian_0609.executor_registry import resolve_legacy_executor_material_source_keys
+from app.services.luxian_0609.source_registry import resolve_luxian_0609_decision_support_source_keys
 
 RULE = "LX0609-07-01-03"
 SCHEMA_VERSION = "lx0609-transfusion-performance-v2"
@@ -286,7 +287,7 @@ async def test_tc02_nonperformed_or_unknown_does_not_claim_entire_stay_no_transf
     # 开始时刻晚于记录时间：不是已发生的开始或跨日，不推测。
     ("2026-06-03 14:00:00", "2026-06-03 14:00:00悬浮红细胞2U输注完毕。", "data_gap"),
     ("下午2时", "下午2时悬浮红细胞2U输注完毕。", "data_gap"),
-    ("15:00", "14:00悬浮红细胞2U输注完毕。", "data_gap"),
+    ("15:00", "14:00悬浮红细胞2U输注完毕。", "technical_error"),
     # 开始时刻早于检验报告：输血前检查未完成。
     ("09:30", "09:30开始输注悬浮红细胞2U，11:00输注完毕。", "non_compliant"),
 ])
@@ -295,23 +296,25 @@ async def test_tc02_start_time_quote_is_grounded_and_bounded_by_record_time(quot
     case["rows"]["bloodtrans_record"][0]["record_content"] = body
     execution, _, final, client = await run_case(case, client_override=PerformanceFake("performed", time_quote=quote))
     assert final["status"] == expected
-    assert execution.llm_call_count == len(client.calls) == 1
+    # 开始时刻引文不落地属可修正错误，定向补核一次（补核规范 2026-10-18）。
+    assert execution.llm_call_count == len(client.calls) == (2 if expected == "technical_error" else 1)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("corrupt", [
-    lambda payload: payload["documents"][0].update(quote=False),
-    lambda payload: payload["documents"][0].update(quote="未出现在正文的引用"),
-    lambda payload: payload["documents"][0].update(extra=1),
-    lambda payload: payload["documents"][0].update(state="cancel", start_time_quote="14:00"),
+@pytest.mark.parametrize(("corrupt", "calls"), [
+    (lambda payload: payload["documents"][0].update(quote=False), 2),
+    (lambda payload: payload["documents"][0].update(quote="未出现在正文的引用"), 2),
+    (lambda payload: payload["documents"][0].update(extra=1), 1),
+    (lambda payload: payload["documents"][0].update(state="cancel", start_time_quote="14:00"), 2),
 ], ids=["non_string_quote", "ungrounded_quote", "extra_key", "nonperformed_with_start_time"])
-async def test_tc02_invalid_model_output_is_one_call_gap(corrupt):
+async def test_tc02_invalid_model_output_is_one_call_technical_error(corrupt, calls):
     case = actual_case()
     case["rows"]["bloodtrans_record"][0]["record_content"] = "14:00悬浮红细胞2U输注完毕。"
     client = PerformanceFake("performed", time_quote="14:00", mutation=corrupt)
     execution, _, final, client = await run_case(case, client_override=client)
-    assert final["status"] == "data_gap"
-    assert execution.llm_call_count == len(client.calls) == 1
+    assert final["status"] == "technical_error"
+    # 引文与状态绑定错误定向补核一次；结构错误（多余字段）不补核。
+    assert execution.llm_call_count == len(client.calls) == calls
 
 
 @pytest.mark.asyncio
@@ -323,10 +326,12 @@ async def test_tc02_known_mr_with_unknown_records_preserves_nc_but_cannot_publis
     case["rows"]["bloodtrans_record"] = [{"document_id": f"synthetic-unknown-{i}", "record_time": "2026-06-02 16:00:00",
                                            "record_content": "本次输血实施信息尚待核实。"} for i in range(unknown_count)]
     if known_nc:
-        case["rows"]["labtest_item_report"] = []
+        case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
+            "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
     execution, _, final, client = await run_case(case, client_override=PerformanceFake("unknown"))
     assert final["status"] == ("non_compliant" if known_nc else "data_gap")
-    assert execution.llm_call_count == len(client.calls) == (0 if unknown_count == 9 else 1)
+    # 超过单批 8 份时分批完整核验（9 份为 2 批），不再以 0 次调用直接判范围不足。
+    assert execution.llm_call_count == len(client.calls) == (2 if unknown_count == 9 else 1)
     if known_nc:
         facts = final["customer_display_facts"]
         assert facts["unconfirmed_record_count"] == unknown_count
@@ -353,12 +358,13 @@ async def test_tc02_multiple_dedicated_performed_records_use_one_batch_and_each_
 
 
 @pytest.mark.asyncio
-async def test_tc02_model_exception_is_one_call_gap_not_retry_or_doctor_omission():
+async def test_tc02_model_exception_is_one_call_technical_error_not_doctor_omission():
     execution, _, final, client = await run_case(actual_case(), client_override=PerformanceFake("performed", error=TimeoutError()))
-    assert final["status"] == "data_gap"
-    assert final["reason_code"] == "semantic_extraction_unresolved"
+    assert final["status"] == "technical_error"
+    # 调用异常按统一分类给出细分原因码，超时可补跑。
+    assert final["reason_code"] == "model_timeout"
     assert execution.llm_call_count == len(client.calls) == 1
-    assert "不要据此补写或改写记录" in final["suggestion"]
+    assert "不应要求医务人员据此补写临床记录" in final["suggestion"]
 
 
 @pytest.mark.asyncio
@@ -428,9 +434,11 @@ async def test_tc02_invalid_atomic_outputs_cannot_publish_performed(mutation):
         else:
             payload["documents"] = []
     execution, _, final, client = await run_case(actual_case(), client_override=PerformanceFake("performed", mutation=corrupt))
-    assert final["status"] == "data_gap"
-    assert final["reason_code"] == "semantic_extraction_unresolved"
-    assert execution.llm_call_count == len(client.calls) == 1
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
+    # 引用、覆盖类错误定向补核一次；多余字段、版本错误为结构错误，不补核。
+    expected_calls = 2 if mutation in {"duplicate_ref", "wrong_quote", "missing_document"} else 1
+    assert execution.llm_call_count == len(client.calls) == expected_calls
 
 
 @pytest.mark.asyncio
@@ -479,7 +487,8 @@ async def test_tc02_synthetic_sqlite_new_instance_preserves_status_scope_and_rea
     elif scenario == "known_nc_unknown":
         case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-MR-confirmed", "transfution_datetime": "2026-06-02 14:00:00"}]
         case["rows"]["bloodtrans_record"][0]["record_content"] = "本次实施事实尚待核实。"
-        case["rows"]["labtest_item_report"] = []
+        case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
+            "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
         case["state"] = "unknown"
     execution, _, final, client = await run_case(case)
     assert final["status"] == {"actual_c": "compliant", "cancel_gap": "data_gap", "known_nc_unknown": "non_compliant"}[scenario]
@@ -540,7 +549,8 @@ async def test_tc02_store_rejects_reserved_count_status_or_type_before_persistin
 
     case = actual_case()
     case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-actual-MR", "transfution_datetime": "2026-06-02 14:00:00"}]
-    case["rows"]["labtest_item_report"] = []
+    case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
+            "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
     case["state"] = "unknown"
     _, _, final, _ = await run_case(case)
     assert final["status"] == "non_compliant"
@@ -607,12 +617,15 @@ async def test_tc02_known_mr_keeps_evaluated_registration_and_lab_refs(state, re
         selected_rule_ids=(RULE,), institute_id="synthetic-I", patient_id="synthetic-P", visit_id="synthetic-V",
         source_schema=None, created_at="2026-10-08T10:00:00+08:00", row_reader=read,
         additional_source_keys=resolve_legacy_executor_material_source_keys(("extended_document",), selected_rule_ids=(RULE,)))
+    # 07-01-03 的判定来源含入院记录锚点及实施确认用的病程/医嘱；
+    # 已注册且实际读取的来源即使为空，也以快照观察摘要入账。
+    consulted = set(resolve_luxian_0609_decision_support_source_keys((RULE,)))
     source_refs = {observation.snapshot_ref.removeprefix("sha256:")
                    for observation in expected_session.snapshot.observations
-                   if observation.source_key in case["rows"]}
-    assert len(source_refs) == 4
+                   if observation.source_key in case["rows"] or observation.source_key in consulted}
+    assert len(source_refs) == 9
     expected |= source_refs
-    assert len(expected) == 16
+    assert len(expected) == 21
     assert set(execution.decisions[0].fact_refs) == expected
     assert final["status"] == ("compliant" if state == "cancel" else "data_gap")
     assert execution.llm_call_count == len(client.calls) == 1
@@ -700,8 +713,9 @@ async def test_tc02_formal_privacy_wrapper_known_residue_still_fails_closed():
         delegate, identity_values=("synthetic-private-token",)))
     assert delegate.calls == []
     assert execution.llm_call_count == 1  # 一次逻辑尝试，privacy边界拒绝，delegate外发0。
-    assert final["status"] == "data_gap"
-    assert final["reason_code"] == "semantic_extraction_unresolved"
+    assert final["status"] == "technical_error"
+    # 隐私拦截是确定性失败，单独记原因码，不进入自动补跑。
+    assert final["reason_code"] == "privacy_guard_blocked"
 
 
 @pytest.mark.asyncio
@@ -738,14 +752,16 @@ async def test_tc02_frozen_marker_text_remains_body_and_cross_document_atom_reje
 
     delegate = PerformanceFake("performed", action_quote=MARKER_QUOTES, mutation=cross if cross_document else None)
     result = await extract_transfusion_performance(deepcopy(MARKER_ROWS), wrap_luxian_0609_llm_client(delegate))
-    assert result.llm_call_count == len(delegate.calls) == 1
+    # 跨文书借用引文属可修正错误，定向补核一次；首次发送内容不变。
+    assert result.llm_call_count == len(delegate.calls) == (2 if cross_document else 1)
     sent = read_sent_documents(delegate.calls[0][0])
     assert [doc["body"] for doc in sent] == [redact_luxian_0609_patient_privacy(row["record_content"]) for row in MARKER_ROWS]
     for marker in ("SPAN_BEGIN d1:full", "SPAN_END d1:full", "SPAN_BEGIN d2:full", "SPAN_END d2:full"):
         assert marker in sent[0]["body"]
     if cross_document:
         assert result.states == ("unknown", "unknown")
-        assert result.reason_code == "semantic_extraction_unresolved"
+        assert result.reason_code == "model_invalid_output"
+        assert result.technical_failure
     else:
         assert result.states == ("performed", "performed")
         assert [item["quote"] for item in result.assertions] == MARKER_QUOTES

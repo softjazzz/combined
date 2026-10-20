@@ -27,6 +27,20 @@ class _StrictSchemaCaptureClient(_CaptureClient):
         return True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["查房后指出：一、", "查房后指出：1、", ""])
+async def test_numbered_demographic_patient_intro_is_redacted_before_residue_check(prefix):
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_values=("赵甲乙",))
+    prompt = prefix + "赵甲乙，老年男性，以发热入院。主治医师：周丙丁。"
+    await client.generate(prompt)
+    assert len(delegate.prompts) == 1
+    assert "赵甲乙" not in delegate.prompts[0]
+    assert "老年男性，以发热入院" in delegate.prompts[0]
+    assert "主治医师：周丙丁" in delegate.prompts[0]
+    assert redact_luxian_0609_patient_privacy(delegate.prompts[0]) == delegate.prompts[0]
+
+
 def test_redaction_removes_patient_identifiers_and_preserves_clinician_names():
     prompt = """
 患者基本信息：姓名：张三；患者张三，女，45岁。

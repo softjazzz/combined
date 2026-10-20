@@ -233,10 +233,7 @@ def test_005_006_frozen_executor_branches_keep_status_reason_and_fact_source(
     expected = {
         "within": ("compliant", "requirement_within_threshold", "within"),
         "late": ("non_compliant", "threshold_exceeded", "late"),
-        "missing": (
-            ("data_gap", "source_empty", None) if rule_id == CASES[0][0]
-            else ("non_compliant", "required_document_missing", "missing")
-        ),
+        "missing": ("non_compliant", "required_document_missing", "missing"),
         "no_anchor": ("data_gap", "authoritative_time_missing", None),
         "date_anchor": ("compliant", "requirement_within_threshold", "within"),
     }[case]

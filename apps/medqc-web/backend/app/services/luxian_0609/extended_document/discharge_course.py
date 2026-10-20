@@ -164,8 +164,8 @@ def evaluate_predischarge_course_presence(
             break
 
     return PredischargeCourseOutcome(
-        "compliant" if present else "data_gap",
-        "requirement_satisfied" if present else "source_empty",
+        "compliant" if present else "non_compliant",
+        "requirement_satisfied" if present else "required_document_missing",
         {
             "verification_kind": "predischarge_course_presence_check",
             "discharge_date": discharge_time.date().isoformat(),

@@ -6,7 +6,7 @@ Python 完成；同次住院按业务键拆分事件，遇到单个事件角色�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 import hashlib
 import json
@@ -368,10 +368,12 @@ def _is_exact_report_restatement(text: str, report_texts: Sequence[str]) -> bool
 class ExamLabFactParseError(ValueError):
     """不含模型正文的受控解析失败类别，仅用于运行诊断。"""
 
-    def __init__(self, failure_kind: str) -> None:
+    def __init__(self, failure_kind: str, *, details: Sequence[str] = ()) -> None:
         if failure_kind not in _PARSE_FAILURE_KINDS:
             raise ValueError("unsupported exam lab parse failure kind")
         self.failure_kind = failure_kind
+        # 失败位置（规则、事件序号、字段与引用位置），仅供定向补核回显；不含模型正文。
+        self.details = tuple(details)
         legacy_message = {
             "not_json": "is not JSON",
             "json_decode": "is not JSON",
@@ -395,6 +397,8 @@ class ExamLabFactParsePartition:
 
     facts: tuple[ExamLabEventFact, ...]
     rule_failures: Mapping[str, str]
+    # 每条失败规则的失败位置，仅供定向补核回显；不影响失败类别与判定。
+    rule_failure_details: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _clean(value: Any) -> str:
@@ -470,8 +474,8 @@ def _row_text(row: Mapping[str, Any]) -> str:
     return _clean(" ".join(_clean(row.get(field)) for field in fields if _clean(row.get(field))))
 
 
-def _bounded_text(value: str, limit: int) -> str:
-    if len(value) <= limit:
+def _bounded_text(value: str, limit: int | None) -> str:
+    if limit is None or len(value) <= limit:
         return value
     half = max(1, (limit - 12) // 2)
     return f"{value[:half]} …[已裁剪]… {value[-half:]}"
@@ -640,9 +644,9 @@ def build_exam_lab_text_projection(
     *,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     horizon_unavailable_reason: str | None = None,
-    max_course_rows: int = 32,
-    max_row_chars: int = 2000,
-    max_context_chars: int = 32000,
+    max_course_rows: int | None = 32,
+    max_row_chars: int | None = 2000,
+    max_context_chars: int | None = 32000,
 ) -> ExamLabTextProjection:
     """从本次就诊白名单来源按业务键构造影像与培养事件序列。"""
 
@@ -1189,7 +1193,9 @@ def build_exam_lab_text_projection(
             event_course_keys[(family, event_position)] = keys
             selected_course_entries.update(keys)
 
-    course_projection_truncated = len(selected_course_entries) > max_course_rows
+    course_projection_truncated = (
+        max_course_rows is not None and len(selected_course_entries) > max_course_rows
+    )
     if course_projection_truncated:
         anchors = tuple(
             value
@@ -1245,7 +1251,7 @@ def build_exam_lab_text_projection(
         )
 
     context = "\n".join(parts)
-    if len(context) > max_context_chars:
+    if max_context_chars is not None and len(context) > max_context_chars:
         raise ValueError("exam lab text projection truncated")
     horizon_rows = tuple(rows_by_source.get("evaluation_context.horizon", ()))
     precise_horizon, precise_horizon_conflict = _unique_role_time(
@@ -1654,13 +1660,17 @@ def parse_exam_lab_fact_response(
                 if isinstance(position, int) and not isinstance(position, bool):
                     shared_course_events.setdefault(position, set()).add(event_position)
     covered: set[tuple[str, int]] = set()
-    for raw in payload["facts"]:
+    # 同一应答的失败项全部收集，最后按首个失败类别整批失败；判定语义不变，
+    # 仅让补核能一次指明全部失败位置。
+    problems: list[tuple[str, str]] = []
+    for index, raw in enumerate(payload["facts"], 1):
         if (
             not isinstance(raw, Mapping)
             or not required_keys.issubset(raw)
             or set(raw) != required_keys
         ):
-            raise ExamLabFactParseError("value")
+            problems.append(("value", f"facts第{index}项：字段须恰好为{','.join(sorted(required_keys))}"))
+            continue
         rule_id = str(raw.get("rule_id") or "").strip().upper()
         if rule_id in ALLOWED_RULE_IDS and rule_id not in expected:
             # 同病例先被 Python 强证据收口的规则可能仍被模型冗余返回；只忽略
@@ -1672,18 +1682,24 @@ def parse_exam_lab_fact_response(
         event_position = raw.get("event_position") if multi_event_schema else 1
         course_positions = raw.get("course_doc_positions")
         fact_key = (rule_id, event_position)
+        location = f"facts第{index}项 rule_id={rule_id} event_position={event_position}"
         if (
             not isinstance(event_position, int)
             or isinstance(event_position, bool)
             or fact_key not in expected_pairs
             or fact_key in covered
-            or applicability not in _ALLOWED_APPLICABILITY
+        ):
+            problems.append(("scope", f"{location}：规则与事件须来自本次目录且每对只输出一次"
+                             + ("（重复）" if fact_key in covered else "（不在本次目录中）")))
+            continue
+        if (
+            applicability not in _ALLOWED_APPLICABILITY
             or semantic not in _ALLOWED_SEMANTIC
             or positive not in _ALLOWED_POSITIVE
         ):
-            raise ExamLabFactParseError(
-                "scope" if fact_key not in expected_pairs or fact_key in covered else "value"
-            )
+            problems.append(("value", f"{location}：applicability={applicability} semantic_state={semantic} "
+                             f"positive_state={positive} 须取规定枚举值"))
+            continue
         reference_invalid = (
             not isinstance(course_positions, list)
             or any(
@@ -1694,7 +1710,9 @@ def parse_exam_lab_fact_response(
             or any(position < 1 or position > len(allowed_course) for position in course_positions)
         )
         if reference_invalid and not multi_event_schema:
-            raise ExamLabFactParseError("evidence_ref")
+            problems.append(("evidence_ref", f"{location}：course_doc_positions={course_positions} "
+                             f"须为1至{len(allowed_course)}之间不重复的整数位置"))
+            continue
         normalized_course = (
             ()
             if reference_invalid
@@ -1759,7 +1777,9 @@ def parse_exam_lab_fact_response(
             # 项目角色先于模型语义：操作标签不能被改成诊断阳性/阴性。
             # 提示词明确要求空引用；不能把模型错挂的病程静默删除后算成功。
             if course_positions:
-                raise ExamLabFactParseError("value")
+                problems.append(("value", f"{location}：guidance_only事件须输出not_applicable+absent且"
+                                 f"course_doc_positions为空，上次为{course_positions}"))
+                continue
             applicability, semantic, positive, normalized_course = (
                 "not_applicable", "absent", "not_relevant", (),
             )
@@ -1848,7 +1868,13 @@ def parse_exam_lab_fact_response(
         )
         reference_invalid = citation_out_of_scope or semantic_inconsistent
         if citation_out_of_scope and not multi_event_schema:
-            raise ExamLabFactParseError("evidence_ref")
+            allowed_positions = sorted(
+                course_refs_in_position_order.index(ref) + 1 for ref in allowed_event_course
+                if ref in course_refs_in_position_order
+            )
+            problems.append(("evidence_ref", f"{location}：course_doc_positions={course_positions} "
+                             f"超出该规则该事件允许的病程位置{allowed_positions}"))
+            continue
         if reference_invalid:
             # 单个事件的模型引用不合法时，只将该事件保守降为 unknown。
             # JSON、schema 和规则/事件范围错误仍由上方整批失败关闭；这里避免
@@ -1925,7 +1951,10 @@ def parse_exam_lab_fact_response(
                 and positive != "not_relevant"
             )
         ):
-            raise ExamLabFactParseError("evidence_ref")
+            problems.append(("evidence_ref", f"{location}：positive_state={positive}；"
+                             "LX0609-06-01-02/06-01-04/06-03-03的positive_state须为not_relevant"
+                             if normalized_evidence else f"{location}：该事件没有可绑定的文书"))
+            continue
         covered.add(fact_key)
         facts.append(ExamLabEventFact(
             rule_id=rule_id,
@@ -1936,8 +1965,26 @@ def parse_exam_lab_fact_response(
             evidence_refs=normalized_evidence,
             event_position=event_position,
         ))
+    missing = sorted(expected_pairs - covered)
+    if problems:
+        details = [detail for _kind, detail in problems]
+        if not any(kind == "scope" for kind, _detail in problems):
+            # 已失败的条目不计入覆盖；只列出模型确实未输出的规则事件对。
+            failed_keys = {
+                (str(raw.get("rule_id") or "").strip().upper(), position)
+                for raw in payload["facts"] if isinstance(raw, Mapping)
+                for position in ((raw.get("event_position") if multi_event_schema else 1),)
+                if isinstance(position, int) and not isinstance(position, bool)
+            }
+            missing = [pair for pair in missing if pair not in failed_keys]
+        details.extend(f"遗漏 rule_id={rule_id} event_position={position}：须补齐该条事实"
+                       for rule_id, position in missing)
+        raise ExamLabFactParseError(problems[0][0], details=details)
     if covered != expected_pairs or len(facts) != len(expected_pairs):
-        raise ExamLabFactParseError("scope")
+        raise ExamLabFactParseError("scope", details=[
+            f"遗漏 rule_id={rule_id} event_position={position}：须补齐该条事实"
+            for rule_id, position in missing
+        ])
     return tuple(facts)
 
 
@@ -1989,18 +2036,20 @@ def parse_exam_lab_fact_response_isolated(
     }
     covered: set[tuple[str, int]] = set()
     rule_failures: dict[str, str] = {}
+    rule_failure_details: dict[str, list[str]] = {}
     allowed_course = set(projection.course_times)
     course_refs_in_position_order = tuple(sorted(projection.course_times))
 
-    for raw in payload["facts"]:
+    for index, raw in enumerate(payload["facts"], 1):
         if not isinstance(raw, Mapping):
             # 无法从非对象确定归属，必须整批失败。
-            raise ExamLabFactParseError("value")
+            raise ExamLabFactParseError("value", details=(f"facts第{index}项：须为对象",))
         rule_id = str(raw.get("rule_id") or "").strip().upper()
         if rule_id not in ALLOWED_RULE_IDS:
             # 已知但未请求的同族规则仍沿用公开解析器的冗余忽略；未知 ID
             # 不能被归并到任何重试请求。
-            raise ExamLabFactParseError("scope")
+            raise ExamLabFactParseError("scope", details=(
+                f"facts第{index}项 rule_id={rule_id}：不是本次可用的规则ID，须原样使用{','.join(expected)}",))
         if rule_id not in rows_by_rule:
             continue
         event_position = raw.get("event_position") if multi_event_schema else 1
@@ -2012,7 +2061,9 @@ def parse_exam_lab_fact_response_isolated(
             or fact_key in covered
         ):
             # 事件身份错误/重复不能安全分配给单条 value 重试。
-            raise ExamLabFactParseError("scope")
+            raise ExamLabFactParseError("scope", details=(
+                f"facts第{index}项 rule_id={rule_id} event_position={event_position}："
+                "规则与事件须来自本次目录且每对只输出一次",))
         covered.add(fact_key)
         rows_by_rule[rule_id].append(raw)
 
@@ -2033,7 +2084,9 @@ def parse_exam_lab_fact_response_isolated(
                 for position in course_positions
             )
         ):
-            raise ExamLabFactParseError("evidence_ref")
+            raise ExamLabFactParseError("evidence_ref", details=(
+                f"facts第{index}项 rule_id={rule_id} event_position={event_position}："
+                f"course_doc_positions={course_positions} 须为1至{len(allowed_course)}之间不重复的整数位置",))
 
         # 011/012/014/015 的病程引用必须落在该事件的 Python 白名单内；
         # 010 的既有多事件共享病程语义仍由公开解析器单独处理。
@@ -2049,9 +2102,20 @@ def parse_exam_lab_fact_response_isolated(
             }
             if not referenced.issubset(allowed_event_course):
                 rule_failures[rule_id] = "evidence_ref"
+                allowed_positions = sorted(
+                    course_refs_in_position_order.index(ref) + 1 for ref in allowed_event_course
+                    if ref in course_refs_in_position_order
+                )
+                rule_failure_details.setdefault(rule_id, []).append(
+                    f"rule_id={rule_id} event_position={event_position}：course_doc_positions={course_positions} "
+                    f"超出该规则该事件允许的病程位置{allowed_positions}"
+                )
 
     if covered != expected_pairs:
-        raise ExamLabFactParseError("scope")
+        raise ExamLabFactParseError("scope", details=tuple(
+            f"遗漏 rule_id={rule_id} event_position={position}：须补齐该条事实"
+            for rule_id, position in sorted(expected_pairs - covered)
+        ))
 
     strict_parser = _strict_parser or parse_exam_lab_fact_response
     facts: list[ExamLabEventFact] = []
@@ -2092,12 +2156,19 @@ def parse_exam_lab_fact_response_isolated(
                 # 源时间/正文缺口由执行器先行判定。合法输出仍未形成确定事实，
                 # 属模型未完成判定，不能借旧 unknown 映射伪装为 required_field_missing。
                 rule_failures[rule_id] = "semantic_unknown"
+                rule_failure_details[rule_id] = [
+                    f"rule_id={rule_id} event_position={fact.event_position}：报告与病程完整，"
+                    "仍返回unknown；须按材料判定present或absent，确实含混冲突才保留unknown"
+                    for fact in parsed
+                    if fact.applicability == "unknown" or fact.semantic_state == "unknown"
+                ]
             else:
                 facts.extend(parsed)
         except ExamLabFactParseError as exc:
             if exc.failure_kind != "value":
                 raise
             rule_failures[rule_id] = exc.failure_kind
+            rule_failure_details[rule_id] = list(exc.details)
         except ValueError:
             # 公开解析器内部的非受控 ValueError 不是可归属的模型字段错误，
             # 交由执行器按整批失败处理。
@@ -2105,4 +2176,9 @@ def parse_exam_lab_fact_response_isolated(
     return ExamLabFactParsePartition(
         facts=tuple(facts),
         rule_failures=rule_failures,
+        rule_failure_details={
+            rule_id: tuple(details)
+            for rule_id, details in rule_failure_details.items()
+            if rule_id in rule_failures
+        },
     )

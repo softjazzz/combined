@@ -537,15 +537,28 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "exam_master",
         "labtest_master",
         "labtest_item_report",
+        "daily_course_record",
+        "senior_course_record",
+        "inpat_nondrug_order",
+        "inpat_drug_order",
     ),
-    "LX0609-07-01-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
-    "LX0609-07-02-01": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
-    "LX0609-07-02-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-07-01-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record",
+        "senior_course_record",
+    ),
+    "LX0609-07-02-01": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record",
+        "senior_course_record",
+    ),
+    "LX0609-07-02-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record",
+        "senior_course_record",
+    ),
     "LX0609-07-03-01": (
         "evaluation_context.horizon",
         "bloodtrans_record",
         "mr_bloodtrans",
         "daily_course_record",
+        "senior_course_record",
+        "inpat_nondrug_order",
+        "inpat_drug_order",
     ),
     "LX0609-07-04-01": (
         "bloodtrans_record",
@@ -581,7 +594,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "crisis_value_record",
     ),
     "LX0609-05-01-02": (
-        "senior_course_record", "consultation_record", "labtest_master",
+        "first_course_record", "senior_course_record", "consultation_record", "labtest_master",
         "labtest_item_report",
     ),
     "LX0609-05-01-03": (
@@ -594,7 +607,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-05-01-05": (
-        "senior_course_record", "consultation_record", "labtest_master",
+        "first_course_record", "senior_course_record", "consultation_record", "labtest_master",
         "labtest_item_report",
     ),
     "LX0609-05-01-06": (
@@ -623,8 +636,13 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 与检验结果均需进入同一 Evidence Session。
     "LX0609-07-01-03": (
         "inpat_registration",
+        "admission_record",
         "mr_bloodtrans",
         "labtest_item_report",
+        "daily_course_record",
+        "senior_course_record",
+        "inpat_nondrug_order",
+        "inpat_drug_order",
     ),
     # 第一阶段扩展规则的触发事实不扩张客户文书范围，但必须进入同一
     # Evidence Session。死亡与普通出院规则互相排斥，因此两类权威记录

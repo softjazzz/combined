@@ -1,0 +1,588 @@
+/*
+ * 单条质控结果卡 v7.1 精简版（SingleRecordQcResultPanel）
+ * 收起：短标题 + 状态胶囊 / 一行结论 + 编号；合规项只占一行。
+ * 展开：判定说明、逐项判定、关键证据胶囊、整改建议依次排列，反馈与规则全文收在底部胶囊按钮。
+ * 本文件在面板内联样式之后加载，覆盖旧版卡片样式；颜色一律取 --mq-* Token。
+ */
+
+.result-list {
+  gap: 8px;
+  padding: 10px 12px 16px;
+  background: transparent;
+}
+
+.result-row {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 2px rgba(10, 45, 90, 0.04);
+}
+
+.result-row:hover {
+  border-color: var(--mq-info-border);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(10, 45, 90, 0.04);
+}
+
+.result-row.is-expanded {
+  border-color: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(10, 55, 115, 0.08);
+}
+
+.result-document-group-toggle {
+  min-height: 36px;
+  color: var(--mq-text-secondary);
+}
+
+.result-document-group-toggle:hover {
+  color: var(--mq-info-text);
+}
+
+.result-document-group-toggle strong {
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.result-document-group-toggle small {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+/* ---------- 收起态：两行摘要 ---------- */
+.result-trigger,
+.result-row:not(.is-expanded) .result-trigger {
+  padding: 10px 14px;
+}
+
+.result-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.result-title-row .rule-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.result-title-row .mq-status {
+  flex: none;
+}
+
+.compliant-dot {
+  position: relative;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mq-success-icon);
+}
+
+.result-row-header {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.rule-conclusion {
+  flex: 1;
+  min-width: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 400;
+  line-height: 20px;
+  white-space: pre-wrap;
+}
+
+.result-row:not(.is-expanded) .rule-conclusion {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-conclusion-spacer {
+  flex: 1;
+}
+
+.rule-code {
+  flex: none;
+  padding: 0;
+  color: var(--mq-text-tertiary);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+  font-weight: 400;
+  line-height: 18px;
+}
+
+/* 复制类问题的病程配对摘要：浅色状态底，不用彩色左边框 */
+.copy-match-headline {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 0;
+  border-radius: 12px;
+  background: var(--mq-danger-bg);
+}
+
+.copy-match-headline-documents {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.copy-match-headline-documents strong {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+.copy-match-headline-documents i,
+.copy-match-headline-documents svg {
+  color: var(--mq-text-tertiary);
+}
+
+.copy-match-headline-documents time {
+  color: var(--mq-text-secondary);
+}
+
+.copy-match-headline-metrics {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+
+.copy-match-headline-metrics > span {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.copy-match-headline-metrics .is-primary {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--mq-danger-text);
+}
+
+.copy-match-headline-metrics strong {
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+/* ---------- 展开态：分区依次排列 ---------- */
+.result-row.is-expanded > :not(.result-trigger):not(.result-document-group-header) {
+  margin-right: 14px;
+  margin-left: 14px;
+}
+
+.result-row.is-expanded > .result-detail,
+.result-row.is-expanded > .result-suggestion-disclosure,
+.result-row.is-expanded > .result-feedback-panel,
+.result-row.is-expanded > .rule-fulltext,
+.result-row.is-expanded > .result-event-overview,
+.result-row.is-expanded > :deep(.consultation-summary) {
+  margin-bottom: 12px;
+}
+
+.result-detail {
+  display: grid;
+  gap: 12px;
+  overflow: visible;
+}
+
+.result-detail .compliant-detail,
+.result-detail .decision-summary {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.compliant-detail > :not(:first-child) {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* 说明 / 实际 / 标准：左标签右正文的紧凑列表，不再三栏平铺 */
+.summary-narrative {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.summary-narrative > .detail-block {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.summary-narrative :deep(h4) {
+  margin: 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.summary-narrative :deep(p) {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.detail-grid,
+.detail-grid.is-compliant:not(.has-main-details) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  border: 0;
+}
+
+.result-detail .decision-fact-block .fact-list dt,
+.result-detail :deep(.timeliness-metric span) {
+  color: var(--mq-text-tertiary);
+}
+
+.result-detail .decision-fact-block .fact-list dd {
+  color: var(--mq-text-primary);
+}
+
+/* 时效类：开始 / 完成 / 用时三格对比，超时格用危险色底 */
+.result-detail :deep(.timeliness-metrics) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+}
+
+.result-detail :deep(.timeliness-metrics.has-1-metrics) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.result-detail :deep(.timeliness-metrics.has-2-metrics) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.result-detail :deep(.timeliness-metric) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(118, 128, 160, 0.07);
+}
+
+.result-detail :deep(.timeliness-metric span) {
+  font-size: var(--mq-font-12);
+  line-height: 18px;
+}
+
+.result-detail :deep(.timeliness-metric strong) {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-detail :deep(.timeliness-metric.is-overdue) {
+  background: var(--mq-danger-bg);
+}
+
+.result-detail :deep(.timeliness-metric.is-overdue span),
+.result-detail :deep(.timeliness-metric.is-overdue strong) {
+  color: var(--mq-danger-text);
+}
+
+/* 资料待核实：先说缺什么 */
+.data-gap-block {
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgba(118, 128, 160, 0.07);
+}
+
+.data-gap-block > h4 {
+  margin: 0 0 6px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.data-gap-block .fact-list {
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 6px 10px;
+}
+
+.data-gap-block .fact-list dt,
+.data-gap-block .fact-list dd {
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
+.data-gap-block .fact-list dt {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+/* ---------- 关键证据：胶囊，点击在左侧病历中定位 ---------- */
+.evidence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.evidence-chips-label {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.evidence-chip {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 14px;
+  overflow: hidden;
+  border: 1px solid var(--mq-info-border);
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.evidence-chip:hover {
+  border-color: rgba(10, 108, 255, 0.28);
+  background: rgba(10, 108, 255, 0.12);
+}
+
+.evidence-chip:focus-visible,
+.result-action-pill:focus-visible,
+.result-action-link:focus-visible,
+.result-row-debug-copy:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.empty-evidence-note {
+  padding: 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
+.empty-evidence-note span {
+  display: inline;
+  margin-left: 8px;
+  font-size: var(--mq-font-12);
+}
+
+/* 模型分析：就地展开的文字链接 */
+.model-analysis summary {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  margin: 0;
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.model-analysis summary::-webkit-details-marker {
+  display: none;
+}
+
+.model-analysis[open] > p {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  background: rgba(118, 128, 160, 0.07);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
+/* ---------- 修改建议：默认折叠，点标题行展开 ---------- */
+.result-suggestion-disclosure {
+  border-radius: 18px;
+  background: rgba(118, 128, 160, 0.07);
+}
+
+.result-suggestion-disclosure > summary {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.result-suggestion-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.result-suggestion-disclosure > summary::after {
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  content: '展开';
+}
+
+.result-suggestion-disclosure[open] > summary::after {
+  content: '收起';
+}
+
+.result-suggestion-disclosure > summary:focus-visible {
+  border-radius: 18px;
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.result-suggestion {
+  padding: 0 14px 12px;
+}
+
+/* 折叠标题已写「修改建议」，组件内标题只留给读屏 */
+.result-suggestion :deep(.qc-remediation-head) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.result-suggestion :deep(.qc-remediation-sections) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* 行内标签与正文共用块级行高，避免继承外层大行高导致行距过松 */
+.result-suggestion :deep(.qc-remediation-section) {
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
+.result-suggestion :deep(.qc-remediation-body),
+.result-suggestion :deep(.qc-remediation-plain) {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
+/* ---------- 反馈 / 规则全文 ---------- */
+.result-feedback-panel {
+  padding: 12px 14px;
+}
+
+.rule-fulltext {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 10px 14px;
+}
+
+.rule-fulltext dt {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  line-height: 20px;
+}
+
+.rule-fulltext dd {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.rule-fulltext .rule-fulltext-code {
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+}
+
+/* ---------- 底部操作 ---------- */
+.result-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px;
+  padding: 0 0 12px;
+  border-top: 0;
+}
+
+.result-action-pill,
+.result-action-link {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--mq-text-secondary);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  cursor: pointer;
+}
+
+.result-action-pill {
+  border: 1px solid rgba(118, 128, 160, 0.18);
+  background: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+}
+
+.result-action-link {
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.result-action-pill:hover,
+.result-action-link:hover {
+  color: var(--mq-text-primary);
+}
+
+.result-action-pill[aria-expanded='true'],
+.result-action-link[aria-expanded='true'] {
+  border-color: var(--mq-info-border);
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+}
+
+.result-row-debug-copy {
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mq-text-tertiary);
+}
+
+.result-row-debug-copy:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-primary);
+}

@@ -11,7 +11,7 @@ from app.services.luxian_0609.transfusion_order_trigger import (
 
 
 def _row(index=0, **kwargs):
-    return ("inpat_nondrug_order", {"order_id": f"O{index}", "order_name": "治疗医嘱原文", **kwargs})
+    return ("inpat_nondrug_order", {"order_id": f"O{index}", "order_name": f"治疗医嘱原文{index}", **kwargs})
 
 
 class FakeClient:
@@ -48,6 +48,28 @@ def test_empty_snapshot_is_absent_without_model():
     result = _run([], None)
     assert result.state == "absent"
     assert result.llm_call_count == 0
+
+
+def test_repeated_semantic_orders_are_classified_once_and_expand_all_identities():
+    client = FakeClient({i: ("transfusion", False) for i in range(1934)})
+    rows = [_row(i, order_name="输注红细胞", order_status="未执行") for i in range(1934)]
+    result = _run(rows, client)
+    assert result.llm_call_count == 1
+    assert result.state == "present"
+    assert result.selected_identities == tuple(("inpat_nondrug_order", f"O{i}") for i in range(1934))
+    assert result.total_tokens == 30
+
+
+@pytest.mark.parametrize("field,value", [
+    ("order_status", "已取消"), ("order_type", "检验"),
+    ("generic_name", "备血"), ("brand_name", "血液衍生药物"),
+])
+def test_order_deduplication_keeps_all_semantic_fields(field, value):
+    client = FakeClient({0: ("transfusion", False), 1: ("other", True)})
+    result = _run([_row(0, order_name="相同名称"), _row(1, order_name="相同名称", **{field: value})], client)
+    assert result.selected_identities == (("inpat_nondrug_order", "O0"),)
+    batch = json.loads(client.prompts[0].split("INPUT_JSON=", 1)[1])["orders"]
+    assert len(batch) == 2
 
 
 def test_missing_row_retry_only_requests_unresolved_orders_and_keeps_bound_results():
@@ -107,12 +129,12 @@ def test_all_rows_batched_and_usage_accumulated():
 
 def test_long_names_are_batched_without_truncation():
     client = FakeClient()
-    result = _run([_row(i, order_name="名" * 1900) for i in range(4)], client)
+    result = _run([_row(i, order_name="名" * 1900 + str(i)) for i in range(4)], client)
     assert result.state == "absent"
     assert result.llm_call_count == 2
     for prompt in client.prompts:
         inputs = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["orders"]
-        assert all(item["name"] == "名" * 1900 for item in inputs)
+        assert all(item["name"] == "名" * 1900 + str(item["index"]) for item in inputs)
 
 
 def test_single_row_exceeding_batch_budget_is_data_gap():
@@ -273,4 +295,6 @@ def test_invalid_partial_rows_are_not_preserved_as_verified_results(invalid):
     client = FakeClient(mutate=mutate)
     result = _run([_row(0), _row(1), _row(2)], client)
     assert result.state == "technical_error" and result.llm_call_count == 2
-    assert client.prompts[0] == client.prompts[1]
+    # 补核不再原样重发：指明失败行并附上次输出（补核规范 2026-10-18）。
+    assert client.prompts[0] != client.prompts[1]
+    assert "上次校验失败" in client.prompts[1] and "PREVIOUS_OUTPUT=" in client.prompts[1]

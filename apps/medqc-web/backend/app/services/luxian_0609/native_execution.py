@@ -24,6 +24,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 from .source_manifest import QueryStatus
 from .surgery_applicability import performed_surgery_rows, resolve_surgery_applicability
+from .surgery_record_coverage import definitely_uncovered_surgery_rows
 
 
 # 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
@@ -470,8 +471,8 @@ def _typed_030_front_page_trigger_refs(
     """030 与 029 同一触发口径：首页确认的已实施手术也触发手术记录要求。
 
     首页“手术及操作”同时含治疗性操作，只采用共用手术适用性解析器按院内
-    目录/手术等级确认为手术的行。仅在手术记录来源完整且为空时补触发；
-    已有手术记录行时沿用既有存在性判定。
+    目录/手术等级确认为手术的行。来源完整时逐台检查，其他日期的记录不能
+    覆盖当前事件；缺时间或同日关联未决时保留原判定。
     """
 
     observation = next(
@@ -480,7 +481,7 @@ def _typed_030_front_page_trigger_refs(
     )
     if (
         observation is None
-        or observation.query_state is not QueryStatus.EMPTY
+        or observation.query_state not in {QueryStatus.EMPTY, QueryStatus.AVAILABLE}
         or observation.completeness is not SourceCompleteness.COMPLETE
     ):
         return ()
@@ -493,11 +494,18 @@ def _typed_030_front_page_trigger_refs(
     performed = performed_surgery_rows(
         source_key="mr_surgery", rows=tuple(row for _, row in document_rows)
     )
+    missing = (
+        performed
+        if observation.query_state is QueryStatus.EMPTY
+        else definitely_uncovered_surgery_rows(
+            performed, tuple(materials.rows("surgery_record"))
+        )
+    )
     return tuple(
         dict.fromkeys(
             reference
             for reference, row in document_rows
-            if any(row is candidate for candidate in performed)
+            if any(row is candidate for candidate in missing)
         )
     )
 
@@ -697,7 +705,7 @@ def execute_luxian_0609_native_rules(
     front_page_trigger_refs: tuple[str, ...] = ()
     if (
         "LX0609-04-02-02" in typed_selected
-        and final_state_by_rule_id.get("LX0609-04-02-02") == "not_applicable"
+        and final_state_by_rule_id.get("LX0609-04-02-02") != "technical_error"
         and evidence_snapshot is not None
         and evidence_materials is not None
     ):

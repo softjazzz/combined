@@ -280,12 +280,19 @@ export type ConsultationRecommendationState =
   | 'generic'
   | 'missing'
   | 'unknown'
+  | 'partial'
   | 'excluded'
 
 export interface ConsultationRecommendationRow {
   key: string
   episodeIndex: number
   recommendationIndex?: number
+  /** 会诊记录时间：医嘱核对窗口的终点（当天结束） */
+  opinionTime?: string
+  /** 医嘱核对窗口的起点（会诊记录前3天） */
+  windowStartDate?: string
+  /** 会诊记录写明患者/家属拒绝或暂缓、因而不核对的措施 */
+  declinedMeasures?: string[]
   text: string
   state: ConsultationRecommendationState
   statusLabel: string
@@ -299,21 +306,23 @@ export interface ConsultationRecommendationPresentation {
   checkedSources: string[]
 }
 
+// 用户口径（2026-10-20）：023 只认会诊记录前3天至会诊记录当天开立的住院医嘱，不看病程；
+// 系统无可靠会诊日期，固定回看3天。
 const CONSULTATION_EXECUTION_STATE_PRESENTATION: Record<
-  Exclude<ConsultationRecommendationState, 'excluded'>,
+  Exclude<ConsultationRecommendationState, 'excluded' | 'partial'>,
   { statusLabel: string; detail: string }
 > = {
   specific: {
-    statusLabel: '已找到具体执行证据',
-    detail: '已匹配到具体执行措施、结果或未执行原因',
+    statusLabel: '已执行',
+    detail: '会诊记录前3天至当天已开立对应医嘱',
   },
   generic: {
-    statusLabel: '执行记录不具体',
-    detail: '已找到后续记录，但缺少具体措施、结果或未执行原因',
+    statusLabel: '执行医嘱不具体',
+    detail: '会诊记录前3天至当天仅有与建议笼统相关的医嘱，不能确认具体落实',
   },
   missing: {
-    statusLabel: '未找到执行证据',
-    detail: '未在已核对的后续记录中匹配到相符执行记录',
+    statusLabel: '未执行',
+    detail: '会诊记录前3天至当天未开立与建议对应的医嘱',
   },
   unknown: {
     statusLabel: '资料待核实',
@@ -322,11 +331,37 @@ const CONSULTATION_EXECUTION_STATE_PRESENTATION: Record<
 }
 
 const CONSULTATION_EXECUTION_SOURCES = [
-  '后续病程记录',
-  '上级医师查房记录',
-  '住院医嘱',
-  '相关检查、检验及手术记录',
+  '会诊记录前3天至当天开立的住院药品医嘱',
+  '会诊记录前3天至当天开立的住院非药品医嘱（“继续/维持”原治疗的建议也认此前已开立的医嘱）',
 ]
+
+const CONSULTATION_EXCLUSION_DETAILS: Record<string, string> = {
+  execution_condition_not_defined: '建议未说明何时达到执行条件，不能据未找到记录判定未落实',
+  non_order_recommendation: '卧床、体位、饮食营养、护理宣教等建议不通过开立医嘱落实，不核对',
+  home_medication: '院外自带药建议不核对',
+  condition_not_met: '条件式建议在核对期间未开立对应医嘱，视为条件未成立，不核对',
+  declined_in_record: '会诊记录写明患者或家属拒绝、或暂缓执行，不核对',
+}
+
+function dateOnly(value: unknown): string {
+  const raw = text(value)
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''
+}
+
+function recordTime(value: unknown): string {
+  const raw = text(value)
+  const matched = raw.match(/^(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}):\d{2})?$/)
+  if (!matched) return ''
+  return matched[2] ? `${matched[1]} ${matched[2]}` : matched[1]
+}
+
+function measureList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => text(item))
+    .filter(Boolean)
+    .slice(0, 8)
+}
 
 function positiveInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
@@ -355,13 +390,30 @@ export function buildConsultationRecommendationPresentation(
       const statePresentation = CONSULTATION_EXECUTION_STATE_PRESENTATION[state]
       if (!episodeIndex || !recommendationIndex || !recommendationText || !statePresentation)
         continue
+      const opinionTime = recordTime(record.opinion_time)
+      const windowStartDate = dateOnly(record.window_start_date)
+      const missingMeasures = measureList(record.missing_measures)
+      const declinedMeasures = measureList(record.declined_measures)
+      const partial = state === 'specific' && missingMeasures.length > 0
+      const presentation = partial
+        ? {
+            state: 'partial' as const,
+            statusLabel: '部分措施未执行',
+            detail: `会诊记录前3天至当天未开立以下措施的医嘱：${missingMeasures.join('、')}`,
+          }
+        : { state, ...statePresentation }
       rows.push({
         key: `compared-${episodeIndex}-${recommendationIndex}`,
         episodeIndex,
         recommendationIndex,
+        ...(opinionTime ? { opinionTime } : {}),
+        ...(windowStartDate ? { windowStartDate } : {}),
+        ...(declinedMeasures.length ? { declinedMeasures } : {}),
         text: recommendationText,
-        state,
-        ...statePresentation,
+        ...presentation,
+        detail: declinedMeasures.length
+          ? `${presentation.detail}；会诊记录写明不执行：${declinedMeasures.join('、')}，该项不核对`
+          : presentation.detail,
       })
     }
   }
@@ -374,19 +426,15 @@ export function buildConsultationRecommendationPresentation(
       const record = entry as Record<string, unknown>
       const episodeIndex = positiveInteger(record.episode_index)
       const recommendationText = text(record.recommendation_text)
-      if (
-        !episodeIndex ||
-        !recommendationText ||
-        record.exclusion_reason !== 'execution_condition_not_defined'
-      )
-        continue
+      const detail = CONSULTATION_EXCLUSION_DETAILS[text(record.exclusion_reason)]
+      if (!episodeIndex || !recommendationText || !detail) continue
       rows.push({
         key: `excluded-${episodeIndex}-${index}`,
         episodeIndex,
         text: recommendationText,
         state: 'excluded',
         statusLabel: '未纳入核对',
-        detail: '建议未说明何时达到执行条件，不能据未找到记录判定未落实',
+        detail,
       })
     }
   }

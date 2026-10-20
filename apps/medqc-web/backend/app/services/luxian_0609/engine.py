@@ -332,6 +332,14 @@ class Luxian0609ExecutionEngine:
                                 expected_rule_ids=context.selected_rule_ids,
                             )
                             if validation.valid:
+                                if validation.reason_code:
+                                    # 逐点修复：只有缺失/重复的规则改判技术错误，其余结果保留。
+                                    logger.warning(
+                                        "LX0609 规则族输出逐点修复: executor_key=%s reason_code=%s repaired_rule_count=%s",
+                                        executor_key,
+                                        validation.reason_code,
+                                        len(validation.repaired_rule_ids),
+                                    )
                                 _emit_trace(
                                     trace_sink,
                                     executor_key=executor_key,
