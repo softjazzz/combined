@@ -3624,6 +3624,10 @@ _NON_ORDER_RECOMMENDATION_PATTERN = re.compile(
 _ORDER_RECOMMENDATION_HINT_PATTERN = re.compile(
     r"药|mg|片|注射|输注|静滴|口服|检查|复查|CT|MRI|彩超|手术|穿刺|切开|置管|转科"
 )
+# 用户口径（2026-10-20）：院外自带药（“继续服用原降压药”等）不核对。
+_HOME_MEDICATION_PATTERN = re.compile(
+    r"自备|自带|院外|家中|原(?![发则因])(?:有|来|口服)?[^，,。；;]{0,8}药"
+)
 # 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对。当天有对应医嘱即视为
 # 条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
 _CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
@@ -3663,6 +3667,8 @@ def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
     if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
         return False
     text = _recommendation_text(recommendation)
+    if _HOME_MEDICATION_PATTERN.search(text):
+        return False
     return not (
         _NON_ORDER_RECOMMENDATION_PATTERN.search(text)
         and not _ORDER_RECOMMENDATION_HINT_PATTERN.search(text)

@@ -9608,3 +9608,20 @@ def test_023_conditional_recommendation_without_order_is_not_checked():
     ]
     assert episode._is_conditional_recommendation(completed[0].recommendation)
     assert not episode._is_conditional_recommendation(completed[3].recommendation)
+
+
+def test_023_home_medication_recommendations_are_not_checked():
+    # 用户口径（2026-10-20）：院外自带药不核对；“原发病”“原则”不误判为自带药。
+    rec = lambda ref, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, "medication", quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    completed = (
+        rec("r1", "继续服用原降压药"),
+        rec("r2", "自备药物继续口服"),
+        rec("r3", "积极治疗原发病，予以抗感染药物"),
+        rec("r4", "按抗感染原则使用头孢类药物"),
+    )
+    in_scope, _ = episode._order_execution_view(completed, None)
+    assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
