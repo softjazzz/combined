@@ -6545,10 +6545,8 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == [
-        48.0,
-        74.0,
-    ]
+    # 医嘱驱动（2026-10-21）：只把48–72小时窗内病程交给模型，窗外记录不再计入间隔。
+    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == [48.0]
 
 
 @pytest.mark.asyncio
@@ -6580,10 +6578,8 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
     assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == []
-    assert result.llm_call_count == 1
-    assert result.prompt_tokens == 10
-    assert result.completion_tokens == 5
-    assert result.total_tokens == 15
+    # 窗内无病程时无需调用模型即可判定未评价。
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

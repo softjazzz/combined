@@ -341,3 +341,41 @@ async def test_054_stop_at_course_planned_in_start_record_needs_no_stop_reason()
     client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染", "planned_duration": "拟用3天"}})
     _, reduced = await _run_stop(rows, client)
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+# ---- 055 医嘱驱动 ----
+
+@pytest.mark.asyncio
+async def test_055_course_stopped_before_48h_needs_no_effect_evaluation() -> None:
+    _, reduced = await _evaluate("LX0609-05-01-03", {
+        "inpat_drug_order": (_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-02 09:00:00"),),
+        "daily_course_record": (), "senior_course_record": (),
+    })
+    assert (reduced.final_state, reduced.reason_code) == (CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete")
+
+
+@pytest.mark.asyncio
+async def test_055_canceled_order_is_not_a_course() -> None:
+    _, reduced = await _evaluate("LX0609-05-01-03", {
+        "inpat_drug_order": (_order("A", "头孢曲松", "2026-01-01 09:00:00",
+                                    canceled_datetime="2026-01-01 09:05:00"),),
+        "daily_course_record": (), "senior_course_record": (),
+    })
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_055_restart_after_gap_opens_a_new_window() -> None:
+    result, reduced = await _evaluate("LX0609-05-01-03", {
+        "inpat_drug_order": (
+            _order("A1", "头孢曲松", "2026-01-01 09:00:00", "2026-01-05 09:00:00"),
+            _order("A2", "头孢曲松", "2026-01-10 09:00:00", "2026-01-15 09:00:00"),
+        ),
+        "daily_course_record": (_course("D-1", "2026-01-03 10:00:00",
+                                        "抗菌药物效果评价：抗感染治疗有效；安全性评价：未见药物不良反应。"),),
+        "senior_course_record": (),
+    })
+    # 第二个疗程（1月10日起）的48–72小时窗内无评价。
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    windows = dict(result.customer_display_facts)["LX0609-05-01-03"]["event_windows"]
+    assert [item["start_time"] for item in windows] == ["2026-01-01 09:00:00", "2026-01-10 09:00:00"]

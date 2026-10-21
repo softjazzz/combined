@@ -3560,18 +3560,24 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not rule_antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-05-01-03":
-                # 客户确认口径（2026-10-20），基线055：
-                # 同药医嘱合为一个疗程，按客户允许的计划开始/开医嘱时间起算；
-                # 沿用计划优先、缺失才回退的顺序，续开不另建48–72小时窗。
-                course_orders: dict[str, list[Mapping[str, Any]]] = {}
-                for order in rule_antimicrobial_orders:
-                    for name in _antimicrobial_names_in(order):
-                        course_orders.setdefault(name, []).append(order)
+                # 客户确认口径（2026-10-20），基线055：按客户允许的计划开始/开医嘱时间起算，
+                # 续开不另建48–72小时窗。用户口径（2026-10-21）改为医嘱驱动：疗程与054/057
+                # 共用同一推导——撤销、皮试医嘱不算；同药停用超过24小时后再开为新疗程，另建窗口；
+                # 疗程不满48小时即停用的不要求48–72小时评价。
+                course_resolution = derive_antimicrobial_use_events(
+                    rule_antimicrobial_orders, _antimicrobial_names_in,
+                )
                 order_events = tuple(
-                    (_AntimicrobialOrderEvent(tuple(orders), (name,)), name,
-                     min(starts) if all(start is not None for start in starts) else None)
-                    for name, orders in course_orders.items()
-                    for starts in [tuple(_antimicrobial_start_datetime(order) for order in orders)]
+                    (_AntimicrobialOrderEvent(event.orders, (event.antimicrobial,)), event.antimicrobial, event.time)
+                    for event in course_resolution.events
+                    if event.kind != "stop"
+                    and (event.course_end is None or event.course_end >= event.time + timedelta(hours=48))
+                ) + tuple(
+                    (_AntimicrobialOrderEvent(
+                        tuple(order for order in rule_antimicrobial_orders if name in _antimicrobial_names_in(order)),
+                        (name,),
+                    ), name, None)
+                    for name in course_resolution.time_missing_names
                 )
                 # 即使评价窗尚未成熟，开始医嘱仍是这项否定结论实际消费的
                 # 业务事实；horizon 仅决定窗口状态，绝不成为客户证据。
@@ -3584,7 +3590,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                 event_windows: list[dict[str, Any]] = []
                 mature_events: list[tuple[_AntimicrobialOrderEvent, str, datetime]] = []
                 immature_states: list[str] = []
-                if any(start is None for _, _, start in order_events):
+                if not order_events:
+                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
+                elif any(start is None for _, _, start in order_events):
                     final_state, reason_code = "data_gap", "authoritative_time_missing"
                 elif antimicrobial_horizon_error:
                     final_state, reason_code = "data_gap", antimicrobial_horizon_error
@@ -3630,15 +3638,18 @@ async def execute_luxian_0609_native_extended_document_rules(
                     # 用户口径（2026-10-20）：空白病程的时间（无权威时间时取最后修改时间作上限）
                     # 早于全部评价窗或已在窗外时，不可能是窗内评价，不再使整例资料不足。
                     earliest_window = min(start + timedelta(hours=48) for _, _, start in mature_events)
+                    # 医嘱驱动：只把落在某个48–72小时评价窗内的病程交给模型；无权威时间的病程
+                    # 以最后修改时间为上限，上限早于最早评价窗的必然不在窗内。
                     effect_course_rows = tuple(
                         row for row in course_rows
-                        if _course_row_has_body(row)
-                        or not (
-                            ((value := _row_time(row)) is not None
-                             and not any(48 <= (value - start).total_seconds() / 3600 <= 72
-                                         for _, _, start in mature_events))
-                            or ((bound := row_time_upper_bound(row)) is not None
-                                and bound < earliest_window)
+                        if (
+                            (value := _row_time(row)) is not None
+                            and any(48 <= (value - start).total_seconds() / 3600 <= 72
+                                    for _, _, start in mature_events)
+                        )
+                        or (
+                            value is None
+                            and not ((bound := row_time_upper_bound(row)) is not None and bound < earliest_window)
                         )
                     )
                     antimicrobial_effect_extraction = await extract_antimicrobial_effects(
@@ -3695,15 +3706,32 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 if state == "present":
                                     rows_by_name.setdefault(name, []).append(row)
                                 elif state == "regimen":
-                                    if len(order_events) == 1:
+                                    # 未点药名的整体方案评价：只用一种药（可有多个疗程）时按评价窗归属；
+                                    # 多药同用时仍无法确定评价的是哪种药。
+                                    row_time = _row_time(row)
+                                    window_names = {
+                                        event_name for _, event_name, start in mature_events
+                                        if row_time is not None
+                                        and 48 <= (row_time - start).total_seconds() / 3600 <= 72
+                                    }
+                                    single_drug = {event_name for _, event_name, _ in order_events} == {name}
+                                    if len(order_events) == 1 or (single_drug and window_names == {name}):
                                         rows_by_name.setdefault(name, []).append(row)
                                     elif row not in unassigned_rows:
                                         unassigned_rows.append(row)
                                 elif state == "unknown":
                                     unknown_rows_by_name.setdefault(name, []).append(row)
+                # 同药多个疗程时按评价窗归属：只有同一份病程同时落入两个同药疗程的
+                # 评价窗（或缺时无法定位）才无法归属。
                 ambiguous_evaluation = any(
                     not _linked_order_id(row)
-                    and sum(name == event_name for _, event_name, _ in order_events) > 1
+                    and sum(
+                        name == event_name and (
+                            (value := _row_time(row)) is None
+                            or 48 <= (value - start).total_seconds() / 3600 <= 72
+                        )
+                        for _, event_name, start in mature_events
+                    ) > 1
                     for rows_by_name in (effect_rows_by_name, safety_rows_by_name)
                     for name, rows in rows_by_name.items() for row in rows
                 )
@@ -3715,7 +3743,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 has_untimed_match = False
                 has_unresolved_unknown = False
                 has_unassigned_regimen = False
-                if final_state in {"data_gap", "technical_error"}:
+                if final_state in {"data_gap", "technical_error", "not_applicable"}:
                     pass
                 elif ambiguous_evaluation:
                     final_state, reason_code = "data_gap", "association_failed"
@@ -3833,9 +3861,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "association_ambiguous": ambiguous_evaluation,
                     "event_windows": event_windows,
                 }
-                if final_state == "not_applicable":
-                    display_facts["window_state"] = reason_code
-                display.append((rule_id, display_facts))
+                if final_state == "not_applicable" and reason_code == "trigger_absent_complete":
+                    pass
+                else:
+                    if final_state == "not_applicable":
+                        display_facts["window_state"] = reason_code
+                    display.append((rule_id, display_facts))
             elif rule_id == "LX0609-05-01-04":
                 # 院方口径（2026-10-11）：重点抗菌药物按院方七类清单识别；“两种及以上”
                 # 按药品种数计，同一药多条医嘱只算一种。

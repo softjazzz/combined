@@ -67,6 +67,7 @@ class AntimicrobialUseEvent:
     orders: tuple[Mapping[str, Any], ...]
     course_start: datetime | None = None
     start_event_id: str = ""
+    course_end: datetime | None = None
 
     @property
     def window_start(self) -> datetime:
@@ -190,7 +191,7 @@ def derive_antimicrobial_use_events(
         course["event_id"] = f"E{len(events) + 1}"
         events.append(AntimicrobialUseEvent(
             course["event_id"], course["name"], kind, course["start"], tuple(course["orders"]),
-            course["start"], course["event_id"],
+            course["start"], course["event_id"], course["end"],
         ))
     for course in courses:
         end = course["end"]
