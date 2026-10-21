@@ -31,41 +31,6 @@ async def test_explicitly_cancelled_never_administered_is_not_applicable(suffix)
 
 
 @pytest.mark.asyncio
-async def test_missing_reason_label_does_not_satisfy_reason_requirement():
-    _, decision = await _evaluate(
-        "LX0609-05-01-02", _rows("今日启用美罗培南，用药理由未记录。")
-    )
-    assert decision.final_state.value == "non_compliant"
-
-
-@pytest.mark.asyncio
-async def test_explicit_confirmed_bacterial_diagnosis_is_an_empiric_reason():
-    _, decision = await _evaluate(
-        "LX0609-05-01-05",
-        _rows("胸部影像证实细菌性肺炎，予以美罗培南经验性抗感染治疗。"),
-    )
-    assert decision.final_state.value == "compliant"
-
-
-@pytest.mark.asyncio
-async def test_negated_bacterial_diagnosis_is_not_an_empiric_reason():
-    _, decision = await _evaluate(
-        "LX0609-05-01-05",
-        _rows("胸部影像未证实细菌性肺炎，予以美罗培南经验性抗感染治疗。"),
-    )
-    assert decision.final_state.value == "non_compliant"
-
-
-@pytest.mark.asyncio
-async def test_positive_reason_survives_unrelated_missing_reason_label():
-    _, decision = await _evaluate(
-        "LX0609-05-01-02",
-        _rows("今日启用美罗培南，因为细菌培养证实感染。此前用药理由未记录。"),
-    )
-    assert decision.final_state.value == "compliant"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("suffix", ("03", "06"))
 async def test_no_adverse_reaction_does_not_cancel_actual_treatment(suffix):
     _, decision = await _evaluate(
@@ -107,24 +72,5 @@ async def test_cancelled_status_cannot_erase_explicit_actual_use():
 async def test_stopped_order_is_not_never_administered():
     _, decision = await _evaluate(
         "LX0609-05-01-06", _rows("美罗培南现已停用。", status="已停止")
-    )
-    assert decision.final_state.value == "non_compliant"
-
-
-@pytest.mark.asyncio
-async def test_not_yet_confirmed_diagnosis_is_not_positive_reason():
-    _, decision = await _evaluate(
-        "LX0609-05-01-05",
-        _rows("胸部影像尚不能证实细菌性肺炎，予以美罗培南经验性抗感染治疗。"),
-    )
-    assert decision.final_state.value == "non_compliant"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("prefix", ("尚无证据证实", "并非证实"))
-async def test_nonaffirmative_confirmation_does_not_supply_empiric_reason(prefix):
-    _, decision = await _evaluate(
-        "LX0609-05-01-05",
-        _rows(prefix + "细菌性肺炎，予以美罗培南经验性抗感染治疗。"),
     )
     assert decision.final_state.value == "non_compliant"

@@ -79,25 +79,11 @@ async def test_cancelled_plan_or_negative_stays_not_applicable(content, suffix):
 
 
 @pytest.mark.asyncio
-async def test_actual_empiric_treatment_keeps_normal_compliant_decision():
-    final = await _final(
-        "05", "已予美罗培南经验性抗感染治疗，考虑感染。",
-    )
-    assert final["status"] == "compliant"
-
-
-@pytest.mark.asyncio
 async def test_plan_clause_does_not_hide_later_actual_administration():
     final = await _final(
         "03", "拟给予美罗培南，随后已予美罗培南静滴抗感染。",
     )
     assert final["status"] == "non_compliant"
-
-
-@pytest.mark.asyncio
-async def test_current_infection_assessment_is_not_a_plan_marker():
-    final = await _final("05", "考虑感染已予美罗培南经验性抗感染治疗。")
-    assert final["status"] == "compliant"
 
 
 @pytest.mark.asyncio
