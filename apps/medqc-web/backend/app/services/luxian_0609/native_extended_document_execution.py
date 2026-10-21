@@ -75,6 +75,8 @@ from .extended_document.diagnosis_change_extraction import (
 from .extended_document.antimicrobial_order_reason import (
     derive_antimicrobial_use_events,
     extract_antimicrobial_reasons,
+    is_planned_stop,
+    planned_duration,
     window_documents,
 )
 from .extended_document.antimicrobial_action_extraction import (
@@ -1852,6 +1854,21 @@ def _order_reason_rule_outcome(
     evaluated: list[tuple[Any, str]] = []
     for event in events:
         facts = facts_by_event.get(event.event_id)
+        if event.kind == "stop":
+            if is_057:
+                continue
+            start_facts = facts_by_event.get(event.start_event_id)
+            if start_facts is not None and start_facts.has("planned_duration") and is_planned_stop(
+                event, planned_duration(start_facts.quotes["planned_duration"][1]),
+            ):
+                continue
+            if facts is not None and facts.has("stop_reason"):
+                evaluated.append((event, "documented"))
+            elif event.event_id in untimed or (facts is not None and facts.documented_use == "unknown"):
+                evaluated.append((event, "unresolved"))
+            else:
+                evaluated.append((event, "missing"))
+            continue
         if is_057:
             if facts is not None and facts.has("prophylaxis"):
                 continue
@@ -3235,6 +3252,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         if "events" not in order_reason_cache:
             resolution = derive_antimicrobial_use_events(
                 _antimicrobial_orders(drug_order_rows), _antimicrobial_names_in,
+                discharge_time=_discharge_time(registration_rows, (), horizon_rows, horizon_error),
             )
             horizon = order_reason_horizon_datetime
             events = tuple(

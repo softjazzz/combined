@@ -599,6 +599,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-05-01-02": (
         "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
         "labtest_master", "labtest_item_report",
+        # 停用事件：出院当日及以后随出院停的不核对，需出院时间。
+        "inpat_registration", "evaluation_context.horizon",
     ),
     "LX0609-05-01-03": (
         "inpat_drug_order", "daily_course_record", "senior_course_record",

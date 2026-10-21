@@ -1,5 +1,6 @@
 """054/057 医嘱驱动：用药事件、开医嘱当日病程窗口、引文校验与状态映射（用户口径 2026-10-21）。"""
 
+from datetime import datetime, timedelta
 import json
 
 import pytest
@@ -10,6 +11,7 @@ from app.services.luxian_0609.canonical_result_finalizer import (
 from app.services.luxian_0609.decision_reducer import CustomerFinalState
 from app.services.luxian_0609.extended_document.antimicrobial_order_reason import (
     derive_antimicrobial_use_events,
+    planned_duration,
     extract_antimicrobial_reasons,
     window_documents,
 )
@@ -48,7 +50,10 @@ class _ReasonClient:
         for event in payload["events"]:
             item = {"event_id": event["event_id"], "documented_use": self.documented_use, "quote_doc_refs": {}}
             for kind, quote in self.fields.get(event["drug"], {}).items():
-                ref = next((r for r in event["doc_refs"] if quote in texts[r]), event["doc_refs"][0])
+                ref = next((r for r in event["doc_refs"] if quote in texts[r]), None)
+                if ref is None:
+                    # 受控桩只引用该事件窗口内确实存在的原文。
+                    continue
                 item[f"{kind}_quote"] = "篡改的引文" if self.broken else quote
                 item["quote_doc_refs"][kind] = ref
             events.append(item)
@@ -68,7 +73,9 @@ def test_events_merge_same_drug_course_and_exclude_skin_test_and_canceled() -> N
         _order("X", "左氧氟沙星", "2026-01-02 09:00:00", canceled_datetime="2026-01-02 09:10:00"),
     ), _antimicrobial_names_in)
 
-    assert [(e.antimicrobial, e.kind, len(e.orders)) for e in resolution.events] == [("头孢曲松", "start", 2)]
+    assert [(e.antimicrobial, e.kind, len(e.orders)) for e in resolution.events if e.kind != "stop"] == [
+        ("头孢曲松", "start", 2),
+    ]
 
 
 def test_events_classify_restart_combine_and_switch() -> None:
@@ -81,7 +88,7 @@ def test_events_classify_restart_combine_and_switch() -> None:
     ), _antimicrobial_names_in)
 
     # 美罗培南开出前3小时左氧氟沙星停用：更换；头孢曲松停用5天后再开：重新开始。
-    assert [(e.antimicrobial, e.kind) for e in resolution.events] == [
+    assert [(e.antimicrobial, e.kind) for e in resolution.events if e.kind != "stop"] == [
         ("头孢曲松", "start"), ("左氧氟沙星", "combine"), ("美罗培南", "switch"), ("头孢曲松", "start"),
     ]
 
@@ -145,7 +152,8 @@ async def test_unverified_quote_retries_once_then_is_technical_error() -> None:
 
 # ---- 执行器状态映射 ----
 
-_ORDERS = (_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-05 09:00:00"),)
+# 未停用的疗程：只有开始事件（停用另见停用测试）。
+_ORDERS = (_order("A", "头孢曲松", "2026-01-01 09:00:00"),)
 
 
 async def _run(rule_id, rows, client):
@@ -261,3 +269,75 @@ async def test_finalized_results_bind_order_and_quoted_course(rule_id) -> None:
     )
     assert final["status"] == "compliant"
     assert {item["source_type"] for item in final["customer_evidence"]} == {"inpat_drug_order", "daily_course_record"}
+
+
+# ---- 停用 ----
+
+def _stops(orders, **kwargs):
+    events = derive_antimicrobial_use_events(orders, _antimicrobial_names_in, **kwargs).events
+    return [(e.antimicrobial, e.time.isoformat(sep=" ")) for e in events if e.kind == "stop"]
+
+
+def test_stop_event_excludes_discharge_switch_and_order_planned_duration() -> None:
+    discharge = datetime(2026, 1, 10, 9, 0)
+    assert _stops((_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-05 09:00:00"),),
+                  discharge_time=discharge) == [("头孢曲松", "2026-01-05 09:00:00")]
+    # 出院当日随出院停用不核对。
+    assert _stops((_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-10 08:00:00"),),
+                  discharge_time=discharge) == []
+    # 停后24小时内改用他药：按更换核对，不另查停用。
+    assert _stops((_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-05 09:00:00"),
+                   _order("B", "美罗培南", "2026-01-05 10:00:00")), discharge_time=discharge) == []
+    # 医嘱用药天数3天、到期停用：按计划停用不核对。
+    assert _stops((_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-04 08:00:00",
+                          medication_duration="3"),), discharge_time=discharge) == []
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("拟用3天", timedelta(days=3)), ("疗程五日", timedelta(days=5)),
+    ("预防用药24小时", timedelta(hours=24)), ("疗程十四天", timedelta(days=14)),
+    ("先用3天，必要时延长至7天", None), ("继续抗感染", None),
+])
+def test_planned_duration_parsing(text, expected) -> None:
+    assert planned_duration(text) == expected
+
+
+_STOP_ORDERS = (_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-04 10:00:00"),)
+
+
+async def _run_stop(rows, client):
+    return await _evaluate("LX0609-05-01-02", {"inpat_drug_order": _STOP_ORDERS, "first_course_record": (),
+                                                "senior_course_record": (), "consultation_record": (),
+                                                "transfer_in_record": (), **rows}, llm_client=client)
+
+
+@pytest.mark.asyncio
+async def test_054_stop_without_reason_on_stop_day_is_non_compliant() -> None:
+    rows = {"daily_course_record": (
+        _course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，予头孢曲松。"),
+        _course("D-2", "2026-01-04 11:00:00", "停用头孢曲松。"),
+    )}
+    _, reduced = await _run_stop(rows, _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}}))
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_054_stop_with_reason_on_stop_day_is_compliant() -> None:
+    rows = {"daily_course_record": (
+        _course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，予头孢曲松。"),
+        _course("D-2", "2026-01-04 11:00:00", "体温正常、感染指标下降，感染控制，停用头孢曲松。"),
+    )}
+    client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染", "stop_reason": "感染控制"}})
+    _, reduced = await _run_stop(rows, client)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_054_stop_at_course_planned_in_start_record_needs_no_stop_reason() -> None:
+    rows = {"daily_course_record": (
+        _course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，予头孢曲松抗感染，拟用3天。"),
+        _course("D-2", "2026-01-04 11:00:00", "停用头孢曲松。"),
+    )}
+    client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染", "planned_duration": "拟用3天"}})
+    _, reduced = await _run_stop(rows, client)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT

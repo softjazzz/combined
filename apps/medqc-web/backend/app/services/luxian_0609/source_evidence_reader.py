@@ -396,6 +396,9 @@ _NATIVE_SOURCE_FIELDS = {
         "prescribed_datetime",
         "planned_start_datetime",
         "carried_datetime",
+        # 054 停用/更换：计划结束及撤销时间（源库同步后启用）。
+        "planned_end_datetime",
+        "canceled_datetime",
         # 028：医嘱停止时间（源库同步后启用；列不存在时不选取）。
         "stop_datetime",
         "order_stop_datetime",
