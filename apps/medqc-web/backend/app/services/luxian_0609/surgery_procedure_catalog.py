@@ -31,6 +31,10 @@ _SUPPLEMENT_OPERATION_SUBCATEGORIES = {
     "44.13": "诊断性操作",
     "33.23": "诊断性操作",
 }
+# ICD-9-CM-3 00.40–00.48 是“操作血管数量/置入支架数量”附加编码，只修饰同台主操作，
+# 本身不是手术；首页为其填写的等级不能触发手术类文书（1019 C15 冠脉介入的“两根血管操作”）。
+_ADJUNCT_CODE_SUBCATEGORIES = frozenset(f"00.4{digit}" for digit in range(9))
+_ADJUNCT_CATEGORY = "附加编码"
 _SUPPLEMENT_OPERATION_NAMES = {
     "气管插管术": "治疗性操作",
     "气管内插管": "治疗性操作",
@@ -194,6 +198,8 @@ def _subcategory_operation(code: str) -> SurgeryProcedureClassification | None:
 
 
 def _supplement_operation(code: str, name: str) -> SurgeryProcedureClassification | None:
+    if _subcategory(code) in _ADJUNCT_CODE_SUBCATEGORIES:
+        return _operation(code, name, _ADJUNCT_CATEGORY, "adjunct_code")
     if category := _SUPPLEMENT_OPERATION_SUBCATEGORIES.get(_subcategory(code)):
         return _operation(code, name, category, "supplement_code")
     if category := _SUPPLEMENT_OPERATION_NAMES.get(name):
