@@ -11264,3 +11264,68 @@ def test_death_scope_falls_back_to_discharge_typed_diagnoses_only_without_death_
     assert _discharge_or_death_diagnosis_rows((admission, discharge), diagnosis_scope="death") == (discharge,)
     assert _discharge_or_death_diagnosis_rows((discharge, death), diagnosis_scope="death") == (death,)
     assert _discharge_or_death_diagnosis_rows((admission,), diagnosis_scope="death") == ()
+
+
+@pytest.mark.parametrize(("clause", "expected"), [
+    # 1019 C11：“预防”属于并列的抑酸药，不能排除同句的抗感染治疗。
+    ("予以头孢曲松抗感染、奥美拉唑抑酸护胃（预防应激性溃疡出血）、补液", False),
+    ("术前予头孢唑林预防感染", True),
+    ("围术期予头孢呋辛抗感染", True),
+    ("予头孢呋辛抗感染、预防切口感染", True),
+])
+def test_057_prophylaxis_is_judged_on_the_antimicrobial_item(clause, expected) -> None:
+    from app.services.luxian_0609.native_extended_document_execution import (
+        _is_prophylactic_antimicrobial_clause,
+    )
+
+    assert _is_prophylactic_antimicrobial_clause(clause) is expected
+
+
+_TRANSFER_PLAN = "予以气管插管呼吸机辅助呼吸，予以哌拉西林他唑巴坦抗感染，完善痰培养。"
+
+
+@pytest.mark.asyncio
+async def test_054_reads_transfer_in_treatment_plan_when_body_is_empty() -> None:
+    """1019 C10：转入记录通用正文为空，用药与处置只写在转入诊疗计划。"""
+    result, reduced = await _evaluate(
+        "LX0609-05-01-02",
+        {
+            "inpat_drug_order": ({"order_id": "P-1", "generic_name": "哌拉西林他唑巴坦"},),
+            "transfer_in_record": ({
+                "document_id": "TI-1", "document_title": "转入记录",
+                "record_time": "2026-01-28 14:22:00", "record_content": "",
+                "transfer_treatment_plan": _TRANSFER_PLAN,
+            },),
+            "first_course_record": (), "daily_course_record": (), "senior_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert result.llm_call_count == 0
+    assert dict(result.customer_display_facts)["LX0609-05-01-02"]["antimicrobials"] == ["哌拉西林"]
+
+
+@pytest.mark.asyncio
+async def test_054_transfer_plan_does_not_duplicate_drug_documented_in_course() -> None:
+    """1019 C11 保护例：同药已在首程记载时，转入计划视为转科续用，不另立事件。"""
+    result, reduced = await _evaluate(
+        "LX0609-05-01-02",
+        {
+            "inpat_drug_order": (
+                {"order_id": "C-1", "generic_name": "头孢曲松"},
+                {"order_id": "C-2", "generic_name": "头孢曲松"},
+            ),
+            "first_course_record": ({
+                "document_id": "FC-1", "record_time": "2026-05-31 20:00:00",
+                "record_content": "考虑肺部感染可能，予以头孢曲松抗感染。",
+            },),
+            "transfer_in_record": ({
+                "document_id": "TI-2", "record_time": "2026-06-03 12:00:00",
+                "transfer_treatment_plan": "予以头孢曲松抗感染，止咳化痰。",
+            },),
+            "daily_course_record": (), "senior_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert result.llm_call_count == 0

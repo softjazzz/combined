@@ -127,6 +127,7 @@ def _row_text(row: Mapping[str, Any]) -> str:
         for key in (
             "record_content", "document_title", "order_name", "generic_name",
             "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
+            "transfer_treatment_plan",
             "item_code", "item_name", "item_abbreviation", "result", "result_flag",
             "abnormal_flag", "diagnosis_name", "labtest_subject", "specimen",
         )

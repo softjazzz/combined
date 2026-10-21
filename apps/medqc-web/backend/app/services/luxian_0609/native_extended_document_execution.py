@@ -1156,6 +1156,8 @@ def _material_text(row: Mapping[str, Any]) -> str:
         for key in (
             "record_content", "document_title", "order_name", "generic_name",
             "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
+            # 转入记录的诊疗计划章节（通用正文为空时药物与处置只写在这里，1019 C10）。
+            "transfer_treatment_plan",
             "item_code", "item_name", "item_abbreviation", "result",
             "result_flag", "abnormal_flag", "diagnosis_name", "labtest_subject",
             "specimen",
@@ -1652,6 +1654,23 @@ class _EmpiricAntimicrobialEvent:
     order_ids: tuple[str, ...]
 
 
+def _is_prophylactic_antimicrobial_clause(clause: str) -> bool:
+    """预防用药只按抗菌药所在的并列项判断。
+
+    “予以头孢曲松抗感染、奥美拉唑抑酸护胃（预防应激性溃疡）”中的“预防”属于
+    抑酸药，不能把同句的抗感染治疗排除（1019 C11）；“预防感染”仍视为预防用药。
+    """
+
+    for segment in re.split(r"、", clause):
+        if not re.search(r"预防|围术期", segment):
+            continue
+        if (re.search(r"抗感染|抗菌", segment)
+                or _antimicrobial_names_in({"record_content": segment})
+                or re.search(r"预防[^、]{0,8}感染", segment)):
+            return True
+    return False
+
+
 def _empiric_antimicrobial_event_contexts(
     *,
     antimicrobial_orders: Sequence[Mapping[str, Any]],
@@ -1672,7 +1691,7 @@ def _empiric_antimicrobial_event_contexts(
         treatment_clauses = tuple(
             clause for clause in re.split(r"[，,。；;\n]", text)
             if re.search(r"抗感染|抗菌治疗", clause)
-            and not re.search(r"预防|围术期", clause)
+            and not _is_prophylactic_antimicrobial_clause(clause)
             and _has_performed_antimicrobial_administration(clause, names)
         )
         treatment_names = tuple(dict.fromkeys(
@@ -1830,6 +1849,7 @@ def _antimicrobial_document_refs(
     allowed_sources = (
         "inpat_drug_order",
         "first_course_record",
+        "transfer_in_record",
         "daily_course_record",
         "senior_course_record",
         "consultation_record",
@@ -3327,7 +3347,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 else antimicrobial_orders
             )
             course_rows = (
-                (*first_course_rows, *daily_rows, *senior_rows)
+                # 转入记录是转科后首份病程性文书，其诊疗计划记载抗菌药使用及理由（1019 C10）。
+                (*first_course_rows, *transfer_in_rows, *daily_rows, *senior_rows)
                 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}
                 else (*daily_rows, *senior_rows)
             )
@@ -3338,7 +3359,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 "" if rule_id == "LX0609-05-01-06" else daily_error or senior_error
             )
             if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}:
-                source_error = source_error or first_course_error
+                source_error = source_error or first_course_error or transfer_in_error
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif rule_id == "LX0609-05-01-02":
@@ -3379,6 +3400,18 @@ async def execute_luxian_0609_native_extended_document_rules(
                         course_rows,
                         antimicrobial_orders,
                         confirmed_actions,
+                    )
+                    # 转入记录只补充其他病程未记载的用药事件；同药已由首程/日常/上级
+                    # 病程记载时，转入诊疗计划是对同一疗程的转科续用，不另立事件
+                    # （1019 C11 保护例；C10 仅转入记录记载用药）。
+                    documented_names = {
+                        event.antimicrobial for event in action_events
+                        if not any(event.row is row for row in transfer_in_rows)
+                    }
+                    action_events = tuple(
+                        event for event in action_events
+                        if not any(event.row is row for row in transfer_in_rows)
+                        or event.antimicrobial not in documented_names
                     )
                     if action_association_failed:
                         final_state, reason_code = "data_gap", "association_failed"

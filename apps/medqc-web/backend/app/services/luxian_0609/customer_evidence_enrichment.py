@@ -55,6 +55,8 @@ _TIME_FIELDS = (
 )
 _EXCERPT_FIELDS = (
     "record_content",
+    # 转入记录通用正文为空时，抗菌药处置写在转入诊疗计划（1019 C10）。
+    "transfer_treatment_plan",
     "consultation_opinion",
     "consultation_advice",
     "surgery_process",

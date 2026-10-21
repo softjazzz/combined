@@ -504,6 +504,8 @@ _NATIVE_SOURCE_FIELDS = {
         "record_datetime",
         "physician_sign",
         "record_content",
+        # 054/057 读取转入诊疗计划中的抗菌药及处置（1019 C10）。
+        "transfer_treatment_plan",
     ),
     "transfer_out_record": (
         "document_id",

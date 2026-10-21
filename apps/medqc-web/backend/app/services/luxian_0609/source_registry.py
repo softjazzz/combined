@@ -597,8 +597,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "crisis_value_record",
     ),
     "LX0609-05-01-02": (
-        "first_course_record", "senior_course_record", "consultation_record", "labtest_master",
-        "labtest_item_report",
+        "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
+        "labtest_master", "labtest_item_report",
     ),
     "LX0609-05-01-03": (
         "inpat_drug_order", "daily_course_record", "senior_course_record",
@@ -610,8 +610,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-05-01-05": (
-        "first_course_record", "senior_course_record", "consultation_record", "labtest_master",
-        "labtest_item_report",
+        "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
+        "labtest_master", "labtest_item_report",
     ),
     "LX0609-05-01-06": (
         "inpat_drug_order", "senior_course_record", "consultation_record",
