@@ -1226,6 +1226,19 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
             },
             "uncertain",
         ),
+        # 客户源库的有效状态“执行”“核实”及非手术类型“处置治疗”（1019 样本 C22）。
+        (
+            {"order_id": "order-029-verified", "order_type": "处置治疗", "order_status": "核实"},
+            "negated",
+        ),
+        (
+            {"order_id": "order-029-executed", "order_type": "治疗", "order_status": "执行"},
+            "negated",
+        ),
+        (
+            {"order_id": "order-029-executed-surgery", "order_type": "手术", "order_status": "执行"},
+            "affirmed",
+        ),
     ],
 )
 def test_029_surgery_order_fact_uses_strict_type_and_status(

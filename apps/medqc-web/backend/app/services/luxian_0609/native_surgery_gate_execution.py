@@ -23,6 +23,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .evidence_snapshot_provider import KNOWN_NON_SURGERY_ORDER_TYPES
 from .native_execution import build_luxian_0609_native_result
 from .malignancy_fact import (
     MalignancyFactResolver,
@@ -1233,18 +1234,10 @@ def _typed_003_decision(
             _clean(row.get("order_type"))
             for row in support_rows["inpat_nondrug_order"]
         )
-        known_non_surgery_order_types = {
-            "检查",
-            "检验",
-            "治疗",
-            "护理",
-            "嘱托",
-            "转科",
-            "其他",
-        }
+        # 与快照手术医嘱分类共用同一类型口径，避免两处集合漂移（C22“处置治疗”）。
         if any(
             not order_type
-            or order_type not in {*known_non_surgery_order_types, "手术"}
+            or order_type not in {*KNOWN_NON_SURGERY_ORDER_TYPES, "手术"}
             for order_type in order_types
         ):
             return decision("data_gap", "authoritative_time_missing")

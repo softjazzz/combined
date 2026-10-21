@@ -61,10 +61,12 @@ _EMERGENCY_RESCUE_NEGATIVE_PATTERN = re.compile(
 _EMERGENCY_RESCUE_POSITIVE_PATTERN = re.compile(
     r"(?:急诊|紧急).{0,12}(?:抢救|救命|挽救生命)"
 )
-_EFFECTIVE_SURGERY_ORDER_STATUSES = frozenset({"新开", "执行中", "停止"})
+# 客户源库有效医嘱状态另有“执行”“核实”（1019 样本 C22 全部医嘱即为这两种），
+# 与出院处方等处的有效状态口径一致；类型“处置治疗”“材料”“输血”同样不是手术。
+_EFFECTIVE_SURGERY_ORDER_STATUSES = frozenset({"新开", "执行中", "执行", "核实", "停止"})
 _EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废"})
-_KNOWN_NON_SURGERY_ORDER_TYPES = frozenset(
-    {"检查", "检验", "治疗", "护理", "嘱托", "转科", "其他"}
+KNOWN_NON_SURGERY_ORDER_TYPES = frozenset(
+    {"检查", "检验", "治疗", "处置治疗", "护理", "嘱托", "转科", "材料", "输血", "其他"}
 )
 
 
@@ -99,7 +101,7 @@ def classify_current_visit_surgery_order_rows(
             states.append(("uncertain", source_document_id))
         elif order_type == "手术":
             states.append(("affirmed", source_document_id))
-        elif order_type in _KNOWN_NON_SURGERY_ORDER_TYPES:
+        elif order_type in KNOWN_NON_SURGERY_ORDER_TYPES:
             states.append(("negated", source_document_id))
         else:
             states.append(("uncertain", source_document_id))

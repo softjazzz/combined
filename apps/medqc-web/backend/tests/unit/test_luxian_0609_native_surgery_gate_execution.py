@@ -715,6 +715,8 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
     ("positive_source", "expected_state", "expected_reason"),
     [
         (None, "not_applicable", "performed_event_absent"),
+        # 客户源库“处置治疗”等类型与快照分类同口径，均不是手术医嘱（1019 C22）。
+        ("order_type_disposal", "not_applicable", "performed_event_absent"),
         ("surgery_application", "data_gap", "authoritative_time_missing"),
         ("inpat_nondrug_order", "data_gap", "authoritative_time_missing"),
         ("order_type_missing", "data_gap", "authoritative_time_missing"),
@@ -740,6 +742,7 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
                 "inpat_nondrug_order": "手术",
                 "order_type_empty": "",
                 "order_type_nonstandard": "手术医嘱",
+                "order_type_disposal": "处置治疗",
             }.get(positive_source, "检查")
             rows = (
                 {
