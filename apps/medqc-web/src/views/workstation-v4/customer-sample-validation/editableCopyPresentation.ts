@@ -7,6 +7,7 @@ export type EditableCopyOrderTypeFilter = 'long' | 'temporary'
 
 export type EditableCopyOrderRow = {
   document: EditableMedicalRecordDocument
+  orderId: string
   startTime: string
   plannedEndTime: string
   stopTime: string
@@ -188,6 +189,7 @@ export function parseEditableOrderRow(
   const orderTypeKey = resolveEditableOrderTypeKey(document)
   return {
     document,
+    orderId: document.order_id?.trim() || '',
     startTime: normalizeEditableOrderTimeText(resolveEditableOrderStartTimeValue(document)),
     stopTime: normalizeEditableOrderTimeText(resolveEditableOrderStopTimeValue(document), ''),
     plannedEndTime: formatPlannedOrderEndTime(document.order_planned_end_time),

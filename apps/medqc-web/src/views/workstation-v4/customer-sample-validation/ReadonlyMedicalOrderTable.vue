@@ -37,6 +37,7 @@
             <th>开始时间</th>
             <th>医嘱类型</th>
             <th>医嘱项目</th>
+            <th>医嘱号</th>
             <th>规格</th>
             <th>剂量</th>
             <th>频次</th>
@@ -59,6 +60,9 @@
             <td>{{ row.orderType }}</td>
             <td :title="row.item">
               {{ row.item }}
+            </td>
+            <td :title="row.orderId">
+              {{ row.orderId || '-' }}
             </td>
             <td :title="row.specification">
               {{ row.specification || '-' }}
@@ -83,7 +87,7 @@
             </td>
           </tr>
           <tr v-if="!visibleRows.length">
-            <td colspan="12" class="editable-copy-order-empty">
+            <td colspan="13" class="editable-copy-order-empty">
               {{
                 hasMedicalOrderFilters(filters)
                   ? '暂无符合筛选条件的医嘱'
@@ -274,12 +278,12 @@ watch(
 
 .editable-copy-order-table th:nth-child(4),
 .editable-copy-order-table td:nth-child(4) {
-  width: 130px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(5),
 .editable-copy-order-table td:nth-child(5) {
-  width: 100px;
+  width: 130px;
 }
 
 .editable-copy-order-table th:nth-child(6),
@@ -294,21 +298,28 @@ watch(
 
 .editable-copy-order-table th:nth-child(8),
 .editable-copy-order-table td:nth-child(8) {
-  width: 90px;
+  width: 100px;
 }
 
 .editable-copy-order-table th:nth-child(9),
 .editable-copy-order-table td:nth-child(9) {
-  width: 160px;
+  width: 90px;
 }
 
 .editable-copy-order-table th:nth-child(10),
 .editable-copy-order-table td:nth-child(10) {
-  width: 100px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(11),
 .editable-copy-order-table td:nth-child(11) {
+  width: 160px;
+}
+
+.editable-copy-order-table th:nth-child(12),
+.editable-copy-order-table td:nth-child(12),
+.editable-copy-order-table th:nth-child(13),
+.editable-copy-order-table td:nth-child(13) {
   width: 100px;
 }
 

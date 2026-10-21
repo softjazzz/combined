@@ -5,6 +5,7 @@ export type MedicalOrderTypeKey = 'long' | 'temporary'
 
 export type MedicalOrderRow = {
   document: EditableMedicalRecordDocument
+  orderId: string
   startTime: string
   plannedEndTime: string
   stopTime: string
@@ -153,6 +154,7 @@ export function buildMedicalOrderRow(document: EditableMedicalRecordDocument): M
   )
   return {
     document,
+    orderId: document.order_id?.trim() || '',
     startTime: normalizeOrderTime(
       document.order_start_time || document.record_time || document.submit_time,
     ),

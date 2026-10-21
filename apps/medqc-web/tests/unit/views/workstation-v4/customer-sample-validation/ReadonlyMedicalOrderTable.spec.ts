@@ -17,6 +17,26 @@ function order(key: string, title: string, extra = {}) {
 }
 
 describe('ReadonlyMedicalOrderTable', () => {
+  it('同名医嘱显示来源完整医嘱号，未提供编号时不编造序号', () => {
+    const wrapper = mount(ReadonlyMedicalOrderTable, {
+      props: {
+        documents: [
+          order('a', '临时医嘱', { order_item: '血常规', order_id: 'safe-visit||68' }),
+          order('b', '临时医嘱', { order_item: '血常规', order_id: 'safe-visit||91' }),
+          order('c', '临时医嘱', { order_item: '血常规', order_id: 'safe-visit||112' }),
+          order('unknown', '临时医嘱', { order_item: '血常规' }),
+        ],
+      },
+    })
+    const column = wrapper.findAll('th').findIndex((h) => h.text() === '医嘱号')
+    expect(column).toBeGreaterThan(-1)
+    expect(wrapper.findAll('tbody tr').map((r) => r.findAll('td')[column].text())).toEqual([
+      'safe-visit||68',
+      'safe-visit||91',
+      'safe-visit||112',
+      '-',
+    ])
+  })
   it('按实际医嘱类型、状态和项目关键词组合筛选，重置保留长临切换', async () => {
     const wrapper = mount(ReadonlyMedicalOrderTable, {
       props: {

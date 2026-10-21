@@ -2092,6 +2092,14 @@
 }
 
 .editable-copy-order-table th:nth-child(5) {
+  width: 170px;
+}
+
+.editable-copy-order-table th:nth-child(6) {
+  width: 170px;
+}
+
+.editable-copy-order-table th:nth-child(7) {
   width: 88px;
 }
 

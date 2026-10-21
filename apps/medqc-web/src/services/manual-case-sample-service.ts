@@ -408,6 +408,7 @@ function readEditableOrderDetails(
   fallback: Partial<EditableMedicalRecordDocument> = {},
 ) {
   return {
+    order_id: readStringField(row, ['order_id'], fallback.order_id),
     order_planned_end_time: readStringField(
       row,
       ['order_planned_end_time', 'planned_end_time', 'planned_end_datetime'],

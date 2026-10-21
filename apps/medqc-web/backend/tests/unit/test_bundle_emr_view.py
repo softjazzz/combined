@@ -1022,6 +1022,20 @@ def test_order_list_to_render_preserves_dose_and_quantity_units_once():
     assert row["quantity"] == "12袋"
 
 
+def test_order_source_id_survives_document_list_and_render_without_using_document_index():
+    source = [{
+        "document_type": "inpat_nondrug_order", "document_id": f"document-{i}",
+        "content": "血常规", "source_fields": [
+            {"source_field": "order_id", "raw_value_preview": f"safe-order||{i}"},
+        ],
+    } for i in (68, 91, 112)]
+    documents = build_documents_from_domain_bundles({"course": {"source_documents": source}})
+    assert {d["order_id"] for d in documents} == {"safe-order||68", "safe-order||91", "safe-order||112"}
+    for document in documents:
+        row = build_render_view(document)["render_blocks"][0]["rows"][0]
+        assert row["order_id"] == document["order_id"]
+
+
 def test_build_render_view_order_table_empty_state():
     order_doc = {
         "id": "order-1",
@@ -1069,6 +1083,7 @@ def test_order_document_projects_complete_display_fields():
         "start_time",
         "order_type",
         "order_item",
+        "order_id",
         "specification",
         "dosage",
         "frequency",
@@ -1084,6 +1099,7 @@ def test_order_document_projects_complete_display_fields():
             "start_time": "2026-08-28 08:00:00",
             "order_type": "长期",
             "order_item": "注射用药品甲",
+            "order_id": "",
             "specification": "1g/瓶",
             "dosage": "1瓶",
             "frequency": "qd",

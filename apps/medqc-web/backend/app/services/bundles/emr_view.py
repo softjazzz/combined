@@ -401,7 +401,7 @@ def _normalize_source_document(
     if doc_type in _ORDER_DOC_TYPES:
         normalized.update(
             {
-                f"order_{key}" if key not in {"order_type", "order_item", "order_status"} else key: value
+                f"order_{key}" if key not in {"order_id", "order_type", "order_item", "order_status"} else key: value
                 for key, value in _order_display_values(raw_doc).items()
             }
         )
@@ -882,7 +882,7 @@ def _normalize_source_document_summary(
     if doc_type in _ORDER_DOC_TYPES:
         summary.update(
             {
-                f"order_{key}" if key not in {"order_type", "order_item", "order_status"} else key: value
+                f"order_{key}" if key not in {"order_id", "order_type", "order_item", "order_status"} else key: value
                 for key, value in _order_display_values(raw_doc).items()
             }
         )
@@ -1222,6 +1222,7 @@ def _build_order_table_block(document: dict[str, Any]) -> dict[str, Any]:
             {"key": "start_time", "label": "开始时间"},
             {"key": "order_type", "label": "医嘱类型"},
             {"key": "order_item", "label": "医嘱项目"},
+            {"key": "order_id", "label": "医嘱号"},
             {"key": "specification", "label": "规格"},
             {"key": "dosage", "label": "剂量"},
             {"key": "frequency", "label": "频次"},
@@ -1301,6 +1302,7 @@ def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
         ),
         "order_type": order_type,
         "order_item": order_item,
+        "order_id": _order_value(document, source_values, "order_id"),
         "specification": _order_value(
             document, source_values, "order_specification", "specification", "drug_specification"
         ),

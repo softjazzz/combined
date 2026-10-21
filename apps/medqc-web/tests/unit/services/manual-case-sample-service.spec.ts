@@ -24,6 +24,37 @@ describe('editable medical-record document normalization', () => {
     vi.clearAllMocks()
   })
 
+  it('preserves source order ID in list and selected detail', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'inpat_nondrug_order',
+            order_id: 'safe-order||68',
+            content: '血常规',
+          },
+        ],
+      },
+    })
+    const list = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = list.data?.documents[0]
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document).orderId).toBe('safe-order||68')
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '血常规',
+        render_blocks: [
+          {
+            block_type: 'order_table',
+            rows: [{ order_id: 'safe-order||68' }],
+          },
+        ],
+      },
+    })
+    const detail = await getEditableMedicalRecordDocument('safe-visit', document)
+    expect(detail.data?.order_id).toBe('safe-order||68')
+  })
+
   it('keeps planned end separate from actual stop through list and render', async () => {
     mocks.requestRaw.mockResolvedValue({
       data: {
