@@ -80,6 +80,23 @@ class PreviewDualSourceTests(unittest.TestCase):
         with patch.object(preview, "MAX_ROWS_PER_TABLE", 2):
             self.assertEqual(reader.table("bloodtrans_record")["C18"].status, "row_limit_exceeded")
 
+    def test_failed_read_reports_sqlstate_without_exception_text(self):
+        class QueryTimeout(Exception):
+            pgcode = "57014"
+
+        reader, cursor = reader_with_columns(policy.IDENTITY_FIELDS)
+        cursor.execute.side_effect = QueryTimeout("PRIVATE-PARAMETERS-AND-TEXT")
+        snapshots = reader.table("bloodtrans_record")
+        self.assertEqual(snapshots["C18"].sqlstate, "57014")
+        self.assertEqual(snapshots["C18"].error_type, "QueryTimeout")
+        self.assertNotIn("PRIVATE-PARAMETERS", repr(snapshots))
+
+    def test_unbounded_statement_timeout_is_rejected_before_connecting(self):
+        with patch("psycopg2.connect") as connect:
+            with self.assertRaises(preview.PreviewError):
+                preview.connect_readonly("dbname=example", timeout_seconds=999)
+            connect.assert_not_called()
+
     def test_c18_focus_requires_actual_four_ids_but_does_not_claim_formal_validity(self):
         case = cases()[17]
         institutes = {s: "H" for s in policy.SOURCES}

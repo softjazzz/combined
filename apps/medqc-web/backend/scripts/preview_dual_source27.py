@@ -53,11 +53,13 @@ def url_dsn(value):
                     user=url.username, password=url.password)
 
 
-def connect_readonly(dsn):
+def connect_readonly(dsn, timeout_seconds=20):
     import psycopg2
 
+    if not 5 <= timeout_seconds <= 120:
+        raise PreviewError("statement_timeout_out_of_bounds")
     conn = psycopg2.connect(dsn, connect_timeout=5,
-                            options="-c default_transaction_read_only=on -c statement_timeout=20000 -c lock_timeout=5000")
+                            options=f"-c default_transaction_read_only=on -c statement_timeout={timeout_seconds * 1000} -c lock_timeout=5000")
     try:
         conn.set_session(readonly=True, isolation_level="REPEATABLE READ")
         with conn.cursor() as cursor:
@@ -116,8 +118,9 @@ class ReadonlyReader:
         from psycopg2 import sql
         from psycopg2.extras import RealDictCursor
 
-        def unavailable(status):
-            return {r["sample"]: policy.SourceSnapshot(self.source, status=status, captured_at=self.captured_at) for r in self.cases}
+        def unavailable(status, error_type="", sqlstate=""):
+            return {r["sample"]: policy.SourceSnapshot(self.source, status=status, captured_at=self.captured_at,
+                                                       error_type=error_type, sqlstate=sqlstate) for r in self.cases}
 
         if self.failed:
             return unavailable("source_transaction_failed")
@@ -128,6 +131,7 @@ class ReadonlyReader:
             return unavailable("identity_columns_missing")
         selected = policy.selected_columns(columns)
         self.schema_report.append({"source": self.source, "table": table, "selected_columns": selected,
+                                   "column_types": dict(columns),
                                    "uncompared_columns": sorted(set(columns) - set(selected))})
         query = sql.SQL("SELECT {} FROM {}.{} WHERE {} LIMIT %s").format(
             sql.SQL(",").join(map(sql.Identifier, selected)), sql.Identifier(self.schema), sql.Identifier(table),
@@ -141,10 +145,13 @@ class ReadonlyReader:
                 rows = cursor.fetchall()
                 if len(rows) > MAX_ROWS_PER_TABLE:
                     return unavailable("row_limit_exceeded")
-        except Exception:
+        except Exception as exc:
             # 异常原文可能含病历参数，不打印。失败事务不重试、不换快照后冒充完整。
             self.failed = True
-            return unavailable("read_error")
+            code = str(getattr(exc, "pgcode", "") or "")
+            code = code if len(code) == 5 and code.isalnum() else ""
+            emit("source_table_error", source=self.source, table=table, error_type=type(exc).__name__, sqlstate=code)
+            return unavailable("read_error", type(exc).__name__, code)
         by_ref = defaultdict(list)
         for row in rows:
             by_ref[(str(row["patient_id"]), str(row["visit_id"]))].append(dict(row))
@@ -170,6 +177,8 @@ def c18_focus(plans, target_columns=None, case=None):
     results = []
     assembler = load_document_assembler() if target_columns is not None else None
     for table, ids in expected.items():
+        if table not in plans:
+            continue
         plan = plans[table]
         present = {c.key[0] for c in plan.candidates}
         assembly_checks = []
@@ -198,6 +207,8 @@ def main(argv=None):
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases27-private.json"))
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--local-only", action="store_true", help="只读本机基线；不冒充实时双源验证")
+    parser.add_argument("--tables", default="", help="可选：逗号分隔的已支持表名，只重查相关表")
+    parser.add_argument("--statement-timeout-seconds", type=int, default=60)
     args = parser.parse_args(argv)
     phase = "configuration"
     try:
@@ -205,13 +216,19 @@ def main(argv=None):
         from sqlalchemy.engine import make_url
 
         cases = validate_cases(json.loads(args.cases.resolve().read_text(encoding="utf-8-sig")))
+        selected_tables = tuple(dict.fromkeys(t.strip() for t in args.tables.split(",") if t.strip())) if args.tables else tuple(policy.TABLE_KEYS)
+        if not selected_tables or not set(selected_tables).issubset(policy.TABLE_KEYS):
+            raise PreviewError("unsupported_table_scope")
+        if not 5 <= args.statement_timeout_seconds <= 120:
+            raise PreviewError("statement_timeout_out_of_bounds")
         env = dotenv_values(args.backend.resolve() / ".env")
         local_url = make_url(env.get("DATABASE_URL", ""))
         if local_url.database != "medqc" or local_url.host not in {"127.0.0.1", "localhost", "::1"}:
             raise PreviewError("local_medqc_required")
         target = cases[0]["institute_id"]
         institutes = {"clinical_data": target, "homology": env.get("HOMOLOGY_SOURCE_INSTITUTE_ID") or "机构号", "local": target}
-        emit("scope", cases=27, tables=len(policy.TABLE_KEYS), mode="local_baseline" if args.local_only else "dual_source",
+        emit("scope", cases=27, tables=len(selected_tables), mode="local_baseline" if args.local_only else "dual_source",
+             diagnostic_version=2, statement_timeout_seconds=args.statement_timeout_seconds,
              database_writes=0, model_calls=0, changes_installed_code=False)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         out = args.output_dir.resolve() / ("dual-source27-" + stamp + "-private")
@@ -219,7 +236,7 @@ def main(argv=None):
         reports, focuses, schemas = [], [], []
         with ExitStack() as stack:
             phase = "connect_local"
-            local_conn = connect_readonly(url_dsn(env["DATABASE_URL"]))
+            local_conn = connect_readonly(url_dsn(env["DATABASE_URL"]), args.statement_timeout_seconds)
             stack.callback(local_conn.close)
             readers = {"local": ReadonlyReader(local_conn, "local", "cdm", cases)}
             unavailable = {}
@@ -228,14 +245,14 @@ def main(argv=None):
                 for source, schema in (("clinical_data", "public"), ("homology", "graph3_homology")):
                     phase = "connect_" + source
                     try:
-                        conn = connect_readonly(dsns[source])
+                        conn = connect_readonly(dsns[source], args.statement_timeout_seconds)
                         stack.callback(conn.close)
                         readers[source] = ReadonlyReader(conn, source, schema, cases)
                     except Exception as exc:
                         unavailable[source] = "connection_failed"
                         emit("source_unavailable", source=source, error_type=type(exc).__name__)
             tables = {}
-            for table in policy.TABLE_KEYS:
+            for table in selected_tables:
                 phase = "read_" + table
                 tables[table] = {}
                 for source in policy.SOURCES:
@@ -246,7 +263,7 @@ def main(argv=None):
             for case in cases:
                 phase = "plan_" + case["sample"]
                 plans = {table: policy.plan_table(table, case, *(tables[table][s][case["sample"]] for s in policy.SOURCES),
-                                                   source_institutes=institutes) for table in policy.TABLE_KEYS}
+                                                   source_institutes=institutes) for table in selected_tables}
                 policy.mark_cross_table_order_ids(list(plans.values()))
                 reports.extend(p.report(case["sample"], readers["local"].columns.get(p.table, {}), case) for p in plans.values())
                 if case["sample"] == "C18":
@@ -263,7 +280,8 @@ def main(argv=None):
                           conflict_records=sum(bool(r["conflicts"]) for r in report["records"]),
                           source_only_records=sum(not r["local_present"] for r in report["records"]))
         manifest = {"complete": complete, "mode": "local_baseline" if args.local_only else "dual_source",
-                    "cases": 27, "tables": list(policy.TABLE_KEYS), "database_writes": 0, "model_calls": 0,
+                    "cases": 27, "tables": list(selected_tables), "database_writes": 0, "model_calls": 0,
+                    "diagnostic_version": 2, "statement_timeout_seconds": args.statement_timeout_seconds,
                     "totals": dict(counts), "c18_focus": focuses, "apply_available": False,
                     "source_snapshots": {s: r.captured_at for s, r in readers.items()},
                     "limitations": ["Independent repeatable-read snapshots; not one atomic cross-database snapshot.",

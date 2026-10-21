@@ -33,13 +33,13 @@ TABLE_KEYS = {
 }
 IDENTITY_FIELDS = ("institute_id", "patient_id", "visit_id")
 ALIASES = {
-    "document_id": ("document_id", "sys_index_id", "id"),
+    "document_id": ("document_id", "documentid", "sys_index_id", "id"),
     "order_id": ("order_id",), "pathology_exam_id": ("pathology_exam_id",),
     "test_id": ("test_id",), "test_item_id": ("test_item_id", "item_id"),
     "print_order_id": ("print_order_id",), "pathology_id": ("pathology_id",),
     "record_content": ("record_content", "recordcontent"),
     "v2_schema": ("v2_schema",),
-    "document_title": ("document_title", "title", "ward_round_type"),
+    "document_title": ("document_title", "documenttitle", "title", "ward_round_type"),
     "document_status": ("document_status", "documentstatus"),
     "record_status": ("record_status",), "report_status": ("report_status",),
     "is_deleted": ("is_deleted", "is_delete"),
@@ -150,6 +150,12 @@ def normalize_row(raw: Mapping[str, Any]) -> tuple[dict[str, Any], set[str]]:
             if isinstance(value, (str, int, float, bool)) and not blank(value):
                 json_choices.append(value)
         choices.extend(json_choices)
+        if name == "document_id":
+            # 正式文书号优先。sys_index_id/id 仅在正式号缺失时作回退，
+            # 它们可能是治理/存储行号，不能要求与正式文书号相等。
+            business_ids = [obj[a] for obj in (row, v2) for a in ("document_id", "documentid")
+                            if a in obj and isinstance(obj[a], (str, int)) and not blank(obj[a])]
+            choices = business_ids or choices[:1]
         if not choices:
             continue
         try:
@@ -168,6 +174,8 @@ class SourceSnapshot:
     rows: tuple[Mapping[str, Any], ...] = ()
     status: str = "ok"
     captured_at: str = ""
+    error_type: str = ""
+    sqlstate: str = ""
 
 
 @dataclass
@@ -214,6 +222,8 @@ class TablePlan:
     source_status: dict[str, str]
     issues: list[str]
     quarantined_rows: int
+    quarantine_reasons: dict[str, int] = field(default_factory=dict)
+    source_errors: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def complete(self) -> bool:
@@ -248,6 +258,7 @@ class TablePlan:
                 "ready": self.ready and projection_complete, "projection_complete": projection_complete,
                 "source_counts": self.source_counts, "source_status": self.source_status,
                 "candidate_records": len(records), "quarantined_rows": self.quarantined_rows,
+                "quarantine_reasons": self.quarantine_reasons, "source_errors": self.source_errors,
                 "issues": self.issues, "records": records}
 
 
@@ -264,6 +275,7 @@ def plan_table(
         raise ValueError("source_order_invalid")
     grouped: dict[str, dict[tuple[str, ...], list[tuple[dict[str, Any], set[str], dict[str, Any]]]]] = {}
     issues, quarantined = [], 0
+    quarantine_reasons: Counter[str] = Counter()
     for snap in snapshots:
         groups = defaultdict(list)
         if snap.status != "ok":
@@ -274,6 +286,7 @@ def plan_table(
                     or str(raw.get("institute_id") or "").strip() != source_institutes[snap.source]):
                 issues.append(snap.source + ":identity_mismatch")
                 quarantined += 1
+                quarantine_reasons[snap.source + ":case_identity_mismatch"] += 1
                 continue
             values, row_issues = normalize_row(raw)
             key = tuple(str(values.get(k) or "").strip() for k in TABLE_KEYS[table])
@@ -285,6 +298,8 @@ def plan_table(
             if not all(key) or any("within_source_conflict:" + k in row_issues for k in TABLE_KEYS[table]):
                 issues.append(snap.source + ":stable_identity_missing_or_conflicting")
                 quarantined += 1
+                reason = "stable_identity_missing" if not all(key) else "stable_identity_alias_conflict"
+                quarantine_reasons[snap.source + ":" + reason] += 1
                 continue
             groups[key].append((values, row_issues, dict(raw)))
         grouped[snap.source] = groups
@@ -294,6 +309,8 @@ def plan_table(
         if any(len(groups.get(key, ())) > 1 for groups in grouped.values()):
             issues.append("duplicate_stable_identity")
             quarantined += sum(len(groups.get(key, ())) for groups in grouped.values())
+            for source, groups in grouped.items():
+                quarantine_reasons[source + ":duplicate_stable_identity"] += len(groups.get(key, ()))
             continue
         variants, raw_variants, blockers = {}, {}, set()
         for source in SOURCES:
@@ -332,7 +349,9 @@ def plan_table(
         changes = {name for name, value in values.items() if blank(variants.get("local", {}).get(name)) and not blank(value)}
         candidates.append(Candidate(key, values, variants, provenance, conflicts, blockers, changes, raw_variants))
     return TablePlan(table, candidates, {s.source: len(s.rows) for s in snapshots},
-                     {s.source: s.status for s in snapshots}, sorted(set(issues)), quarantined)
+                     {s.source: s.status for s in snapshots}, sorted(set(issues)), quarantined,
+                     dict(quarantine_reasons), {s.source: {"error_type": s.error_type, "sqlstate": s.sqlstate}
+                                                for s in snapshots if s.error_type or s.sqlstate})
 
 
 def mark_cross_table_order_ids(plans: Sequence[TablePlan]) -> None:

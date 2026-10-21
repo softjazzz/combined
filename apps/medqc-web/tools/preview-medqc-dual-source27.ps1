@@ -3,6 +3,8 @@ param(
     [string]$OutputDir = 'D:\medqc\dual-source27-reports',
     [string]$PythonPath = '',
     [string]$CasesPath = '',
+    [string]$Tables = '',
+    [ValidateRange(5, 120)][int]$StatementTimeoutSeconds = 60,
     [switch]$LocalOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -14,6 +16,8 @@ if (-not (Test-Path -LiteralPath $entry)) {
 }
 $cases = if ($CasesPath) { $CasesPath } else { Join-Path (Split-Path -Parent $entry) 'cases27-private.json' }
 $arguments = @($entry, '--backend', $BackendPath, '--cases', $cases, '--output-dir', $OutputDir)
+if ($Tables) { $arguments += @('--tables', $Tables) }
+$arguments += @('--statement-timeout-seconds', [string]$StatementTimeoutSeconds)
 if ($LocalOnly) { $arguments += '--local-only' }
 Write-Host 'Read-only dual-source preview: 27 cases. No database writes, deployment, or model calls.'
 if ($PythonPath) { & $PythonPath @arguments } else { & py -3.10 @arguments }

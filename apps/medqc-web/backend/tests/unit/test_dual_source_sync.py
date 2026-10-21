@@ -101,6 +101,30 @@ class DualSourceTests(unittest.TestCase):
         result = plan(homology=[{**CASE, "sys_index_id": "D1", "recordcontent": "正文"}])
         self.assertEqual(result.candidates[0].key, ("D1",))
 
+    def test_homology_documentid_and_documenttitle_are_read(self):
+        result = plan(homology=[{**CASE, "documentid": "DOC", "documenttitle": "查房记录", "recordcontent": "正文"}])
+        self.assertEqual(result.candidates[0].key, ("DOC",))
+        self.assertEqual(result.candidates[0].values["document_title"], "查房记录")
+        self.assertEqual(result.quarantined_rows, 0)
+
+    def test_sys_index_is_fallback_not_a_competing_business_document_id(self):
+        result = plan(clinical=[row("BUSINESS", sys_index_id="STORAGE", v2_schema={"sys_index_id": "OTHER-STORAGE"})])
+        self.assertEqual(result.candidates[0].key, ("BUSINESS",))
+        self.assertEqual(result.quarantined_rows, 0)
+
+    def test_two_conflicting_explicit_document_ids_still_block(self):
+        result = plan(homology=[row("A", documentid="B")])
+        self.assertEqual(result.quarantined_rows, 1)
+        self.assertFalse(result.candidates)
+
+    def test_read_error_details_are_safe_and_do_not_become_zero_success(self):
+        result = sync.plan_table("bloodtrans_record", CASE,
+                                 sync.SourceSnapshot("clinical_data", status="read_error", error_type="QueryCanceled", sqlstate="57014"),
+                                 snapshot("homology"), snapshot("local"),
+                                 source_institutes={"clinical_data": "H", "homology": "H", "local": "H"})
+        self.assertFalse(result.complete)
+        self.assertEqual(result.report("C18")["source_errors"]["clinical_data"]["sqlstate"], "57014")
+
     def test_record_and_submit_times_remain_distinct(self):
         result = plan(homology=[row(recorddatetime="2026-10-02T20:14:48", submitdatetime="2026-10-02T20:45:33")])
         values = result.candidates[0].values
