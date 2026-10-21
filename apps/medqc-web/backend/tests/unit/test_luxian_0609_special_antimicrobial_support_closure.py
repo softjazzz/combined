@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pytest
 
+from special_antimicrobial_test_support import FrozenSpecialApprovalClient
+
 from app.services.luxian_0609 import native_extended_document_execution as native
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_reduced_customer_result,
@@ -236,11 +238,6 @@ CASES = [{'id': 'expert_other_drug',
   'rationale': '现有多事件匿名支持归属不明合同保护，不能猜测覆盖全部。'}]
 
 
-class _NoModel:
-    async def generate(self, *_args, **_kwargs):
-        raise AssertionError("特殊级抗菌药物对象绑定测试不得访问模型")
-
-
 async def _run(rows):
     def read(**kwargs):
         key = kwargs["source_key"]
@@ -257,7 +254,7 @@ async def _run(rows):
         ),
     )
     execution = await native.execute_luxian_0609_native_extended_document_rules(
-        rule_ids=(RULE,), decision_rule_ids=(RULE,), llm_client=_NoModel(),
+        rule_ids=(RULE,), decision_rule_ids=(RULE,), llm_client=FrozenSpecialApprovalClient(),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
@@ -268,7 +265,9 @@ async def _run(rows):
         decision=reduced, raw_customer_display_facts=dict(execution.customer_display_facts)[RULE],
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
-    assert execution.llm_call_count == execution.prompt_tokens == execution.completion_tokens == execution.total_tokens == 0
+    # 用户口径（2026-10-21）：058 改为医嘱驱动，专家是否同意由模型抽取，受控桩每例至多一次调用。
+    assert execution.llm_call_count in {0, 1}
+    assert execution.total_tokens == execution.llm_call_count * 15
     assert execution.results == ()
     assert len(execution.decisions) == 1
     return execution, reduced, final

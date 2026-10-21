@@ -249,6 +249,10 @@ async def _evaluate(
         llm_client = FrozenAntimicrobialEffectClient()
     if rule_id == "LX0609-03-02-01" and llm_client is None:
         llm_client = FrozenDiagnosisScopeClient()
+    if rule_id == "LX0609-05-01-06" and llm_client is None:
+        # 058 医嘱驱动后由模型确认“专家同意使用”；受控桩只认原文分句的明确同意。
+        from special_antimicrobial_test_support import FrozenSpecialApprovalClient
+        llm_client = FrozenSpecialApprovalClient()
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -303,6 +307,9 @@ async def _evaluate_selected(
         llm_client = FrozenAntimicrobialEffectClient()
     if "LX0609-03-02-01" in rule_ids and llm_client is None:
         llm_client = FrozenDiagnosisScopeClient()
+    if "LX0609-05-01-06" in rule_ids and llm_client is None:
+        from special_antimicrobial_test_support import FrozenSpecialApprovalClient
+        llm_client = FrozenSpecialApprovalClient()
     snapshot, materials = _session(
         rows_by_source,
         unavailable_sources=unavailable_sources,
@@ -5991,7 +5998,8 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         llm_client=client,
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    expected_calls = 1 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-03"} else 0
+    # 058 医嘱驱动后由模型确认专家同意（2026-10-21）。
+    expected_calls = 1 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-06"} else 0
     assert result.llm_call_count == expected_calls
     assert result.prompt_tokens == expected_calls * 10
     assert result.completion_tokens == expected_calls * 5

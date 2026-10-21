@@ -379,3 +379,69 @@ async def test_055_restart_after_gap_opens_a_new_window() -> None:
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     windows = dict(result.customer_display_facts)["LX0609-05-01-03"]["event_windows"]
     assert [item["start_time"] for item in windows] == ["2026-01-01 09:00:00", "2026-01-10 09:00:00"]
+
+
+# ---- 056 / 058 医嘱驱动 ----
+
+@pytest.mark.asyncio
+async def test_056_canceled_key_antimicrobial_does_not_count_toward_two_drugs() -> None:
+    _, reduced = await _evaluate("LX0609-05-01-04", {
+        "inpat_drug_order": (
+            _order("M", "美罗培南", "2026-01-01 09:00:00"),
+            _order("V", "万古霉素", "2026-01-01 10:00:00", canceled_datetime="2026-01-01 10:05:00"),
+        ),
+        "labtest_master": (), "labtest_item_report": (),
+    })
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_056_uses_planned_start_as_first_use_time() -> None:
+    """病原学送检晚于开医嘱、早于计划开始：按计划开始判定已在使用前送检。"""
+    _, reduced = await _evaluate("LX0609-05-01-04", {
+        "inpat_drug_order": (
+            {**_order("M", "美罗培南", "2026-01-01 12:00:00"), "prescribed_datetime": "2026-01-01 09:00:00"},
+            {**_order("V", "万古霉素", "2026-01-01 13:00:00"), "prescribed_datetime": "2026-01-01 09:30:00"},
+        ),
+        "labtest_master": ({"test_id": "L1", "labtest_subject": "血培养及药敏", "specimen": "静脉血",
+                            "request_datetime": "2026-01-01 10:00:00"},),
+        "labtest_item_report": (),
+    })
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_058_support_linked_to_other_order_does_not_count() -> None:
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (_order("M-1", "美罗培南", "2026-01-01 09:00:00"),),
+        "consultation_record": ({"document_id": "C-1", "related_order_id": "OTHER", "record_time": "2026-01-01 08:00:00",
+                                 "record_content": "感染专家会诊同意使用美罗培南。"},),
+        "senior_course_record": (),
+    })
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_058_refused_consultation_is_not_approval() -> None:
+    _, reduced = await _evaluate("LX0609-05-01-06", {
+        "inpat_drug_order": (_order("M-1", "美罗培南", "2026-01-01 09:00:00"),),
+        "consultation_record": ({"document_id": "C-1", "record_time": "2026-01-01 08:00:00",
+                                 "record_content": "感染专家会诊：暂不建议使用美罗培南。"},),
+        "senior_course_record": (),
+    })
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.parametrize(("text", "quote", "expected"), [
+    # 授权专家意见中“请临床药学会诊后同意加用”仍是专家同意（1019 C04）。
+    ("感染科张某副主任医师会诊意见：抗感染效果不佳，请临床药学会诊后同意加用万古霉素联合抗感染。",
+     "请临床药学会诊后同意加用万古霉素联合抗感染", True),
+    # 无授权专家署名的用药申请单文字不算（1019 C05）；同文书远处的专家署名不能借用。
+    ("感染科张某副主任医师会诊意见：见前。" + "病情记录。" * 30 + "本病人建议使用【注射用伏立康唑】，使用目的为：治疗-经验。",
+     "本病人建议使用【注射用伏立康唑】", False),
+    ("临床药师会诊：建议使用美罗培南。", "建议使用美罗培南", False),
+])
+def test_058_approval_requires_authorized_expert_near_quote(text, quote, expected) -> None:
+    from app.services.luxian_0609.native_extended_document_execution import _special_approval_by_authorized_expert
+
+    assert _special_approval_by_authorized_expert(text, quote) is expected
