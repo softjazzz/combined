@@ -3864,6 +3864,8 @@ def customer_finding_from_controlled_facts(
             )
             if facts.get(key)
         ]
+        if facts.get("ambiguous_signature_count"):
+            missing_parts.append(f"{facts.get('ambiguous_signature_count')}份已读取多人签名，但无法区分经治医师")
         return (
             f"已读取{facts.get('daily_course_record_count')}份病程记录，"
             f"其中已识别普通病程{facts.get('eligible_daily_course_count')}份；"

@@ -5,6 +5,8 @@ import json
 import re
 from typing import Any
 
+from .signatures import body_physician_signatures, signature_names
+
 
 COMMON_META_FIELDS: tuple[str, ...] = (
     "document_id",
@@ -144,18 +146,24 @@ def extract_document_identity_metadata(
     )
     for source_field, role in _SIGNATURE_FIELDS:
         name = _identity_text(payload.get(source_field))
-        if not name:
+        names = signature_names(name) if source_field == "physician_sign" else ((name,) if name else ())
+        effective_source_field = source_field
+        if source_field == "physician_sign" and not names:
+            names = body_physician_signatures(payload.get("record_content"))
+            effective_source_field = "record_content"
+        if not names:
             continue
-        item = {"role": role, "name": name, "source_field": source_field}
         if source_field == "physician_sign":
             signed_at = _identity_text(payload.get("physician_sign_datetime"))
         elif source_field == "senior_physician_sign":
             signed_at = _identity_text(payload.get("seniorphy_sign_datetime"))
         else:
             signed_at = generic_signed_at
-        if signed_at:
-            item["signed_at"] = signed_at
-        signatures.append(item)
+        for name in names:
+            item = {"role": role, "name": name, "source_field": effective_source_field}
+            if signed_at and effective_source_field != "record_content":
+                item["signed_at"] = signed_at
+            signatures.append(item)
 
     for name_field, role, code_field in _PARTICIPANT_FIELDS:
         name = _identity_text(payload.get(name_field))

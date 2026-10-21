@@ -69,7 +69,7 @@ _PUBLISHED_INTEGER_FIELDS = frozenset({
     "timed_change_event_count", "missing_change_time_count", "handoff_record_count",
     "missing_handoff_time_count", "handover_record_count", "missing_handover_time_count",
     "daily_course_record_count", "eligible_daily_course_count", "missing_title_count",
-    "missing_time_count", "missing_signature_count", "transfer_order_count",
+    "missing_time_count", "missing_signature_count", "ambiguous_signature_count", "transfer_order_count",
     "transfer_in_count", "transfer_out_count", "diagnosis_change_count",
     "diagnosis_record_count", "untimed_document_count", "procedure_count",
 })
@@ -77,6 +77,13 @@ _PUBLISHED_INTEGER_FIELDS = frozenset({
 
 def is_continuity_customer_rule(rule_id: str) -> bool:
     return str(rule_id or "").strip().upper() in CONTINUITY_CUSTOMER_RULE_IDS
+
+
+def _fact_keys(kind: str, raw: Mapping[str, Any]) -> set[str]:
+    keys = _ALLOWED_KEYS[kind]
+    if kind == "physician_signature_timeline_incomplete" and "ambiguous_signature_count" in raw:
+        return keys | {"ambiguous_signature_count"}
+    return keys
 
 
 def safe_continuity_customer_display_facts(
@@ -92,7 +99,7 @@ def safe_continuity_customer_display_facts(
     if kind not in _KINDS_BY_RULE[rule_id] or not isinstance(kind, str):
         return None
     if kind in {"physician_handoff_identity_missing", "physician_signature_timeline_incomplete"}:
-        if set(raw) != {kind_key, "source_document_refs", *_ALLOWED_KEYS[kind]}:
+        if set(raw) != {kind_key, "source_document_refs", *_fact_keys(kind, raw)}:
             return None
     if kind == "transfer_event_association_gap" and not _valid_transfer_event_association_gap(raw):
         return None
@@ -102,7 +109,7 @@ def safe_continuity_customer_display_facts(
         return None
 
     safe: dict[str, Any] = {kind_key: kind}
-    for key in _ALLOWED_KEYS[kind]:
+    for key in _fact_keys(kind, raw):
         if key == "event_results":
             if not _valid_consultation_events(raw.get(key)):
                 return None
@@ -167,11 +174,11 @@ def validate_published_continuity_facts(
     kind = raw[kind_key]
     if not isinstance(kind, str) or kind not in _KINDS_BY_RULE[rule_id]:
         return False, None
-    if set(raw) != {kind_key, *_ALLOWED_KEYS[kind]}:
+    if set(raw) != {kind_key, *_fact_keys(kind, raw)}:
         return False, None
 
     try:
-        for key in _ALLOWED_KEYS[kind]:
+        for key in _fact_keys(kind, raw):
             value = raw[key]
             if key == "event_results" and kind == "consultation_timeliness_check":
                 if (
@@ -415,7 +422,8 @@ def _valid_handoff_association(kind: str, raw: Mapping[str, Any]) -> bool:
 
 def _valid_signature_timeline(raw: Mapping[str, Any]) -> bool:
     values = tuple(raw.get(key) for key in ("daily_course_record_count", "eligible_daily_course_count", "missing_title_count", "missing_time_count", "missing_signature_count"))
-    return all(_nonnegative_int(value) for value in values) and values[0] >= values[1] and values[0] >= values[2] and values[1] + values[2] <= values[0] and values[3] <= values[1] and values[4] <= values[1] and any(value > 0 for value in values[2:])
+    ambiguous = raw.get("ambiguous_signature_count", 0)
+    return all(_nonnegative_int(value) for value in (*values, ambiguous)) and values[0] >= values[1] and values[0] >= values[2] and values[1] + values[2] <= values[0] and values[3] <= values[1] and values[4] + ambiguous <= values[1] and any(value > 0 for value in (*values[2:], ambiguous))
 
 
 def physician_signature_gap_fields(raw: Any) -> list[str] | None:
@@ -426,7 +434,7 @@ def physician_signature_gap_fields(raw: Any) -> list[str] | None:
         or not _valid_signature_timeline(raw)
     ):
         return None
-    return [
+    fields = [
         label
         for key, label in (
             ("missing_title_count", "文书标题"),
@@ -435,6 +443,9 @@ def physician_signature_gap_fields(raw: Any) -> list[str] | None:
         )
         if raw[key] > 0
     ]
+    if raw.get("ambiguous_signature_count", 0) > 0:
+        fields.append("多人签名中的经治医师身份")
+    return fields
 
 
 def transfer_event_association_gap_display(

@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from ..source_evidence_reader import authoritative_document_time_value
+from app.services.document_assembly.signatures import course_physician_signatures
 
 
 _LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_BODY_SIGNATURE_LABEL = re.compile(r"(?<![一-鿿A-Za-z])(?:医师|医生)签名\s*[:：]")
-_BODY_SIGNATURE_NAME = re.compile(r"[一-鿿A-Za-z·]{2,8}")
 
 
 def _clean(value: Any) -> str:
@@ -51,16 +49,8 @@ def course_record_signer(row: Mapping[str, Any]) -> str:
     单一姓名，不能从正文提及、上级签名或多人未分角色的签名中猜测记录医师。
     """
 
-    structured = _clean(row.get("physician_sign"))
-    if structured:
-        return structured
-    body = _clean(row.get("record_content"))
-    labels = tuple(_BODY_SIGNATURE_LABEL.finditer(body))
-    if len(labels) == 1:
-        signer = body[labels[0].end():].strip()
-        if _BODY_SIGNATURE_NAME.fullmatch(signer):
-            return signer
-    return ""
+    names = course_physician_signatures(row)
+    return names[0] if len(names) == 1 else ""
 
 
 def row_time_upper_bound(row: Mapping[str, Any]) -> datetime | None:

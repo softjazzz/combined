@@ -8,7 +8,8 @@ from datetime import datetime
 from math import ceil
 from typing import Any, Mapping, Sequence
 
-from .shared import _clean, _parse_datetime, _row_time, course_record_signer
+from .shared import _clean, _parse_datetime, _row_time
+from app.services.document_assembly.signatures import course_physician_signatures
 
 
 _PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
@@ -147,6 +148,7 @@ def _derive_change_rows_from_daily_courses(
     missing_title_count = 0
     missing_time_count = 0
     missing_signature_count = 0
+    ambiguous_signature_count = 0
     for row in daily_course_rows:
         title = _clean(row.get("document_title"))
         if not title:
@@ -159,17 +161,20 @@ def _derive_change_rows_from_daily_courses(
         record_time = _row_time(row)
         # 提交人是文书元数据，可能与签名医师不同；缺结构化签名时只读取
         # 明确的正文签名栏，不能把任意正文姓名或提交人当作经治医师。
-        physician_name = course_record_signer(row)
+        signers = course_physician_signatures(row)
+        physician_name = signers[0] if len(signers) == 1 else ""
         if record_time is None:
             missing_time_count += 1
-        if not physician_name:
+        if not signers:
             missing_signature_count += 1
+        elif len(signers) > 1:
+            ambiguous_signature_count += 1
         if record_time is None or not physician_name:
             missing_field_rows.append(row)
         if record_time is not None and physician_name:
             timed_signed_rows.append((record_time, physician_name, row))
 
-    if missing_title_count or missing_time_count or missing_signature_count:
+    if missing_title_count or missing_time_count or missing_signature_count or ambiguous_signature_count:
         return (
             (),
             "required_field_missing",
@@ -180,6 +185,7 @@ def _derive_change_rows_from_daily_courses(
                 "missing_title_count": missing_title_count,
                 "missing_time_count": missing_time_count,
                 "missing_signature_count": missing_signature_count,
+                **({"ambiguous_signature_count": ambiguous_signature_count} if ambiguous_signature_count else {}),
                 "source_document_refs": _document_refs(
                     (("daily_course_record", missing_field_rows),)
                 ),

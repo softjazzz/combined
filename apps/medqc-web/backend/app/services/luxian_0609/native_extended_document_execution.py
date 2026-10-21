@@ -90,7 +90,8 @@ from .extended_document.transfusion_performance_extraction import extract_transf
 from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
-from .extended_document.shared import _clean, _parse_datetime, _row_time, course_record_signer, row_time_upper_bound
+from .extended_document.shared import _clean, _parse_datetime, _row_time, row_time_upper_bound
+from app.services.document_assembly.signatures import course_physician_signatures
 from .extended_document.discharge_medication_extraction import extract_discharge_medications
 from .extended_document.discharge_approval_extraction import (
     DischargeApprovalInput,
@@ -2431,10 +2432,9 @@ def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
         token
         for value in (
             row.get("author_name"),
-            row.get("physician_sign"),
             row.get("author_signature"),
             row.get("doctor_signature"),
-            course_record_signer(row),
+            *course_physician_signatures(row),
         )
         if (token := _normalized_physician_token(value))
     )
