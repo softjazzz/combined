@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
@@ -11,7 +11,8 @@ from ..source_evidence_reader import authoritative_document_time_value
 
 
 _LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_BODY_SIGNATURE_PATTERN = re.compile(r"(?:医师|医生)签名[:：]\s*([一-鿿A-Za-z·]{2,8})")
+_BODY_SIGNATURE_LABEL = re.compile(r"(?<![一-鿿A-Za-z])(?:医师|医生)签名\s*[:：]")
+_BODY_SIGNATURE_NAME = re.compile(r"[一-鿿A-Za-z·]{2,8}")
 
 
 def _clean(value: Any) -> str:
@@ -44,19 +45,21 @@ def _row_time(row: Mapping[str, Any]) -> datetime | None:
 
 
 def course_record_signer(row: Mapping[str, Any]) -> str:
-    """病程记录医师签名：结构化签名优先，否则取正文末次“医师签名：X”。
+    """结构化签名优先，否则读取正文末尾唯一、明确的医师签名。
 
-    用户口径（2026-10-20）：源库病程结构化签名字段全部为空，签名只在正文末尾；
-    正文签名须与提交人一致才认可，不一致或缺一项时视为签名缺失（不猜测是谁签的）。
+    提交人可能是代录人员，不是签名成立的前置条件。只接受独立签名栏的
+    单一姓名，不能从正文提及、上级签名或多人未分角色的签名中猜测记录医师。
     """
 
     structured = _clean(row.get("physician_sign"))
     if structured:
         return structured
-    matches = _BODY_SIGNATURE_PATTERN.findall(_clean(row.get("record_content")))
-    submitter = re.sub(r"\s+", "", _clean(row.get("submitter")))
-    if matches and submitter and matches[-1] == submitter:
-        return submitter
+    body = _clean(row.get("record_content"))
+    labels = tuple(_BODY_SIGNATURE_LABEL.finditer(body))
+    if len(labels) == 1:
+        signer = body[labels[0].end():].strip()
+        if _BODY_SIGNATURE_NAME.fullmatch(signer):
+            return signer
     return ""
 
 

@@ -86,9 +86,13 @@ async def test_title_matches_whole_physician_identity(title, expected):
     materials = _materials()
     for row in materials["daily_course_record"]:
         row.update(author_name="赵医生", document_title=title, record_content="术者李明完成手术，患者恢复中。")
-    result, reduced = await _evaluate(RULE, materials)
+    snapshot, store, result, reduced = await _evaluate_selected((RULE,), materials)
     assert dict(result.customer_display_facts)[RULE]["surgeon_round_present"] is expected
-    assert reduced.final_state.value == ("compliant" if expected else "non_compliant")
+    assert reduced[0].final_state.value == ("compliant" if expected else "non_compliant")
+    final = _canonical_extended_result(
+        rule_id=RULE, snapshot=snapshot, materials=store, result=result, reduced=reduced,
+    )
+    assert final["status"] == ("compliant" if expected else "non_compliant")
 
 
 @pytest.mark.asyncio
@@ -197,9 +201,9 @@ async def test_course_time_gap_fact_rejects_non_boolean_values(invalid_flag):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("submitter,expected", (("李明", True), ("赵医生", False)))
-async def test_body_signature_matching_submitter_identifies_surgeon_round(submitter, expected):
-    """用户口径（2026-10-20，1019 C15）：结构化签名缺失时认可与提交人一致的正文签名。"""
+@pytest.mark.parametrize("submitter", ("李明", "赵医生", None))
+async def test_explicit_body_signature_identifies_surgeon_without_submitter_requirement(submitter):
+    """正文明确签名可确认术者，提交人为空或不同不影响身份读取。"""
     materials = _materials()
     for row in (*materials["daily_course_record"], *materials["senior_course_record"]):
         row.pop("author_name")
@@ -207,5 +211,28 @@ async def test_body_signature_matching_submitter_identifies_surgeon_round(submit
         row["submitter"] = submitter
     result, reduced = await _evaluate(RULE, materials)
     facts = dict(result.customer_display_facts)[RULE]
-    assert facts["surgeon_round_present"] is expected
+    assert facts["surgeon_round_present"] is True
+    assert reduced.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("time_value,signer,expected", (
+    ("2026-07-07 19:00:00", "李明", True),
+    ("2026-07-08 18:30:00", "李明", True),
+    ("2026-07-08 18:30:01", "李明", False),
+    ("2026-07-07 19:00:00", "张甲", False),
+))
+async def test_surgeon_signed_first_postoperative_course_counts_within_24_hours(
+    time_value, signer, expected,
+):
+    materials = _materials()
+    for row in materials["daily_course_record"]:
+        row["author_name"] = "赵医生"
+    materials["postsurg_firstcourse_record"] = ({
+        "document_id": "FIRST-POST", "record_time": time_value,
+        "record_content": f"术后查房，患者恢复平稳。\n医师签名：{signer}",
+        "submitter": "代录人",
+    },)
+    result, reduced = await _evaluate(RULE, materials)
+    assert dict(result.customer_display_facts)[RULE]["surgeon_round_present"] is expected
     assert reduced.final_state.value == ("compliant" if expected else "non_compliant")

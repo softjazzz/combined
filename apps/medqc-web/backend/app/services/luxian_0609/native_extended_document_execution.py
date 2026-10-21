@@ -2425,8 +2425,7 @@ def _surgery_event_surgeon_names(row: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
-    """病程记录仅从受控的作者或签名字段获取记录医师；结构化签名缺失时，
-    认可与提交人一致的正文签名（用户口径 2026-10-20，1019 C15）。"""
+    """从受控作者字段或明确正文签名读取医师；提交人不替代签名。"""
 
     return frozenset(
         token
@@ -5364,13 +5363,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     key=lambda row: _row_time(row) or datetime.max,
                                 )
                             )
-                        def surgeon_round_in(window_start: datetime, window_end: datetime) -> Mapping[str, Any] | None:
+                        def surgeon_round_in(
+                            window_start: datetime,
+                            window_end: datetime,
+                            candidate_rows: Sequence[Mapping[str, Any]],
+                        ) -> Mapping[str, Any] | None:
                             # 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
                             return next(
                                 (
                                     row
                                     for row in sorted(
-                                        (*daily_rows, *senior_rows),
+                                        candidate_rows,
                                         key=lambda item: _row_time(item) or datetime.max,
                                     )
                                     if (record_time := _row_time(row)) is not None
@@ -5391,11 +5394,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                         surgeon_round_row = surgeon_round_in(
                             event.surgery_end_time,
                             event.surgery_end_time + timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS),
+                            # 术者本人签署的术后首次病程也是术后查房记录；
+                            # 仅参与身份/24小时时窗核对，不替代术后三日病程覆盖。
+                            (*daily_rows, *senior_rows, *postop_first_rows),
                         )
                         preop_round_row = (
                             surgeon_round_in(
                                 event.surgery_begin_time - timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS),
                                 event.surgery_begin_time,
+                                (*daily_rows, *senior_rows),
                             )
                             if event.surgery_begin_time is not None
                             else None

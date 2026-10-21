@@ -157,8 +157,8 @@ def _derive_change_rows_from_daily_courses(
             continue
         eligible_count += 1
         record_time = _row_time(row)
-        # 提交人是文书元数据，可能与签名医师不同；只有正文签名与提交人一致
-        # 才认可（用户口径 2026-10-20），禁止单用正文姓名或记录者代替签名。
+        # 提交人是文书元数据，可能与签名医师不同；缺结构化签名时只读取
+        # 明确的正文签名栏，不能把任意正文姓名或提交人当作经治医师。
         physician_name = course_record_signer(row)
         if record_time is None:
             missing_time_count += 1

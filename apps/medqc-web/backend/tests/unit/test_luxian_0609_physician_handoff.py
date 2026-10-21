@@ -596,13 +596,13 @@ def _body_signed(document_id: str, time: str, signer: str, submitter: str | None
 @pytest.mark.parametrize(
     ("submitter", "expected_reason"),
     [
-        # 用户口径（2026-10-20）：结构化签名为空时，正文签名与提交人一致才认可。
+        # 正文已明确签名，提交人不是签名成立的前置条件。
         ("张甲", "trigger_absent_complete"),
-        ("李乙", "required_field_missing"),
-        (None, "required_field_missing"),
+        ("李乙", "trigger_absent_complete"),
+        (None, "trigger_absent_complete"),
     ],
 )
-async def test_071_body_signature_counts_only_when_it_matches_submitter(
+async def test_071_explicit_body_signature_does_not_require_matching_submitter(
     submitter, expected_reason
 ) -> None:
     result = await _execute(

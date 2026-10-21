@@ -635,7 +635,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
                         "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",
                         "crisis_value_record", "inpat_nondrug_order", "discharge_record_diagnosis"),
-    "LX0609-04-05-01": ("evaluation_context.horizon", "mr_surgery"),
+    "LX0609-04-05-01": (
+        "evaluation_context.horizon", "mr_surgery", "postsurg_firstcourse_record",
+    ),
     "LX0609-04-05-02": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-04-05-03": ("mr_surgery",),
     # 070 的九项必须属于本次住院、且早于每一笔实际输血；住院登记、输血事件
