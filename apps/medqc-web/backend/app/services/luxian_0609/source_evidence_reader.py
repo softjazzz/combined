@@ -263,6 +263,8 @@ _NATIVE_SOURCE_FIELDS = {
         "physician_sign",
         "physician_sign_datetime",
         "record_content",
+        # 无记录时间文书的时间上限（用户口径 2026-10-20），不作权威记录时间。
+        "last_modified_datetime",
     ),
     "senior_course_record": (
         "document_id",
@@ -277,6 +279,8 @@ _NATIVE_SOURCE_FIELDS = {
         "physician_sign",
         "physician_sign_datetime",
         "record_content",
+        # 无记录时间文书的时间上限（用户口径 2026-10-20），不作权威记录时间。
+        "last_modified_datetime",
     ),
     "exam_master": (
         "modality",

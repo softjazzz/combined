@@ -875,6 +875,27 @@ def _anesthesia_consent_completeness(
     return ("incomplete" if missing else "complete"), missing
 
 
+# 用户口径（2026-10-20，1019 C15）：急诊介入属于039急诊抢救例外。病程只认“急诊”
+# 直接修饰介入/冠脉造影的写法，排除既往史；泛化的“急诊科”“急诊抢救后转入”不算。
+_COURSE_EMERGENCY_INTERVENTION_PATTERN = re.compile(
+    r"(?<![既往曾])急诊(?:行|下|予|予以)?"
+    r"(?:冠脉造影|冠状动脉造影|PCI|经皮冠状动脉|冠脉介入|介入治疗|介入手术)"
+)
+_COURSE_HISTORY_PREFIX_PATTERN = re.compile(r"(?:既往|曾|年前|月前)[^。；;]{0,12}$")
+
+
+def _course_records_emergency_intervention(
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> bool:
+    rows = _anesthesia_visit_rows(materials, "daily_course_record") or ()
+    for row in rows:
+        text = str(row.get("record_content") or "")
+        for match in _COURSE_EMERGENCY_INTERVENTION_PATTERN.finditer(text):
+            if not _COURSE_HISTORY_PREFIX_PATTERN.search(text[max(0, match.start() - 16):match.start()]):
+                return True
+    return False
+
+
 def _anesthesia_visit_rows(
     materials: Luxian0609EvidenceMaterialStore | None,
     source_key: str,
@@ -1499,6 +1520,8 @@ def _typed_terminal_outcome(
                 fact_types=_EMERGENCY_FACT_TYPES,
                 source_key="rescue_record",
             )
+        if emergency_state == "absent" and _course_records_emergency_intervention(materials):
+            emergency_state = "present"
         if emergency_state == "present":
             return _SurgeryDocumentOutcome(
                 rule_id, "not_applicable", "emergency_rescue_exception", "program"

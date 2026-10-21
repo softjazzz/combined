@@ -8,7 +8,7 @@ from datetime import datetime
 from math import ceil
 from typing import Any, Mapping, Sequence
 
-from .shared import _clean, _parse_datetime, _row_time
+from .shared import _clean, _parse_datetime, _row_time, course_record_signer
 
 
 _PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
@@ -139,7 +139,7 @@ def _evaluate_explicit_order_events(
 def _derive_change_rows_from_daily_courses(
     daily_course_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[tuple[Mapping[str, Any], ...], str, Mapping[str, Any] | None]:
-    """从普通病程的结构化医师签名序列推导稳定的经治医师变更。"""
+    """从普通病程的医师签名序列推导稳定的经治医师变更。"""
 
     eligible_count = 0
     missing_field_rows: list[Mapping[str, Any]] = []
@@ -157,9 +157,9 @@ def _derive_change_rows_from_daily_courses(
             continue
         eligible_count += 1
         record_time = _row_time(row)
-        # author_name/submitter 是文书元数据，真实病历中可能与医师签名不同；
-        # 071 只消费结构化 physician_sign，禁止用正文姓名或记录者代替签名。
-        physician_name = _clean(row.get("physician_sign"))
+        # 提交人是文书元数据，可能与签名医师不同；只有正文签名与提交人一致
+        # 才认可（用户口径 2026-10-20），禁止单用正文姓名或记录者代替签名。
+        physician_name = course_record_signer(row)
         if record_time is None:
             missing_time_count += 1
         if not physician_name:

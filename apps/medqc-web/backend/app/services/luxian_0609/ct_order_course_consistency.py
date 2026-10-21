@@ -536,6 +536,7 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
                     for order_position, _ in enumerate(_event_orders(review.events[position - 1]), 1)}
         seen: set[tuple[int, int]] = set()
         order_findings: dict[int, list[HandbookFinding]] = {}
+        computed: list[tuple[int, int, str, str, tuple[CourseClause, ...]]] = []
         for item in payload["events"]:
             if not isinstance(item, Mapping) or set(item) != {"event_position", "order_position", "record_state", "clause_ids"}:
                 raise ValueError("invalid CT event fact")
@@ -566,13 +567,29 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
                 ),
                 "unknown": "semantic_fact_unknown",
             }[state]
+            computed.append((position, order_position, state, issue, clauses))
+        if seen != expected:
+            raise ValueError("incomplete CT fact scope")
+        # 用户口径（2026-10-20，1019 C08）：同一检查事件的多条医嘱共用一次扫描与一份报告，
+        # 病程记载了该报告即覆盖同事件的兄弟医嘱；兄弟医嘱只沿用已记载医嘱的结论与定位，
+        # 不另行判定，也不能把未关联的记载升格为一致。
+        described: dict[int, list[tuple[str, tuple[CourseClause, ...]]]] = {}
+        for position, _order_position, state, issue, clauses in computed:
+            if state in {"consistent_description", "contradictory_description"}:
+                described.setdefault(position, []).append((issue, clauses))
+        for position, order_position, state, issue, clauses in computed:
+            if state == "absent" and position in described:
+                siblings = described[position]
+                status = _aggregate_status(
+                    tuple(HandbookFinding(_ISSUE_STATES[item], item) for item, _ in siblings), True
+                )
+                issue, clauses = next(item for item in siblings if _ISSUE_STATES[item[0]] == status)
+            event = review.events[position - 1]
             refs = tuple(dict.fromkeys((*event.refs, *(clause.document_ref for clause in clauses))))
             order_findings.setdefault(position, []).append(HandbookFinding(_ISSUE_STATES[issue], issue, refs, event.name))
             order_id = str(_event_orders(event)[order_position - 1].get("order_id") or "")
             order_refs = tuple(ref for ref, row in event.orders if str(row.get("order_id") or "") == order_id)
             order_bindings.append((position, order_position, _ISSUE_STATES[issue], issue, order_refs, clauses))
-        if seen != expected:
-            raise ValueError("incomplete CT fact scope")
         for position, items in order_findings.items():
             status = _aggregate_status(tuple(items), True)
             decisive = next(item for item in items if item.status == status)

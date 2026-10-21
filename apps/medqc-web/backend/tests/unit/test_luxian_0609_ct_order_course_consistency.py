@@ -108,7 +108,7 @@ def test_known_conflict_is_not_hidden_by_an_unrelated_missing_event():
     assert [r["event_status"] for r in result.display_facts["event_results"]] == ["non_compliant", "data_gap"]
 
 
-def test_one_merged_report_cannot_use_one_order_to_cover_all_body_sites():
+def test_one_merged_report_described_once_covers_sibling_orders():
     event = replace(_event(), orders=(*_event().orders,
         ("order:2", {"order_id": "ORDER-002", "order_name": "胸部CT"})))
     review = _review(events=(event,))
@@ -118,9 +118,17 @@ def test_one_merged_report_cannot_use_one_order_to_cover_all_body_sites():
     payload["events"].append({"event_position": 1, "order_position": 2,
                               "record_state": "absent", "clause_ids": []})
     result = evaluate_ct_review(review, payload)
-    # 胸部CT那条医嘱在完整病程中未见记载，不能被左膝CT的记载覆盖。
-    assert result.status == "non_compliant"
+    # 用户口径（2026-10-20，1019 C08）：同一事件共用一份报告，病程记载该报告即覆盖兄弟医嘱。
+    assert result.status == "compliant"
     assert result.display_facts["event_count"] == 1
+    assert [item["issue_kind"] for item in result.display_facts["order_results"]] == [
+        "order_course_consistent", "order_course_consistent",
+    ]
+    assert validate_ct_display_facts(result.display_facts) == result.display_facts
+    # 已记载医嘱本身未能关联时，兄弟医嘱同样只能是关联缺口，不能判未记载。
+    unresolved = evaluate_ct_review(_review("完成CT。", events=(event,)), payload)
+    assert unresolved.status == "data_gap"
+    assert {item["issue_kind"] for item in unresolved.display_facts["order_results"]} == {"association_unresolved"}
 
 
 @pytest.mark.parametrize("state,text", [

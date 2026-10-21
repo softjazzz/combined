@@ -1239,6 +1239,16 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
             {"order_id": "order-029-executed-surgery", "order_type": "手术", "order_status": "执行"},
             "affirmed",
         ),
+        (
+            {"order_id": "order-029-local-anesthesia", "order_type": "麻醉", "order_status": "新开"},
+            "negated",
+        ),
+        # 用户口径（2026-10-20）：“手术”类型的床旁气管插管按操作处理（1019 C10）。
+        (
+            {"order_id": "order-029-intubation", "order_type": "手术", "order_status": "新开",
+             "order_name": "气管插管术"},
+            "negated",
+        ),
     ],
 )
 def test_029_surgery_order_fact_uses_strict_type_and_status(

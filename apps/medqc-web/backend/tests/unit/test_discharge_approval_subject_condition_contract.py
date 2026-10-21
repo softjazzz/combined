@@ -60,6 +60,11 @@ class SequencedClient:
     ("daily_course_record", "准备次日出院", False),
     ("senior_course_record", "若复查正常，拟明日带药出院", False),
     ("senior_course_record", "今日出院医嘱：规律作息", False),
+    # 用户口径（2026-10-20，1019 C23）：直接指示予换药/拆线/拔管后出院视为同意。
+    ("senior_course_record", "主治医师查房指示：患者病情稳定，切口愈合良好，予切口换药后出院", True),
+    ("senior_course_record", "主任医师查房：予拆线后出院", True),
+    ("senior_course_record", "主任医师查房：予复查血常规后出院", False),
+    ("senior_course_record", "主任医师查房：若切口愈合欠佳，予换药后再评估出院", False),
     ("senior_course_record", "办理出院医嘱，注意休息", False),
     ("senior_course_record", "若稳定再建议出院", False),
     (

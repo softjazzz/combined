@@ -194,3 +194,18 @@ async def test_course_time_gap_fact_rejects_non_boolean_values(invalid_flag):
     raw = deepcopy(dict(result.customer_display_facts)[RULE])
     raw["surgery_events"][0]["course_time_unresolved"] = invalid_flag
     assert safe_postoperative_customer_display_facts(rule_id=RULE, raw=raw) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("submitter,expected", (("李明", True), ("赵医生", False)))
+async def test_body_signature_matching_submitter_identifies_surgeon_round(submitter, expected):
+    """用户口径（2026-10-20，1019 C15）：结构化签名缺失时认可与提交人一致的正文签名。"""
+    materials = _materials()
+    for row in (*materials["daily_course_record"], *materials["senior_course_record"]):
+        row.pop("author_name")
+        row["record_content"] += "医师签名：李明"
+        row["submitter"] = submitter
+    result, reduced = await _evaluate(RULE, materials)
+    facts = dict(result.customer_display_facts)[RULE]
+    assert facts["surgeon_round_present"] is expected
+    assert reduced.final_state.value == ("compliant" if expected else "non_compliant")

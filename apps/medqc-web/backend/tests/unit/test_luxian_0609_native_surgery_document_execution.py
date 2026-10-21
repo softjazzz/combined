@@ -871,9 +871,17 @@ def _typed_session(
     discussion_mode: str = "available",
     rescue_mode: str = "empty",
     selected_rule_ids: tuple[str, ...] = surgery_doc.SURGERY_DOCUMENT_RULE_IDS,
+    daily_text: str | None = None,
 ):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
+        if source_key == "daily_course_record" and daily_text is not None:
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=({"record_time": "2026-01-01 07:00:00", "record_content": daily_text},),
+                truncated=False,
+                limit_rows=50,
+            )
         if source_key == "surgery_record":
             if surgery_mode == "error":
                 raise SourceEvidenceQueryError()
@@ -3417,3 +3425,39 @@ class _NamedSurgeryMaterials:
 def test_029_endoscopic_only_procedures_need_no_preop_summary(mr_names, exempt):
     """院方口径（2026-10-10）：自然腔道内镜操作不需要术前小结，镜下手术仍核对。"""
     assert surgery_doc._only_endoscopic_procedures(_NamedSurgeryMaterials(mr_names=mr_names)) is exempt
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("daily_text", "expected_reason"),
+    [
+        # 用户口径（2026-10-20，1019 C15）：病程写明急诊介入，属于039急诊抢救例外。
+        ("于11:00送患者到导管室急诊行冠脉造影＋必要时支架置入。", "emergency_rescue_exception"),
+        ("患者既往于外院急诊行PCI术，现病情平稳。", "preop_discussion_missing"),
+        ("患者由急诊科收入，完善检查后择期手术。", "preop_discussion_missing"),
+    ],
+)
+async def test_typed_039_course_emergency_intervention_is_rescue_exception(
+    daily_text, expected_reason
+):
+    session = _typed_session(
+        discussion_mode="empty",
+        selected_rule_ids=("LX0609-04-01-02",),
+        daily_text=daily_text,
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-04-01-02",),
+        wrapper_rules=[_wrapper("LX0609-04-01-02")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-04-01-02",),
+    )
+
+    outcome_reason = dict(result.customer_display_facts).get("LX0609-04-01-02", {}).get(
+        "failure_kind", result.decisions[0].reason_code
+    )
+    expected = "eligibility_not_met" if expected_reason == "emergency_rescue_exception" else expected_reason
+    assert outcome_reason == expected
+    assert result.llm_call_count == 0

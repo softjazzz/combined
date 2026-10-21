@@ -583,3 +583,36 @@ async def test_071_multiple_stable_signature_changes_are_checked_independently()
     facts = dict(result.customer_display_facts)["LX0609-10-01-01"]
     assert facts["verification_kind"] == "physician_handoff_multi_event_check"
     assert facts["change_event_count"] == 2
+
+
+def _body_signed(document_id: str, time: str, signer: str, submitter: str | None):
+    row = _daily(document_id, time, None)
+    row["record_content"] = f"查房内容：病情平稳，继续当前治疗。医师签名：{signer}"
+    row["submitter"] = submitter
+    return row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("submitter", "expected_reason"),
+    [
+        # 用户口径（2026-10-20）：结构化签名为空时，正文签名与提交人一致才认可。
+        ("张甲", "trigger_absent_complete"),
+        ("李乙", "required_field_missing"),
+        (None, "required_field_missing"),
+    ],
+)
+async def test_071_body_signature_counts_only_when_it_matches_submitter(
+    submitter, expected_reason
+) -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _body_signed("DAILY-B-1", "2026-08-20 08:00:00", "张甲", submitter),
+                _body_signed("DAILY-B-2", "2026-08-21 08:00:00", "张甲", submitter),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    assert result.decisions[0].reason_code == expected_reason

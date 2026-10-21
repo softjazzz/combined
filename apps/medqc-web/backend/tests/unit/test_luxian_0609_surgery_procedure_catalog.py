@@ -109,3 +109,44 @@ def test_catalog_exposes_same_read_only_items_used_by_classifier() -> None:
 
     assert len(catalog) == 6513
     assert next(item for item in catalog if item.code == "01.2408").effective_level == "四级"
+
+
+@pytest.mark.parametrize(
+    ("code", "name", "category", "match_mode"),
+    [
+        # 1019 C21：目录未收录 45.2302，同亚目 45.23 全为诊断性操作。
+        ("45.2302", "电子结肠镜检查", "诊断性操作", "subcategory"),
+        # 目录连亚目都未收录时只认用户确认的补充清单（2026-10-20）。
+        ("44.1300x001", "胃镜检查", "诊断性操作", "supplement_code"),
+        ("33.2302", "电子支气管镜检查", "诊断性操作", "supplement_code"),
+        ("31.1x00x005", "暂时性气管切开术", "治疗性操作", "supplement_code"),
+        ("96.0400", "气管内插管", "治疗性操作", "supplement_code"),
+        (None, "气管插管术", "治疗性操作", "supplement_name"),
+    ],
+)
+def test_uncatalogued_procedures_fall_back_to_subcategory_or_confirmed_supplement(
+    code, name, category, match_mode
+) -> None:
+    item = classify_surgery_procedure(code=code, name=name)
+
+    assert item is not None
+    assert (item.category, item.match_mode, item.is_surgery) == (category, match_mode, False)
+    row = {"surgery_code": code, "surgery_name": name, "surgical_level": "二级"}
+    assert has_qualified_traditional_surgery_row(row) is False
+
+
+def test_mixed_subcategory_and_unknown_names_keep_structured_fallback() -> None:
+    # 44.1 下同时有诊断性操作和手术，不能按亚目推断；名称也不做关键词猜测。
+    assert classify_surgery_procedure(code="44.1999", name="未收录胃部检查") is None
+    assert has_qualified_traditional_surgery_row(
+        {"surgery_code": "44.1999", "surgery_name": "未收录胃部检查", "surgical_level": "二级"}
+    ) is True
+
+
+def test_surgery_type_order_for_bedside_procedure_is_not_surgery_order() -> None:
+    from app.services.luxian_0609.surgery_procedure_catalog import is_non_surgical_procedure_order
+
+    assert is_non_surgical_procedure_order({"order_name": "气管插管术"}) is True
+    assert is_non_surgical_procedure_order({"order_name": "心肺复苏术"}) is True
+    assert is_non_surgical_procedure_order({"order_name": "腹腔镜下阑尾切除术"}) is False
+    assert is_non_surgical_procedure_order({"order_name": "气管插管护理"}) is False

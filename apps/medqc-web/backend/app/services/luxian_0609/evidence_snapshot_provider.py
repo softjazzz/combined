@@ -43,6 +43,7 @@ from .source_evidence_reader import (
     read_luxian_0609_snapshot_source_rows,
 )
 from .source_manifest import QueryStatus
+from .surgery_procedure_catalog import is_non_surgical_procedure_order
 from .source_registry import (
     SOURCE_REGISTRY_VERSION,
     SourceAccessMode,
@@ -63,10 +64,11 @@ _EMERGENCY_RESCUE_POSITIVE_PATTERN = re.compile(
 )
 # 客户源库有效医嘱状态另有“执行”“核实”（1019 样本 C22 全部医嘱即为这两种），
 # 与出院处方等处的有效状态口径一致；类型“处置治疗”“材料”“输血”同样不是手术。
+# “麻醉”类型是局部浸润麻醉等收费医嘱，本身不是手术（1019 C03 床旁气管切开）。
 _EFFECTIVE_SURGERY_ORDER_STATUSES = frozenset({"新开", "执行中", "执行", "核实", "停止"})
 _EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废"})
 KNOWN_NON_SURGERY_ORDER_TYPES = frozenset(
-    {"检查", "检验", "治疗", "处置治疗", "护理", "嘱托", "转科", "材料", "输血", "其他"}
+    {"检查", "检验", "治疗", "处置治疗", "护理", "嘱托", "转科", "材料", "输血", "麻醉", "其他"}
 )
 
 
@@ -79,7 +81,8 @@ def classify_current_visit_surgery_order_rows(
 
     返回的 ID 绝不能写入 FactV2；它只用于把同一次冻结材料行还原为公共
     证据投影所需的 document_ref。判定本身只依赖 ``order_type`` 和
-    ``order_status``，不从名称推断手术。
+    ``order_status``，不从名称推断手术；仅名称精确命中目录或补充清单中的
+    操作时，排除该“手术”类型医嘱。
     """
 
     ordered_rows = tuple(sorted(rows, key=lambda row: canonical_source_evidence(dict(row))))
@@ -99,6 +102,9 @@ def classify_current_visit_surgery_order_rows(
             states.append(("negated", source_document_id))
         elif order_status not in _EFFECTIVE_SURGERY_ORDER_STATUSES:
             states.append(("uncertain", source_document_id))
+        elif order_type == "手术" and is_non_surgical_procedure_order(row):
+            # 用户口径（2026-10-20）：气管插管/切开等床旁操作按操作处理（C03、C10）。
+            states.append(("negated", source_document_id))
         elif order_type == "手术":
             states.append(("affirmed", source_document_id))
         elif order_type in KNOWN_NON_SURGERY_ORDER_TYPES:

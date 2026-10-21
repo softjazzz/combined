@@ -90,7 +90,7 @@ from .extended_document.transfusion_performance_extraction import extract_transf
 from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
-from .extended_document.shared import _clean, _parse_datetime, _row_time
+from .extended_document.shared import _clean, _parse_datetime, _row_time, course_record_signer, row_time_upper_bound
 from .extended_document.discharge_medication_extraction import extract_discharge_medications
 from .extended_document.discharge_approval_extraction import (
     DischargeApprovalInput,
@@ -2425,17 +2425,19 @@ def _surgery_event_surgeon_names(row: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
-    """病程记录仅从受控的作者或签名字段获取记录医师。"""
+    """病程记录仅从受控的作者或签名字段获取记录医师；结构化签名缺失时，
+    认可与提交人一致的正文签名（用户口径 2026-10-20，1019 C15）。"""
 
     return frozenset(
         token
-        for key in (
-            "author_name",
-            "physician_sign",
-            "author_signature",
-            "doctor_signature",
+        for value in (
+            row.get("author_name"),
+            row.get("physician_sign"),
+            row.get("author_signature"),
+            row.get("doctor_signature"),
+            course_record_signer(row),
         )
-        if (token := _normalized_physician_token(row.get(key)))
+        if (token := _normalized_physician_token(value))
     )
 
 
@@ -3131,8 +3133,14 @@ async def execute_luxian_0609_native_extended_document_rules(
             extraction_error = None
             if not source_error and admission_time is not None:
                 # 权威时间已排除的早期病程不进入语义调用；缺时保留，不能静默排除。
-                scope_rows = tuple(row for row in daily_rows if _row_time(row) is None
-                                   or _row_time(row) >= admission_time + timedelta(days=7))
+                # 无权威时间的病程以最后修改时间为上限：上限早于第7天的必然是早期病程（用户口径 2026-10-20）。
+                scope_rows = tuple(
+                    row for row in daily_rows
+                    if ((value := _row_time(row)) is not None and value >= admission_time + timedelta(days=7))
+                    or (value is None and not (
+                        (bound := row_time_upper_bound(row)) is not None
+                        and bound < admission_time + timedelta(days=7)))
+                )
                 diagnosis_scope_extraction = await extract_diagnosis_scope(
                     scope_rows, llm_client, max_prompt_bytes=65536, max_completion_tokens=16384,
                 )
@@ -3505,8 +3513,22 @@ async def execute_luxian_0609_native_extended_document_rules(
                 evaluation_resolution = "ready"
                 if not final_state and mature_events:
                     targets = tuple(dict.fromkeys(name for _, name, _ in mature_events))
+                    # 用户口径（2026-10-20）：空白病程的时间（无权威时间时取最后修改时间作上限）
+                    # 早于全部评价窗或已在窗外时，不可能是窗内评价，不再使整例资料不足。
+                    earliest_window = min(start + timedelta(hours=48) for _, _, start in mature_events)
+                    effect_course_rows = tuple(
+                        row for row in course_rows
+                        if _course_row_has_body(row)
+                        or not (
+                            ((value := _row_time(row)) is not None
+                             and not any(48 <= (value - start).total_seconds() / 3600 <= 72
+                                         for _, _, start in mature_events))
+                            or ((bound := row_time_upper_bound(row)) is not None
+                                and bound < earliest_window)
+                        )
+                    )
                     antimicrobial_effect_extraction = await extract_antimicrobial_effects(
-                        course_rows, targets, llm_client,
+                        effect_course_rows, targets, llm_client,
                         max_prompt_bytes=65536, max_completion_tokens=16384,
                     )
                     if antimicrobial_effect_extraction.reason_code == "source_capacity_exceeded":
@@ -3514,7 +3536,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         # 保留所有无时间病程及窗口内全文，不按药名或评价词筛选、截断正文。
                         candidate_pairs = tuple(
                             (row_index, target_index)
-                            for row_index, row in enumerate(course_rows)
+                            for row_index, row in enumerate(effect_course_rows)
                             for target_index, target in enumerate(targets)
                             if (value := _row_time(row)) is None
                             or any(
@@ -3523,7 +3545,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             )
                         )
                         antimicrobial_effect_extraction = await extract_antimicrobial_effect_pairs(
-                            course_rows, targets, candidate_pairs, llm_client,
+                            effect_course_rows, targets, candidate_pairs, llm_client,
                             max_prompt_bytes=65536, max_completion_tokens=16384,
                         )
                     extraction = antimicrobial_effect_extraction
@@ -3540,7 +3562,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         )
                     else:
                         for assertion in extraction.assertions:
-                            row = course_rows[assertion.row_index]
+                            row = effect_course_rows[assertion.row_index]
                             name = targets[assertion.target_index]
                             for state, rows_by_name, unknown_rows_by_name, unassigned_rows in (
                                 (

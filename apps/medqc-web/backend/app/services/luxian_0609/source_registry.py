@@ -486,7 +486,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 本规则的权威判定资料，必须在单规则 Evidence Session 中读取。
     "LX0609-04-04-03": ("mr_surgery", "anesthesia_record"),
     # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
-    "LX0609-04-01-02": ("surgery_record", "mr_surgery", "rescue_record"),
+    # 用户口径（2026-10-20）：急诊介入的“急诊”常只写在普通病程里（1019 C15）。
+    "LX0609-04-01-02": ("surgery_record", "mr_surgery", "rescue_record", "daily_course_record"),
     # 020/023 的“复会诊是否执行”可由病程、医嘱、检查检验或手术记录体现。
     # 全部候选必须进入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-03-01-01": (

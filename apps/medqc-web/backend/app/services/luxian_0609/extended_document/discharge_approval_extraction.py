@@ -54,6 +54,11 @@ _COMPLETED_SENIOR_APPROVAL_PATTERN = re.compile(
 _PENDING_MEDICAL_ACTION_PATTERN = re.compile(
     r"(?:复查|检查|治疗|换药).{0,16}后(?:再)?.{0,8}出院"
 )
+# 用户口径（2026-10-20，1019 C23）：上级医师直接指示“予（切口）换药/拆线/拔管后出院”
+# 是当日即可完成的处置后出院，视为同意出院；复查、检查结果待定的仍按条件式处理。
+_ORDERED_MINOR_ACTION_THEN_DISCHARGE_PATTERN = re.compile(
+    r"(?:予|予以)(?:切口|伤口)?(?:换药|拆线|拔管)后(?:即可|即)?出院"
+)
 _COMPLETED_MEDICAL_ACTION_PATTERN = re.compile(
     r"(?:复查|检查)(?:结果)?(?:已|已经)(?:正常|无异常|完成)"
     r"|(?:治疗|换药)(?:已|已经)(?:完成|结束)"
@@ -195,12 +200,14 @@ def has_confirmed_senior_discharge_approval_quote(
         and not _DATED_DISCHARGE_PLAN_PATTERN.search(clause)
     ):
         return False
+    ordered_minor_action = _ORDERED_MINOR_ACTION_THEN_DISCHARGE_PATTERN.search(clause) is not None
     if (
         _PENDING_MEDICAL_ACTION_PATTERN.search(clause)
         and not _COMPLETED_MEDICAL_ACTION_PATTERN.search(clause)
+        and not ordered_minor_action
     ):
         return False
-    return _DISCHARGE_DISPOSITION_PATTERN.search(clause) is not None
+    return ordered_minor_action or _DISCHARGE_DISPOSITION_PATTERN.search(clause) is not None
 
 
 def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:

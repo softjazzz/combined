@@ -24,6 +24,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .evidence_snapshot_provider import KNOWN_NON_SURGERY_ORDER_TYPES
+from .surgery_procedure_catalog import is_non_surgical_procedure_order
 from .native_execution import build_luxian_0609_native_result
 from .malignancy_fact import (
     MalignancyFactResolver,
@@ -1241,7 +1242,10 @@ def _typed_003_decision(
             for order_type in order_types
         ):
             return decision("data_gap", "authoritative_time_missing")
-        has_surgery_order = "手术" in order_types
+        has_surgery_order = any(
+            _clean(row.get("order_type")) == "手术" and not is_non_surgical_procedure_order(row)
+            for row in support_rows["inpat_nondrug_order"]
+        )
         if (
             not mr_rows
             and not support_rows["surgery_application"]
