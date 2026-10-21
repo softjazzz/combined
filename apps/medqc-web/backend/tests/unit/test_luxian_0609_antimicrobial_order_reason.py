@@ -1,4 +1,4 @@
-"""054/057 医嘱驱动：用药事件、24小时病程窗口、引文校验与状态映射（用户口径 2026-10-21）。"""
+"""054/057 医嘱驱动：用药事件、开医嘱当日病程窗口、引文校验与状态映射（用户口径 2026-10-21）。"""
 
 import json
 
@@ -92,24 +92,39 @@ def test_missing_order_start_time_is_reported_not_guessed() -> None:
     assert resolution.events == () and resolution.time_missing_names == ("头孢曲松",)
 
 
-# ---- 24 小时窗口 ----
+# ---- 开医嘱当日窗口 ----
 
-def test_window_keeps_only_24h_after_order_and_untimed_rows_bounded_by_modification() -> None:
-    events = derive_antimicrobial_use_events((_order("A", "头孢曲松", "2026-01-01 09:00:00"),),
-                                             _antimicrobial_names_in).events
+def test_window_is_order_calendar_day_and_untimed_rows_bounded_by_modification() -> None:
+    """用户口径（2026-10-21）：抗菌调整医嘱当日必须有对应病程理由；开嘱前的同日查房同样有效（1019 C05）。"""
+    events = derive_antimicrobial_use_events((
+        _order("Z", "左氧氟沙星", "2025-12-20 09:00:00", "2025-12-31 20:00:00"),
+        _order("A", "头孢曲松", "2026-01-01 09:00:00"),
+    ), _antimicrobial_names_in).events[1:]
+    assert events[0].kind == "switch"
     rows = (
-        _course("before", "2026-01-01 08:00:00", "入院评估"),
-        _course("in", "2026-01-02 08:59:00", "考虑肺部感染"),
-        _course("after", "2026-01-02 09:01:00", "复查"),
-        {"document_id": "old", "record_content": "早期记录", "last_modified_datetime": "2026-01-01 07:00:00"},
+        _course("prev-day", "2025-12-31 23:59:00", "入院评估"),
+        _course("before", "2026-01-01 08:00:00", "原方案无效，拟改用头孢曲松"),
+        _course("same-day", "2026-01-01 22:00:00", "考虑肺部感染"),
+        _course("next-day", "2026-01-02 08:00:00", "复查"),
+        {"document_id": "old", "record_content": "早期记录", "last_modified_datetime": "2025-12-31 07:00:00"},
     )
     documents, per_event, untimed = window_documents(events, (("daily_course_record", rows),), _material_text)
 
-    assert [doc.row["document_id"] for doc in documents] == ["in"]
-    assert per_event == {"E1": ("D1",)} and untimed == frozenset()
+    assert [doc.row["document_id"] for doc in documents] == ["before", "same-day"]
+    assert per_event == {"E2": ("D1", "D2")} and untimed == frozenset()
     later = rows + ({"document_id": "late", "record_content": "缺时记录",
                      "last_modified_datetime": "2026-01-01 12:00:00"},)
-    assert window_documents(events, (("daily_course_record", later),), _material_text)[2] == {"E1"}
+    assert window_documents(events, (("daily_course_record", later),), _material_text)[2] == {"E2"}
+
+
+def test_start_event_also_covers_24h_after_order() -> None:
+    """首次开始用药：入院当日开药、次日上午写首程/查房仍在窗口内；超过24小时不算。"""
+    events = derive_antimicrobial_use_events((_order("A", "头孢曲松", "2026-01-01 14:00:00"),),
+                                             _antimicrobial_names_in).events
+    rows = (_course("next-morning", "2026-01-02 10:00:00", "考虑肺部感染"),
+            _course("too-late", "2026-01-02 15:00:00", "复查"))
+    documents, _, _ = window_documents(events, (("daily_course_record", rows),), _material_text)
+    assert [doc.row["document_id"] for doc in documents] == ["next-morning"]
 
 
 # ---- 抽取与引文校验 ----
@@ -140,7 +155,7 @@ async def _run(rule_id, rows, client):
 
 
 @pytest.mark.asyncio
-async def test_054_course_within_24h_with_infection_judgment_is_compliant_and_publishes() -> None:
+async def test_054_same_day_course_with_infection_judgment_is_compliant_and_publishes() -> None:
     client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}})
     rows = {"daily_course_record": (_course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，继续当前抗感染治疗。"),)}
     result, reduced = await _run("LX0609-05-01-02", rows, client)
