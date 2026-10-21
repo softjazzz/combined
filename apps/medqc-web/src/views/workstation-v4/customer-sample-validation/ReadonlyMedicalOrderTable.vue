@@ -16,6 +16,12 @@
         临时医嘱
       </button>
     </div>
+    <MedicalOrderFilterBar
+      v-model="filters"
+      :rows="rows"
+      :visible-count="visibleRows.length"
+      :total-count="scopedRows.length"
+    />
     <div
       v-if="hasIncompleteOrders"
       class="mq-soft readonly-medical-order-notice"
@@ -78,7 +84,11 @@
           </tr>
           <tr v-if="!visibleRows.length">
             <td colspan="12" class="editable-copy-order-empty">
-              暂无{{ activeType === 'long' ? '长期医嘱' : '临时医嘱' }}
+              {{
+                hasMedicalOrderFilters(filters)
+                  ? '暂无符合筛选条件的医嘱'
+                  : `暂无${activeType === 'long' ? '长期医嘱' : '临时医嘱'}`
+              }}
             </td>
           </tr>
         </tbody>
@@ -97,6 +107,12 @@ import {
   resolveMedicalOrderTypeKey,
 } from './medicalOrderDisplay'
 import type { MedicalOrderTypeKey } from './medicalOrderDisplay'
+import MedicalOrderFilterBar from './MedicalOrderFilterBar.vue'
+import {
+  emptyMedicalOrderFilters,
+  hasMedicalOrderFilters,
+  matchesMedicalOrderFilters,
+} from './medicalOrderFilters'
 
 const props = withDefaults(
   defineProps<{
@@ -123,8 +139,16 @@ const hasIncompleteOrders = computed(() =>
 )
 const rows = computed(() => orderDocuments.value.map((document) => buildMedicalOrderRow(document)))
 const activeType = ref<MedicalOrderTypeKey>('temporary')
+const filters = ref(emptyMedicalOrderFilters())
+const scopedRows = computed(() => rows.value.filter((row) => row.orderTypeKey === activeType.value))
 const visibleRows = computed(() =>
-  rows.value.filter((row) => row.orderTypeKey === activeType.value),
+  scopedRows.value.filter((row) => matchesMedicalOrderFilters(row, filters.value)),
+)
+watch(
+  () => orderDocuments.value.map((document) => document.key).join('\u0000'),
+  () => {
+    filters.value = emptyMedicalOrderFilters()
+  },
 )
 
 watch(

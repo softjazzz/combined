@@ -1531,6 +1531,12 @@
                         临时医嘱
                       </button>
                     </div>
+                    <MedicalOrderFilterBar
+                      v-model="editableCopyOrderFilters"
+                      :rows="editableCopyOrderRows"
+                      :visible-count="editableCopyVisibleOrderRows.length"
+                      :total-count="editableCopyScopedOrderRows.length"
+                    />
                     <div class="editable-copy-order-table-wrap">
                       <table class="editable-copy-order-table">
                         <thead>
@@ -1562,9 +1568,7 @@
                           </tr>
                           <tr v-if="!editableCopyVisibleOrderRows.length">
                             <td colspan="6" class="editable-copy-order-empty">
-                              暂无{{
-                                editableCopyOrderTypeFilter === 'long' ? '长期医嘱' : '临时医嘱'
-                              }}
+                              暂无符合当前条件的医嘱
                             </td>
                           </tr>
                         </tbody>
@@ -1783,6 +1787,7 @@
 
 <script setup lang="ts">
 import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
+import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {
@@ -1837,6 +1842,9 @@ const {
   editableCopyNewDocumentType,
   editableCopyOpen,
   editableCopyOrderTypeFilter,
+  editableCopyOrderFilters,
+  editableCopyOrderRows,
+  editableCopyScopedOrderRows,
   editableCopyReadonly,
   editableCopySaveAndRunLoading,
   editableCopySaving,

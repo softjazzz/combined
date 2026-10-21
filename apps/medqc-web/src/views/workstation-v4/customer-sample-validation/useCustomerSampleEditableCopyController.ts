@@ -1,5 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { emptyMedicalOrderFilters, matchesMedicalOrderFilters } from './medicalOrderFilters'
 import type {
   EditableMedicalRecordDocument,
   ManualSamplePool,
@@ -82,6 +83,7 @@ export function useCustomerSampleEditableCopyController(
   const editableCopyDocumentQuery = ref('')
   const editableCopyDocumentFilter = ref<EditableCopyDocumentFilter>('all')
   const editableCopyOrderTypeFilter = ref<EditableCopyOrderTypeFilter>('temporary')
+  const editableCopyOrderFilters = ref(emptyMedicalOrderFilters())
   const editableCopyActiveDocumentKey = ref('')
   const editableCopyExpandedGroupKeys = ref(new Set<string>())
   const editableCopyAllDocuments = computed(() => editableCopyDraft.value?.documents || [])
@@ -97,9 +99,14 @@ export function useCustomerSampleEditableCopyController(
   const editableCopyOrderRows = computed<EditableCopyOrderRow[]>(() =>
     editableCopyOrderDocuments.value.map((document) => parseEditableOrderRow(document)),
   )
-  const editableCopyVisibleOrderRows = computed(() =>
+  const editableCopyScopedOrderRows = computed(() =>
     editableCopyOrderRows.value.filter(
       (row) => row.orderTypeKey === editableCopyOrderTypeFilter.value,
+    ),
+  )
+  const editableCopyVisibleOrderRows = computed(() =>
+    editableCopyScopedOrderRows.value.filter((row) =>
+      matchesMedicalOrderFilters(row, editableCopyOrderFilters.value),
     ),
   )
   const editableCopyFilteredDocuments = computed(() => {
@@ -149,6 +156,7 @@ export function useCustomerSampleEditableCopyController(
   })
 
   async function loadEditableCopyDocuments(record: ManualSamplePoolRecord): Promise<boolean> {
+    editableCopyOrderFilters.value = emptyMedicalOrderFilters()
     editableCopySourceRecord.value = record
     editableCopyDraft.value = null
     editableCopyOpen.value = true
@@ -542,6 +550,9 @@ export function useCustomerSampleEditableCopyController(
     editableCopyDocumentQuery,
     editableCopyDocumentFilter,
     editableCopyOrderTypeFilter,
+    editableCopyOrderFilters,
+    editableCopyOrderRows,
+    editableCopyScopedOrderRows,
     editableCopyEnabledDocumentCount,
     editableCopyVisibleOrderRows,
     editableCopyFilteredDocuments,

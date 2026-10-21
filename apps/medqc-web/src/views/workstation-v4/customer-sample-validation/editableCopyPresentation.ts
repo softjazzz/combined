@@ -127,6 +127,8 @@ function isEditableOrderCategoryLine(value: string): boolean {
 }
 
 function resolveEditableOrderCategoryText(document: EditableMedicalRecordDocument): string {
+  const category = String(document.order_category || '').trim()
+  if (category) return category === '药品' ? '用药' : category
   const lines = editableOrderContentLines(document)
     .map((line) => stripEditableOrderPrefix(line))
     .filter(Boolean)
@@ -152,6 +154,7 @@ function resolveEditableOrderCategoryText(document: EditableMedicalRecordDocumen
 }
 
 function resolveEditableOrderItemText(document: EditableMedicalRecordDocument): string {
+  if (document.order_item?.trim()) return document.order_item.trim()
   const lines = editableOrderContentLines(document)
     .map((line) => stripEditableOrderPrefix(line))
     .filter(
@@ -168,6 +171,7 @@ function resolveEditableOrderItemText(document: EditableMedicalRecordDocument): 
 
 function resolveEditableOrderStatus(document: EditableMedicalRecordDocument): string {
   if (document.enabled === false) return '不写入'
+  if (document.order_status?.trim()) return document.order_status.trim()
   const lines = editableOrderContentLines(document).map((line) => stripEditableOrderPrefix(line))
   const explicitStatus = lines.find((line) => isEditableOrderStatusLine(line))
   if (explicitStatus) return explicitStatus
