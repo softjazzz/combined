@@ -536,6 +536,8 @@ class DailyCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+    physician_sign = Column(Text, comment="医师签名（源值）")
+    physician_sign_datetime = Column(DateTime(timezone=True), comment="医师签名时间")
 
 
 class SeniorCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
@@ -548,6 +550,12 @@ class SeniorCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+    physician_sign = Column(Text, comment="医师签名（源值，不以其他角色补值）")
+    physician_sign_datetime = Column(DateTime(timezone=True), comment="医师签名时间")
+    recorder_sign = Column(Text, comment="记录人签名")
+    attending_physician_sign = Column(Text, comment="主治医师签名")
+    senior_physician_sign = Column(Text, comment="上级医师签名")
+    seniorphy_sign_datetime = Column(DateTime(timezone=True), comment="上级医师签名时间")
 
 
 class PostsurgFirstcourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
@@ -560,6 +568,9 @@ class PostsurgFirstcourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Ba
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+    physician_sign = Column(Text, comment="医师签名（源值）")
+    physician_sign_datetime = Column(DateTime(timezone=True), comment="医师签名时间")
+    surgeon_sign = Column(Text, comment="术者签名（独立于记录医师）")
 
 
 class ConsultationRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):

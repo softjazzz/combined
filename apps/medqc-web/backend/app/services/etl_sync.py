@@ -64,9 +64,26 @@ _AUTHORITATIVE_DOCUMENT_TIME_COLUMNS = (
     "submit_datetime",
 )
 
+# 病程签名保持各角色独立，只统一已核实的签署时间别名；不以提交人补签名。
+_COURSE_SIGNATURE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    table: {
+        "physician_sign": ("physician_sign",),
+        "physician_sign_datetime": ("physician_sign_datetime", "physician_sign_time"),
+    }
+    for table in ("daily_course_record", "senior_course_record", "postsurg_firstcourse_record")
+}
+_COURSE_SIGNATURE_COLUMN_ALIASES["senior_course_record"].update({
+    "recorder_sign": ("recorder_sign",),
+    "attending_physician_sign": ("attending_physician_sign",),
+    "senior_physician_sign": ("senior_physician_sign",),
+    "seniorphy_sign_datetime": ("seniorphy_sign_datetime", "seniorphy_sign_time"),
+})
+_COURSE_SIGNATURE_COLUMN_ALIASES["postsurg_firstcourse_record"]["surgeon_sign"] = ("surgeon_sign",)
+
 # 源库字段与本地 CDM 列名不一致时的同步映射（目标列 -> 源候选列）。
 # 仅在目标列存在、本条记录未携带目标列时生效。
 _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    **_COURSE_SIGNATURE_COLUMN_ALIASES,
     "admission_record": {
         # 客户源表以 record_time / sys_index_id 表示文书时间和稳定身份；
         # 001/002 必须用同一份本地字段计算并定位，不能只在展示层读取原值。
@@ -987,11 +1004,11 @@ def _validate_document_field_preservation(
     normalized: Dict[str, Any],
     existing_columns: set[str],
 ) -> None:
-    """阻止“源端可定位、落库后不可定位/不可取时”的静默字段丢失。
+    """阻止文书定位、时间及三类病程签名在落库时静默丢失。
 
-    仅约束文书稳定身份与正式记录时间：它们既是病历浏览定位的基础，
-    也是 LX0609 规则对文书证据作确定判定的最低合同。正文和业务字段
-    仍按各表明确模型/结构化正文映射处理，不能在这里凭空扩张落库范围。
+    文书稳定身份、正式记录时间以及源端有值的病程签名均按明确字段映射
+    检查；不从提交人或病历正文补造结构化签名。其他正文和业务字段仍按
+    各表明确模型/结构化正文映射处理。
     """
 
     normalized_table = str(table_name or "").strip().lower()
@@ -1040,6 +1057,19 @@ def _validate_document_field_preservation(
         ):
             raise ValueError(
                 f"{normalized_table} 结构化字段未保留：{target_column}，拒绝静默同步"
+            )
+
+    for target_column, source_candidates in _COURSE_SIGNATURE_COLUMN_ALIASES.get(
+        normalized_table, {}
+    ).items():
+        if _first_non_empty(normalized, source_candidates) and (
+            target_column not in existing_columns
+            or not _first_non_empty(normalized, (target_column,))
+        ):
+            # 在任何写SQL（含整次住院重载删除旧行）之前拒绝丢失有值签名。
+            # 只报表和字段名，不把签署人或源数据写入错误日志。
+            raise ValueError(
+                f"{normalized_table} 签名字段未保留：{target_column}，请先升级本地数据库"
             )
 
 

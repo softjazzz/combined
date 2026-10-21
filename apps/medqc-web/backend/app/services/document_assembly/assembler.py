@@ -28,6 +28,9 @@ COMMON_META_FIELDS: tuple[str, ...] = (
     "signer_id",
     "physician_sign",
     "physician_sign_datetime",
+    "recorder_sign",
+    "senior_physician_sign",
+    "seniorphy_sign_datetime",
     "resident_physician_sign",
     "attending_physician_sign",
     "chief_physician_sign",
@@ -81,6 +84,8 @@ _AUTHOR_FIELDS: tuple[tuple[str, str | None], ...] = (
 _SIGNATURE_FIELDS: tuple[tuple[str, str], ...] = (
     ("signer", "signer"),
     ("physician_sign", "physician"),
+    ("recorder_sign", "recorder"),
+    ("senior_physician_sign", "senior_physician"),
     ("resident_physician_sign", "resident_physician"),
     ("attending_physician_sign", "attending_physician"),
     ("chief_physician_sign", "chief_physician"),
@@ -142,11 +147,12 @@ def extract_document_identity_metadata(
         if not name:
             continue
         item = {"role": role, "name": name, "source_field": source_field}
-        signed_at = (
-            _identity_text(payload.get("physician_sign_datetime"))
-            if source_field == "physician_sign"
-            else generic_signed_at
-        )
+        if source_field == "physician_sign":
+            signed_at = _identity_text(payload.get("physician_sign_datetime"))
+        elif source_field == "senior_physician_sign":
+            signed_at = _identity_text(payload.get("seniorphy_sign_datetime"))
+        else:
+            signed_at = generic_signed_at
         if signed_at:
             item["signed_at"] = signed_at
         signatures.append(item)
