@@ -8853,7 +8853,8 @@ async def test_postoperative_not_applicable_unknown_operation_keeps_source_ancho
         {
             "mr_surgery": ({
                 "document_id": "OP-UNKNOWN",
-                "surgery_code": "99.9999",
+                # 第87–99章已按操作处理（2026-10-21），此处用其他章节的未收录编码保持“未知操作”语义。
+                "surgery_code": "54.9999",
                 "surgery_name": "未纳入目录的操作",
                 "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
             },),

@@ -241,8 +241,8 @@ async def test_003_merged_components_still_need_authoritative_end():
         "data_gap", "authoritative_time_missing")
 
 
-def test_catalog_intervention_components_remain_non_surgical():
-    # 目录既有原则：复合名称中已识别项均为介入/诊断操作时，不猜测未识别项为手术。
+def test_catalog_intervention_components_trigger_as_surgery():
+    # 用户口径（2026-10-21）：介入治疗按手术触发；复合名称仍只按已识别项分类，不猜测未识别项。
     intervention = next(row for row in load_surgery_procedure_catalog() if row.code == "00.6600X004")
     item = classify_surgery_procedure(name=f"合成未收录操作+{intervention.name}")
-    assert item is not None and item.category == "介入治疗" and not item.is_surgery
+    assert item is not None and item.category == "介入治疗" and item.is_surgery
