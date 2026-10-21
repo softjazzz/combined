@@ -169,6 +169,31 @@ def identity_checks(source, local):
     return blockers
 
 
+def connection_dsns(backend):
+    """沿用项目配置，只返回内存中的连接串，调用方禁止输出。"""
+    if not (backend / ".env").is_file():
+        raise PreviewError("backend_env_missing")
+    sys.path.insert(0, str(backend))
+    os.chdir(backend)
+    from dotenv import load_dotenv
+    from psycopg2.extensions import make_dsn
+    from sqlalchemy.engine import make_url
+
+    load_dotenv(backend / ".env", override=True)
+    local = make_url(os.environ.get("DATABASE_URL", ""))
+    if (local.get_backend_name() != "postgresql" or local.database != "medqc"
+            or local.host not in {"127.0.0.1", "localhost", "::1"}):
+        raise PreviewError("local_postgresql_required")
+    local_dsn = make_dsn(host=local.host, port=local.port or 5432,
+                         dbname=local.database, user=local.username, password=local.password)
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        from app.services.etl_sync import get_remote_db_url
+        remote = get_remote_db_url()
+    if not remote:
+        raise PreviewError("remote_database_not_configured")
+    return local_dsn, make_dsn(remote, dbname="homology")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", required=True, type=Path)
@@ -190,27 +215,7 @@ def main(argv=None):
         try:
             scope = json.loads(scope_path.read_text(encoding="utf-8-sig"))
             cases = validate_scope(scope)
-            if not (backend / ".env").is_file():
-                raise PreviewError("backend_env_missing")
-            sys.path.insert(0, str(backend))
-            os.chdir(backend)
-            from dotenv import load_dotenv
-            load_dotenv(backend / ".env", override=True)
-            from sqlalchemy.engine import make_url
-            from psycopg2.extensions import make_dsn
-            local = make_url(os.environ.get("DATABASE_URL", ""))
-            if (local.get_backend_name() != "postgresql" or local.database != "medqc"
-                    or local.host not in {"127.0.0.1", "localhost", "::1"}):
-                raise PreviewError("local_postgresql_required")
-            local_dsn = make_dsn(host=local.host, port=local.port or 5432,
-                                 dbname=local.database, user=local.username, password=local.password)
-            # 沿用客户机项目的已保存源库连接，不要求填写或输出另一份凭据。
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                from app.services.etl_sync import get_remote_db_url
-                remote = get_remote_db_url()
-            if not remote:
-                raise PreviewError("remote_database_not_configured")
-            source_dsn = make_dsn(remote, dbname=scope["source_database"])
+            local_dsn, source_dsn = connection_dsns(backend)
             emit("scope", cases=2, table="inpat_drug_order", mode="preview",
                  captured_at_utc=datetime.now(timezone.utc).isoformat(),
                  database_writes=0, model_calls=0, changes_installed_code=False)
