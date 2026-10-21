@@ -536,6 +536,7 @@ _SECTION_LABELS: dict[str, str] = {
     "note": "注意事项",
     "discharge_condition": "出院情况",
     "discharge_order": "出院医嘱",
+    "positive_assist_exam": "重要辅助检查结果",
     "generic_name": "药品名称",
     "brand_name": "商品名",
     "drug_specification": "规格",
@@ -748,6 +749,7 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
     ),
     "discharge_record": (
         AssemblyFieldSpec("admission_condition", required=True),
+        AssemblyFieldSpec("positive_assist_exam"),
         AssemblyFieldSpec("treatment_course", required=True),
         AssemblyFieldSpec("discharge_condition", required=True),
         AssemblyFieldSpec("discharge_order", required=True),
