@@ -154,6 +154,32 @@ class Preview27Tests(unittest.TestCase):
         self.assertNotIn("Identifier('name')", rendered)
         self.assertNotIn("UPDATE", rendered)
 
+    def test_empty_exact_case_uses_named_count_from_real_dict_cursor(self):
+        conn = MagicMock()
+        cursor = conn.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        cursor.fetchone.return_value = {"row_count": 0}
+        cols = set(preview.check.KEYS) | set(preview.mapping(D))
+        rows, count = preview.read_case(conn, "graph3_homology", D, cols, "SOURCE",
+                                        dict(patient_id="P1", visit_id="V1"))
+        self.assertEqual(rows, [])
+        self.assertEqual(count, 0)
+        self.assertEqual(cursor.execute.call_count, 2)
+        query, params = cursor.execute.call_args.args
+        self.assertIn("AS row_count", repr(query))
+        self.assertEqual(params, ("P1", "V1"))
+
+    def test_empty_exact_case_reports_other_institution_count_without_key_error(self):
+        conn = MagicMock()
+        cursor = conn.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        cursor.fetchone.return_value = {"row_count": 7}
+        cols = set(preview.check.KEYS) | set(preview.mapping(N))
+        rows, count = preview.read_case(conn, "graph3_homology", N, cols, "SOURCE",
+                                        dict(patient_id="P1", visit_id="V1"))
+        self.assertEqual(rows, [])
+        self.assertEqual(count, 7)
+
 
 if __name__ == "__main__":
     unittest.main()

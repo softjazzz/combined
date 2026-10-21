@@ -127,9 +127,9 @@ def read_case(conn, schema, table, cols, institute, case):
         rows = [canonical(dict(row), mapping(table)) for row in cursor.fetchall()]
         same_case = len(rows)
         if not rows:
-            cursor.execute(sql.SQL("SELECT count(*) FROM {}.{} WHERE patient_id=%s AND visit_id=%s").format(
+            cursor.execute(sql.SQL("SELECT count(*) AS row_count FROM {}.{} WHERE patient_id=%s AND visit_id=%s").format(
                 sql.Identifier(schema), sql.Identifier(table)), (case["patient_id"], case["visit_id"]))
-            same_case = cursor.fetchone()[0]
+            same_case = cursor.fetchone()["row_count"]
     return rows, same_case
 
 
