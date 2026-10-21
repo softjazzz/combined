@@ -1001,6 +1001,27 @@ def test_build_render_view_does_not_repeat_first_course_sections_as_basic_info()
     ]
 
 
+def test_order_list_to_render_preserves_dose_and_quantity_units_once():
+    documents = build_documents_from_domain_bundles({
+        "course": {"source_documents": [{
+            "document_type": "inpat_drug_order",
+            "document_id": "safe-order",
+            "content": "示例药品",
+            "source_fields": [
+                {"source_field": "single_dose", "raw_value_preview": "2"},
+                {"source_field": "single_dose_unit", "raw_value_preview": "袋"},
+                {"source_field": "quantity", "raw_value_preview": "12"},
+                {"source_field": "quantity_unit", "raw_value_preview": "袋"},
+            ],
+        }]},
+    })
+    assert documents[0]["order_dosage"] == "2袋"
+    assert documents[0]["order_quantity"] == "12袋"
+    row = build_render_view(documents[0])["render_blocks"][0]["rows"][0]
+    assert row["dosage"] == "2袋"
+    assert row["quantity"] == "12袋"
+
+
 def test_build_render_view_order_table_empty_state():
     order_doc = {
         "id": "order-1",

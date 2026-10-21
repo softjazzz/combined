@@ -17,10 +17,83 @@ import {
   runManualSamplePool,
   syncManualSamplePoolRecordsByHospitalization,
 } from '@/services/manual-case-sample-service'
+import { buildMedicalOrderRow } from '@/views/workstation-v4/customer-sample-validation/medicalOrderDisplay'
 
 describe('editable medical-record document normalization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('keeps structured order details from the documents API through the table row', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'inpat_drug_order::safe-order',
+            doc_type: 'inpat_drug_order',
+            content: '示例药品',
+            order_specification: '4g/袋',
+            order_dosage: '2袋',
+            order_frequency: '每日3次',
+            order_route: '口服',
+            order_quantity: '12袋',
+            order_prescribed_doctor: '示例医师',
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = result.data?.documents[0]
+    expect(document).toBeDefined()
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document)).toMatchObject({
+      specification: '4g/袋',
+      dosage: '2袋',
+      frequency: '每日3次',
+      route: '口服',
+      quantity: '12袋',
+      prescribedDoctor: '示例医师',
+    })
+  })
+
+  it('keeps order details from the render API and retains existing details when absent', async () => {
+    const summary = {
+      key: 'inpat_drug_order::safe-order',
+      document_type: 'inpat_drug_order',
+      title: '药品医嘱',
+      content: '',
+      order_quantity: '12袋',
+    }
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '示例药品',
+        render_blocks: [
+          {
+            block_type: 'order_table',
+            rows: [
+              {
+                specification: '4g/袋',
+                dosage: '2袋',
+                frequency: '每日3次',
+                route: '口服',
+                prescribed_doctor: '示例医师',
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocument('safe-visit', summary)
+    expect(result.data).toBeDefined()
+    if (!result.data) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(result.data)).toMatchObject({
+      specification: '4g/袋',
+      dosage: '2袋',
+      frequency: '每日3次',
+      route: '口服',
+      quantity: '12袋',
+      prescribedDoctor: '示例医师',
+    })
   })
 
   it('preserves current admission source and explicitly requests current view', async () => {

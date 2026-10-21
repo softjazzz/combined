@@ -1281,13 +1281,19 @@ def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
         "item_name",
         "order_name",
     )
-    dosage = _order_value(document, source_values, "order_dosage", "dosage", "dose", "single_dose")
-    dosage = _join_order_value(
-        dosage,
-        _order_value(document, source_values, "dose_unit", "single_dose_unit"),
-    )
-    quantity = _order_value(document, source_values, "order_quantity", "quantity")
-    quantity = _join_order_value(quantity, _order_value(document, source_values, "quantity_unit"))
+    # 目录规范化后的字段已包含单位，详情再次渲染时不能重复追加。
+    dosage = _order_value(document, source_values, "order_dosage")
+    if not dosage:
+        dosage = _join_order_value(
+            _order_value(document, source_values, "dosage", "dose", "single_dose"),
+            _order_value(document, source_values, "dose_unit", "single_dose_unit"),
+        )
+    quantity = _order_value(document, source_values, "order_quantity")
+    if not quantity:
+        quantity = _join_order_value(
+            _order_value(document, source_values, "quantity"),
+            _order_value(document, source_values, "quantity_unit"),
+        )
     return {
         "start_time": _order_value(
             document, source_values, "order_start_time", "start_time", "order_time", "prescribed_datetime"

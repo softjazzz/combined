@@ -363,6 +363,7 @@ function normalizeEditableDocumentsResponse(
           'order_content',
         ]),
         order_status: readStringField(row, ['order_status', 'status', 'order_state', 'state']),
+        ...readEditableOrderDetails(row),
         doctor_name: readStringField(row, ['doctor_name', 'submitter', 'recorder']),
         doctor_code: readStringField(row, ['doctor_code', 'submitter_id']),
         enabled: true,
@@ -401,6 +402,36 @@ function normalizeEditableDocumentsResponse(
     ]) as EditableMedicalRecordDocumentsResult['empty_reason'],
     documents,
     raw: payload,
+  }
+}
+
+function readEditableOrderDetails(
+  row: Record<string, unknown>,
+  fallback: Partial<EditableMedicalRecordDocument> = {},
+) {
+  return {
+    order_specification: readStringField(
+      row,
+      ['order_specification', 'specification', 'drug_specification'],
+      fallback.order_specification,
+    ),
+    order_dosage: readStringField(row, ['order_dosage', 'dosage'], fallback.order_dosage),
+    order_frequency: readStringField(
+      row,
+      ['order_frequency', 'drug_frequency', 'frequency'],
+      fallback.order_frequency,
+    ),
+    order_route: readStringField(
+      row,
+      ['order_route', 'drug_apply_method', 'route'],
+      fallback.order_route,
+    ),
+    order_quantity: readStringField(row, ['order_quantity', 'quantity'], fallback.order_quantity),
+    order_prescribed_doctor: readStringField(
+      row,
+      ['order_prescribed_doctor', 'prescribed_doctor', 'doctor_name'],
+      fallback.order_prescribed_doctor,
+    ),
   }
 }
 
@@ -485,6 +516,7 @@ function normalizeEditableDocumentRender(
     order_status: orderRow
       ? readStringField(orderRow, ['order_status', 'status'], summary.order_status)
       : summary.order_status,
+    ...readEditableOrderDetails(orderRow || {}, summary),
     content,
     has_content: Boolean(content) || summary.has_content === true,
     content_loaded: true,
