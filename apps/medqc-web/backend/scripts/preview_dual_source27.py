@@ -102,10 +102,11 @@ def load_remote_dsns(local_conn, env):
 
 
 class ReadonlyReader:
-    def __init__(self, conn, source, schema, cases):
+    def __init__(self, conn, source, schema, cases, *, full_columns=False):
         self.conn, self.source, self.schema, self.cases = conn, source, schema, cases
         self.columns = defaultdict(dict)
         self.failed = False
+        self.full_columns = full_columns
         self.captured_at = datetime.now(timezone.utc).isoformat()
         self.schema_report = []
         with conn.cursor() as cursor:
@@ -129,7 +130,7 @@ class ReadonlyReader:
             return unavailable("table_unavailable")
         if not set(policy.IDENTITY_FIELDS).issubset(columns):
             return unavailable("identity_columns_missing")
-        selected = policy.selected_columns(columns)
+        selected = sorted(columns) if self.full_columns else policy.selected_columns(columns)
         self.schema_report.append({"source": self.source, "table": table, "selected_columns": selected,
                                    "column_types": dict(columns),
                                    "uncompared_columns": sorted(set(columns) - set(selected))})

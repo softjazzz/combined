@@ -74,6 +74,16 @@ class PreviewDualSourceTests(unittest.TestCase):
         self.assertEqual(reader.table("bloodtrans_record")["C18"].status, "read_error")
         self.assertEqual(reader.table("bloodtrans_record")["C18"].status, "source_transaction_failed")
 
+    def test_export_mode_reads_extra_columns_without_changing_default_preview(self):
+        reader, cursor = reader_with_columns([*policy.IDENTITY_FIELDS, "document_id", "new_unmapped_field"])
+        cursor.fetchall.return_value = []
+        reader.table("bloodtrans_record")
+        self.assertNotIn("new_unmapped_field", reader.schema_report[-1]["selected_columns"])
+        reader.full_columns = True
+        reader.table("bloodtrans_record")
+        self.assertIn("new_unmapped_field", reader.schema_report[-1]["selected_columns"])
+        self.assertEqual(reader.schema_report[-1]["uncompared_columns"], [])
+
     def test_row_limit_is_not_treated_as_a_complete_snapshot(self):
         reader, cursor = reader_with_columns(policy.IDENTITY_FIELDS)
         cursor.fetchall.return_value = [{}] * 3
