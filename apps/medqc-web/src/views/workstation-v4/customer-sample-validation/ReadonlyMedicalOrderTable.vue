@@ -36,7 +36,8 @@
             <th>频次</th>
             <th>用法</th>
             <th>数量</th>
-            <th>停止时间</th>
+            <th title="北京时间；计划结束不代表已实际停止">计划结束时间</th>
+            <th>实际停止时间</th>
             <th>医嘱状态</th>
             <th>下达医生</th>
           </tr>
@@ -68,6 +69,7 @@
             <td :title="row.quantity">
               {{ row.quantity || '-' }}
             </td>
+            <td>{{ row.plannedEndTime || '-' }}</td>
             <td>{{ row.stopTime || '-' }}</td>
             <td>{{ row.status }}</td>
             <td :title="row.prescribedDoctor">
@@ -75,7 +77,7 @@
             </td>
           </tr>
           <tr v-if="!visibleRows.length">
-            <td colspan="11" class="editable-copy-order-empty">
+            <td colspan="12" class="editable-copy-order-empty">
               暂无{{ activeType === 'long' ? '长期医嘱' : '临时医嘱' }}
             </td>
           </tr>

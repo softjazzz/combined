@@ -421,6 +421,7 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   report_items?: EditableMedicalReportItem[]
   report_metadata?: Record<string, string>
   order_start_time?: string
+  order_planned_end_time?: string
   order_stop_time?: string
   order_category?: string
   order_item?: string

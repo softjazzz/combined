@@ -17,6 +17,26 @@ function order(key: string, title: string, extra = {}) {
 }
 
 describe('ReadonlyMedicalOrderTable', () => {
+  it('分列显示计划结束与实际停止，医院时区转换后不互相补值', () => {
+    const wrapper = mount(ReadonlyMedicalOrderTable, {
+      props: {
+        documents: [
+          order('planned', '临时医嘱', {
+            order_planned_end_time: '2026-09-22T14:00:00+00:00',
+          }),
+        ],
+      },
+    })
+    const headers = wrapper.findAll('th').map((h) => h.text())
+    const cells = wrapper
+      .findAll('tbody tr')[0]
+      .findAll('td')
+      .map((c) => c.text())
+    expect(headers).toContain('计划结束时间')
+    expect(headers).toContain('实际停止时间')
+    expect(cells[headers.indexOf('计划结束时间')]).toBe('2026-09-22 22:00:00')
+    expect(cells[headers.indexOf('实际停止时间')]).toBe('-')
+  })
   it('任一医嘱未完整时在表格上方提示且切换后保留', async () => {
     const wrapper = mount(ReadonlyMedicalOrderTable, {
       props: {

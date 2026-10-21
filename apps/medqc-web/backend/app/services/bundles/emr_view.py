@@ -1227,7 +1227,8 @@ def _build_order_table_block(document: dict[str, Any]) -> dict[str, Any]:
             {"key": "frequency", "label": "频次"},
             {"key": "route", "label": "用法"},
             {"key": "quantity", "label": "数量"},
-            {"key": "stop_time", "label": "停止时间"},
+            {"key": "planned_end_time", "label": "计划结束时间"},
+            {"key": "stop_time", "label": "实际停止时间"},
             {"key": "order_status", "label": "医嘱状态"},
             {"key": "prescribed_doctor", "label": "下达医生"},
         ],
@@ -1307,6 +1308,9 @@ def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
         "frequency": _order_value(document, source_values, "order_frequency", "drug_frequency", "frequency"),
         "route": _order_value(document, source_values, "order_route", "drug_apply_method", "route"),
         "quantity": quantity,
+        "planned_end_time": _order_value(
+            document, source_values, "order_planned_end_time", "planned_end_time", "planned_end_datetime"
+        ),
         "stop_time": _order_value(document, source_values, "order_stop_time", "stop_time"),
         "order_status": _order_value(document, source_values, "order_status", "status"),
         "prescribed_doctor": _order_value(

@@ -1,12 +1,14 @@
 import type { EditableMedicalRecordDocument } from './types'
 import { testRecordDocumentTypeOptions } from './syntheticCaseBuilder'
 import { parseBackendDateTime } from './recordPresentation'
+import { formatPlannedOrderEndTime } from './medicalOrderDisplay'
 
 export type EditableCopyOrderTypeFilter = 'long' | 'temporary'
 
 export type EditableCopyOrderRow = {
   document: EditableMedicalRecordDocument
   startTime: string
+  plannedEndTime: string
   stopTime: string
   orderType: string
   item: string
@@ -184,6 +186,7 @@ export function parseEditableOrderRow(
     document,
     startTime: normalizeEditableOrderTimeText(resolveEditableOrderStartTimeValue(document)),
     stopTime: normalizeEditableOrderTimeText(resolveEditableOrderStopTimeValue(document), ''),
+    plannedEndTime: formatPlannedOrderEndTime(document.order_planned_end_time),
     orderType: resolveEditableOrderCategoryText(document),
     item: resolveEditableOrderItemText(document),
     status: resolveEditableOrderStatus(document),

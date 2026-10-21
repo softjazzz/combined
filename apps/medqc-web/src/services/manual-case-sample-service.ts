@@ -342,8 +342,6 @@ function normalizeEditableDocumentsResponse(
           'stop_datetime',
           'end_time',
           'end_datetime',
-          'cancel_time',
-          'cancel_datetime',
         ]),
         order_category: readStringField(row, [
           'order_category',
@@ -410,6 +408,11 @@ function readEditableOrderDetails(
   fallback: Partial<EditableMedicalRecordDocument> = {},
 ) {
   return {
+    order_planned_end_time: readStringField(
+      row,
+      ['order_planned_end_time', 'planned_end_time', 'planned_end_datetime'],
+      fallback.order_planned_end_time,
+    ),
     order_specification: readStringField(
       row,
       ['order_specification', 'specification', 'drug_specification'],

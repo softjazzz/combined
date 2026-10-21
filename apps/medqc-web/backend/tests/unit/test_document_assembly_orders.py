@@ -90,3 +90,15 @@ def test_order_select_columns_should_include_order_id(document_type: str) -> Non
     columns = build_document_select_columns(document_type, {"order_id", "update_time"})
 
     assert "order_id" in columns
+
+
+@pytest.mark.parametrize("document_type", ["inpat_drug_order", "inpat_nondrug_order"])
+def test_order_plan_end_is_selected_and_preserved_as_separate_source_field(document_type):
+    columns = build_document_select_columns(document_type, {"order_id", "planned_end_datetime"})
+    assert "planned_end_datetime" in columns
+    document = assemble_document(document_type, {
+        "order_id": "safe-order", "planned_end_datetime": "2026-09-22T14:00:00+00:00",
+    })
+    fields = {field.source_field: field.raw_value_preview for field in document.source_fields}
+    assert fields["planned_end_datetime"] == "2026-09-22T14:00:00+00:00"
+    assert not fields.get("stop_time")

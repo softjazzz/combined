@@ -1538,7 +1538,8 @@
                             <th>开始时间</th>
                             <th>医嘱类型</th>
                             <th>医嘱项目</th>
-                            <th>停止时间</th>
+                            <th title="北京时间；计划结束不代表已实际停止">计划结束时间</th>
+                            <th>实际停止时间</th>
                             <th>医嘱状态</th>
                           </tr>
                         </thead>
@@ -1555,11 +1556,12 @@
                             <td>{{ order.startTime }}</td>
                             <td>{{ order.orderType }}</td>
                             <td>{{ order.item }}</td>
-                            <td>{{ order.stopTime }}</td>
+                            <td>{{ order.plannedEndTime || '-' }}</td>
+                            <td>{{ order.stopTime || '-' }}</td>
                             <td>{{ order.status }}</td>
                           </tr>
                           <tr v-if="!editableCopyVisibleOrderRows.length">
-                            <td colspan="5" class="editable-copy-order-empty">
+                            <td colspan="6" class="editable-copy-order-empty">
                               暂无{{
                                 editableCopyOrderTypeFilter === 'long' ? '长期医嘱' : '临时医嘱'
                               }}

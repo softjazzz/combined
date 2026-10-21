@@ -24,6 +24,68 @@ describe('editable medical-record document normalization', () => {
     vi.clearAllMocks()
   })
 
+  it('keeps planned end separate from actual stop through list and render', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'inpat_drug_order::safe-order',
+            doc_type: 'inpat_drug_order',
+            content: '示例医嘱',
+            order_planned_end_time: '2026-09-22T14:00:00+00:00',
+            order_stop_time: '2026-09-23 10:00:00',
+          },
+        ],
+      },
+    })
+    const list = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = list.data?.documents[0]
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document)).toMatchObject({
+      plannedEndTime: '2026-09-22 22:00:00',
+      stopTime: '2026-09-23 10:00:00',
+    })
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '示例医嘱',
+        render_blocks: [
+          {
+            block_type: 'order_table',
+            rows: [{ planned_end_time: '2026-09-24T00:00:00+08:00' }],
+          },
+        ],
+      },
+    })
+    const detail = await getEditableMedicalRecordDocument('safe-visit', document)
+    if (!detail.data) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(detail.data)).toMatchObject({
+      plannedEndTime: '2026-09-24 00:00:00',
+      stopTime: '2026-09-23 10:00:00',
+    })
+  })
+
+  it('does not interpret planned end or cancellation as actual stop', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'inpat_nondrug_order',
+            content: '示例医嘱',
+            planned_end_datetime: '2026-09-22 22:00:00',
+            cancel_datetime: '2026-09-21 10:00:00',
+          },
+        ],
+      },
+    })
+    const list = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = list.data?.documents[0]
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document)).toMatchObject({
+      plannedEndTime: '2026-09-22 22:00:00',
+      stopTime: '',
+    })
+  })
+
   it('keeps structured order details from the documents API through the table row', async () => {
     mocks.requestRaw.mockResolvedValue({
       data: {
