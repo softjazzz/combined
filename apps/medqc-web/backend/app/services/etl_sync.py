@@ -123,6 +123,10 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "planned_start_datetime",
             "planned_start_time",
         ),
+        "planned_end_datetime": (
+            "planned_end_datetime",
+            "planned_end_time",
+        ),
         "order_status": ("order_status", "status"),
         "generic_name": ("generic_name", "drug_name", "order_item_name", "order_item"),
         "drug_specification": ("drug_specification", "specification"),
@@ -804,6 +808,11 @@ def _apply_sync_column_aliases(
         normalized=normalized,
         existing_columns=existing_columns,
     )
+    _validate_order_time_preservation(
+        table_name=table_name,
+        normalized=normalized,
+        existing_columns=existing_columns,
+    )
     return normalized
 
 
@@ -995,6 +1004,29 @@ def _apply_sync_derived_fields(
                 f"{structured_content}\n记录内容：{source_content}"
                 if source_content
                 else structured_content
+            )
+
+
+def _validate_order_time_preservation(
+    *,
+    table_name: str,
+    normalized: Dict[str, Any],
+    existing_columns: set[str],
+) -> None:
+    """源端有值的医嘱时间须原义落库；旧表缺列时在删除旧快照前提示升级。"""
+    normalized_table = str(table_name or "").strip().lower()
+    if normalized_table not in {"inpat_drug_order", "inpat_nondrug_order"}:
+        return
+    for field in (
+        "planned_end_datetime", "reviewed_datetime", "carried_datetime", "canceled_datetime",
+    ):
+        # 与通用 datetime/time 别名映射一致，不把计划、执行、撤销互相替代。
+        source_fields = (field, field.removesuffix("_datetime") + "_time")
+        if _first_non_empty(normalized, source_fields) and (
+            field not in existing_columns or not _first_non_empty(normalized, (field,))
+        ):
+            raise ValueError(
+                f"{normalized_table} 医嘱时间字段未保留：{field}，请先升级本地数据库"
             )
 
 
