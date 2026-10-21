@@ -110,7 +110,10 @@ def fetch_order(conn, schema, available, institute, case):
     if not set(KEYS).issubset(available):
         raise PreviewError("identity_columns_missing")
     # 仅取身份核对和时间；不读取整行，避免意外带出正文、医师或患者姓名。
-    selected = set(KEYS) | {"generic_name", "prescribed_datetime", "planned_start_datetime", "order_status"}
+    selected = set(KEYS) | {
+        "generic_name", "brand_name", "drug_code", "prescribed_datetime",
+        "planned_start_datetime", "order_status",
+    }
     aliases = {}
     for name in FIELDS:
         alternate = name.removesuffix("_datetime") + "_time"
@@ -141,10 +144,24 @@ def identity_checks(source, local):
     blockers = []
     source_name = str(source.get("generic_name") or "").strip()
     local_name = str(local.get("generic_name") or "").strip()
+    source_code = str(source.get("drug_code") or "").strip()
+    local_code = str(local.get("drug_code") or "").strip()
+    codes_match = bool(source_code and local_code and source_code == local_code)
+    if source_code and local_code and not codes_match:
+        blockers.append("drug_code_conflict")
+    # 治理库可能把完整商品名存进 generic_name。仅在编码一致且确切名称交叉
+    # 相同时接受，不删品牌/规格、不模糊匹配，也不凭相同编码单独放行。
+    def names(row):
+        return {
+            "".join(str(row.get(field) or "").split())
+            for field in ("generic_name", "brand_name") if str(row.get(field) or "").strip()
+        }
+
     if not source_name or not local_name:
         blockers.append("drug_identity_unavailable")
     elif "".join(source_name.split()) != "".join(local_name.split()):
-        blockers.append("drug_identity_conflict")
+        if not (codes_match and names(source).intersection(names(local))):
+            blockers.append("drug_identity_conflict")
     for name in ("prescribed_datetime", "planned_start_datetime"):
         if source.get(name) is not None and local.get(name) is not None:
             if parse_time(source[name]) != parse_time(local[name]):

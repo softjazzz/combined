@@ -45,6 +45,26 @@ class PreviewTests(unittest.TestCase):
             {"generic_name": "药品甲", "planned_start_datetime": "2026-01-01T10:00:00"},
             {"generic_name": "药品甲", "planned_start_datetime": "2026-01-02T10:00:00"}))
 
+    def test_code_and_exact_brand_bridge_accept_governed_generic_name(self):
+        source = {"generic_name": "药品甲", "brand_name": "品牌甲药品甲(1g)", "drug_code": "D001"}
+        local = {"generic_name": "品牌甲药品甲(1g)", "drug_code": "D001"}
+        self.assertEqual(preview.identity_checks(source, local), [])
+
+    def test_equal_code_without_any_exact_name_bridge_is_blocked(self):
+        self.assertIn("drug_identity_conflict", preview.identity_checks(
+            {"generic_name": "药品甲", "drug_code": "D001"},
+            {"generic_name": "药品乙", "drug_code": "D001"}))
+
+    def test_name_bridge_without_equal_code_does_not_bypass_identity(self):
+        self.assertIn("drug_identity_conflict", preview.identity_checks(
+            {"generic_name": "药品甲", "brand_name": "品牌药品甲"},
+            {"generic_name": "品牌药品甲"}))
+
+    def test_matching_name_with_different_codes_is_blocked(self):
+        self.assertIn("drug_code_conflict", preview.identity_checks(
+            {"generic_name": "药品甲", "drug_code": "D001"},
+            {"generic_name": "药品甲", "drug_code": "D002"}))
+
     def test_unexpected_scope_rejected(self):
         with self.assertRaises(preview.PreviewError):
             preview.validate_scope({"source_schema": "public"})
