@@ -41,6 +41,8 @@ def _daily(document_id: str, time: str | None, physician: str | None, *, title="
         "document_title": title,
         "record_time": time,
         "physician_sign": physician,
+        # 空白病程（无正文无签名）不进入签名序列，夹具默认带普通正文。
+        "record_content": "患者病情平稳，继续当前治疗。",
     }
 
 
@@ -616,3 +618,57 @@ async def test_071_explicit_body_signature_does_not_require_matching_submitter(
     )
 
     assert result.decisions[0].reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+async def test_071_untitled_courses_join_timeline_and_blank_courses_are_skipped() -> None:
+    """用户口径（2026-10-21）：标题不是质控要求，缺标题病程按签名进入序列，空白病程跳过。"""
+    untitled = _daily("DAILY-U-1", "2026-08-21 08:00:00", "张甲", title=None)
+    blank = {**_daily("DAILY-U-2", None, None, title=None), "record_content": "医师签名:"}
+    surgery = _daily("DAILY-S-1", "2026-08-22 08:00:00", "李乙", title="术后病程记录")
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                untitled, blank, surgery,
+                _daily("DAILY-A-2", "2026-08-23 08:00:00", "张甲"),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    assert result.decisions[0].reason_code == "trigger_absent_complete"
+
+
+@pytest.mark.asyncio
+async def test_071_untitled_course_signature_change_is_detected() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-C-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-C-2", "2026-08-21 08:00:00", "张甲"),
+                _daily("DAILY-C-3", "2026-08-22 08:00:00", "李乙", title=None),
+                _daily("DAILY-C-4", "2026-08-23 08:00:00", "李乙", title=None),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    assert result.decisions[0].reason_code != "required_field_missing"
+
+
+@pytest.mark.asyncio
+async def test_071_single_leading_foreign_signature_does_not_set_baseline() -> None:
+    """开头单份异名病程（如值班医师危急值记录）不能确立起始经治医师。"""
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-L-1", "2026-08-20 08:00:00", "值班丙", title=None),
+                _daily("DAILY-L-2", "2026-08-21 08:00:00", "张甲"),
+                _daily("DAILY-L-3", "2026-08-22 08:00:00", "张甲"),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    assert result.decisions[0].reason_code == "trigger_absent_complete"
