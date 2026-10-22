@@ -10477,46 +10477,6 @@ def test_056_explanation_rejects_invalid_counts_and_status_conflicts(count, befo
         )
 
 
-# 054 用户口径（2026-10-18）：同药存在即关联；延续原方案不触发；同句因果与病情依据可作理由。
-@pytest.mark.parametrize(
-    ("text", "drug", "expected"),
-    (
-        ("继续予以亚胺培南西司他丁联合莫西沙星抗感染。", "亚胺培南", True),
-        ("治疗上暂无调整，继续呼吸机辅助呼吸，美罗培南联合氟康唑抗感染。", "美罗培南", True),
-        ("继续予以心电监护、吸氧，头孢曲松抗感染。", "头孢曲松", True),
-        ("继续联用左氧氟沙星抗感染。", "左氧氟沙星", True),
-        ("暂不更换并继续使用左氧氟沙星抗感染。", "左氧氟沙星", True),
-        ("今日停用甲硝唑，余继续目前抗感染治疗。", "甲硝唑", False),
-        ("予以美罗培南降阶梯为哌拉西林他唑巴坦抗感染。", "美罗培南", False),
-        ("加用莫西沙星联合亚胺培南西司他丁加强抗感染。", "莫西沙星", False),
-        ("请示上级医师后予以头孢曲松抗感染、补液维持水电解质平衡。", "头孢曲松", False),
-        ("继续目前治疗，今日予以万古霉素加强阳性菌覆盖。", "万古霉素", False),
-        # 用药后病情回顾不是新动作（用户口径 2026-10-18，C05）。
-        ("诊疗计划：患者给予哌拉西林他唑巴坦钠抗感染后仍有反复发热。", "哌拉西林", True),
-        ("予以头孢曲松抗感染后体温恢复正常。", "头孢曲松", True),
-        ("予以头孢曲松抗感染，3天后复查血常规。", "头孢曲松", False),
-        ("停用美罗培南后仍有发热。", "美罗培南", False),
-    ),
-)
-def test_054_continuation_only_follows_drug_clause(text, drug, expected) -> None:
-    assert module._054_is_continuation_only({"record_content": text}, drug) is expected
-
-
-@pytest.mark.parametrize(
-    ("text", "drug", "expected"),
-    (
-        ("鉴于患者腹泻情况好转，故今日停用甲硝唑。", "甲硝唑", True),
-        ("复查炎症指标恢复正常，故停用哌拉西林他唑巴坦钠。", "哌拉西林", True),
-        ("患者肺部感染重，请临床药学会诊后建议更换抗生素。故更换头孢他啶。", "头孢他啶", True),
-        ("今日停用甲硝唑，患者腹泻好转。", "甲硝唑", False),
-        ("故停用甲硝唑。", "甲硝唑", False),
-        ("今日停用甲硝唑。", "甲硝唑", False),
-    ),
-)
-def test_054_reason_in_action_sentence_requires_basis_before_drug(text, drug, expected) -> None:
-    assert module._054_reason_in_action_sentence({"record_content": text}, drug) is expected
-
-
 def _two_metronidazole_orders() -> tuple[dict, dict]:
     return (
         {"order_id": "MET-1", "generic_name": "甲硝唑", "repeat_indicator": "长期",

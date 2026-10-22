@@ -241,5 +241,5 @@ async def test_058_bracketed_infection_expert_signature_is_recognized():
 def test_058_infection_expert_signature_variants(signature, expected):
     from app.services.luxian_0609 import native_extended_document_execution as ned
 
-    row = {"record_content": signature + "患者感染重,同意使用美罗培南加强抗感染治疗。"}
-    assert bool(ned._is_special_antimicrobial_expert_support(row)) is expected
+    text = signature + "患者感染重,同意使用美罗培南加强抗感染治疗。"
+    assert ned._special_approval_by_authorized_expert(text, "同意使用美罗培南加强抗感染治疗") is expected

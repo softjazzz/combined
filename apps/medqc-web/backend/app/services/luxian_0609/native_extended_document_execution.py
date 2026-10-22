@@ -247,12 +247,6 @@ _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN = re.compile(
     r"感染(?:性疾病)?科[^。；;\n科]{0,24}?(?:副主任医师|主任医师)"
     r"[\]】）)]?\s*(?:会诊|意见|指出|建议|查房|[:：,，])"
 )
-_SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
-    r"(?:拒绝|不同意|未(?:行|完成|进行)|尚未|无).{0,12}"
-    r"(?:感染专家|专家会诊|专家查房|会诊意见)|"
-    r"(?:感染专家|专家会诊|专家查房|会诊意见).{0,12}"
-    r"(?:未(?:行|完成|进行)|尚未|缺失|不存在|无)",
-)
 _LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _AUTOMATIC_DISCHARGE_PATTERN = re.compile(r"自动出院")
 _SENIOR_PHYSICIAN_CONSULTED_PATTERN = re.compile(
@@ -1199,24 +1193,6 @@ def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
     )
 
 
-def _is_special_antimicrobial_expert_support(row: Mapping[str, Any]) -> bool:
-    """排除明确拒绝/未完成的会诊文字，避免否定句充当支持证据。"""
-
-    text = _material_text(row)
-    return (
-        (
-            _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
-            or (
-                _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN.search(text)
-                and _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
-                and re.search(r"(?:建议|同意|予以|给予).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
-                and not re.search(r"(?:不同意|不建议|暂不|拒绝).{0,24}(?:抗感染|美罗培南|亚胺培南|利奈唑胺|万古霉素)", text)
-            )
-        )
-        and not _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN.search(text)
-    )
-
-
 def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
     """同意引文本身或其紧邻前文须出现授权专家身份，不能借同文书其他段落的专家署名。"""
 
@@ -1234,120 +1210,6 @@ def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
 
 def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> bool:
     return any(any(marker in _material_text(row) for marker in markers) for row in rows)
-
-
-# 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作，
-# 只查使用/加用、停用、更换、新增联合、超说明书。
-_054_CHANGE_ACTION_PATTERN = re.compile(
-    r"加用|停用|停药|停止使用|更换|换用|改为|改用|调整为|降阶梯|升阶梯|启用|开始使用|首次使用|新加|超说明书"
-)
-_054_ADMINISTER_VERB_PATTERN = re.compile(r"予以|给予|使用|应用|静滴|口服|联用")
-_054_CONTINUATION_CLAUSE_PATTERN = re.compile(r"继续|维持|续用|仍予|仍用")
-_054_UNCHANGED_SENTENCE_PATTERN = re.compile(
-    r"暂无调整|暂不调整|未作调整|无调整|治疗同前|方案同前|维持原方案|方案不变|继续(?:目前|当前|原)"
-)
-
-
-# 054 用户口径（2026-10-18，C05）：“给予X抗感染后仍有反复发热”是用药后病情回顾，不是新动作。
-_054_RETROSPECTIVE_OUTCOME_PATTERN = re.compile(
-    r"后(?:仍|仍有|无|未见|未|好转|改善|缓解|效果|体温|症状|病情|出现|反复)"
-)
-
-
-def _054_governs_drug(gap: str) -> bool:
-    """延续标记与药名之间没有新的给药动词（紧跟标记的“继续予以”等复合写法除外）。"""
-
-    gap = re.sub(r"^\s*(?:予以|给予|使用|应用|联用)", "", gap)
-    return not _054_ADMINISTER_VERB_PATTERN.search(gap)
-
-
-def _054_is_continuation_only(row: Mapping[str, Any], antimicrobial: str) -> bool:
-    """该病程对目标药的所有提及都只是延续原方案时返回 True。
-
-    以目标药所在分句为准：分句有加用/停用/更换等变更词即为触发；分句自身写
-    “继续/维持”，或分句无给药动词而上一分句写“继续”（共用动词），视为延续；
-    句中药名之前有“暂无调整/治疗同前”等且其间没有新的给药动词，也视为延续。
-    分句在药名之后写“后仍有/后好转”等用药后病情，是既往用药回顾，同样不是新动作。
-    """
-
-    text = _material_text(row)
-    continuation = False
-    for sentence in re.split(r"[。；;！!？?\n]", text):
-        if antimicrobial not in sentence:
-            continue
-        clauses = re.split(r"[，,]", sentence)
-        offset = 0
-        for index, clause in enumerate(clauses):
-            clause_start = offset
-            offset += len(clause) + 1
-            if antimicrobial not in clause:
-                continue
-            if any(
-                not re.search(r"(?:不|未|无需|无须|勿)(?:建议|考虑|需要|需|予|再)?$", clause[:change.start()])
-                for change in _054_CHANGE_ACTION_PATTERN.finditer(clause)
-            ):
-                return False
-            clause_drug_at = clause.find(antimicrobial)
-            if _054_RETROSPECTIVE_OUTCOME_PATTERN.search(clause[clause_drug_at + len(antimicrobial):]):
-                continuation = True
-                continue
-            drug_at = clause_start + clause_drug_at
-            unchanged = any(
-                _054_governs_drug(sentence[marker.end():drug_at])
-                for marker in _054_UNCHANGED_SENTENCE_PATTERN.finditer(sentence[:drug_at])
-            )
-            if (
-                any(
-                    _054_governs_drug(clause[marker.end():clause_drug_at])
-                    for marker in _054_CONTINUATION_CLAUSE_PATTERN.finditer(clause[:clause_drug_at])
-                )
-                or (
-                    index > 0
-                    and not _054_ADMINISTER_VERB_PATTERN.search(clause)
-                    and _054_CONTINUATION_CLAUSE_PATTERN.search(clauses[index - 1])
-                )
-                or unchanged
-            ):
-                continuation = True
-                continue
-            return False
-    return continuation
-
-
-# 同一病程内与目标药同句的病情依据（用户口径 2026-10-18，程序判定）：
-# “鉴于…故/因此…”因果结构，或炎性指标、体温、症状等变化。
-_054_CAUSAL_CONNECTOR_PATTERN = re.compile(r"鉴于|故|因此|所以|遂|据此|结合")
-_054_CLINICAL_BASIS_PATTERN = re.compile(
-    r"(?:炎性|炎症|感染)指标[^，,。；;]{0,8}(?:下降|降低|好转|恢复正常|正常|升高|增高)"
-    r"|(?:体温|血象|白细胞|降钙素原|PCT|CRP|C反应蛋白)[^，,。；;]{0,8}(?:正常|下降|降低|好转|升高|增高)"
-    r"|(?:症状|病情|感染|腹泻|咳嗽|咳痰|发热)[^，,。；;]{0,6}(?:好转|缓解|控制|加重|无改善|未见好转)"
-)
-
-
-def _054_reason_in_action_sentence(row: Mapping[str, Any], antimicrobial: str) -> bool:
-    """理由须与目标药同句且位于药名之前：因果连接词前有内容，或写有病情依据。"""
-
-    sentences = re.split(r"[。；;！!？?\n]", _material_text(row))
-    for index, sentence in enumerate(sentences):
-        position = sentence.find(antimicrobial)
-        if position < 0:
-            continue
-        prefix = sentence[:position]
-        if _054_CLINICAL_BASIS_PATTERN.search(prefix):
-            return True
-        # “……。故更换X”：以“故/因此/遂”起句即声明理由在上一句。
-        if (
-            index > 0
-            and re.match(r"\s*(?:故|因此|所以|遂|据此)", prefix)
-            and re.search(r"[一-鿿]{4,}", sentences[index - 1])
-        ):
-            return True
-        connector = None
-        for connector in _054_CAUSAL_CONNECTOR_PATTERN.finditer(prefix):
-            pass
-        if connector is not None and re.search(r"[一-鿿]{4,}", prefix[:connector.start()]):
-            return True
-    return False
 
 
 def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
