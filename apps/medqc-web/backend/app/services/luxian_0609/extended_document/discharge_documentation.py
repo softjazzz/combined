@@ -95,6 +95,10 @@ def evaluate_discharge_documentation_timeliness(
     else:
         hours = (record_time - discharge_time).total_seconds() / 3600
         actual_interval_hours = hours if hours < 0 else round(hours, 2)
+        # 超时数秒（如 24 小时 0 分 17 秒）舍入后会显示为 24.0，与“超时”判定矛盾；
+        # 展示值不得因舍入越过 24 小时界线（1022 C13）。
+        if hours > 24 and actual_interval_hours <= 24:
+            actual_interval_hours = 24.01
         # 院方口径（2026-10-10）：24 小时是完成期限上限，出院前已完成同样满足；
         # 负间隔保留符号供文案说明“出院前完成”。
         final_state = "compliant" if hours <= 24 else "non_compliant"
