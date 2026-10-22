@@ -602,8 +602,12 @@ class _SemanticUnresolved(Exception):
     pass
 
 
+# 补核后仍存在、且只能由模型自己消解的状态矛盾；Python 不替模型选边。
+_UNRESOLVABLE_STATE_ISSUES = frozenset({"inconsistent recommendation state", "inconsistent state refs"})
+
+
 class _OpinionStateUnresolved(Exception):
-    """补核后模型仍同时给出“意见不明确/低置信”和建议清单。
+    """补核后模型仍自相矛盾：同时给出“意见不明确/低置信”和建议清单，或状态与引用文书矛盾。
 
     两个输出互相矛盾，Python 无权替模型选边（清空建议会把可能明确的意见判为不明确，
     保留建议会无视模型自己的低置信），也不是技术故障；按资料不足交付且不冻结，
@@ -2126,10 +2130,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
             or not all(isinstance(ref, str) and ref in member_refs for ref in opinion_refs)
             or len(application_refs) != len(set(application_refs))
             or len(opinion_refs) != len(set(opinion_refs))
-            or (application == "absent" and application_refs)
-            or (opinion == "absent" and opinion_refs)
-            or (application == "clear" and not application_refs)
-            or (opinion == "clear" and not opinion_refs)
             or episode_ref not in member_refs
             or application not in _STATES
             or opinion not in _STATES
@@ -2138,6 +2138,25 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
             or len(raw_recommendations) > _MAX_RECOMMENDATIONS_PER_EPISODE
         ):
             raise _SemanticInvalid()
+        state_ref_conflicts = [
+            name
+            for name, state, refs in (
+                ("application", application, application_refs),
+                ("opinion", opinion, opinion_refs),
+            )
+            if (state == "absent" and refs) or (state == "clear" and not refs)
+        ]
+        if state_ref_conflicts:
+            # 状态与引用自相矛盾（如判申请缺失却引用了申请文书）可修正：补核一次，
+            # 仍矛盾时与意见状态矛盾同样按资料不足交付（1022 C01 第7份会诊）。
+            raise _EpisodeGroundingViolation(tuple(
+                _ReviewIssue(
+                    "inconsistent state refs", f"episode_ref={episode_ref}.{name}_state/{name}_refs", "",
+                    f"{name}_state为absent时{name}_refs必须为空，为clear时必须列出对应文书；"
+                    "重新核对所属原文后如实给出状态与引用，不能为凑齐格式改写其中一项",
+                )
+                for name in state_ref_conflicts
+            ))
         recommendations: list[_Recommendation] = []
         for number, raw_recommendation in enumerate(raw_recommendations, 1):
             if not isinstance(raw_recommendation, Mapping):
@@ -5189,7 +5208,7 @@ async def _execute_consultation_episode_rules(
                     break
                 error = _EpisodeGroundingViolation(issues)
                 if attempt:
-                    if all(item.reason == "inconsistent recommendation state" for item in issues):
+                    if all(item.reason in _UNRESOLVABLE_STATE_ISSUES for item in issues):
                         raise _OpinionStateUnresolved() from error
                     raise error
                 attempt_prompt = _review_retry_prompt(first_prompt, error, response, "输入：")

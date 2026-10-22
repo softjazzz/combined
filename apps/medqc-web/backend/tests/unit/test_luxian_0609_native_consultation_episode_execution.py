@@ -3675,7 +3675,7 @@ def test_unlabelled_unknown_application_without_refs_stays_unknown():
 
 @pytest.mark.asyncio
 async def test_opinion_only_episode_with_absent_application_cannot_carry_an_application_ref(monkeypatch):
-    """意见-only 合同要求 absent 申请状态不得携带意见文书引用。"""
+    """absent 申请状态不得携带文书引用：补核一次，仍矛盾按资料不足交付（1022 C01）。"""
 
     monkeypatch.setattr(
         episode,
@@ -3699,14 +3699,11 @@ async def test_opinion_only_episode_with_absent_application_cannot_carry_an_appl
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == [
-        "technical_error",
-        "technical_error",
-    ]
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert {item["metadata"]["reason_code"] for item in result.results} == {
-        "model_invalid_output"
+        "semantic_extraction_unresolved"
     }
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
