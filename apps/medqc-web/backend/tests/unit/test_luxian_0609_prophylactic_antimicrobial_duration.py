@@ -452,3 +452,13 @@ def test_028_preoperative_only_use_wording() -> None:
     assert customer_finding_from_controlled_facts(rule_id="LX0609-05-01-01", facts=facts, status="compliant") == (
         "Ⅰ类切口手术，围术期抗菌药物仅在手术开始前使用（最后一次 2026-06-01 15:33:31），未超过预防用药时限。"
     )
+
+
+@pytest.mark.parametrize("marker", ["0", "临时"])
+def test_temporary_order_marker_zero_or_chinese_stops_at_start(marker) -> None:
+    # 院方确认：长临标识0=临时、1=长期；临时医嘱不要求停止时间。
+    from app.services.luxian_0609.prophylactic_antimicrobial_duration import order_stop
+
+    row = {"planned_start_datetime": "2026-01-01 08:00:00", "repeat_indicator": marker}
+    assert order_stop(row) == datetime(2026, 1, 1, 8, 0)
+    assert order_stop({**row, "repeat_indicator": "1"}) is None

@@ -34,6 +34,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     SourceEvidenceQueryError,
     SourceEvidenceTruncated,
     SourceEvidenceUnavailable,
@@ -1147,7 +1148,7 @@ def _derive_semantic_opinion_reason(
 
 def _project_row(source_key: str, row: Mapping[str, Any], index: int) -> str:
     title = _clean(row.get("document_title")) or source_key
-    record_time = _clean(row.get("record_time"))
+    record_time = _clean(authoritative_document_time_value(row))
     content = _clean(row.get("record_content"))
     if source_key in {"daily_course_record", "senior_course_record"}:
         positions = [content.find(keyword) for keyword in _COURSE_CONTEXT_KEYWORDS]

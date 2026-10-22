@@ -6,6 +6,9 @@ import re
 from typing import Any, Literal, Mapping
 
 
+from .source_evidence_reader import authoritative_document_time_value
+
+
 AssessmentOutcome = tuple[str, str, Mapping[str, Any]]
 
 # 用户口径（2026-10-18）：申请单申请理由字段与正文均为空（接口未提供）时，
@@ -354,7 +357,7 @@ def _pretransfusion_course_text(
     entries: list[tuple[datetime, str, str, str]] = []
     for source_key in COURSE_REASON_SOURCE_KEYS:
         for row in _rows(documents, source_key):
-            record_time = _datetime(row.get("record_time"))
+            record_time = _datetime(authoritative_document_time_value(row))
             content = _application_text(row)
             if (
                 record_time is None

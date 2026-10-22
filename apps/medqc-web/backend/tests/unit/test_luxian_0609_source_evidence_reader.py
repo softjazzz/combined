@@ -739,3 +739,61 @@ def test_severity_order_reader_filters_cancelled_rows_before_limit(monkeypatch) 
     sql, params = connection.calls[0]
     assert "NOT LIKE :cancelled_name" in sql
     assert params["cancelled_name"] == "%取消%"
+
+
+@pytest.mark.parametrize("snapshot", (False, True))
+@pytest.mark.parametrize("new_columns", (False, True))
+def test_discharge_reader_keeps_new_evidence_fields_without_changing_document_clocks(
+    monkeypatch, snapshot, new_columns,
+):
+    import json
+    import re
+    from datetime import datetime, timezone
+    from app.services.luxian_0609.extended_document.discharge_documentation import (
+        _discharge_record_completion_time,
+    )
+    from app.services.luxian_0609.native_extended_document_execution import _row_text
+
+    signed = datetime(2026, 10, 1, 0, tzinfo=timezone.utc)
+    payload = json.dumps({"cheifphy_sign_time": signed.isoformat(), "private_extra": "JSON_ONLY_MARKER", "items": list(range(5000))})
+    row = {"document_id":"D", "record_time":None, "submit_datetime":None,
+           "record_content":"合成出院正文。", "chief_physician_sign_datetime":signed, "v2_schema":payload}
+    fields = ("chief_physician_sign_datetime", "v2_schema")
+    columns = ["institute_id", "patient_id", "visit_id", "document_id", "record_content", "record_time", "submit_datetime"]
+    if new_columns:
+        columns.extend(fields)
+
+    class ProjectedConnection(_SourceRowsConnection):
+        def execute(self, statement, params):
+            self.calls.append((str(statement), dict(params)))
+            selected = re.findall(r'"([a-z0-9_]+)"', str(statement).split(" FROM ")[0])
+            return _Rows([{name: row.get(name) for name in selected}])
+
+    connection = ProjectedConnection([row])
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _Engine(connection))
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_get_table_columns", lambda *_: columns)
+    kwargs = dict(source_key="discharge_record", institute_id="I", patient_id="P", visit_id="V", source_schema="cdm")
+    if snapshot:
+        output = source_evidence_reader.read_luxian_0609_snapshot_source_rows(**kwargs).rows[0]
+    else:
+        output = source_evidence_reader.read_luxian_0609_native_source_rows(**kwargs)[0]
+    selected_sql = connection.calls[0][0].split(" FROM ")[0]
+    if new_columns:
+        assert output[fields[0]] == signed
+        assert output[fields[1]] == payload
+        assert all(f'"{field}"' in selected_sql for field in fields)
+    else:
+        assert all(field not in output and f'"{field}"' not in selected_sql for field in fields)
+    assert source_evidence_reader.authoritative_document_time_value(output) is None
+    assert _discharge_record_completion_time(output) is None
+    assert "JSON_ONLY_MARKER" not in _row_text(output)
+    assert _row_text(output) == row["record_content"]
+    assert row["record_time"] is None and row["submit_datetime"] is None
+
+
+def test_discharge_signature_and_json_are_in_both_whitelists_but_not_time_fallbacks():
+    fields = {"chief_physician_sign_datetime", "v2_schema"}
+    assert fields <= set(source_evidence_reader._NATIVE_SOURCE_FIELDS["discharge_record"])
+    assert fields <= set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS["discharge_record"])
+    assert not fields.intersection(source_evidence_reader.AUTHORITATIVE_DOCUMENT_TIME_FIELDS)

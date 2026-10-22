@@ -9895,3 +9895,50 @@ def test_recommendation_without_any_window_candidate_is_settled_absent():
         (unknown,), completed=completed, candidates=same_day, source_incomplete_keys=frozenset(),
     )
     assert kept is unknown
+
+
+def test_023_surgery_or_transfer_recommendation_executed_during_stay():
+    # 用户口径（2026-10-22）：手术/转科类建议在本次住院期间有手术记录，或病程写明患方
+    # 同意/拒绝，即算已执行，不受会诊前3天至当天的医嘱窗口限制。
+    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._ObservedTime(datetime(2026, 8, 24, 16), True),
+    )
+    candidate = lambda ref, source, day, text: episode._CandidateDocument(
+        ref, source, episode._ObservedTime(datetime(2026, 8, day, 10), True), text,
+    )
+    candidates = (
+        candidate("daily_course_record-1", "daily_course_record", 29, "查房小结：家属同意手术治疗，计划明日手术"),
+        candidate("daily_course_record-2", "daily_course_record", 23, "家属同意手术治疗"),
+        candidate("surgery_record-1", "surgery_record", 30, "胸腔镜下右肺上叶切除术"),
+        candidate("daily_course_record-3", "daily_course_record", 25, "继续当前抗感染治疗"),
+    )
+    completed = episode._annotate_stay_execution((
+        rec("r1", "procedure", "建议手术治疗，若同意则转胸外科"),
+        rec("r2", "medication", "予以亚胺培南抗感染"),
+    ), candidates)
+    assert completed[0].stay_execution_refs == ("daily_course_record-1", "surgery_record-1")
+    assert completed[1].stay_execution_refs == ()
+    absent = lambda ref: episode._ExecutionAssessment(ref, "absent", (), "high", ())
+    kept, view = episode._order_execution_view(completed, (absent("r1"), absent("r2")))
+    assert [(item.recommendation_ref, item.execution_record_state) for item in view] == [
+        ("r1", "specific_trace"), ("r2", "no_trace"),
+    ]
+    assert view[0].trace_refs == ("daily_course_record-1", "surgery_record-1")
+    assert episode._measure_check_scope(completed, (absent("r1"), absent("r2")))[0].recommendation.recommendation_ref == "r2"
+
+    # 转出/转入记录同样算住院期间执行证据；会诊前的转科记录不算。
+    transfer_only = episode._annotate_stay_execution((rec("r3", "transfer", "建议转心内科进一步治疗"),), (
+        candidate("transfer_out_record-1", "transfer_out_record", 25, "转科目的：进一步治疗"),
+        candidate("transfer_in_record-1", "transfer_in_record", 20, "转入记录"),
+    ))
+    assert transfer_only[0].stay_execution_refs == ("transfer_out_record-1",)
+
+    # 缺手术记录单据时，术后首次病程证明已做手术；只作手术类建议的证据。
+    postop = (candidate("postsurg_firstcourse_record-1", "postsurg_firstcourse_record", 30, "术后首次病程记录"),)
+    surgery_rec, transfer_rec = episode._annotate_stay_execution((
+        rec("r4", "procedure", "建议手术治疗"), rec("r5", "transfer", "建议转心内科进一步治疗"),
+    ), postop)
+    assert surgery_rec.stay_execution_refs == ("postsurg_firstcourse_record-1",)
+    assert transfer_rec.stay_execution_refs == ()

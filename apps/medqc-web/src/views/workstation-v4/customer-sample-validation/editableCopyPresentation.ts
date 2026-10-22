@@ -1,12 +1,15 @@
 import type { EditableMedicalRecordDocument } from './types'
 import { testRecordDocumentTypeOptions } from './syntheticCaseBuilder'
 import { parseBackendDateTime } from './recordPresentation'
+import { formatPlannedOrderEndTime } from './medicalOrderDisplay'
 
 export type EditableCopyOrderTypeFilter = 'long' | 'temporary'
 
 export type EditableCopyOrderRow = {
   document: EditableMedicalRecordDocument
+  orderId: string
   startTime: string
+  plannedEndTime: string
   stopTime: string
   orderType: string
   item: string
@@ -125,6 +128,8 @@ function isEditableOrderCategoryLine(value: string): boolean {
 }
 
 function resolveEditableOrderCategoryText(document: EditableMedicalRecordDocument): string {
+  const category = String(document.order_category || '').trim()
+  if (category) return category === '药品' ? '用药' : category
   const lines = editableOrderContentLines(document)
     .map((line) => stripEditableOrderPrefix(line))
     .filter(Boolean)
@@ -150,6 +155,7 @@ function resolveEditableOrderCategoryText(document: EditableMedicalRecordDocumen
 }
 
 function resolveEditableOrderItemText(document: EditableMedicalRecordDocument): string {
+  if (document.order_item?.trim()) return document.order_item.trim()
   const lines = editableOrderContentLines(document)
     .map((line) => stripEditableOrderPrefix(line))
     .filter(
@@ -166,6 +172,7 @@ function resolveEditableOrderItemText(document: EditableMedicalRecordDocument): 
 
 function resolveEditableOrderStatus(document: EditableMedicalRecordDocument): string {
   if (document.enabled === false) return '不写入'
+  if (document.order_status?.trim()) return document.order_status.trim()
   const lines = editableOrderContentLines(document).map((line) => stripEditableOrderPrefix(line))
   const explicitStatus = lines.find((line) => isEditableOrderStatusLine(line))
   if (explicitStatus) return explicitStatus
@@ -182,8 +189,10 @@ export function parseEditableOrderRow(
   const orderTypeKey = resolveEditableOrderTypeKey(document)
   return {
     document,
+    orderId: document.order_id?.trim() || '',
     startTime: normalizeEditableOrderTimeText(resolveEditableOrderStartTimeValue(document)),
     stopTime: normalizeEditableOrderTimeText(resolveEditableOrderStopTimeValue(document), ''),
+    plannedEndTime: formatPlannedOrderEndTime(document.order_planned_end_time),
     orderType: resolveEditableOrderCategoryText(document),
     item: resolveEditableOrderItemText(document),
     status: resolveEditableOrderStatus(document),

@@ -137,6 +137,14 @@ def _evaluate_explicit_order_events(
     )
 
 
+_SIGNATURE_LABEL_PATTERN = re.compile(r"(?:医师|医生)签名\s*[:：]")
+
+
+def _is_blank_course(row: Mapping[str, Any]) -> bool:
+    body = _SIGNATURE_LABEL_PATTERN.sub("", _clean(row.get("record_content")))
+    return not body.strip() and not course_physician_signatures(row)
+
+
 def _derive_change_rows_from_daily_courses(
     daily_course_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[tuple[Mapping[str, Any], ...], str, Mapping[str, Any] | None]:
@@ -151,11 +159,13 @@ def _derive_change_rows_from_daily_courses(
     ambiguous_signature_count = 0
     for row in daily_course_rows:
         title = _clean(row.get("document_title"))
-        if not title:
-            missing_title_count += 1
-            missing_field_rows.append(row)
+        # 用户口径（2026-10-21）：经治医师变更只看普通病程的签名序列，标题不是
+        # 质控要求。有标题且属于查房、手术、交接班等非常规病程的仍排除；缺标题
+        # 不再使整例资料不足（1019 中院方另一路写入的病程均无标题）。
+        if title and _NON_ROUTINE_COURSE_TITLE_PATTERN.search(title):
             continue
-        if _NON_ROUTINE_COURSE_TITLE_PATTERN.search(title):
+        if _is_blank_course(row):
+            # 无正文且无签名的空白文书不含任何书写医师信息，不进入序列。
             continue
         eligible_count += 1
         record_time = _row_time(row)
@@ -203,9 +213,14 @@ def _derive_change_rows_from_daily_courses(
         else:
             runs.append([item])
 
-    current_physician = runs[0][0][1]
+    # 起始经治医师同样须连续书写才成立：开头一份异名文书（如值班医师写的危急值
+    # 处理记录，1019 C14/C17）与中途临时代班同理，不能据此把后续主管医师判为变更。
+    start = next((index for index, run in enumerate(runs) if len(run) >= 2), None)
+    if start is None:
+        return (), "", None
+    current_physician = runs[start][0][1]
     change_rows: list[Mapping[str, Any]] = []
-    for run in runs[1:]:
+    for run in runs[start + 1:]:
         new_physician = run[0][1]
         if new_physician.casefold() == current_physician.casefold():
             continue

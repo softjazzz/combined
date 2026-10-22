@@ -8,6 +8,8 @@ import json
 import re
 from typing import Any, Mapping, Sequence
 
+from .source_evidence_reader import AUTHORITATIVE_DOCUMENT_TIME_FIELDS
+
 
 SCHEMA_VERSION = "lx0609-surgery-text-facts-v2"
 LX0609_025_REQUIRED_FIELDS = (
@@ -262,10 +264,18 @@ def build_surgery_text_projection(
             source_document_id = _clean(row.get("document_id") or row.get("id"))
             if source_document_id:
                 source_ids_by_ref[doc_ref] = source_document_id
-            raw_times: list[tuple[Any, str]] = [
+            document_clock = next(
+                (
+                    (row[field], field)
+                    for field in AUTHORITATIVE_DOCUMENT_TIME_FIELDS
+                    if row.get(field) is not None and str(row[field]).strip()
+                ),
+                None,
+            )
+            raw_times: list[tuple[Any, str]] = ([document_clock] if document_clock else []) + [
                 (row.get(field), field)
                 for field in (
-                    "record_time", "report_time", "report_datetime", "prescribed_datetime",
+                    "report_time", "report_datetime", "prescribed_datetime",
                     "surgery_begin_time", "surgery_end_time", "surgery_begin_datetime",
                     "surgery_end_datetime",
                 )

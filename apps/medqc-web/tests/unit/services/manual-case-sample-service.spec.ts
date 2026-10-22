@@ -17,10 +17,176 @@ import {
   runManualSamplePool,
   syncManualSamplePoolRecordsByHospitalization,
 } from '@/services/manual-case-sample-service'
+import { buildMedicalOrderRow } from '@/views/workstation-v4/customer-sample-validation/medicalOrderDisplay'
 
 describe('editable medical-record document normalization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('preserves source order ID in list and selected detail', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'inpat_nondrug_order',
+            order_id: 'safe-order||68',
+            content: '血常规',
+          },
+        ],
+      },
+    })
+    const list = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = list.data?.documents[0]
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document).orderId).toBe('safe-order||68')
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '血常规',
+        render_blocks: [
+          {
+            block_type: 'order_table',
+            rows: [{ order_id: 'safe-order||68' }],
+          },
+        ],
+      },
+    })
+    const detail = await getEditableMedicalRecordDocument('safe-visit', document)
+    expect(detail.data?.order_id).toBe('safe-order||68')
+  })
+
+  it('keeps planned end separate from actual stop through list and render', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'inpat_drug_order::safe-order',
+            doc_type: 'inpat_drug_order',
+            content: '示例医嘱',
+            order_planned_end_time: '2026-09-22T14:00:00+00:00',
+            order_stop_time: '2026-09-23 10:00:00',
+          },
+        ],
+      },
+    })
+    const list = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = list.data?.documents[0]
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document)).toMatchObject({
+      plannedEndTime: '2026-09-22 22:00:00',
+      stopTime: '2026-09-23 10:00:00',
+    })
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '示例医嘱',
+        render_blocks: [
+          {
+            block_type: 'order_table',
+            rows: [{ planned_end_time: '2026-09-24T00:00:00+08:00' }],
+          },
+        ],
+      },
+    })
+    const detail = await getEditableMedicalRecordDocument('safe-visit', document)
+    if (!detail.data) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(detail.data)).toMatchObject({
+      plannedEndTime: '2026-09-24 00:00:00',
+      stopTime: '2026-09-23 10:00:00',
+    })
+  })
+
+  it('does not interpret planned end or cancellation as actual stop', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'inpat_nondrug_order',
+            content: '示例医嘱',
+            planned_end_datetime: '2026-09-22 22:00:00',
+            cancel_datetime: '2026-09-21 10:00:00',
+          },
+        ],
+      },
+    })
+    const list = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = list.data?.documents[0]
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document)).toMatchObject({
+      plannedEndTime: '2026-09-22 22:00:00',
+      stopTime: '',
+    })
+  })
+
+  it('keeps structured order details from the documents API through the table row', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'inpat_drug_order::safe-order',
+            doc_type: 'inpat_drug_order',
+            content: '示例药品',
+            order_specification: '4g/袋',
+            order_dosage: '2袋',
+            order_frequency: '每日3次',
+            order_route: '口服',
+            order_quantity: '12袋',
+            order_prescribed_doctor: '示例医师',
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('safe-visit')
+    const document = result.data?.documents[0]
+    expect(document).toBeDefined()
+    if (!document) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(document)).toMatchObject({
+      specification: '4g/袋',
+      dosage: '2袋',
+      frequency: '每日3次',
+      route: '口服',
+      quantity: '12袋',
+      prescribedDoctor: '示例医师',
+    })
+  })
+
+  it('keeps order details from the render API and retains existing details when absent', async () => {
+    const summary = {
+      key: 'inpat_drug_order::safe-order',
+      document_type: 'inpat_drug_order',
+      title: '药品医嘱',
+      content: '',
+      order_quantity: '12袋',
+    }
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '示例药品',
+        render_blocks: [
+          {
+            block_type: 'order_table',
+            rows: [
+              {
+                specification: '4g/袋',
+                dosage: '2袋',
+                frequency: '每日3次',
+                route: '口服',
+                prescribed_doctor: '示例医师',
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocument('safe-visit', summary)
+    expect(result.data).toBeDefined()
+    if (!result.data) throw new Error('缺少测试医嘱')
+    expect(buildMedicalOrderRow(result.data)).toMatchObject({
+      specification: '4g/袋',
+      dosage: '2袋',
+      frequency: '每日3次',
+      route: '口服',
+      quantity: '12袋',
+      prescribedDoctor: '示例医师',
+    })
   })
 
   it('preserves current admission source and explicitly requests current view', async () => {
@@ -211,6 +377,7 @@ describe('editable medical-record document normalization', () => {
     expect(result.data?.documents[0]).toMatchObject({
       record_time: '2026-06-21 17:05:00',
       submit_time: '2026-06-21 17:05:00',
+      record_time_source: 'source_submit_time',
     })
   })
 

@@ -2618,6 +2618,8 @@ async def test_course_009_complete_exam_lab_rows_are_grouped_as_clinical_events(
             "test_id": "LAB-EVENT-1" if index < 5 else "LAB-EVENT-2",
             "item_name": f"检验项目{index}",
             "result": f"结果{index}",
+            # 用户口径（2026-10-22）：检验只有危急值才是病情变化候选。
+            "abnormal_indicator": "PH",
             "report_time": (
                 "2026-01-01 10:00:00"
                 if index < 5
@@ -2700,6 +2702,8 @@ async def test_course_009_208790_shape_fits_one_event_window_call() -> None:
             "test_id": "LAB-A" if index < 5 else "LAB-B",
             "item_name": f"项目{index}",
             "result": f"结果{index}",
+            # 用户口径（2026-10-22）：检验只有危急值才是病情变化候选。
+            "abnormal_indicator": "PH",
             "report_time": (
                 "2026-07-08 10:00:00"
                 if index < 5

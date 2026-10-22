@@ -13,6 +13,13 @@ export function resolveMedicalDocumentTime(document: EditableMedicalRecordDocume
   return String(document.record_time || document.submit_time || '').trim()
 }
 
+export function resolveMedicalDocumentTimeLabel(document: EditableMedicalRecordDocument): string {
+  return document.record_time_source === 'source_submit_time' ||
+    (!String(document.record_time || '').trim() && Boolean(document.submit_time?.trim()))
+    ? '提交时间'
+    : '记录时间'
+}
+
 export function formatMedicalDocumentTime(value?: string): string {
   const normalized = String(value || '').trim()
   if (!normalized) return '未返回时间'

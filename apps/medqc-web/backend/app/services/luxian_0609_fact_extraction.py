@@ -5,6 +5,7 @@ import json
 import re
 from typing import Any, Iterable, Protocol
 
+from .luxian_0609.source_evidence_reader import authoritative_document_time_value
 from .luxian_0609_trigger_gate import Luxian0609GateDecision, evaluate_luxian_0609_trigger_gates
 
 
@@ -101,7 +102,7 @@ def _document_type(document: dict[str, Any]) -> str:
 
 def _document_time(document: dict[str, Any]) -> str:
     return _clean_text(
-        document.get("record_time")
+        authoritative_document_time_value(document)
         or document.get("display_time")
         or document.get("sort_time")
         or document.get("submit_time")

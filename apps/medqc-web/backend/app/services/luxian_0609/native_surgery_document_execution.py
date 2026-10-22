@@ -33,6 +33,7 @@ from .native_preop_content_execution import evaluate_preop_content_rules
 from .planner import PlannedRule
 from .source_manifest import QueryStatus
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     has_qualified_traditional_surgery_row,
 )
 from .surgery_event_association import (
@@ -1072,10 +1073,7 @@ def _anesthesia_visit_completeness(
             structured_fields=("anesthetist_sign",),
             text_markers=("医师签名",),
         ),
-        "record_time": any(
-            _minute_signature_state(pre.get(field)) == "present"
-            for field in ("record_time", "submit_datetime")
-        ),
+        "record_time": _minute_signature_state(authoritative_document_time_value(pre)) == "present",
     }
     post_checks = {
         "consciousness_status": _row_has_any(
@@ -1091,10 +1089,7 @@ def _anesthesia_visit_completeness(
             structured_fields=("anesthetist_sign",),
             text_markers=("医师签名",),
         ),
-        "record_time": any(
-            _minute_signature_state(post.get(field)) == "present"
-            for field in ("record_time", "submit_datetime")
-        ),
+        "record_time": _minute_signature_state(authoritative_document_time_value(post)) == "present",
     }
     missing = {
         "preanesthesia_visit": [name for name, present in pre_checks.items() if not present],
@@ -1197,7 +1192,7 @@ def _visit_window_states(
         return [
             visit_time
             for _ref, row in materials.document_rows(source_key, snapshot=snapshot)
-            if (visit_time := _visit_datetime(row.get("record_time") or row.get("submit_datetime"))) is not None
+            if (visit_time := _visit_datetime(authoritative_document_time_value(row))) is not None
         ]
 
     pre_visits, post_visits = visit_times("preane_surveil_record"), visit_times("postane_surveil_record")
@@ -1248,8 +1243,7 @@ async def _typed_037_controlled_outcome(
     sources = (("preane_surveil_record", "preanesthesia_visit"), ("postane_surveil_record", "postanesthesia_visit"))
     for source, visit in sources:
         for ref, row in materials.document_rows(source, snapshot=snapshot):
-            states = {"record_time": "present" if any(_minute_signature_state(row.get(key)) == "present"
-                for key in ("record_time", "submit_datetime")) else "absent"}
+            states = {"record_time": "present" if (_minute_signature_state(authoritative_document_time_value(row)) == "present") else "absent"}
             signature = _clean(row.get("anesthetist_sign"))
             if signature and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(signature):
                 states["anesthetist_signature"] = "present"
@@ -1940,7 +1934,7 @@ def _associate_presurg_summaries_to_surgeries(
             continue
         association = associate_preop_document_to_surgery_event(
             events=events, procedure_name=summary_surgery_name_from_row(row),
-            record_time=_visit_datetime(row.get("record_time")),
+            record_time=_visit_datetime(authoritative_document_time_value(row)),
             planned_surgery_time=summary_planned_surgery_time_from_row(row),
         )
         if association.state != "matched" or association.event_index is None:

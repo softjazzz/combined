@@ -152,6 +152,7 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "postsurg_firstcourse_record",
         "mr_surgery",
         "surgery_record",
+        "anesthesia_record",
         "consultation_record",
         "handoff_record",
         "handover_record",

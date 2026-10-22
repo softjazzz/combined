@@ -54,9 +54,11 @@ from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
     SourceEvidenceQueryError,
     SourceEvidenceTruncated,
     SourceEvidenceUnavailable,
+    authoritative_document_time_value,
     read_luxian_0609_native_source_rows,
 )
 from .structured_output import structured_output_kwargs
@@ -502,6 +504,8 @@ class _CompletedRecommendation:
     declined_objects: tuple[str, ...] = ()
     declined_measures: tuple[str, ...] = ()
     fully_declined: bool = False
+    # 手术/转科类建议在本次住院期间的执行证据（手术记录、写明患方同意或拒绝的病程）。
+    stay_execution_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1019,7 +1023,7 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
             "ref": f"{_SOURCE_KEY}-{index}",
             "document_id": document_id,
             "material_ref": _clean(row.get("_material_document_ref")),
-            "time": _clean(row.get("record_time")),
+            "time": _clean(authoritative_document_time_value(row)),
             "text": text,
             "event_identity_mode": event_identity_mode,
         }, business_tokens))
@@ -1102,15 +1106,15 @@ def _row_time(
             "update_time",
             "record_time",
         )
-    elif source_key in _COURSE_EXECUTION_SOURCE_KEYS:
+    elif source_key == "postsurg_firstcourse_record":
+        time_keys = AUTHORITATIVE_DOCUMENT_TIME_FIELDS
+    elif source_key in ("transfer_out_record", "transfer_in_record"):
+        # 转科记录：权威记录/提交时间，缺失时按转科日期（只用于住院期间是否已转科）。
+        time_keys = (*AUTHORITATIVE_DOCUMENT_TIME_FIELDS, "transfer_date", "record_datetime")
+    elif source_key in _COURSE_EXECUTION_SOURCE_KEYS or source_key == _SOURCE_KEY:
         # 与病程质量规则共用同一权威时间口径：优先正式记录时间，客户CDM
         # 未回传该字段时使用提交时间；不从正文、同步时间或文件顺序猜测。
-        time_keys = (
-            "record_time",
-            "record_datetime",
-            "submit_time",
-            "submit_datetime",
-        )
+        time_keys = AUTHORITATIVE_DOCUMENT_TIME_FIELDS
     elif source_key in {"exam_master", "exam_item_report"}:
         # 检查执行的时序优先取实际检查时间；申请时间不能替代已实施检查，
         # report/record_time 也可能只是报告或同步归档时间。
@@ -3891,7 +3895,8 @@ def _drop_conditional_missing_measures(
         ref: tuple(
             measure for measure in measures
             if ref not in by_ref or not (
-                _measure_in_conditional_clause(by_ref[ref].recommendation, measure)
+                by_ref[ref].stay_execution_refs
+                or _measure_in_conditional_clause(by_ref[ref].recommendation, measure)
                 or measure_is_declined(measure, by_ref[ref].declined_objects)
             )
         )
@@ -3904,10 +3909,91 @@ def _measure_check_scope(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
 ) -> tuple["_CompletedRecommendation", ...]:
-    """逐项核对覆盖全部医嘱类建议，包括初判未找到医嘱的建议。"""
+    """逐项核对覆盖全部医嘱类建议，包括初判未找到医嘱的建议；住院期间已证实执行的手术/转科建议不再逐项核对。"""
 
     in_scope, _ = _order_execution_view(completed, assessments)
-    return in_scope
+    return tuple(item for item in in_scope if not item.stay_execution_refs)
+
+
+# 用户口径（2026-10-22）：手术、转科类建议需术前准备或患方决定，当天不会有执行记录。
+# 本次住院期间（会诊当天起）有手术记录，或病程写明患方同意/拒绝该手术、转科，即算已执行，
+# 不受会诊前3天至当天的医嘱窗口限制。
+_STAY_LEVEL_RECOMMENDATION_PATTERN = re.compile(r"手术|转科|转院|转[^，,。；;]{1,8}科")
+_STAY_DECISION_PATTERN = re.compile(r"同意|拒绝|不同意|放弃|暂不|不愿")
+# 转出/转入记录只作手术、转科建议的住院期间执行证据，不进入模型候选来源。
+_TRANSFER_STAY_SOURCE_KEYS = ("transfer_out_record", "transfer_in_record")
+# 用户口径（2026-10-22）：源库可能缺手术记录单据（C23、C25），术后首次病程同样证明
+# 已做手术，只作手术类建议的执行证据。
+_POSTOP_STAY_SOURCE_KEY = "postsurg_firstcourse_record"
+_SURGERY_RECOMMENDATION_PATTERN = re.compile(r"手术")
+
+
+def _transfer_stay_candidates(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+    stay_window: "_StayWindow",
+) -> tuple["_CandidateDocument", ...]:
+    """本次住院内有时间的转出/转入记录及术后首次病程；来源缺失或异常时不提供证据（不据此判缺陷）。"""
+
+    candidates: list[_CandidateDocument] = []
+    for source_key in (*_TRANSFER_STAY_SOURCE_KEYS, _POSTOP_STAY_SOURCE_KEY):
+        try:
+            rows = _read_rows(
+                source_key=source_key, institute_id=institute_id, patient_id=patient_id,
+                visit_id=visit_id, source_schema=source_schema,
+                evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot,
+            )
+        except (_SourceGap, _SourceTechnical):
+            continue
+        for index, row in enumerate(rows, start=1):
+            observed_time = _row_time(row, source_key=source_key)
+            text = _candidate_text(row=row, source_key=source_key) or source_key
+            if observed_time is None or not stay_window.contains(observed_time):
+                continue
+            candidates.append(_CandidateDocument(
+                ref=f"{source_key}-{index}", source_key=source_key, observed_time=observed_time,
+                text=text[:_MAX_CANDIDATE_CHARS],
+                document_id=_candidate_document_id(row=row, source_key=source_key),
+                material_ref=_clean(row.get("_material_document_ref")),
+            ))
+    return tuple(candidates)
+
+
+def _stay_execution_refs(
+    item: "_CompletedRecommendation", candidates: Sequence["_CandidateDocument"],
+) -> tuple[str, ...]:
+    if not _STAY_LEVEL_RECOMMENDATION_PATTERN.search(_recommendation_text(item.recommendation)):
+        return ()
+    refs: list[str] = []
+    for candidate in candidates:
+        if candidate.observed_time.day < item.opinion_time.day:
+            continue
+        if candidate.source_key == "surgery_record" or candidate.source_key in _TRANSFER_STAY_SOURCE_KEYS:
+            refs.append(candidate.ref)
+        elif candidate.source_key == _POSTOP_STAY_SOURCE_KEY and _SURGERY_RECOMMENDATION_PATTERN.search(
+            _recommendation_text(item.recommendation)
+        ):
+            refs.append(candidate.ref)
+        elif candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS and any(
+            _STAY_DECISION_PATTERN.search(clause) and _STAY_LEVEL_RECOMMENDATION_PATTERN.search(clause)
+            for clause in _CLAUSE_SPLIT_PATTERN.split(candidate.text)
+        ):
+            refs.append(candidate.ref)
+    return tuple(refs[:8])
+
+
+def _annotate_stay_execution(
+    completed: Sequence["_CompletedRecommendation"], candidates: Sequence["_CandidateDocument"],
+) -> tuple["_CompletedRecommendation", ...]:
+    return tuple(
+        replace(item, stay_execution_refs=refs) if (refs := _stay_execution_refs(item, candidates)) else item
+        for item in completed
+    )
 
 
 def _needs_measure_scope_refinement(item: "_CompletedRecommendation") -> bool:
@@ -4122,6 +4208,14 @@ def _order_execution_view(
     for item in in_scope:
         kept.append(item)
         assessment = by_ref.get(item.recommendation.recommendation_ref)
+        if item.stay_execution_refs:
+            # 住院期间的手术记录或写明患方决定的病程即为具体执行证据。
+            view.append(replace(
+                assessment or _unknown_execution_assessment(item.recommendation.recommendation_ref),
+                execution_state="linked_specific", execution_record_state="specific_trace",
+                trace_refs=item.stay_execution_refs, execution_refs=(), context_only_refs=(),
+            ))
+            continue
         if assessment is None:
             view.append(_unknown_execution_assessment(item.recommendation.recommendation_ref))
             continue
@@ -5188,6 +5282,25 @@ async def _execute_consultation_episode_rules(
                     completed_recommendations,
                     documents_by_ref=documents_by_ref,
                 )
+                transfer_candidates = (
+                    _transfer_stay_candidates(
+                        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+                        source_schema=source_schema, evidence_materials=evidence_materials,
+                        evidence_snapshot=evidence_snapshot, stay_window=execution_stay_window,
+                    )
+                    if "LX0609-03-01-04" in stage_two_rule_ids
+                    else ()
+                )
+                completed_recommendations = _annotate_stay_execution(
+                    completed_recommendations, projection.candidates + transfer_candidates,
+                )
+                used_stay_refs = frozenset(
+                    ref for item in completed_recommendations for ref in item.stay_execution_refs
+                )
+                # 只把被引用为执行证据的转科记录加入候选，供证据绑定与展示。
+                projection = replace(projection, candidates=projection.candidates + tuple(
+                    item for item in transfer_candidates if item.ref in used_stay_refs
+                ))
                 embedded_decision_refs = frozenset({
                     ref
                     for item in episodes
@@ -5236,12 +5349,17 @@ async def _execute_consultation_episode_rules(
                     # 用户口径（2026-10-20）：023 只认医嘱、不看病程。020 不在本次范围时，
                     # 病程、检查检验、手术候选只会撑大输入（真实样本因超 64k 上限整例落资料不足），
                     # 二阶段只保留医嘱和本次会诊文书（用于识别文书内写明的暂缓/拒绝决定）。
+                    # 手术/转科建议的住院期间执行证据（病程、手术记录）须留在候选中供证据绑定。
+                    stay_refs = frozenset(
+                        ref for item in completed_recommendations for ref in item.stay_execution_refs
+                    )
                     projection = replace(
                         projection,
                         candidates=tuple(
                             item for item in projection.candidates
                             if item.source_key in _ORDER_EXECUTION_SOURCE_KEYS
                             or item.source_key == "consultation_record"
+                            or item.ref in stay_refs
                         ),
                     )
                 execution_candidate_projection = projection

@@ -334,6 +334,18 @@ def _source_field_preview(raw_doc: dict[str, Any], field_names: tuple[str, ...])
     return ""
 
 
+def _record_display_clock(raw_doc: dict[str, Any], doc_type: str, sort_time: str) -> tuple[str, str, str]:
+    record_time = _safe_text(raw_doc.get("record_time"))
+    if record_time:
+        return record_time, "source_record_time", ""
+    submit_time = _safe_text(raw_doc.get("submit_time") or raw_doc.get("submit_datetime"))
+    if submit_time:
+        return submit_time, "source_submit_time", "源库未返回记录时间，当前显示提交时间。"
+    if doc_type in _RECORD_TIME_FALLBACK_DOC_TYPES and sort_time:
+        return sort_time, "fallback_display_time", "源库未返回记录时间，当前使用提交时间、最后修改时间或更新时间等可用时间显示。"
+    return "", "", ""
+
+
 def _normalize_source_document(
     *,
     raw_doc: dict[str, Any],
@@ -352,11 +364,9 @@ def _normalize_source_document(
             raw_doc,
             ("start_time", "order_time", "prescribed_datetime"),
         )
-    source_record_time = _safe_text(raw_doc.get("record_time"))
-    record_time_note = ""
-    can_use_display_time_as_record_time = doc_type in _RECORD_TIME_FALLBACK_DOC_TYPES
-    if can_use_display_time_as_record_time and not source_record_time and sort_time:
-        record_time_note = "源库未返回记录时间，当前使用提交时间、最后修改时间或更新时间等可用时间显示。"
+    submit_time = _safe_text(raw_doc.get("submit_time") or raw_doc.get("submit_datetime"))
+    sort_time = sort_time or submit_time
+    record_time, record_time_source, record_time_note = _record_display_clock(raw_doc, doc_type, sort_time)
     group_key = _infer_group_key(doc_type)
     label = _friendly_doc_label(doc_type, doc_title)
     doc_key = _build_doc_key(doc_type, doc_id, index)
@@ -375,10 +385,9 @@ def _normalize_source_document(
         "document_id": doc_id,
         "document_title": doc_title or label,
         "sort_time": sort_time,
-        "record_time": source_record_time or (sort_time if can_use_display_time_as_record_time else ""),
-        "record_time_source": "source_record_time"
-        if source_record_time
-        else ("fallback_display_time" if can_use_display_time_as_record_time and sort_time else ""),
+        "record_time": record_time,
+        "submit_time": submit_time,
+        "record_time_source": record_time_source,
         "record_time_note": record_time_note,
         "has_content": bool(content),
         "content": content or None,
@@ -403,7 +412,7 @@ def _normalize_source_document(
     if doc_type in _ORDER_DOC_TYPES:
         normalized.update(
             {
-                f"order_{key}" if key not in {"order_type", "order_item", "order_status"} else key: value
+                f"order_{key}" if key not in {"order_id", "order_type", "order_item", "order_status"} else key: value
                 for key, value in _order_display_values(raw_doc).items()
             }
         )
@@ -856,8 +865,9 @@ def _normalize_source_document_summary(
     doc_id = _safe_text(raw_doc.get("document_id"))
     title = _friendly_doc_label(doc_type, _safe_text(raw_doc.get("document_title")))
     sort_time = _safe_text(raw_doc.get("display_time") or raw_doc.get("record_time"))
-    source_record_time = _safe_text(raw_doc.get("record_time"))
-    can_use_display_time_as_record_time = doc_type in _RECORD_TIME_FALLBACK_DOC_TYPES
+    submit_time = _safe_text(raw_doc.get("submit_time") or raw_doc.get("submit_datetime"))
+    sort_time = sort_time or submit_time
+    record_time, record_time_source, record_time_note = _record_display_clock(raw_doc, doc_type, sort_time)
     length = max(0, int(raw_doc.get("length") or 0))
     has_content = raw_doc.get("has_content") is True or length > 0
     summary = {
@@ -871,8 +881,10 @@ def _normalize_source_document_summary(
         "document_id": doc_id,
         "document_title": title,
         "sort_time": sort_time,
-        "record_time": source_record_time
-        or (sort_time if can_use_display_time_as_record_time else ""),
+        "record_time": record_time,
+        "submit_time": submit_time,
+        "record_time_source": record_time_source,
+        "record_time_note": record_time_note,
         "has_content": has_content,
         "length": length,
         "group_key": _infer_group_key(doc_type),
@@ -886,7 +898,7 @@ def _normalize_source_document_summary(
     if doc_type in _ORDER_DOC_TYPES:
         summary.update(
             {
-                f"order_{key}" if key not in {"order_type", "order_item", "order_status"} else key: value
+                f"order_{key}" if key not in {"order_id", "order_type", "order_item", "order_status"} else key: value
                 for key, value in _order_display_values(raw_doc).items()
             }
         )
@@ -1226,12 +1238,14 @@ def _build_order_table_block(document: dict[str, Any]) -> dict[str, Any]:
             {"key": "start_time", "label": "开始时间"},
             {"key": "order_type", "label": "医嘱类型"},
             {"key": "order_item", "label": "医嘱项目"},
+            {"key": "order_id", "label": "医嘱号"},
             {"key": "specification", "label": "规格"},
             {"key": "dosage", "label": "剂量"},
             {"key": "frequency", "label": "频次"},
             {"key": "route", "label": "用法"},
             {"key": "quantity", "label": "数量"},
-            {"key": "stop_time", "label": "停止时间"},
+            {"key": "planned_end_time", "label": "计划结束时间"},
+            {"key": "stop_time", "label": "实际停止时间"},
             {"key": "order_status", "label": "医嘱状态"},
             {"key": "prescribed_doctor", "label": "下达医生"},
         ],
@@ -1285,19 +1299,26 @@ def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
         "item_name",
         "order_name",
     )
-    dosage = _order_value(document, source_values, "order_dosage", "dosage", "dose", "single_dose")
-    dosage = _join_order_value(
-        dosage,
-        _order_value(document, source_values, "dose_unit", "single_dose_unit"),
-    )
-    quantity = _order_value(document, source_values, "order_quantity", "quantity")
-    quantity = _join_order_value(quantity, _order_value(document, source_values, "quantity_unit"))
+    # 目录规范化后的字段已包含单位，详情再次渲染时不能重复追加。
+    dosage = _order_value(document, source_values, "order_dosage")
+    if not dosage:
+        dosage = _join_order_value(
+            _order_value(document, source_values, "dosage", "dose", "single_dose"),
+            _order_value(document, source_values, "dose_unit", "single_dose_unit"),
+        )
+    quantity = _order_value(document, source_values, "order_quantity")
+    if not quantity:
+        quantity = _join_order_value(
+            _order_value(document, source_values, "quantity"),
+            _order_value(document, source_values, "quantity_unit"),
+        )
     return {
         "start_time": _order_value(
             document, source_values, "order_start_time", "start_time", "order_time", "prescribed_datetime"
         ),
         "order_type": order_type,
         "order_item": order_item,
+        "order_id": _order_value(document, source_values, "order_id"),
         "specification": _order_value(
             document, source_values, "order_specification", "specification", "drug_specification"
         ),
@@ -1305,6 +1326,9 @@ def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
         "frequency": _order_value(document, source_values, "order_frequency", "drug_frequency", "frequency"),
         "route": _order_value(document, source_values, "order_route", "drug_apply_method", "route"),
         "quantity": quantity,
+        "planned_end_time": _order_value(
+            document, source_values, "order_planned_end_time", "planned_end_time", "planned_end_datetime"
+        ),
         "stop_time": _order_value(document, source_values, "order_stop_time", "stop_time"),
         "order_status": _order_value(document, source_values, "order_status", "status"),
         "prescribed_doctor": _order_value(
@@ -1500,6 +1524,8 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "doc_key": doc_key,
             "group_key": group_key,
             "record_time": _safe_text(document.get("sort_time") or document.get("record_time")),
+            "submit_time": _safe_text(document.get("submit_time")),
+            "record_time_source": _safe_text(document.get("record_time_source")),
             "authors": list(document.get("authors") or []),
             "signatures": list(document.get("signatures") or []),
             "chief_physician_sign_datetime": _safe_text(document.get("chief_physician_sign_datetime")),

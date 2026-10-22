@@ -1531,6 +1531,12 @@
                         临时医嘱
                       </button>
                     </div>
+                    <MedicalOrderFilterBar
+                      v-model="editableCopyOrderFilters"
+                      :rows="editableCopyOrderRows"
+                      :visible-count="editableCopyVisibleOrderRows.length"
+                      :total-count="editableCopyScopedOrderRows.length"
+                    />
                     <div class="editable-copy-order-table-wrap">
                       <table class="editable-copy-order-table">
                         <thead>
@@ -1538,7 +1544,9 @@
                             <th>开始时间</th>
                             <th>医嘱类型</th>
                             <th>医嘱项目</th>
-                            <th>停止时间</th>
+                            <th>医嘱号</th>
+                            <th title="北京时间；计划结束不代表已实际停止">计划结束时间</th>
+                            <th>实际停止时间</th>
                             <th>医嘱状态</th>
                           </tr>
                         </thead>
@@ -1555,14 +1563,16 @@
                             <td>{{ order.startTime }}</td>
                             <td>{{ order.orderType }}</td>
                             <td>{{ order.item }}</td>
-                            <td>{{ order.stopTime }}</td>
+                            <td :title="order.orderId">
+                              {{ order.orderId || '-' }}
+                            </td>
+                            <td>{{ order.plannedEndTime || '-' }}</td>
+                            <td>{{ order.stopTime || '-' }}</td>
                             <td>{{ order.status }}</td>
                           </tr>
                           <tr v-if="!editableCopyVisibleOrderRows.length">
-                            <td colspan="5" class="editable-copy-order-empty">
-                              暂无{{
-                                editableCopyOrderTypeFilter === 'long' ? '长期医嘱' : '临时医嘱'
-                              }}
+                            <td colspan="7" class="editable-copy-order-empty">
+                              暂无符合当前条件的医嘱
                             </td>
                           </tr>
                         </tbody>
@@ -1781,6 +1791,7 @@
 
 <script setup lang="ts">
 import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
+import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {
@@ -1835,6 +1846,9 @@ const {
   editableCopyNewDocumentType,
   editableCopyOpen,
   editableCopyOrderTypeFilter,
+  editableCopyOrderFilters,
+  editableCopyOrderRows,
+  editableCopyScopedOrderRows,
   editableCopyReadonly,
   editableCopySaveAndRunLoading,
   editableCopySaving,

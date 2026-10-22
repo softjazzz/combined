@@ -422,6 +422,9 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         "record_time",
+        # 独立签署证据和完整二级结构化仅进入服务端材料，不提升为记录/提交时间。
+        "chief_physician_sign_datetime",
+        "v2_schema",
         # update_time 是增量同步时间，不作为 061 的出院记录完成/提交时间；
         # 保留读取供同一来源的其他既有规则使用。
         "update_time",
@@ -508,6 +511,8 @@ _NATIVE_SOURCE_FIELDS = {
         "record_datetime",
         "physician_sign",
         "record_content",
+        # 054/057 读取转入诊疗计划中的抗菌药及处置（1019 C10）。
+        "transfer_treatment_plan",
     ),
     "transfer_out_record": (
         "document_id",
@@ -774,13 +779,13 @@ _SNAPSHOT_SOURCE_FIELDS.update({
     "presurg_summary": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
     "surgery_safecheck_record": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
 })
@@ -1590,7 +1595,7 @@ def read_luxian_0609_runtime_source_rows(
             raise SourceEvidenceUnavailable()
         selected.append("surgery_begin_datetime")
     if source_key == "presurg_summary":
-        selected.extend(field for field in ("record_content", "record_time") if field in columns)
+        selected.extend(field for field in ("record_content", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS) if field in columns)
     if source_key == "surgery_safecheck_record":
         selected.extend(field for field in ("record_content",) if field in columns)
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"

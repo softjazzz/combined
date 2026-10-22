@@ -22,6 +22,8 @@ COORDINATES = ("synthetic-I", "synthetic-P", "synthetic-V")
     "病人牟甲乙，性别男，年龄60岁。",
     "患儿牟甲乙，因贫血入院。",
     "患者赵甲乙，老年男性，因贫血入院。",
+    "新建S章节:牟甲乙，男，79岁，因反复咳嗽入院。",
+    "牟甲乙，女，60岁，因贫血入院。",
 ])
 def test_known_patient_intro_is_redacted_before_fact_preparation(text):
     name = "赵甲乙" if "赵甲乙" in text else "牟甲乙"
@@ -73,6 +75,7 @@ async def test_fact_preparation_and_http_redaction_keep_identical_quote_binding(
     ("患者牟甲乙丰，拟行检查。", ("牟甲乙",)),
     ("检验值130mg。", ("130",)),
     ("患者神志清醒，继续观察。", ("牟甲乙",)),
+    ("会诊意见:牟甲乙丰，男，60岁。", ("牟甲乙",)),
 ])
 def test_known_intro_does_not_blindly_replace_identity_or_medical_text(text, identities):
     with luxian_0609_case_identity_scope(case_coordinates=COORDINATES, identity_provider=lambda: identities):

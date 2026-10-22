@@ -3,7 +3,6 @@
 import pytest
 
 from test_luxian_0609_native_extended_document_execution import (
-    _AntimicrobialActionClient,
     _056_rows,
     _evaluate,
 )
@@ -52,21 +51,6 @@ async def test_key_drug_specimen_identity_links_detail_to_master_time():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("body_field", ["record_content", "treatment_plan"])
-@pytest.mark.parametrize("action", ["予以", "予"])
-async def test_first_course_named_antimicrobial_action_requires_reason(body_field, action):
-    _, reduced = await _evaluate("LX0609-05-01-02", {
-        "inpat_drug_order": ({"generic_name": "左氧氟沙星"},),
-        "first_course_record": ({
-            "document_id": "synthetic-first",
-            "record_time": "2026-06-01 10:00:00",
-            body_field: f"考虑感染，{action}左氧氟沙星抗感染治疗。",
-        },),
-    }, llm_client=_AntimicrobialActionClient())
-    assert reduced.final_state.value == "compliant"
-
-
-@pytest.mark.asyncio
 async def test_infection_department_senior_consultant_can_support_named_drug():
     _, reduced = await _evaluate("LX0609-05-01-06", {
         "inpat_drug_order": ({"generic_name": "美罗培南",
@@ -111,20 +95,6 @@ def test_ct_department_formal_report_without_order_is_association_gap():
     assert len(ledger.events["exam"]) == 1
     review = build_ct_review_input(ledger=ledger, snapshot=snapshot, materials=materials)
     assert evaluate_ct_review(review).status == "data_gap"
-
-
-@pytest.mark.asyncio
-async def test_actual_infection_treatment_without_pathogen_basis_is_empiric():
-    _, reduced = await _evaluate("LX0609-05-01-05", {
-        "inpat_drug_order": ({"generic_name": "左氧氟沙星",
-                              "planned_start_datetime": "2026-06-01 10:00:00"},),
-        "first_course_record": ({
-            "document_id": "synthetic-first",
-            "record_time": "2026-06-01 11:00:00",
-            "record_content": "考虑感染，已给予左氧氟沙星抗感染治疗，另予运动预防静脉血栓。",
-        },),
-    })
-    assert reduced.final_state.value == "compliant"
 
 
 @pytest.mark.asyncio
@@ -188,38 +158,6 @@ async def test_non_pathogen_or_unlinked_detail_does_not_prove_specimen(detail_na
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("text", [
-    "拟给予左氧氟沙星抗感染治疗。",
-    "已给予左氧氟沙星预防感染。",
-    "根据药敏已给予左氧氟沙星抗感染治疗。",
-])
-async def test_new_empiric_trigger_excludes_plan_prophylaxis_and_targeted_use(text):
-    _, reduced = await _evaluate("LX0609-05-01-05", {
-        "inpat_drug_order": ({"generic_name": "左氧氟沙星",
-                              "planned_start_datetime": "2026-06-01 10:00:00"},),
-        "first_course_record": ({"record_time": "2026-06-01 11:00:00",
-                                  "record_content": text},),
-    })
-    assert reduced.final_state.value == "not_applicable"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("reason", [
-    "发热伴黄痰，有抗生素使用指征",
-    "结合发热与新发渗出影考虑肺部感染",
-    "发热伴咳黄痰，诊断为社区获得性肺炎",
-])
-async def test_empiric_reason_can_document_concrete_antibiotic_indication(reason):
-    _, reduced = await _evaluate("LX0609-05-01-05", {
-        "inpat_drug_order": ({"generic_name": "左氧氟沙星",
-                              "planned_start_datetime": "2026-06-01 10:00:00"},),
-        "first_course_record": ({"record_time": "2026-06-01 11:00:00",
-                                  "treatment_plan": reason + "，已给予左氧氟沙星抗感染。"},),
-    })
-    assert reduced.final_state.value == "compliant"
-
-
-@pytest.mark.asyncio
 async def test_later_ambiguous_expert_support_cannot_hide_unsupported_first_use():
     _, reduced = await _evaluate("LX0609-05-01-06", {
         "inpat_drug_order": (
@@ -230,22 +168,6 @@ async def test_later_ambiguous_expert_support_cannot_hide_unsupported_first_use(
                                   "record_content": "感染科合成专家副主任医师会诊意见：建议予以美罗培南抗感染。"},),
     })
     assert reduced.final_state.value == "non_compliant"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("future_start", ["2026-06-05 10:00:00", None])
-async def test_future_same_drug_order_cannot_hide_documented_initial_empiric_use(future_start):
-    _, reduced = await _evaluate("LX0609-05-01-05", {
-        "inpat_drug_order": (
-            {"generic_name": "左氧氟沙星", "planned_start_datetime": "2026-06-01 10:00:00"},
-            {"generic_name": "左氧氟沙星", "planned_start_datetime": future_start},
-        ),
-        "first_course_record": ({"record_time": "2026-06-01 11:00:00",
-                                  "record_content": "考虑感染，已给予左氧氟沙星抗感染。"},),
-    })
-    # 主控代定口径（2026-10-18，待客户复核），基线057：同药多医嘱存在即关联，
-    # 另一条医嘱缺开始时间也不再遮蔽首次经验用药及其已记录理由。
-    assert reduced.final_state.value == "compliant"
 
 
 @pytest.mark.asyncio

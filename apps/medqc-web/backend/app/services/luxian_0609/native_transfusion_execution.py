@@ -3356,7 +3356,7 @@ async def execute_luxian_0609_native_transfusion_rules(
 
         nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
         key = tuple(
-            (str(row.get("document_id") or row.get("id") or ""), str(row.get("record_time") or ""))
+            (str(row.get("document_id") or row.get("id") or ""), str(authoritative_document_time_value(row) or ""))
             for row in record_rows
         ) + (("dedicated", str(dedicated_performance_source)),)
         if key in performance_event_cache:

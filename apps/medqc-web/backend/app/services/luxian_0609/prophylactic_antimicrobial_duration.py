@@ -23,6 +23,7 @@ from time import perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .extended_document.shared import order_repeat_kind
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
@@ -146,6 +147,13 @@ def is_cardiac_surgery(codes: Sequence[Any], names: Sequence[Any]) -> bool:
     )
 
 
+def is_local_route_drug_order(row: Mapping[str, Any]) -> bool:
+    """滴眼、外用、冲洗、雾化等局部用药（药名或给药途径）；用户口径：局部用药不算抗菌药使用。"""
+
+    name = _clean(" ".join(str(row.get(key) or "") for key in ("generic_name", "brand_name", "order_name")))
+    return bool(_NON_SYSTEMIC.search(name + _clean(row.get("drug_apply_method"))))
+
+
 def is_systemic_antibacterial(row: Mapping[str, Any]) -> bool:
     if _CANCELLED.search(str(row.get("order_status") or "")):
         return False
@@ -166,7 +174,7 @@ def order_stop(row: Mapping[str, Any]) -> datetime | None:
     """临时/单次医嘱以开始时刻为止；长期医嘱必须有停止时间，不以更新时间替代。"""
 
     start = order_start(row)
-    if str(row.get("repeat_indicator") or "").strip() == "临时" or _SINGLE_DOSE.fullmatch(
+    if order_repeat_kind(row) == "temporary" or _SINGLE_DOSE.fullmatch(
         _clean(row.get("drug_frequency"))
     ):
         return start

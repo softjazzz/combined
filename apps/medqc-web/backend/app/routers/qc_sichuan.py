@@ -181,7 +181,7 @@ async def surgery_procedure_catalog(
             "policy": {
                 "level_priority": "院内绩效分配优先于2025年国家临床版手术分级目录",
                 "conditional_level_four": "条件四级按四级手术执行",
-                "category_boundary": "治疗性操作、诊断性操作和介入治疗不按手术触发",
+                "category_boundary": "治疗性操作、诊断性操作不按手术触发；介入治疗按手术触发",
             },
             "summary": {
                 "total": len(catalog),

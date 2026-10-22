@@ -404,6 +404,7 @@ export type ManualTestRecordSourceMeta = {
 
 export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   key: string
+  record_time_source?: string
   execution_domain?: string
   has_content?: boolean
   content_loaded?: boolean
@@ -421,6 +422,8 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   report_items?: EditableMedicalReportItem[]
   report_metadata?: Record<string, string>
   order_start_time?: string
+  order_id?: string
+  order_planned_end_time?: string
   order_stop_time?: string
   order_category?: string
   order_item?: string

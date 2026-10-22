@@ -150,3 +150,38 @@ def test_surgery_type_order_for_bedside_procedure_is_not_surgery_order() -> None
     assert is_non_surgical_procedure_order({"order_name": "心肺复苏术"}) is True
     assert is_non_surgical_procedure_order({"order_name": "腹腔镜下阑尾切除术"}) is False
     assert is_non_surgical_procedure_order({"order_name": "气管插管护理"}) is False
+
+
+def test_vessel_count_adjunct_code_is_not_surgery() -> None:
+    # 1019 C15：冠脉介入首页的“两根血管操作”附加编码带三级等级，不能单独触发手术。
+    item = classify_surgery_procedure(code="00.4100", name="两根血管操作")
+
+    assert item is not None
+    assert (item.category, item.match_mode, item.is_surgery) == ("附加编码", "adjunct_code", False)
+    assert has_qualified_traditional_surgery_row(
+        {"surgery_code": "00.4100", "surgery_name": "两根血管操作", "surgical_level": "三级"}
+    ) is False
+    # 00.49 是目录内的独立治疗性操作，不属于附加编码。
+    assert classify_surgery_procedure(code="00.4900").category == "治疗性操作"
+
+
+@pytest.mark.parametrize(("code", "name"), [
+    ("96.7201", "呼吸机治疗[大于等于96小时]"),
+    ("99.0301", "输血"),
+    ("87.4100", "胸部CT检查"),
+])
+def test_uncatalogued_chapter_87_to_99_codes_are_operations(code, name) -> None:
+    """用户口径（2026-10-21）：目录未收录的第87–99章一律按操作，不按首页等级兜底（1019 C15）。"""
+    item = classify_surgery_procedure(code=code, name=name)
+
+    assert item is not None and item.match_mode == "chapter_87_99" and item.is_surgery is False
+    assert has_qualified_traditional_surgery_row(
+        {"surgery_code": code, "surgery_name": name, "surgical_level": "三级"}
+    ) is False
+
+
+def test_interventional_procedure_triggers_as_surgery() -> None:
+    """用户口径（2026-10-21）：介入治疗（如 PCI）按手术触发。"""
+    item = classify_surgery_procedure(code="00.6600X004")
+
+    assert item is not None and item.category == "介入治疗" and item.is_surgery is True

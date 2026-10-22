@@ -37,12 +37,12 @@ def test_empty_refs_do_not_invent_binding_failure(refs):
 
 
 @pytest.mark.asyncio
-async def test_missing_title_document_is_located_without_changing_data_gap():
+async def test_missing_signature_document_is_located_without_changing_data_gap():
     from app.services.luxian_0609.native_extended_document_execution import execute_luxian_0609_native_extended_document_rules
     from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
     from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
     snapshot, materials = _handoff_session(
-        {"daily_course_record": (_daily("NO-TITLE", "2026-08-20 08:00:00", "医师甲", title=None),)},
+        {"daily_course_record": (_daily("NO-TITLE", "2026-08-20 08:00:00", None, title=None),)},
         unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
     )
     native = await execute_luxian_0609_native_extended_document_rules(

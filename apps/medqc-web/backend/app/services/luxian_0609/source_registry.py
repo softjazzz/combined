@@ -517,6 +517,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_master",
         "labtest_item_report",
         "surgery_record",
+        # 手术/转科类建议的住院期间执行证据（用户口径 2026-10-22）。
+        "transfer_out_record",
+        "transfer_in_record",
+        "postsurg_firstcourse_record",
     ),
     # 040 先由结构化手术等级确认四级手术，再核对同次就诊会诊记录。
     # 术前小结中的“今日急诊/急诊手术”是免除术前 MDT 的受控例外依据，
@@ -597,8 +601,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "crisis_value_record",
     ),
     "LX0609-05-01-02": (
-        "first_course_record", "senior_course_record", "consultation_record", "labtest_master",
-        "labtest_item_report",
+        "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
+        "labtest_master", "labtest_item_report",
+        # 手术、麻醉记录只认围术期预防用药引文（用户口径 2026-10-22）。
+        "surgery_record", "anesthesia_record",
+        # 停用事件：出院当日及以后随出院停的不核对，需出院时间。
+        "inpat_registration", "evaluation_context.horizon",
     ),
     "LX0609-05-01-03": (
         "inpat_drug_order", "daily_course_record", "senior_course_record",
@@ -610,8 +618,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-05-01-05": (
-        "first_course_record", "senior_course_record", "consultation_record", "labtest_master",
-        "labtest_item_report",
+        "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
+        "labtest_master", "labtest_item_report", "surgery_record", "anesthesia_record",
     ),
     "LX0609-05-01-06": (
         "inpat_drug_order", "senior_course_record", "consultation_record",

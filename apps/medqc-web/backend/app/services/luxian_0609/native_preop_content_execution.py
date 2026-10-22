@@ -401,9 +401,9 @@ def _validated_items(
 
 
 def _document_record_time(row: Mapping[str, Any]) -> datetime | None:
-    """仅使用术前文书自身可靠的 record_time，绝不以提交时间猜测。"""
+    """文书记录时间为空时回退提交时间，仍要求完整且可解析的时间。"""
 
-    value = row.get("record_time")
+    value = authoritative_document_time_value(row)
     if isinstance(value, datetime):
         if value.tzinfo is None:
             return value

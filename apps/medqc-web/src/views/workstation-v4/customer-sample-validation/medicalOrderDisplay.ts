@@ -1,10 +1,13 @@
 import type { EditableMedicalRecordDocument } from './types'
+import { formatDocSortTime } from '../utils/documentDisplay'
 
 export type MedicalOrderTypeKey = 'long' | 'temporary'
 
 export type MedicalOrderRow = {
   document: EditableMedicalRecordDocument
+  orderId: string
   startTime: string
+  plannedEndTime: string
   stopTime: string
   orderType: string
   item: string
@@ -53,6 +56,14 @@ function normalizeOrderTime(value?: string, fallback = '-'): string {
     .replace('T', ' ')
     .replace(/(?:Z|[+-]\d{2}:?\d{2})$/u, '')
     .slice(0, 19)
+}
+
+export function formatPlannedOrderEndTime(value?: string): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  // 有明确时区的计划时间按医院北京时间显示；无时区值保留来源钟表时间。
+  if (/[T ]\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$/iu.test(raw)) return formatDocSortTime(raw)
+  return normalizeOrderTime(raw, '')
 }
 
 function resolveOrderTypeKey(document: EditableMedicalRecordDocument): MedicalOrderTypeKey {
@@ -143,10 +154,12 @@ export function buildMedicalOrderRow(document: EditableMedicalRecordDocument): M
   )
   return {
     document,
+    orderId: document.order_id?.trim() || '',
     startTime: normalizeOrderTime(
       document.order_start_time || document.record_time || document.submit_time,
     ),
     stopTime: normalizeOrderTime(document.order_stop_time, ''),
+    plannedEndTime: formatPlannedOrderEndTime(document.order_planned_end_time),
     orderType: resolveOrderCategory(document),
     item: resolveOrderItem(document),
     specification: resolveOrderField(

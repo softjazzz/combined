@@ -87,6 +87,7 @@ def _session(
         "postsurg_firstcourse_record": "snapshot-provider-postsurg_firstcourse_record-v1",
         "mr_surgery": "snapshot-provider-surgery_record-v2",
         "surgery_record": "snapshot-provider-surgery_record-v2",
+        "anesthesia_record": "snapshot-provider-anesthesia_record-v1",
         "consultation_record": "snapshot-provider-consultation_record-v1",
         "handoff_record": "snapshot-provider-handoff_record-v1",
         "handover_record": "snapshot-provider-handover_record-v1",
@@ -249,6 +250,10 @@ async def _evaluate(
         llm_client = FrozenAntimicrobialEffectClient()
     if rule_id == "LX0609-03-02-01" and llm_client is None:
         llm_client = FrozenDiagnosisScopeClient()
+    if rule_id == "LX0609-05-01-06" and llm_client is None:
+        # 058 医嘱驱动后由模型确认“专家同意使用”；受控桩只认原文分句的明确同意。
+        from special_antimicrobial_test_support import FrozenSpecialApprovalClient
+        llm_client = FrozenSpecialApprovalClient()
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -303,6 +308,9 @@ async def _evaluate_selected(
         llm_client = FrozenAntimicrobialEffectClient()
     if "LX0609-03-02-01" in rule_ids and llm_client is None:
         llm_client = FrozenDiagnosisScopeClient()
+    if "LX0609-05-01-06" in rule_ids and llm_client is None:
+        from special_antimicrobial_test_support import FrozenSpecialApprovalClient
+        llm_client = FrozenSpecialApprovalClient()
     snapshot, materials = _session(
         rows_by_source,
         unavailable_sources=unavailable_sources,
@@ -5952,7 +5960,8 @@ def test_discharge_medication_labels_form_a_structured_contract() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "rule_id",
-    ["LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-04", "LX0609-05-01-06"],
+    # 054 改为医嘱驱动后由 test_luxian_0609_antimicrobial_order_reason.py 覆盖。
+    ["LX0609-05-01-03", "LX0609-05-01-04", "LX0609-05-01-06"],
 )
 async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
     client = _AntimicrobialActionClient() if rule_id == "LX0609-05-01-02" else None
@@ -5990,189 +5999,12 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         llm_client=client,
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    expected_calls = 1 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-03"} else 0
+    # 058 医嘱驱动后由模型确认专家同意（2026-10-21）。
+    expected_calls = 1 if rule_id in {"LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-06"} else 0
     assert result.llm_call_count == expected_calls
     assert result.prompt_tokens == expected_calls * 10
     assert result.completion_tokens == expected_calls * 5
     assert result.total_tokens == expected_calls * 15
-
-
-@pytest.mark.asyncio
-async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": ({
-                "generic_name": "美罗培南",
-                "prescribed_datetime": "2026-06-01 10:00:00",
-            },),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "启用美罗培南。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-
-
-@pytest.mark.asyncio
-async def test_054_unacted_second_order_does_not_create_a_second_trigger_event() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": (
-                {"order_id": "A-1", "generic_name": "美罗培南"},
-                {"order_id": "A-2", "generic_name": "万古霉素"},
-            ),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
-    assert facts["reason_documented"] is True
-    assert facts["antimicrobials"] == ["美罗培南"]
-    assert facts["unmatched_antimicrobials"] == []
-
-
-@pytest.mark.asyncio
-async def test_054_antimicrobial_orders_without_documented_action_are_not_applicable() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": (
-                {"order_id": "M-1", "generic_name": "美罗培南"},
-                {"order_id": "M-2", "generic_name": "美罗培南"},
-            ),
-            "daily_course_record": (),
-            "senior_course_record": (),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-05-01-02" not in dict(result.customer_display_facts)
-
-
-@pytest.mark.asyncio
-async def test_054_multiple_same_drug_actions_cannot_share_one_unlinked_reason() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": (
-                {"order_id": "M-1", "generic_name": "美罗培南"},
-                {"order_id": "M-2", "generic_name": "美罗培南"},
-            ),
-            "daily_course_record": (
-                {
-                    "record_time": "2026-06-01 12:00:00",
-                    "related_order_id": "M-1",
-                    "record_content": "启用美罗培南。",
-                },
-                {
-                    "record_time": "2026-06-02 12:00:00",
-                    "related_order_id": "M-2",
-                    "record_content": "更换为美罗培南。",
-                },
-                {
-                    "record_time": "2026-06-02 13:00:00",
-                    "record_content": "考虑重症感染，需要美罗培南覆盖耐药菌。",
-                },
-            ),
-            "senior_course_record": (),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
-    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
-    assert facts["reason_documented"] is False
-    assert facts["unmatched_antimicrobials"] == ["美罗培南"]
-    assert facts["association_ambiguous"] is True
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "orders",
-    (
-        (),
-        ({"order_id": "P-1", "generic_name": "青霉素"},),
-    ),
-)
-async def test_054_action_without_a_matching_current_antimicrobial_order_is_data_gap(
-    orders,
-) -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": orders,
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
-    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
-    assert facts["antimicrobials"] == ["美罗培南"]
-    assert facts["association_ambiguous"] is True
-
-
-@pytest.mark.asyncio
-async def test_054_explicit_action_with_same_record_reason_is_compliant() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": ({"order_id": "M-1", "generic_name": "美罗培南"},),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
-    assert facts["reason_documented"] is True
-    assert facts["unmatched_antimicrobials"] == []
-    assert facts["association_ambiguous"] is False
-
-
-@pytest.mark.asyncio
-async def test_054_change_after_infusion_pruritus_has_documented_reason() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": (
-                {"order_id": "L-1", "generic_name": "左氧氟沙星"},
-                {"order_id": "C-1", "generic_name": "头孢呋辛"},
-            ),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": (
-                    "呼吸科建议左氧氟沙星抗肺部感染，但患者输注后出现瘙痒不适，"
-                    "今日更改为头孢呋辛继续预防感染。"
-                ),
-            },),
-        },
-        llm_client=_AntimicrobialActionClient("affirmed"),
-    )
-
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-05-01-02"]
-    assert facts["antimicrobials"] == ["头孢呋辛", "左氧氟沙星"]
-    assert facts["action_count"] == 2
-    assert facts["reason_documented"] is True
-    assert result.llm_call_count == 1
 
 
 @pytest.mark.parametrize(
@@ -6267,205 +6099,6 @@ def test_054_high_confidence_candidate_action_is_conservative(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("course_text", "expected_state", "expected_reason"),
-    (
-        (
-            "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
-        ),
-        (
-            "考虑右肾感染可能予以左氧氟沙星经验性抗感染处理。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
-        ),
-        (
-            "考虑肺部感染，给予甲泼尼龙抗炎，左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
-        ),
-        (
-            "目前感染证据不足，暂不予以左氧氟沙星抗感染处理。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "当前未考虑予以左氧氟沙星抗感染治疗。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "目前不建议予以左氧氟沙星抗感染治疗。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "尚未决定是否予以左氧氟沙星抗感染治疗。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "未予以左氧氟沙星使用。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，尚未明确是否予以左氧氟沙星抗感染处理。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，暂不推荐予以左氧氟沙星抗感染处理。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，暂不建议在病原学检查结果回报并完成会诊讨论前予以左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，不予继续使用左氧氟沙星。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
-            "考虑感染，不建议停用而继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
-            "考虑感染，未见不良反应继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，并非不予以左氧氟沙星抗感染。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
-        ),
-        (
-            "感染证据不足，不予以左氧氟沙星抗感染处理。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "感染持续加重，不使用左氧氟沙星，改用其他方案。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染持续加重，不得不予以左氧氟沙星抗感染处理。",
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
-        ),
-        (
-            "未给予甲泼尼龙抗炎，左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，尚未开始使用左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，未曾予以左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            "考虑感染，暂未实际给予左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-        (
-            # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作。
-            "考虑感染，暂不更换并继续使用左氧氟沙星抗感染。",
-            CustomerFinalState.NOT_APPLICABLE,
-            "trigger_absent_complete",
-        ),
-    ),
-)
-async def test_054_recognizes_only_affirmed_yuyi_antimicrobial_action(
-    course_text: str,
-    expected_state: CustomerFinalState,
-    expected_reason: str,
-) -> None:
-    semantic_state = (
-        "affirmed"
-        if expected_state is CustomerFinalState.COMPLIANT
-        else "no_action"
-    )
-    _, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": ({
-                "order_id": "L-1",
-                "generic_name": "左氧氟沙星",
-            },),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": course_text,
-            },),
-        },
-        llm_client=_AntimicrobialActionClient(semantic_state),
-    )
-
-    assert reduced.final_state is expected_state
-    assert reduced.reason_code == expected_reason
-
-
-@pytest.mark.asyncio
-async def test_054_semantic_uncertainty_is_explicit_evaluation_unknown_with_usage() -> None:
-    client = _AntimicrobialActionClient("uncertain")
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": ({
-                "order_id": "L-1",
-                "generic_name": "左氧氟沙星",
-            },),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑感染，是否继续使用左氧氟沙星尚待确认。",
-            },),
-        },
-        llm_client=client,
-    )
-
-    assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
-    assert reduced.reason_code == "semantic_low_confidence"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 15
-    assert len(client.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_054_semantic_candidate_without_model_is_technical_error() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": ({
-                "order_id": "L-1",
-                "generic_name": "左氧氟沙星",
-            },),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑感染，尚未开始使用左氧氟沙星抗感染。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
-    assert reduced.reason_code == "model_transport_error"
-    assert result.llm_call_count == 0
-
-
-@pytest.mark.asyncio
 async def test_054_unavailable_course_source_remains_data_gap() -> None:
     result, reduced = await _evaluate(
         "LX0609-05-01-02",
@@ -6488,42 +6121,6 @@ async def test_054_without_antimicrobial_is_not_applicable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_054_order_only_case_survives_binding_aggregator_and_renderer() -> None:
-    snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-05-01-02",),
-        {
-            "inpat_drug_order": ({
-                "order_id": "M-1",
-                "generic_name": "美罗培南",
-                "order_status": "停止",
-                "update_time": "2026-06-02 12:00:00",
-            },),
-            "daily_course_record": (),
-            "senior_course_record": (),
-        },
-    )
-
-    canonical = _canonical_extended_result(
-        rule_id="LX0609-05-01-02",
-        snapshot=snapshot,
-        materials=materials,
-        result=execution,
-        reduced=reduced,
-    )
-
-    assert (canonical["status"], canonical["reason_code"]) == (
-        "not_applicable", "trigger_absent_complete"
-    )
-    assert "customer_display_facts" not in canonical
-    assert execution.llm_call_count == 0
-    assert execution.total_tokens == 0
-    rendered = render_luxian_0609_customer_result(decision=reduced[0])
-    assert (rendered["status"], rendered["reason_code"]) == (
-        "not_applicable", "trigger_absent_complete"
-    )
-
-
-@pytest.mark.asyncio
 async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-05-01-05",
@@ -6539,92 +6136,6 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-
-
-@pytest.mark.asyncio
-async def test_057_culture_then_start_and_susceptibility_adjustment_is_not_empiric_use() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-05",
-        {
-            "inpat_drug_order": ({"generic_name": "美罗培南"},),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 10:00:00",
-                "record_content": "留取血培养后启用美罗培南，待药敏结果调整方案。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced.reason_code == "trigger_absent_complete"
-    assert "LX0609-05-01-05" not in dict(result.customer_display_facts)
-
-
-@pytest.mark.asyncio
-async def test_057_generic_culture_then_start_sequence_is_not_empiric_use() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-05-01-05",
-        {
-            "inpat_drug_order": ({"generic_name": "美罗培南"},),
-            "daily_course_record": ({
-                "record_content": "留取培养后启用抗菌药，待药敏结果调整方案。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced.reason_code == "trigger_absent_complete"
-
-
-@pytest.mark.asyncio
-async def test_057_antimicrobial_order_without_explicit_empiric_use_is_not_applicable() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-05-01-05",
-        {
-            "inpat_drug_order": ({"generic_name": "美罗培南"},),
-            "daily_course_record": (),
-            "senior_course_record": (),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced.reason_code == "trigger_absent_complete"
-
-
-@pytest.mark.asyncio
-async def test_057_explicit_empiric_use_with_reason_is_compliant() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-05-01-05",
-        {
-            "inpat_drug_order": ({"order_id": "A-1", "generic_name": "美罗培南"},),
-            "daily_course_record": ({
-                "order_id": "A-1",
-                "record_content": "考虑重症感染，经验性抗感染治疗，启用美罗培南覆盖耐药菌。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert reduced.reason_code == "requirement_satisfied"
-    assert dict(result.customer_display_facts)["LX0609-05-01-05"]["empiric_use_confirmed"] is True
-
-
-@pytest.mark.asyncio
-async def test_057_explicit_empiric_use_without_unique_drug_event_is_data_gap() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-05-01-05",
-        {
-            "inpat_drug_order": (
-                {"order_id": "A-1", "generic_name": "美罗培南"},
-                {"order_id": "A-2", "generic_name": "万古霉素"},
-            ),
-            "daily_course_record": ({
-                "record_content": "经验性抗感染治疗，覆盖耐药菌。",
-            },),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
 
 
 def _duplicate_levofloxacin_order_rows(
@@ -6664,126 +6175,6 @@ def _duplicate_levofloxacin_order_rows(
             "planned_start_datetime": "2026-06-01 09:59:45+08:00",
         },
         second,
-    )
-
-
-@pytest.mark.asyncio
-async def test_054_and_057_group_strict_duplicate_order_rows_and_keep_all_refs() -> None:
-    course_row = {
-        "document_id": "LEVO-COURSE",
-        "record_time": "2026-06-01 12:00:00",
-        "record_content": "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
-    }
-    snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-05-01-02", "LX0609-05-01-05"),
-        {
-            "inpat_drug_order": _duplicate_levofloxacin_order_rows(
-                second_start="2026-06-01 10:00:00+08:00"
-            ),
-            "daily_course_record": (course_row,),
-        },
-    )
-
-    refs = {
-        row["document_id"]: reference
-        for source_key in ("inpat_drug_order", "daily_course_record")
-        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
-    }
-    expected_refs = tuple(sorted((
-        refs["LEVO-ORDER-1"],
-        refs["LEVO-ORDER-2"],
-        refs["LEVO-COURSE"],
-    )))
-
-    assert [item.final_state for item in reduced] == [
-        CustomerFinalState.COMPLIANT,
-        CustomerFinalState.COMPLIANT,
-    ]
-    assert [item.reason_code for item in reduced] == [
-        "requirement_satisfied",
-        "requirement_satisfied",
-    ]
-    assert [item.fact_refs for item in execution.decisions] == [
-        expected_refs,
-        expected_refs,
-    ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("rule_id", ("LX0609-05-01-02", "LX0609-05-01-05"))
-@pytest.mark.parametrize(
-    ("second_start", "second_overrides"),
-    (
-        ("2026-06-01 10:00:46+08:00", {}),
-        ("2026-06-01 10:00:00+08:00", {"repeat_indicator": "长期"}),
-        ("2026-06-01 10:00:00+08:00", {"dose_form": "片剂"}),
-        ("2026-06-01 10:00:00+08:00", {"drug_specification": "50ml:0.25g"}),
-        ("2026-06-01 10:00:00+08:00", {"medication_duration": "2"}),
-        (
-            "2026-06-01 10:00:00+08:00",
-            {"last_modified_datetime": "2026-06-01 09:58:01"},
-        ),
-    ),
-)
-async def test_antimicrobial_nearby_distinct_orders_remain_ambiguous(
-    rule_id: str,
-    second_start: str,
-    second_overrides: dict,
-) -> None:
-    _, reduced = await _evaluate(
-        rule_id,
-        {
-            "inpat_drug_order": _duplicate_levofloxacin_order_rows(
-                second_start=second_start,
-                second_overrides=second_overrides,
-            ),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
-            },),
-        },
-    )
-
-    if rule_id == "LX0609-05-01-02":
-        # 054 用户口径（2026-10-18）：同药多条医嘱且无停止时间时，存在同药医嘱即关联成立，
-        # 按病程理由判定。
-        assert reduced.final_state is CustomerFinalState.COMPLIANT
-        assert reduced.reason_code == "requirement_satisfied"
-    else:
-        # 主控代定口径（2026-10-18，待客户复核），基线057：同药存在即关联，理由按药名归属。
-        assert reduced.final_state is CustomerFinalState.COMPLIANT
-        assert reduced.reason_code == "requirement_satisfied"
-
-
-@pytest.mark.asyncio
-async def test_057_absent_empiric_trigger_survives_binding_aggregator_and_renderer() -> None:
-    snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-05-01-05",),
-        {
-            "inpat_drug_order": ({"generic_name": "美罗培南"},),
-            "daily_course_record": ({
-                "record_content": "留取血培养后启用美罗培南，待药敏结果调整方案。",
-            },),
-        },
-    )
-
-    canonical = _canonical_extended_result(
-        rule_id="LX0609-05-01-05",
-        snapshot=snapshot,
-        materials=materials,
-        result=execution,
-        reduced=reduced,
-    )
-
-    assert (canonical["status"], canonical["reason_code"]) == (
-        "not_applicable", "trigger_absent_complete"
-    )
-    assert "customer_display_facts" not in canonical
-    assert execution.llm_call_count == 0
-    assert execution.total_tokens == 0
-    rendered = render_luxian_0609_customer_result(decision=reduced[0])
-    assert (rendered["status"], rendered["reason_code"]) == (
-        "not_applicable", "trigger_absent_complete"
     )
 
 
@@ -7163,10 +6554,8 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == [
-        48.0,
-        74.0,
-    ]
+    # 医嘱驱动（2026-10-21）：只把48–72小时窗内病程交给模型，窗外记录不再计入间隔。
+    assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == [48.0]
 
 
 @pytest.mark.asyncio
@@ -7198,10 +6587,8 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced.reason_code == "threshold_exceeded"
     assert dict(result.customer_display_facts)["LX0609-05-01-03"]["evaluation_intervals"] == []
-    assert result.llm_call_count == 1
-    assert result.prompt_tokens == 10
-    assert result.completion_tokens == 5
-    assert result.total_tokens == 15
+    # 窗内无病程时无需调用模型即可判定未评价。
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -9049,96 +8436,6 @@ async def test_055_fact_refs_only_include_matched_start_order_and_window_evaluat
 
 
 @pytest.mark.asyncio
-async def test_054_fact_refs_only_include_trigger_action_matched_order_and_reason() -> None:
-    snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-05-01-02",),
-        {
-            "inpat_drug_order": ({
-                "document_id": "ORDER-054-MATCH",
-                "order_id": "ORDER-054-MATCH",
-                "generic_name": "美罗培南",
-            },),
-            "daily_course_record": (
-                {
-                    "document_id": "COURSE-054-ACTION",
-                    "related_order_id": "ORDER-054-MATCH",
-                    "record_content": "停用美罗培南。",
-                },
-                {
-                    "document_id": "COURSE-054-REASON",
-                    "related_order_id": "ORDER-054-MATCH",
-                    "record_content": "考虑感染已控制，停用理由已记录。",
-                },
-                {
-                    "document_id": "COURSE-054-OTHER",
-                    "related_order_id": "ORDER-054-OTHER",
-                    "record_content": "考虑感染，继续观察病情。",
-                },
-            ),
-        },
-    )
-
-    refs_by_document_id = {
-        row["document_id"]: reference
-        for source_key in ("inpat_drug_order", "daily_course_record")
-        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
-    }
-
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert execution.decisions[0].fact_refs == tuple(sorted((
-        refs_by_document_id["ORDER-054-MATCH"],
-        refs_by_document_id["COURSE-054-ACTION"],
-        refs_by_document_id["COURSE-054-REASON"],
-    )))
-    assert refs_by_document_id["COURSE-054-OTHER"] not in execution.decisions[0].fact_refs
-
-
-@pytest.mark.asyncio
-async def test_057_fact_refs_only_include_empiric_trigger_matched_order_and_reason() -> None:
-    snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-05-01-05",),
-        {
-            "inpat_drug_order": ({
-                "document_id": "ORDER-057-MATCH",
-                "order_id": "ORDER-057-MATCH",
-                "generic_name": "美罗培南",
-            },),
-            "daily_course_record": (
-                {
-                    "document_id": "COURSE-057-TRIGGER",
-                    "related_order_id": "ORDER-057-MATCH",
-                    "record_content": "经验性用药，使用美罗培南。",
-                },
-                {
-                    "document_id": "COURSE-057-REASON",
-                    "related_order_id": "ORDER-057-MATCH",
-                    "record_content": "考虑感染可能，理由已记录。",
-                },
-                {
-                    "document_id": "COURSE-057-OTHER",
-                    "related_order_id": "ORDER-057-OTHER",
-                    "record_content": "考虑感染可能，理由已记录。",
-                },
-            ),
-        },
-    )
-
-    refs_by_document_id = {
-        row["document_id"]: reference
-        for source_key in ("inpat_drug_order", "daily_course_record")
-        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
-    }
-
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert execution.decisions[0].fact_refs == tuple(sorted((
-        refs_by_document_id["ORDER-057-MATCH"],
-        refs_by_document_id["COURSE-057-TRIGGER"],
-        refs_by_document_id["COURSE-057-REASON"],
-    )))
-    assert refs_by_document_id["COURSE-057-OTHER"] not in execution.decisions[0].fact_refs
-
-
-@pytest.mark.asyncio
 async def test_058_noncompliant_fact_refs_include_only_order_and_late_matched_support() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-05-01-06",),
@@ -9557,7 +8854,8 @@ async def test_postoperative_not_applicable_unknown_operation_keeps_source_ancho
         {
             "mr_surgery": ({
                 "document_id": "OP-UNKNOWN",
-                "surgery_code": "99.9999",
+                # 第87–99章已按操作处理（2026-10-21），此处用其他章节的未收录编码保持“未知操作”语义。
+                "surgery_code": "54.9999",
                 "surgery_name": "未纳入目录的操作",
                 "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
             },),
@@ -11210,51 +10508,6 @@ def _two_metronidazole_orders() -> tuple[dict, dict]:
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("course_text", "expected_state", "expected_reason"),
-    (
-        ("鉴于患者腹泻情况好转，故今日停用甲硝唑。", CustomerFinalState.COMPLIANT, "requirement_satisfied"),
-        ("今日停用甲硝唑。", CustomerFinalState.NON_COMPLIANT, "requirement_violated"),
-    ),
-)
-async def test_054_repeated_same_drug_orders_associate_and_judge_reason(
-    course_text, expected_state, expected_reason,
-) -> None:
-    _, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": _two_metronidazole_orders(),
-            "daily_course_record": ({
-                "record_time": "2026-06-08 09:00:00",
-                "record_content": course_text,
-            },),
-        },
-        llm_client=_AntimicrobialActionClient("affirmed"),
-    )
-
-    assert reduced.final_state is expected_state
-    assert reduced.reason_code == expected_reason
-
-
-@pytest.mark.asyncio
-async def test_054_action_without_same_drug_order_remains_association_failed() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-05-01-02",
-        {
-            "inpat_drug_order": _two_metronidazole_orders(),
-            "daily_course_record": ({
-                "record_time": "2026-06-08 09:00:00",
-                "record_content": "考虑感染加重，今日更换抗生素为哌拉西林他唑巴坦。",
-            },),
-        },
-        llm_client=_AntimicrobialActionClient("affirmed"),
-    )
-
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
-
-
 def test_death_scope_falls_back_to_discharge_typed_diagnoses_only_without_death_type():
     # 用户决定（2026-10-20）：死亡病例首页/出院记录只标“出院诊断”时以其作出院/死亡诊断比对。
     from app.services.luxian_0609.native_extended_document_execution import _discharge_or_death_diagnosis_rows
@@ -11264,3 +10517,21 @@ def test_death_scope_falls_back_to_discharge_typed_diagnoses_only_without_death_
     assert _discharge_or_death_diagnosis_rows((admission, discharge), diagnosis_scope="death") == (discharge,)
     assert _discharge_or_death_diagnosis_rows((discharge, death), diagnosis_scope="death") == (death,)
     assert _discharge_or_death_diagnosis_rows((admission,), diagnosis_scope="death") == ()
+
+
+@pytest.mark.parametrize(("clause", "expected"), [
+    # 1019 C11：“预防”属于并列的抑酸药，不能排除同句的抗感染治疗。
+    ("予以头孢曲松抗感染、奥美拉唑抑酸护胃（预防应激性溃疡出血）、补液", False),
+    ("术前予头孢唑林预防感染", True),
+    ("围术期予头孢呋辛抗感染", True),
+    ("予头孢呋辛抗感染、预防切口感染", True),
+])
+def test_057_prophylaxis_is_judged_on_the_antimicrobial_item(clause, expected) -> None:
+    from app.services.luxian_0609.native_extended_document_execution import (
+        _is_prophylactic_antimicrobial_clause,
+    )
+
+    assert _is_prophylactic_antimicrobial_clause(clause) is expected
+
+
+_TRANSFER_PLAN = "予以气管插管呼吸机辅助呼吸，予以哌拉西林他唑巴坦抗感染，完善痰培养。"

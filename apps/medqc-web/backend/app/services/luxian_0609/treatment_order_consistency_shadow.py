@@ -220,8 +220,8 @@ def _adapt_materials(
             notes.append(CourseNote(
                 note_id=document_id,
                 note_time=_time(
-                    row, "record_time", "record_datetime", "document_time",
-                    "submit_time", "submitted_at", "update_time",
+                    row, "record_time", "record_datetime", "submit_time", "submit_datetime",
+                    "document_time", "submitted_at", "update_time",
                 ),
                 text=_text(row, "record_content"),
                 source_ref=_source_ref(source_key, document_id),

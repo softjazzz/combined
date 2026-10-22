@@ -14,6 +14,9 @@ from typing import Any, Mapping
 CATALOG_VERSION = "luxian-surgery-procedure-2025-v1"
 SURGERY_CATEGORY = "手术"
 OPERATION_CATEGORIES = frozenset({"治疗性操作", "诊断性操作", "介入治疗"})
+# 用户口径（2026-10-21）：介入治疗（如 PCI）按手术触发手术类文书规则；目录展示分类不变。
+INTERVENTIONAL_CATEGORY = "介入治疗"
+SURGERY_TRIGGER_CATEGORIES = frozenset({SURGERY_CATEGORY, INTERVENTIONAL_CATEGORY})
 _DATA_PATH = (
     Path(__file__).resolve().parents[2] / "data" / "surgery_procedure_catalog_2025.csv"
 )
@@ -31,6 +34,12 @@ _SUPPLEMENT_OPERATION_SUBCATEGORIES = {
     "44.13": "诊断性操作",
     "33.23": "诊断性操作",
 }
+# ICD-9-CM-3 00.40–00.48 是“操作血管数量/置入支架数量”附加编码，只修饰同台主操作，
+# 本身不是手术；首页为其填写的等级不能触发手术类文书（1019 C15 冠脉介入的“两根血管操作”）。
+_ADJUNCT_CODE_SUBCATEGORIES = frozenset(f"00.4{digit}" for digit in range(9))
+_ADJUNCT_CATEGORY = "附加编码"
+_CHAPTER_PATTERN = re.compile(r"^(\d{2})\.")
+_MISC_PROCEDURE_CATEGORY = "其他诊断性和治疗性操作"
 _SUPPLEMENT_OPERATION_NAMES = {
     "气管插管术": "治疗性操作",
     "气管内插管": "治疗性操作",
@@ -61,7 +70,7 @@ class SurgeryProcedureClassification:
 
     @property
     def is_surgery(self) -> bool:
-        return self.category == SURGERY_CATEGORY
+        return self.category in SURGERY_TRIGGER_CATEGORIES
 
 
 def _normalize_code(value: Any) -> str:
@@ -194,10 +203,16 @@ def _subcategory_operation(code: str) -> SurgeryProcedureClassification | None:
 
 
 def _supplement_operation(code: str, name: str) -> SurgeryProcedureClassification | None:
+    if _subcategory(code) in _ADJUNCT_CODE_SUBCATEGORIES:
+        return _operation(code, name, _ADJUNCT_CATEGORY, "adjunct_code")
     if category := _SUPPLEMENT_OPERATION_SUBCATEGORIES.get(_subcategory(code)):
         return _operation(code, name, category, "supplement_code")
     if category := _SUPPLEMENT_OPERATION_NAMES.get(name):
         return _operation(code, name, category, "supplement_name")
+    if (chapter := _CHAPTER_PATTERN.match(code)) and 87 <= int(chapter.group(1)) <= 99:
+        # 用户口径（2026-10-21）：目录未收录的 ICD-9-CM-3 第 87–99 章（其他诊断性和治疗性操作，
+        # 如呼吸机、输血、影像检查）一律按操作处理，不再按首页手术等级兜底（1019 C15 呼吸机治疗）。
+        return _operation(code, name, _MISC_PROCEDURE_CATEGORY, "chapter_87_99")
     return None
 
 

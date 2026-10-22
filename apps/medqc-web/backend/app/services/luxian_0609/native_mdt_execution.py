@@ -23,6 +23,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .structured_output import structured_output_kwargs
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     parse_strict_performed_time,
     read_luxian_0609_native_source_rows,
 )
@@ -1173,7 +1174,7 @@ async def execute_luxian_0609_native_mdt_rule(
                 else {}
             )
             for row in rows:
-                record_time = _parse_datetime(row.get("record_time"))
+                record_time = _parse_datetime(authoritative_document_time_value(row))
                 if record_time is None:
                     return finish(_MdtRuleOutcome("data_gap", "data_gap", "authoritative_time_missing"), selected_fact_refs=selected_trigger_fact_refs)
                 if record_time > earliest_level4:

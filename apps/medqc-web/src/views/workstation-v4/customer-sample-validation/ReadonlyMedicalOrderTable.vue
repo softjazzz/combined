@@ -16,6 +16,12 @@
         临时医嘱
       </button>
     </div>
+    <MedicalOrderFilterBar
+      v-model="filters"
+      :rows="rows"
+      :visible-count="visibleRows.length"
+      :total-count="scopedRows.length"
+    />
     <div
       v-if="hasIncompleteOrders"
       class="mq-soft readonly-medical-order-notice"
@@ -31,12 +37,14 @@
             <th>开始时间</th>
             <th>医嘱类型</th>
             <th>医嘱项目</th>
+            <th>医嘱号</th>
             <th>规格</th>
             <th>剂量</th>
             <th>频次</th>
             <th>用法</th>
             <th>数量</th>
-            <th>停止时间</th>
+            <th title="北京时间；计划结束不代表已实际停止">计划结束时间</th>
+            <th>实际停止时间</th>
             <th>医嘱状态</th>
             <th>下达医生</th>
           </tr>
@@ -53,6 +61,9 @@
             <td :title="row.item">
               {{ row.item }}
             </td>
+            <td :title="row.orderId">
+              {{ row.orderId || '-' }}
+            </td>
             <td :title="row.specification">
               {{ row.specification || '-' }}
             </td>
@@ -68,6 +79,7 @@
             <td :title="row.quantity">
               {{ row.quantity || '-' }}
             </td>
+            <td>{{ row.plannedEndTime || '-' }}</td>
             <td>{{ row.stopTime || '-' }}</td>
             <td>{{ row.status }}</td>
             <td :title="row.prescribedDoctor">
@@ -75,8 +87,12 @@
             </td>
           </tr>
           <tr v-if="!visibleRows.length">
-            <td colspan="11" class="editable-copy-order-empty">
-              暂无{{ activeType === 'long' ? '长期医嘱' : '临时医嘱' }}
+            <td colspan="13" class="editable-copy-order-empty">
+              {{
+                hasMedicalOrderFilters(filters)
+                  ? '暂无符合筛选条件的医嘱'
+                  : `暂无${activeType === 'long' ? '长期医嘱' : '临时医嘱'}`
+              }}
             </td>
           </tr>
         </tbody>
@@ -95,6 +111,12 @@ import {
   resolveMedicalOrderTypeKey,
 } from './medicalOrderDisplay'
 import type { MedicalOrderTypeKey } from './medicalOrderDisplay'
+import MedicalOrderFilterBar from './MedicalOrderFilterBar.vue'
+import {
+  emptyMedicalOrderFilters,
+  hasMedicalOrderFilters,
+  matchesMedicalOrderFilters,
+} from './medicalOrderFilters'
 
 const props = withDefaults(
   defineProps<{
@@ -121,8 +143,16 @@ const hasIncompleteOrders = computed(() =>
 )
 const rows = computed(() => orderDocuments.value.map((document) => buildMedicalOrderRow(document)))
 const activeType = ref<MedicalOrderTypeKey>('temporary')
+const filters = ref(emptyMedicalOrderFilters())
+const scopedRows = computed(() => rows.value.filter((row) => row.orderTypeKey === activeType.value))
 const visibleRows = computed(() =>
-  rows.value.filter((row) => row.orderTypeKey === activeType.value),
+  scopedRows.value.filter((row) => matchesMedicalOrderFilters(row, filters.value)),
+)
+watch(
+  () => orderDocuments.value.map((document) => document.key).join('\u0000'),
+  () => {
+    filters.value = emptyMedicalOrderFilters()
+  },
 )
 
 watch(
@@ -248,12 +278,12 @@ watch(
 
 .editable-copy-order-table th:nth-child(4),
 .editable-copy-order-table td:nth-child(4) {
-  width: 130px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(5),
 .editable-copy-order-table td:nth-child(5) {
-  width: 100px;
+  width: 130px;
 }
 
 .editable-copy-order-table th:nth-child(6),
@@ -268,21 +298,28 @@ watch(
 
 .editable-copy-order-table th:nth-child(8),
 .editable-copy-order-table td:nth-child(8) {
-  width: 90px;
+  width: 100px;
 }
 
 .editable-copy-order-table th:nth-child(9),
 .editable-copy-order-table td:nth-child(9) {
-  width: 160px;
+  width: 90px;
 }
 
 .editable-copy-order-table th:nth-child(10),
 .editable-copy-order-table td:nth-child(10) {
-  width: 100px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(11),
 .editable-copy-order-table td:nth-child(11) {
+  width: 160px;
+}
+
+.editable-copy-order-table th:nth-child(12),
+.editable-copy-order-table td:nth-child(12),
+.editable-copy-order-table th:nth-child(13),
+.editable-copy-order-table td:nth-child(13) {
   width: 100px;
 }
 
