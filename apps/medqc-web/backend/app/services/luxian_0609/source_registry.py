@@ -517,6 +517,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_master",
         "labtest_item_report",
         "surgery_record",
+        # 手术/转科类建议的住院期间执行证据（用户口径 2026-10-22）。
+        "transfer_out_record",
+        "transfer_in_record",
     ),
     # 040 先由结构化手术等级确认四级手术，再核对同次就诊会诊记录。
     # 术前小结中的“今日急诊/急诊手术”是免除术前 MDT 的受控例外依据，

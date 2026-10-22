@@ -1106,6 +1106,9 @@ def _row_time(
             "update_time",
             "record_time",
         )
+    elif source_key in ("transfer_out_record", "transfer_in_record"):
+        # 转科记录：权威记录/提交时间，缺失时按转科日期（只用于住院期间是否已转科）。
+        time_keys = (*AUTHORITATIVE_DOCUMENT_TIME_FIELDS, "transfer_date", "record_datetime")
     elif source_key in _COURSE_EXECUTION_SOURCE_KEYS or source_key == _SOURCE_KEY:
         # 与病程质量规则共用同一权威时间口径：优先正式记录时间，客户CDM
         # 未回传该字段时使用提交时间；不从正文、同步时间或文件顺序猜测。
@@ -3915,6 +3918,44 @@ def _measure_check_scope(
 # 不受会诊前3天至当天的医嘱窗口限制。
 _STAY_LEVEL_RECOMMENDATION_PATTERN = re.compile(r"手术|转科|转院|转[^，,。；;]{1,8}科")
 _STAY_DECISION_PATTERN = re.compile(r"同意|拒绝|不同意|放弃|暂不|不愿")
+# 转出/转入记录只作手术、转科建议的住院期间执行证据，不进入模型候选来源。
+_TRANSFER_STAY_SOURCE_KEYS = ("transfer_out_record", "transfer_in_record")
+
+
+def _transfer_stay_candidates(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+    stay_window: "_StayWindow",
+) -> tuple["_CandidateDocument", ...]:
+    """本次住院内有时间的转出/转入记录；来源缺失或异常时不提供证据（不据此判缺陷）。"""
+
+    candidates: list[_CandidateDocument] = []
+    for source_key in _TRANSFER_STAY_SOURCE_KEYS:
+        try:
+            rows = _read_rows(
+                source_key=source_key, institute_id=institute_id, patient_id=patient_id,
+                visit_id=visit_id, source_schema=source_schema,
+                evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot,
+            )
+        except (_SourceGap, _SourceTechnical):
+            continue
+        for index, row in enumerate(rows, start=1):
+            observed_time = _row_time(row, source_key=source_key)
+            text = _candidate_text(row=row, source_key=source_key) or source_key
+            if observed_time is None or not stay_window.contains(observed_time):
+                continue
+            candidates.append(_CandidateDocument(
+                ref=f"{source_key}-{index}", source_key=source_key, observed_time=observed_time,
+                text=text[:_MAX_CANDIDATE_CHARS],
+                document_id=_candidate_document_id(row=row, source_key=source_key),
+                material_ref=_clean(row.get("_material_document_ref")),
+            ))
+    return tuple(candidates)
 
 
 def _stay_execution_refs(
@@ -3926,7 +3967,7 @@ def _stay_execution_refs(
     for candidate in candidates:
         if candidate.observed_time.day < item.opinion_time.day:
             continue
-        if candidate.source_key == "surgery_record":
+        if candidate.source_key == "surgery_record" or candidate.source_key in _TRANSFER_STAY_SOURCE_KEYS:
             refs.append(candidate.ref)
         elif candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS and any(
             _STAY_DECISION_PATTERN.search(clause) and _STAY_LEVEL_RECOMMENDATION_PATTERN.search(clause)
@@ -5231,9 +5272,25 @@ async def _execute_consultation_episode_rules(
                     completed_recommendations,
                     documents_by_ref=documents_by_ref,
                 )
-                completed_recommendations = _annotate_stay_execution(
-                    completed_recommendations, projection.candidates,
+                transfer_candidates = (
+                    _transfer_stay_candidates(
+                        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+                        source_schema=source_schema, evidence_materials=evidence_materials,
+                        evidence_snapshot=evidence_snapshot, stay_window=execution_stay_window,
+                    )
+                    if "LX0609-03-01-04" in stage_two_rule_ids
+                    else ()
                 )
+                completed_recommendations = _annotate_stay_execution(
+                    completed_recommendations, projection.candidates + transfer_candidates,
+                )
+                used_stay_refs = frozenset(
+                    ref for item in completed_recommendations for ref in item.stay_execution_refs
+                )
+                # 只把被引用为执行证据的转科记录加入候选，供证据绑定与展示。
+                projection = replace(projection, candidates=projection.candidates + tuple(
+                    item for item in transfer_candidates if item.ref in used_stay_refs
+                ))
                 embedded_decision_refs = frozenset({
                     ref
                     for item in episodes

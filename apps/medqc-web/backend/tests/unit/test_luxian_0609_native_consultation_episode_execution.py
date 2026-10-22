@@ -9927,3 +9927,10 @@ def test_023_surgery_or_transfer_recommendation_executed_during_stay():
     ]
     assert view[0].trace_refs == ("daily_course_record-1", "surgery_record-1")
     assert episode._measure_check_scope(completed, (absent("r1"), absent("r2")))[0].recommendation.recommendation_ref == "r2"
+
+    # 转出/转入记录同样算住院期间执行证据；会诊前的转科记录不算。
+    transfer_only = episode._annotate_stay_execution((rec("r3", "transfer", "建议转心内科进一步治疗"),), (
+        candidate("transfer_out_record-1", "transfer_out_record", 25, "转科目的：进一步治疗"),
+        candidate("transfer_in_record-1", "transfer_in_record", 20, "转入记录"),
+    ))
+    assert transfer_only[0].stay_execution_refs == ("transfer_out_record-1",)
