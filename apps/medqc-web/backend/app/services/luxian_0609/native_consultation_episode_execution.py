@@ -1106,6 +1106,8 @@ def _row_time(
             "update_time",
             "record_time",
         )
+    elif source_key == "postsurg_firstcourse_record":
+        time_keys = AUTHORITATIVE_DOCUMENT_TIME_FIELDS
     elif source_key in ("transfer_out_record", "transfer_in_record"):
         # 转科记录：权威记录/提交时间，缺失时按转科日期（只用于住院期间是否已转科）。
         time_keys = (*AUTHORITATIVE_DOCUMENT_TIME_FIELDS, "transfer_date", "record_datetime")
@@ -3920,6 +3922,10 @@ _STAY_LEVEL_RECOMMENDATION_PATTERN = re.compile(r"手术|转科|转院|转[^，,
 _STAY_DECISION_PATTERN = re.compile(r"同意|拒绝|不同意|放弃|暂不|不愿")
 # 转出/转入记录只作手术、转科建议的住院期间执行证据，不进入模型候选来源。
 _TRANSFER_STAY_SOURCE_KEYS = ("transfer_out_record", "transfer_in_record")
+# 用户口径（2026-10-22）：源库可能缺手术记录单据（C23、C25），术后首次病程同样证明
+# 已做手术，只作手术类建议的执行证据。
+_POSTOP_STAY_SOURCE_KEY = "postsurg_firstcourse_record"
+_SURGERY_RECOMMENDATION_PATTERN = re.compile(r"手术")
 
 
 def _transfer_stay_candidates(
@@ -3932,10 +3938,10 @@ def _transfer_stay_candidates(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None,
     stay_window: "_StayWindow",
 ) -> tuple["_CandidateDocument", ...]:
-    """本次住院内有时间的转出/转入记录；来源缺失或异常时不提供证据（不据此判缺陷）。"""
+    """本次住院内有时间的转出/转入记录及术后首次病程；来源缺失或异常时不提供证据（不据此判缺陷）。"""
 
     candidates: list[_CandidateDocument] = []
-    for source_key in _TRANSFER_STAY_SOURCE_KEYS:
+    for source_key in (*_TRANSFER_STAY_SOURCE_KEYS, _POSTOP_STAY_SOURCE_KEY):
         try:
             rows = _read_rows(
                 source_key=source_key, institute_id=institute_id, patient_id=patient_id,
@@ -3968,6 +3974,10 @@ def _stay_execution_refs(
         if candidate.observed_time.day < item.opinion_time.day:
             continue
         if candidate.source_key == "surgery_record" or candidate.source_key in _TRANSFER_STAY_SOURCE_KEYS:
+            refs.append(candidate.ref)
+        elif candidate.source_key == _POSTOP_STAY_SOURCE_KEY and _SURGERY_RECOMMENDATION_PATTERN.search(
+            _recommendation_text(item.recommendation)
+        ):
             refs.append(candidate.ref)
         elif candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS and any(
             _STAY_DECISION_PATTERN.search(clause) and _STAY_LEVEL_RECOMMENDATION_PATTERN.search(clause)

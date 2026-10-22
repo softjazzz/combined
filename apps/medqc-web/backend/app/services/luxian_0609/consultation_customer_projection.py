@@ -34,6 +34,7 @@ _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = frozenset(
         # 023 手术/转科类建议的住院期间执行证据（用户口径 2026-10-22）。
         "transfer_out_record",
         "transfer_in_record",
+        "postsurg_firstcourse_record",
     }
 )
 

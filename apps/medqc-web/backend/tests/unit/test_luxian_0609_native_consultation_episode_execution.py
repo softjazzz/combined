@@ -9934,3 +9934,11 @@ def test_023_surgery_or_transfer_recommendation_executed_during_stay():
         candidate("transfer_in_record-1", "transfer_in_record", 20, "转入记录"),
     ))
     assert transfer_only[0].stay_execution_refs == ("transfer_out_record-1",)
+
+    # 缺手术记录单据时，术后首次病程证明已做手术；只作手术类建议的证据。
+    postop = (candidate("postsurg_firstcourse_record-1", "postsurg_firstcourse_record", 30, "术后首次病程记录"),)
+    surgery_rec, transfer_rec = episode._annotate_stay_execution((
+        rec("r4", "procedure", "建议手术治疗"), rec("r5", "transfer", "建议转心内科进一步治疗"),
+    ), postop)
+    assert surgery_rec.stay_execution_refs == ("postsurg_firstcourse_record-1",)
+    assert transfer_rec.stay_execution_refs == ()
