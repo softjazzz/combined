@@ -1852,16 +1852,20 @@ def _formal_discharge_prescription_medications(
 def _medication_identity_matches(documented_name: Any, prescription_name: Any) -> bool:
     """只接受精确药名或现有有限盐型/剂型后缀，不做泛品牌、片段或相似匹配。"""
 
-    documented = _clean(documented_name)
+    # 正文与处方同口径去掉括注（如采购标记“(JC)”、规格），否则正文照抄处方名时
+    # 永远对不上（1022 C17）。
+    documented = re.sub(r"[（(][^）)]*[）)]", "", _clean(documented_name)).strip()
     prescribed = re.sub(r"[（(][^）)]*[）)]", "", _clean(prescription_name)).strip()
     if not documented or not prescribed:
         return False
     if documented == prescribed:
         return True
-    if len(documented) < 3:
+    # 正文剂型写法与处方不同（“丁苯酞胶囊”对“丁苯酞软胶囊”）时按去剂型后的药名比对。
+    base = re.sub(_SAFE_MEDICATION_IDENTITY_SUFFIX + r"$", "", documented)
+    if len(base) < 3:
         return False
     return bool(re.fullmatch(
-        re.escape(documented) + _SAFE_MEDICATION_IDENTITY_SUFFIX, prescribed,
+        re.escape(base) + _SAFE_MEDICATION_IDENTITY_SUFFIX, prescribed,
     ))
 
 
