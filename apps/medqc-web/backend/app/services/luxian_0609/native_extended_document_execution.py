@@ -1170,6 +1170,8 @@ def _material_text(row: Mapping[str, Any]) -> str:
             "case_characteristic", "diagnose_based_on", "differential_diagnosis", "treatment_plan",
             # 转入记录的诊疗计划章节（通用正文为空时药物与处置只写在这里，1019 C10）。
             "transfer_treatment_plan",
+            # 手术记录正文在手术经过（054/057 围术期预防用药引文）。
+            "surgery_process",
             "item_code", "item_name", "item_abbreviation", "result",
             "result_flag", "abnormal_flag", "diagnosis_name", "labtest_subject",
             "specimen",

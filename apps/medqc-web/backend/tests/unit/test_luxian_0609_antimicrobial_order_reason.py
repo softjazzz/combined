@@ -217,7 +217,9 @@ def _surgery(document_id, time, text):
 async def test_054_prophylaxis_in_surgery_or_anesthesia_record_counts() -> None:
     for source in ("surgery_record", "anesthesia_record"):
         client = _ReasonClient({"头孢曲松": {"prophylaxis": "术前30分钟予头孢曲松预防感染"}})
-        rows = {source: (_surgery("S-1", "2026-01-01 11:00:00", "术前30分钟予头孢曲松预防感染。"),)}
+        field = "surgery_process" if source == "surgery_record" else "record_content"
+        row = {"document_id": "S-1", "record_time": "2026-01-01 11:00:00", field: "术前30分钟予头孢曲松预防感染。"}
+        rows = {source: (row,)}
         _, reduced = await _run("LX0609-05-01-02", rows, client)
         assert reduced.final_state is CustomerFinalState.COMPLIANT, source
         assert "anesthesia_record" in client.calls[0] and "只能用于 prophylaxis_quote" in client.calls[0]
