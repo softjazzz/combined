@@ -5282,12 +5282,17 @@ async def _execute_consultation_episode_rules(
                     # 用户口径（2026-10-20）：023 只认医嘱、不看病程。020 不在本次范围时，
                     # 病程、检查检验、手术候选只会撑大输入（真实样本因超 64k 上限整例落资料不足），
                     # 二阶段只保留医嘱和本次会诊文书（用于识别文书内写明的暂缓/拒绝决定）。
+                    # 手术/转科建议的住院期间执行证据（病程、手术记录）须留在候选中供证据绑定。
+                    stay_refs = frozenset(
+                        ref for item in completed_recommendations for ref in item.stay_execution_refs
+                    )
                     projection = replace(
                         projection,
                         candidates=tuple(
                             item for item in projection.candidates
                             if item.source_key in _ORDER_EXECUTION_SOURCE_KEYS
                             or item.source_key == "consultation_record"
+                            or item.ref in stay_refs
                         ),
                     )
                 execution_candidate_projection = projection
