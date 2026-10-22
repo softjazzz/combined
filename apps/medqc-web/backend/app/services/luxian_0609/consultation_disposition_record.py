@@ -298,8 +298,12 @@ def parse_facts(
     documents: Sequence[Mapping[str, str]],
     roles: Mapping[str, Mapping[str, Any]],
     *, review_issues: list[_ReviewIssue] | None = None,
+    rechecked: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
-    """身份和覆盖仍整批严格校验；独立文书失败不能覆盖已核验的缺陷。"""
+    """身份和覆盖仍整批严格校验；独立文书失败不能覆盖已核验的缺陷。
+
+    rechecked=True 表示本次是补核后的输出：词表提示已经交模型复核过，不再据此改判。
+    """
     payload = _payload(response)
     if (not isinstance(payload, dict)
         or set(payload) != {"schema_version", "documents"}
@@ -327,6 +331,7 @@ def parse_facts(
             outcomes.append(_parse_document_facts(
                 {"content": json.dumps({"schema_version": SCHEMA_VERSION, "documents": [item]})},
                 (expected[ref],), {ref: roles[ref]}, review_issues=review_issues,
+                rechecked=rechecked,
             ))
         except (ValueError, TypeError, KeyError, IndexError, AttributeError):
             invalid = True
@@ -347,6 +352,7 @@ def _parse_document_facts(
     documents: Sequence[Mapping[str, str]],
     roles: Mapping[str, Mapping[str, Any]],
     *, review_issues: list[_ReviewIssue] | None = None,
+    rechecked: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
     payload = _payload(response)
     if (
@@ -437,6 +443,10 @@ def _parse_document_facts(
                 group == "medications"
                 or re.search(r"(?:给予|加用|服用|停用).+复查", action)
             ):
+                # 给药与复查并成一项时复查的反馈无从单独核对：提示补核，仍未拆开则资料不足。
+                if review_issues is not None:
+                    review_issues.append(_ReviewIssue("merged followup action", position + ".action_quote", action,
+                        "给药与复查是两个独立动作：复查须单独列入examinations并单独核对反馈"))
                 unresolved = True
                 continue
             if group == "examinations":
@@ -465,8 +475,20 @@ def _parse_document_facts(
                 _GENERIC.fullmatch(_normalized(feedback))
                 or _GENERIC_REMAINDER.search(_normalized(feedback))
             ):
-                defects.append(ref)
-                continue
+                if kind in {"generic", "missing"}:
+                    # 模型自己判为未具体处置，原话又确是套话：缺陷，referent 不能借此升级。
+                    defects.append(ref)
+                    continue
+                if not rechecked:
+                    # 模型判为具体处置时，笼统回应词表只触发一次补核，不推翻模型判定
+                    # （用户要求：正则不得否决模型结论）。例如“予某药抗感染，其余遵会诊意见”
+                    # 对该药本身仍是具体处理。
+                    if review_issues is not None:
+                        review_issues.append(_ReviewIssue("generic feedback hint", position + ".feedback_kind", feedback,
+                            "该反馈原话含“遵会诊意见执行”“其余遵嘱”等笼统回应：重新核对它是否写明了本项的具体处理；"
+                            "未写明本项具体处理标generic，确有具体处理才保留performed/planned/declined"))
+                    unresolved = True
+                    continue
             if kind in _SPECIFIC:
                 if not feedback:
                     unresolved = True
@@ -484,7 +506,8 @@ def _parse_document_facts(
             for target in set(required_followups) - covered_followups:
                 review_issues.append(_ReviewIssue("incomplete action coverage", f"ref={ref}.examinations", target,
                     "显式复查须单独列入examinations，不得并入用药动作；无反馈时仍列项"))
-        unresolved |= not actions or set(required_followups) != covered_followups
+        # 复查项目由正则从意见中列出，只作覆盖提示；补核后仍未列入的以模型为准。
+        unresolved |= not actions or (set(required_followups) != covered_followups and not rechecked)
     if seen != set(sources):
         raise _ReviewViolation([_ReviewIssue("incomplete document coverage", "documents.ref", "", "每个输入ref恰好返回一次，补齐遗漏并删除重复或越界ref")])
     if defects:
@@ -688,7 +711,9 @@ async def check_disposition_record(
                 stage = "action"
                 continue
             issues: list[_ReviewIssue] = []
-            status, reason, refs = parse_facts(response, documents, frozen, review_issues=issues)
+            status, reason, refs = parse_facts(
+                response, documents, frozen, review_issues=issues, rechecked=action_retried,
+            )
             if issues and status == "data_gap":
                 raise _ReviewViolation(issues, fallback=(status, reason, refs))
             return DispositionRecordOutcome(status, reason, refs, calls, *totals, elapsed)
