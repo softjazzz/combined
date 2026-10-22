@@ -351,7 +351,7 @@ def _prompt(events: Sequence[AntimicrobialUseEvent], documents: Sequence[WindowD
         "注意：以下各引文字段与 documented_use 相互独立，即使文书未写药名或 documented_use=no，"
         "只要文书中有对应内容也必须摘录；"
         "selection_reason_quote：为什么选择或换成该药（覆盖某类病原、原方案无效、过敏、根据药敏、"
-        "经验首选等），只有感染判断而未说明为何选此药时留空；"
+        "经验性用药、按指南首选等，一句话即可），只有感染判断而未说明为何选此药时留空；"
         "prophylaxis_quote：写明该药用于围术期或预防感染的原文；"
         "specimen_quote：已送或拟送病原学标本（痰/血/尿培养等），或写明无法采样原因的原文；"
         "planned_duration_quote：仅 start/combine/switch 事件，写明该药计划疗程的原文（如“拟用3天”"

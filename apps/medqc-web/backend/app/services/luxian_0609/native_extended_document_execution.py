@@ -1861,8 +1861,8 @@ def _order_reason_rule_outcome(
     """按医嘱事件映射054/057状态；模型只提供带引文的事实。
 
     054：每个开始/联合/更换事件须在开医嘱当日病程写明感染判断、选药理由或预防用途。
-    057：仅开药时尚无病原学结果的治疗性事件；感染判断或选药理由均算已记录
-    （沿用客户批准的临时理由口径，选药理由是否必需待客户确认）。
+    057：仅开药时尚无病原学结果的治疗性事件；用户口径（2026-10-22）感染判断与选药理由
+    都须记录，选药理由一句话即可（如“经验性覆盖革兰阴性菌”“按指南首选”）。
     """
 
     is_057 = rule_id == "LX0609-05-01-05"
@@ -1903,8 +1903,8 @@ def _order_reason_rule_outcome(
             if basis == "prior":
                 continue
         documented = facts is not None and (
-            facts.has("infection_judgment") or facts.has("selection_reason")
-            or (not is_057 and facts.has("prophylaxis"))
+            (facts.has("infection_judgment") and facts.has("selection_reason")) if is_057
+            else (facts.has("infection_judgment") or facts.has("selection_reason") or facts.has("prophylaxis"))
         )
         if documented:
             evaluated.append((event, "documented"))

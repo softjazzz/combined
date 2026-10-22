@@ -258,14 +258,23 @@ async def test_057_prophylaxis_is_not_empiric_use() -> None:
 
 
 @pytest.mark.asyncio
-async def test_057_empiric_use_with_infection_judgment_is_compliant() -> None:
-    rows = {"daily_course_record": (_course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，予头孢曲松抗感染。"),),
+async def test_057_empiric_use_needs_infection_judgment_and_selection_reason() -> None:
+    # 用户口径（2026-10-22）：经验用药须同时写感染判断和选药理由，选药理由一句话即可。
+    rows = {"daily_course_record": (_course(
+        "D-1", "2026-01-01 20:00:00", "考虑肺部感染，经验性覆盖社区获得性肺炎常见菌，予头孢曲松抗感染。"),),
             "labtest_master": (), "labtest_item_report": ()}
-    client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}})
+    client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染",
+                                         "selection_reason": "经验性覆盖社区获得性肺炎常见菌"}})
     result, reduced = await _run("LX0609-05-01-05", rows, client)
-
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-05-01-05"]["empiric_use_confirmed"] is True
+
+    # 只有感染判断、未写为何选此药：不合规；054 仍算已写理由。
+    client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}})
+    _, reduced = await _run("LX0609-05-01-05", rows, client)
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    _, reduced = await _run("LX0609-05-01-02", rows, _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}}))
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
 
 
 @pytest.mark.asyncio
@@ -297,11 +306,12 @@ async def test_finalized_results_bind_order_and_quoted_course(rule_id) -> None:
 
     rows = {"inpat_drug_order": _ORDERS, "first_course_record": (), "senior_course_record": (),
             "consultation_record": (), "transfer_in_record": (), "labtest_master": (), "labtest_item_report": (),
-            "daily_course_record": (_course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，予头孢曲松。"),)}
+            "daily_course_record": (_course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，经验性予头孢曲松。"),)}
     snapshot, materials = _session(rows)
     native = await execute_luxian_0609_native_extended_document_rules(
         rule_ids=(rule_id,), decision_rule_ids=(rule_id,), evidence_snapshot=snapshot,
-        evidence_materials=materials, llm_client=_ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}}),
+        evidence_materials=materials, llm_client=_ReasonClient(
+            {"头孢曲松": {"infection_judgment": "考虑肺部感染", "selection_reason": "经验性予头孢曲松"}}),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=native.decisions, expected_rule_ids=(rule_id,), snapshot=snapshot, evidence_materials=materials,
