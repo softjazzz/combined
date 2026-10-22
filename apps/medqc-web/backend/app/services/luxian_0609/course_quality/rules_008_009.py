@@ -70,7 +70,6 @@ _RULE_009_LAB_STATES = {
     **dict.fromkeys(("A", "ABNORMAL", "异常"), "abnormal"),
     **dict.fromkeys(("CRITICAL", "危急", "危急值"), "critical"),
 }
-_RULE_009_LAB_NORMAL_STATES = frozenset({"normal", "negative"})
 _RULE_009_LAB_CRITICAL_STATES = frozenset({"critical_high", "critical_low", "critical"})
 _LOGGER = logging.getLogger(__name__)
 
@@ -886,61 +885,27 @@ def _rule_009_filter_lab_candidates(
     grouped_external_events: Mapping[tuple[str, str], Mapping[str, Any]],
     lab_history_groups: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> dict[tuple[str, str], Mapping[str, Any]]:
-    """纯函数：保留危急、状态变化、新出现异常或整单标志不可用的项目。
+    """纯函数：检验只保留标为危急的项目，检查不筛。
 
-    历史包含本次就诊病危期前的结果；同一权威报告时刻状态冲突时不猜测。
-    不改写输入，也不使用结果数值或正文判断异常。
+    用户口径（2026-10-22）：普通检验异常（含新出现、由正常转异常）不算病情变化；
+    检验只有危急值才作为候选。无明细或异常标志缺失的检验无法证明危急，不进候选
+    （危急值另由危急值记录规则核对）。不改写输入，也不使用结果数值或正文判断异常。
     """
 
-    history: dict[str, dict[datetime, set[str | None]]] = {}
-    for group in lab_history_groups.values():
-        report_time = _rule_009_group_event_time(
-            event_kind="lab", times_by_source=group["times_by_source"],
-        )
-        if report_time is None:
-            continue
-        for row in group["items"]:
-            name = _clean(row.get("item_name"))
-            if name:
-                state = _RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper())
-                history.setdefault(name, {}).setdefault(report_time, set()).add(state)
-
+    del lab_history_groups  # 不再与既往结果比较
     selected: dict[tuple[str, str], Mapping[str, Any]] = {}
     for identity, group in grouped_external_events.items():
-        items = group["items"]
-        # 检查不筛；无明细的检验主记录按无法判断保留。
-        if not items:
+        if identity[0] != "lab":
             selected[identity] = group
             continue
-        states = [_RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper()) for row in items]
-        all_unknown = all(state is None for state in states)
-        report_time = _rule_009_group_event_time(
-            event_kind="lab", times_by_source=lab_history_groups[identity]["times_by_source"],
-        )
         texts: list[str] = []
-        for row, state in zip(items, states):
-            previous = history.get(_clean(row.get("item_name")), {})
-            prior_time = max(
-                (time for time in previous if report_time is not None and time < report_time),
-                default=None,
-            )
-            prior_states = previous.get(prior_time, set())
-            comparable = len(prior_states) == 1 and None not in prior_states
-            changed = (
-                state is not None and comparable and state not in prior_states
-            )
-            # 用户选定口径（2026-10-18，待客户复核）：持续普通异常不算变化；
-            # 没有可比较历史时，不能证明持续，仍按新出现异常保留。
-            new_abnormal = (
-                state is not None and state not in _RULE_009_LAB_NORMAL_STATES
-                and not comparable
-            )
-            if all_unknown or state in _RULE_009_LAB_CRITICAL_STATES or changed or new_abnormal:
+        for row in group["items"]:
+            if _RULE_009_LAB_STATES.get(_rule_009_lab_flag(row).upper()) in _RULE_009_LAB_CRITICAL_STATES:
                 content = _rule_009_external_event_text("labtest_item_report", row)
                 if content and content not in texts:
                     texts.append(content)
         if texts:
-            # 有明细时不附主记录正文，避免被排除的正常项目从主记录重新进入提示词。
+            # 有明细时不附主记录正文，避免被排除的项目从主记录重新进入提示词。
             selected[identity] = {**group, "texts": texts}
     return selected
 
