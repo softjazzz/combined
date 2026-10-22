@@ -120,6 +120,8 @@ def test_wrapper_keeps_none_and_is_idempotent():
 
 @pytest.mark.parametrize("body", [
     "现住址：某镇测试街道12号\n14:00悬浮红细胞2U输注完毕。",
+    # 入院记录首部常单写“住址：”（1022 全量 01-01-02 被隐私守卫拦截）。
+    "联系电话：[手机号已脱敏]住址：某镇测试街道12号职业：农民\n输注完毕。",
     "工作单位：测试单位甲\n输注完毕。",
 ])
 @pytest.mark.parametrize("pre_redacted", [False, True])

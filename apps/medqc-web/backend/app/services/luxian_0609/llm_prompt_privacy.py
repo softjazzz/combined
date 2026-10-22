@@ -81,7 +81,7 @@ _FREE_TEXT_CHAR = r'(?:(?!\\[\\"/bfnrtu])[^\n\r；;"])'
 _ALREADY_REDACTED = r"(?!\[[^\]\n]{1,16}已脱敏\])"
 _ADDRESS = re.compile(
     r"(?P<label>(?:现住址|家庭住址|户籍地址|通讯地址|联系地址|联系人地址|"
-    r"工作单位地址|详细地址|地址)\s*[:：]\s*)"
+    r"工作单位地址|详细地址|住址|地址)\s*[:：]\s*)"
     rf"(?P<value>{_ALREADY_REDACTED}{_FREE_TEXT_CHAR}{{2,160}})"
 )
 _MEDICAL_IDENTIFIER = re.compile(
