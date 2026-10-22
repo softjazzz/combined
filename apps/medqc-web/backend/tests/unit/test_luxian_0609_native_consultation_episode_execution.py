@@ -9997,3 +9997,55 @@ def test_023_surgery_or_transfer_recommendation_executed_during_stay():
     ), postop)
     assert surgery_rec.stay_execution_refs == ("postsurg_firstcourse_record-1",)
     assert transfer_rec.stay_execution_refs == ()
+
+
+@pytest.mark.asyncio
+async def test_persistent_inconsistent_opinion_state_is_data_gap_and_not_frozen(
+    monkeypatch, tmp_path
+):
+    """补核后仍“意见不明确/低置信却列出建议”：资料不足交付，不报技术错误，也不冻结（1022 C01）。"""
+
+    rows = _rows("会诊申请", "会诊意见：建议复查血常规。")
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    opinion="vague",
+                    confidence="low",
+                    application_refs=["consultation_record-1"],
+                    opinion_refs=["consultation_record-2"],
+                    recommendations=[{
+                        "recommendation_ref": "consultation_record-1#r1",
+                        "action_type": "test",
+                        "source_quote": "复查血常规",
+                        "opinion_ref": "consultation_record-2",
+                    }],
+                )
+            ]
+        )
+    )
+    freeze_dir = tmp_path / "freeze"
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+        opinion_freeze_dir=freeze_dir,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "semantic_extraction_unresolved"
+    }
+    assert result.llm_call_count == 2
+    assert not freeze_dir.exists() or not list(freeze_dir.glob("*.json"))

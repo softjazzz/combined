@@ -106,7 +106,11 @@ _RULE_DATA_GAP_EXPLANATIONS = {
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): {"reason_label": '输血实施事实待确认', "missing_sources": [], "missing_fields": []},
     ("LX0609-07-01-03", "source_readiness_unproven"): {"reason_label": '输血正文读取待确认', "missing_sources": [], "missing_fields": []},
     ("LX0609-07-01-03", "candidate_scope_incomplete"): {"reason_label": '实施事实核对范围不足', "missing_sources": [], "missing_fields": []},
-    ("LX0609-03-01-04", "semantic_extraction_unresolved"): {"reason_label": "会诊措施逐项核对待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-03-01-04", "semantic_extraction_unresolved"): {"reason_label": "会诊建议执行核对待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-03-01-01", "semantic_extraction_unresolved"): {"reason_label": "会诊意见抽取待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-03-01-02", "semantic_extraction_unresolved"): {"reason_label": "会诊意见抽取待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-03-01-03", "semantic_extraction_unresolved"): {"reason_label": "会诊意见抽取待确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-03-01-05", "semantic_extraction_unresolved"): {"reason_label": "会诊意见抽取待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-04-04-02", "semantic_extraction_unresolved"): {
         "reason_label": "内容抽取待确认",
         "missing_sources": [],

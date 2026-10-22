@@ -602,6 +602,15 @@ class _SemanticUnresolved(Exception):
     pass
 
 
+class _OpinionStateUnresolved(Exception):
+    """补核后模型仍同时给出“意见不明确/低置信”和建议清单。
+
+    两个输出互相矛盾，Python 无权替模型选边（清空建议会把可能明确的意见判为不明确，
+    保留建议会无视模型自己的低置信），也不是技术故障；按资料不足交付且不冻结，
+    下次运行重新抽取（1022 C01 第7份会诊）。
+    """
+
+
 _NEGATION_PREFIX = re.compile(r"(?:不|无|未|否认|禁止|避免)$")
 _DOSE_OR_NUMERIC = re.compile(r"\d+(?:\.\d+)?")
 _DOSE_VALUE = re.compile(r"\d+(?:\.\d+)?(?:mg|g|ml|μg|ug|片|次|日|h|小时|%)", re.IGNORECASE)
@@ -5180,6 +5189,8 @@ async def _execute_consultation_episode_rules(
                     break
                 error = _EpisodeGroundingViolation(issues)
                 if attempt:
+                    if all(item.reason == "inconsistent recommendation state" for item in issues):
+                        raise _OpinionStateUnresolved() from error
                     raise error
                 attempt_prompt = _review_retry_prompt(first_prompt, error, response, "输入：")
         phase = "validate"
@@ -5204,6 +5215,9 @@ async def _execute_consultation_episode_rules(
         )
     except _SourceGap:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    except _OpinionStateUnresolved:
+        logger.warning("consultation_stage_one_opinion_state_unresolved visit=%s calls=%s", visit_id, calls)
+        return _finish(selected=selected, status="data_gap", reason_code="semantic_extraction_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticUnresolved:
         return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticInvalid as error:

@@ -139,7 +139,10 @@ async def test_episode_inconsistent_recommendations_get_one_review(
         rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p",
         visit_id="synthetic-consistency", source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path)
     assert result.llm_call_count == 2 and result.total_tokens == 32
-    assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"technical_error"})
+    # 补核后仍自相矛盾：Python 不替模型选边，按资料不足交付且不冻结（1022 C01）。
+    assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"data_gap"})
+    if not fixed:
+        assert {item["metadata"]["reason_code"] for item in result.results} == {"semantic_extraction_unresolved"}
     assert field in client.prompts[1] and "recommendations" in client.prompts[1]
     assert "不能直接提高置信度" in client.prompts[1]
     assert bool(list(tmp_path.glob("*.json"))) == fixed

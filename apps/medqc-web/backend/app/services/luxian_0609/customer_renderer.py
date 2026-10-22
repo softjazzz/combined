@@ -141,7 +141,11 @@ _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
     ("LX0609-07-01-03", "source_readiness_unproven"): '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。',
     ("LX0609-07-01-03", "candidate_scope_incomplete"): '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。',
-    ("LX0609-03-01-04", "semantic_extraction_unresolved"): "会诊建议中的措施尚未形成可靠的逐项核对结果，暂时无法确认每项措施是否均已执行。",
+    ("LX0609-03-01-04", "semantic_extraction_unresolved"): "会诊建议或其中的措施尚未形成可靠的核对结果，暂时无法确认会诊建议是否均已执行。",
+    ("LX0609-03-01-01", "semantic_extraction_unresolved"): "会诊意见原文是否明确、包含哪些建议尚未形成可靠的抽取结果，暂时无法完成本项核对。",
+    ("LX0609-03-01-02", "semantic_extraction_unresolved"): "会诊意见原文是否明确、包含哪些建议尚未形成可靠的抽取结果，暂时无法完成本项核对。",
+    ("LX0609-03-01-03", "semantic_extraction_unresolved"): "会诊意见原文是否明确、包含哪些建议尚未形成可靠的抽取结果，暂时无法完成本项核对。",
+    ("LX0609-03-01-05", "semantic_extraction_unresolved"): "会诊意见原文是否明确、包含哪些建议尚未形成可靠的抽取结果，暂时无法完成本项核对。",
     ("LX0609-04-04-02", "semantic_extraction_unresolved"):
         "现有访视正文的必填内容尚未形成可靠抽取结果，暂时无法判定填写是否完整。",
     (
@@ -598,8 +602,28 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-03-01-01", "semantic_extraction_unresolved"): (
+        "会诊意见暂无法可靠抽取",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-03-01-01", "semantic_extraction_unresolved")],
+        "请复核会诊意见原文或重试质控；不要据此补写或改写记录。",
+    ),
+    ("LX0609-03-01-02", "semantic_extraction_unresolved"): (
+        "会诊意见暂无法可靠抽取",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-03-01-02", "semantic_extraction_unresolved")],
+        "请复核会诊意见原文或重试质控；不要据此补写或改写记录。",
+    ),
+    ("LX0609-03-01-03", "semantic_extraction_unresolved"): (
+        "会诊意见暂无法可靠抽取",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-03-01-03", "semantic_extraction_unresolved")],
+        "请复核会诊意见原文或重试质控；不要据此补写或改写记录。",
+    ),
+    ("LX0609-03-01-05", "semantic_extraction_unresolved"): (
+        "会诊意见暂无法可靠抽取",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-03-01-05", "semantic_extraction_unresolved")],
+        "请复核会诊意见原文或重试质控；不要据此补写或改写记录。",
+    ),
     ("LX0609-03-01-04", "semantic_extraction_unresolved"): (
-        "会诊措施执行暂无法逐项确认",
+        "会诊建议执行暂无法确认",
         _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-03-01-04", "semantic_extraction_unresolved")],
         "请复核会诊建议与后续医嘱、病程，或重试质控；不要据此补写或改写记录。",
     ),
@@ -4891,7 +4915,11 @@ def render_luxian_0609_customer_result(
                 ("LX0609-09-01-01", "rescue_end_time_missing"),
                 ("LX0609-09-01-01", "document_completion_time_missing"),
                 ("LX0609-03-02-01", "diagnosis_scope_uncertain"),
+                ("LX0609-03-01-01", "semantic_extraction_unresolved"),
+                ("LX0609-03-01-02", "semantic_extraction_unresolved"),
+                ("LX0609-03-01-03", "semantic_extraction_unresolved"),
                 ("LX0609-03-01-04", "semantic_extraction_unresolved"),
+                ("LX0609-03-01-05", "semantic_extraction_unresolved"),
                 ("LX0609-04-04-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "candidate_scope_incomplete"),

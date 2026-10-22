@@ -85,7 +85,7 @@
     },
     {
       "payload": {
-        "schema_version": "lx0609-consultation-measure-check-v4",
+        "schema_version": "lx0609-consultation-measure-check-v5",
         "measures": [
           {
             "recommendation_ref": "consultation_record-1#r1",
@@ -93,7 +93,8 @@
             "evidence_ref": "inpat_nondrug_order-1",
             "quote": "血常规",
             "executed_action": "血常规",
-            "action_relation": "matched"
+            "action_relation": "matched",
+            "conditional": false
           }
         ],
         "generic": []
