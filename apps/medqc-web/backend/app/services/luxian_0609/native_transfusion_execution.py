@@ -39,6 +39,10 @@ from .transfusion_course_presence import (
     TransfusionCoursePresenceResult, classify_transfusion_course_records,
     select_transfusion_course_candidates,
 )
+from .posttransfusion_effect_extraction import (
+    PosttransfusionEffectCandidate,
+    confirm_posttransfusion_effects,
+)
 from .intraoperative_transfusion_facts import (
     SOURCES as INTRAOPERATIVE_SOURCES,
     IntraoperativeDocument,
@@ -2084,6 +2088,45 @@ def _course_has_transfusion_effect(text: str) -> bool:
     )) and _has_clinical_posttransfusion_evaluation(text)
 
 
+_047_MODEL_CONFIRMED_EFFECTS_KEY = "__posttransfusion_effect_confirmed__"
+
+
+def _course_effect_confirmed(
+    documents: Mapping[str, Any], source_key: str, row: Mapping[str, Any], text: str,
+) -> bool:
+    """正则认出的评价直接采用；未认出的只认受控模型逐字引文确认过的病程。"""
+    if _course_has_transfusion_effect(text):
+        return True
+    document_id = str(row.get("document_id") or row.get("id") or "").strip()
+    return bool(document_id) and (source_key, document_id) in (
+        documents.get(_047_MODEL_CONFIRMED_EFFECTS_KEY) or frozenset()
+    )
+
+
+def _047_effect_candidates(documents: Mapping[str, Any]) -> tuple[PosttransfusionEffectCandidate, ...]:
+    """结束后 24 小时内、正则未认出评价的病程；窗口与对应关系仍由 Python 判定。"""
+    end_times = [
+        max(event[0] for event in events)
+        for row in _source_document_rows(documents, "bloodtrans_record")
+        for events in (_transfusion_end_evidence(_row_text(row))[0],)
+        if events
+    ]
+    candidates: list[PosttransfusionEffectCandidate] = []
+    for source_key in ("daily_course_record", "senior_course_record"):
+        for row in _source_document_rows(documents, source_key):
+            text = _row_text(row)
+            record_time = _authoritative_record_time(row)
+            document_id = str(row.get("document_id") or row.get("id") or "").strip()
+            if (
+                not text.strip() or not document_id or record_time is None
+                or _course_has_transfusion_effect(text)
+                or not any(0 <= (record_time - end).total_seconds() <= 24 * 3600 for end in end_times)
+            ):
+                continue
+            candidates.append(PosttransfusionEffectCandidate(source_key, document_id, text))
+    return tuple(candidates)
+
+
 @dataclass(frozen=True)
 class _PosttransfusionEvaluationAssessment:
     """047 的唯一时间资格判定，供状态与客户事实投影共同使用。"""
@@ -2292,9 +2335,7 @@ def _programmatic_047_assessment(
         for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
             text = _row_text(row)
-            if not (
-                _course_has_transfusion_effect(text)
-            ):
+            if not _course_effect_confirmed(documents, source_key, row, text):
                 continue
             record_time = _authoritative_record_time(row)
             daily_ref = (
@@ -2452,9 +2493,7 @@ def _programmatic_047_assessment(
                                 for row in _source_document_rows(documents, key)):
         record_time = _authoritative_record_time(row)
         text = _row_text(row)
-        if not (
-            _course_has_transfusion_effect(text)
-        ):
+        if not _course_effect_confirmed(documents, source_key, row, text):
             continue
         if (
             record_time is not None
@@ -4005,12 +4044,39 @@ async def execute_luxian_0609_native_transfusion_rules(
                     if str(row.get("document_id", row.get("id"))) in valid_ids
                 ]
             assessment = _programmatic_047_assessment(documents)
+            executor_type = "program"
+            if (
+                assessment.status == "non_compliant"
+                and assessment.reason_code in {"posttransfusion_evaluation_missing", "posttransfusion_evaluation_late"}
+                and (effect_candidates := _047_effect_candidates(documents))
+            ):
+                # 是否评价了输血效果是语义判断：正则未认出的窗口内病程交受控模型确认，
+                # 不由词表闭世界判缺（用户要求：正则不得否决模型结论，2026-10-22）。
+                effects = await confirm_posttransfusion_effects(effect_candidates, llm_client)
+                llm_call_count += effects.llm_call_count
+                prompt_tokens += effects.prompt_tokens
+                completion_tokens += effects.completion_tokens
+                total_tokens += effects.total_tokens
+                api_time += effects.api_time
+                if effects.state != "ready":
+                    emit_outcome(rule_id, effects.state, effects.reason_code, executor_type="llm")
+                    continue
+                executor_type = "llm"
+                documents = {**documents, _047_MODEL_CONFIRMED_EFFECTS_KEY: effects.confirmed}
+                assessment = _programmatic_047_assessment(documents)
+                if (
+                    assessment.status == "non_compliant"
+                    and assessment.reason_code == "posttransfusion_evaluation_missing"
+                    and effects.unclear
+                ):
+                    emit_outcome(rule_id, "data_gap", "semantic_extraction_unresolved", executor_type="llm")
+                    continue
             status, reason_code = assessment.status, assessment.reason_code
             emit_outcome(
                 rule_id,
                 status,
                 reason_code,
-                executor_type="program",
+                executor_type=executor_type,
                 selected_source_document_refs=assessment.selected_source_document_refs,
                 display_facts=_programmatic_transfusion_display_facts(
                     rule_id=rule_id,
