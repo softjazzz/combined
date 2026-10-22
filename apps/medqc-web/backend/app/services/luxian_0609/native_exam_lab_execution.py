@@ -2023,35 +2023,8 @@ def _strong_semantic_fact(
             break
     refs = tuple(refs)
     if not refs:
-        # 阳性报告已明确记入病程，但完整病程投影中没有分析/处置事实时，
-        # 可直接形成“已记录结果、未完成分析”的闭世界结论。条件性计划或
-        # “待结合病情观察”不是已经完成的分析/处置，不得据此降为资料不足。
-        if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}:
-            mention_pattern = _STRONG_SEMANTIC_PATTERNS[
-                "LX0609-06-01-04" if rule_id == "LX0609-06-01-05" else "LX0609-06-03-03"
-            ]
-            mention_refs = tuple(
-                ref
-                for ref, text in course_items
-                if any(
-                    mention_pattern.search(clause)
-                    and (
-                        rule_id != "LX0609-06-03-04"
-                        or _event_identity_mentions_course(event, clause)
-                    )
-                    and not _UNCERTAIN_SEMANTIC_PATTERN.search(clause)
-                    for clause in _CLAUSE_SPLIT_PATTERN.split(text)
-                )
-            )
-            if mention_refs:
-                return ExamLabEventFact(
-                    rule_id=rule_id,
-                    applicability="applicable",
-                    semantic_state="absent",
-                    positive_state=positive_state,
-                    course_doc_refs=mention_refs,
-                    evidence_refs=tuple((*event.document_refs, *mention_refs)),
-                )
+        # 未命中明确短语不能证明病程未分析/未处置（如“根据药敏予哌拉西林他唑巴坦”不含动作词）：
+        # 交由受控模型判断，Python 不按关键词闭世界判缺（用户要求：正则不得否决模型结论，2026-10-22）。
         return None
     return ExamLabEventFact(
         rule_id=rule_id,

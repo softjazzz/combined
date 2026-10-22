@@ -3630,12 +3630,9 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
             },
         ),
     )
+    # 是否已分析处置由受控模型判断（2026-10-22 起 Python 不按关键词闭世界判缺）。
     client = _Client([
-        _fact_response(
-            ("LX0609-06-03-04",),
-            applicability="unknown",
-            semantic_state="unknown",
-        )
+        _fact_response(("LX0609-06-03-04",), semantic_state="absent", positive_state="positive")
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -3664,7 +3661,7 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
         },
     )[0]
 
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     assert canonical["status"] == "non_compliant"
     assert canonical["reason_code"] == "requirement_violated"
     assert [
@@ -3672,7 +3669,6 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
         for item in canonical["customer_evidence"]
     ] == [
         ("labtest_item_report", "culture-report-015"),
-        ("daily_course_record", "course-culture-015"),
     ]
 
 
@@ -5733,7 +5729,7 @@ async def test_explicit_report_and_culture_action_phrases_use_python_without_mod
 
 
 @pytest.mark.asyncio
-async def test_explicit_result_only_course_closes_analysis_rules_without_model(monkeypatch):
+async def test_explicit_result_only_course_leaves_analysis_rules_to_one_model_call(monkeypatch):
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=({
@@ -5757,7 +5753,7 @@ async def test_explicit_result_only_course_closes_analysis_rules_without_model(m
         evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
     )
     client = _Client([
-        _fact_response(("LX0609-06-01-05",), semantic_state="absent", positive_state="positive")
+        _fact_response(("LX0609-06-01-05", "LX0609-06-03-04"), semantic_state="absent", positive_state="positive")
     ])
     rule_ids = ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04")
 
