@@ -268,3 +268,18 @@ async def test_date_only_surgery_time_uses_calendar_day_windows(pre_time, post_t
     facts = dict(result.customer_display_facts)[RULE]
     assert facts["preop_surgeon_round_present"] is expected_pre
     assert facts["surgeon_round_present"] is expected_post
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,expected", (
+    # 用户口径（2026-10-22）：正文明确写“术者/主刀医师××查看患者”也算术者查房。
+    ("术前李明主刀医师查看患者，术前准备已完善，待术。", True),
+    ("主刀医师李明查看患者后指出：术前准备已完善。", True),
+    ("手术由李明完成，术前准备已完善。", False),
+    ("术前张伟主刀医师查看患者，术前准备已完善。", False),
+))
+async def test_preop_round_recognized_from_explicit_surgeon_mention_in_body(body, expected):
+    materials = _materials()
+    materials["senior_course_record"][0].update(author_name="赵医生", record_content=body)
+    result, _ = await _evaluate(RULE, materials)
+    assert dict(result.customer_display_facts)[RULE]["preop_surgeon_round_present"] is expected

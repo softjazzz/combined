@@ -2569,6 +2569,33 @@ _TITLE_ROUND_ROLE_DESCRIPTION_PATTERN = re.compile(
 _MASKED_PHYSICIAN_IDENTITY_PATTERN = re.compile(r"(?:某|匿名|脱敏|[*＊×])")
 
 
+_PHYSICIAN_TITLE_ALTERNATION = "副主任医师|主任医师|主治医师|住院医师|医师"
+
+
+def _body_surgeon_round_tokens(row: Mapping[str, Any], *, candidate_tokens: frozenset[str]) -> frozenset[str]:
+    """用户口径（2026-10-22）：正文明确写“术者/主刀医师××查看患者”也算术者查房。
+
+    只认术者/主刀角色与首页术者完整姓名紧邻、且同句写明查看/查房；单纯提及术者
+    （如“手术由××完成”）不算。
+    """
+
+    text = _clean(row.get("record_content"))
+    if not text:
+        return frozenset()
+    found = set()
+    for token in candidate_tokens:
+        name = re.escape(token)
+        title = rf"(?:{_PHYSICIAN_TITLE_ALTERNATION})?"
+        role = r"(?:术者|主刀(?:医师|医生)?)"
+        if re.search(
+            rf"(?:{role}[：:]?\s*{name}{title}|{name}{title}[（(]?{role}[）)]?)"
+            rf"[^。；;\n]{{0,12}}(?:查看|查房|看望|探视)",
+            text,
+        ):
+            found.add(token)
+    return frozenset(found)
+
+
 def _normalized_physician_token(value: Any) -> str:
     token = re.sub(r"\s+", "", _clean(value)).lower()
     for suffix in _PHYSICIAN_TITLE_SUFFIXES:
@@ -5521,6 +5548,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     and event.surgeon_tokens.intersection(
                                         _course_record_physician_tokens(row)
                                         | _title_round_physician_tokens(
+                                            row,
+                                            candidate_tokens=event.surgeon_tokens,
+                                        )
+                                        | _body_surgeon_round_tokens(
                                             row,
                                             candidate_tokens=event.surgeon_tokens,
                                         )
