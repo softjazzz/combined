@@ -84,12 +84,10 @@ from .extended_document.antimicrobial_order_reason import (
     window_documents,
 )
 from .extended_document.antimicrobial_action_extraction import (
-    ANTIMICROBIAL_CONTEXT_MARKERS as _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS,
     SPECIAL_ANTIMICROBIALS as _SPECIAL_ANTIMICROBIALS,
     AntimicrobialOrderEvent as _AntimicrobialOrderEvent,
     antimicrobial_names_in as _antimicrobial_names_in,
     antimicrobial_names_in_rows as _antimicrobial_names_in_rows,
-    build_antimicrobial_order_events as _antimicrobial_order_events,
     linked_order_id as _linked_order_id,
 )
 from .extended_document.antimicrobial_effect_extraction import (
@@ -239,28 +237,6 @@ _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?<![a-z])(?:po|sc|ih|im|iv|ivgtt)(?![a-z])|"
     r"\d+(?:\.\d+)?\s*(?:mg|μg|ug|ml|g|单位|片|粒|袋|支)(?![a-z]))",
     re.IGNORECASE,
-)
-_ANTIMICROBIAL_REASON_MARKERS = (
-    "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
-    "培养", "药敏", "感染证据", "感染可能", "疑似感染", "因感染",
-    "感染指标升高", "无样可采", "耐药", "过敏", "不良反应", "输注反应",
-    "瘙痒", "皮疹", "肝功能", "肾功能",
-)
-_EMPIRIC_ANTIMICROBIAL_TRIGGER_PATTERN = re.compile(
-    r"(?:经验性用药|经验用药|经验性抗感染(?:治疗)?|经验性抗菌治疗|经验性)"
-)
-_EMPIRIC_ANTIMICROBIAL_NEGATED_PATTERN = re.compile(
-    r"(?:非|不是|并非|停止|终止).{0,8}(?:经验性用药|经验用药|经验性抗感染(?:治疗)?|经验性抗菌治疗)"
-)
-_TARGETED_ANTIMICROBIAL_MARKERS = (
-    "根据药敏", "依据药敏", "药敏结果调整", "培养结果后调整",
-    "培养结果调整", "目标治疗",
-)
-_EMPIRIC_REASON_MARKERS = (
-    "重症感染", "覆盖耐药菌", "感染证据", "感染可能", "疑似感染",
-    "考虑感染", "因感染", "感染指标升高", "无样可采",
-    "有抗生素使用指征", "有抗菌药物使用指征",
-    "肺部感染", "社区获得性肺炎",
 )
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
@@ -431,7 +407,6 @@ def _source_rows(
     except EvidenceMaterialUnavailable:
         return (), "source_unavailable"
     return tuple(dict(row) for row in rows), ""
-
 
 
 def _course_body_candidate_inputs(
@@ -1264,19 +1239,6 @@ def _exclude_unperformed_antimicrobial_orders(
     return tuple(kept), tuple(excluded_evidence)
 
 
-def _antimicrobial_reason_clauses(row: Mapping[str, Any]) -> tuple[str, ...]:
-    """理由缺失声明不能以其中的“理由/依据”字面值充当正向事实。"""
-
-    return tuple(
-        clause for clause in re.split(r"[，,。；;\n]", _material_text(row))
-        if not re.search(
-            r"(?:理由|依据|感染证据).{0,4}(?:未记录|未说明|缺失|不详|未提供)"
-            r"|(?:无|缺少|未记录|未说明).{0,4}(?:理由|依据|感染证据)",
-            clause,
-        )
-    )
-
-
 def _055_treatment_orders(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], ...]:
@@ -1308,36 +1270,6 @@ def _parse_lx0609_058_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(_LX0609_HOSPITAL_TIMEZONE).replace(tzinfo=None)
     return parsed
-
-
-def _antimicrobial_start_datetime(row: Mapping[str, Any]) -> datetime | None:
-    """按院方口径读取抗菌药启用时间；计划时间缺失时回退医嘱下达时间。"""
-
-    return _parse_datetime(
-        row.get("planned_start_datetime") or row.get("prescribed_datetime")
-    )
-
-
-def _lx0609_058_first_use_events(
-    events: Sequence[tuple[Mapping[str, Any], str, datetime | None]],
-) -> tuple[tuple[Mapping[str, Any], str, datetime | None], ...]:
-    """每种特殊级药物只保留首次启用事件。
-
-    用户口径（2026-10-17）：同一药物后续续开或调整剂量的医嘱沿用首次启用时的专家支持。
-    同药任一医嘱缺启用时间时无法确定首次启用，保留缺时间事件交由时间缺口出口处理。
-    """
-
-    first: dict[str, tuple[Mapping[str, Any], str, datetime | None]] = {}
-    for event in events:
-        _order, name, start = event
-        current = first.get(name)
-        if current is None:
-            first[name] = event
-        elif current[2] is None:
-            continue
-        elif start is None or start < current[2]:
-            first[name] = event
-    return tuple(first.values())
 
 
 def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
@@ -1386,17 +1318,6 @@ def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
 
 def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> bool:
     return any(any(marker in _material_text(row) for marker in markers) for row in rows)
-
-
-@dataclass(frozen=True)
-class _AntimicrobialReasonAction:
-    """054 的一个可证明、已命名的抗菌药处置动作。"""
-
-    row: Mapping[str, Any]
-    antimicrobial: str
-    action: str
-    order_ids: tuple[str, ...]
-    orders: tuple[Mapping[str, Any], ...]
 
 
 # 054 用户口径（2026-10-18）：延续原方案不是需要记录理由的用药动作，
@@ -1513,158 +1434,6 @@ def _054_reason_in_action_sentence(row: Mapping[str, Any], antimicrobial: str) -
     return False
 
 
-def _054_action_events(
-    rows: Sequence[Mapping[str, Any]],
-    antimicrobial_orders: Sequence[Mapping[str, Any]],
-    confirmed_actions: Mapping[tuple[int, str], str],
-) -> tuple[tuple[_AntimicrobialReasonAction, ...], bool, tuple[str, ...]]:
-    """仅从病程里的“具体药物 + 明确动作”建立054触发事件。
-
-    医嘱的普通存在、order_status、update_time 都不表示这里要求的使用或调整
-    事实；不得据此推断停用或更换。
-    """
-
-    events: list[_AntimicrobialReasonAction] = []
-    order_events = _antimicrobial_order_events(antimicrobial_orders)
-    mentioned_antimicrobials: list[str] = []
-    association_failed = False
-    for row_index, row in enumerate(rows):
-        for antimicrobial in _antimicrobial_names_in(row):
-            if (
-                action := confirmed_actions.get((row_index, antimicrobial))
-            ) is None:
-                continue
-            if _054_is_continuation_only(row, antimicrobial):
-                continue
-            mentioned_antimicrobials.append(antimicrobial)
-            row_order_id = _linked_order_id(row)
-            if row_order_id:
-                candidates = tuple(
-                    order_event
-                    for order_event in order_events
-                    if row_order_id in order_event.order_ids
-                    and antimicrobial in order_event.antimicrobials
-                )
-            else:
-                candidates = tuple(
-                    order_event
-                    for order_event in order_events
-                    if antimicrobial in order_event.antimicrobials
-                )
-            if row_order_id and len(candidates) != 1:
-                # 病程带医嘱号时必须唯一对上该医嘱，不能让其他同名医嘱代为触发。
-                association_failed = True
-                continue
-            if not candidates:
-                # 本次就诊没有同药受控医嘱，病程动作无法证明属于本次用药。
-                association_failed = True
-                continue
-            # 同药多次开立且源库无停止时间时无法定位具体哪条（用户口径 2026-10-18：
-            # 存在同药医嘱即关联成立）；不绑定医嘱号，理由归属按药名规则处理。
-            single = candidates[0] if len(candidates) == 1 else None
-            events.append(_AntimicrobialReasonAction(
-                row=row,
-                antimicrobial=antimicrobial,
-                action=action,
-                order_ids=single.order_ids if single is not None else (),
-                orders=(
-                    single.orders if single is not None
-                    else tuple(order for candidate in candidates for order in candidate.orders)
-                ),
-            ))
-    return (
-        tuple(events),
-        association_failed,
-        tuple(dict.fromkeys(mentioned_antimicrobials)),
-    )
-
-
-def _054_reason_documented(row: Mapping[str, Any]) -> bool:
-    return any(
-        marker in clause
-        for clause in _antimicrobial_reason_clauses(row)
-        for marker in _ANTIMICROBIAL_REASON_MARKERS
-    )
-
-
-def _054_event_reason_state(
-    *,
-    event: _AntimicrobialReasonAction,
-    all_events: Sequence[_AntimicrobialReasonAction],
-    course_rows: Sequence[Mapping[str, Any]],
-) -> tuple[str, Mapping[str, Any] | None]:
-    """返回单个054动作的理由状态：documented/missing/ambiguous。
-
-    同一条动作病程内的理由天然同源，优先认可。分开的理由必须有共同医嘱
-    标识，或在同名动作仅出现一次时以药名唯一归属；不能让同一条泛化理由
-    共享给多次同名动作。
-    """
-
-    if _054_reason_documented(event.row) or _054_reason_in_action_sentence(
-        event.row, event.antimicrobial
-    ):
-        return "documented", event.row
-
-    same_name_events = tuple(
-        candidate
-        for candidate in all_events
-        if candidate.antimicrobial == event.antimicrobial
-    )
-    has_unresolvable_candidate = False
-    for row in course_rows:
-        if row is event.row or not _054_reason_documented(row):
-            continue
-        row_order_id = _linked_order_id(row)
-        row_names = _antimicrobial_names_in(row)
-        if event.order_ids and row_order_id:
-            if row_order_id in event.order_ids:
-                return "documented", row
-            continue
-        if row_order_id or event.order_ids:
-            # 只有一端带医嘱标识时，不能用同名猜测它们属于同一动作。
-            if event.antimicrobial in row_names:
-                has_unresolvable_candidate = True
-            continue
-        if event.antimicrobial in row_names:
-            if len(same_name_events) == 1:
-                return "documented", row
-            has_unresolvable_candidate = True
-            continue
-        if len(all_events) == 1 and not row_names:
-            return "documented", row
-        if not row_names:
-            has_unresolvable_candidate = True
-    return ("ambiguous" if has_unresolvable_candidate else "missing"), None
-
-
-def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
-    """只以明确的经验用药表述触发057，排除药敏/培养后的目标治疗。"""
-
-    text = _material_text(row)
-    if not _EMPIRIC_ANTIMICROBIAL_TRIGGER_PATTERN.search(text):
-        return False
-    if _EMPIRIC_ANTIMICROBIAL_NEGATED_PATTERN.search(text):
-        return False
-    if any(marker in text for marker in _TARGETED_ANTIMICROBIAL_MARKERS):
-        return False
-    # 单独的“经验性”必须同时有实际抗菌用药动作，不能把泛泛的病情描述
-    # 误作经验用药事件；其余完整术语本身已足以表示触发事实。
-    if "经验性" in text and not any(
-        marker in text
-        for marker in (
-            "经验性用药", "经验性抗感染", "经验性抗菌治疗",
-        )
-    ):
-        return (
-            any(action in text for action in ("启用", "使用", "给予", "用药", "治疗"))
-            and (
-                bool(_antimicrobial_names_in(row))
-                or any(marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS)
-            )
-        )
-    return True
-
-
 def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
     """病原学项目身份只取检验名称，不把任意核酸检测等同于病原学。"""
     text = " ".join(_clean(row.get(field)) for field in (
@@ -1674,14 +1443,6 @@ def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
         re.search(r"培养|药敏|病原", text)
         or re.search(r"(?:病毒|细菌|真菌|支原体|衣原体|结核|HBV|HCV|HIV).{0,20}(?:核酸|DNA|RNA)", text, re.I)
     )
-
-
-@dataclass(frozen=True)
-class _EmpiricAntimicrobialEvent:
-    """057 已关联的同药医嘱集合；未绑定具体医嘱时号集合为空。"""
-    orders: tuple[Mapping[str, Any], ...]
-    antimicrobials: tuple[str, ...]
-    order_ids: tuple[str, ...]
 
 
 def _is_prophylactic_antimicrobial_clause(clause: str) -> bool:
@@ -1699,128 +1460,6 @@ def _is_prophylactic_antimicrobial_clause(clause: str) -> bool:
                 or re.search(r"预防[^、]{0,8}感染", segment)):
             return True
     return False
-
-
-def _empiric_antimicrobial_event_contexts(
-    *,
-    antimicrobial_orders: Sequence[Mapping[str, Any]],
-    candidate_rows: Sequence[Mapping[str, Any]],
-    lab_master_rows: Sequence[Mapping[str, Any]] = (),
-    lab_item_rows: Sequence[Mapping[str, Any]] = (),
-    pathogen_sources_complete: bool = False,
-) -> tuple[tuple[tuple[Mapping[str, Any], _EmpiricAntimicrobialEvent], ...], bool]:
-    """返回按药名或唯一医嘱号关联的经验用药事件。"""
-
-    order_events = _antimicrobial_order_events(antimicrobial_orders)
-    contexts: list[tuple[Mapping[str, Any], _EmpiricAntimicrobialEvent]] = []
-    association_ambiguous = False
-    for row in candidate_rows:
-        explicit = _is_explicit_empiric_antimicrobial_use(row)
-        text = _material_text(row)
-        names = _antimicrobial_names_in(row)
-        treatment_clauses = tuple(
-            clause for clause in re.split(r"[，,。；;\n]", text)
-            if re.search(r"抗感染|抗菌治疗", clause)
-            and not _is_prophylactic_antimicrobial_clause(clause)
-            and _has_performed_antimicrobial_administration(clause, names)
-        )
-        treatment_names = tuple(dict.fromkeys(
-            name for clause in treatment_clauses
-            for name in _antimicrobial_names_in({"record_content": clause})
-        ))
-        # 无“经验性”字样时，只接受有时间的本次已实施、明确治疗感染的
-        # 具体用药叙述；计划医嘱和预防用药不进入新增路径。
-        inferred_candidate = (
-            bool(treatment_names) and _row_time(row) is not None
-            and not re.search(r"根据.{0,12}(?:培养|药敏)|依据.{0,12}(?:培养|药敏)", text)
-            and not any(marker in text for marker in _TARGETED_ANTIMICROBIAL_MARKERS)
-        )
-        if not explicit and not inferred_candidate:
-            continue
-        linked_order_id = _linked_order_id(row)
-        mentioned_names = _antimicrobial_names_in(row) if explicit else treatment_names
-        if linked_order_id:
-            candidates = tuple(
-                event
-                for event in order_events
-                if linked_order_id in event.order_ids
-                and (not mentioned_names or all(name in event.antimicrobials for name in mentioned_names))
-            )
-        elif mentioned_names:
-            candidates = tuple(
-                event
-                for event in order_events
-                if any(name in event.antimicrobials for name in mentioned_names)
-            )
-        elif len(order_events) == 1:
-            candidates = order_events
-        else:
-            candidates = ()
-        if not explicit and not linked_order_id and len(candidates) > 1:
-            # 沿用经验用药推断的时序门槛；尚未启用的未来医嘱不能证明本次已实施。
-            document_time = _row_time(row)
-            candidates = tuple(
-                event for event in candidates
-                if document_time is not None
-                and any(
-                    (start := _antimicrobial_start_datetime(order)) is None
-                    or start <= document_time
-                    for order in event.orders
-                )
-            )
-        if not candidates or (linked_order_id and len(candidates) != 1):
-            association_ambiguous = association_ambiguous or explicit
-            continue
-        if len(candidates) > 1 and len({
-            name for event in candidates for name in mentioned_names
-            if name in event.antimicrobials
-        }) > 1:
-            # 本轮只合并同药多医嘱；多种药物的原有事件归属边界不变。
-            association_ambiguous = association_ambiguous or explicit
-            continue
-        # 主控代定口径（2026-10-18，待客户复核），基线057：
-        # 同药存在即关联；多医嘱不绑定具体号，理由继续按药名归属。
-        if not linked_order_id and mentioned_names:
-            candidates = tuple(_EmpiricAntimicrobialEvent(
-                orders=tuple(order for event in candidates if name in event.antimicrobials
-                             for order in event.orders),
-                antimicrobials=(name,),
-                order_ids=(),
-            ) for name in mentioned_names if any(name in event.antimicrobials for event in candidates))
-            if len(candidates) != len(mentioned_names):
-                if explicit:
-                    association_ambiguous = True
-                    continue
-        if not explicit:
-            start = min((value for order in candidates[0].orders
-                         if (value := _antimicrobial_start_datetime(order)) is not None), default=None)
-            if not pathogen_sources_complete or start is None:
-                association_ambiguous = True
-                continue
-            # 只在完整检验来源中核对启用时已可获得的病原学结果；未知报告
-            # 时间不能当作“尚无结果”，已有结果时不推断为经验治疗。
-            pathogen_ids = {
-                _clean(item.get("test_id")) for item in (*lab_master_rows, *lab_item_rows)
-                if _clean(item.get("test_id")) and _is_pathogen_lab(item)
-            }
-            reports = tuple(item for item in (*lab_master_rows, *lab_item_rows)
-                            if _clean(item.get("test_id")) in pathogen_ids)
-            prior_basis = False
-            unknown_basis_time = False
-            for report in reports:
-                moment = _parse_datetime(report.get("report_datetime") or report.get("report_time"))
-                has_result = bool(_clean(report.get("result")))
-                prior_basis = prior_basis or (moment is not None and moment <= start)
-                unknown_basis_time = unknown_basis_time or (has_result and moment is None)
-            if prior_basis:
-                continue
-            if unknown_basis_time:
-                association_ambiguous = True
-                continue
-        contexts.extend((row, _EmpiricAntimicrobialEvent(
-            event.orders, event.antimicrobials, event.order_ids,
-        )) for event in candidates)
-    return tuple(contexts), association_ambiguous
 
 
 def _pathogen_basis_state(
@@ -1951,45 +1590,6 @@ def _order_reason_rule_outcome(
         "unmatched_antimicrobials": [] if final_state == "compliant" else unmatched,
         "association_ambiguous": final_state == "data_gap",
     }, tuple(evidence)
-
-
-def _empiric_reason_documented(
-    *,
-    event_row: Mapping[str, Any],
-    order_event: _EmpiricAntimicrobialEvent,
-    course_rows: Sequence[Mapping[str, Any]],
-) -> Mapping[str, Any] | None:
-    """理由只能来自可归属该经验用药事件的病程，不以培养/药敏调整代替。"""
-
-    order_ids = order_event.order_ids
-    order_names = order_event.antimicrobials
-    for row in course_rows:
-        clauses = _antimicrobial_reason_clauses(row)
-        if not any(
-            any(marker in clause for marker in _EMPIRIC_REASON_MARKERS)
-            # 新增同义依据只接受分句起始的明确肯定形式，不在任意前缀后
-            # 搜索“证实”。复杂修饰不由短距离否定词排除表推断为肯定。
-            or (
-                re.match(r"^\s*(?:(?:胸部)?影像)?(?:已)?(?:证实|确诊)"
-                         r"(?:为)?(?:细菌|感染)", clause)
-                and not re.search(r"尚|未|不|无|非|否|待|拟|可能|可疑|是否|排除", clause)
-            )
-            for clause in clauses
-        ):
-            continue
-        row_order_id = _linked_order_id(row)
-        if row_order_id:
-            matches = tuple(event for event in _antimicrobial_order_events(order_event.orders)
-                            if row_order_id in event.order_ids)
-            if len(matches) == 1 and (not order_ids or row_order_id in order_ids):
-                return row
-            continue
-        row_names = _antimicrobial_names_in(row)
-        if row_names and any(name in order_names for name in row_names):
-            return row
-        if row is event_row and len(order_names) == 1:
-            return row
-    return None
 
 
 def _antimicrobial_document_refs(
