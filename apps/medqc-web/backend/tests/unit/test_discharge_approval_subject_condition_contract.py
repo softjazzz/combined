@@ -77,6 +77,10 @@ class SequencedClient:
         "今日请示某主任医师查看患者，同意明日出院",
         True,
     ),
+    # 查体阴性“不肿”不是否定出院（1022 C15）；同一短句内的否定仍拒绝。
+    ("senior_course_record", "副主任医师查房后指出：患者好转，双下肢不肿，患者拟明日出院", True),
+    ("senior_course_record", "主任医师查房：病情未稳定，暂不出院", False),
+    ("senior_course_record", "主任医师查房：目前不宜出院", False),
     ("daily_course_record", "上级医师查房。今日办理出院", False),
     ("daily_course_record", "患者要求出院。上级医师查房", False),
 ])
