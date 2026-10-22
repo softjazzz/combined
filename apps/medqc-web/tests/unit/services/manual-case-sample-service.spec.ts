@@ -377,6 +377,7 @@ describe('editable medical-record document normalization', () => {
     expect(result.data?.documents[0]).toMatchObject({
       record_time: '2026-06-21 17:05:00',
       submit_time: '2026-06-21 17:05:00',
+      record_time_source: 'source_submit_time',
     })
   })
 

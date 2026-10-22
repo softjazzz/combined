@@ -54,9 +54,11 @@ from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
     SourceEvidenceQueryError,
     SourceEvidenceTruncated,
     SourceEvidenceUnavailable,
+    authoritative_document_time_value,
     read_luxian_0609_native_source_rows,
 )
 from .structured_output import structured_output_kwargs
@@ -1019,7 +1021,7 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
             "ref": f"{_SOURCE_KEY}-{index}",
             "document_id": document_id,
             "material_ref": _clean(row.get("_material_document_ref")),
-            "time": _clean(row.get("record_time")),
+            "time": _clean(authoritative_document_time_value(row)),
             "text": text,
             "event_identity_mode": event_identity_mode,
         }, business_tokens))
@@ -1102,15 +1104,10 @@ def _row_time(
             "update_time",
             "record_time",
         )
-    elif source_key in _COURSE_EXECUTION_SOURCE_KEYS:
+    elif source_key in _COURSE_EXECUTION_SOURCE_KEYS or source_key == _SOURCE_KEY:
         # 与病程质量规则共用同一权威时间口径：优先正式记录时间，客户CDM
         # 未回传该字段时使用提交时间；不从正文、同步时间或文件顺序猜测。
-        time_keys = (
-            "record_time",
-            "record_datetime",
-            "submit_time",
-            "submit_datetime",
-        )
+        time_keys = AUTHORITATIVE_DOCUMENT_TIME_FIELDS
     elif source_key in {"exam_master", "exam_item_report"}:
         # 检查执行的时序优先取实际检查时间；申请时间不能替代已实施检查，
         # report/record_time 也可能只是报告或同步归档时间。

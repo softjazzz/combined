@@ -1720,6 +1720,7 @@ def _inventory_entry(
         "document_id": assembled.document_id,
         "document_title": assembled.document_title,
         "record_time": assembled.record_time or "",
+        "submit_time": assembled.submit_time or "",
         "display_time": assembled.display_time or "",
         "hit": bool(text_value),
         "text_preview": text_value[:600],
@@ -2843,6 +2844,7 @@ def load_domain_bundle_document_index(
                        'document_title', item -> 'document_title',
                        'display_time', item -> 'display_time',
                        'record_time', item -> 'record_time',
+                       'submit_time', item -> 'submit_time',
                        'has_content', LENGTH(BTRIM(COALESCE(item ->> 'content', ''))) > 0,
                        'length', LENGTH(COALESCE(item ->> 'content', '')),
                        'source_fields', CASE

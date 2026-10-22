@@ -323,6 +323,9 @@ function normalizeEditableDocumentsResponse(
         report_items: reportItems,
         report_metadata: reportMetadata,
         record_time: rawRecordTime || orderDisplayTime || submitTime,
+        record_time_source:
+          readStringField(row, ['record_time_source']) ||
+          (!rawRecordTime && !orderDisplayTime && submitTime ? 'source_submit_time' : ''),
         submit_time: submitTime,
         order_start_time: readStringField(row, [
           'order_start_time',

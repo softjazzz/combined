@@ -51,6 +51,30 @@ const issues: QCRecordCompareIssue[] = [
 ]
 
 describe('QCRecordCompareWorkbench', () => {
+  it('缺记录时间时显示提交时间及其来源标签', async () => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'V1',
+        issues: [],
+        documentOnly: true,
+        providedDocuments: [
+          {
+            key: 'consult-1',
+            document_type: 'consultation_record',
+            title: '会诊记录',
+            content: '会诊意见',
+            record_time: '2026-06-01 09:10:00',
+            submit_time: '2026-06-01 09:10:00',
+            record_time_source: 'source_submit_time',
+          },
+        ],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.record-content-time').text()).toContain('提交时间')
+    expect(wrapper.find('.record-content-time').text()).toContain('2026-06-01 09:10:00')
+    wrapper.unmount()
+  })
   beforeEach(() => {
     getDocumentsMock.mockReset()
     getDocumentMock.mockReset()

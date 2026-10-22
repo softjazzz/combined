@@ -60,7 +60,7 @@
               class="record-content-time"
               :class="{ 'is-missing': !resolveDocumentTime(selectedDocument) }"
             >
-              <span>记录时间</span>
+              <span>{{ resolveMedicalDocumentTimeLabel(selectedDocument) }}</span>
               <b>{{ formatDocumentTime(resolveDocumentTime(selectedDocument)) }}</b>
             </time>
             <time
@@ -325,6 +325,7 @@ import {
   formatMedicalDocumentTime,
   isMedicalOrderDocument,
   resolveMedicalDocumentTime,
+  resolveMedicalDocumentTimeLabel,
   resolveMedicalDocumentTitle,
   resolveMedicalDocumentTypeLabel,
 } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'

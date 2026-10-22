@@ -1,6 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { resolveMedicalDocumentGroup } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { formatDiagnosisSection } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+import { resolveMedicalDocumentTimeLabel } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+
+it('提交时间回退明确标明来源，已有记录时间仍优先', () => {
+  const doc = {
+    key: 'consult-1',
+    document_type: 'consultation_record',
+    title: '会诊记录',
+    content: '',
+  }
+  expect(resolveMedicalDocumentTimeLabel({ ...doc, submit_time: '2026-06-01 09:10' })).toBe(
+    '提交时间',
+  )
+  expect(
+    resolveMedicalDocumentTimeLabel({
+      ...doc,
+      record_time: '2026-06-01 09:10',
+      record_time_source: 'source_submit_time',
+    }),
+  ).toBe('提交时间')
+  expect(
+    resolveMedicalDocumentTimeLabel({
+      ...doc,
+      record_time: '2026-06-01 08:10',
+      submit_time: '2026-06-01 09:10',
+    }),
+  ).toBe('记录时间')
+})
 
 it('诊断类别与其他诊断分行，保留椎体编号及原有归属', () => {
   expect(
