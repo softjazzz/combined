@@ -88,3 +88,27 @@ def test_bundle_verification_requires_correct_table_identity_and_full_sections()
         bundle_child.check_document("discharge_record", "D", ["缺失段落"], documents)
     with pytest.raises(ValueError, match="bundle_document_missing"):
         bundle_child.check_document("discharge_record", "", ["甲乙"], documents)
+
+
+def test_scene_bundle_inventory_uses_real_storage_column():
+    assert bundle_child.inventory_expression({"structured_context"}) == "structured_context -> 'document_inventory'"
+    assert bundle_child.inventory_expression({"source_documents", "structured_context"}) == "source_documents"
+    with pytest.raises(ValueError, match="bundle_inventory_column_missing"):
+        bundle_child.inventory_expression({"bundle_text"})
+
+
+def test_confirmation_mode_never_refreshes_bundles():
+    assembly = SimpleNamespace(refresh_all_bundle_variants_for_rows=Mock(side_effect=AssertionError("must stay read only")))
+    assert bundle_child.refresh_if_requested(assembly, {"refresh": False}) == {}
+    assembly.refresh_all_bundle_variants_for_rows.assert_not_called()
+
+
+def test_legacy_empty_json_text_is_not_expected_body():
+    assert bundle_child.source_sections({"record_content": "[]", "discharge_order": "真实医嘱"}) == ["真实医嘱"]
+
+
+def test_missing_expected_source_document_cannot_vacuously_pass():
+    required = [{"sample": "C18", "table": "bloodtrans_record", "document_id": "D"}]
+    with pytest.raises(ValueError, match="expected_document_missing"):
+        bundle_child.check_required_documents([], required)
+    bundle_child.check_required_documents([{**required[0], "bundle_content_verified": True}], required)

@@ -69,3 +69,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - 用真实27例双库冻结导出和本机只读表结构做23表候选演练；C18可生成3份输血记录和1份出院记录的新增计划。历史快照中的候选数量不代表客户机当前会写入同样数量。
 - Ruff、PowerShell语法和差异空白检查通过。客户机实时连接、实际写入和客户机安装版本的Bundle读回仍需上述小范围验收，不宣称已部署验证。
 - 未修改医院源库、主工作树、运行环境开关或质控结论；没有重跑27例质控，没有模型调用。
+
+## 客户机已提交后的验收修正
+
+客户机首次 Apply 返回 `data_committed: true`，Bundle验证失败。已在本机只读复现验收器的确定缺陷：`running_record_bundle`、`final_record_bundle` 的文书目录位于 `structured_context.document_inventory`，原验收器直接查询不存在的 `source_documents` 列，得到 SQLSTATE 42703。领域Bundle则有独立 `source_documents` 列。
+
+验收器现按实际列结构读取，增加明确错误代码、阶段和无正文栈位置，并支持 `refresh: false` 的只读确认。旧资料的空正文字符串 `[]` 不作为需匹配的正文；指定的C18四份文书必须实际读到，避免空范围误通过。
+
+修复已用本机现有 C17/C18/C22 的9份输血和出院文书实际只读验证通过，不刷新Bundle、不写库、不调用模型。客户机仍须执行单独的 `confirm-medqc-dual-source-20261022.ps1` 确认实际结果；不应重复 Apply。该独立确认脚本会校验上次范围备份的SHA256，并读取现有Bundle。它不修改客户机项目文件，只在临时目录生成检查器。
