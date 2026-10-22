@@ -544,3 +544,15 @@ def test_058_approval_requires_authorized_expert_near_quote(text, quote, expecte
     from app.services.luxian_0609.native_extended_document_execution import _special_approval_by_authorized_expert
 
     assert _special_approval_by_authorized_expert(text, quote) is expected
+
+
+@pytest.mark.parametrize(("quote", "expected"), [
+    ("今日复查白细胞较前升高...目前考虑肺部感染控制差，不排除血流感染", "目前考虑肺部感染控制差，不排除血流感染"),
+    ("复查白细胞…目前考虑肺部感染控制差", "目前考虑肺部感染控制差"),
+    ("今日复查白细胞较前升高...考虑尿路感染", None),
+])
+def test_ellipsis_spliced_quote_is_verified_segment_by_segment(quote, expected) -> None:
+    from app.services.luxian_0609.extended_document.antimicrobial_order_reason import _restore_spliced_quote
+
+    text = "患者今日复查白细胞较前升高，体温发热，予退热处理。目前考虑肺部感染控制差，不排除血流感染。"
+    assert _restore_spliced_quote(quote, text) == expected

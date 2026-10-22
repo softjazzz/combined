@@ -35,6 +35,7 @@ from ..llm_prompt_privacy import (
     redact_luxian_0609_patient_privacy,
 )
 from ..structured_output import structured_output_kwargs
+from ..consultation_disposition_record import _split_into_source_segments
 from .shared import _clean, _parse_datetime, _row_time, order_repeat_kind, row_time_upper_bound
 
 
@@ -384,6 +385,20 @@ def _strip_fence(content: str) -> str:
     return text
 
 
+_ELLIPSIS = re.compile(r"\.{2,}|…+|。{3,}")
+
+
+def _restore_spliced_quote(quote: str, text: str) -> str | None:
+    """模型用省略号把同一文书的几段原文拼成一条引文时，逐段按原文顺序核验。
+
+    每段须逐字、按位置递增出现在原文中（沿用会诊处置的拆分合同）；核验通过后只保留
+    最长的一段作为引文，仍是逐字连续原文。任一段对不上返回 None。
+    """
+
+    segments = _split_into_source_segments(_ELLIPSIS.sub("", quote), text)
+    return max(segments, key=len) if segments else None
+
+
 def _parse(
     content: str,
     events: Sequence[AntimicrobialUseEvent],
@@ -426,11 +441,12 @@ def _parse(
             if not quote:
                 continue
             ref = refs.get(kind)
-            if (
-                not isinstance(ref, str) or _DOC_REF.fullmatch(ref) is None
-                or ref not in per_event[event_id] or quote not in texts.get(ref, "")
-            ):
+            if not isinstance(ref, str) or _DOC_REF.fullmatch(ref) is None or ref not in per_event[event_id]:
                 raise ValueError("unverified quote")
+            if quote not in texts.get(ref, ""):
+                quote = _restore_spliced_quote(quote, texts.get(ref, ""))
+                if quote is None:
+                    raise ValueError("unverified quote")
             if kind != "prophylaxis" and sources.get(ref) in PROPHYLAXIS_ONLY_SOURCES:
                 raise ValueError("surgery or anesthesia record quoted for non-prophylaxis field")
             quotes[kind] = (ref, quote)
