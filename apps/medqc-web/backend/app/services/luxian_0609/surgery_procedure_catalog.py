@@ -40,6 +40,10 @@ _ADJUNCT_CODE_SUBCATEGORIES = frozenset(f"00.4{digit}" for digit in range(9))
 _ADJUNCT_CATEGORY = "附加编码"
 _CHAPTER_PATTERN = re.compile(r"^(\d{2})\.")
 _MISC_PROCEDURE_CATEGORY = "其他诊断性和治疗性操作"
+# 用户口径（2026-10-22）：皮肤和皮下组织的清创缝合（多为急诊、床旁处理，1022 C02 头皮
+# 裂伤清创缝合）按治疗性操作处理，不触发手术类规则，优先于目录分类：86.59 皮肤缝合、
+# 86.28 非切除性清创。切除性清创（86.22）、甲床清创、皮瓣清创及 V-Y 缝合仍按目录。
+_SKIN_SUTURE_OPERATION_SUBCATEGORIES = frozenset({"86.59", "86.28"})
 _SUPPLEMENT_OPERATION_NAMES = {
     "气管插管术": "治疗性操作",
     "气管内插管": "治疗性操作",
@@ -139,6 +143,8 @@ def classify_surgery_procedure(
 ) -> SurgeryProcedureClassification | None:
     by_code, by_name = _catalog_indexes()
     normalized_code = _normalize_code(code)
+    if _subcategory(normalized_code) in _SKIN_SUTURE_OPERATION_SUBCATEGORIES:
+        return _operation(normalized_code, _normalize_name(name), "治疗性操作", "skin_suture_operation")
     if normalized_code and (item := by_code.get(normalized_code)) is not None:
         return _matched(item, "code")
     normalized_name = _normalize_name(name)
