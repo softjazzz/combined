@@ -283,7 +283,7 @@ def _context(
             + selected_diagnosis_rows
         )
     for source_key, row, content in context_rows:
-        record_time = _clean(row.get("record_time")) or "未提供"
+        record_time = _clean(authoritative_document_time_value(row)) or "未提供"
         scope = (
             "（仅供核实病灶侧别、识别规范例外、理解术语）"
             if rule_id == "LX0609-01-01-02" and source_key == "admission_record"

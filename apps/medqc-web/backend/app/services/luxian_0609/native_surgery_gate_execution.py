@@ -32,6 +32,7 @@ from .malignancy_fact import (
     resolve_malignancy_visit_stage,
 )
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     has_qualified_traditional_surgery_row,
     has_strict_performed_time,
     parse_strict_performed_time,
@@ -841,7 +842,7 @@ def _resolve_surgery_signature_selection(
 
 
 def _authoritative_record_time(value: Any) -> datetime | None:
-    """只接受 record_time 整值；不从正文、标题或局部文本提取时间。"""
+    """只接受受控文书时间整值；不从正文、标题或局部文本提取时间。"""
 
     if isinstance(value, datetime):
         parsed = value
@@ -1272,7 +1273,7 @@ def _typed_003_decision(
         surgery_end_time = _authoritative_surgery_end_time(
             source_key="surgery_record", row=row
         )
-        record_time = _authoritative_record_time(row.get("record_time"))
+        record_time = _authoritative_record_time(authoritative_document_time_value(row))
         if surgery_end_time is None or record_time is None:
             if surgery_end_time is None:
                 missing_time_fields.add("surgery_end_time")
@@ -1318,7 +1319,7 @@ def _typed_003_decision(
             sorted({
                 parsed
                 for row in surgery_rows
-                if (parsed := _authoritative_record_time(row.get("record_time")))
+                if (parsed := _authoritative_record_time(authoritative_document_time_value(row)))
                 is not None
             })
         )
@@ -1363,7 +1364,7 @@ def _typed_003_decision(
         anesthesia_end_time = _labeled_anesthesia_surgery_time(
             anesthesia_rows[0], label="手术结束时间"
         )
-        record_time = _authoritative_record_time(surgery_rows[0].get("record_time"))
+        record_time = _authoritative_record_time(authoritative_document_time_value(surgery_rows[0]))
         if (
             surgery_begin_time is not None
             and anesthesia_begin_time == surgery_begin_time

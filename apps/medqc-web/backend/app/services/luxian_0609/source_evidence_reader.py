@@ -776,13 +776,13 @@ _SNAPSHOT_SOURCE_FIELDS.update({
     "presurg_summary": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
     "surgery_safecheck_record": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
 })
@@ -1592,7 +1592,7 @@ def read_luxian_0609_runtime_source_rows(
             raise SourceEvidenceUnavailable()
         selected.append("surgery_begin_datetime")
     if source_key == "presurg_summary":
-        selected.extend(field for field in ("record_content", "record_time") if field in columns)
+        selected.extend(field for field in ("record_content", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS) if field in columns)
     if source_key == "surgery_safecheck_record":
         selected.extend(field for field in ("record_content",) if field in columns)
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"

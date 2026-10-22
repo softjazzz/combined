@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly  # noqa: F401
 
@@ -17,6 +19,7 @@ from .evidence_snapshot_provider import classify_current_visit_surgery_order_row
 from .source_manifest import QueryStatus
 from .surgery_procedure_catalog import catalog_surgery_state
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     SURGERY_TIME_FIELDS,
     SourceEvidenceUnavailable,
     canonical_source_evidence,
@@ -33,7 +36,6 @@ _EXTRACTOR_VERSION = "rts-v1"
 _MAPPING_POLICY_VERSION = "rtm-v2"
 _MAX_SOURCES = 6
 _PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
-_PRESURG_RECORD_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 _TARGET_QUALIFICATION_POLICY_VERSION = deterministic_gate.TARGET_QUALIFICATION_POLICY_VERSION
 _MIN_SUBSTANTIVE_TARGET_LENGTH = 16
 # 兼容已验收 provider 的测试 seam；实现位于共享读侧模块。
@@ -129,14 +131,24 @@ def _substantive_target_body(value: Any) -> bool:
 
 
 def _parse_presurg_record_time(value: Any) -> datetime | None:
-    if not isinstance(value, str):
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        candidate = value.strip().replace("Z", "+00:00")
+        if not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2})?",
+            candidate,
+        ):
+            return None
+        try:
+            parsed = datetime.fromisoformat(candidate)
+        except ValueError:
+            return None
+    else:
         return None
-    candidate = value.strip()
-    try:
-        parsed = datetime.strptime(candidate, _PRESURG_RECORD_TIME_FORMAT)
-    except ValueError:
-        return None
-    return parsed if parsed.strftime(_PRESURG_RECORD_TIME_FORMAT) == candidate else None
+    if parsed.tzinfo is None:
+        return parsed
+    return parsed.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
 
 
 def _target_qualification_material_hash(source_key: str, row: Mapping[str, Any]) -> str | None:
@@ -144,7 +156,7 @@ def _target_qualification_material_hash(source_key: str, row: Mapping[str, Any])
     if source_key == "presurg_summary":
         material = {
             "record_content": row.get("record_content").strip() if isinstance(row.get("record_content"), str) else "",
-            "record_time": row.get("record_time").strip() if isinstance(row.get("record_time"), str) else "",
+            "record_time": str(authoritative_document_time_value(row) or "").strip(),
         }
     elif source_key == "surgery_safecheck_record":
         material = {
@@ -373,7 +385,7 @@ def provide_luxian_0609_runtime_shadow_inputs(
                 1
                 for row in target_rows
                 if _substantive_target_body(row.get("record_content"))
-                and (record_time := _parse_presurg_record_time(row.get("record_time"))) is not None
+                and (record_time := _parse_presurg_record_time(authoritative_document_time_value(row))) is not None
                 and earliest_surgery_time is not None
                 and record_time <= earliest_surgery_time
             )

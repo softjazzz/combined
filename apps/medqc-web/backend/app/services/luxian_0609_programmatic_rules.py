@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from .luxian_0609.source_evidence_reader import (
+    authoritative_document_time_value,
     parse_luxian_0609_rescue_end_time,
 )
 
@@ -239,8 +240,8 @@ def _first_time(docs: list[dict[str, Any]]) -> tuple[datetime | None, dict[str, 
 
 
 def _document_time(item: dict[str, Any]) -> datetime | None:
-    for key in ("authored_at", "record_time", "display_time", "submit_datetime", "submit_time", "update_time"):
-        parsed = _parse_dt(item.get(key))
+    for value in (authoritative_document_time_value(item), item.get("authored_at"), item.get("display_time"), item.get("update_time")):
+        parsed = _parse_dt(value)
         if parsed:
             return parsed
     return None
