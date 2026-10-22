@@ -23,6 +23,7 @@ from time import perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .extended_document.shared import order_repeat_kind
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
@@ -166,7 +167,7 @@ def order_stop(row: Mapping[str, Any]) -> datetime | None:
     """临时/单次医嘱以开始时刻为止；长期医嘱必须有停止时间，不以更新时间替代。"""
 
     start = order_start(row)
-    if str(row.get("repeat_indicator") or "").strip() == "临时" or _SINGLE_DOSE.fullmatch(
+    if order_repeat_kind(row) == "temporary" or _SINGLE_DOSE.fullmatch(
         _clean(row.get("drug_frequency"))
     ):
         return start

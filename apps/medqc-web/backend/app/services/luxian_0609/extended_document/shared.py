@@ -62,3 +62,19 @@ def row_time_upper_bound(row: Mapping[str, Any]) -> datetime | None:
     if _row_time(row) is not None:
         return None
     return _parse_datetime(row.get("last_modified_datetime"))
+
+
+# 院方确认（2026-10-22）：长临标识 0=临时、1=长期；本地历史数据多以中文存储。
+_TEMPORARY_ORDER_MARKERS = frozenset({"0", "临时"})
+_LONG_TERM_ORDER_MARKERS = frozenset({"1", "长期"})
+
+
+def order_repeat_kind(row: Mapping[str, Any]) -> str | None:
+    """医嘱长临类型：temporary / long_term；标识缺失或无法识别返回 None。"""
+
+    value = _clean(row.get("repeat_indicator"))
+    if value in _TEMPORARY_ORDER_MARKERS:
+        return "temporary"
+    if value in _LONG_TERM_ORDER_MARKERS:
+        return "long_term"
+    return None

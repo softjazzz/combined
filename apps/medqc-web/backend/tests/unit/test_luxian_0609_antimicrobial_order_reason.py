@@ -293,6 +293,43 @@ def test_stop_event_excludes_discharge_switch_and_order_planned_duration() -> No
                           medication_duration="3"),), discharge_time=discharge) == []
 
 
+def test_temporary_orders_end_24h_after_start_and_never_create_stop_events() -> None:
+    discharge = datetime(2026, 1, 10, 9, 0)
+    # 院方口径：临时医嘱（标识0或“临时”）默认不超过24小时；用完即止，无停嘱，不查停用原因。
+    for marker in ("0", "临时"):
+        events = derive_antimicrobial_use_events(
+            (_order("A", "头孢唑林", "2026-01-01 08:00:00", repeat_indicator=marker),),
+            _antimicrobial_names_in, discharge_time=discharge,
+        ).events
+        assert [(e.kind, e.course_end) for e in events] == [("start", datetime(2026, 1, 2, 8, 0))]
+    # 次日再开临时医嘱首尾相接，合为一个疗程，结束顺延。
+    events = derive_antimicrobial_use_events((
+        _order("A", "头孢唑林", "2026-01-01 08:00:00", repeat_indicator="临时"),
+        _order("B", "头孢唑林", "2026-01-02 07:00:00", repeat_indicator="0"),
+    ), _antimicrobial_names_in, discharge_time=discharge).events
+    assert [(e.kind, e.course_end) for e in events] == [("start", datetime(2026, 1, 3, 7, 0))]
+    # 临时用药结束后2天再开他药：按开始使用核对，不当作联合。
+    events = derive_antimicrobial_use_events((
+        _order("A", "头孢唑林", "2026-01-01 08:00:00", repeat_indicator="临时"),
+        _order("B", "左氧氟沙星", "2026-01-04 08:00:00"),
+    ), _antimicrobial_names_in, discharge_time=discharge).events
+    assert [e.kind for e in events] == ["start", "start"]
+    # 临时医嘱用完后24小时内开他药不算更换；临时医嘱有效期内开他药为联合。
+    events = derive_antimicrobial_use_events((
+        _order("A", "头孢唑林", "2026-01-01 08:00:00", repeat_indicator="临时"),
+        _order("B", "左氧氟沙星", "2026-01-01 20:00:00"),
+        _order("C", "甲硝唑", "2026-01-02 12:00:00", repeat_indicator="临时"),
+    ), _antimicrobial_names_in, discharge_time=discharge).events
+    assert [e.kind for e in events] == ["start", "combine", "combine"]
+    # 长期医嘱（标识1）停嘱仍按停用核对；其后同药临时医嘱接续则以临时医嘱收尾，不查停用。
+    assert _stops((_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-05 09:00:00", repeat_indicator="1"),),
+                  discharge_time=discharge) == [("头孢曲松", "2026-01-05 09:00:00")]
+    assert _stops((
+        _order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-05 09:00:00", repeat_indicator="长期"),
+        _order("B", "头孢曲松", "2026-01-05 20:00:00", repeat_indicator="临时"),
+    ), discharge_time=discharge) == []
+
+
 @pytest.mark.parametrize(("text", "expected"), [
     ("拟用3天", timedelta(days=3)), ("疗程五日", timedelta(days=5)),
     ("预防用药24小时", timedelta(hours=24)), ("疗程十四天", timedelta(days=14)),
@@ -349,6 +386,15 @@ async def test_054_stop_at_course_planned_in_start_record_needs_no_stop_reason()
 async def test_055_course_stopped_before_48h_needs_no_effect_evaluation() -> None:
     _, reduced = await _evaluate("LX0609-05-01-03", {
         "inpat_drug_order": (_order("A", "头孢曲松", "2026-01-01 09:00:00", "2026-01-02 09:00:00"),),
+        "daily_course_record": (), "senior_course_record": (),
+    })
+    assert (reduced.final_state, reduced.reason_code) == (CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete")
+
+
+@pytest.mark.asyncio
+async def test_055_single_temporary_order_needs_no_effect_evaluation() -> None:
+    _, reduced = await _evaluate("LX0609-05-01-03", {
+        "inpat_drug_order": (_order("A", "头孢唑林", "2026-01-01 09:00:00", repeat_indicator="0"),),
         "daily_course_record": (), "senior_course_record": (),
     })
     assert (reduced.final_state, reduced.reason_code) == (CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete")

@@ -12,6 +12,9 @@
 - 停用（用户口径 2026-10-21）：疗程结束当日病程须写明停药原因。不核对：出院当日及以后随出院
   停的；停后24小时内改用他药、已按更换核对的；按计划到期停的——医嘱用药天数或开药时病程写明的
   计划疗程与实际停用相差不超过24小时。
+- 结束时间（院方确认 2026-10-22）：长期医嘱的计划结束时间即 HIS 停止栏时间；临时医嘱默认不超过
+  24 小时，按开始后24小时结束。停用事件只来自长期医嘱的停嘱——疗程最后以临时医嘱结束的，
+  用完即止，无医生停嘱动作，不要求停药原因。
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ from ..llm_prompt_privacy import (
     redact_luxian_0609_patient_privacy,
 )
 from ..structured_output import structured_output_kwargs
-from .shared import _clean, _parse_datetime, _row_time, row_time_upper_bound
+from .shared import _clean, _parse_datetime, _row_time, order_repeat_kind, row_time_upper_bound
 
 
 logger = logging.getLogger(__name__)
@@ -91,6 +94,9 @@ def _start_time(row: Mapping[str, Any]) -> datetime | None:
 
 
 def _end_time(row: Mapping[str, Any]) -> datetime | None:
+    if order_repeat_kind(row) == "temporary":
+        start = _start_time(row)
+        return None if start is None else start + timedelta(hours=WINDOW_HOURS)
     for key in ("planned_end_datetime", "stop_datetime", "order_stop_datetime", "stop_time", "end_datetime"):
         if (value := _parse_datetime(row.get(key))) is not None:
             return value
@@ -185,17 +191,25 @@ def derive_antimicrobial_use_events(
             ):
                 current["orders"].append(row)
                 if current["end"] is not None:
-                    current["end"] = None if end is None else max(current["end"], end)
+                    if end is None:
+                        current["end"] = None
+                    elif end >= current["end"]:
+                        current["end"] = end
+                        current["temporary_end"] = order_repeat_kind(row) == "temporary"
                 continue
-            current = {"name": name, "start": start, "end": end, "orders": [row]}
+            current = {
+                "name": name, "start": start, "end": end, "orders": [row],
+                "temporary_end": order_repeat_kind(row) == "temporary",
+            }
             courses.append(current)
     courses.sort(key=lambda item: (item["start"], item["name"]))
     events: list[AntimicrobialUseEvent] = []
     for course in courses:
         others = [item for item in courses if item["name"] != course["name"] and item["start"] < course["start"]]
         active = any(item["end"] is None or item["end"] >= course["start"] for item in others)
+        # 更换须是他药长期医嘱停嘱前后24小时内新开；临时医嘱到时用完不是停药决定。
         switched = any(
-            item["end"] is not None
+            item["end"] is not None and not item["temporary_end"]
             and abs((course["start"] - item["end"]).total_seconds()) <= WINDOW_HOURS * 3600
             for item in others
         )
@@ -207,7 +221,7 @@ def derive_antimicrobial_use_events(
         ))
     for course in courses:
         end = course["end"]
-        if end is None:
+        if end is None or course["temporary_end"]:
             continue
         if discharge_time is not None and end.date() >= discharge_time.date():
             continue
