@@ -80,7 +80,7 @@ async def test_disposition_length_retry_omits_previous(stage):
 def measure_answer(completed, aliases, *, quote="电针", action="电针", evidence=None):
     return {"content": json.dumps({"schema_version": measure.SCHEMA_VERSION, "generic": [], "measures": [{
         "recommendation_ref": completed[0].recommendation.recommendation_ref, "measure": "电针",
-        "quote": quote, "executed_action": action, "action_relation": "matched",
+        "quote": quote, "executed_action": action, "action_relation": "matched", "conditional": False,
         "evidence_ref": evidence or next(iter(aliases.values()))}]}, ensure_ascii=True)}
 
 

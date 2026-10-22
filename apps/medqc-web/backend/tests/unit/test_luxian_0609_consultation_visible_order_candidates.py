@@ -22,6 +22,8 @@ def _completed(ref: str, action_type: str, text: str, when: datetime):
             text,
             text,
             "consultation_record-1",
+            # 是否延续当前治疗由第一阶段模型标注（2026-10-22）；合成样本按“继续”开头给出。
+            continues_current_treatment=text.startswith("继续"),
         ),
         episode._ObservedTime(when, True),
         window_start=(when - timedelta(days=3)).date(),

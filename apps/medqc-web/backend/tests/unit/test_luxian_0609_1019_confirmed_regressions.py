@@ -68,7 +68,9 @@ def test_actual_family_refusal_after_communication_only_exempts_that_consultatio
     recommendation = replace(completed[0].recommendation, action_type="test",
                              source_quote="建议完善头颅MRI、骨代谢相关检查",
                              normalized_action="完善头颅MRI、骨代谢相关检查")
-    current = replace(completed[0], recommendation=recommendation)
+    # 拒绝由第一阶段模型按各自会诊文书抽取（2026-10-22）：只有沟通后拒绝的那次会诊带拒绝事实。
+    current = replace(completed[0], recommendation=replace(
+        recommendation, decline_state="full", decline_quote="与患者家属沟通后,拒绝进一步检查"))
     unrelated = replace(completed[0], episode_ref="consultation_record-2",
                         recommendation=replace(recommendation, opinion_ref="consultation_record-2",
                                                recommendation_ref="consultation_record-2#r1"))

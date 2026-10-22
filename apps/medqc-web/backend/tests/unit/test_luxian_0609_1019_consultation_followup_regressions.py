@@ -7,7 +7,7 @@ from app.services.luxian_0609 import native_consultation_episode_execution as ep
 from app.services.luxian_0609.consultation_measure_check import MeasureCheckOutcome
 
 
-def _completed(ref: str, kind: str, quote: str, *, declined: bool = False):
+def _completed(ref: str, kind: str, quote: str, *, declined: bool = False, scope: str = "in_stay"):
     return episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation(
@@ -16,6 +16,7 @@ def _completed(ref: str, kind: str, quote: str, *, declined: bool = False):
             quote,
             quote,
             "consultation_record-1",
+            execution_scope=scope,
         ),
         episode._ObservedTime(datetime(2026, 10, 1, 11, 30), True),
         fully_declined=declined,
@@ -45,9 +46,10 @@ def test_023_仅原有表述不推定院外_拒绝只豁免对应检查() -> Non
 
 
 def test_023_仅明确院外来源用药豁免住院医嘱核对() -> None:
+    # 是否院外自备药由第一阶段模型标注 home_medication（2026-10-22），不再按“自备/院外”字样判断。
     for index, text in enumerate(("继续自备药物甲", "继续院外口服药物乙", "服用家中药物丙")):
         assert not episode._is_order_recommendation(
-            _completed(f"outside-{index}", "medication", text).recommendation
+            _completed(f"outside-{index}", "medication", text, scope="home_medication").recommendation
         )
     for index, text in enumerate(("继续原降压药", "继续原有药物甲", "维持既往方案")):
         assert episode._is_order_recommendation(
@@ -55,32 +57,18 @@ def test_023_仅明确院外来源用药豁免住院医嘱核对() -> None:
         )
 
 
-def test_023_条件说明可位于措施前一分句() -> None:
-    recommendation = _completed(
-        "conditional",
-        "transfer",
-        "建议评估操作甲；病情稳定后；可转科治疗",
-    ).recommendation
+def test_023_附条件措施以模型标注为准而非条件词正则() -> None:
+    # 用户口径（2026-10-22）：措施是否附条件由措施核对模型标注，程序只按标注剔除。
+    completed = (_completed("conditional", "transfer", "建议评估操作甲；病情稳定后；可转科治疗"),)
+    outcome = MeasureCheckOutcome(
+        "ready",
+        {"conditional": ("可转科治疗", "评估操作甲")},
+        conditional_measures={"conditional": ("可转科治疗",)},
+    )
 
-    assert episode._measure_in_conditional_clause(recommendation, "可转科治疗")
-    assert not episode._measure_in_conditional_clause(recommendation, "评估操作甲")
-    anomaly_condition = _completed(
-        "anomaly-condition",
-        "transfer",
-        "建议评估操作乙；无明显异常后；可转科治疗",
-    ).recommendation
-    assert episode._measure_in_conditional_clause(anomaly_condition, "可转科治疗")
+    filtered = episode._drop_conditional_missing_measures(outcome, completed)
 
-
-def test_023_完整条件措施不向下一项传播() -> None:
-    recommendation = _completed(
-        "conditional-action",
-        "medication",
-        "必要时复查血气；给予药物甲",
-    ).recommendation
-
-    assert episode._measure_in_conditional_clause(recommendation, "复查血气")
-    assert not episode._measure_in_conditional_clause(recommendation, "给予药物甲")
+    assert filtered.missing_measures == {"conditional": ("评估操作甲",)}
 
 
 def test_023_初判缺失的建议仍进入逐措施核验() -> None:
@@ -119,6 +107,7 @@ def test_023_初判不合规可由全条件缺项收敛为不适用() -> None:
     outcome = MeasureCheckOutcome(
         "ready",
         {"conditional": ("可转科治疗",)},
+        conditional_measures={"conditional": ("可转科治疗",)},
     )
 
     status, excluded = episode._apply_order_measure_check(
@@ -180,3 +169,36 @@ def test_023_非条件缺项仍维持不合规() -> None:
 
     assert status == ("non_compliant", "requirement_violated")
     assert not excluded
+
+
+def test_023_手术转科建议逐项核对见患方决定即按已处置剔除() -> None:
+    # 用户口径（2026-10-22）：无手术、转科记录时，病程写明患方同意或拒绝由逐项核对模型判断；
+    # 模型给出全部措施均有处置证据（无缺项）时，按住院期间已处置不再判缺。
+    surgery = _completed("surgery", "procedure", "建议手术治疗")
+    plain = _completed("plain", "test", "完善检查甲")
+    assert episode._needs_measure_scope_refinement(surgery)
+    status, excluded = episode._apply_order_measure_check(
+        ("non_compliant", "requirement_violated"),
+        MeasureCheckOutcome("ready", {"surgery": ()}),
+        completed=(surgery, plain),
+        assessments=(_absent("surgery"), _absent("plain")),
+        already_excluded=frozenset(),
+        source_incomplete_keys=frozenset(),
+        checked_refs=frozenset({"surgery"}),
+    )
+    assert excluded == frozenset({"surgery"})
+    assert status == ("non_compliant", "requirement_violated")
+
+
+def test_023_漏拆时已明确的无证据措施仍维持不合规() -> None:
+    # 1022 C10：同批另一建议的标题段落漏拆，不能抹掉已拆出且明确无执行证据的措施。
+    plain = _completed("plain", "medication", "阿托伐他汀调脂")
+    status, _ = episode._apply_order_measure_check(
+        ("non_compliant", "requirement_violated"),
+        MeasureCheckOutcome("unresolved", {"plain": ("阿托伐他汀调脂",)}),
+        completed=(plain,),
+        assessments=(_absent("plain"),),
+        already_excluded=frozenset(),
+        source_incomplete_keys=frozenset(),
+    )
+    assert status == ("non_compliant", "requirement_violated")
