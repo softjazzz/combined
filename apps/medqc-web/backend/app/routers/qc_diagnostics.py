@@ -1,6 +1,8 @@
 """历史质控诊断包入口；仅管理员且必须是所选任务创建人。"""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.security import require_roles
@@ -12,6 +14,26 @@ from ..services.qc_diagnostics import support_store
 router = APIRouter(prefix="/api/v1/qc/diagnostics", tags=["qc-diagnostics"])
 _delivery = HistoryDelivery()
 _admin = require_roles("admin", "super_admin")
+
+
+@router.get("/source-fields/discharge/{pool_id}")
+def discharge_source_fields(
+    pool_id: UUID, response: Response,
+    row_no: list[int] = Query(min_length=1, max_length=6),
+    user: dict = Depends(_admin),
+):
+    """仅管理员可读；现场检查取数，不运行质控，不返回医疗原文。"""
+    from ..services.qc_diagnostics.discharge_source_fields import check_discharge_source_fields
+
+    response.headers["Cache-Control"] = "no-store"
+    if len(set(row_no)) != len(row_no) or any(value < 1 for value in row_no):
+        raise HTTPException(422, "样本行号须为1至6个不重复的正整数")
+    try:
+        return check_discharge_source_fields(pool_id=str(pool_id), row_numbers=row_no)
+    except LookupError:
+        raise HTTPException(404, "未找到指定范围的已匹配样本") from None
+    except Exception:
+        raise HTTPException(503, "只读取数核查未完成，未执行质控或模型调用") from None
 
 
 class PrepareHistory(BaseModel):
