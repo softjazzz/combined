@@ -281,3 +281,13 @@ def test_signature_clock_is_selected_as_metadata_but_not_rule_document_clock():
     assert authoritative_document_time_value(row) is None
     assembled = assemble_document("discharge_record", row)
     assert assembled.record_time is None and assembled.submit_time is None
+
+
+def test_bundle_refresh_keeps_existing_submission_clock_independent_of_signing():
+    from app.services.bundles.assembly import _inventory_entry
+    row = {"document_id":"D", "record_time":None, "submit_datetime":"2026-10-01 09:00:00",
+           "chief_physician_sign_datetime":TIME, "record_content":"合成出院正文。"}
+    entry = _inventory_entry(table_name="discharge_record",row=row)
+    assert entry["submit_time"] == row["submit_datetime"]
+    assert entry["chief_physician_sign_datetime"] == TIME
+    assert not entry["record_time"]
