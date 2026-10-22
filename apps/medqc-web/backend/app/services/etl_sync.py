@@ -84,6 +84,9 @@ _COURSE_SIGNATURE_COLUMN_ALIASES["postsurg_firstcourse_record"]["surgeon_sign"] 
 # 仅在目标列存在、本条记录未携带目标列时生效。
 _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
     **_COURSE_SIGNATURE_COLUMN_ALIASES,
+    "discharge_record": {
+        "chief_physician_sign_datetime": ("chief_physician_sign_datetime", "cheifphy_sign_time"),
+    },
     "admission_record": {
         # 客户源表以 record_time / sys_index_id 表示文书时间和稳定身份；
         # 001/002 必须用同一份本地字段计算并定位，不能只在展示层读取原值。
@@ -786,6 +789,8 @@ def _apply_sync_column_aliases(
     existing_columns: set[str],
 ) -> Dict[str, Any]:
     normalized: Dict[str, Any] = {str(k).lower(): v for k, v in record.items()}
+    if table_name.strip().lower() == "discharge_record" and isinstance(normalized.get("v2_schema"), (dict, list)):
+        normalized["v2_schema"] = json.dumps(normalized["v2_schema"], ensure_ascii=False)
     _apply_sync_alias_map(
         normalized=normalized,
         existing_columns=existing_columns,
@@ -1075,6 +1080,9 @@ def _validate_document_field_preservation(
             "consultation_time",
             "record_time",
         )
+    elif normalized_table == "discharge_record":
+        # 独立保存签署时钟与完整JSON，缺列必须在写SQL前报出，不静默过滤。
+        required_structured_targets = ("chief_physician_sign_datetime", "v2_schema")
     elif normalized_table == "handoff_record":
         required_structured_targets = ("shift_time", "handoff_doctor")
     elif normalized_table == "handover_record":

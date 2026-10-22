@@ -1732,6 +1732,9 @@ def _inventory_entry(
         "signatures": identity_metadata["signatures"],
         "participants": identity_metadata["participants"],
     }
+    if table_name == "discharge_record" and row.get("chief_physician_sign_datetime") is not None:
+        # 即使未提供签署人姓名，也保留独立签署时钟；不参与record/submit/display选时。
+        entry["chief_physician_sign_datetime"] = _json_safe(row["chief_physician_sign_datetime"])
     if report_items is not None:
         entry["report_items"] = _json_safe(report_items)
     if report_metadata is not None:
@@ -2843,6 +2846,7 @@ def load_domain_bundle_document_index(
                        'document_title', item -> 'document_title',
                        'display_time', item -> 'display_time',
                        'record_time', item -> 'record_time',
+                       'chief_physician_sign_datetime', item -> 'chief_physician_sign_datetime',
                        'has_content', LENGTH(BTRIM(COALESCE(item ->> 'content', ''))) > 0,
                        'length', LENGTH(COALESCE(item ->> 'content', '')),
                        'source_fields', CASE

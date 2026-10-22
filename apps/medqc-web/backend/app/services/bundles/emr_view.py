@@ -398,6 +398,8 @@ def _normalize_source_document(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    if raw_doc.get("chief_physician_sign_datetime") is not None:
+        normalized["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
         normalized.update(
             {
@@ -879,6 +881,8 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    if raw_doc.get("chief_physician_sign_datetime") is not None:
+        summary["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
         summary.update(
             {
@@ -1498,6 +1502,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "record_time": _safe_text(document.get("sort_time") or document.get("record_time")),
             "authors": list(document.get("authors") or []),
             "signatures": list(document.get("signatures") or []),
+            "chief_physician_sign_datetime": _safe_text(document.get("chief_physician_sign_datetime")),
             "projection_incomplete": document.get("projection_incomplete") is True,
             "projection_notice": _safe_text(document.get("projection_notice")),
             "source": "bundle",

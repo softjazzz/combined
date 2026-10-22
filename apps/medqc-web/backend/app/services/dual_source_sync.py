@@ -210,6 +210,8 @@ def project_candidate(candidate: Candidate, case: Mapping[str, str], columns: Ma
         if name.endswith("_datetime") and columns[target] == "timestamp without time zone":
             # 旧客户库无时区列按医院北京时间保留墙上时间，不受客户机系统时区影响。
             value = datetime.fromisoformat(value).astimezone(HOSPITAL_TZ).replace(tzinfo=None).isoformat()
+        if name == "v2_schema" and columns[target] == "text" and isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
         projected[target] = value
     return TargetProjection(projected, unmapped)
 

@@ -459,6 +459,8 @@ class DischargeRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     resident_physician_sign = Column(String(100), comment="住院医师签名")
     attending_physician_sign = Column(String(100), comment="主治医师签名")
     chief_physician_sign = Column(String(100), comment="主副主任医师签名")
+    chief_physician_sign_datetime = Column(DateTime(timezone=True), comment="主副主任医师签署时间，独立于记录和提交时间")
+    v2_schema = Column(Text, comment="源端完整二级结构化JSON，不截断或替代普通正文")
 
 
 # ==================== 9. 质控结果表（系统新增）====================

@@ -36,6 +36,7 @@ COMMON_META_FIELDS: tuple[str, ...] = (
     "resident_physician_sign",
     "attending_physician_sign",
     "chief_physician_sign",
+    "chief_physician_sign_datetime",
     "surgeon_sign",
     "anesthetist_sign",
     "patient_sign",
@@ -157,6 +158,8 @@ def extract_document_identity_metadata(
             signed_at = _identity_text(payload.get("physician_sign_datetime"))
         elif source_field == "senior_physician_sign":
             signed_at = _identity_text(payload.get("seniorphy_sign_datetime"))
+        elif source_field == "chief_physician_sign":
+            signed_at = _identity_text(payload.get("chief_physician_sign_datetime")) or generic_signed_at
         else:
             signed_at = generic_signed_at
         for name in names:
