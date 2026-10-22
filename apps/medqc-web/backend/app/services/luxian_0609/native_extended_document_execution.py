@@ -2549,6 +2549,8 @@ class _PostoperativeSurgeryEvent:
     # 院方口径（2026-10-10）：源库缺实际结束时间时以开始时间推算术后起点。
     surgery_time_estimated: bool = False
     member_rows: tuple[Mapping[str, Any], ...] = ()
+    # 缺手术记录、仅首页手术日期（0点）时，手术时刻未知（C23、C25 源库缺手术记录单据）。
+    surgery_time_date_only: bool = False
 
 
 # 064 院方口径：术者须亲自在术前24小时内、术后24小时内查房。
@@ -2658,6 +2660,9 @@ def _title_round_physician_tokens(
     ):
         identity = match.group(1).strip()
         # 仅剥离有明确边界的联合查房/科室前缀；其余整段保留，不能猜姓名。
+        # “联合”后紧跟的“××科/××中心”是会诊科室（C25“联合胸外科某某副主任医师”），
+        # 不在固定名单内也剥离；无“联合”边界时不拆（“王科李明”不能拆出“李明”）。
+        identity = re.sub(r"^联合[\u4e00-\u9fff]{1,8}?(?:科|中心)(?=[\u4e00-\u9fff]{2,4}$)", "", identity)
         identity = re.sub(r"^联合", "", identity)
         identity = re.sub(
             r"^(?:联合)?(?:神经疾病中心|神经外科|神经内科|心胸外科|"
@@ -2747,6 +2752,10 @@ def _postoperative_surgery_events(
             surgeon_tokens=_surgery_event_surgeon_tokens(surgeon_row),
             surgery_begin_time=begin_time,
             surgery_time_estimated=end_time is None and begin_time is not None,
+            surgery_time_date_only=(
+                source_key == "mr_surgery" and end_time is None and begin_time is not None
+                and begin_time.time() == datetime.min.time()
+            ),
         ))
     # 主控代定口径（2026-10-18，待客户复核），基线064/065/066：
     # 仅首页同日同开始时间术式行合台；无开始时间的行独立保留，不猜测关联。
@@ -5520,9 +5529,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 None,
                             )
 
+                        # 用户口径（2026-10-22）：只有手术日期、无具体时刻时按自然日核对——
+                        # 术前认手术前一日及当日，术后24小时认手术当日及次日。
+                        date_only = event.surgery_time_date_only
                         surgeon_round_row = surgeon_round_in(
                             event.surgery_end_time,
-                            event.surgery_end_time + timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS),
+                            event.surgery_end_time + (
+                                timedelta(days=2) - timedelta(microseconds=1) if date_only
+                                else timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS)
+                            ),
                             # 术者本人签署的术后首次病程也是术后查房记录；
                             # 仅参与身份/24小时时窗核对，不替代术后三日病程覆盖。
                             (*daily_rows, *senior_rows, *postop_first_rows),
@@ -5530,7 +5545,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                         preop_round_row = (
                             surgeon_round_in(
                                 event.surgery_begin_time - timedelta(hours=_SURGEON_ROUND_WINDOW_HOURS),
-                                event.surgery_begin_time,
+                                event.surgery_begin_time + (
+                                    timedelta(days=1) - timedelta(microseconds=1) if date_only else timedelta()
+                                ),
                                 (*daily_rows, *senior_rows),
                             )
                             if event.surgery_begin_time is not None

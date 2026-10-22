@@ -79,6 +79,8 @@ async def test_time_gap_protection_cases(variant, expected):
     ("李明副主任医师手术后查房记录", True),
     ("石跃主治医师联合神经疾病中心李明副主任医师、眼科曾亚丽主治医师查房记录", True),
     ("李明某主任医师查房记录", False),
+    ("赵某主治医师联合胸外科李明副主任医师查房记录", True),
+    ("赵某主治医师联合肝胆外科李明主任医师查房记录", True),
     ("王李明主任医师查房记录，术者李明", False),
     ("术者：李明主任医师查房记录", False),
 ))
@@ -236,3 +238,33 @@ async def test_surgeon_signed_first_postoperative_course_counts_within_24_hours(
     result, reduced = await _evaluate(RULE, materials)
     assert dict(result.customer_display_facts)[RULE]["surgeon_round_present"] is expected
     assert reduced.final_state.value == ("compliant" if expected else "non_compliant")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pre_time,post_time,expected_pre,expected_post", (
+    # 只有首页手术日期：术前认前一日及当日，术后24小时认当日及次日。
+    ("2026-07-07 07:30:00", "2026-07-08 09:00:00", True, True),
+    ("2026-07-06 10:00:00", "2026-07-08 23:00:00", True, True),
+    ("2026-07-05 10:00:00", "2026-07-09 08:00:00", False, False),
+))
+async def test_date_only_surgery_time_uses_calendar_day_windows(pre_time, post_time, expected_pre, expected_post):
+    from datetime import datetime
+
+    materials = _materials()
+    materials["surgery_record"] = ()
+    materials["mr_surgery"] = ({
+        "document_id": "M1", "surgery_code": "47.0100", "surgery_name": "腹腔镜下阑尾切除术",
+        "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "李明",
+    },)
+    for row in materials["daily_course_record"]:
+        row["author_name"] = "赵医生"
+    materials["senior_course_record"] = (
+        {"document_id": "PRE", "record_time": pre_time, "record_content": "术前查房，完善术前准备。",
+         "author_name": "李明"},
+        {"document_id": "POST", "record_time": post_time, "record_content": "术后查房，患者恢复平稳。",
+         "author_name": "李明"},
+    )
+    result, _ = await _evaluate(RULE, materials)
+    facts = dict(result.customer_display_facts)[RULE]
+    assert facts["preop_surgeon_round_present"] is expected_pre
+    assert facts["surgeon_round_present"] is expected_post
