@@ -504,6 +504,8 @@ class _CompletedRecommendation:
     declined_objects: tuple[str, ...] = ()
     declined_measures: tuple[str, ...] = ()
     fully_declined: bool = False
+    # 手术/转科类建议在本次住院期间的执行证据（手术记录、写明患方同意或拒绝的病程）。
+    stay_execution_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -3888,7 +3890,8 @@ def _drop_conditional_missing_measures(
         ref: tuple(
             measure for measure in measures
             if ref not in by_ref or not (
-                _measure_in_conditional_clause(by_ref[ref].recommendation, measure)
+                by_ref[ref].stay_execution_refs
+                or _measure_in_conditional_clause(by_ref[ref].recommendation, measure)
                 or measure_is_declined(measure, by_ref[ref].declined_objects)
             )
         )
@@ -3901,10 +3904,45 @@ def _measure_check_scope(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
 ) -> tuple["_CompletedRecommendation", ...]:
-    """逐项核对覆盖全部医嘱类建议，包括初判未找到医嘱的建议。"""
+    """逐项核对覆盖全部医嘱类建议，包括初判未找到医嘱的建议；住院期间已证实执行的手术/转科建议不再逐项核对。"""
 
     in_scope, _ = _order_execution_view(completed, assessments)
-    return in_scope
+    return tuple(item for item in in_scope if not item.stay_execution_refs)
+
+
+# 用户口径（2026-10-22）：手术、转科类建议需术前准备或患方决定，当天不会有执行记录。
+# 本次住院期间（会诊当天起）有手术记录，或病程写明患方同意/拒绝该手术、转科，即算已执行，
+# 不受会诊前3天至当天的医嘱窗口限制。
+_STAY_LEVEL_RECOMMENDATION_PATTERN = re.compile(r"手术|转科|转院|转[^，,。；;]{1,8}科")
+_STAY_DECISION_PATTERN = re.compile(r"同意|拒绝|不同意|放弃|暂不|不愿")
+
+
+def _stay_execution_refs(
+    item: "_CompletedRecommendation", candidates: Sequence["_CandidateDocument"],
+) -> tuple[str, ...]:
+    if not _STAY_LEVEL_RECOMMENDATION_PATTERN.search(_recommendation_text(item.recommendation)):
+        return ()
+    refs: list[str] = []
+    for candidate in candidates:
+        if candidate.observed_time.day < item.opinion_time.day:
+            continue
+        if candidate.source_key == "surgery_record":
+            refs.append(candidate.ref)
+        elif candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS and any(
+            _STAY_DECISION_PATTERN.search(clause) and _STAY_LEVEL_RECOMMENDATION_PATTERN.search(clause)
+            for clause in _CLAUSE_SPLIT_PATTERN.split(candidate.text)
+        ):
+            refs.append(candidate.ref)
+    return tuple(refs[:8])
+
+
+def _annotate_stay_execution(
+    completed: Sequence["_CompletedRecommendation"], candidates: Sequence["_CandidateDocument"],
+) -> tuple["_CompletedRecommendation", ...]:
+    return tuple(
+        replace(item, stay_execution_refs=refs) if (refs := _stay_execution_refs(item, candidates)) else item
+        for item in completed
+    )
 
 
 def _needs_measure_scope_refinement(item: "_CompletedRecommendation") -> bool:
@@ -4119,6 +4157,14 @@ def _order_execution_view(
     for item in in_scope:
         kept.append(item)
         assessment = by_ref.get(item.recommendation.recommendation_ref)
+        if item.stay_execution_refs:
+            # 住院期间的手术记录或写明患方决定的病程即为具体执行证据。
+            view.append(replace(
+                assessment or _unknown_execution_assessment(item.recommendation.recommendation_ref),
+                execution_state="linked_specific", execution_record_state="specific_trace",
+                trace_refs=item.stay_execution_refs, execution_refs=(), context_only_refs=(),
+            ))
+            continue
         if assessment is None:
             view.append(_unknown_execution_assessment(item.recommendation.recommendation_ref))
             continue
@@ -5184,6 +5230,9 @@ async def _execute_consultation_episode_rules(
                 completed_recommendations = _annotate_order_scope(
                     completed_recommendations,
                     documents_by_ref=documents_by_ref,
+                )
+                completed_recommendations = _annotate_stay_execution(
+                    completed_recommendations, projection.candidates,
                 )
                 embedded_decision_refs = frozenset({
                     ref
