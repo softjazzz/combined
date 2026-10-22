@@ -1,7 +1,7 @@
 """双源同步的纯内存规划器；无数据库、写入、模型或运行配置副作用。
 
 候选记录与原始变体保存在内存，report 仅返回匿名元数据。
-本轮只开放只读演练，不能将 candidates 直接送入旧的整表替换入口。
+候选不能直接送入旧的整表替换入口；正式写入由独立的保守写入器验证。
 """
 
 from __future__ import annotations
@@ -267,9 +267,11 @@ class TablePlan:
 def plan_table(
     table: str, case: Mapping[str, str], clinical: SourceSnapshot, homology: SourceSnapshot,
     local: SourceSnapshot, *, source_institutes: Mapping[str, str],
+    stable_keys: Sequence[str] | None = None,
 ) -> TablePlan:
-    if table not in TABLE_KEYS:
+    if table not in TABLE_KEYS and stable_keys is None:
         raise ValueError("unsupported_table")
+    keys_for_table = TABLE_KEYS.get(table, tuple(stable_keys or ()))
     if any(not case.get(k) for k in IDENTITY_FIELDS) or any(not source_institutes.get(s) for s in SOURCES):
         raise ValueError("explicit_identity_mapping_required")
     snapshots = (clinical, homology, local)
@@ -291,13 +293,16 @@ def plan_table(
                 quarantine_reasons[snap.source + ":case_identity_mismatch"] += 1
                 continue
             values, row_issues = normalize_row(raw)
-            key = tuple(str(values.get(k) or "").strip() for k in TABLE_KEYS[table])
+            for key_field in keys_for_table:
+                if key_field not in values and not blank(raw.get(key_field)):
+                    values[key_field] = raw[key_field]
+            key = tuple(str(values.get(k) or "").strip() for k in keys_for_table)
             if not all(key) and table == "labtest_item_report" and values.get("document_id"):
                 # 旧本地检验明细只有稳定 document_id，缺上游复合键；保留原行，
                 # 使用来源限定的内部匹配键，绝不据此生成源编号或跨库硬合并。
                 key = ("unmatched_document_id", snap.source, str(values["document_id"]))
                 row_issues.add("cross_source_identity_unavailable")
-            if not all(key) or any("within_source_conflict:" + k in row_issues for k in TABLE_KEYS[table]):
+            if not all(key) or any("within_source_conflict:" + k in row_issues for k in keys_for_table):
                 issues.append(snap.source + ":stable_identity_missing_or_conflicting")
                 quarantined += 1
                 reason = "stable_identity_missing" if not all(key) else "stable_identity_alias_conflict"
