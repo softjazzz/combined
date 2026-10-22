@@ -147,6 +147,13 @@ def is_cardiac_surgery(codes: Sequence[Any], names: Sequence[Any]) -> bool:
     )
 
 
+def is_local_route_drug_order(row: Mapping[str, Any]) -> bool:
+    """滴眼、外用、冲洗、雾化等局部用药（药名或给药途径）；用户口径：局部用药不算抗菌药使用。"""
+
+    name = _clean(" ".join(str(row.get(key) or "") for key in ("generic_name", "brand_name", "order_name")))
+    return bool(_NON_SYSTEMIC.search(name + _clean(row.get("drug_apply_method"))))
+
+
 def is_systemic_antibacterial(row: Mapping[str, Any]) -> bool:
     if _CANCELLED.search(str(row.get("order_status") or "")):
         return False

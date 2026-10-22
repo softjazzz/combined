@@ -97,6 +97,7 @@ from .extended_document.antimicrobial_effect_extraction import (
     extract_antimicrobial_effect_pairs,
 )
 from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
+from .prophylactic_antimicrobial_duration import is_local_route_drug_order
 from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
@@ -185,6 +186,7 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
     "postsurg_firstcourse_record",
     "mr_surgery",
     "surgery_record",
+    "anesthesia_record",
     "consultation_record",
     "handoff_record",
     "handover_record",
@@ -1177,7 +1179,8 @@ def _material_text(row: Mapping[str, Any]) -> str:
 
 
 def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
-    return tuple(row for row in rows if _antimicrobial_names_in(row))
+    # 用户口径（2026-10-22）：滴眼、外用、冲洗等局部用药不算抗菌药使用。
+    return tuple(row for row in rows if _antimicrobial_names_in(row) and not is_local_route_drug_order(row))
 
 
 def _has_performed_antimicrobial_administration(
@@ -2007,6 +2010,8 @@ def _antimicrobial_document_refs(
         "daily_course_record",
         "senior_course_record",
         "consultation_record",
+        "surgery_record",
+        "anesthesia_record",
     )
     refs: list[str] = []
     for selected_row in selected_rows:
@@ -3153,6 +3158,11 @@ async def execute_luxian_0609_native_extended_document_rules(
     consultation_rows, consultation_error = _source_rows(
         evidence_materials, "consultation_record"
     )
+    anesthesia_record_rows, _anesthesia_record_error = (
+        _source_rows(evidence_materials, "anesthesia_record")
+        if {"LX0609-05-01-02", "LX0609-05-01-05"}.intersection(selected)
+        else ((), "")
+    )
     handoff_rows, handoff_error = _source_rows(evidence_materials, "handoff_record")
     handover_rows, handover_error = _source_rows(evidence_materials, "handover_record")
     physician_change_rows, physician_change_error = _source_rows(
@@ -3391,6 +3401,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ("daily_course_record", daily_rows),
                     ("senior_course_record", senior_rows),
                     ("consultation_record", consultation_rows),
+                    # 只认预防用药引文；缺记录时间的不进窗口，以免把事件拖成无法定位。
+                    ("surgery_record", tuple(row for row in surgery_record_rows if _row_time(row) is not None)),
+                    ("anesthesia_record", tuple(row for row in anesthesia_record_rows if _row_time(row) is not None)),
                 ),
                 _material_text,
             )
@@ -3999,6 +4012,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 special_orders = tuple(
                     row for row in drug_order_rows
                     if key_antimicrobials_in_order(row) and not is_excluded_antimicrobial_order(row)
+                    and not is_local_route_drug_order(row)
                 )
                 key_drugs = {
                     name for row in special_orders for name in key_antimicrobials_in_order(row)

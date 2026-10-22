@@ -12,6 +12,8 @@
 - 停用（用户口径 2026-10-21）：疗程结束当日病程须写明停药原因。不核对：出院当日及以后随出院
   停的；停后24小时内改用他药、已按更换核对的；按计划到期停的——医嘱用药天数或开药时病程写明的
   计划疗程与实际停用相差不超过24小时。
+- 来源（用户口径 2026-10-22）：手术记录、麻醉记录只认围术期预防用药引文，感染判断、选药理由等
+  仍须出自病程、会诊或转入记录。
 - 结束时间（院方确认 2026-10-22）：长期医嘱的计划结束时间即 HIS 停止栏时间；临时医嘱默认不超过
   24 小时，按开始后24小时结束。停用事件只来自长期医嘱的停嘱——疗程最后以临时医嘱结束的，
   用完即止，无医生停嘱动作，不要求停药原因。
@@ -46,6 +48,8 @@ MAX_PROMPT_CHARS = 80000
 MAX_COMPLETION_TOKENS = 4096
 _CANCELED_STATUSES = frozenset({"撤销", "作废", "取消"})
 _EVENT_KINDS = ("start", "combine", "switch")
+# 只能提供预防用药引文的来源。
+PROPHYLAXIS_ONLY_SOURCES = frozenset({"surgery_record", "anesthesia_record"})
 _QUOTE_FIELDS = (
     "infection_judgment", "selection_reason", "prophylaxis", "specimen", "planned_duration", "stop_reason",
 )
@@ -336,6 +340,8 @@ def _prompt(events: Sequence[AntimicrobialUseEvent], documents: Sequence[WindowD
         "events 是由抗菌药医嘱确定的用药事件：kind=start 开始使用、combine 在已有抗菌药基础上联合、"
         "switch 更换为该药、stop 停用该药（order_time 为停用时间）；其余 order_time 为开医嘱时间。每个事件只能阅读其 doc_refs 列出的文书"
         "（开医嘱当日的病程；kind=start 另含开嘱后24小时内的病程；文书可能早于或晚于开嘱时刻）。"
+        "source 为 surgery_record（手术记录）、anesthesia_record（麻醉记录）的文书只能用于 prophylaxis_quote，"
+        "其余引文字段不得引用这两类文书。"
         "对每个事件输出一个对象，字段："
         "event_id；"
         "documented_use：这些文书是否记载了使用/联合/更换该药的处置——yes（写了该药，或写了"
@@ -394,6 +400,7 @@ def _parse(
     if not isinstance(items, list):
         raise ValueError("invalid events")
     texts = {doc.doc_ref: redact_luxian_0609_patient_privacy(doc.text)[:MAX_DOCUMENT_CHARS] for doc in documents}
+    sources = {doc.doc_ref: doc.source_key for doc in documents}
     expected = {event.event_id for event in events}
     parsed: dict[str, EventReasonFacts] = {}
     for item in items:
@@ -424,6 +431,8 @@ def _parse(
                 or ref not in per_event[event_id] or quote not in texts.get(ref, "")
             ):
                 raise ValueError("unverified quote")
+            if kind != "prophylaxis" and sources.get(ref) in PROPHYLAXIS_ONLY_SOURCES:
+                raise ValueError("surgery or anesthesia record quoted for non-prophylaxis field")
             quotes[kind] = (ref, quote)
         parsed[event_id] = EventReasonFacts(event_id, documented, quotes)
     if set(parsed) != expected:

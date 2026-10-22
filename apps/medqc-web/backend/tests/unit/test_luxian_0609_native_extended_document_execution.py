@@ -87,6 +87,7 @@ def _session(
         "postsurg_firstcourse_record": "snapshot-provider-postsurg_firstcourse_record-v1",
         "mr_surgery": "snapshot-provider-surgery_record-v2",
         "surgery_record": "snapshot-provider-surgery_record-v2",
+        "anesthesia_record": "snapshot-provider-anesthesia_record-v1",
         "consultation_record": "snapshot-provider-consultation_record-v1",
         "handoff_record": "snapshot-provider-handoff_record-v1",
         "handover_record": "snapshot-provider-handover_record-v1",

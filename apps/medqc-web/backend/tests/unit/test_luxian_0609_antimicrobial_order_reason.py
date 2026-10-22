@@ -193,6 +193,47 @@ async def test_054_course_without_reason_quote_is_non_compliant() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ["LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05"])
+async def test_local_route_antimicrobial_is_not_antimicrobial_use(rule_id) -> None:
+    # 用户口径：滴眼、外用等局部用药不算抗菌药使用。
+    client = _ReasonClient()
+    _, reduced = await _evaluate(rule_id, {
+        "inpat_drug_order": (
+            _order("A", "左氧氟沙星滴眼液", "2026-01-01 09:00:00", drug_apply_method="滴眼"),
+            _order("B", "甲硝唑氯化钠注射液", "2026-01-02 09:00:00", drug_apply_method="外用"),
+        ),
+        "daily_course_record": (), "senior_course_record": (), "first_course_record": (),
+        "consultation_record": (), "transfer_in_record": (),
+    }, llm_client=client)
+    assert (reduced.final_state, reduced.reason_code) == (CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete")
+    assert client.calls == []
+
+
+def _surgery(document_id, time, text):
+    return {"document_id": document_id, "record_time": time, "record_content": text}
+
+
+@pytest.mark.asyncio
+async def test_054_prophylaxis_in_surgery_or_anesthesia_record_counts() -> None:
+    for source in ("surgery_record", "anesthesia_record"):
+        client = _ReasonClient({"头孢曲松": {"prophylaxis": "术前30分钟予头孢曲松预防感染"}})
+        rows = {source: (_surgery("S-1", "2026-01-01 11:00:00", "术前30分钟予头孢曲松预防感染。"),)}
+        _, reduced = await _run("LX0609-05-01-02", rows, client)
+        assert reduced.final_state is CustomerFinalState.COMPLIANT, source
+        assert "anesthesia_record" in client.calls[0] and "只能用于 prophylaxis_quote" in client.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_054_infection_judgment_from_surgery_record_is_rejected() -> None:
+    # 手术记录只认预防用药；其余引文取自手术记录属协议违规，重试一次后技术错误，不能判合规。
+    client = _ReasonClient({"头孢曲松": {"infection_judgment": "术中见腹腔脓液考虑腹腔感染"}})
+    rows = {"surgery_record": (_surgery("S-1", "2026-01-01 11:00:00", "术中见腹腔脓液考虑腹腔感染。"),)}
+    _, reduced = await _run("LX0609-05-01-02", rows, client)
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert len(client.calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_057_prior_pathogen_result_makes_event_targeted_not_applicable() -> None:
     rows = {
         "daily_course_record": (_course("D-1", "2026-01-01 20:00:00", "痰培养示肺炎链球菌，予头孢曲松。"),),
