@@ -422,6 +422,9 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         "record_time",
+        # 独立签署证据和完整二级结构化仅进入服务端材料，不提升为记录/提交时间。
+        "chief_physician_sign_datetime",
+        "v2_schema",
         # update_time 是增量同步时间，不作为 061 的出院记录完成/提交时间；
         # 保留读取供同一来源的其他既有规则使用。
         "update_time",
