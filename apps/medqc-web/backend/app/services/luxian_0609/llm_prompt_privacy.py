@@ -47,13 +47,21 @@ _PATIENT_INTRO = re.compile(
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
     rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
 )
+_DEMOGRAPHIC_LABEL = (
+    r"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:]))[ \t]*"
+    r"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
+)
+_DEMOGRAPHIC_FOLLOW = (
+    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|(?:老年|中年|青年|成年|幼年)[男女]性|男|女|\d{{1,3}}[ \t]*岁|年龄))"
+)
 _DEMOGRAPHIC_NAME = re.compile(
-    rf"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:]))[ \t]*"
-    rf"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
-    rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|(?:老年|中年|青年|成年|幼年)[男女]性|男|女|\d{{1,3}}[ \t]*岁|年龄))",
+    _DEMOGRAPHIC_LABEL
+    + rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
+    + _DEMOGRAPHIC_FOLLOW,
     flags=re.MULTILINE,
 )
+# 无“患者”字样的人口学介绍（“某某，男，79岁”）也需取已知身份辅助识别。
+_DEMOGRAPHIC_HINT = re.compile(r"[，,、][ \t]*[男女][ \t]*[，,、]")
 _CONTACT_NAME = re.compile(
     rf"(?P<label>(?:联系人|家属)(?:姓名)?[ \t]*[:：][ \t]*)"
     rf"(?P<value>{_PERSON_NAME})"
@@ -125,7 +133,9 @@ def redact_luxian_0609_patient_privacy(
 
     if not isinstance(prompt, str):
         raise TypeError("prompt must be str")
-    if identity_values is None and any(label in prompt for label in ("患者", "病人", "患儿")):
+    if identity_values is None and (
+        any(label in prompt for label in ("患者", "病人", "患儿")) or _DEMOGRAPHIC_HINT.search(prompt)
+    ):
         from .privacy_request_scope import current_luxian_0609_redaction_identities
 
         identity_values = current_luxian_0609_redaction_identities()
@@ -140,7 +150,13 @@ def redact_luxian_0609_patient_privacy(
             r"(?P<label>(?:患者|病人|患儿)\s*)"
             + r"(?P<value>" + "|".join(known_names) + r")(?=[\s，,、；;。]|因|$)"
         )
-        name_patterns = (*name_patterns, known_intro)
+        # 已知姓名出现在句首/冒号后并紧跟性别、年龄（如“新建S章节:某某，男，79岁”），
+        # 同样是患者介绍；姓氏不在常见表时只能靠已知身份识别。
+        known_demographic = re.compile(
+            _DEMOGRAPHIC_LABEL + r"(?P<value>" + "|".join(known_names) + r")" + _DEMOGRAPHIC_FOLLOW,
+            flags=re.MULTILINE,
+        )
+        name_patterns = (*name_patterns, known_intro, known_demographic)
     protected_prompt, protected_clinicians = _protect_clinician_names(prompt)
     patient_names = {
         match.group("value").strip()
@@ -169,6 +185,7 @@ def redact_luxian_0609_patient_privacy(
     )
     if known_names:
         redacted = _replace_labelled(known_intro, redacted, _PATIENT_NAME_PLACEHOLDER)
+        redacted = _replace_labelled(known_demographic, redacted, _PATIENT_NAME_PLACEHOLDER)
     redacted = _replace_labelled(
         _CONTACT_NAME,
         redacted,
