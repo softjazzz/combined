@@ -567,6 +567,11 @@ def _typed_decision_from_outcome(
             outcome.rule_id == "LX0609-07-03-01"
             and outcome.reason_code == "association_failed"
         )
+        # 047 效果评价交受控模型后的两类资料不足，原因码原样保留供客户文案区分。
+        effect_extraction_gap = (
+            outcome.rule_id == "LX0609-07-03-01"
+            and outcome.reason_code in {"semantic_extraction_unresolved", "candidate_scope_incomplete"}
+        )
         dimensions = (
             (
                 ApplicabilityState.UNKNOWN
@@ -586,6 +591,8 @@ def _typed_decision_from_outcome(
                 if authoritative_time_conflict
                 else "association_failed"
                 if association_gap
+                else outcome.reason_code
+                if effect_extraction_gap
                 else "required_field_missing"
             ),
         )
@@ -2071,14 +2078,27 @@ def _transfusion_record_has_effect(text: str) -> bool:
     return bool(ends) and _has_clinical_posttransfusion_evaluation(text[ends[-1].end():])
 
 
+_STRICT_LAB_EFFECT_PATTERN = re.compile(
+    r"(?:血红蛋白|(?<![A-Za-z])(?:HGB|Hb)(?![A-Za-z])|血小板|凝血功能)[^。；;\n]{0,50}"
+    r"较前[^。；;\n]{0,8}(?:上升|升高|提升|下降|降低|改善|无明显变化)"
+    # 同一分句写明输血后的指标及变化方向，同属带方向的实验室效果评价。
+    r"|(?:输血|输注)(?:(?:结束|完毕|完成)后?|后)[^。；;\n]{0,20}"
+    r"(?:血红蛋白|(?<![A-Za-z])(?:HGB|Hb|HCT)(?![A-Za-z])|红细胞压积|血小板|凝血功能)"
+    r"[^。；;\n]{0,20}(?:上升|升高|提升|恢复|改善|纠正)",
+    re.I,
+)
+
+
+def _course_has_strict_lab_effect(text: str) -> bool:
+    """唯一保留的程序直认：血液指标带方向的前后比较本身即实验室效果评价。"""
+    return _STRICT_LAB_EFFECT_PATTERN.search(text) is not None
+
+
 def _course_has_transfusion_effect(text: str) -> bool:
     """跨病程评价须明确关联输血，不能借用另一疾病的症状好转。"""
     # 24小时关联由调用方核验。明确的血液指标比较本身也是实验室效果评价，
     # 不额外要求把“输血后”三个字写进同一句；普通症状好转仍不据此采信。
-    if re.search(
-        r"(?:血红蛋白|(?<![A-Za-z])(?:HGB|Hb)(?![A-Za-z])|血小板|凝血功能)[^。；;\n]{0,50}"
-        r"较前[^。；;\n]{0,8}(?:上升|升高|提升|下降|降低|改善|无明显变化)", text, re.I,
-    ):
+    if _course_has_strict_lab_effect(text):
         return True
     # 写明输血结束后紧接的评价（如“输血结束，复查血红蛋白改善”）与专用记录同口径。
     if _transfusion_record_has_effect(text):
@@ -2094,8 +2114,9 @@ _047_MODEL_CONFIRMED_EFFECTS_KEY = "__posttransfusion_effect_confirmed__"
 def _course_effect_confirmed(
     documents: Mapping[str, Any], source_key: str, row: Mapping[str, Any], text: str,
 ) -> bool:
-    """正则认出的评价直接采用；未认出的只认受控模型逐字引文确认过的病程。"""
-    if _course_has_transfusion_effect(text):
+    """院方口径（047 基线）：评价须含临床或实验室效果。程序只直认带方向的指标比较；
+    其余写法（如“输血后复查”“效果好”）是否构成效果评价由受控模型逐字引文确认。"""
+    if _course_has_strict_lab_effect(text):
         return True
     document_id = str(row.get("document_id") or row.get("id") or "").strip()
     return bool(document_id) and (source_key, document_id) in (
@@ -2119,7 +2140,7 @@ def _047_effect_candidates(documents: Mapping[str, Any]) -> tuple[Posttransfusio
             document_id = str(row.get("document_id") or row.get("id") or "").strip()
             if (
                 not text.strip() or not document_id or record_time is None
-                or _course_has_transfusion_effect(text)
+                or _course_has_strict_lab_effect(text)
                 or not any(0 <= (record_time - end).total_seconds() <= 24 * 3600 for end in end_times)
             ):
                 continue
@@ -4050,8 +4071,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 and assessment.reason_code in {"posttransfusion_evaluation_missing", "posttransfusion_evaluation_late"}
                 and (effect_candidates := _047_effect_candidates(documents))
             ):
-                # 是否评价了输血效果是语义判断：正则未认出的窗口内病程交受控模型确认，
-                # 不由词表闭世界判缺（用户要求：正则不得否决模型结论，2026-10-22）。
+                # 是否评价了输血效果是语义判断：病程只直认带方向的指标比较，其余窗口内病程交受控模型确认，
+                # 既不由词表闭世界判缺，也不凭“输血后复查/效果好”等宽词判合规（2026-10-22）。
                 effects = await confirm_posttransfusion_effects(effect_candidates, llm_client)
                 llm_call_count += effects.llm_call_count
                 prompt_tokens += effects.prompt_tokens

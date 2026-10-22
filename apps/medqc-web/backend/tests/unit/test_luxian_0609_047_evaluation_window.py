@@ -358,3 +358,18 @@ async def test_047_model_unclear_is_data_gap_not_defect():
 
     assert _canonical_state(result=result, session=session)[0] == "data_gap"
     assert result.decisions[0].reason_code == "semantic_extraction_unresolved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wording", ["输血后复查血常规。", "输血效果好，继续观察。"])
+async def test_047_loose_wording_without_clinical_or_lab_effect_is_not_auto_compliant(wording):
+    """院方口径：评价须含临床或实验室效果。“输血后复查”“效果好”交模型确认，模型判否仍缺评价。"""
+    session = _session(
+        horizon_date="2026-01-03",
+        bloodtrans_rows=[{"document_id": "BT-1", "record_content": "2026-01-01 16:00:00输血结束。"}],
+        daily_rows=[{"document_id": "D-1", "record_time": "2026-01-02 08:00:00", "record_content": wording}],
+    )
+    result, client = await _execute_with_effect_labels(session, {})
+
+    assert _canonical_state(result=result, session=session) == ("non_compliant", "requirement_violated")
+    assert any("lx0609-posttransfusion-effect-v1" in prompt for prompt in client.protocol_prompts)
