@@ -2,9 +2,6 @@
 
 import pytest
 
-from app.services.luxian_0609.native_extended_document_execution import (
-    _has_confirmed_discharge_approval,
-)
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
     DischargeApprovalInput, extract_discharge_approval,
 )
@@ -24,17 +21,6 @@ async def test_semantic_approved_senior_explicit_disposition_is_accepted(disposi
         "senior_course_record": ({"document_id": "synthetic-disposition", "record_time": "2026-07-03 09:00:00", "record_content": body},),
     }, llm_client=client)
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-
-
-@pytest.mark.parametrize("text", [
-    "尚不予出院", "暂不办理出院", "若复查正常，今日出院", "待治疗结束后安排出院",
-    "明日如无特殊情况办理出院", "考虑今日出院", "出院医嘱：规律作息。",
-    "尚未安排出院", "拟办理出院", "复查后再办理出院",
-    "今日出院医嘱：规律作息。", "办理出院医嘱，注意休息。",
-    "上级医师尚未明确同意患者今日带药出院", "主任医师仍未正式批准患者办理出院",
-])
-def test_explicit_disposition_keeps_negation_condition_and_heading_guards(text):
-    assert not _has_confirmed_discharge_approval(text)
 
 
 class NarrowingClient(Client):

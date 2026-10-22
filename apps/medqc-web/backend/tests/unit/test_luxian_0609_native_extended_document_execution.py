@@ -365,6 +365,17 @@ class _DischargeApprovalClient:
         }
 
 
+class _RoutedClient:
+    """067 病程正文与 068 出院意见各用各的受控 Fake。"""
+
+    def __init__(self, course_client, approval_client):
+        self.course_client, self.approval_client = course_client, approval_client
+
+    async def generate(self, prompt, **kwargs):
+        target = self.approval_client if "出院的意见事实" in prompt else self.course_client
+        return await target.generate(prompt, **kwargs)
+
+
 def _approval_item(
     local_doc_id,
     *,
@@ -1602,7 +1613,10 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
                 "record_content": "上级医师查房后同意患者出院。",
             },),
         },
-        llm_client=FrozenCourseBodyClient({'上级医师查房后同意患者出院。': ('present', '同意患者出院')}),
+        llm_client=_RoutedClient(
+            FrozenCourseBodyClient({'上级医师查房后同意患者出院。': ('present', '同意患者出院')}),
+            _DischargeApprovalClient(_approval_item("doc_01", quote="上级医师查房后同意患者出院。")),
+        ),
     )
 
     decisions = {item.rule_id: item for item in reduced}
@@ -1614,8 +1628,8 @@ async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
     assert facts["LX0609-08-01-01"]["discharge_time_source"] == "evaluation_context.horizon"
     assert facts["LX0609-08-02-01"]["checked_dates"] == ["2026-07-02", "2026-07-03"]
     assert facts["LX0609-08-02-02"]["checked_dates"] == ("2026-07-02", "2026-07-03")
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 15
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 115
 
 
 @pytest.mark.asyncio
@@ -1956,6 +1970,10 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
                 {"record_time": "2026-07-03 09:00:00", "record_content": "一般病程。"},
             ),
         },
+        llm_client=_DischargeApprovalClient(
+            _approval_item("doc_01", opinion="unknown", quote=""),
+            _approval_item("doc_02", quote="上级医师查看患者，同意明日出院。"),
+        ),
     )
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT, reduced[0].reason_code
@@ -1980,8 +1998,8 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
 
 
 @pytest.mark.asyncio
-async def test_068_accepts_senior_yuyi_discharge_without_model_call() -> None:
-    client = _DischargeApprovalClient()
+async def test_068_accepts_senior_yuyi_discharge_from_model_opinion() -> None:
+    client = _DischargeApprovalClient(_approval_item("doc_01", quote="病情好转平稳，予以出院。"))
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-08-02-02",),
         {
@@ -2001,8 +2019,7 @@ async def test_068_accepts_senior_yuyi_discharge_without_model_call() -> None:
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 0
-    assert client.calls == []
+    assert result.llm_call_count == len(client.calls) == 1
     canonical = _canonical_extended_result(
         rule_id="LX0609-08-02-02",
         snapshot=snapshot,
@@ -2231,6 +2248,9 @@ async def test_068_accepts_senior_approval_recorded_in_daily_course() -> None:
                 },
             ),
         },
+        llm_client=_DischargeApprovalClient(
+            _approval_item("doc_01", quote="今日请示李主任医师查看患者，同意明日出院。"),
+        ),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -2342,9 +2362,7 @@ async def test_068_semantic_equivalent_approval_uses_existing_senior_path(
     facts = dict(result.customer_display_facts)["LX0609-08-02-02"]
     assert facts["approval_path"] == "senior_approval"
     assert facts["checked_source"] == "senior_course_record"
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.calls == []
+    assert result.llm_call_count == len(client.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -2379,7 +2397,7 @@ async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None
 
 
 @pytest.mark.asyncio
-async def test_068_deterministic_undated_approval_keeps_time_missing_semantics() -> None:
+async def test_068_undated_model_approval_keeps_time_missing_semantics() -> None:
     text = "主任医师查房后认为恢复良好，予以出院。"
     client = _DischargeApprovalClient(_approval_item("doc_01", quote=text))
     result, reduced = await _evaluate(
@@ -2402,12 +2420,12 @@ async def test_068_deterministic_undated_approval_keeps_time_missing_semantics()
     assert reduced.reason_code == "authoritative_time_missing"
     facts = dict(result.customer_display_facts)["LX0609-08-02-02"]
     assert facts["missing_time_count"] == 1
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("dated_opinion", ("approved", "conditional"))
-async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
+async def test_068_dated_semantics_take_priority_over_undated_approval(
     dated_opinion,
 ) -> None:
     undated_text = "主任医师查房后同意出院。"
@@ -2460,7 +2478,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
         assert reduced[0].final_state is CustomerFinalState.DATA_GAP
         assert reduced[0].reason_code == "authoritative_time_missing"
         assert dict(result.customer_display_facts)["LX0609-08-02-02"]["missing_time_count"] == 1
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio

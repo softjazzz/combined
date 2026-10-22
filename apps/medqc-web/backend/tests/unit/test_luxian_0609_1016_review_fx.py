@@ -316,18 +316,13 @@ def test_diagnosis_change_prompt_scopes_basis_to_new_or_changed_items():
     assert "清单中沿用原有诊断的条目不要求逐条记录依据" in text
 
 
-@pytest.mark.parametrize("text,expected", [
-    ("经治疗后患者病情好转，拟明日带药出院，门诊随访治疗", True),
-    ("拟于今日出院", True),
-    ("拟办理出院", False),
-    ("考虑于今日出院", False),
-    ("拟明日复查血常规后出院", False),
-    ("若稳定再建议出院", False),
-])
-def test_dated_senior_discharge_plan_counts_as_confirmed_approval(text, expected):
-    """写明日期的出院安排视为同意出院；未写日期、考虑或带未满足前提的仍不算（院方 2026-10-17）。"""
-    from app.services.luxian_0609.native_extended_document_execution import _has_confirmed_discharge_approval
-    assert _has_confirmed_discharge_approval(text) is expected
+def test_dated_senior_discharge_plan_policy_lives_in_extraction_prompt():
+    """院方口径（2026-10-17、2026-10-20）由模型提示词承载，不再由正则判语义（2026-10-22）。"""
+    from app.services.luxian_0609.extended_document.discharge_approval_extraction import _prompt
+    text = _prompt([])
+    assert "拟明日带药出院" in text and "出院日期本身不是条件" in text
+    assert "可考虑" in text and "conditional" in text
+    assert "换药、拆线或拔管后出院" in text
 
 
 class _LeakyBadOutputClient:

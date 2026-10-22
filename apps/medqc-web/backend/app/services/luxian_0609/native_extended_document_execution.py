@@ -105,7 +105,6 @@ from .extended_document.discharge_medication_extraction import extract_discharge
 from .extended_document.discharge_approval_extraction import (
     DischargeApprovalInput,
     extract_discharge_approval,
-    has_confirmed_senior_discharge_approval_quote,
 )
 from .extended_document.transfer_documentation import (
     evaluate_transfer_documentation,
@@ -255,35 +254,6 @@ _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
     r"(?:未(?:行|完成|进行)|尚未|缺失|不存在|无)",
 )
 _LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_DISCHARGE_APPROVAL_PATTERN = re.compile(
-    r"(?:同意|批准|准许|准予)(?:患者|其)?(?:于|拟于)?"
-    r"(?:今日|明日|次日)?(?:安排|办理)?出院"
-    r"|(?:可以|可)(?:患者|其)?(?:于|拟于)?"
-    r"(?:今日|明日|次日)?(?:安排|办理|予以)?出院"
-    r"|(?:建议|予以)(?:患者|其)?(?:于|拟于)?"
-    r"(?:今日|明日|次日)?(?:安排|办理)?出院"
-    r"|(?<!拟)(?<!计划)(?<!准备)于今日(?:办理)?出院"
-    # 院方口径（2026-10-17）：上级医师写明日期的出院安排（如拟明日带药出院）视为同意出院；
-    # 未写日期的“拟办理出院”及“考虑出院”仍不构成明确同意。
-    r"|(?P<dated_plan>(?:拟|计划|准备)(?:于)?(?:今日|明日|次日)(?:带药)?(?:办理)?出院)"
-)
-_DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
-    r"(?:不|未|未获|未取得|未得到|尚未|尚不|暂不).{0,12}"
-    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
-    r"|(?:待|若|如|如果).{0,24}"
-    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
-    r"|(?:复查|检查|治疗).{0,16}后(?:再)?.{0,8}"
-    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
-    r"|(?:病情|情况).{0,16}后再.{0,8}"
-    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
-    r"|考虑.{0,12}于今日(?:办理)?出院"
-)
-_SEMANTIC_DISCHARGE_DISPOSITION_PATTERN = re.compile(
-    r"(?:(?:今日|今天|明日|次日)(?:带药)?|办理|安排|予)出院(?!医嘱)"
-)
-_SENIOR_PHYSICIAN_REFERENCE_PATTERN = re.compile(
-    r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
-)
 _AUTOMATIC_DISCHARGE_PATTERN = re.compile(r"自动出院")
 _SENIOR_PHYSICIAN_CONSULTED_PATTERN = re.compile(
     r"(?:请示|报请|报告).{0,12}"
@@ -338,62 +308,8 @@ def _discharge_approval_path(
     ):
         return "automatic_discharge"
 
-    author_title = _clean(row.get("author_title"))
-    known_senior = source_key == "senior_course_record" or bool(
-        _SENIOR_PHYSICIAN_REFERENCE_PATTERN.search(author_title)
-    )
-    # 与语义入口共用同分句完成条件，既不把待请示当批准，也不漏掉已获同意后的安排。
-    for clause in re.split(r"[。！？!?；;\r\n]+", text):
-        if has_confirmed_senior_discharge_approval_quote(
-            clause,
-            source_type="senior_course_record" if known_senior else "daily_course_record",
-        ):
-            return "senior_approval"
+    # 上级同意出院一律交模型抽取，不再由正则直接认定（用户口径 2026-10-22）。
     return None
-
-
-def _unnegated_discharge_approvals(text: str) -> list[re.Match[str]]:
-    """未被否定或条件短语约束的全部出院处置匹配。"""
-
-    value = str(text or "")
-    approvals = []
-    for approval in _DISCHARGE_APPROVAL_PATTERN.finditer(value):
-        local_start = max(0, approval.start() - 80)
-        local_context = value[local_start: approval.end() + 40]
-        is_bound_to_negation = any(
-            local_start + negated.start() < approval.end()
-            and local_start + negated.end() > approval.start()
-            for negated in _DISCHARGE_APPROVAL_NEGATED_PATTERN.finditer(local_context)
-        )
-        if not is_bound_to_negation:
-            approvals.append(approval)
-    return approvals
-
-
-def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
-    """返回未被否定或条件短语约束的明确出院处置。"""
-
-    approvals = _unnegated_discharge_approvals(text)
-    return approvals[0] if approvals else None
-
-
-def _is_dated_discharge_plan_only(text: str) -> bool:
-    """引文只有“拟/计划某日出院”的安排、没有同意或批准等明确表态。
-
-    写明日期的出院安排只在确认为上级医师所写时才视为同意；身份不明的此类安排
-    （如住院医师日常病程“拟明日出院”）不构成上级同意，不能当作未能确认的同意。
-    """
-
-    approvals = _unnegated_discharge_approvals(text)
-    return bool(approvals) and all(approval.group("dated_plan") for approval in approvals)
-
-
-def _has_confirmed_discharge_approval(text: str) -> bool:
-    """模型的 approved 枚举也必须通过同一明确处置合同。"""
-    # 此入口只消费已独立确认的 senior 角色；引文自身仍须证明条件已完成。
-    return has_confirmed_senior_discharge_approval_quote(
-        text, source_type="senior_course_record",
-    )
 
 
 def _source_rows(
@@ -5515,7 +5431,6 @@ async def execute_luxian_0609_native_extended_document_rules(
                     and _discharge_approval_path(row, source_key=source_key)
                 ) if not present else ()
                 approval_resolution_blocked = False
-                approval_unresolved = False
                 if approval_match is None and (daily_error or senior_error):
                     final_state, reason_code = (
                         "data_gap",
@@ -5566,29 +5481,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     if row_time is not None
                                     and assertion.role == "senior"
                                     and assertion.opinion == "approved"
-                                    and _has_confirmed_discharge_approval(
-                                        assertion.quote
-                                    )
                                 ),
                                 None,
                             )
-                            # 模型称已同意但身份或引文未能确认时，不能确认“缺意见”；
-                            # 其余（未知、附条件、拒绝、患者要求）均不构成明确上级同意。
-                            approval_unresolved = any(
-                                row_time is not None
-                                and assertion.opinion == "approved"
-                                and (
-                                    (
-                                        assertion.role == "unknown"
-                                        and not _is_dated_discharge_plan_only(assertion.quote)
-                                    )
-                                    or (
-                                        assertion.role == "senior"
-                                        and not _has_confirmed_discharge_approval(assertion.quote)
-                                    )
-                                )
-                                for _source_key, _row, row_time, assertion in extracted_candidates
-                            )
+                            # 同意与否以模型意见为准，不再用正则复核语义（用户口径 2026-10-22）；
+                            # 引文未写明上级医师称谓的日常病程意见不是上级同意。
                             semantic_undated = tuple(
                                 (source_key, row)
                                 for source_key, row, row_time, assertion
@@ -5596,9 +5493,6 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 if row_time is None
                                 and assertion.role == "senior"
                                 and assertion.opinion == "approved"
-                                and _has_confirmed_discharge_approval(
-                                    assertion.quote
-                                )
                             )
                             if semantic_match is not None:
                                 approval_match = semantic_match
@@ -5649,7 +5543,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     if present:
                         final_state, reason_code = "compliant", "requirement_satisfied"
-                    elif window_course_count and approval_unresolved:
+                    elif window_course_count and llm_client is None:
+                        # 上级同意只能由模型抽取确认；无模型时不能据未读到意见判缺。
                         window_course_count = 0
                         final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
                     elif window_course_count:
