@@ -75,6 +75,11 @@ _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = {
     "labtest_master",
     "labtest_item_report",
     "surgery_record",
+    # 须与 luxian_0609/consultation_customer_projection 同名集合一致：023 手术/转科类建议的
+    # 执行证据（2026-10-22）只加在投影层时，保存层会拒收整批结果（客户包任务失败）。
+    "transfer_out_record",
+    "transfer_in_record",
+    "postsurg_firstcourse_record",
 }
 
 
