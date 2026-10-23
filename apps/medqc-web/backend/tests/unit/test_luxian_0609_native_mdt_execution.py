@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pytest
 
 from app.services.luxian_0609 import native_mdt_execution
@@ -1241,12 +1242,13 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=None,
+        llm_client=_EmergencyConfirmClient("emergency", "手术时间：今日急诊"),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=("LX0609-04-01-03",),
     )
 
+    assert execution.llm_call_count == 1
     assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
     assert set(execution.decisions[0].fact_refs) == _material_document_refs(
@@ -1692,3 +1694,60 @@ async def test_capable_client_extracts_participants_with_thinking_disabled():
 
     assert execution.decisions[0].reason_code == "requirement_satisfied"
     assert llm.kwargs == {"enable_thinking": False}
+
+
+
+class _EmergencyConfirmClient:
+    """急诊豁免确认的受控替身（2026-10-22）。"""
+
+    def __init__(self, state, quote=""):
+        self.state, self.quote, self.prompts = state, quote, []
+
+    async def generate(self, prompt, **_):
+        self.prompts.append(prompt)
+        return {"content": json.dumps({"state": self.state, "quote": self.quote}, ensure_ascii=False),
+                "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}}
+
+
+def _emergency_word_session(summary_text):
+    return _session({
+        "mr_surgery": [{
+            "document_id": "surgery-40", "surgery_name": "开颅血肿清除术", "surgical_level": "四级",
+            "surgery_begin_datetime": "2026-01-02T09:00:00",
+        }],
+        "presurg_summary": [{"document_id": "summary-40", "record_content": summary_text}],
+        "presurg_discussion": [],
+        "consultation_record": [],
+    })
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state,expected", [
+    ("not_emergency", ApplicabilityState.APPLICABLE),
+    ("unclear", ApplicabilityState.UNKNOWN),
+])
+async def test_emergency_wording_without_model_confirmation_is_not_exempt(state, expected):
+    """“既往曾行急诊手术”只是词表候选：模型判非本次急诊则照常核对 MDT，判不清为资料不足。"""
+    session = _emergency_word_session("既往曾行急诊手术。本次择期行开颅血肿清除术。")
+    client = _EmergencyConfirmClient(state)
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        evidence_materials=session.materials, evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-04-01-03",),
+    )
+    assert client.prompts and "既往手术史中的急诊手术" in client.prompts[0]
+    assert execution.decisions[0].applicability is expected
+    if state == "unclear":
+        assert execution.decisions[0].reason_code == "semantic_extraction_unresolved"
+
+
+@pytest.mark.asyncio
+async def test_emergency_confirmation_quote_must_be_verbatim():
+    session = _emergency_word_session("手术时间：今日急诊。")
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=_EmergencyConfirmClient("emergency", "原文没有的急诊描述"),
+        evidence_materials=session.materials, evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-04-01-03",),
+    )
+    assert execution.decisions[0].reason_code == "model_invalid_output"

@@ -103,6 +103,7 @@ _RULE_DATA_GAP_EXPLANATIONS = {
     ("LX0609-08-02-01", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-08-02-01", "candidate_scope_incomplete"): {"reason_label": "病程正文核对范围不足", "missing_sources": [], "missing_fields": []},
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): {"reason_label": '实施事实抽取待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-04-01-03", "semantic_extraction_unresolved"): {"reason_label": "急诊手术判定待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-07-03-01", "semantic_extraction_unresolved"): {"reason_label": "输血效果评价抽取待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-07-03-01", "candidate_scope_incomplete"): {"reason_label": "输血后病程核对范围不足", "missing_sources": [], "missing_fields": []},
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): {"reason_label": '输血实施事实待确认', "missing_sources": [], "missing_fields": []},

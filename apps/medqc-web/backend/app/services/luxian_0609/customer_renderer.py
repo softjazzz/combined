@@ -138,6 +138,7 @@ _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     ("LX0609-08-02-02", "semantic_extraction_unresolved"): "出院前病程中疑似有上级医师同意出院的意见，但医师身份或原文未能可靠确认，暂时无法判定。",
     ("LX0609-08-02-01", "candidate_scope_incomplete"): "现有出院前病程正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。',
+    ("LX0609-04-01-03", "semantic_extraction_unresolved"): "手术文书中出现急诊或紧急抢救字样，但尚未能可靠确认本次手术是否属于急诊抢救手术，暂时无法判定是否须术前多学科讨论。",
     ("LX0609-07-03-01", "semantic_extraction_unresolved"): "现有输血后病程尚未形成可靠的效果评价抽取结果，暂时无法确认输血后24小时内是否评价了输血效果。",
     ("LX0609-07-03-01", "candidate_scope_incomplete"): "输血后病程超出本次受控抽取范围，暂时无法完成输血效果评价核对。",
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
@@ -651,6 +652,11 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
     ),
     ("LX0609-07-01-01", "source_unavailable"): ('输血前检验结果未取得或不可读', '本次质控未取得可读的输血前常规检验结果，暂无法核对项目是否齐全。', '请核对检验结果及同步情况后重新评估。'),
     ("LX0609-07-01-03", "source_unavailable"): ('输血前检验结果未取得或不可读', '本次质控未取得可读的输血前九项检验结果，暂无法核对项目是否齐全。', '请核对检验结果及同步情况后重新评估。'),
+    ("LX0609-04-01-03", "semantic_extraction_unresolved"): (
+        "急诊手术判定暂无法确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-04-01-03", "semantic_extraction_unresolved")],
+        "请复核手术记录及术前小结中的手术性质，或重试质控；不要据此补写或改写记录。",
+    ),
     ("LX0609-07-03-01", "semantic_extraction_unresolved"): (
         "输血效果评价暂无法确认",
         _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-07-03-01", "semantic_extraction_unresolved")],
@@ -4939,6 +4945,7 @@ def render_luxian_0609_customer_result(
                 ("LX0609-08-02-01", "candidate_scope_incomplete"),
                 ("LX0609-07-01-03", "semantic_extraction_unresolved"),
                 ("LX0609-07-03-01", "semantic_extraction_unresolved"),
+                ("LX0609-04-01-03", "semantic_extraction_unresolved"),
                 ("LX0609-07-03-01", "candidate_scope_incomplete"),
                 ("LX0609-07-01-03", "positive_assertion_not_explicit"),
                 ("LX0609-07-01-03", "source_readiness_unproven"),
