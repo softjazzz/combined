@@ -1617,7 +1617,13 @@ def _programmatic_044_status(
             or {},
         )
     if not has_marker and not has_indication and not has_application:
-        return "non_compliant", "pretransfusion_assessment_missing"
+        # 没有评估文书时沿用前面同类分支的“文书未记录”合同。
+        # 不能让后续回退扫描普通病程的零散目的/指标，再生成空缺项或字段缺失结论。
+        return (
+            "non_compliant",
+            "pretransfusion_assessment_missing",
+            display_facts("non_compliant", "pretransfusion_assessment_missing") or {},
+        )
     if bloodtrans_entries and has_application and not has_marker:
         return "non_compliant", "pretransfusion_assessment_incomplete"
     return None

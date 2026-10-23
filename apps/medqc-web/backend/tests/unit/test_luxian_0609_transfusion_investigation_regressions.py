@@ -1,5 +1,7 @@
 """Regression coverage for the 2026-10-20 transfusion audit findings."""
 
+import pytest
+
 from app.services.luxian_0609 import native_transfusion_execution as native
 from app.services.luxian_0609.transfusion_result_mapping import (
     safe_transfusion_customer_display_facts,
@@ -118,3 +120,24 @@ def test_044_legacy_missing_projection_uses_current_two_field_contract() -> None
     assert safe is not None
     assert safe["checked_fields"] == ["application_reason", "laboratory_indicator"]
     assert safe["missing_fields"] == ["application_reason", "laboratory_indicator"]
+
+
+@pytest.mark.parametrize("course_text", [
+    "输血目的：纠正贫血；血红蛋白60g/L。",
+    "患者贫血，血红蛋白60g/L，继续观察。",
+    "患者一般情况尚可，继续观察。",
+])
+def test_044_missing_assessment_keeps_document_absence_contract_through_save(course_text) -> None:
+    """普通病程零散信号不能让缺评估文书变成空缺项并被 Finalizer 拒收。"""
+    from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+
+    rows = order_rows()
+    rows["senior_course_record"] = [{"document_id": "synthetic-round", "record_content": course_text}]
+    _, final = run_case(rows, client=FrozenOrderClient())
+    result = final["LX0609-07-01-02"]
+    assert result["status"] == "non_compliant"
+    facts = result["customer_display_facts"]
+    assert facts["failure_kind"] == "transfusion_requirement_not_documented"
+    assert facts["requirement"] == "pretransfusion_assessment"
+    assert "missing_fields" not in facts
+    envelope_item_from_rule_result(result, hmac_key="synthetic-save-validation")
