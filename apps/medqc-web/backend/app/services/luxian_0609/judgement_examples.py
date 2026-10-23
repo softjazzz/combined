@@ -48,6 +48,8 @@ CONSULTATION_SCOPE_EXAMPLES = (
     "对照“复查血常规，若血小板仍低则输注血小板”→execution_scope=in_stay且has_conditional_measures=true（条件只管后半句）。"
     "③“出院后门诊随访，1个月后复查甲功”→execution_scope=after_discharge；对照“1周后复查肝功能”→execution_scope=in_stay。"
     "④“若血压控制不佳，加用厄贝沙坦”→execution_scope=conditional，scope_quote为“若血压控制不佳”。"
+    "⑤“建议积极处理原发病，筛查呼吸机抵抗原因”没有写出具体检查或治疗项目→action_type=other（方向性意见，不按医嘱核对）；"
+    "对照“建议完善痰培养查找感染原因”→action_type=test。"
 )
 
 # 03-01-04：措施逐项核对中手术、转科、转院类措施的患方意愿。
@@ -55,4 +57,6 @@ CONSULTATION_MEASURE_EXAMPLES = (
     "判定例子（合成文本，只说明口径）：建议“转上级医院进一步治疗”，病程写“已告知家属，家属表示拒绝转院”"
     "→reasoned_non_execution，non_execution_reason摘“家属表示拒绝转院”；"
     "对照建议“行胃镜检查”，病程和医嘱均无任何提及→无执行证据，不得填reasoned_non_execution。"
+    "康复治疗以医嘱为准：建议“电针、中频治疗”，候选有“中频脉冲电治疗”医嘱→中频为matched；"
+    "只有笼统的“康复治疗”“康复综合评定”医嘱→不能证明电针或中频，填unrelated；只在病程写“今日予电针”而无相关医嘱→不是执行证据。"
 )
