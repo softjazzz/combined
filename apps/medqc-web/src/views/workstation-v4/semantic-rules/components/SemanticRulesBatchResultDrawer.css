@@ -3550,3 +3550,615 @@
     transform: translateX(100%);
   }
 }
+
+/* ==========================================================================
+ * v7.1 液态玻璃覆盖层（docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md）
+ * 只改展示：画布光晕底、玻璃页头与玻璃卡、胶囊按钮、.mq-status 同款状态胶囊、
+ * 等宽编号；颜色一律引用 --mq-*。以 .drawer-shell 前缀覆盖上方历史层。
+ * ========================================================================== */
+.drawer-shell {
+  background: var(--mq-bg-mesh);
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+
+/* ---------- 页头：眉标 + 32px 标题，右侧胶囊按钮 ---------- */
+.drawer-shell .result-review-header {
+  min-height: 0;
+  padding: 20px 32px 18px;
+  border-bottom: 0.5px solid var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+}
+
+.drawer-shell .drawer-title-group {
+  align-items: flex-end;
+  gap: var(--mq-space-4);
+}
+
+.drawer-shell .drawer-eyebrow {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.drawer-shell .drawer-title {
+  margin-top: var(--mq-space-1);
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.drawer-shell .drawer-back-button::before {
+  content: none;
+}
+
+.drawer-shell .result-review-header .drawer-back-button,
+.drawer-shell .result-review-header :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--mq-control-height);
+  padding: 0 16px;
+  border-radius: var(--mq-radius-tag);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.drawer-shell .result-review-header .drawer-back-button,
+.drawer-shell .result-review-header :deep(.ant-btn-default) {
+  border: 1px solid var(--mq-glass-border);
+  background: var(--mq-bg-subtle);
+  box-shadow: var(--mq-float-shadow);
+  color: var(--mq-text-primary);
+}
+
+.drawer-shell .result-review-header :deep(.ant-btn-primary) {
+  border: 0;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+}
+
+.drawer-shell .result-review-header :deep(.ant-btn-text) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--mq-text-secondary);
+}
+
+.drawer-shell .drawer-body {
+  gap: var(--mq-space-5);
+  padding: var(--mq-space-5) 32px 32px;
+}
+
+/* ---------- 一级卡片：玻璃卡 ---------- */
+.drawer-shell .drawer-card,
+.drawer-shell .issue-review-workbench-card {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.drawer-shell .drawer-section-title {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.drawer-shell .drawer-section-meta,
+.drawer-shell .issue-focus-summary {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+/* 视图切换（a-radio-group）做成分段切换 */
+.drawer-shell .drawer-section-actions :deep(.ant-radio-group) {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+
+.drawer-shell .drawer-section-actions :deep(.ant-radio-button-wrapper) {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 28px;
+}
+
+.drawer-shell .drawer-section-actions :deep(.ant-radio-button-wrapper::before) {
+  display: none;
+}
+
+.drawer-shell .drawer-section-actions :deep(.ant-radio-button-wrapper-checked) {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+/* 筛选栏：控件 12px 圆角，按钮胶囊 */
+.drawer-shell .issue-filter-bar :deep(.ant-input-affix-wrapper),
+.drawer-shell .issue-filter-bar :deep(.ant-select-selector) {
+  border-color: var(--mq-border);
+  border-radius: var(--mq-radius-control) !important;
+  background: var(--mq-bg-subtle);
+}
+
+.drawer-shell .issue-filter-bar :deep(.ant-btn) {
+  border-radius: var(--mq-radius-tag);
+}
+
+/* ---------- 左列表 + 右详情 ---------- */
+.drawer-shell .issue-business-workbench--single {
+  gap: var(--mq-space-5);
+  padding: var(--mq-space-4);
+  border-radius: 20px;
+  background: transparent;
+}
+
+.drawer-shell .issue-review-nav {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: none;
+}
+
+.drawer-shell .issue-review-nav-head strong {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-nav-head span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.drawer-shell .issue-review-nav-group {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-nav-group em {
+  min-width: 24px;
+  padding: 0 8px;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.drawer-shell .issue-review-nav-item {
+  min-height: 56px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+}
+
+.drawer-shell .issue-review-nav-item:hover {
+  background: var(--mq-glass-bg-strong);
+}
+
+.drawer-shell .issue-review-nav-item.issue-review-nav-item--active {
+  border-color: var(--mq-info-border);
+  background: var(--mq-brand-50);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.drawer-shell .issue-review-nav-item .issue-review-nav-code {
+  color: var(--mq-text-secondary);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-nav-item--active .issue-review-nav-code {
+  color: var(--mq-info-text);
+}
+
+.drawer-shell .issue-review-nav-item .issue-review-nav-title {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-nav-item em {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-nav-item--danger em,
+.drawer-shell .issue-review-nav-item--error em {
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
+
+.drawer-shell .issue-review-nav-item--warning em {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+.drawer-shell .issue-review-nav-item--ok em {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+
+/* 详情面板：玻璃卡，不用彩色边条 */
+.drawer-shell .issue-detail-panel,
+.drawer-shell .issue-detail-panel[class*='issue-conclusion-card--'] {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg-strong);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.drawer-shell .issue-detail-head {
+  padding: 22px 28px 16px;
+  border-bottom: 0.5px solid var(--mq-border);
+}
+
+.drawer-shell .issue-rule-code {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.drawer-shell .issue-detail-title-separator {
+  color: var(--mq-text-disabled);
+}
+
+.drawer-shell .issue-detail-title-row strong {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.drawer-shell .issue-conclusion-meta span {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+
+.drawer-shell .issue-conclusion-meta span:first-child {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 结论状态：与 .mq-status 同款带圆点胶囊 */
+.drawer-shell .issue-result-kind,
+.drawer-shell .issue-conclusion-status :deep(.aggregation-count-tag) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.drawer-shell .issue-result-kind::before {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a1a7b3;
+  content: '';
+}
+
+.drawer-shell .issue-result-kind--danger,
+.drawer-shell .issue-result-kind--error {
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
+
+.drawer-shell .issue-result-kind--danger::before,
+.drawer-shell .issue-result-kind--error::before {
+  background: var(--mq-danger-icon);
+}
+
+.drawer-shell .issue-result-kind--review {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+.drawer-shell .issue-result-kind--review::before {
+  background: var(--mq-warning-icon);
+}
+
+.drawer-shell .issue-result-kind--ok {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+
+.drawer-shell .issue-result-kind--ok::before {
+  background: var(--mq-success-icon);
+}
+
+/* 阅读路径：浅灰信息块 + 编号圆点 */
+.drawer-shell .issue-review-reading-path {
+  margin: var(--mq-space-4) 28px 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(118, 128, 160, 0.07);
+}
+
+.drawer-shell .issue-review-reading-step {
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.drawer-shell .issue-review-reading-step.is-active {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+}
+
+.drawer-shell .issue-review-reading-step span {
+  background: var(--mq-bg-muted);
+  color: var(--mq-text-secondary);
+  font-family: var(--mq-font-mono);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-reading-step.is-active span {
+  background: var(--mq-brand-gradient);
+  color: #ffffff;
+}
+
+.drawer-shell .issue-review-reading-step strong {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-review-reading-step em {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-style: normal;
+}
+
+/* 当前病历：半透明白色子容器 */
+.drawer-shell .issue-patient-context-card {
+  margin-right: 28px;
+  margin-left: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: none;
+}
+
+.drawer-shell .issue-patient-avatar {
+  border: 0;
+  border-radius: 13px;
+  background: linear-gradient(160deg, rgba(10, 108, 255, 0.18), rgba(10, 108, 255, 0.06));
+  box-shadow: inset 0 0 0 0.5px var(--mq-info-border);
+  color: var(--mq-brand-600);
+  font-size: var(--mq-font-16);
+  font-weight: 700;
+}
+
+.drawer-shell .issue-patient-context-kicker {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-patient-context-id {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.drawer-shell .issue-patient-context-meta span {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-patient-context-meta em {
+  color: var(--mq-text-tertiary);
+  font-style: normal;
+  font-weight: 400;
+}
+
+/* 结论、证据、建议分区：半透明白色子容器，16px 小标题 */
+.drawer-shell .issue-detail-body {
+  padding-right: 28px;
+  padding-left: 28px;
+}
+
+.drawer-shell .issue-detail-section,
+.drawer-shell .evidence-table-card,
+.drawer-shell .suggestion-panel,
+.drawer-shell .copy-evidence-compare,
+.drawer-shell .evidence-chain-panel,
+.drawer-shell .deep-review-chain,
+.drawer-shell .issue-detail-panel .issue-detail-section--conclusion {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: none;
+}
+
+.drawer-shell .issue-detail-section-title,
+.drawer-shell .evidence-table-card .issue-detail-section-title {
+  border-bottom: 0;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-detail-section-title span {
+  color: var(--mq-text-tertiary);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.drawer-shell .issue-detail-panel .issue-detail-section--conclusion p,
+.drawer-shell .issue-detail-text p,
+.drawer-shell .issue-detail-text li {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+.drawer-shell .issue-detail-reason {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.drawer-shell .structured-evidence-card {
+  border: 0;
+  border-radius: 14px;
+  background: rgba(118, 128, 160, 0.07);
+}
+
+.drawer-shell .structured-evidence-card-head strong {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.drawer-shell .structured-evidence-card-head span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.drawer-shell .structured-evidence-card blockquote {
+  border-left: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.drawer-shell .evidence-table-row {
+  border-bottom: 0.5px solid var(--mq-border);
+  background: transparent;
+}
+
+.drawer-shell .evidence-table-row span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.drawer-shell .evidence-table-row strong {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+/* 输血相关三项：浅灰信息块，状态只在胶囊里着色 */
+.drawer-shell .transfusion-documentation-summary,
+.drawer-shell .transfusion-documentation-summary--complete {
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(118, 128, 160, 0.07);
+  box-shadow: none;
+}
+
+.drawer-shell .transfusion-documentation-summary-head strong {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.drawer-shell .transfusion-documentation-summary-head span {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.drawer-shell
+  .transfusion-documentation-summary--complete
+  .transfusion-documentation-summary-head
+  span {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+
+.drawer-shell .transfusion-documentation-summary p,
+.drawer-shell .transfusion-documentation-summary-statuses span {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.drawer-shell .transfusion-documentation-summary-statuses span {
+  border: 0;
+  background: transparent;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+@media (max-width: 1180px) {
+  .drawer-shell .result-review-header,
+  .drawer-shell .drawer-body {
+    padding-right: var(--mq-space-5);
+    padding-left: var(--mq-space-5);
+  }
+
+  .drawer-shell .drawer-title {
+    font-size: var(--mq-font-28);
+  }
+}
