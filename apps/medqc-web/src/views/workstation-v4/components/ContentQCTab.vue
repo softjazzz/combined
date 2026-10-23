@@ -346,7 +346,7 @@
 
             <footer class="issue-card__actions">
               <a-button
-                v-if="record.ruleId"
+                v-if="askAssistantEnabled && record.ruleId"
                 type="link"
                 size="small"
                 data-testid="content-qc-ask-assistant"
@@ -653,6 +653,8 @@ const props = defineProps<{
   instituteId?: string
   scene?: 'running' | 'final' | string
   documents?: DocItem[] // 从 PG 各文书表查出的文书列表
+  // 宿主面板有对话页签时才显示“问助手”。
+  askAssistantEnabled?: boolean
 }>()
 
 const emit = defineEmits<{

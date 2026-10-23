@@ -41,6 +41,7 @@ function baseProps(extra: Record<string, unknown> = {}) {
   return {
     visible: true,
     assistTab: 'chat',
+    chatEnabled: true,
     activeDocType: 'progress_note',
     documentsList: [],
     suggestions: [],
@@ -231,5 +232,32 @@ describe('智能助手面板的对话页签', () => {
     const prefill = wrapper.findComponent(ChatStub).props('prefill') as { text: string }
     expect(prefill.text).toContain('LX0609-01-01-01')
     expect(prefill.text).toContain('首次病程记录')
+  })
+})
+
+// 2026-10-23 客户要求：医生病历页恢复为原“智能分析面板”弹窗，不带对话。
+describe('医生病历页默认的分析面板', () => {
+  it('未开启对话时使用分析面板样式，去掉对话页签，不读取助手授权', async () => {
+    let accessCalls = 0
+    handler.run = async () => {
+      accessCalls += 1
+      return {}
+    }
+    const PropsPanel = defineComponent({
+      name: 'WorkstationAssistPanel',
+      props: { variant: String, availableTabs: Array, defaultTab: String },
+      template: '<div><slot name="chat" :active="true" /></div>',
+    })
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps({ chatEnabled: undefined, assistTab: 'form' }),
+      global: { stubs: { WorkstationAssistPanel: PropsPanel, BusinessAgentDrawer: ChatStub } },
+    })
+    await flushPromises()
+    const panel = wrapper.findComponent(PropsPanel)
+    expect(panel.props('variant')).toBe('analysis')
+    expect(panel.props('availableTabs')).not.toContain('chat')
+    expect(panel.props('availableTabs')).toContain('content')
+    expect(wrapper.findComponent(ChatStub).exists()).toBe(false)
+    expect(accessCalls).toBe(0)
   })
 })

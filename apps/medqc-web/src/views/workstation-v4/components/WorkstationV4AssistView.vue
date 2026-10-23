@@ -3,6 +3,8 @@
     v-if="selectedRecord"
     :visible="visible"
     :default-tab="assistTab"
+    :variant="chatEnabled ? 'assistant' : 'analysis'"
+    :available-tabs="chatEnabled ? undefined : ANALYSIS_TABS"
     :patient-info="assistPatientInfo"
     :content-count="contentQCCount"
     :qc-count="assistBadgeCount"
@@ -13,7 +15,7 @@
     @tab-change="emit('tab-change', $event)"
     @refresh-tab="emit('refresh-tab', $event)"
   >
-    <template #chat="{ active }">
+    <template v-if="chatEnabled" #chat="{ active }">
       <BusinessAgentDrawer
         embedded
         :open="active && accessSettled"
@@ -34,6 +36,7 @@
         :institute-id="selectedRecord?.instituteId"
         :scene="resolveContentScene(selectedRecord)"
         :documents="documentsList"
+        :ask-assistant-enabled="chatEnabled"
         @issues-change="emit('content-issues-change', $event)"
         @ask-assistant="askAboutRule"
       />
@@ -473,7 +476,7 @@
               </div>
               <div class="mt-2 flex items-center justify-end gap-2">
                 <a-button
-                  v-if="isCurrentRecordNotification(notif)"
+                  v-if="chatEnabled && isCurrentRecordNotification(notif)"
                   size="small"
                   class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
                   data-testid="assist-notification-ask"
@@ -665,6 +668,17 @@ import type { DocItem, PatientRecord } from '../types'
 
 type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
+// 医生病历页按客户要求恢复为原“智能分析面板”弹窗：不含对话页签（2026-10-23）。
+const ANALYSIS_TABS: AssistTabKey[] = [
+  'content',
+  'form',
+  'coding',
+  'cost',
+  'profile',
+  'drg',
+  'message',
+]
+
 const AsyncAIProfileDashboard = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/AIProfileDashboard.vue'),
 )
@@ -675,6 +689,8 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
 const props = defineProps<{
   visible: boolean
   assistTab: AssistTabKey
+  // 是否在面板中提供对话页签及“问助手”入口；默认关闭，即原分析面板样式。
+  chatEnabled?: boolean
   activeDocType?: string
   selectedRecord?: PatientRecord | null
   assistPatientInfo?: Record<string, unknown> | null
@@ -753,6 +769,7 @@ const emit = defineEmits<{
 const access = ref<BusinessAgentAccess | null>(null)
 const accessSettled = ref(false)
 onMounted(() => {
+  if (!props.chatEnabled) return
   businessAgentApi.access().then(
     (value) => {
       access.value = value

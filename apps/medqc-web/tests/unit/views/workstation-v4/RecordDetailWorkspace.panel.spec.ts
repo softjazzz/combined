@@ -20,11 +20,11 @@ function mountWorkspace(selectedRecord: unknown) {
 }
 
 describe('病历详情的助手入口', () => {
-  it('入口只通知宿主打开智能助手面板的“对话”页签，自身不再持有抽屉', async () => {
+  it('入口只通知宿主打开分析面板的“内涵质控”页签，自身不持有抽屉', async () => {
     const wrapper = mountWorkspace({ id: 'V', instituteId: 'H', patientId: 'P', visitId: 'V' })
     expect(wrapper.findComponent({ name: 'BusinessAgentDrawer' }).exists()).toBe(false)
     await wrapper.get('[data-testid="business-agent-record-entry"]').trigger('click')
-    expect(wrapper.emitted('open-assist-chat')).toHaveLength(1)
+    expect(wrapper.emitted('open-content-qc')).toHaveLength(1)
   })
 
   it('没有选中病例时不显示入口', () => {

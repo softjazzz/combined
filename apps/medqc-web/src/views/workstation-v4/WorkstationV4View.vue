@@ -110,7 +110,7 @@
               @toggle-expand-all-sections="toggleExpandAllSections"
               @toggle-section="toggleConcatSection"
               @select-document="selectDocumentByKey"
-              @open-assist-chat="openAssistChat"
+              @open-content-qc="openAssistContentQC"
             />
           </template>
           <template #frontpage>
@@ -1445,9 +1445,9 @@ const profileAnalyzing = ref(false)
 const drgDetailModalVisible = ref(false)
 
 // 助手只能请求打开同一病例的既有画像面板；不自动运行分析。
-// 详情页入口与悬浮入口合并：只打开智能助手面板并停在“对话”页签。
-function openAssistChat() {
-  assistTab.value = 'chat'
+// 详情页“查看质控问题与依据”：打开分析面板并停在“内涵质控”页签。
+function openAssistContentQC() {
+  assistTab.value = 'content'
   assistPanelVisible.value = true
 }
 

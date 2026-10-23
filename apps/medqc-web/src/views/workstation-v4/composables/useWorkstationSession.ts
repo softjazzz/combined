@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import type { IcdApplyTarget } from '../types'
 
 type ViewMode = 'list' | 'detail' | 'rules'
-type AssistTabKey = 'chat' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PersistedState {
   frontpageTab: 'fields' | 'preview' | 'official'
@@ -14,8 +14,9 @@ interface PersistedState {
 }
 
 const STORAGE_KEY = 'workstation_v4_session'
+// 病历页面板已恢复为原分析面板，不再有“对话”页签；旧会话里保存的 chat 回到默认页签。
 const VALID_ASSIST_TABS: AssistTabKey[] = [
-  'chat',
+  'content',
   'form',
   'coding',
   'cost',
@@ -37,7 +38,7 @@ function loadState(): PersistedState {
             ? 'official'
             : 'fields',
       assistPanelVisible: !!parsed.assistPanelVisible,
-      assistTab: VALID_ASSIST_TABS.includes(parsed.assistTab) ? parsed.assistTab : 'chat',
+      assistTab: VALID_ASSIST_TABS.includes(parsed.assistTab) ? parsed.assistTab : 'form',
       icdDrawerVisible: !!parsed.icdDrawerVisible,
       icdApplyTarget: parsed.icdApplyTarget || 'mainDiagnosis',
       icdApplyIndex: Math.max(1, Number(parsed.icdApplyIndex || 1)),
@@ -46,7 +47,7 @@ function loadState(): PersistedState {
     return {
       frontpageTab: 'fields',
       assistPanelVisible: false,
-      assistTab: 'chat',
+      assistTab: 'form',
       icdDrawerVisible: false,
       icdApplyTarget: 'mainDiagnosis',
       icdApplyIndex: 1,
