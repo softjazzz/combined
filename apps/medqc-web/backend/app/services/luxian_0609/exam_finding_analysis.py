@@ -30,6 +30,8 @@ from .exam_lab_fact_extraction import (
     _course_refs_for_rule_event,
     events_for_family,
 )
+from .exam_analysis_freeze import freeze_key, load_analysis, save_analysis
+from .judgement_examples import EXAM_FINDING_ANALYSIS_EXAMPLES
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .llm_role_routing import client_for_role
 from .structured_output import structured_output_kwargs
@@ -339,6 +341,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "quote_type不为none时，report_fragment_id必须选本事件report_fragments中被这些话针对的异常片段编号；"
         "病程中针对的是其他检查（另一部位或另一份报告）的异常时，不能归入本事件的算分析类别，应归none。"
         "none时report_fragment_id为空字符串。编号只来自本事件、本份病程，不得借用其他报告或文书的编号。"
+        + EXAM_FINDING_ANALYSIS_EXAMPLES +
         f"严格JSON根对象只含schema_version和docs，schema_version={SCHEMA_VERSION}；"
         "docs每项只含event_position、course_doc_ref、basis_fragment_ids、basis_relation、quote_type、course_fragment_ids、report_fragment_id；每个事件的每份病程必须且仅输出一次。\n"
         "EVENTS_JSON=" + json.dumps(events, ensure_ascii=False, separators=(",", ":"))
@@ -348,6 +351,8 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
 # 用户口径（2026-10-11/19）：笼统的变化判断（“CT提示较前好转”“病灶减少”）、常规治疗
 # （“继续目前治疗/对症处理”“观察病情变化”）和正常查体不是病程针对本次异常的自有分析，
 # 计算自有内容与异常归属前先去除；具体药物、处置和阳性症状体征保留。
+# 用户决定（2026-10-22）：本词表是“正则只触发补核、不否决模型”原则的明确例外，保留直接剔除；
+# 10-22 全量录制应答中仅单独否决过 C01 第1次检查，与 10-19 口径一致。
 _GENERIC_PHRASES = re.compile(
     "|".join((
         r"(?:较前|较前次|较上次|较入院时|较前片|与前片相比)?(?:无明显|明显|稍|略|有所|逐渐)?"
@@ -740,6 +745,12 @@ async def check_exam_finding_analysis(
     batches = _target_batches(projection, model_targets)
     if not batches:
         return FindingAnalysisOutcome("failed", {})
+    # 用户决定（2026-10-22）：同一份病历版本的分析核验结论（含单事件复核）首次完整确定后
+    # 冻结复用，避免开思考的临界判断逐次翻转（C15、C26）。键覆盖全部批次提示词。
+    key = freeze_key("".join(_prompt(projection, batch) for batch in batches), model_expected)
+    frozen = load_analysis(key)
+    if frozen is not None and set(model_expected) <= set(frozen[0]):
+        return FindingAnalysisOutcome("ready", frozen[0], gap_refs=frozen[1])
     # 各批互不依赖，并发调用：耗时不再随批数累加（C02 三批串行开思考会超出执行时限）。
     results = list(await asyncio.gather(*(
         _check_batch(projection, llm_client, batch, {position: model_expected[position] for position in batch})
@@ -772,6 +783,9 @@ async def check_exam_finding_analysis(
         if item.ready and item.analysed.get(position):
             analysed_refs[position] = item.analysed[position]
             gap_refs.pop(position, None)
+    if set(model_expected) <= set(analysed_refs):
+        # 只冻结全部事件均已核定的结论；漏核事件沿用主抽取，下次仍重新判断。
+        save_analysis(key, analysed_refs, gap_refs)
     return FindingAnalysisOutcome("ready", analysed_refs, calls, *usage, gap_refs=gap_refs)
 
 

@@ -22,6 +22,15 @@ LISTING = "辅助检查：腰椎MRI示L4/5椎间盘突出。结合病史及辅�
 LINKED = "腰椎MRI示L4/5椎间盘突出压迫右侧神经根，与右下肢放射痛相符，拟行手术。"
 
 
+
+def _reset_analysis_freeze() -> None:
+    """同一用例内换一组模型应答重跑同一份病历前，清空分析核验冻结（2026-10-22 起结论冻结复用）。"""
+    import shutil
+    from app.services.luxian_0609.exam_analysis_freeze import default_store_dir
+
+    shutil.rmtree(default_store_dir(), ignore_errors=True)
+
+
 def _projection(course_text, *, hint="positive"):
     projection = build_exam_lab_text_projection(
         rows_by_source={
@@ -156,6 +165,7 @@ async def test_quote_about_another_exam_does_not_count_for_this_event():
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
     assert outcome.llm_call_count == 3 and "不能选“较某日片”" in client.prompts[1]  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
 
+    _reset_analysis_freeze()
     client = _Client([
         _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="右肺小结节"),
         _answer(ref, "none"),
@@ -191,6 +201,7 @@ async def test_protocol_violation_retries_once_then_fails_open_to_main_extractio
     assert outcome.state == "ready" and outcome.llm_call_count == 2
     assert client.prompts[1].index("上一次输出未通过校验") < client.prompts[1].index("EVENTS_JSON=")
 
+    _reset_analysis_freeze()
     failed = await check_exam_finding_analysis(projection, _Client([first, first]))
     assert failed.state == "failed" and failed.analysed_refs == {}
 
@@ -241,6 +252,7 @@ async def test_final_partial_coverage_decides_per_event_instead_of_failing_whole
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,)} and len(client.prompts) == 2
     # 末次仍漏核且已核到的不算分析 → 该事件不固定，沿用主抽取。
+    _reset_analysis_freeze()
     outcome = await check_exam_finding_analysis(projection, _Client([only(second, "none")] * 2))
     assert outcome.state == "ready" and outcome.analysed_refs == {}
 
@@ -580,3 +592,19 @@ async def test_negative_event_is_rechecked_alone_and_only_confirmed_analysis_fli
     assert outcome.state == "ready" and outcome.llm_call_count == 2
     assert outcome.analysed_refs == ({1: (ref,)} if expected_analysed else {1: ()})
     assert outcome.total_tokens == 30
+
+
+
+@pytest.mark.asyncio
+async def test_completed_analysis_conclusion_is_frozen_and_reused_without_model():
+    """用户决定（2026-10-22）：同一份病历的分析核验结论首次确定后冻结，重跑不再调用模型、不再翻转。"""
+    projection = _projection(LINKED)
+    ref = _report_ref(projection)
+    first = await check_exam_finding_analysis(
+        projection, _Client([_answer(ref, "finding_linked", "L4/5椎间盘突出压迫右侧神经根")]))
+    assert first.state == "ready" and first.llm_call_count == 1
+
+    flipped = _Client([_answer(ref, "none")])
+    reused = await check_exam_finding_analysis(projection, flipped)
+    assert reused.state == "ready" and reused.analysed_refs == first.analysed_refs
+    assert reused.llm_call_count == 0 and not flipped.prompts

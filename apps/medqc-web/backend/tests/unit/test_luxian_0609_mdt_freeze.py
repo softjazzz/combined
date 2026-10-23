@@ -285,7 +285,9 @@ async def test_mdt_emergency_exemption_is_projected_by_current_public_facts_cont
             "presurg_summary": [{"record_content": "本次急诊抢救，为挽救生命立即手术。"}],
         }
     )
-    envelope, reduced, result = await _execute_and_project(session, None)
+    # 急诊豁免须由受控模型确认本次手术为急诊（2026-10-22）。
+    llm = _RecordedLlm(content='{"state":"emergency","quote":"为挽救生命立即手术"}')
+    envelope, reduced, result = await _execute_and_project(session, llm)
 
     assert (reduced.final_state.value, reduced.reason_code) == (
         "not_applicable",

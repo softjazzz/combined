@@ -146,7 +146,7 @@ def _record_state(
         # 已有当前记录时，不把科室不对应的历史文书新增为本次候选。
         early = tuple(item for item in early if _departments_correspond(item[0], early_out_order))
     if early_out_order is not None and early:
-        if current or len(early) > 1 or not _departments_correspond(early[0][0], early_out_order):
+        if current or len(early) > 1 or not _departments_compatible(early[0][0], early_out_order):
             return "multiple", None
         if has_unknown:
             return "time_unknown", None
@@ -191,6 +191,18 @@ def _departments_correspond(record: Mapping[str, Any], order: Mapping[str, Any])
     current = _clean(order.get("current_department") or order.get("transferout_department"))
     record_source = _clean(record.get("transferout_department"))
     return bool((target and record_target == target) or (current and record_source == current))
+
+
+def _departments_compatible(record: Mapping[str, Any], order: Mapping[str, Any]) -> bool:
+    """单次转科、唯一提前转出记录时的科室核对：科室对应，或记录未填任何科室字段。
+
+    Claude 代定口径（2026-10-22，用户授权，C03/C09）：转出记录比转科医嘱早几分钟书写且未填科室，
+    科室无从矛盾；住院内仅一次转科医嘱、仅此一份提前转出记录时关联唯一，按时间接受。
+    记录填了科室但与医嘱不对应时仍不接受。
+    """
+    if _departments_correspond(record, order):
+        return True
+    return not any(_clean(record.get(field)) for field in ("transferin_department", "transferout_department"))
 
 
 def _group_transfer_orders(

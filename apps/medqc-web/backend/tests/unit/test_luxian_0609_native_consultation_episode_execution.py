@@ -829,16 +829,21 @@ def _planned_trace_parse(
     )[0]
 
 
-def test_advice_to_start_new_treatment_is_not_an_execution_trace():
-    """“建议行某项治疗”只表明后续安排，不是已经执行的痕迹。"""
+def test_advice_to_start_new_treatment_only_triggers_recheck():
+    """“建议行某项治疗”只表明后续安排：正则只触发补核，不直接改判模型的执行痕迹（2026-10-22）。"""
 
-    assessment = _planned_trace_parse(
-        "治疗上告知患者，建议行神经阻滞治疗，配合针灸理疗，余治疗同前，续观。"
+    text = "治疗上告知患者，建议行神经阻滞治疗，配合针灸理疗，余治疗同前，续观。"
+    assessment = _planned_trace_parse(text)
+
+    assert assessment.execution_record_state == "generic_trace"
+    assert assessment.trace_refs == ("daily_course_record-1",)
+    candidate = episode._CandidateDocument(
+        "daily_course_record-1", "daily_course_record",
+        episode._ObservedTime(datetime(2026, 7, 21, 8), True), text, "course-document-1",
     )
-
-    assert assessment.execution_record_state == "no_trace"
-    assert assessment.trace_refs == ()
-    assert assessment.confidence == "high"
+    assert episode._trace_document_is_planned_only(
+        assessment, (candidate,), source_quote="建议复查血常规并复查肝功能",
+    )
 
 
 def test_discharge_course_repeating_opinion_stays_a_trace():
@@ -2809,7 +2814,7 @@ def test_low_confidence_structured_link_keeps_unknown_execution_record_state():
 
 
 def _scope_test_completed_recommendations(
-    *, action_type: str, source_quote: str,
+    *, action_type: str, source_quote: str, execution_scope: str = "in_stay",
 ) -> tuple[episode._CompletedRecommendation, ...]:
     recommendation = episode._Recommendation(
         "consultation_record-1#r1",
@@ -2817,6 +2822,7 @@ def _scope_test_completed_recommendations(
         source_quote,
         source_quote,
         "consultation_record-1",
+        execution_scope=execution_scope,
     )
     model_episode = episode._Episode(
         "consultation_record-1",
@@ -2922,24 +2928,33 @@ def _scope_test_completed_recommendations(
 def test_completed_recommendations_exclude_non_order_execution_scope(
     action_type, source_quote, included,
 ):
+    # 用户口径（2026-10-22）：随访、出院后与未定义条件由第一阶段模型标注 execution_scope，
+    # 程序不再按随访词、必要时等正则判断；这里按真实样本应有的模型标注核对排除结果。
+    as_needed = source_quote.startswith(("必要时", "如有必要", "酌情", "视情况"))
+    scope = "in_stay" if included else ("as_needed" if as_needed else "after_discharge")
     completed = _scope_test_completed_recommendations(
         action_type=action_type,
         source_quote=source_quote,
+        execution_scope=scope,
     )
 
     assert bool(completed) is included
+    if action_type == "monitoring":
+        # 监护类不论范围一律不核对执行。
+        assert not _scope_test_completed_recommendations(
+            action_type=action_type, source_quote=source_quote,
+        )
 
 
-def test_conditional_recommendation_uses_source_quote_when_normalized_action_drops_condition():
+def test_ambiguous_execution_condition_follows_model_scope_not_wording():
+    """“必要时”等未定义条件由第一阶段模型标注 as_needed（2026-10-22），不按措辞正则判断。"""
     recommendation = episode._Recommendation(
-        "consultation_record-1#r1",
-        "test",
-        "必要时完善TCD检查",
-        "完善TCD检查",
-        "consultation_record-1",
+        "consultation_record-1#r1", "test", "必要时完善TCD检查", "完善TCD检查", "consultation_record-1",
     )
-
-    assert episode._has_ambiguous_execution_condition(recommendation) is True
+    assert episode._has_ambiguous_execution_condition(recommendation) is False
+    assert episode._has_ambiguous_execution_condition(
+        replace(recommendation, execution_scope="as_needed")
+    ) is True
 
 
 def test_explicit_source_condition_is_not_excluded_by_ambiguous_normalized_action():
@@ -2962,6 +2977,7 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
             "建议动态随访",
             "建议动态随访",
             "consultation_record-1",
+            execution_scope="after_discharge",
         ),
         episode._Recommendation(
             "consultation_record-1#r2",
@@ -2983,6 +2999,7 @@ def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope
             "必要时完善TCD检查",
             "必要时完善TCD检查",
             "consultation_record-1",
+            execution_scope="as_needed",
         ),
     )
     model_episode = episode._Episode(
@@ -3658,7 +3675,7 @@ def test_unlabelled_unknown_application_without_refs_stays_unknown():
 
 @pytest.mark.asyncio
 async def test_opinion_only_episode_with_absent_application_cannot_carry_an_application_ref(monkeypatch):
-    """意见-only 合同要求 absent 申请状态不得携带意见文书引用。"""
+    """absent 申请状态不得携带文书引用：补核一次，仍矛盾按资料不足交付（1022 C01）。"""
 
     monkeypatch.setattr(
         episode,
@@ -3682,14 +3699,11 @@ async def test_opinion_only_episode_with_absent_application_cannot_carry_an_appl
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == [
-        "technical_error",
-        "technical_error",
-    ]
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert {item["metadata"]["reason_code"] for item in result.results} == {
-        "model_invalid_output"
+        "semantic_extraction_unresolved"
     }
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -4569,8 +4583,8 @@ def _no_course_source_rows(*, consultation_text, source_key, source_rows):
     return rows
 
 
-def _single_recommendation_payload(*, action_type, source_quote):
-    """只含一条原子建议的第一阶段受控事实。"""
+def _single_recommendation_payload(*, action_type, source_quote, **scope_fields):
+    """只含一条原子建议的第一阶段受控事实；scope_fields 为模型抽取的执行范围与拒绝事实。"""
 
     return _payload(episodes=[_episode(
         "consultation_record-1",
@@ -4581,6 +4595,7 @@ def _single_recommendation_payload(*, action_type, source_quote):
             "source_quote": source_quote,
             "normalized_action": source_quote,
             "opinion_ref": "__AUTO__",
+            **scope_fields,
         }],
     )])
 
@@ -4887,6 +4902,10 @@ async def test_023_window_starts_three_days_before_record_and_only_declined_meas
         _single_recommendation_payload(
             action_type="test",
             source_quote="建议诱导痰查XPERT,真菌G\\GM试验,若均为阴性,可充分沟通后气管镜进一步排除活动性病变",
+            has_conditional_measures=True,
+            decline_state="partial",
+            declined_measures=["气管镜"],
+            decline_quote="患者家属表示不行纤支镜检查",
         ),
         candidate_ref="inpat_nondrug_order-1", candidate_text="痰XPERT检测")
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -4897,7 +4916,7 @@ async def test_023_window_starts_three_days_before_record_and_only_declined_meas
     assert any("痰XPERT检测" in text for text in _stage_two_candidate_texts(client.prompts[1]))
     evidence = dict(result.customer_display_facts)["LX0609-03-01-04"]["recommendation_evidence"][0]
     assert evidence["window_start_date"] == "2026-07-17"
-    assert evidence["declined_measures"] == ["纤支镜检查"]
+    assert evidence["declined_measures"] == ["气管镜"]
 
 
 @pytest.mark.asyncio
@@ -4910,7 +4929,10 @@ async def test_023_recommendation_only_declined_in_record_is_compliant_and_liste
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows",
                         lambda *, source_key, **_: rows[source_key])
     client = _EvidenceBoundStageClient(
-        _single_recommendation_payload(action_type="procedure", source_quote="建议行气管镜检查排除活动性病变"),
+        _single_recommendation_payload(
+            action_type="procedure", source_quote="建议行气管镜检查排除活动性病变",
+            decline_state="full", declined_measures=[], decline_quote="患者家属表示不行纤支镜检查",
+        ),
         candidate_ref="inpat_nondrug_order-1", candidate_text="不存在的医嘱")
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-03-01-04",), institute_id="i", patient_id="p", visit_id="v",
@@ -5160,16 +5182,22 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
         "read_luxian_0609_native_source_rows",
         lambda *, source_key, **_: source_rows[source_key],
     )
+    # 家属决定暂不处理、仅在家属要求时才转院：由第一阶段模型抽取为拒绝与条件（2026-10-22）。
     recommendations = [
         {
             "source_quote": "可请消化内科评估",
             "normalized_action": "请消化内科评估",
             "action_type": "transfer",
+            "decline_state": "full",
+            "declined_measures": [],
+            "decline_quote": "家属决定暂不处理痔疮",
         },
         {
             "source_quote": "家属强烈要求时建议上级医院",
             "normalized_action": "必要时转上级医院",
             "action_type": "transfer",
+            "execution_scope": "conditional",
+            "scope_quote": "家属强烈要求时",
         },
     ]
     client = _SequentialClient(
@@ -5226,7 +5254,10 @@ async def test_clinical_non_execution_decision_in_same_opinion_is_available_per_
     client = _SequentialClient(
         _payload(episodes=[_episode(ref, [ref], application="absent", recommendations=[
             {"recommendation_ref": f"{ref}#r{index}", "source_quote": text,
-             "normalized_action": text, "action_type": "test"}
+             "normalized_action": text, "action_type": "test",
+             # 会诊文书写明暂不考虑的检查由第一阶段模型抽取为拒绝（2026-10-22）。
+             **({"decline_state": "full", "declined_measures": [],
+                 "decline_quote": "暂不考虑血气分析、肺功能检查"} if text != "痰培养" else {})}
             for index, text in enumerate(("血气分析", "肺功能", "痰培养") if missing_culture else ("血气分析", "肺功能"), 1)
         ])]),
         {"executions": [
@@ -9452,7 +9483,7 @@ def test_textless_exam_master_header_linked_to_known_order_does_not_mark_scope_i
     assert not [item for item in projection.candidates if item.source_key == "exam_master"]
 
 
-def test_planned_only_course_trace_keeps_independent_structured_execution():
+def test_planned_only_course_trace_is_recheck_target_and_keeps_structured_execution():
     """真实样本：病程只写“建议行神经阻滞治疗，配合针灸理疗，续观”，针灸等医嘱已执行。
     只否定病程痕迹，结构化医嘱的落实判断保留，不能形成“未执行但有医嘱”的矛盾事实。"""
     completed = (
@@ -9495,7 +9526,11 @@ def test_planned_only_course_trace_keeps_independent_structured_execution():
         allowed_refs=allowed_refs,
         candidates=candidates,
     )
-    assert parsed[0].execution_record_state == "no_trace" and parsed[0].trace_refs == ()
+    # 正则不再改判模型选中的病程痕迹，只把它列为补核对象（2026-10-22）。
+    assert parsed[0].execution_record_state == "generic_trace"
+    assert episode._trace_document_is_planned_only(
+        parsed[0], candidates, source_quote="针灸、中频、磁疗、穴位贴敷康复治疗",
+    )
     assert parsed[0].execution_state == "linked_specific"
     assert parsed[0].execution_refs == ("inpat_nondrug_order-1",)
     assert episode._execution_quality_outcome(
@@ -9604,7 +9639,10 @@ def test_continuation_recommendation_accepts_order_opened_before_consultation_da
     def completed(quote):
         return (episode._CompletedRecommendation(
             "consultation_record-1",
-            episode._Recommendation("r1", "medication", quote, quote, "consultation_record-1"),
+            episode._Recommendation(
+                "r1", "medication", quote, quote, "consultation_record-1",
+                continues_current_treatment=quote.startswith("继续"),
+            ),
             episode._ObservedTime(datetime(2026, 7, 20, 10), True),
         ),)
     candidates = tuple(episode._CandidateDocument(
@@ -9633,18 +9671,18 @@ def test_023_ignores_non_order_recommendations():
     ) == ("not_applicable", "trigger_absent_complete")
 
 
-def test_023_keyword_non_order_recommendations_are_not_checked():
-    # 模型把“改前臂吊带”“骨盆骨折卧床”归为操作类时，按关键词剔除；含明确药物/检查的仍核对。
-    rec = lambda ref, quote: episode._CompletedRecommendation(
+def test_023_non_order_recommendations_follow_model_action_type():
+    # 用户口径（2026-10-22）：吊带、卧床等是否开医嘱落实以模型 action_type 为准，不再按关键词兜底剔除。
+    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
         "consultation_record-1",
-        episode._Recommendation(ref, "procedure", quote, quote, "consultation_record-1"),
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
         episode._ObservedTime(datetime(2026, 7, 20, 10), True),
     )
     completed = (
-        rec("r1", "改前臂吊带悬吊患肢"),
-        rec("r2", "骨盆骨折需卧床2个月"),
-        rec("r3", "卧床期间复查骨盆CT"),
-        rec("r4", "行气管切开术"),
+        rec("r1", "other", "改前臂吊带悬吊患肢"),
+        rec("r2", "other", "骨盆骨折需卧床2个月"),
+        rec("r3", "test", "卧床期间复查骨盆CT"),
+        rec("r4", "procedure", "行气管切开术"),
     )
     in_scope, _ = episode._order_execution_view(completed, None)
     assert [item.recommendation.recommendation_ref for item in in_scope] == ["r3", "r4"]
@@ -9652,15 +9690,16 @@ def test_023_keyword_non_order_recommendations_are_not_checked():
 
 def test_023_conditional_recommendation_without_order_is_not_checked():
     # 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对；当天有医嘱即按已执行。
-    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+    rec = lambda ref, kind, quote, scope="in_stay": episode._CompletedRecommendation(
         "consultation_record-1",
-        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1", execution_scope=scope),
         episode._ObservedTime(datetime(2026, 7, 20, 10), True),
     )
+    # 整条建议是否以未成立前提开头由模型标注 conditional（2026-10-22）。
     completed = (
-        rec("r1", "transfer", "若病情加重及家属同意可转科"),
-        rec("r2", "test", "若均阴性则行气管镜检查"),
-        rec("r3", "procedure", "凝血无异常后行气管切开"),
+        rec("r1", "transfer", "若病情加重及家属同意可转科", "conditional"),
+        rec("r2", "test", "若均阴性则行气管镜检查", "conditional"),
+        rec("r3", "procedure", "凝血无异常后行气管切开", "conditional"),
         rec("r4", "medication", "予以亚胺培南抗感染"),
     )
     absent = lambda ref: episode._ExecutionAssessment(ref, "absent", (), "high", ())
@@ -9684,14 +9723,17 @@ def test_023_conditional_recommendation_without_order_is_not_checked():
 
 def test_023_existing_home_medication_recommendations_still_require_inpatient_orders():
     # 明确自备药沿用院外药豁免；仅写“原药”不能推定来自院外，仍核对住院医嘱。
-    rec = lambda ref, quote: episode._CompletedRecommendation(
+    rec = lambda ref, quote, scope="in_stay": episode._CompletedRecommendation(
         "consultation_record-1",
-        episode._Recommendation(ref, "medication", quote, quote, "consultation_record-1"),
+        episode._Recommendation(
+            ref, "medication", quote, quote, "consultation_record-1", execution_scope=scope,
+        ),
         episode._ObservedTime(datetime(2026, 7, 20, 10), True),
     )
+    # 是否院外自备药由模型标注 home_medication（2026-10-22）。
     completed = (
         rec("r1", "继续服用原降压药"),
-        rec("r2", "自备药物继续口服"),
+        rec("r2", "自备药物继续口服", "home_medication"),
         rec("r3", "积极治疗原发病，予以抗感染药物"),
         rec("r4", "按抗感染原则使用头孢类药物"),
     )
@@ -9701,33 +9743,42 @@ def test_023_existing_home_medication_recommendations_still_require_inpatient_or
     ]
 
 
-def test_023_conditional_is_judged_by_first_clause_and_measure_clause():
-    # “先查A，若阴性则行B”前半句仍须执行；只有条件分句里的措施未见医嘱时才不计。
-    rec = lambda quote: episode._Recommendation("r1", "test", quote, quote, "consultation_record-1")
-    assert episode._is_conditional_recommendation(rec("疼痛完全缓解2周后予非布司他20mg qd降尿酸"))
-    assert episode._is_conditional_recommendation(rec("若病情加重及家属同意可转科进一步治疗"))
-    compound = rec("复查凝血功能，无明显异常后行气管切开")
-    assert not episode._is_conditional_recommendation(compound)
-    assert episode._measure_in_conditional_clause(compound, "行气管切开")
-    assert not episode._measure_in_conditional_clause(compound, "复查凝血功能")
-    staged = rec("诱导痰XPERT检测、真菌G/GM试验；若均阴性则行气管镜检查排除活动性病变")
+def test_023_conditional_follows_model_scope_and_measure_flag():
+    # 用户口径（2026-10-22）：整条建议是否条件式、是否含附条件措施由第一阶段模型标注，
+    # 程序不再按“若/待…后”等条件词判断；“先查A，若阴性则行B”整条仍须执行并送逐项核对。
+    rec = lambda quote, **fields: episode._Recommendation(
+        "r1", "test", quote, quote, "consultation_record-1", **fields,
+    )
+    assert episode._is_conditional_recommendation(
+        rec("若病情加重及家属同意可转科进一步治疗", execution_scope="conditional")
+    )
+    assert not episode._is_conditional_recommendation(rec("若病情加重及家属同意可转科进一步治疗"))
+    staged = rec(
+        "诱导痰XPERT检测、真菌G/GM试验；若均阴性则行气管镜检查排除活动性病变",
+        has_conditional_measures=True,
+    )
     assert not episode._is_conditional_recommendation(staged)
-    assert episode._measure_in_conditional_clause(staged, "行气管镜检查")
-    assert not episode._measure_in_conditional_clause(staged, "诱导痰XPERT检测")
+    completed = episode._CompletedRecommendation(
+        "consultation_record-1", staged, episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+    )
+    assert episode._needs_measure_scope_refinement(completed)
+    assert not episode._needs_measure_scope_refinement(
+        replace(completed, recommendation=rec("复查血常规"))
+    )
 
 
 def test_023_measure_check_scope_and_conditional_missing_measures():
     # 逐项核对只针对已由医嘱证明执行的建议；条件分句中的未执行措施不计。
     from app.services.luxian_0609.consultation_measure_check import MeasureCheckOutcome
 
-    rec = lambda ref, kind, quote: episode._CompletedRecommendation(
+    rec = lambda ref, kind, quote, scope="in_stay": episode._CompletedRecommendation(
         "consultation_record-1",
-        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
+        episode._Recommendation(ref, kind, quote, quote, "consultation_record-1", execution_scope=scope),
         episode._ObservedTime(datetime(2026, 7, 20, 10), True),
     )
     completed = (
         rec("r1", "test", "诱导痰XPERT检测；若均阴性则行气管镜检查"),
-        rec("r2", "transfer", "若病情加重及家属同意可转科进一步治疗"),
+        rec("r2", "transfer", "若病情加重及家属同意可转科进一步治疗", "conditional"),
     )
     assessments = (
         episode._ExecutionAssessment(
@@ -9740,10 +9791,7 @@ def test_023_measure_check_scope_and_conditional_missing_measures():
     )
     scope = episode._measure_check_scope(completed, assessments)
     assert [item.recommendation.recommendation_ref for item in scope] == ["r1"]
-    outcome = episode._drop_conditional_missing_measures(
-        MeasureCheckOutcome("ready", {"r1": ("行气管镜检查",)}), scope,
-    )
-    assert not outcome.has_missing
+    # 附条件措施已由措施核对模型排除在缺项之外；这里不再按条件词正则二次剔除。
     outcome = episode._drop_conditional_missing_measures(
         MeasureCheckOutcome("ready", {"r1": ("诱导痰XPERT检测",)}), scope,
     )
@@ -9755,7 +9803,10 @@ def test_continuation_keeps_matching_earlier_long_term_order_within_budget():
     quote = "可继续亚胺培南西司它丁抗感染治疗"
     completed = (episode._CompletedRecommendation(
         "consultation_record-1",
-        episode._Recommendation("r1", "medication", quote, "继续亚胺培南西司他丁抗感染治疗", "consultation_record-1"),
+        episode._Recommendation(
+            "r1", "medication", quote, "继续亚胺培南西司他丁抗感染治疗", "consultation_record-1",
+            continues_current_treatment=True,
+        ),
         episode._ObservedTime(datetime(2026, 1, 20, 17, 21), True),
     ),)
     assert episode._is_continuation_recommendation(completed[0].recommendation)
@@ -9898,8 +9949,9 @@ def test_recommendation_without_any_window_candidate_is_settled_absent():
 
 
 def test_023_surgery_or_transfer_recommendation_executed_during_stay():
-    # 用户口径（2026-10-22）：手术/转科类建议在本次住院期间有手术记录，或病程写明患方
-    # 同意/拒绝，即算已执行，不受会诊前3天至当天的医嘱窗口限制。
+    # 用户口径（2026-10-22）：手术/转科类建议在本次住院期间有手术记录、转科记录或术后首次病程，
+    # 即算已执行，不受会诊前3天至当天的医嘱窗口限制；病程写明患方同意/拒绝交逐项核对模型判断，
+    # 不再由程序按“同意/拒绝”字样认定。
     rec = lambda ref, kind, quote: episode._CompletedRecommendation(
         "consultation_record-1",
         episode._Recommendation(ref, kind, quote, quote, "consultation_record-1"),
@@ -9918,14 +9970,14 @@ def test_023_surgery_or_transfer_recommendation_executed_during_stay():
         rec("r1", "procedure", "建议手术治疗，若同意则转胸外科"),
         rec("r2", "medication", "予以亚胺培南抗感染"),
     ), candidates)
-    assert completed[0].stay_execution_refs == ("daily_course_record-1", "surgery_record-1")
+    assert completed[0].stay_execution_refs == ("surgery_record-1",)
     assert completed[1].stay_execution_refs == ()
     absent = lambda ref: episode._ExecutionAssessment(ref, "absent", (), "high", ())
     kept, view = episode._order_execution_view(completed, (absent("r1"), absent("r2")))
     assert [(item.recommendation_ref, item.execution_record_state) for item in view] == [
         ("r1", "specific_trace"), ("r2", "no_trace"),
     ]
-    assert view[0].trace_refs == ("daily_course_record-1", "surgery_record-1")
+    assert view[0].trace_refs == ("surgery_record-1",)
     assert episode._measure_check_scope(completed, (absent("r1"), absent("r2")))[0].recommendation.recommendation_ref == "r2"
 
     # 转出/转入记录同样算住院期间执行证据；会诊前的转科记录不算。
@@ -9942,3 +9994,101 @@ def test_023_surgery_or_transfer_recommendation_executed_during_stay():
     ), postop)
     assert surgery_rec.stay_execution_refs == ("postsurg_firstcourse_record-1",)
     assert transfer_rec.stay_execution_refs == ()
+
+
+@pytest.mark.asyncio
+async def test_persistent_inconsistent_opinion_state_is_data_gap_and_not_frozen(
+    monkeypatch, tmp_path
+):
+    """补核后仍“意见不明确/低置信却列出建议”：资料不足交付，不报技术错误，也不冻结（1022 C01）。"""
+
+    rows = _rows("会诊申请", "会诊意见：建议复查血常规。")
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    opinion="vague",
+                    confidence="low",
+                    application_refs=["consultation_record-1"],
+                    opinion_refs=["consultation_record-2"],
+                    recommendations=[{
+                        "recommendation_ref": "consultation_record-1#r1",
+                        "action_type": "test",
+                        "source_quote": "复查血常规",
+                        "opinion_ref": "consultation_record-2",
+                    }],
+                )
+            ]
+        )
+    )
+    freeze_dir = tmp_path / "freeze"
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+        opinion_freeze_dir=freeze_dir,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "semantic_extraction_unresolved"
+    }
+    assert result.llm_call_count == 2
+    assert not freeze_dir.exists() or not list(freeze_dir.glob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_stage_two_responses_are_frozen_and_reused_without_model(monkeypatch):
+    """用户决定（2026-10-22）：会诊第二阶段应答在可交付运行后冻结，同一病历重跑不再调用模型、结论不变。"""
+
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows("会诊意见：建议复查血常规。", hour_start=1, action_suffix=False)
+    source_rows["senior_course_record"] = _rows("已按会诊意见复查血常规。", hour_start=2, action_suffix=False)
+    session = _window_session(rows_by_source=source_rows)
+
+    def client():
+        return _SequentialClient(
+            _payload(episodes=[_episode(
+                "consultation_record-1", ["consultation_record-1"],
+                recommendations=[{
+                    "recommendation_ref": "consultation_record-1#r1", "action_type": "test",
+                    "source_quote": "复查血常规",
+                }],
+            )]),
+            _execution({
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace", "trace_refs": ["senior_course_record-1"],
+                "execution_state": "absent", "structured_action_refs": [], "confidence": "high",
+                "recommendation_coverage_state": "complete", "coverage_confidence": "high",
+                "uncovered_source_quotes": [],
+            }),
+        )
+
+    async def run(llm_client, freeze_dir):
+        return await episode.execute_luxian_0609_native_consultation_episode_rules(
+            rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P",
+            visit_id="V", source_schema=None, llm_client=llm_client,
+            evidence_materials=session.materials, evidence_snapshot=session.snapshot,
+            opinion_freeze_dir=freeze_dir,
+        )
+
+    import tempfile
+
+    first = await run(client(), tempfile.mkdtemp())
+    assert first.llm_call_count == 2
+    empty = _SequentialClient()
+    # 第一阶段冻结换新目录强制重抽：第二阶段与第一阶段应答都应由应答冻结复用。
+    second = await run(empty, tempfile.mkdtemp())
+    assert [item["status"] for item in second.results] == [item["status"] for item in first.results]
+    assert second.llm_call_count == 0 and not empty.prompts

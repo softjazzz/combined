@@ -296,3 +296,80 @@ async def test_047_uses_one_assessment_for_status_and_display_facts(
     # 仅一次专用记录实施核验（与 045/046 共享），状态与展示事实不重复计算。
     assert result.llm_call_count == 1
     assert result.customer_display_facts == ()
+
+
+async def _execute_with_effect_labels(session: Any, effect_labels: dict[str, tuple[str, str]]):
+    client = FrozenTransfusionProtocolClient(default_course_label="record", effect_labels=effect_labels)
+    result = await execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-07-03-01",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-07-03-01",),
+    )
+    return result, client
+
+
+_UNMATCHED_EVALUATION = "复查血红蛋白较前变化不大，考虑消耗所致，继续观察。"
+
+
+def _effect_session():
+    return _session(
+        horizon_date="2026-01-03",
+        bloodtrans_rows=[{"document_id": "BT-1", "record_content": "2026-01-01 16:00:00输血结束。"}],
+        daily_rows=[{
+            "document_id": "D-1",
+            "record_time": "2026-01-02 08:00:00",
+            "record_content": "今日查房，患者精神可。" + _UNMATCHED_EVALUATION,
+        }],
+    )
+
+
+@pytest.mark.asyncio
+async def test_047_unmatched_wording_is_confirmed_by_model_not_closed_world_defect():
+    """“较前变化不大”不在词表内：交受控模型确认评价后合规（2026-10-22）。"""
+    session = _effect_session()
+    result, client = await _execute_with_effect_labels(
+        session, {_UNMATCHED_EVALUATION: ("evaluated", "复查血红蛋白较前变化不大")},
+    )
+
+    assert _canonical_state(result=result, session=session) == ("compliant", "requirement_satisfied")
+    assert any("lx0609-posttransfusion-effect-v1" in prompt for prompt in client.protocol_prompts)
+
+
+@pytest.mark.asyncio
+async def test_047_model_not_evaluated_keeps_python_missing_defect():
+    session = _effect_session()
+    result, _ = await _execute_with_effect_labels(session, {})
+
+    assert _canonical_state(result=result, session=session) == ("non_compliant", "requirement_violated")
+
+
+@pytest.mark.asyncio
+async def test_047_model_unclear_is_data_gap_not_defect():
+    session = _effect_session()
+    result, _ = await _execute_with_effect_labels(session, {_UNMATCHED_EVALUATION: ("unclear", "")})
+
+    assert _canonical_state(result=result, session=session)[0] == "data_gap"
+    assert result.decisions[0].reason_code == "semantic_extraction_unresolved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wording", ["输血后复查血常规。", "输血效果好，继续观察。"])
+async def test_047_loose_wording_without_clinical_or_lab_effect_is_not_auto_compliant(wording):
+    """院方口径：评价须含临床或实验室效果。“输血后复查”“效果好”交模型确认，模型判否仍缺评价。"""
+    session = _session(
+        horizon_date="2026-01-03",
+        bloodtrans_rows=[{"document_id": "BT-1", "record_content": "2026-01-01 16:00:00输血结束。"}],
+        daily_rows=[{"document_id": "D-1", "record_time": "2026-01-02 08:00:00", "record_content": wording}],
+    )
+    result, client = await _execute_with_effect_labels(session, {})
+
+    assert _canonical_state(result=result, session=session) == ("non_compliant", "requirement_violated")
+    assert any("lx0609-posttransfusion-effect-v1" in prompt for prompt in client.protocol_prompts)

@@ -185,3 +185,16 @@ def test_interventional_procedure_triggers_as_surgery() -> None:
     item = classify_surgery_procedure(code="00.6600X004")
 
     assert item is not None and item.category == "介入治疗" and item.is_surgery is True
+
+
+@pytest.mark.parametrize(("code", "name", "is_surgery"), [
+    # 用户口径（2026-10-22）：皮肤清创缝合按治疗性操作，不触发手术类规则（1022 C02）。
+    ("86.5902", "头皮裂伤清创缝合术", False),
+    ("86.5900X006", "皮肤缝合术", False),
+    ("86.2800x012", "右侧胫前皮肤裂伤清创缝合", False),
+    ("86.2201", "皮肤伤口切除性清创术", True),
+    ("86.7501", "皮瓣清创术", True),
+])
+def test_skin_debridement_suture_is_operation(code, name, is_surgery):
+    classification = classify_surgery_procedure(code=code, name=name)
+    assert classification is not None and classification.is_surgery is is_surgery

@@ -83,9 +83,9 @@ async def test_reasoned_non_execution_is_not_missing_but_other_actions_still_che
     text = "完善血气分析、肺功能、痰培养"
     quote = "现无气紧症状，暂不考虑血气分析、肺功能检查"
     measures = [dict(measure=measure, quote=quote, executed_action=measure,
-                     action_relation="reasoned_non_execution", non_execution_reason="现无气紧症状")
+                     action_relation="reasoned_non_execution", conditional=False, non_execution_reason="现无气紧症状")
                 for measure in ("血气分析", "肺功能")]
-    measures.append(dict(measure="痰培养", quote="", executed_action="", action_relation="not_found"))
+    measures.append(dict(measure="痰培养", quote="", executed_action="", action_relation="not_found", conditional=False))
     # 未执行项不允许借用另一项的证据。
     result, _ = await _check_clinical_decision(text, quote, measures)
     assert result.state == "ready"
@@ -97,7 +97,7 @@ async def test_reasoned_non_execution_is_not_missing_but_other_actions_still_che
 async def test_non_execution_without_grounded_reason_is_not_accepted(reason):
     result, _ = await _check_clinical_decision("完善血气分析", "暂不考虑血气分析", [dict(
         measure="血气分析", quote="暂不考虑血气分析", executed_action="血气分析",
-        action_relation="reasoned_non_execution", non_execution_reason=reason)])
+        action_relation="reasoned_non_execution", conditional=False, non_execution_reason=reason)])
     assert result.state == "failed"
 
 
@@ -105,7 +105,7 @@ async def test_non_execution_without_grounded_reason_is_not_accepted(reason):
 async def test_topical_treatment_locations_are_not_independent_actions():
     text = "中药贴敷天突、双肺俞清热化痰止咳"
     result, client = await _check_clinical_decision(text, "中药敷贴", [dict(
-        measure="中药贴敷", quote="中药敷贴", executed_action="中药敷贴", action_relation="matched")],
+        measure="中药贴敷", quote="中药敷贴", executed_action="中药敷贴", action_relation="matched", conditional=False)],
         generic=("天突", "双肺俞清热化痰止咳"))
     assert result.state == "ready" and not result.has_missing
     assert "中药贴敷与中药敷贴" in client.prompts[0]
@@ -155,15 +155,15 @@ UNEXECUTED = ("关节松动术", "偏瘫肢体综合训练")
 def _measures(alias, *, include_missing=True, bad=None, generic=()):
     items = [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "电针",
-         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针", "executed_action": "电针", "action_relation": "matched"},
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "电针", "executed_action": "电针", "action_relation": "matched", "conditional": False},
         {"recommendation_ref": "consultation_record-1#r1", "measure": "头皮针",
-         "evidence_ref": alias["inpat_nondrug_order-2"], "quote": "头皮针", "executed_action": "头皮针", "action_relation": "matched"},
+         "evidence_ref": alias["inpat_nondrug_order-2"], "quote": "头皮针", "executed_action": "头皮针", "action_relation": "matched", "conditional": False},
         {"recommendation_ref": "consultation_record-1#r1", "measure": "低频",
-         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗", "executed_action": "低频脉冲治疗", "action_relation": "matched"},
+         "evidence_ref": alias["inpat_nondrug_order-3"], "quote": "低频脉冲治疗", "executed_action": "低频脉冲治疗", "action_relation": "matched", "conditional": False},
     ]
     if include_missing:
         items += [{"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-                   "evidence_ref": "", "quote": "", "executed_action": "", "action_relation": "not_found"} for measure in UNEXECUTED]
+                   "evidence_ref": "", "quote": "", "executed_action": "", "action_relation": "not_found", "conditional": False} for measure in UNEXECUTED]
     if bad == "measure":
         items[0]["measure"] = "针刺疗法"
     elif bad == "scope":
@@ -210,6 +210,7 @@ async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution(
         "recommendation_ref": recommendation.recommendation_ref, "measure": "关节松动术",
         "evidence_ref": aliases.get(candidates[0].ref, ""), "quote": "动态心电图检查" if aliases else "",
         "executed_action": "动态心电图检查" if aliases else "", "action_relation": "unrelated" if aliases else "not_found",
+        "conditional": False,
     }]}
     result = await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed,
@@ -220,11 +221,37 @@ async def test_real_but_unrelated_order_does_not_prove_rehabilitation_execution(
     assert _final(result) == ("non_compliant", "requirement_violated")
 
 
+@pytest.mark.asyncio
+async def test_model_conditional_flag_is_carried_without_regex():
+    """措施是否附条件由模型标注（2026-10-22）；标注随结果返回，缺项本身仍如实列出。"""
+    from dataclasses import replace
+    completed, candidates, _, _ = _setup(("动态心电图检查",))
+    quote = "若均阴性则行气管镜检查"
+    recommendation = replace(completed[0].recommendation, source_quote=quote, normalized_action=quote)
+    completed = (replace(completed[0], recommendation=recommendation),)
+    _, allowed = episode._execution_prompt(completed=completed, candidates=candidates)
+    aliases = episode._prompt_alias_by_ref(candidates, allowed)
+    answer = {"schema_version": SCHEMA_VERSION, "generic": [
+        {"recommendation_ref": recommendation.recommendation_ref, "text": "若均阴性则"},
+    ], "measures": [{
+        "recommendation_ref": recommendation.recommendation_ref, "measure": "行气管镜检查",
+        "evidence_ref": "", "quote": "", "executed_action": "", "action_relation": "not_found",
+        "conditional": True,
+    }]}
+    result = await check_consultation_measures(
+        completed=completed, candidates=candidates, allowed_refs=allowed,
+        alias_by_ref=aliases, llm_client=_Client([answer, answer]),
+    )
+    assert result.state == "ready"
+    assert result.missing_measures == {recommendation.recommendation_ref: ("行气管镜检查",)}
+    assert result.conditional_measures == {recommendation.recommendation_ref: ("行气管镜检查",)}
+
+
 def _fully_evidenced(alias):
     answer = _measures(alias, include_missing=False)
     answer["measures"] += [
         {"recommendation_ref": "consultation_record-1#r1", "measure": measure,
-         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure, "executed_action": measure, "action_relation": "matched"}
+         "evidence_ref": alias[f"inpat_nondrug_order-{index}"], "quote": measure, "executed_action": measure, "action_relation": "matched", "conditional": False}
         for index, measure in enumerate(UNEXECUTED, start=4)
     ]
     return answer
@@ -362,7 +389,7 @@ async def test_purpose_clause_in_recommendation_is_not_an_omission():
     alias = episode._prompt_alias_by_ref(candidates, allowed)
     answer = {"schema_version": SCHEMA_VERSION, "generic": [], "measures": [
         {"recommendation_ref": "consultation_record-1#r1", "measure": "红光照射",
-         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗", "executed_action": "红光治疗", "action_relation": "matched"}]}
+         "evidence_ref": alias["inpat_nondrug_order-1"], "quote": "红光治疗", "executed_action": "红光治疗", "action_relation": "matched", "conditional": False}]}
     client = _Client([answer])
     outcome = await check_consultation_measures(
         completed=completed, candidates=candidates, allowed_refs=allowed, alias_by_ref=alias, llm_client=client)

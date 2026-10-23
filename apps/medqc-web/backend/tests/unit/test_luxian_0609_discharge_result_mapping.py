@@ -15,7 +15,9 @@ from app.services.luxian_0609.extended_document.discharge_documentation import e
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_executor_customer_display_facts
 
 
-@pytest.mark.parametrize("seconds,status", [(-7200, "compliant"), (-1, "compliant"), (0, "compliant"), (86400, "compliant"), (90000, "non_compliant")])
+@pytest.mark.parametrize("seconds,status", [(-7200, "compliant"), (-1, "compliant"), (0, "compliant"), (86400, "compliant"),
+    # 超时数秒舍入后不能显示为 24.0 而与超时判定矛盾（1022 C13）。
+    (86401, "non_compliant"), (86417, "non_compliant"), (90000, "non_compliant")])
 def test_061_executor_facts_survive_final_delivery(seconds, status):
     discharge = datetime(2026, 9, 8, 12)
     outcome = evaluate_discharge_documentation_timeliness(

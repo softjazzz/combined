@@ -48,9 +48,12 @@ _SOURCE_KEYS = (
 
 
 class _PresentLlm:
-    async def generate(self, prompt):
+    async def generate(self, prompt, **_):
+        # 急诊豁免须由模型确认本次手术为急诊（2026-10-22）。
+        content = ('{"state":"emergency","quote":"为挽救生命立即手术"}'
+                   if "本次住院的这次手术属于急诊" in prompt else '{"state":"present"}')
         return {
-            "choices": [{"message": {"content": '{"state":"present"}'}}],
+            "choices": [{"message": {"content": content}}],
             "usage": {
                 "prompt_tokens": 120,
                 "completion_tokens": 12,
@@ -379,7 +382,8 @@ async def test_surgery_mdt_emergency_lifesaving_exemption_is_publicly_projected(
     )
     envelope, reduced, result = await _execute_and_project(session)
 
-    assert envelope.llm_call_count == envelope.total_tokens == 0
+    # 急诊豁免由受控模型确认一次（2026-10-22）。
+    assert envelope.llm_call_count == 1 and envelope.total_tokens == 132
     assert (reduced.final_state.value, reduced.reason_code) == (
         "not_applicable",
         "trigger_absent_complete",

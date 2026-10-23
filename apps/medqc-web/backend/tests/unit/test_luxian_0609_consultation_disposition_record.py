@@ -112,9 +112,9 @@ def test_valid_document_defect_survives_other_document_invalid_action_schema():
     )
 
 
-def parse(docs, opinion, feedback, *items, scope="ordinary", state="present"):
+def parse(docs, opinion, feedback, *items, scope="ordinary", state="present", **kwargs):
     frozen = record.parse_opinions(opinions(opinion, feedback, scope, state), docs)
-    return record.parse_facts(response(*items), docs, frozen)
+    return record.parse_facts(response(*items), docs, frozen, **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -220,14 +220,18 @@ def test_a_consultants_generic_instruction_is_not_requesting_department_feedback
     "feedback",
     ["遵照执行", "已予具体用药，其余遵嘱执行", "处理:予以康复理疗。", "对症康复治疗。"],
 )
-def test_generic_text_cannot_be_relabelled_as_specific(feedback):
+def test_generic_wording_labelled_specific_is_rechecked_then_follows_model(feedback):
+    """笼统回应词表只触发补核，不推翻模型结论；补核后模型仍判具体处置则以模型为准。"""
     docs = documents("建议给予电针。" + feedback)
-    assert (
-        parse(docs, "建议给予电针", feedback, item("给予电针", feedback, "performed"))[
-            0
-        ]
-        == "non_compliant"
-    )
+    fact = item("给予电针", feedback, "performed")
+    issues = []
+    assert parse(docs, "建议给予电针", feedback, fact, review_issues=issues)[0] == "data_gap"
+    assert [issue.reason for issue in issues] == ["generic feedback hint"]
+    assert parse(docs, "建议给予电针", feedback, fact, rechecked=True)[0] == "compliant"
+    # 补核后模型改判为笼统回应时照常判缺陷。
+    assert parse(
+        docs, "建议给予电针", feedback, item("给予电针", feedback, "generic"), rechecked=True
+    )[0] == "non_compliant"
 
 
 @pytest.mark.parametrize("field", ["feedback_quote", "referent_quote"])
@@ -765,3 +769,16 @@ def test_anchor_start_must_be_unique_in_the_document():
 def test_opinion_prompt_asks_for_anchors_on_long_paragraphs():
     prompt = record.build_opinion_prompt(documents(_LONG_BODY))
     assert '"start"' in prompt and '"end"' in prompt and "60字" in prompt
+
+
+@pytest.mark.asyncio
+async def test_specific_item_beside_remainder_wording_is_rechecked_once_then_compliant():
+    """“予某药，其余遵会诊意见”对该药本身是具体处置：词表命中只补核一次，不判缺陷。"""
+    text = "建议头孢呋辛抗感染。我科处理：予头孢呋辛抗感染，其余遵会诊意见。"
+    docs = documents(text)
+    feedback = "予头孢呋辛抗感染，其余遵会诊意见"
+    facts = response(medications=[item("头孢呋辛抗感染", feedback, "performed")])
+    client = Client(opinions("建议头孢呋辛抗感染", feedback), facts, facts)
+    outcome = await record.check_disposition_record(documents=docs, llm_client=client)
+    assert (outcome.status, outcome.llm_call_count) == ("compliant", 3)
+    assert "generic feedback hint" in client.prompts[2]

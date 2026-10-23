@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 
 # v3：区分治疗动作与施治部位、会诊建议与原科室执行反馈。
 # 抽取口径变化时旧冻结自动失效，避免重新运行仍复用旧的错误建议清单。
-FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v3"
+# v4（2026-10-22）：建议另抽执行范围、是否延续当前治疗、会诊文书内拒绝/暂缓，替代正则。
+# v5（2026-10-22）：条件式须给出建议开头的条件原话（scope_quote）供结构核对。
+# v6（2026-10-22）：第一阶段提示词加入用户确认的成对判定例子，旧冻结须重新抽取。
+FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v6"
 _ENV_STORE_DIR = "LUXIAN_0609_OPINION_FREEZE_DIR"
 _PAYLOAD_KEYS = ("episodes", "consultation_event_facts")
 _SAFE_NAME = re.compile(r"[^0-9A-Za-z_.-]+")

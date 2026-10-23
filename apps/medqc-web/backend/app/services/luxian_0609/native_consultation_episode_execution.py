@@ -19,13 +19,7 @@ import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
 from .consultation_measure_check import check_consultation_measures
-from .consultation_order_scope import (
-    declined_measure_objects,
-    current_checks_declined_after_communication,
-    measure_is_declined,
-    order_window_start,
-    recommendation_decline,
-)
+from .consultation_order_scope import measure_is_declined, order_window_start
 from .consultation_disposition_record import RULE_ID as DISPOSITION_RECORD_RULE_ID, check_disposition_record
 from .consultation_disposition_record import _ReviewIssue, _review_retry_prompt
 from .consultation_decision_evidence import (
@@ -50,6 +44,8 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.shared import _parse_datetime
+from .consultation_response_freeze import FrozenResponseClient
+from .judgement_examples import CONSULTATION_SCOPE_EXAMPLES
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
 from .native_execution import build_luxian_0609_native_result
@@ -182,33 +178,6 @@ _RECOMMENDATION_COVERAGE_STATES = frozenset({
     "complete", "partial", "no_trace", "unknown",
 })
 _RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer", "monitoring", "other"})
-# 监护类及明确院外/周期随访不进入 023 医嘱执行核对；住院内检查、治疗建议保留。
-_FOLLOW_UP_SCOPE_PATTERN = re.compile(
-    r"(?:门诊|出院(?:后)?|院外|长期|周期性|定期)"
-    r"[^。；\n]{0,16}(?:随访|复查)"
-    r"|(?:随访|复查)[^。；\n]{0,16}"
-    r"(?:门诊|出院(?:后)?|院外|长期|周期性|定期)"
-)
-_PURE_FOLLOW_UP_PATTERN = re.compile(
-    r"^[\s，,、;；:：。.!！？]*"
-    r"(?:建议|可|请|继续|安排|予以)?\s*"
-    r"(?:我科|本科|专科)?\s*"
-    r"(?:动态)?随访"
-    r"[\s，,、;；:：。.!！？]*$"
-)
-_FOLLOW_UP_INTERVAL_PATTERN = re.compile(
-    r"(?:每(?:隔)?\s*(?:(?:\d+|[一二两三四五六七八九十]+)"
-    r"\s*[-~至]\s*)?(?:\d+|[一二两三四五六七八九十]+)?"
-    r"\s*(?:年|个?月|季度))"
-    r"[^。；\n]{0,32}(?:随访|复查|查(?:看)?|检查|检验|完善)"
-    r"|(?:随访|复查|查(?:看)?|检查|检验|完善)"
-    r"[^。；\n]{0,32}(?:每(?:隔)?\s*(?:(?:\d+|[一二两三四五六七八九十]+)"
-    r"\s*[-~至]\s*)?(?:\d+|[一二两三四五六七八九十]+)?"
-    r"\s*(?:年|个?月|季度))"
-)
-_AMBIGUOUS_CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
-    r"^(?:建议|可)?\s*(?:必要时|如有必要(?:时)?|酌情|视情况)"
-)
 _EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
     r"(?:会诊目的|申请.{0,12}会诊).{0,80}"
     r"(?:评估.{0,24}(?:适应证|病情|方案)|明确.{0,24}(?:诊断|原因|方案)|"
@@ -288,6 +257,29 @@ _RECOMMENDATION_ACTION_BOUNDARY_PROMPT = (
     "中药贴敷与医嘱中药敷贴是同一动作的同义表达。"
     "会诊医师的诊断不是待执行动作；原科室在意见之后写出的遵照执行、已予治疗、"
     "暂不考虑某项检查是执行反馈，不得混入会诊医师的建议清单。"
+)
+_EXECUTION_SCOPES = frozenset({"in_stay", "as_needed", "conditional", "after_discharge", "home_medication"})
+_DECLINE_STATES = frozenset({"none", "partial", "full"})
+_RECOMMENDATION_SCOPE_PROMPT = (
+    "每条建议另给execution_scope、scope_quote、continues_current_treatment、has_conditional_measures、"
+    "decline_state、declined_measures、decline_quote："
+    "execution_scope只能是in_stay/as_needed/conditional/after_discharge/home_medication；"
+    "in_stay=本次住院内应执行；as_needed=整条建议以必要时、酌情、视情况、如有必要开头、执行条件未定义；"
+    "conditional=整条建议以尚未成立的前提开头（若…、如…则、待…后、病情稳定后、家属同意后）。"
+    "as_needed与conditional的scope_quote必须逐字摘出source_quote开头的条件原话（如“若家属同意”“必要时”），"
+    "其他取值scope_quote为空字符串。只要建议中有一项措施不带前提，整条就是in_stay："
+    "“建议复查凝血功能，如无明显异常再行气管切开”“建议手术治疗，若患方同意可转胸外科”"
+    "“可继续亚胺培南抗感染，必要时加用喹诺酮”都是in_stay且has_conditional_measures=true；"
+    "has_conditional_measures=true表示部分措施带尚未成立的前提或必要时，否则false。"
+    "“择期手术”“1周后复查”“3天后复查”是住院期间的安排，属于in_stay。"
+    "after_discharge仅限明确写出出院后、门诊、院外或按月按年定期随访复查；"
+    "home_medication仅限明确写出自备、自带、院外或家中来源的药物；只写“原降压药”“原有药物”“继续用药”"
+    "不能推定来自院外，仍为in_stay。continues_current_treatment=true表示继续、维持、续用住院中已在用的治疗，否则false。"
+    "decline_state只能是none/partial/full：同一会诊文书中原科室或患方明确写明患者或家属拒绝、不同意、放弃，"
+    "或本科室暂不考虑、暂缓、不予执行本建议的部分措施为partial、全部措施为full，否则none；"
+    "条件句（若家属拒绝…）不算。declined_measures为被拒绝或暂缓的措施，必须是本条source_quote中的连续原话，"
+    "none与full时可为空数组；decline_quote为该文书中写明拒绝或暂缓的连续原文（最长120字），none时为空字符串。"
+    + CONSULTATION_SCOPE_EXAMPLES
 )
 _EMBEDDED_CLINICAL_DECISION_PATTERN = re.compile(r"暂不考虑|暂缓(?:检查|治疗|执行)|不予(?:检查|治疗)")
 _EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(
@@ -438,6 +430,14 @@ class _Recommendation:
     source_quote: str
     normalized_action: str
     opinion_ref: str
+    # 用户口径（2026-10-22）：执行范围、是否延续当前治疗、会诊文书内写明的拒绝/暂缓
+    # 均由第一阶段模型抽取，程序只核对原文，不再用条件词、随访词、拒绝词正则推断。
+    execution_scope: str = "in_stay"
+    continues_current_treatment: bool = False
+    decline_state: str = "none"
+    declined_measures: tuple[str, ...] = ()
+    decline_quote: str = ""
+    has_conditional_measures: bool = False
 
 
 @dataclass(frozen=True)
@@ -605,6 +605,19 @@ class _SemanticUnresolved(Exception):
     pass
 
 
+# 补核后仍存在、且只能由模型自己消解的状态矛盾；Python 不替模型选边。
+_UNRESOLVABLE_STATE_ISSUES = frozenset({"inconsistent recommendation state", "inconsistent state refs"})
+
+
+class _OpinionStateUnresolved(Exception):
+    """补核后模型仍自相矛盾：同时给出“意见不明确/低置信”和建议清单，或状态与引用文书矛盾。
+
+    两个输出互相矛盾，Python 无权替模型选边（清空建议会把可能明确的意见判为不明确，
+    保留建议会无视模型自己的低置信），也不是技术故障；按资料不足交付且不冻结，
+    下次运行重新抽取（1022 C01 第7份会诊）。
+    """
+
+
 _NEGATION_PREFIX = re.compile(r"(?:不|无|未|否认|禁止|避免)$")
 _DOSE_OR_NUMERIC = re.compile(r"\d+(?:\.\d+)?")
 _DOSE_VALUE = re.compile(r"\d+(?:\.\d+)?(?:mg|g|ml|μg|ug|片|次|日|h|小时|%)", re.IGNORECASE)
@@ -721,33 +734,107 @@ def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
 
 
-def _is_out_of_execution_check_scope(recommendation: "_Recommendation") -> bool:
-    """识别不要求通过住院医嘱核对执行情况的会诊建议。"""
+def _decline_quote_is_grounded(quote: str, document_text: str) -> bool:
+    """拒绝原文须见于本文书；模型用省略号拼接多段时逐段核对。"""
 
-    if _has_ambiguous_execution_condition(recommendation):
-        return True
-    if _clean(recommendation.action_type).lower() == "monitoring":
-        return True
-    source_quote = _clean(recommendation.source_quote)
-    if not source_quote:
+    segments = [part for part in _SEGMENT_SPLIT_PATTERN.split(quote) if part.strip()]
+    return bool(segments) and all(
+        _quote_is_grounded(quote=part, source=document_text) for part in segments
+    )
+
+
+_SCOPE_QUOTE_MAX_LEAD_CHARS = 4
+
+
+def _scope_quote_leads_source(scope_quote: str, source_quote: str) -> bool:
+    """条件原话须逐字位于建议原文开头（允许“建议”“可”等不超过 4 字的引导语）。"""
+
+    quote = _clean(scope_quote)
+    source = _clean(source_quote)
+    if not quote or not source:
         return False
-    return bool(
-        _FOLLOW_UP_SCOPE_PATTERN.search(source_quote)
-        or _FOLLOW_UP_INTERVAL_PATTERN.search(source_quote)
-        or _PURE_FOLLOW_UP_PATTERN.fullmatch(source_quote)
+    position = source.find(quote)
+    return 0 <= position <= _SCOPE_QUOTE_MAX_LEAD_CHARS
+
+
+def _recommendation_scope_fields(
+    raw: Mapping[str, Any],
+    *,
+    source_quote: str,
+    document_text: str,
+    review_issues: list["_ReviewIssue"] | None = None,
+    position: str = "",
+) -> tuple[str, bool, bool, str, tuple[str, ...], str]:
+    """校验第一阶段模型给出的执行范围与拒绝事实；缺字段按保守默认值（住院内、无拒绝）。
+
+    拒绝事实对不上原文时先列为补核问题；补核后仍对不上，只作废该条拒绝（按无拒绝处理），
+    不让整次第一阶段失败。
+    """
+
+    scope = _clean(raw.get("execution_scope", "in_stay")).lower()
+    scope_quote = raw.get("scope_quote", "")
+    continues = raw.get("continues_current_treatment", False)
+    conditional_measures = raw.get("has_conditional_measures", False)
+    decline_state = _clean(raw.get("decline_state", "none")).lower()
+    declined = raw.get("declined_measures", [])
+    decline_quote = raw.get("decline_quote", "")
+    if (
+        scope not in _EXECUTION_SCOPES
+        or type(continues) is not bool
+        or type(conditional_measures) is not bool
+        or decline_state not in _DECLINE_STATES
+        or not isinstance(declined, list)
+        or not all(isinstance(item, str) and item.strip() for item in declined)
+        or not isinstance(decline_quote, str)
+        or len(decline_quote) > 120
+        or not isinstance(scope_quote, str)
+    ):
+        raise _SemanticInvalid()
+    if scope in {"as_needed", "conditional"} and not _scope_quote_leads_source(scope_quote, source_quote):
+        # 结构核对（不判语义）：整条条件式必须由建议原文开头的条件原话证明；证明不了时
+        # 按住院内执行、含附条件措施处理，照常核对，带条件的措施交逐项核对判断。
+        logger.info("consultation_scope_quote_not_leading position=%s scope=%s", position, scope)
+        scope, conditional_measures = "in_stay", True
+    declined_measures = tuple(dict.fromkeys(_clean(item) for item in declined))
+    if decline_state == "none":
+        if declined_measures or decline_quote.strip():
+            raise _SemanticInvalid()
+        return scope, continues, conditional_measures, decline_state, (), ""
+    # 拒绝事实须有原文：拒绝原文见于本文书，被拒措施见于本条建议原文。
+    if (
+        not decline_quote.strip()
+        or not _decline_quote_is_grounded(decline_quote, document_text)
+        or (decline_state == "partial" and not declined_measures)
+        or not all(
+            _quote_is_grounded(quote=item, source=source_quote) for item in declined_measures
+        )
+    ):
+        if review_issues is not None:
+            review_issues.append(_ReviewIssue(
+                "decline not grounded",
+                f"{position}.decline_quote/declined_measures",
+                decline_quote,
+                "decline_quote须逐字摘自本条所属会诊文书中写明拒绝或暂缓的原文；declined_measures须是本条"
+                "source_quote中的连续原话；拒绝的是其他建议或只写了商量后再定时，decline_state填none",
+            ))
+        logger.info("consultation_decline_not_grounded position=%s", position)
+        return scope, continues, conditional_measures, "none", (), ""
+    return scope, continues, conditional_measures, decline_state, declined_measures, decline_quote
+
+
+def _is_out_of_execution_check_scope(recommendation: "_Recommendation") -> bool:
+    """不要求通过住院医嘱核对执行情况的会诊建议：监护类、未定义条件或出院后执行（模型判断）。"""
+
+    return (
+        _clean(recommendation.action_type).lower() == "monitoring"
+        or recommendation.execution_scope in {"as_needed", "after_discharge"}
     )
 
 
 def _has_ambiguous_execution_condition(recommendation: "_Recommendation") -> bool:
-    """条件未定义的建议不能据“未执行”形成缺陷。"""
+    """条件未定义的建议（必要时、酌情）不能据“未执行”形成缺陷；由模型标注。"""
 
-    # 以会诊建议原文为准，避免模型在 normalized_action 中丢失条件词，
-    # 也避免把原文中条件明确的建议错误概括成“必要时”后再排除。
-    source_quote = _clean(recommendation.source_quote)
-    return bool(
-        source_quote
-        and _AMBIGUOUS_CONDITIONAL_RECOMMENDATION_PATTERN.match(source_quote)
-    )
+    return recommendation.execution_scope == "as_needed"
 
 
 def _is_pure_signature_template(record_content: Any) -> bool:
@@ -1655,9 +1742,11 @@ def _compact_document_prompt(
         "medication/test/procedure/transfer/monitoring/other（卧床、活动、体位、制动方式、饮食与营养目标、护理、宣教、"
         "随诊及继续原科室治疗等不通过开立医嘱落实的建议一律为other）；source_quote优先返回该文书的连续支持原句，最长240字；"
         "normalized_action只做医学归一化，不得虚构。non_target/unknown的recommendations必须为空。"
+        + _RECOMMENDATION_SCOPE_PROMPT +
         "每个输入ref必须恰好输出一次，禁止创造、改写、遗漏或重复ref。"
         "严格输出JSON对象：{consultation_event_facts:[{ref,scope,application_state,opinion_state,confidence,"
-        "recommendations:[{source_quote,normalized_action,action_type}]}]}。输入："
+        "recommendations:[{source_quote,normalized_action,action_type,execution_scope,scope_quote,"
+        "continues_current_treatment,has_conditional_measures,decline_state,declined_measures,decline_quote}]}]}。输入："
         + payload
     )
 
@@ -1741,7 +1830,9 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "不得拼接多个文书、删改否定词、剂量或数值，最长240字；normalized_action仅用于后续语义关联，"
         "允许source_quote和normalized_action作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
         "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
-        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,source_quote,normalized_action,action_type}]}],"
+        + _RECOMMENDATION_SCOPE_PROMPT +
+        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,source_quote,normalized_action,action_type,"
+        "execution_scope,scope_quote,continues_current_treatment,has_conditional_measures,decline_state,declined_measures,decline_quote}]}],"
         "non_target_refs:[],unresolved_refs:[]}。格式示例（只说明引用和字段结构，不代表实际语义）："
         + output_example
         + "。输入："
@@ -1797,6 +1888,13 @@ def _parse_compact_document_facts(
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
+            if action_type in _EXECUTION_SCOPES:
+                # 模型把执行范围（如 home_medication）填进了建议类型：可修正，补核一次（1022 例子验证 C10）。
+                raise _EpisodeGroundingViolation((_ReviewIssue(
+                    "action_type holds execution_scope", f"recommendation_ref={recommendation_ref}.action_type",
+                    action_type, "action_type只能是medication/test/procedure/transfer/monitoring/other；"
+                    "in_stay、home_medication等是execution_scope的取值，不能填入action_type",
+                ),))
             if (
                 action_type not in _RECOMMENDATION_TYPES
                 or not isinstance(normalized_action, str)
@@ -1824,6 +1922,15 @@ def _parse_compact_document_facts(
                     source_quote,
                     "须逐字摘取所属文书的支持原句，不得改写或跨文书拼接，最长240字",
                 ))
+            scope, continues, conditional_measures, decline_state, declined_measures, decline_quote = (
+                _recommendation_scope_fields(
+                    raw_recommendation,
+                    source_quote=grounded_source_quote or _clean(source_quote),
+                    document_text=document_text,
+                    review_issues=review_issues,
+                    position=f"recommendation_ref={recommendation_ref} opinion_ref={ref}",
+                )
+            )
             recommendations.append(
                 _Recommendation(
                     recommendation_ref,
@@ -1831,6 +1938,12 @@ def _parse_compact_document_facts(
                     grounded_source_quote,
                     normalized_action,
                     ref,
+                    scope,
+                    continues,
+                    decline_state,
+                    declined_measures,
+                    decline_quote,
+                    conditional_measures,
                 )
             )
         if recommendations and (opinion != "clear" or confidence != "high"):
@@ -1965,13 +2078,7 @@ def _merge_authoritative_event_group_splits(
             raise _SemanticInvalid()
         episode_ref = member_refs[0]
         recommendations = tuple(
-            _Recommendation(
-                f"{episode_ref}#r{number}",
-                item.action_type,
-                item.source_quote,
-                item.normalized_action,
-                item.opinion_ref,
-            )
+            replace(item, recommendation_ref=f"{episode_ref}#r{number}")
             for number, item in enumerate(source_recommendations, 1)
         )
         first_index = min(indexes)
@@ -2033,10 +2140,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
             or not all(isinstance(ref, str) and ref in member_refs for ref in opinion_refs)
             or len(application_refs) != len(set(application_refs))
             or len(opinion_refs) != len(set(opinion_refs))
-            or (application == "absent" and application_refs)
-            or (opinion == "absent" and opinion_refs)
-            or (application == "clear" and not application_refs)
-            or (opinion == "clear" and not opinion_refs)
             or episode_ref not in member_refs
             or application not in _STATES
             or opinion not in _STATES
@@ -2045,6 +2148,25 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
             or len(raw_recommendations) > _MAX_RECOMMENDATIONS_PER_EPISODE
         ):
             raise _SemanticInvalid()
+        state_ref_conflicts = [
+            name
+            for name, state, refs in (
+                ("application", application, application_refs),
+                ("opinion", opinion, opinion_refs),
+            )
+            if (state == "absent" and refs) or (state == "clear" and not refs)
+        ]
+        if state_ref_conflicts:
+            # 状态与引用自相矛盾（如判申请缺失却引用了申请文书）可修正：补核一次，
+            # 仍矛盾时与意见状态矛盾同样按资料不足交付（1022 C01 第7份会诊）。
+            raise _EpisodeGroundingViolation(tuple(
+                _ReviewIssue(
+                    "inconsistent state refs", f"episode_ref={episode_ref}.{name}_state/{name}_refs", "",
+                    f"{name}_state为absent时{name}_refs必须为空，为clear时必须列出对应文书；"
+                    "重新核对所属原文后如实给出状态与引用，不能为凑齐格式改写其中一项",
+                )
+                for name in state_ref_conflicts
+            ))
         recommendations: list[_Recommendation] = []
         for number, raw_recommendation in enumerate(raw_recommendations, 1):
             if not isinstance(raw_recommendation, Mapping):
@@ -2057,6 +2179,13 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
+            if action_type in _EXECUTION_SCOPES:
+                # 模型把执行范围（如 home_medication）填进了建议类型：可修正，补核一次（1022 例子验证 C10）。
+                raise _EpisodeGroundingViolation((_ReviewIssue(
+                    "action_type holds execution_scope", f"recommendation_ref={recommendation_ref}.action_type",
+                    action_type, "action_type只能是medication/test/procedure/transfer/monitoring/other；"
+                    "in_stay、home_medication等是execution_scope的取值，不能填入action_type",
+                ),))
             if (
                 opinion_ref not in opinion_refs
                 or action_type not in _RECOMMENDATION_TYPES
@@ -2068,12 +2197,28 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
                 or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
             ):
                 raise _SemanticInvalid()
+            scope, continues, conditional_measures, decline_state, declined_measures, decline_quote = (
+                _recommendation_scope_fields(
+                    raw_recommendation,
+                    source_quote=source_quote,
+                    document_text=_clean(documents_by_ref[opinion_ref].get("text"))
+                    if opinion_ref in documents_by_ref else "",
+                    review_issues=review_issues,
+                    position=f"recommendation_ref={recommendation_ref} opinion_ref={opinion_ref}",
+                )
+            )
             recommendations.append(_Recommendation(
                 recommendation_ref,
                 action_type,
                 source_quote,
                 normalized_action,
                 opinion_ref,
+                scope,
+                continues,
+                decline_state,
+                declined_measures,
+                decline_quote,
+                conditional_measures,
             ))
         if raw_recommendations and (opinion != "clear" or confidence != "high"):
             raise _EpisodeGroundingViolation((_ReviewIssue(
@@ -3255,7 +3400,7 @@ def _trace_document_is_planned_only(
     *,
     source_quote: str = "",
 ) -> bool:
-    """模型选中的执行痕迹只有后续安排或建议用语，没有任何已执行动作。
+    """模型选中的执行痕迹只有后续安排或建议用语，没有任何已执行动作（仅作补核触发）。
 
     4.20.4 要求病程记录会诊意见及执行情况：“建议行…治疗”“拟…复查”只表明后续
     安排，不能当作已经执行。判定只看模型自己选中的候选原文；任一选中候选
@@ -3684,30 +3829,6 @@ def _parse_executions(
             coverage_confidence,
             uncovered_quotes,
         )
-        # 自选的执行痕迹只有后续安排或建议用语时，确定性地按“没有执行痕迹”
-        # 处理：这是对选中原文的核对，不是对新文书或新事实的推断。
-        if _trace_document_is_planned_only(
-            assessment,
-            candidates,
-            source_quote=recommendation_by_ref[recommendation_ref].source_quote,
-        ):
-            # 只否定病程执行痕迹；已关联的结构化医嘱独立证明执行，不随之清除。
-            # 此前一并改为 absent 却保留医嘱引用，形成“未执行但有医嘱”的矛盾事实，
-            # 023 因此落为资料不足（真实样本多轮翻转）。
-            assessment = replace(
-                assessment,
-                execution_state=(
-                    assessment.execution_state if assessment.execution_refs else "absent"
-                ),
-                confidence="high",
-                execution_quotes=(),
-                execution_record_state="no_trace",
-                trace_refs=(),
-                context_only_refs=(),
-                recommendation_coverage_state="unknown",
-                coverage_confidence="low",
-                uncovered_source_quotes=(),
-            )
         parsed.append(assessment)
     if seen != expected_refs:
         raise _ExecutionCoverageIncomplete(
@@ -3749,37 +3870,6 @@ _ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
 # 用户口径（2026-10-20）：023 会诊执行只认会诊记录当天开立的医嘱，不看病程；只核对需通过医嘱落实的建议
 # （药物、检查检验、操作治疗、转科），卧床/活动/体位/饮食营养目标/护理宣教等不属于医嘱，不核对。
 _ORDER_RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer"})
-_CONTINUATION_RECOMMENDATION_PATTERN = re.compile(
-    r"^\s*(?:建议|可|暂|拟|予)*(?:继续|维持|续用|仍予|仍用)"
-)
-# 模型偶把“改前臂吊带”“骨盆骨折卧床”等归为操作类，这里按关键词兜底剔除；
-# 同一建议含明确药物、检查或手术操作时仍按医嘱核对。
-_NON_ORDER_RECOMMENDATION_PATTERN = re.compile(
-    r"吊带|悬吊|夹板|卧床|体位|制动|饮食|营养目标|护理|宣教|功能锻炼|随诊"
-)
-_ORDER_RECOMMENDATION_HINT_PATTERN = re.compile(
-    r"药|mg|片|注射|输注|静滴|口服|检查|复查|CT|MRI|彩超|手术|穿刺|切开|置管|转科"
-)
-# 已明确属于院外的自备/自带用药不以住院医嘱核对；仅写“原药”“继续用药”
-# 不能推定药品来自院外，仍须核对住院医嘱。
-_HOME_MEDICATION_PATTERN = re.compile(
-    r"(?:自备|自带|院外|家中)[^，,。；;]{0,12}(?:药|口服|服用)"
-)
-# 用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对。当天有对应医嘱即视为
-# 条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
-_CONDITIONAL_RECOMMENDATION_PATTERN = re.compile(
-    r"若|如果|假如|倘若|如[^，,。；;]{1,16}(?:则|时|者)|待[^，,。；;]{1,24}后"
-    r"|(?:同意|稳定|好转|平稳|缓解|无[^，,。；;]{0,4}异常|正常|允许|阴性|阳性)[^，,。；;]{0,6}?(?:后|则)"
-    r"|必要时|酌情|视情况"
-)
-_CLAUSE_SPLIT_PATTERN = re.compile(r"[，,；;。\n]")
-_CONDITIONAL_CLAUSE_ACTION_PATTERN = re.compile(
-    r"给予|予以|加用|使用|服用|口服|注射|输注|复查|检查|检验|治疗|手术|穿刺|置管"
-    r"|转科|转院|处置|操作|评估|监测|观察|随访|停用|停止|继续|维持"
-)
-_BARE_CONDITIONAL_END_PATTERN = re.compile(
-    r"(?:后|时|则|成立|同意|允许|阴性|阳性|正常|异常|稳定|好转|平稳|缓解)\s*$"
-)
 
 
 def _order_in_execution_window(
@@ -3805,10 +3895,7 @@ def _in_order_window_days(item: "_CompletedRecommendation", day: date) -> bool:
 
 
 def _is_continuation_recommendation(recommendation: "_Recommendation") -> bool:
-    return bool(
-        _CONTINUATION_RECOMMENDATION_PATTERN.match(_clean(recommendation.source_quote))
-        or _CONTINUATION_RECOMMENDATION_PATTERN.match(_clean(recommendation.normalized_action))
-    )
+    return recommendation.continues_current_treatment
 
 
 def _recommendation_text(recommendation: "_Recommendation") -> str:
@@ -3827,14 +3914,12 @@ def _cjk_trigrams(text: str) -> frozenset[str]:
 
 
 def _is_order_recommendation(recommendation: "_Recommendation") -> bool:
-    if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
-        return False
-    text = _recommendation_text(recommendation)
-    if _HOME_MEDICATION_PATTERN.search(text):
-        return False
-    return not (
-        _NON_ORDER_RECOMMENDATION_PATTERN.search(text)
-        and not _ORDER_RECOMMENDATION_HINT_PATTERN.search(text)
+    # 建议类型与院外自备药均以模型抽取为准，不再按护理、饮食等关键词兜底剔除。
+    # 用户口径（2026-10-20）：已明确属于院外的自备/自带用药不以住院医嘱核对；仅写“原药”
+    # “继续用药”不能推定药品来自院外，仍须核对住院医嘱（已写入第一阶段提示词）。
+    return (
+        _clean(recommendation.action_type).lower() in _ORDER_RECOMMENDATION_TYPES
+        and recommendation.execution_scope != "home_medication"
     )
 
 
@@ -3844,7 +3929,7 @@ def _order_scope_exclusion_reason(item: "_CompletedRecommendation") -> str:
     recommendation = item.recommendation
     if _clean(recommendation.action_type).lower() not in _ORDER_RECOMMENDATION_TYPES:
         return "non_order_recommendation"
-    if _HOME_MEDICATION_PATTERN.search(_recommendation_text(recommendation)):
+    if recommendation.execution_scope == "home_medication":
         return "home_medication"
     if not _is_order_recommendation(recommendation):
         return "non_order_recommendation"
@@ -3856,39 +3941,22 @@ def _order_scope_exclusion_reason(item: "_CompletedRecommendation") -> str:
 
 
 def _is_conditional_recommendation(recommendation: "_Recommendation") -> bool:
-    """整条建议以条件开头才算条件式；“先查A，若阴性则行B”前半句仍须执行。"""
+    """整条建议以尚未成立的前提开头才算条件式（模型标注）；“先查A，若阴性则行B”仍须执行。
 
-    text = _clean(recommendation.source_quote) or _clean(recommendation.normalized_action)
-    first_clause = _CLAUSE_SPLIT_PATTERN.split(text, maxsplit=1)[0]
-    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(first_clause))
+    用户口径（2026-10-20）：条件式建议在病历里没有成立的不核对。当天有对应医嘱即视为
+    条件成立且已执行；没有医嘱时视为条件未成立，不判未执行。
+    """
 
-
-def _measure_in_conditional_clause(recommendation: "_Recommendation", measure: str) -> bool:
-    """措施所在分句或紧邻前一分句带条件时，未见医嘱视为条件未成立。"""
-
-    target = _clean(measure)
-    for text in (_clean(recommendation.source_quote), _clean(recommendation.normalized_action)):
-        previous_clause_is_bare_condition = False
-        for clause in _CLAUSE_SPLIT_PATTERN.split(text):
-            clause_is_condition = bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(clause))
-            if target and target in clause and (
-                clause_is_condition or previous_clause_is_bare_condition
-            ):
-                return True
-            previous_clause_is_bare_condition = bool(
-                clause_is_condition
-                and (
-                    _BARE_CONDITIONAL_END_PATTERN.search(clause)
-                    or not _CONDITIONAL_CLAUSE_ACTION_PATTERN.search(clause)
-                )
-            )
-    return False
+    return recommendation.execution_scope == "conditional"
 
 
 def _drop_conditional_missing_measures(
     outcome: Any, completed: Sequence["_CompletedRecommendation"],
 ) -> Any:
-    """条件分句里的措施，以及会诊记录写明拒绝/暂缓的措施，都不列为未开立医嘱。"""
+    """住院期间已证实执行的手术/转科建议，以及会诊记录写明拒绝/暂缓的措施，都不列为未开立医嘱。
+
+    附条件措施以措施核对模型的标注为准，不再按条件词正则判断（用户口径 2026-10-22）。
+    """
 
     by_ref = {item.recommendation.recommendation_ref: item for item in completed}
     missing = {
@@ -3896,8 +3964,8 @@ def _drop_conditional_missing_measures(
             measure for measure in measures
             if ref not in by_ref or not (
                 by_ref[ref].stay_execution_refs
-                or _measure_in_conditional_clause(by_ref[ref].recommendation, measure)
-                or measure_is_declined(measure, by_ref[ref].declined_objects)
+                or measure in outcome.conditional_measures.get(ref, ())
+                or measure_is_declined(measure, by_ref[ref].declined_measures)
             )
         )
         for ref, measures in outcome.missing_measures.items()
@@ -3916,10 +3984,9 @@ def _measure_check_scope(
 
 
 # 用户口径（2026-10-22）：手术、转科类建议需术前准备或患方决定，当天不会有执行记录。
-# 本次住院期间（会诊当天起）有手术记录，或病程写明患方同意/拒绝该手术、转科，即算已执行，
-# 不受会诊前3天至当天的医嘱窗口限制。
+# 本次住院期间（会诊当天起）有手术记录、转出转入记录或术后首次病程，即算已执行，
+# 不受会诊前3天至当天的医嘱窗口限制；病程写明患方同意/拒绝的，由逐项核对模型判断。
 _STAY_LEVEL_RECOMMENDATION_PATTERN = re.compile(r"手术|转科|转院|转[^，,。；;]{1,8}科")
-_STAY_DECISION_PATTERN = re.compile(r"同意|拒绝|不同意|放弃|暂不|不愿")
 # 转出/转入记录只作手术、转科建议的住院期间执行证据，不进入模型候选来源。
 _TRANSFER_STAY_SOURCE_KEYS = ("transfer_out_record", "transfer_in_record")
 # 用户口径（2026-10-22）：源库可能缺手术记录单据（C23、C25），术后首次病程同样证明
@@ -3964,10 +4031,16 @@ def _transfer_stay_candidates(
     return tuple(candidates)
 
 
+def _is_stay_level_recommendation(recommendation: "_Recommendation") -> bool:
+    """手术、转科、转院类建议（按建议原文中的措施名识别，不判语义）。"""
+
+    return bool(_STAY_LEVEL_RECOMMENDATION_PATTERN.search(_recommendation_text(recommendation)))
+
+
 def _stay_execution_refs(
     item: "_CompletedRecommendation", candidates: Sequence["_CandidateDocument"],
 ) -> tuple[str, ...]:
-    if not _STAY_LEVEL_RECOMMENDATION_PATTERN.search(_recommendation_text(item.recommendation)):
+    if not _is_stay_level_recommendation(item.recommendation):
         return ()
     refs: list[str] = []
     for candidate in candidates:
@@ -3977,11 +4050,6 @@ def _stay_execution_refs(
             refs.append(candidate.ref)
         elif candidate.source_key == _POSTOP_STAY_SOURCE_KEY and _SURGERY_RECOMMENDATION_PATTERN.search(
             _recommendation_text(item.recommendation)
-        ):
-            refs.append(candidate.ref)
-        elif candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS and any(
-            _STAY_DECISION_PATTERN.search(clause) and _STAY_LEVEL_RECOMMENDATION_PATTERN.search(clause)
-            for clause in _CLAUSE_SPLIT_PATTERN.split(candidate.text)
         ):
             refs.append(candidate.ref)
     return tuple(refs[:8])
@@ -3997,13 +4065,19 @@ def _annotate_stay_execution(
 
 
 def _needs_measure_scope_refinement(item: "_CompletedRecommendation") -> bool:
-    """初判不合规时，仅补核需要按措施拆分的条件项或部分拒绝项。"""
+    """初判不合规时，补核条件项、含附条件措施或部分拒绝的建议，以及无结构化证据的手术/转科建议。
 
-    if item.declined_objects and not item.fully_declined:
-        return True
-    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(
-        _recommendation_text(item.recommendation)
-    ))
+    是否附条件由第一阶段模型标注（用户口径 2026-10-22），不再按条件词正则筛选；
+    病程写明患方同意或拒绝手术/转科，由逐项核对模型判断。
+    """
+
+    recommendation = item.recommendation
+    return bool(
+        (item.declined_objects and not item.fully_declined)
+        or recommendation.execution_scope == "conditional"
+        or recommendation.has_conditional_measures
+        or (_is_stay_level_recommendation(recommendation) and not item.stay_execution_refs)
+    )
 
 
 # 药名/检查名能否对上是结构化比对，由程序确定性判定（真实样本 C02“小牛血去蛋白提取物眼用凝胶”
@@ -4117,49 +4191,26 @@ def _annotate_order_scope(
 ) -> tuple["_CompletedRecommendation", ...]:
     """为 023 标注医嘱核对窗口起点（会诊记录前 3 天）和会诊记录内写明不执行的措施。"""
 
-    declined_by_opinion: dict[str, tuple[str, ...]] = {}
-    for item in completed:
-        opinion_ref = item.recommendation.opinion_ref
-        if opinion_ref in declined_by_opinion:
-            continue
-        text = _clean(documents_by_ref.get(opinion_ref, {}).get("text"))
-        declined_by_opinion[opinion_ref] = declined_measure_objects(
-            text, is_conditional=_is_conditional_clause,
-        )
     annotated: list[_CompletedRecommendation] = []
     for item in completed:
-        opinion_ref = item.recommendation.opinion_ref
-        declined_objects = declined_by_opinion.get(opinion_ref, ())
-        declined_measures, fully_declined = recommendation_decline(
-            _clean(item.recommendation.source_quote) or _clean(item.recommendation.normalized_action),
-            declined_objects,
-            is_conditional=_is_conditional_clause,
-        )
-        # 泛称拒绝只在该会诊仅有一条检查类建议、且本科室反馈明确沟通后拒绝时回指。
-        # 不扩展到其他会诊、用药或含多条建议的记录。
-        if (
-            not fully_declined
-            and item.recommendation.action_type == "test"
-            and sum(other.recommendation.opinion_ref == opinion_ref for other in completed) == 1
-            and current_checks_declined_after_communication(
-                _clean(documents_by_ref.get(opinion_ref, {}).get("text")),
-                is_conditional=_is_conditional_clause,
-            )
-        ):
-            fully_declined = True
-            declined_measures = (item.recommendation.source_quote,)
+        recommendation = item.recommendation
+        # 拒绝/暂缓由第一阶段模型抽取并核对原文（用户口径 2026-10-22），不再按拒绝词正则识别。
+        fully_declined = recommendation.decline_state == "full"
+        declined_measures = (
+            (recommendation.source_quote or recommendation.normalized_action,)
+            if fully_declined and not recommendation.declined_measures
+            else recommendation.declined_measures
+        ) if recommendation.decline_state != "none" else ()
         annotated.append(replace(
             item,
             window_start=order_window_start(item.opinion_time.day),
-            declined_objects=declined_objects,
+            declined_objects=(
+                (recommendation.decline_quote,) if recommendation.decline_state != "none" else ()
+            ),
             declined_measures=declined_measures,
             fully_declined=fully_declined,
         ))
     return tuple(annotated)
-
-
-def _is_conditional_clause(text: str) -> bool:
-    return bool(_CONDITIONAL_RECOMMENDATION_PATTERN.search(text or ""))
 
 
 def _declined_by_record_semantics(
@@ -4347,6 +4398,14 @@ def _apply_order_measure_check(
     if outcome.state == "skipped":
         return status, already_excluded
     if outcome.state != "ready":
+        if (
+            status[0] == "non_compliant"
+            and outcome.state == "unresolved"
+            and any(_drop_conditional_missing_measures(outcome, completed).missing_measures.values())
+        ):
+            # 漏拆只说明部分原文未核对；已拆出、无执行证据且非附条件、非拒绝的措施本身
+            # 已是严格落地的缺陷，足以维持不合规（1022 C10）。
+            return status, already_excluded
         if status[0] == "non_compliant":
             checked = checked_refs or frozenset(
                 item.recommendation.recommendation_ref for item in completed
@@ -4386,6 +4445,19 @@ def _apply_order_measure_check(
         ):
             # 该建议在建议级只因“未见医嘱”命中，逐措施核验后确认其全部缺项
             # 均为条件未成立或本次明确拒绝的措施，故从 023 范围中剔除。
+            excluded.add(ref)
+
+    checked = checked_refs or frozenset(
+        item.recommendation.recommendation_ref for item in completed
+    )
+    for item in completed:
+        ref = item.recommendation.recommendation_ref
+        if (
+            ref in checked
+            and ref in outcome.missing_measures
+            and _is_stay_level_recommendation(item.recommendation)
+            and not filtered_outcome.missing_measures.get(ref)
+        ):
             excluded.add(ref)
 
     remaining_missing = {
@@ -5144,12 +5216,17 @@ async def _execute_consultation_episode_rules(
                     episodes = _parse(payload, documents, review_issues=issues)
                 except _EpisodeGroundingViolation as error:
                     issues.extend(error.issues)
-                if not issues:
+                if not any(item.reason != "decline not grounded" for item in issues):
                     issues.extend(_episode_recommendations_are_grounded(episodes, documents))
+                if attempt:
+                    # 补核后仍对不上原文的拒绝事实只作废该条拒绝，不使第一阶段失败。
+                    issues = [item for item in issues if item.reason != "decline not grounded"]
                 if not issues:
                     break
                 error = _EpisodeGroundingViolation(issues)
                 if attempt:
+                    if all(item.reason in _UNRESOLVABLE_STATE_ISSUES for item in issues):
+                        raise _OpinionStateUnresolved() from error
                     raise error
                 attempt_prompt = _review_retry_prompt(first_prompt, error, response, "输入：")
         phase = "validate"
@@ -5174,6 +5251,9 @@ async def _execute_consultation_episode_rules(
         )
     except _SourceGap:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    except _OpinionStateUnresolved:
+        logger.warning("consultation_stage_one_opinion_state_unresolved visit=%s calls=%s", visit_id, calls)
+        return _finish(selected=selected, status="data_gap", reason_code="semantic_extraction_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticUnresolved:
         return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticInvalid as error:
@@ -5218,6 +5298,7 @@ async def _execute_consultation_episode_rules(
     execution_source_incomplete_keys: frozenset[str] = frozenset()
     context_only_candidate_present = False
     execution_candidate_projection: _CandidateProjection | None = None
+    stay_decision_course_candidates: tuple[_CandidateDocument, ...] = ()
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     excluded_conditional_recommendations: tuple[_CompletedRecommendation, ...] = ()
     # 023 逐项核对查出的“当日未开立医嘱”措施，供客户展示逐条说明原因。
@@ -5353,6 +5434,15 @@ async def _execute_consultation_episode_rules(
                     stay_refs = frozenset(
                         ref for item in completed_recommendations for ref in item.stay_execution_refs
                     )
+                    if any(
+                        _is_stay_level_recommendation(item.recommendation)
+                        and not item.stay_execution_refs
+                        for item in completed_recommendations
+                    ):
+                        stay_decision_course_candidates = tuple(
+                            item for item in projection.candidates
+                            if item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+                        )
                     projection = replace(
                         projection,
                         candidates=tuple(
@@ -5361,6 +5451,11 @@ async def _execute_consultation_episode_rules(
                             or item.source_key == "consultation_record"
                             or item.ref in stay_refs
                         ),
+                    )
+                if "LX0609-03-01-01" in stage_two_rule_ids:
+                    stay_decision_course_candidates = tuple(
+                        item for item in projection.candidates
+                        if item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
                     )
                 execution_candidate_projection = projection
                 execution_source_technical = projection.source_technical
@@ -5716,12 +5811,27 @@ async def _execute_consultation_episode_rules(
                                         ),
                                     )
                                 )
+                                # 正则只挑出需要复核的建议，不直接改判（用户口径 2026-10-22）：
+                                # 笼统记录与具体执行原文冲突，或所选痕迹只有拟行、建议用语。
+                                recommendation_source_quotes = {
+                                    item.recommendation.recommendation_ref: item.recommendation.source_quote
+                                    for item in completed_recommendations
+                                }
                                 conflict_refs = {
                                     item.recommendation_ref
                                     for item in execution_assessments
                                     if item.confidence == "high"
-                                    and _generic_trace_conflicts_with_completed_action(
-                                        item, projection.candidates
+                                    and (
+                                        _generic_trace_conflicts_with_completed_action(
+                                            item, projection.candidates
+                                        )
+                                        or _trace_document_is_planned_only(
+                                            item,
+                                            projection.candidates,
+                                            source_quote=recommendation_source_quotes.get(
+                                                item.recommendation_ref, ""
+                                            ),
+                                        )
                                     )
                                 }
                                 if conflict_refs:
@@ -5917,23 +6027,37 @@ async def _execute_consultation_episode_rules(
                         if _needs_measure_scope_refinement(item)
                     )
                 measure_excluded_refs = frozenset()
-                measure_batches = (
-                    _execution_event_batches(
-                        completed=measure_scope, candidates=measure_candidates,
-                    )
-                    if measure_scope
-                    else ()
+                # 用户口径（2026-10-22）：手术/转科建议无结构化执行证据时，病程写明患方同意
+                # 或拒绝由逐项核对模型判断，只给这类建议另带病程候选；其余建议仍只核对医嘱。
+                stay_measure_scope = tuple(
+                    item for item in measure_scope
+                    if _is_stay_level_recommendation(item.recommendation)
                 )
-                for measure_completed in measure_batches:
+                order_measure_scope = tuple(
+                    item for item in measure_scope if item not in stay_measure_scope
+                )
+                stay_measure_candidates = measure_candidates + stay_decision_course_candidates
+                measure_batches = tuple(
+                    (batch, candidates_for_batch)
+                    for scope_items, candidates_for_batch in (
+                        (order_measure_scope, measure_candidates),
+                        (stay_measure_scope, stay_measure_candidates),
+                    )
+                    if scope_items
+                    for batch in _execution_event_batches(
+                        completed=scope_items, candidates=candidates_for_batch,
+                    )
+                )
+                for measure_completed, batch_candidates in measure_batches:
                     _, measure_allowed_refs = _execution_prompt(
                         completed=measure_completed,
-                        candidates=measure_candidates,
+                        candidates=batch_candidates,
                     )
                     measure_outcome = await check_consultation_measures(
                         completed=measure_completed,
-                        candidates=measure_candidates,
+                        candidates=batch_candidates,
                         allowed_refs=measure_allowed_refs,
-                        alias_by_ref=_prompt_alias_by_ref(measure_candidates, measure_allowed_refs),
+                        alias_by_ref=_prompt_alias_by_ref(batch_candidates, measure_allowed_refs),
                         llm_client=llm_client,
                     )
                     calls += measure_outcome.llm_call_count
@@ -6150,7 +6274,41 @@ async def _execute_consultation_episode_rules(
     )
 
 
+_DELIVERABLE_FREEZE_STATUSES = frozenset({"compliant", "non_compliant", "not_applicable", "data_gap"})
+
+
 async def execute_luxian_0609_native_consultation_episode_rules(
+    *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
+    source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (), opinion_freeze_dir: str | Path | None = None,
+    opinion_freeze_rebuild: bool = False,
+) -> NativeConsultationEpisodeExecutionResult:
+    """会诊族模型应答按病历版本冻结复用（用户决定 2026-10-22，见 consultation_response_freeze）。"""
+    if llm_client is None:
+        return await _execute_luxian_0609_native_consultation_episode_rules_uncached(
+            rule_ids=rule_ids, institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+            source_schema=source_schema, llm_client=None, evidence_materials=evidence_materials,
+            evidence_snapshot=evidence_snapshot, decision_rule_ids=decision_rule_ids,
+            opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild,
+        )
+    frozen_client = FrozenResponseClient(llm_client, visit_id=visit_id)
+    result = await _execute_luxian_0609_native_consultation_episode_rules_uncached(
+        rule_ids=rule_ids, institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        source_schema=source_schema, llm_client=frozen_client, evidence_materials=evidence_materials,
+        evidence_snapshot=evidence_snapshot, decision_rule_ids=decision_rule_ids,
+        opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild,
+    )
+    if result.results and all(item.get("status") in _DELIVERABLE_FREEZE_STATUSES for item in result.results):
+        # 只冻结全部结论可交付的运行；技术错误、无法判定的下次重新调用模型。
+        frozen_client.commit()
+    if frozen_client.reused_calls:
+        result = replace(result, llm_call_count=max(0, result.llm_call_count - frozen_client.reused_calls))
+    return result
+
+
+async def _execute_luxian_0609_native_consultation_episode_rules_uncached(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,

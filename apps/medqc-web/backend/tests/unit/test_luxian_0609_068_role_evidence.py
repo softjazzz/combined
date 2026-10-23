@@ -1,4 +1,8 @@
-"""068 语义意见的角色证据必须由来源或绑定引文确定。"""
+"""068 语义意见的角色证据必须由来源或绑定引文确定。
+
+用户口径（2026-10-22）：同意、附条件、拒绝以模型意见为准；程序只核对引文原文、
+来源与上级称谓等身份结构，不再用关键词正则直接认定或推翻上级同意。
+"""
 
 from __future__ import annotations
 
@@ -65,20 +69,12 @@ def _base_rows() -> dict[str, tuple[dict[str, object], ...]]:
 
 
 @pytest.mark.asyncio
-async def test_daily_approval_without_role_evidence_does_not_block_senior_condition_gap() -> None:
+async def test_daily_approval_without_senior_role_is_not_senior_approval() -> None:
     daily_text = "病情好转，予以办理出院。"
     senior_text = "主任医师指示：今日继续治疗，明日如无特殊情况可办理出院。"
     client = _Client(
-        _item(
-            "doc_01",
-            opinion="approved",
-            quote=daily_text,
-        ),
-        _item(
-            "doc_02",
-            opinion="conditional",
-            quote=senior_text,
-        ),
+        _item("doc_01", opinion="approved", quote=daily_text),
+        _item("doc_02", opinion="conditional", quote=senior_text),
     )
     result, reduced = await _evaluate(
         "LX0609-08-02-02",
@@ -98,22 +94,16 @@ async def test_daily_approval_without_role_evidence_does_not_block_senior_condit
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "semantic_extraction_unresolved"
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-08-02-02"]["approval_present"] is False
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 100
-    assert len(client.calls) == 1
+    assert result.llm_call_count == len(client.calls) == 1
 
 
 @pytest.mark.asyncio
 async def test_daily_approval_with_senior_role_inside_opinion_quote_is_compliant() -> None:
     text = "主任医师指示：患者病情稳定，批准办理出院。"
-    client = _Client(_item(
-        "doc_01",
-        opinion="approved",
-        quote=text,
-    ))
+    client = _Client(_item("doc_01", opinion="approved", quote=text))
     result, reduced = await _evaluate(
         "LX0609-08-02-02",
         {
@@ -132,9 +122,7 @@ async def test_daily_approval_with_senior_role_inside_opinion_quote_is_compliant
     facts = dict(result.customer_display_facts)["LX0609-08-02-02"]
     assert facts["approval_path"] == "senior_approval"
     assert facts["checked_source"] == "daily_course_record"
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.calls == []
+    assert result.llm_call_count == len(client.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -142,19 +130,19 @@ async def test_daily_approval_with_senior_role_inside_opinion_quote_is_compliant
     ("document_id", "text"),
     (
         ("c02", "可安排出院"),
-        ("c06", "可出院"),
         ("c08", "准予其出院"),
-        ("c10", "可出院"),
         ("c30", "于今日出院"),
         ("completed-condition", "病情好转后，予以出院"),
+        # 查体阴性“不肿”不能被当作否定出院（1022 C15）。
+        ("c15-negative-exam", "副主任医师查房后指出：患者好转，双下肢不肿，患者拟明日出院"),
         ("c08-mixed-plan-and-approval", "拟于今日出院，请示主任后准予其出院"),
     ),
 )
-async def test_confirmed_senior_approval_phrases_use_fixed_path_and_exact_evidence(
+async def test_model_approved_senior_opinion_is_compliant_with_exact_evidence(
     document_id: str,
     text: str,
 ) -> None:
-    client = _Client()
+    client = _Client(_item("doc_01", opinion="approved", quote=text))
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-08-02-02",),
         {
@@ -170,9 +158,7 @@ async def test_confirmed_senior_approval_phrases_use_fixed_path_and_exact_eviden
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.calls == []
+    assert result.llm_call_count == len(client.calls) == 1
     canonical = _canonical_extended_result(
         rule_id="LX0609-08-02-02",
         snapshot=snapshot,
@@ -187,27 +173,23 @@ async def test_confirmed_senior_approval_phrases_use_fixed_path_and_exact_eviden
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "text",
+    ("text", "opinion"),
     (
-        "拟办理出院",
-        "经仔细看后出院",
-        "不建议出院",
-        "不可以出院",
-        "不准许出院",
-        "复查后可出院",
-        "若稳定再建议出院",
+        ("拟办理出院", "unknown"),
+        ("不建议出院", "denied"),
+        ("不准许出院", "denied"),
+        ("复查后可出院", "conditional"),
+        ("若稳定再建议出院", "conditional"),
     ),
 )
-async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
-    text: str,
-) -> None:
-    client = _Client(_item("doc_01", opinion="approved", quote=text))
+async def test_model_non_approval_opinion_is_not_senior_approval(text: str, opinion: str) -> None:
+    client = _Client(_item("doc_01", opinion=opinion, quote="" if opinion == "unknown" else text))
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-08-02-02",),
         {
             **_base_rows(),
             "senior_course_record": ({
-                "document_id": "unconfirmed-approval",
+                "document_id": "not-approved",
                 "record_time": "2026-07-03 08:00:00",
                 "record_content": text,
             },),
@@ -215,21 +197,9 @@ async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
         llm_client=client,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "semantic_extraction_unresolved"
-    # “复查后可出院”类附条件批准引文按设计定向补核一次（c74ad1bb3）。
-    calls = 2 if "后可出院" in text else 1
-    assert result.llm_call_count == calls
-    assert result.total_tokens == 100 * calls
-    assert len(client.calls) == calls
-    canonical = _canonical_extended_result(
-        rule_id="LX0609-08-02-02",
-        snapshot=snapshot,
-        materials=materials,
-        result=result,
-        reduced=reduced,
-    )
-    assert "customer_evidence" not in canonical
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == len(client.calls) == 1
 
 
 @pytest.mark.asyncio

@@ -115,6 +115,25 @@ async def test_safe_generic_suffix_and_source_brand_match_without_false_omission
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("documented,prescribed", [
+    # 正文照抄处方名带括注（1022 C17）。
+    ("(JC)合成药甲片", "(JC)合成药甲片(5mg*14片)"),
+    # 正文剂型写法与处方不同（1022 C16）。
+    ("合成药乙胶囊", "(国)合成药乙软胶囊(0.1g×24粒)"),
+])
+async def test_bracketed_or_dosage_form_variant_name_is_not_a_false_omission(documented, prescribed):
+    rows = {
+        "discharge_record": ({"document_id": "d1", "discharge_medications": [_medication(documented)]},),
+        **_prescription_rows(prescribed),
+    }
+
+    _result, final = await _evaluate(rows)
+
+    assert final["status"] == "compliant"
+    assert final["customer_display_facts"]["missing_drug_names"] == []
+
+
+@pytest.mark.asyncio
 async def test_exact_two_character_drug_name_matches_without_suffix_expansion():
     rows = {
         "discharge_record": ({"document_id": "d1", "discharge_medications": [_medication("叶酸")]},),

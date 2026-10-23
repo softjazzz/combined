@@ -27,16 +27,17 @@ generic 也可放目的、理由、用法等非措施原话。同一段内并列
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import re
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
 from .consultation_disposition_record import _ReviewIssue, _ReviewViolation, _review_retry_prompt
+from .judgement_examples import CONSULTATION_MEASURE_EXAMPLES
 from .transfusion_order_trigger import _json_response_object, _usage
 
-SCHEMA_VERSION = "lx0609-consultation-measure-check-v4"
+SCHEMA_VERSION = "lx0609-consultation-measure-check-v5"
 PROTOCOL_ATTEMPTS = 2
 MAX_MEASURE_CHARS = 40
 MAX_QUOTE_CHARS = 80
@@ -63,6 +64,8 @@ class MeasureCheckOutcome:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    # 建议 ref -> 模型标注为附条件（前提未成立）的措施原文；由下游决定是否计为缺项。
+    conditional_measures: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def has_missing(self) -> bool:
@@ -167,11 +170,18 @@ def _prompt(
         "此例executed_action分别逐字摘血气分析、肺功能检查，不能补写成未执行血气分析或暂不考虑肺功能，"
         "因为后两句不是连续原文；non_execution_reason摘现无气紧症状。"
         "不代表其他建议也被排除。只写暂不考虑但未写原因不能填此关系；建议原文或拟执行不是执行证据。"
+        "手术、转科、转院类措施另有口径（用户口径2026-10-22）：病程写明患者或家属已同意该手术或转科、"
+        "已签署同意书或已转科，填matched，executed_action逐字摘同意或转科原话；写明患者或家属拒绝、放弃或暂不同意的，"
+        "填reasoned_non_execution，non_execution_reason逐字摘拒绝原话，患方意愿即可，不要求临床原因。"
+        + CONSULTATION_MEASURE_EXAMPLES +
         "明确无关填unrelated；动作关系不清填uncertain；未找到候选填not_found且executed_action也为空。"
+        "每项措施另给conditional（true/false）：该措施在建议原文中带有尚未成立的前提时为true，"
+        "如若…则、如…时、待…后、必要时、视情况、酌情，或紧跟在“若复查阴性，”这类条件分句之后；"
+        "“先查A，若阴性则行B”中A为false、B为true；无前提的措施为false。"
         "建议仅写上位概念（如康复理疗）时，具体康复动作（如电针或低频脉冲治疗）可支持该概括建议，填matched；"
         "建议明确列出关节松动术、肌力训练等独立动作时，电针只支持电针，不能替代其余动作。"
         f"严格JSON根对象只含schema_version、measures和generic，schema_version={SCHEMA_VERSION}；measures每项只含"
-        "recommendation_ref、measure、evidence_ref、quote、executed_action、action_relation，"
+        "recommendation_ref、measure、evidence_ref、quote、executed_action、action_relation、conditional，"
         "仅reasoned_non_execution另含non_execution_reason；generic每项只含recommendation_ref、text，没有笼统嘱咐时为空数组；"
         "每条建议至少输出一项措施。\n"
         "RECOMMENDATIONS_JSON=" + json.dumps(recommendations, ensure_ascii=False, separators=(",", ":"))
@@ -201,6 +211,7 @@ def _parse(
              for item in completed}
     action_types = {item.recommendation.recommendation_ref: item.recommendation.action_type for item in completed}
     missing: dict[str, list[str]] = {ref: [] for ref in texts}
+    conditional_by_ref: dict[str, list[str]] = {ref: [] for ref in texts}
     counts: dict[str, int] = {ref: 0 for ref in texts}
     seen: set[tuple[str, str]] = set()
     covered: dict[str, list[str]] = {ref: [] for ref in texts}
@@ -223,6 +234,7 @@ def _parse(
             raise ValueError("invalid measure schema")
         expected_fields = {
             "recommendation_ref", "measure", "evidence_ref", "quote", "executed_action", "action_relation",
+            "conditional",
         }
         if item.get("action_relation") == "reasoned_non_execution":
             expected_fields.add("non_execution_reason")
@@ -231,8 +243,13 @@ def _parse(
         ref, measure = item["recommendation_ref"], item["measure"]
         evidence, quote = item["evidence_ref"], item["quote"]
         action, relation = item["executed_action"], item["action_relation"]
+        conditional = item["conditional"]
+        if conditional is True:
+            # 是否附条件由模型判断（用户口径 2026-10-22），不再按条件词正则推断。
+            conditional_by_ref[ref].append(measure)
         if (ref not in texts or not all(isinstance(value, str) for value in (measure, evidence, quote, action, relation))
-                or relation not in {"matched", "unrelated", "uncertain", "not_found", "reasoned_non_execution"}):
+                or relation not in {"matched", "unrelated", "uncertain", "not_found", "reasoned_non_execution"}
+                or type(conditional) is not bool):
             raise ValueError("invalid measure identity")
         position = f"recommendation_ref={ref}.measures第{index}项"
         normalized_measure = _normalize(measure)
@@ -268,8 +285,7 @@ def _parse(
             if (candidates_by_ref[internal].source_key not in {
                     "daily_course_record", "senior_course_record", "consultation_record"}
                     or not isinstance(reason, str) or not _normalize(reason)
-                    or len(reason) > MAX_MEASURE_CHARS or _normalize(reason) not in normalized_quote
-                    or not re.search(r"暂不|暂缓|不考虑|不予|无需|拒绝|不同意|停用|取消", normalized_quote)):
+                    or len(reason) > MAX_MEASURE_CHARS or _normalize(reason) not in normalized_quote):
                 issues.append(_ReviewIssue("non execution reason not grounded", position + ".non_execution_reason", str(reason), _RETRY_HINTS["non execution reason not grounded"]))
         if relation in {"uncertain", "not_found"}:
             issues.append(_ReviewIssue("action relation unresolved", position + ".action_relation", relation, _RETRY_HINTS["action relation unresolved"]))
@@ -287,13 +303,14 @@ def _parse(
     }
     if any(uncovered.values()):
         gap = _CoverageGap(result, uncovered)
+        gap.conditional = {ref: tuple(values) for ref, values in conditional_by_ref.items()}
         if issues:
             issues.extend(gap.issues)
         else:
             raise gap
     if issues:
         raise _ReviewViolation(issues)
-    return result
+    return result, {ref: tuple(values) for ref, values in conditional_by_ref.items()}
 
 
 _RETRY_HINTS = {
@@ -343,18 +360,24 @@ async def check_consultation_measures(
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
-            missing = _parse(response, completed, candidates_by_ref, allowed_refs, ref_by_alias)
+            missing, conditional = _parse(response, completed, candidates_by_ref, allowed_refs, ref_by_alias)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
-                # 末次仍漏拆：漏拆段落未经执行证据核对，既不算未执行也不算已执行。
-                state = "unresolved" if isinstance(error, _CoverageGap) else "failed"
-                return MeasureCheckOutcome(state, {}, calls, prompt_tokens, completion_tokens,
+                # 末次仍漏拆：漏拆段落未经执行证据核对，既不算未执行也不算已执行；
+                # 已拆出且明确无执行证据的措施仍随结果返回，由下游决定能否据此判缺（1022 C10）。
+                if isinstance(error, _CoverageGap):
+                    return MeasureCheckOutcome(
+                        "unresolved", error.missing, calls, prompt_tokens, completion_tokens,
+                        total_tokens, api_time or perf_counter() - started,
+                        getattr(error, "conditional", {}),
+                    )
+                return MeasureCheckOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                            total_tokens, api_time or perf_counter() - started)
             attempt_prompt = _review_retry_prompt(prompt, error, response, "\nRECOMMENDATIONS_JSON=")
 
     return MeasureCheckOutcome("ready", missing, calls, prompt_tokens, completion_tokens, total_tokens,
-                               api_time or perf_counter() - started)
+                               api_time or perf_counter() - started, conditional)
 
 
 def apply_measure_check(

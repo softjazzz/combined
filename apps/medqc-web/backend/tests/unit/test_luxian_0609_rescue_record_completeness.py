@@ -446,28 +446,38 @@ def test_actual_rescue_time_with_label_or_action_link_is_present(time_text, meas
     ("记录时间：2026-07-16 09:00", "", "。\n"),
     ("签字时间：2026-07-16 09:00", "", "。\n"),
     ("入院时间：2026-07-16 09:00", "", "。\n"),
-    ("既往于2026-07-16 09:00予以", "", "治疗。\n"),
-    ("计划于2026-07-16 09:00予以", "", "治疗。\n"),
-    ("于2026-07-16 09:00", "", "。\n"),
-    ("于2026-07-16 09:00予以", "", "治疗。\n"),
-    ("于2026-07-16 09:00", "", "抢救措施：吸氧。\n"),
     ("于2026-07-16 25:99予以", "", ""),
-    ("于2026-07-16 09:00", "", "未予以"),
+    ("于2026-07-16 09:00至10:00", "", "。\n"),
 ])
-def test_non_rescue_or_unlinked_time_remains_unknown(time_text, before, after):
+def test_structurally_invalid_or_other_field_time_remains_unknown(time_text, before, after):
+    """结构核对：其他栏目的时间、非法时分或多个时分不能作为抢救时间。"""
     session, payload = _time_case(time_text, before=before, after=after)
     result = _execute(session, FakeLLM(payload))
     assert _state(result) == "data_gap"
     assert _facts(result)["unknown_fields"] == ["rescue_time"]
 
 
-def test_narrative_time_is_bound_to_the_selected_actual_measures_not_another_episode():
+@pytest.mark.parametrize("time_text,before,after", [
+    ("既往于2026-07-16 09:00予以", "", "治疗。\n"),
+    ("计划于2026-07-16 09:00予以", "", "治疗。\n"),
+    ("于2026-07-16 09:00", "", "。\n"),
+    ("于2026-07-16 09:00", "", "抢救措施：吸氧。\n"),
+    ("于2026-07-16 09:00", "", "未予以"),
+])
+def test_model_present_narrated_time_is_not_vetoed_by_wording(time_text, before, after):
+    """是否本次实际抢救时间由模型判断；动作词、否定词、计划词不再推翻模型的 present。"""
+    session, payload = _time_case(time_text, before=before, after=after)
+    result = _execute(session, FakeLLM(payload))
+    assert _state(result) == "compliant"
+    assert _facts(result)["rescue_content_events"][0]["field_facts"]["rescue_time"]["state"] == "present"
+
+
+def test_narrative_time_choice_between_episodes_follows_model():
     session, payload = _time_case(
         "于09:00予以", after="吸氧。\n于10:00予以", measures="胸外按压。",
     )
     result = _execute(session, FakeLLM(payload))
-    assert _state(result) == "data_gap"
-    assert _facts(result)["unknown_fields"] == ["rescue_time"]
+    assert _state(result) == "compliant"
 
 
 def test_second_rescue_time_can_be_selected_when_it_precedes_its_measures():
@@ -483,15 +493,12 @@ def test_second_rescue_time_can_be_selected_when_it_precedes_its_measures():
 @pytest.mark.parametrize("inline_before,between,expected", [
     ("", "予以", "compliant"),
     ("立即", "给予", "compliant"),
-    ("", "未予以", "data_gap"),
-    ("", "并未实施", "data_gap"),
-    ("", "没有给予", "data_gap"),
-    ("若", "给予", "data_gap"),
-    ("如果", "实施", "data_gap"),
-    ("若病情持续恶化并且经多方评估确认需要采取措施时再", "给予", "data_gap"),
-    ("拟", "予以", "data_gap"),
+    # 否定、条件、计划语气由模型通读全文判断；模型判 present 时 Python 不按词表推翻。
+    ("", "未予以", "compliant"),
+    ("若", "给予", "compliant"),
+    ("拟", "予以", "compliant"),
 ])
-def test_narrated_time_requires_asserted_action_in_full_parse(inline_before, between, expected):
+def test_narrated_time_follows_model_in_full_parse(inline_before, between, expected):
     session, payload = _time_case(
         "于10:30", inline_before=inline_before, after=between, measures="胸外按压。",
     )

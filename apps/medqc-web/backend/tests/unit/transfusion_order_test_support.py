@@ -12,7 +12,7 @@ OPEN_TRANSFUSION_ORDER = {
 
 class FrozenTransfusionProtocolClient:
     def __init__(self, delegate=None, *, course_labels=None, default_course_label=None,
-                 intraoperative=None, performance_state=None):
+                 intraoperative=None, performance_state=None, effect_labels=None):
         self.delegate = delegate
         self.course_labels = dict(course_labels or {})
         # 仅供正文全部由测试作者写成同一类记录的用例使用，避免逐句重复标注。
@@ -21,6 +21,8 @@ class FrozenTransfusionProtocolClient:
         self.intraoperative = intraoperative
         # 实施事实抽取协议的人工标注：整份正文作为引用、不给开始时刻；未提供时视为替身不可用。
         self.performance_state = performance_state
+        # 047 输血效果评价抽取的人工标注：{正文片段: (state, quote)}，未命中的病程为 not_evaluated。
+        self.effect_labels = dict(effect_labels or {})
         self.protocol_calls = 0
         self.protocol_prompts = []
 
@@ -38,6 +40,20 @@ class FrozenTransfusionProtocolClient:
         payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
         self.protocol_calls += 1
         self.protocol_prompts.append(prompt)
+        if set(payload) == {"items"}:
+            from app.services.luxian_0609.posttransfusion_effect_extraction import SCHEMA_VERSION
+
+            items = []
+            for item in payload["items"]:
+                state, quote = next(
+                    (label for marker, label in self.effect_labels.items() if marker in item["content"]),
+                    ("not_evaluated", ""),
+                )
+                items.append({"index": item["index"], "state": state, "quote": quote})
+            output = {"schema_version": SCHEMA_VERSION, "items": items}
+            return {"choices": [{"message": {"content": json.dumps(output, ensure_ascii=False)},
+                                 "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
         if set(payload) == {"documents"}:
             if self.performance_state is None:
                 raise RuntimeError("未提供实施事实人工标注")

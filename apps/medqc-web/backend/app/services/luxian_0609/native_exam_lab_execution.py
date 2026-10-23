@@ -33,6 +33,7 @@ from .exam_lab_projection_batching import (
     build_exam_lab_projection_batches,
     select_exam_lab_projection_batch,
 )
+from .exam_analysis_freeze import freeze_key, load_payload, save_payload
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
@@ -2023,35 +2024,8 @@ def _strong_semantic_fact(
             break
     refs = tuple(refs)
     if not refs:
-        # 阳性报告已明确记入病程，但完整病程投影中没有分析/处置事实时，
-        # 可直接形成“已记录结果、未完成分析”的闭世界结论。条件性计划或
-        # “待结合病情观察”不是已经完成的分析/处置，不得据此降为资料不足。
-        if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}:
-            mention_pattern = _STRONG_SEMANTIC_PATTERNS[
-                "LX0609-06-01-04" if rule_id == "LX0609-06-01-05" else "LX0609-06-03-03"
-            ]
-            mention_refs = tuple(
-                ref
-                for ref, text in course_items
-                if any(
-                    mention_pattern.search(clause)
-                    and (
-                        rule_id != "LX0609-06-03-04"
-                        or _event_identity_mentions_course(event, clause)
-                    )
-                    and not _UNCERTAIN_SEMANTIC_PATTERN.search(clause)
-                    for clause in _CLAUSE_SPLIT_PATTERN.split(text)
-                )
-            )
-            if mention_refs:
-                return ExamLabEventFact(
-                    rule_id=rule_id,
-                    applicability="applicable",
-                    semantic_state="absent",
-                    positive_state=positive_state,
-                    course_doc_refs=mention_refs,
-                    evidence_refs=tuple((*event.document_refs, *mention_refs)),
-                )
+        # 未命中明确短语不能证明病程未分析/未处置（如“根据药敏予哌拉西林他唑巴坦”不含动作词）：
+        # 交由受控模型判断，Python 不按关键词闭世界判缺（用户要求：正则不得否决模型结论，2026-10-22）。
         return None
     return ExamLabEventFact(
         rule_id=rule_id,
@@ -2103,7 +2077,73 @@ class _ExamLabBatchResult:
     transport_rule_ids: frozenset[str] = frozenset()
 
 
+def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str]) -> str:
+    return freeze_key(build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection))
+
+
+def _load_frozen_exam_lab_batch(key: str) -> _ExamLabBatchResult | None:
+    payload = load_payload("main", key)
+    if payload is None:
+        return None
+    try:
+        facts = tuple(
+            ExamLabEventFact(
+                rule_id=str(item["rule_id"]), applicability=str(item["applicability"]),
+                semantic_state=str(item["semantic_state"]), positive_state=str(item["positive_state"]),
+                course_doc_refs=tuple(str(ref) for ref in item["course_doc_refs"]),
+                evidence_refs=tuple(str(ref) for ref in item["evidence_refs"]),
+                event_position=int(item["event_position"]),
+            )
+            for item in payload["facts"]
+        )
+        conflicts = {int(position): tuple(str(ref) for ref in refs) for position, refs in payload["result_conflicts"].items()}
+        gaps = {
+            int(position): tuple((str(ref), str(kind)) for ref, kind in items)
+            for position, items in payload["analysis_gaps"].items()
+        }
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    return _ExamLabBatchResult(facts=facts, result_conflicts=conflicts, analysis_gaps=gaps)
+
+
+def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
+    if result.facts is None or result.rule_failures:
+        # 只冻结全部规则均已核定的批次；有失败规则时下次重新抽取。
+        return
+    save_payload("main", key, {
+        "facts": [
+            {
+                "rule_id": fact.rule_id, "applicability": fact.applicability,
+                "semantic_state": fact.semantic_state, "positive_state": fact.positive_state,
+                "course_doc_refs": list(fact.course_doc_refs), "evidence_refs": list(fact.evidence_refs),
+                "event_position": fact.event_position,
+            }
+            for fact in result.facts
+        ],
+        "result_conflicts": {str(position): list(refs) for position, refs in result.result_conflicts.items()},
+        "analysis_gaps": {
+            str(position): [list(item) for item in items] for position, items in result.analysis_gaps.items()
+        },
+    })
+
+
 async def _extract_exam_lab_batch(
+    *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
+) -> _ExamLabBatchResult:
+    """主抽取结论按病历版本冻结复用（用户决定 2026-10-22）：首次全部规则核定后固定，
+    避免模型挑选证据病程、报告与病程关联逐次出入（C08、C02、C04）。"""
+    key = _main_freeze_key(projection, eligible_rule_ids)
+    frozen = _load_frozen_exam_lab_batch(key)
+    if frozen is not None:
+        return frozen
+    result = await _extract_exam_lab_batch_uncached(
+        projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+    )
+    _save_frozen_exam_lab_batch(key, result)
+    return result
+
+
+async def _extract_exam_lab_batch_uncached(
     *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
 ) -> _ExamLabBatchResult:
     """复用原单批语义抽取、受控恢复及专项核验；不在此处作规则判定。"""

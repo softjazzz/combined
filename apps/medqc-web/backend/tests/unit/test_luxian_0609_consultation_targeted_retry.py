@@ -80,7 +80,7 @@ async def test_disposition_length_retry_omits_previous(stage):
 def measure_answer(completed, aliases, *, quote="电针", action="电针", evidence=None):
     return {"content": json.dumps({"schema_version": measure.SCHEMA_VERSION, "generic": [], "measures": [{
         "recommendation_ref": completed[0].recommendation.recommendation_ref, "measure": "电针",
-        "quote": quote, "executed_action": action, "action_relation": "matched",
+        "quote": quote, "executed_action": action, "action_relation": "matched", "conditional": False,
         "evidence_ref": evidence or next(iter(aliases.values()))}]}, ensure_ascii=True)}
 
 
@@ -139,7 +139,10 @@ async def test_episode_inconsistent_recommendations_get_one_review(
         rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p",
         visit_id="synthetic-consistency", source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path)
     assert result.llm_call_count == 2 and result.total_tokens == 32
-    assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"technical_error"})
+    # 补核后仍自相矛盾：Python 不替模型选边，按资料不足交付且不冻结（1022 C01）。
+    assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"data_gap"})
+    if not fixed:
+        assert {item["metadata"]["reason_code"] for item in result.results} == {"semantic_extraction_unresolved"}
     assert field in client.prompts[1] and "recommendations" in client.prompts[1]
     assert "不能直接提高置信度" in client.prompts[1]
     assert bool(list(tmp_path.glob("*.json"))) == fixed
@@ -276,3 +279,37 @@ async def test_episode_compact_retry_echoes_original_failed_quote(monkeypatch, t
     assert result.results[0]["status"] == "compliant"
     hint = client.prompts[1].split("PREVIOUS_OUTPUT=", 1)[0]
     assert "错误摘录" in hint and "source_quote" in hint and "consultation_record-1#r1" in hint
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fixed", [False, True])
+async def test_episode_state_ref_conflict_gets_one_review_then_data_gap(monkeypatch, tmp_path, fixed):
+    """判申请缺失却引用申请文书：补核一次；仍矛盾按资料不足交付且不冻结（1022 C01 第7份会诊）。"""
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: ep._rows("专科会诊意见"))
+    good = episode_answer()
+    bad = json.loads(json.dumps(good))
+    bad["episodes"][0]["application_state"] = "absent"
+    client = Client({"content": json.dumps(bad)}, {"content": json.dumps(good if fixed else bad)})
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p",
+        visit_id="synthetic-state-refs", source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path)
+    assert result.llm_call_count == 2
+    assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"data_gap"})
+    assert "application_state" in client.prompts[1] and "inconsistent state refs" in client.prompts[1]
+    assert bool(list(tmp_path.glob("*.json"))) == fixed
+
+
+@pytest.mark.asyncio
+async def test_execution_scope_written_into_action_type_gets_one_review(monkeypatch, tmp_path):
+    """模型把 home_medication 填进 action_type：补核一次，改正后正常（1022 例子验证 C10）。"""
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: ep._rows("专科会诊意见"))
+    good = episode_answer()
+    bad = json.loads(json.dumps(good))
+    bad["episodes"][0]["recommendations"][0]["action_type"] = "home_medication"
+    client = Client({"content": json.dumps(bad)}, {"content": json.dumps(good)})
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p",
+        visit_id="synthetic-action-type", source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path)
+    assert result.llm_call_count == 2
+    assert {item["status"] for item in result.results} == {"compliant"}
+    assert "action_type holds execution_scope" in client.prompts[1]
