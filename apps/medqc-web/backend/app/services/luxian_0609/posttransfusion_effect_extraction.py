@@ -18,6 +18,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal
 
+from .judgement_examples import POSTTRANSFUSION_EFFECT_EXAMPLES
 from .llm_prompt_privacy import (
     classify_luxian_0609_llm_call_failure,
     describe_luxian_0609_llm_parse_failure,
@@ -76,6 +77,7 @@ def _prompt(items: Sequence[dict[str, Any]]) -> str:
         "只写“输血效果好”“有效”而没有任何症状体征或指标依据；只罗列化验数值而没有比较或判断；"
         "与输血无关的病情或其他治疗的好转；输血计划、必要时输血、拟复查。"
         "unclear：无法可靠判断。"
+        + POSTTRANSFUSION_EFFECT_EXAMPLES +
         f"evaluated时quote必须逐字摘自该份content中表达评价的单个连续片段，不超过{MAX_QUOTE_CHARS}字；"
         "其余状态quote为空字符串。"
         "每份输入必须且仅输出一次，index原样保留。严格JSON根对象只含schema_version和items；schema_version="

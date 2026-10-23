@@ -44,6 +44,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.shared import _parse_datetime
+from .judgement_examples import CONSULTATION_SCOPE_EXAMPLES
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
 from .native_execution import build_luxian_0609_native_result
@@ -277,6 +278,7 @@ _RECOMMENDATION_SCOPE_PROMPT = (
     "或本科室暂不考虑、暂缓、不予执行本建议的部分措施为partial、全部措施为full，否则none；"
     "条件句（若家属拒绝…）不算。declined_measures为被拒绝或暂缓的措施，必须是本条source_quote中的连续原话，"
     "none与full时可为空数组；decline_quote为该文书中写明拒绝或暂缓的连续原文（最长120字），none时为空字符串。"
+    + CONSULTATION_SCOPE_EXAMPLES
 )
 _EMBEDDED_CLINICAL_DECISION_PATTERN = re.compile(r"暂不考虑|暂缓(?:检查|治疗|执行)|不予(?:检查|治疗)")
 _EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(

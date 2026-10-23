@@ -31,6 +31,7 @@ from .exam_lab_fact_extraction import (
     events_for_family,
 )
 from .exam_analysis_freeze import freeze_key, load_analysis, save_analysis
+from .judgement_examples import EXAM_FINDING_ANALYSIS_EXAMPLES
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .llm_role_routing import client_for_role
 from .structured_output import structured_output_kwargs
@@ -340,6 +341,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "quote_type不为none时，report_fragment_id必须选本事件report_fragments中被这些话针对的异常片段编号；"
         "病程中针对的是其他检查（另一部位或另一份报告）的异常时，不能归入本事件的算分析类别，应归none。"
         "none时report_fragment_id为空字符串。编号只来自本事件、本份病程，不得借用其他报告或文书的编号。"
+        + EXAM_FINDING_ANALYSIS_EXAMPLES +
         f"严格JSON根对象只含schema_version和docs，schema_version={SCHEMA_VERSION}；"
         "docs每项只含event_position、course_doc_ref、basis_fragment_ids、basis_relation、quote_type、course_fragment_ids、report_fragment_id；每个事件的每份病程必须且仅输出一次。\n"
         "EVENTS_JSON=" + json.dumps(events, ensure_ascii=False, separators=(",", ":"))

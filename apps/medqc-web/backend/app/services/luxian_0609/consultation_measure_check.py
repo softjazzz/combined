@@ -34,6 +34,7 @@ from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
 from .consultation_disposition_record import _ReviewIssue, _ReviewViolation, _review_retry_prompt
+from .judgement_examples import CONSULTATION_MEASURE_EXAMPLES
 from .transfusion_order_trigger import _json_response_object, _usage
 
 SCHEMA_VERSION = "lx0609-consultation-measure-check-v5"
@@ -172,6 +173,7 @@ def _prompt(
         "手术、转科、转院类措施另有口径（用户口径2026-10-22）：病程写明患者或家属已同意该手术或转科、"
         "已签署同意书或已转科，填matched，executed_action逐字摘同意或转科原话；写明患者或家属拒绝、放弃或暂不同意的，"
         "填reasoned_non_execution，non_execution_reason逐字摘拒绝原话，患方意愿即可，不要求临床原因。"
+        + CONSULTATION_MEASURE_EXAMPLES +
         "明确无关填unrelated；动作关系不清填uncertain；未找到候选填not_found且executed_action也为空。"
         "每项措施另给conditional（true/false）：该措施在建议原文中带有尚未成立的前提时为true，"
         "如若…则、如…时、待…后、必要时、视情况、酌情，或紧跟在“若复查阴性，”这类条件分句之后；"
