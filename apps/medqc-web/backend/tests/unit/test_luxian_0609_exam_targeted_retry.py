@@ -125,15 +125,15 @@ async def test_unicode_identity_is_decoded_before_previous_output_redaction(site
 
 @pytest.mark.asyncio
 async def test_truncation_uses_short_output_hint_without_previous_output(site):
-    if site.module in (record, analysis):
-        # 06-01-04/05（2026-10-23 C02）：截断后不原样加提示重发，而是把配对二分后分别核验。
+    if site.module in (record, analysis, reason):
+        # 06-01-02/04/05（2026-10-23 C02）：截断后不原样加提示重发，而是把配对二分后分别核验。
         def only(ref):
             return {**site.good, "docs": [item for item in site.good["docs"] if item["course_doc_ref"] == ref]}
 
         client = Client([(json.dumps(site.bad), "length"), only("D1"), only("D2")])
         result = await site.function(site.projection, client)
         assert result.state == "ready" and result.llm_call_count == 3
-        refs = result.recorded_refs if site.module is record else result.analysed_refs
+        refs = getattr(result, "reason_refs", getattr(result, "recorded_refs", getattr(result, "analysed_refs", None)))
         assert refs == {1: ("D1", "D2")}
         assert all("截断" not in prompt and "PREVIOUS_OUTPUT=" not in prompt for prompt in client.prompts[1:])
         return
@@ -286,3 +286,13 @@ def test_shared_course_is_listed_once_in_both_check_prompts():
         payload = json.loads(module._prompt(projection, targets).split("EVENTS_JSON=", 1)[1])
         assert [doc["course_doc_ref"] for doc in payload["course_docs"]] == ["D1"]
         assert [event["course_doc_refs"] for event in payload["events"]] == [["D1"], ["D1"]]
+
+
+def test_reason_prompt_lists_overlapping_window_course_once():
+    # 06-01-02：多次检查的 48 小时窗口重叠，同一份病程只列一次（2026-10-23）。
+    projection = SimpleNamespace(course_candidates={"D1": ("完善胸部CT了解肺部情况。",)})
+    targets = {position: reason._Target(("D1",), ("胸部CT",), "2026-08-18 10:00:00", "肺部感染。")
+               for position in (1, 2)}
+    payload = json.loads(reason._prompt(projection, targets).split("EVENTS_JSON=", 1)[1])
+    assert [doc["course_doc_ref"] for doc in payload["course_docs"]] == ["D1"]
+    assert [event["course_doc_refs"] for event in payload["events"]] == [["D1"], ["D1"]]

@@ -2081,9 +2081,9 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
     from .exam_output_batching import OUTPUT_PROTOCOL_VERSION
 
     prompt = build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection)
-    # 06-01-04 结果记录核验与 06-01-05 分析核验改为按输出量拆批、病程去重（2026-10-23）；
-    # 两类核验结果随主抽取一并冻结，不含这两条规则的冻结结论不受影响。
-    if {'LX0609-06-01-04', 'LX0609-06-01-05'}.intersection(eligible_rule_ids):
+    # 06-01-02/04/05 专项核验改为按输出量拆批、病程去重（2026-10-23）；核验结果随主抽取一并冻结，
+    # 不含这三条规则的冻结结论不受影响。
+    if {'LX0609-06-01-02', 'LX0609-06-01-04', 'LX0609-06-01-05'}.intersection(eligible_rule_ids):
         prompt = OUTPUT_PROTOCOL_VERSION + '\x1e' + prompt
     return freeze_key(prompt)
 

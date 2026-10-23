@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from finding_selection_test_support import prompt_events
 from app.services.luxian_0609.exam_lab_fact_extraction import (
     ExamLabEventFact,
     build_exam_lab_text_projection,
@@ -68,7 +69,7 @@ async def test_only_window_docs_are_sent_and_stated_reason_with_site_counts():
     client = _Client([_answer(ref, "reason_stated", "完善胸部CT了解肺部感染情况")])
     outcome = await check_exam_reason(projection, client)
     assert outcome.state == "ready" and outcome.reason_refs == {1: (ref,)}
-    sent = json.loads(client.prompts[0].split("EVENTS_JSON=", 1)[1])
+    sent = prompt_events(client.prompts[0])
     assert [doc["course_doc_ref"] for doc in sent[0]["course_docs"]] == [ref]
     assert sent[0]["orders"] == ["胸部螺旋CT平扫(含膈上肋骨)"]
 
