@@ -3375,12 +3375,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     unmatched_names = list(dict.fromkeys(
                         (*unmatched_effect_names, *unmatched_safety_names)
                     ))
-                    if has_unresolved_unknown:
+                    # 已有药物确定缺评价（有权威时间、窗口内无评价）时直接判不合规，不因其他药物
+                    # 评价不确定而降为资料不足；与054“缺失优先于不明”一致（2026-10-23，C08）。
+                    confirmed_missing = bool(unmatched_names) and not has_untimed_match
+                    if has_unresolved_unknown and not confirmed_missing:
                         final_state, reason_code = (
                             "data_gap", "semantic_extraction_unresolved"
                         )
                         evaluation_resolution = "unknown"
-                    elif has_unassigned_regimen:
+                    elif has_unassigned_regimen and not confirmed_missing:
                         final_state, reason_code = "data_gap", "association_failed"
                         ambiguous_evaluation = True
                     elif not unmatched_names:

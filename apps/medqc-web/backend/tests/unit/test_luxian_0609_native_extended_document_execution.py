@@ -6516,8 +6516,8 @@ async def test_055_generic_effect_record_cannot_cover_multiple_drug_events() -> 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
+    # 未点药名的疗效评价归属不明，但两药均确定无安全性评价：缺失优先，判不合规（2026-10-23）。
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
 
 
 @pytest.mark.asyncio
@@ -6738,6 +6738,29 @@ async def test_055_unresolved_safety_attribution_remains_data_gap() -> None:
     assert reduced.reason_code == "semantic_extraction_unresolved"
     facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
     assert facts["evaluation_resolution"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_055_confirmed_missing_drug_is_not_downgraded_by_other_drug_unknown() -> None:
+    # 2026-10-23 C08：万古霉素窗口内确定无评价，另一药评价不确定时仍判不合规。
+    execution, reduced = await _evaluate(
+        "LX0609-05-01-03",
+        {
+            "inpat_drug_order": (
+                {"generic_name": "美罗培南", "planned_start_datetime": "2026-06-01 10:00:00"},
+                {"generic_name": "万古霉素", "planned_start_datetime": "2026-06-01 10:00:00"},
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：有效；安全性评价归属不明确。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-05-01-03"]
+    assert "万古霉素" in facts["unmatched_antimicrobials"]
+    assert "美罗培南" not in facts["unmatched_antimicrobials"]
 
 
 @pytest.mark.asyncio

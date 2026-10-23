@@ -30,3 +30,14 @@ def test_consultation_freeze_version_invalidates_frozen_stage_one_without_exampl
     from app.services.luxian_0609.consultation_opinion_freeze import FREEZE_SCHEMA_VERSION
 
     assert FREEZE_SCHEMA_VERSION == "consultation-opinion-freeze-v6"
+
+
+def test_antimicrobial_selection_reason_examples_reach_order_reason_prompt():
+    from datetime import datetime
+
+    from app.services.luxian_0609.extended_document import antimicrobial_order_reason as reason
+    from app.services.luxian_0609.judgement_examples import ANTIMICROBIAL_SELECTION_REASON_EXAMPLES
+
+    event = reason.AntimicrobialUseEvent("E1", "头孢曲松", "start", datetime(2026, 1, 1, 8), ())
+    prompt = reason._prompt([event], [], {"E1": ()})
+    assert prompt.index(ANTIMICROBIAL_SELECTION_REASON_EXAMPLES) < prompt.index("INPUT_JSON=")
