@@ -20,7 +20,9 @@ type ServiceResult<T> = {
   jobStatus?: string
 }
 
-type ErrorResponseLike = { response?: { status?: unknown; headers?: Record<string, unknown> } } | null
+type ErrorResponseLike = {
+  response?: { status?: unknown; headers?: Record<string, unknown> }
+} | null
 
 function toErrorStatus(error: unknown): number | undefined {
   const status = (error as ErrorResponseLike)?.response?.status
@@ -122,6 +124,28 @@ export async function getSichuanWorkspaceBatchJob(jobId: string) {
       timeout: WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取四川规则批量任务详情失败',
+  )
+}
+
+/** 结果页病历标识：按客户安全引用 record_ref 回查住院号、科室等，不含患者姓名。 */
+export type BatchJobRecordIdentity = {
+  record_ref: string
+  sequence: number
+  inpatient_no: string
+  department: string
+  doctor: string
+  admission_date: string
+  discharge_date: string
+}
+
+export async function getSichuanWorkspaceBatchJobRecordIdentities(jobId: string) {
+  return requestEnvelope<{ items: BatchJobRecordIdentity[] }>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/record-identities`,
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '获取病历标识失败',
   )
 }
 

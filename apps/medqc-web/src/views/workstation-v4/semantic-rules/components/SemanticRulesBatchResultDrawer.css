@@ -4162,3 +4162,41 @@
     font-size: var(--mq-font-28);
   }
 }
+
+/* 泸县 0609 部分执行失败：客户只看一行轻提示，明细按需展开（2026-10-23 客户视图） */
+.drawer-shell .partial-failure-notice {
+  padding: 12px 18px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.drawer-shell .partial-failure-notice p {
+  margin: 0;
+}
+
+.drawer-shell .partial-failure-notice button {
+  margin-left: var(--mq-space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-brand-600);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.drawer-shell .partial-failure-notice ul {
+  display: grid;
+  gap: var(--mq-space-1);
+  margin: var(--mq-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drawer-shell .partial-failure-notice li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mq-space-3);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}

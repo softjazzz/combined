@@ -5145,6 +5145,27 @@ class CustomQCWorkspaceService:
             projection_key=projection_key,
         )
 
+    def list_record_result_case_refs(self, *, job_id: str, limit: int = 500) -> List[CaseRef]:
+        """按任务读取正式结果信封的病历三坐标（结果页身份回查用），按首次写入顺序去重。"""
+        table = self._record_result_envelope_table
+        session = _session()
+        try:
+            rows = session.execute(
+                select(table.c.institute_id, table.c.patient_id, table.c.visit_id)
+                .where(or_(table.c.root_job_id == job_id, table.c.job_id == job_id))
+                .order_by(table.c.created_at, table.c.id)
+            ).all()
+        finally:
+            session.close()
+        refs: List[CaseRef] = []
+        for row in rows:
+            ref = CaseRef(_safe_text(row[0]), _safe_text(row[1]), _safe_text(row[2]))
+            if all(ref) and ref not in refs:
+                refs.append(ref)
+                if len(refs) >= limit:
+                    break
+        return refs
+
     def _load_record_result_envelope_items(
         self,
         session: Session,

@@ -2821,6 +2821,46 @@ async def export_filtered_workspace_record_results(
     )
 
 
+@router.get("/workspace/batch-jobs/{job_id}/record-identities")
+async def get_workspace_batch_job_record_identities(
+    request: Request,
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """结果页病历身份回查（2026-10-23）：权限与任务详情一致，只返回住院号、科室、主治医生与入出院日期。"""
+    from ..services.qc_workspace.batch_record_identity import build_batch_job_record_identities
+
+    workspace = _sichuan_workspace_service()
+    job = await run_in_threadpool(
+        workspace.get_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
+    if not job:
+        job = await run_in_threadpool(
+            _resolve_shared_sample_pool_latest_job,
+            workspace=workspace,
+            job_id=job_id,
+            current_user=current_user,
+        )
+    if not _is_workspace_batch_job(job):
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    case_refs = await run_in_threadpool(
+        workspace.list_record_result_case_refs, job_id=str(job.get("id") or job_id),
+    )
+    identities = await run_in_threadpool(
+        build_batch_job_record_identities,
+        job=job,
+        collect_records=workspace.collect_records,
+        case_refs=case_refs,
+    )
+    return success_response(
+        data={"items": identities},
+        message="获取病历标识成功",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.post("/workspace/batch-jobs/{job_id}/review")
 async def review_workspace_batch_job(
     request: Request,
