@@ -16,11 +16,11 @@
     <!-- 侧边栏 -->
     <a-layout-sider
       :collapsed="isNarrowScreen ? false : collapsed"
-      @update:collapsed="handleSiderCollapse"
       collapsible
       class="sidebar-container relative overflow-hidden border-none"
       theme="light"
       width="220"
+      @update:collapsed="handleSiderCollapse"
     >
       <!-- Logo区域 -->
       <div class="logo-container" :class="{ 'logo-container--collapsed': collapsed }">
@@ -103,12 +103,6 @@
               </template>
               <span>病历池</span>
             </a-menu-item>
-            <a-menu-item v-if="canSee('/workstation-v5/stats')" key="/workstation-v5/stats">
-              <template #icon>
-                <ChartNoAxesColumnIncreasing class="sidebar-icon" />
-              </template>
-              <span>统计分析</span>
-            </a-menu-item>
             <a-menu-item
               v-if="canSee('/workstation-v5/records/outpatient-emergency')"
               key="/workstation-v5/records/outpatient-emergency"
@@ -118,13 +112,19 @@
               </template>
               <span>门急诊病历</span>
             </a-menu-item>
-            <a-menu-item v-if="canSee('/workstation-v5/records/running')" key="/workstation-v5/records/running">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/records/running')"
+              key="/workstation-v5/records/running"
+            >
               <template #icon>
                 <PlayCircle class="sidebar-icon" />
               </template>
               <span>运行病历质控</span>
             </a-menu-item>
-            <a-menu-item v-if="canSee('/workstation-v5/records/final')" key="/workstation-v5/records/final">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/records/final')"
+              key="/workstation-v5/records/final"
+            >
               <template #icon>
                 <CircleCheck class="sidebar-icon" />
               </template>
@@ -139,7 +139,10 @@
               </template>
               <span>质控反馈记录</span>
             </a-menu-item>
-            <a-menu-item v-if="canSee('/workstation-v5/customer-sample-validation')" key="/workstation-v5/customer-sample-validation">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/customer-sample-validation')"
+              key="/workstation-v5/customer-sample-validation"
+            >
               <template #icon>
                 <FileSearch class="sidebar-icon" />
               </template>
@@ -175,6 +178,38 @@
               </template>
               <span>结算清单质控</span>
             </a-menu-item>
+          </a-sub-menu>
+
+          <a-sub-menu
+            v-if="canSeeAny(STATISTICS_MENU_TARGETS)"
+            key="statistics-sub"
+            class="menu-item-base statistics-menu"
+          >
+            <template #icon>
+              <ChartNoAxesColumnIncreasing class="sidebar-icon" />
+            </template>
+            <template #title>
+              <span class="font-medium">统计分析</span>
+            </template>
+            <a-menu-item v-if="canSee('/workstation-v5/stats')" key="/workstation-v5/stats">
+              <template #icon>
+                <ChartNoAxesColumnIncreasing class="sidebar-icon" />
+              </template>
+              <span>质控统计总览</span>
+            </a-menu-item>
+            <template v-for="item in REPORT_MENU_ITEMS" :key="item.path">
+              <a-menu-item
+                v-if="canSee(item.path)"
+                :key="item.path"
+                :title="item.title"
+                class="statistics-report-item"
+              >
+                <template #icon>
+                  <FileChartColumn class="sidebar-icon" />
+                </template>
+                <span>{{ item.title }}</span>
+              </a-menu-item>
+            </template>
           </a-sub-menu>
 
           <!-- 质控规则 -->
@@ -228,7 +263,11 @@
           </a-sub-menu>
 
           <!-- ICD 编码查询 -->
-          <a-menu-item v-if="canSee('/workstation-v5/icd')" key="/workstation-v5/icd" class="menu-item-base">
+          <a-menu-item
+            v-if="canSee('/workstation-v5/icd')"
+            key="/workstation-v5/icd"
+            class="menu-item-base"
+          >
             <template #icon>
               <Search class="sidebar-icon" />
             </template>
@@ -236,11 +275,7 @@
           </a-menu-item>
 
           <!-- DRG/DIP 分析 -->
-          <a-sub-menu
-            v-if="canSeeAny(DRG_MENU_TARGETS)"
-            key="drg-sub"
-            class="menu-item-base"
-          >
+          <a-sub-menu v-if="canSeeAny(DRG_MENU_TARGETS)" key="drg-sub" class="menu-item-base">
             <template #icon>
               <Network class="sidebar-icon" />
             </template>
@@ -259,7 +294,10 @@
               </template>
               <span>事中监控</span>
             </a-menu-item>
-            <a-menu-item v-if="canSee('/workstation-v5/drg/payment')" key="/workstation-v5/drg/payment">
+            <a-menu-item
+              v-if="canSee('/workstation-v5/drg/payment')"
+              key="/workstation-v5/drg/payment"
+            >
               <template #icon>
                 <BadgeDollarSign class="sidebar-icon" />
               </template>
@@ -279,14 +317,23 @@
             </a-menu-item>
           </a-sub-menu>
 
-          <a-menu-item v-if="canSee('/workstation-v5/rules/custom-workspace')" key="/workstation-v5/rules/custom-workspace" class="menu-item-base">
+          <a-menu-item
+            v-if="canSee('/workstation-v5/rules/custom-workspace')"
+            key="/workstation-v5/rules/custom-workspace"
+            class="menu-item-base"
+          >
             <template #icon>
               <Bolt class="sidebar-icon" />
             </template>
             <span class="font-medium">自定义质控点</span>
           </a-menu-item>
 
-          <a-menu-item v-if="canSee('/workstation-v5/document-definitions')" key="/workstation-v5/document-definitions" class="menu-item-base" data-testid="document-definitions-menu">
+          <a-menu-item
+            v-if="canSee('/workstation-v5/document-definitions')"
+            key="/workstation-v5/document-definitions"
+            class="menu-item-base"
+            data-testid="document-definitions-menu"
+          >
             <template #icon>
               <FileText class="sidebar-icon" />
             </template>
@@ -294,7 +341,11 @@
           </a-menu-item>
 
           <!-- 数据上传 -->
-          <a-menu-item v-if="canSee('/workstation-v5/upload')" key="/workstation-v5/upload" class="menu-item-base">
+          <a-menu-item
+            v-if="canSee('/workstation-v5/upload')"
+            key="/workstation-v5/upload"
+            class="menu-item-base"
+          >
             <template #icon>
               <CloudUpload class="sidebar-icon" />
             </template>
@@ -302,7 +353,11 @@
           </a-menu-item>
 
           <!-- 系统配置 -->
-          <a-menu-item v-if="canSee('/workstation-v5/system-config')" key="/workstation-v5/system-config" class="menu-item-base">
+          <a-menu-item
+            v-if="canSee('/workstation-v5/system-config')"
+            key="/workstation-v5/system-config"
+            class="menu-item-base"
+          >
             <template #icon>
               <Settings class="sidebar-icon" />
             </template>
@@ -526,6 +581,13 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
+const REPORT_MENU_ITEMS = [
+  { path: '/workstation-v5/reports/record-quality', title: '病历质量分析' },
+  { path: '/workstation-v5/reports/special-records', title: '特殊病历报表' },
+  { path: '/workstation-v5/reports/frontpage-quality', title: '病案首页统计分析' },
+  { path: '/workstation-v5/reports/staff-analysis', title: '质控员工作分析' },
+] as const
+
 // 响应式数据
 const collapsed = ref(false)
 const mobileMediaQuery = '(max-width: 767px)'
@@ -578,7 +640,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v5/customer-sample-validation': '客户样本验证',
     '/workstation-v5/system-config': '系统配置',
   }
-  return titleMap[path] || '工作台'
+  return REPORT_MENU_ITEMS.find((item) => item.path === path)?.title || titleMap[path] || '工作台'
 })
 
 // 角色中文映射
@@ -615,11 +677,14 @@ const STAGE_MENU_TARGET = '/workstation-v5/worklist'
 const WORKSTATION_MENU_TARGETS = [
   '/workstation-v5',
   '/workstation-v5/worklist',
-  '/workstation-v5/stats',
   '/workstation-v5/records/outpatient-emergency',
   '/workstation-v5/records/running',
   '/workstation-v5/records/final',
   '/workstation-v5/customer-sample-validation',
+] as const
+const STATISTICS_MENU_TARGETS = [
+  '/workstation-v5/stats',
+  ...REPORT_MENU_ITEMS.map((item) => item.path),
 ] as const
 const RULES_MENU_TARGETS = [
   '/workstation-v5/rules?tab=coding',
@@ -729,6 +794,12 @@ watch(
       return
     }
     selectedKeys.value = [base]
+    if (
+      STATISTICS_MENU_TARGETS.some((path) => path === base) &&
+      !openKeys.value.includes('statistics-sub')
+    ) {
+      openKeys.value = [...openKeys.value, 'statistics-sub']
+    }
     if (
       base === '/workstation-v5/records/outpatient-emergency' &&
       !openKeys.value.includes('workstation-sub')
@@ -922,6 +993,13 @@ watch(
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.statistics-menu > .ant-menu-sub.ant-menu-inline > .statistics-report-item.ant-menu-item) {
+  padding-left: 8px !important;
+  padding-right: 4px !important;
 }
 
 /* 菜单项悬停 */

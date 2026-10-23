@@ -47,11 +47,22 @@ describe('路由守卫权限判断（锁定现有行为）', () => {
     authState.userRoles = ['admin']
   })
 
+  it.each(['record-quality', 'special-records', 'frontpage-quality', 'staff-analysis'])(
+    'V5 报表 %s 保留场景，未登录时使用工作台登录页',
+    async (slug) => {
+      const target = `/workstation-v5/reports/${slug}?scene=final`
+      authState.userRoles = ['qc_manager']
+      expect(await visit(target)).toBe(target)
+      authState.isAuthenticated = false
+      const login = router.resolve((await visit(target))!)
+      expect(login.path).toBe('/workstation-v5/login')
+      expect(login.query.redirect).toBe(target)
+    },
+  )
+
   it('未登录访问 dashboard 页面跳转到通用登录页并带 redirect', async () => {
     authState.isAuthenticated = false
-    expect(await visit('/dashboard/tasks/all')).toBe(
-      '/auth/login?redirect=/dashboard/tasks/all',
-    )
+    expect(await visit('/dashboard/tasks/all')).toBe('/auth/login?redirect=/dashboard/tasks/all')
   })
 
   it('未登录访问工作台页面跳转到工作台登录页', async () => {
@@ -68,9 +79,7 @@ describe('路由守卫权限判断（锁定现有行为）', () => {
 
   it('无 meta.permission 的页面登录即可访问', async () => {
     authState.userRoles = ['qc_staff']
-    expect(await visit('/dashboard/tasks/my?tab=received')).toBe(
-      '/dashboard/tasks/my?tab=received',
-    )
+    expect(await visit('/dashboard/tasks/my?tab=received')).toBe('/dashboard/tasks/my?tab=received')
   })
 
   it('子路由继承父路由的 meta.permission', async () => {

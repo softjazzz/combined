@@ -754,7 +754,11 @@ const routes: RouteRecordRaw[] = [
         path: 'qc/reports/special-records',
         name: 'SpecialRecordReport',
         component: () => import('@/views/qc/reports/SpecialRecordReportView.vue'),
-        meta: { title: '特殊病历报表', icon: 'BarChartOutlined', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '特殊病历报表',
+          icon: 'BarChartOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'qc/reports/frontpage-quality',
@@ -1177,6 +1181,30 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
         meta: { title: '统计分析', permission: QC_ANALYTICS_ROLES },
+      },
+      {
+        path: 'reports/record-quality',
+        name: 'WorkstationV5RecordQualityReport',
+        component: () => import('@/views/qc/reports/RecordQualityReportView.vue'),
+        meta: { title: '病历质量分析', permission: QC_ANALYTICS_ROLES },
+      },
+      {
+        path: 'reports/special-records',
+        name: 'WorkstationV5SpecialRecordReport',
+        component: () => import('@/views/qc/reports/SpecialRecordReportView.vue'),
+        meta: { title: '特殊病历报表', permission: QC_ANALYTICS_ROLES },
+      },
+      {
+        path: 'reports/frontpage-quality',
+        name: 'WorkstationV5FrontpageQualityReport',
+        component: () => import('@/views/qc/reports/FrontpageQualityReportView.vue'),
+        meta: { title: '病案首页统计分析', permission: QC_ANALYTICS_ROLES },
+      },
+      {
+        path: 'reports/staff-analysis',
+        name: 'WorkstationV5StaffAnalysisReport',
+        component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),
+        meta: { title: '质控员工作分析', permission: QC_ANALYTICS_ROLES },
       },
       {
         path: 'drg/pre',
