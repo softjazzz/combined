@@ -79,8 +79,9 @@ async def test_free_text_medication_preserves_final_decision_and_usage(missing_r
 
 @pytest.mark.asyncio
 async def test_semantic_uncertainty_survives_final_aggregation():
+    # 2026-10-23：补核后仍不确定按资料不足交付（uncertain 不得交付）。
     result, final = await _run(FakeClient(_payload(uncertain=True)))
-    assert final["status"] == "uncertain"
+    assert final["status"] == "data_gap" and final["reason_code"] == "semantic_extraction_unresolved"
     assert final["customer_display_facts"] == {
         "verification_kind": "discharge_medication_extraction_pending", "extraction_state": "unknown",
     }
@@ -147,7 +148,8 @@ async def test_granule_route_policy_reaches_canonical_result(name, expected, rou
     client = FakeClient(payload)
     result, final = await _run(client, text=text)
     if route_state == "uncertain" and expected != "compliant":
-        assert final["status"] == "uncertain"
+        # 2026-10-23：补核后仍不确定按资料不足交付，不再停在不可交付的 uncertain。
+        assert final["status"] == "data_gap"
     else:
         assert final["status"] == expected
         assert final["customer_display_facts"]["missing_fields"] == ([] if expected == "compliant" else ["route"])

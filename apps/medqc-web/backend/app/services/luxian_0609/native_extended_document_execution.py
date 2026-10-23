@@ -4379,8 +4379,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     medications = list(medication_extraction.medications)
                     medication_error = ""
                 else:
+                    # 定向补核后仍不确定：按资料不足交付（uncertain 不得交付，2026-10-23 C15）。
                     final_state = {
-                        "unknown": "uncertain",
+                        "unknown": "data_gap",
                         "data_gap": "data_gap",
                         "technical_error": "technical_error",
                     }[medication_extraction.state]
@@ -4392,7 +4393,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         rule_id=rule_id, snapshot=evidence_snapshot,
                         source_keys=("discharge_record",),
                         final_state=final_state,
-                        reason_code=medication_extraction.reason_code,
+                        reason_code=(
+                            "semantic_extraction_unresolved" if medication_extraction.state == "unknown"
+                            else medication_extraction.reason_code
+                        ),
                         document_refs=selected_discharge_document_refs,
                     ))
                     continue
