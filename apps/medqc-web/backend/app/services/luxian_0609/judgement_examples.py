@@ -42,11 +42,12 @@ POSTTRANSFUSION_EFFECT_EXAMPLES = (
 # 03-01-04：会诊建议的执行范围（第一阶段建议抽取）。
 CONSULTATION_SCOPE_EXAMPLES = (
     "判定例子（合成文本，只说明口径）："
-    "①“继续口服原降压药”→in_stay；对照“继续服用患者自备的苯磺酸氨氯地平”→home_medication。"
-    "②“必要时复查头颅CT”→as_needed，scope_quote为“必要时”；"
-    "对照“复查血常规，若血小板仍低则输注血小板”→in_stay且has_conditional_measures=true（条件只管后半句）。"
-    "③“出院后门诊随访，1个月后复查甲功”→after_discharge；对照“1周后复查肝功能”→in_stay。"
-    "④“若血压控制不佳，加用厄贝沙坦”→conditional，scope_quote为“若血压控制不佳”。"
+    "以下箭头后均为execution_scope的取值，action_type照常按建议内容填medication/test等。"
+    "①“继续口服原降压药”→execution_scope=in_stay；对照“继续服用患者自备的苯磺酸氨氯地平”→execution_scope=home_medication。"
+    "②“必要时复查头颅CT”→execution_scope=as_needed，scope_quote为“必要时”；"
+    "对照“复查血常规，若血小板仍低则输注血小板”→execution_scope=in_stay且has_conditional_measures=true（条件只管后半句）。"
+    "③“出院后门诊随访，1个月后复查甲功”→execution_scope=after_discharge；对照“1周后复查肝功能”→execution_scope=in_stay。"
+    "④“若血压控制不佳，加用厄贝沙坦”→execution_scope=conditional，scope_quote为“若血压控制不佳”。"
 )
 
 # 03-01-04：措施逐项核对中手术、转科、转院类措施的患方意愿。

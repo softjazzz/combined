@@ -297,3 +297,19 @@ async def test_episode_state_ref_conflict_gets_one_review_then_data_gap(monkeypa
     assert {item["status"] for item in result.results} == ({"compliant"} if fixed else {"data_gap"})
     assert "application_state" in client.prompts[1] and "inconsistent state refs" in client.prompts[1]
     assert bool(list(tmp_path.glob("*.json"))) == fixed
+
+
+@pytest.mark.asyncio
+async def test_execution_scope_written_into_action_type_gets_one_review(monkeypatch, tmp_path):
+    """模型把 home_medication 填进 action_type：补核一次，改正后正常（1022 例子验证 C10）。"""
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: ep._rows("专科会诊意见"))
+    good = episode_answer()
+    bad = json.loads(json.dumps(good))
+    bad["episodes"][0]["recommendations"][0]["action_type"] = "home_medication"
+    client = Client({"content": json.dumps(bad)}, {"content": json.dumps(good)})
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-02", "LX0609-03-01-03"), institute_id="i", patient_id="p",
+        visit_id="synthetic-action-type", source_schema=None, llm_client=client, opinion_freeze_dir=tmp_path)
+    assert result.llm_call_count == 2
+    assert {item["status"] for item in result.results} == {"compliant"}
+    assert "action_type holds execution_scope" in client.prompts[1]

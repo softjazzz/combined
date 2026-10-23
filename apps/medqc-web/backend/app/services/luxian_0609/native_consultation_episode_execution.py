@@ -1887,6 +1887,13 @@ def _parse_compact_document_facts(
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
+            if action_type in _EXECUTION_SCOPES:
+                # 模型把执行范围（如 home_medication）填进了建议类型：可修正，补核一次（1022 例子验证 C10）。
+                raise _EpisodeGroundingViolation((_ReviewIssue(
+                    "action_type holds execution_scope", f"recommendation_ref={recommendation_ref}.action_type",
+                    action_type, "action_type只能是medication/test/procedure/transfer/monitoring/other；"
+                    "in_stay、home_medication等是execution_scope的取值，不能填入action_type",
+                ),))
             if (
                 action_type not in _RECOMMENDATION_TYPES
                 or not isinstance(normalized_action, str)
@@ -2171,6 +2178,13 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]], *
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
+            if action_type in _EXECUTION_SCOPES:
+                # 模型把执行范围（如 home_medication）填进了建议类型：可修正，补核一次（1022 例子验证 C10）。
+                raise _EpisodeGroundingViolation((_ReviewIssue(
+                    "action_type holds execution_scope", f"recommendation_ref={recommendation_ref}.action_type",
+                    action_type, "action_type只能是medication/test/procedure/transfer/monitoring/other；"
+                    "in_stay、home_medication等是execution_scope的取值，不能填入action_type",
+                ),))
             if (
                 opinion_ref not in opinion_refs
                 or action_type not in _RECOMMENDATION_TYPES
