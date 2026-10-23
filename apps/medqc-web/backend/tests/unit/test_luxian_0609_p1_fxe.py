@@ -355,3 +355,20 @@ def test_course_candidate_selector_drops_rows_without_transfusion_mention():
 
     rows = [{"record_content": "患者咳嗽减轻，继续抗感染治疗。"}, {"content": "复查血常规。"}]
     assert select_transfusion_course_candidates(rows) == ()
+
+
+@pytest.mark.parametrize("out_row,expected", [
+    # 早于医嘱几分钟、未填科室：单次转科唯一候选，按时间接受（Claude 代定 2026-10-22，C03/C09）。
+    ({"record_time": "2026-06-01 09:55:00"}, "compliant"),
+    # 填了科室但与医嘱不对应：仍不接受。
+    ({"record_time": "2026-06-01 09:55:00", "transferin_department": "骨科"}, "data_gap"),
+])
+def test_early_transfer_out_record_without_department_fields_is_accepted_for_single_transfer(out_row, expected):
+    outcome = evaluate_transfer_documentation(
+        rule_id="LX0609-10-02-02", nondrug_order_error="", transfer_in_error="", transfer_out_error="",
+        nondrug_order_rows=[{"order_name": "转入内科", "order_time": "2026-06-01 10:00:00"}],
+        transfer_in_rows=[{"record_time": "2026-06-01 12:00:00"}],
+        transfer_out_rows=[out_row],
+        evaluation_horizon_datetime=datetime(2026, 6, 8),
+    )
+    assert outcome.final_state == expected
