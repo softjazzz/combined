@@ -124,6 +124,8 @@ def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
         "意见主体必须与本次出院意见位于同一连续分句，不能挪用同文书其他句子的上级医师角色；"
         "‘请示上级医师后才可出院’表示尚待请示，不能仅因含上级称谓就视为上级已经批准；"
         "只有同一连续分句明确记载已经获得上级同意，才可把请示后的出院安排记为approved。"
+        "例：“请示上级医师后予以办理出院”“经请示上级医师同意，今日出院”是已请示并已作出出院安排，记approved；"
+        "“需请示上级医师后再决定是否出院”“请示上级医师后才可出院”是尚待请示，记conditional。"
         "不要合并多个不同主体或多个出院表达；若意见原文没有明确主体，也只按原文返回quote。"
         "senior_course_record自身可确定上级角色，quote只需完整保留意见原文。"
         f"schema_version固定为{SCHEMA_VERSION}。只返回JSON，不能有Markdown或额外字段。"
@@ -259,7 +261,8 @@ async def _extract_discharge_approval_once(
                 if role_correction else ""
             ) + (
                 "\n补核处置完成情况：‘检查、治疗后出院’仍须区分未来条件与已完成事实；上级医师直接指示予换药、拆线或拔管后出院的记为approved。"
-                "‘请示上级医师后才可出院’也属于尚未证实完成的条件，不能把被请示者当作已发表意见的主体。"
+                "‘请示上级医师后才可出院’也属于尚未证实完成的条件，不能把被请示者当作已发表意见的主体；"
+                "但“请示上级医师后予以办理出院”是已请示并已办理，仍记approved。"
                 "只有本份文书明确证明前提已完成且已批准出院才可approved；"
                 "尚需完成处置的用conditional，无法判断的用unknown，不能因已经出院推定完成。"
                 if condition_correction else ""
