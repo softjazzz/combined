@@ -30,6 +30,7 @@ from .exam_lab_fact_extraction import (
     _course_refs_for_rule_event,
     events_for_family,
 )
+from .exam_analysis_freeze import freeze_key, load_analysis, save_analysis
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .llm_role_routing import client_for_role
 from .structured_output import structured_output_kwargs
@@ -742,6 +743,12 @@ async def check_exam_finding_analysis(
     batches = _target_batches(projection, model_targets)
     if not batches:
         return FindingAnalysisOutcome("failed", {})
+    # 用户决定（2026-10-22）：同一份病历版本的分析核验结论（含单事件复核）首次完整确定后
+    # 冻结复用，避免开思考的临界判断逐次翻转（C15、C26）。键覆盖全部批次提示词。
+    key = freeze_key("".join(_prompt(projection, batch) for batch in batches), model_expected)
+    frozen = load_analysis(key)
+    if frozen is not None and set(model_expected) <= set(frozen[0]):
+        return FindingAnalysisOutcome("ready", frozen[0], gap_refs=frozen[1])
     # 各批互不依赖，并发调用：耗时不再随批数累加（C02 三批串行开思考会超出执行时限）。
     results = list(await asyncio.gather(*(
         _check_batch(projection, llm_client, batch, {position: model_expected[position] for position in batch})
@@ -774,6 +781,9 @@ async def check_exam_finding_analysis(
         if item.ready and item.analysed.get(position):
             analysed_refs[position] = item.analysed[position]
             gap_refs.pop(position, None)
+    if set(model_expected) <= set(analysed_refs):
+        # 只冻结全部事件均已核定的结论；漏核事件沿用主抽取，下次仍重新判断。
+        save_analysis(key, analysed_refs, gap_refs)
     return FindingAnalysisOutcome("ready", analysed_refs, calls, *usage, gap_refs=gap_refs)
 
 
