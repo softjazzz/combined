@@ -258,7 +258,7 @@ class _SemanticClient:
                 '{"relation_state":"%s","rationale_code":"%s"}'
                 % (
                     self.state,
-                    "obvious_unrelated_item"
+                    "no_related_item"
                     if self.state == "unrelated"
                     else "insufficient_information"
                     if self.state == "unknown"
@@ -266,6 +266,15 @@ class _SemanticClient:
                 )
             )
         )
+        if not self.invalid:
+            import json
+
+            payload = json.loads(content)
+            payload.update({
+                "medical_analysis": "第一诊断为急性胆囊炎，需结合腹痛的部位、体征和辅助检查核对鉴别诊断是否解释同一临床问题。",
+                "evidence_quote": "消化性溃疡穿孔；急性胰腺炎",
+            })
+            content = json.dumps(payload, ensure_ascii=False)
         return {
             "content": content,
             "usage": {"prompt_tokens": 50, "completion_tokens": 8, "total_tokens": 58},
@@ -296,6 +305,62 @@ def _077_rows() -> dict[str, list[Mapping[str, object]]]:
         "diagnosis": [],
         "admission_record_diagnosis": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_077_same_document_clinical_background_and_analysis_survive_save_projection() -> None:
+    rows = _077_rows()
+    rows["first_course_record"][0].update({
+        "case_characteristic": "外伤后上肢疼痛，额部包块，伴意识改变。",
+        "diagnose_based_on": "影像提示上肢骨折及颞叶可疑挫伤。",
+    })
+    session = _session("LX0609-01-02-02", rows)
+    client = _SemanticClient("unrelated")
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    assert "外伤后上肢疼痛，额部包块，伴意识改变。" in client.prompts[0]
+    assert "影像提示上肢骨折及颞叶可疑挫伤。" in client.prompts[0]
+    assert "不要求鉴别诊断与第一诊断逐病名、一对一替代" in client.prompts[0]
+    assert "仅同次住院或仅共同外伤史" in client.prompts[0]
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    analysis = result["criterion_results"][0]["medical_analysis"]
+    assert "第一诊断为急性胆囊炎" in analysis
+    assert "消化性溃疡穿孔；急性胰腺炎" in analysis
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("analysis,quote", [
+    ("", "消化性溃疡穿孔"),
+    ("不相关", "消化性溃疡穿孔"),
+    ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", "原文没有的引文"),
+    ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", ""),
+])
+async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defect(analysis, quote) -> None:
+    import json
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {"content": json.dumps({
+                "relation_state": "unrelated", "rationale_code": "no_related_item",
+                "medical_analysis": analysis, "evidence_quote": quote,
+            }, ensure_ascii=False)}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == "data_gap"
+    assert execution.llm_call_count == 1
 
 
 def test_077_required_structured_fields_survive_the_production_source_projection() -> None:
@@ -384,7 +449,7 @@ async def test_077_runs_one_controlled_semantic_call_on_the_formal_native_family
     assert "急性胆囊炎" in client.prompts[0]
     assert "慢性胆囊炎" in client.prompts[0]
     assert client.calls == [
-        {"max_completion_tokens": 180, "allow_length_retry": False}
+        {"max_completion_tokens": 768, "allow_length_retry": False}
     ]
     assert "消化性溃疡穿孔" in client.prompts[0]
     assert any(
@@ -448,7 +513,8 @@ async def test_077_bound_structured_diagnosis_is_authoritative_over_body_fallbac
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert "第一诊断：急性胆囊炎" in client.prompts[0]
-    assert "正文回退诊断" not in client.prompts[0]
+    # 正文作为背景可以保留，但不能覆盖已绑定结构化第一诊断。
+    assert "第一诊断：正文回退诊断" not in client.prompts[0]
 
 
 @pytest.mark.asyncio

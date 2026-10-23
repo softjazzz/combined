@@ -122,8 +122,26 @@ describe('CriterionResultBlock', () => {
     expect(rows[1]!.get('p').text()).toBe('当前资料不足以完成主诉与第一诊断的医学指向核对。')
 
     expect(rows[2]!.get('.criterion-head strong').text()).toBe('子项核对')
-    expect(rows[2]!.get('p').text()).toBe('实际值：false；标准：null。')
+    expect(rows[2]!.get('p').text()).toBe('实际值：false。')
     expect(rows[3]!.get('p').text()).toBe('该子项已按规则要求完成核对。')
+  })
+
+  it('鉴别诊断关联性显示中文结论及具体依据，空标准不显示', () => {
+    const wrapper = mount(CriterionResultBlock, {
+      props: {
+        variant: 'decision',
+        criteria: [{
+          criterion_id: 'differential_diagnosis_relation', kind: 'semantic_relation',
+          status: 'failed', reason_code: 'no_related_item',
+          actual_value: 'unrelated', expected_value: null,
+          medical_analysis: '鉴别诊断不能解释第一诊断所涉及的临床问题。',
+        }],
+      },
+    })
+    expect(wrapper.get('.criterion-head strong').text()).toBe('鉴别诊断关联性')
+    expect(wrapper.get('.criterion-body > p').text()).toContain('未发现合理关联')
+    expect(wrapper.text()).not.toMatch(/null|unrelated|标准：/)
+    expect(wrapper.get('details p').text()).toBe('鉴别诊断不能解释第一诊断所涉及的临床问题。')
   })
 
   it('criteria 为空时不渲染 criterion block', () => {
