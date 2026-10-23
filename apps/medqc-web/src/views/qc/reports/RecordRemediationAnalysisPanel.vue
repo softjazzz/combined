@@ -2,23 +2,27 @@
   <section class="remediation-analysis" aria-label="整改分析">
     <header>
       <h2>整改分析</h2>
-      <a-button :disabled="!analysis || busy || exporting" @click="download"
-        ><Download :size="16" />导出 CSV</a-button
-      >
+      <a-button :disabled="!analysis || busy || exporting" @click="download">
+        <Download :size="16" />导出 CSV
+      </a-button>
     </header>
     <a-alert v-if="error" :message="error" type="error" show-icon />
-    <a-button v-if="error" :disabled="busy" @click="load(1)">重试读取</a-button>
+    <a-button v-if="error" :disabled="busy" @click="load(1)"> 重试读取 </a-button>
     <a-spin :spinning="busy">
       <template v-if="analysis">
         <a-alert type="info" message="七标签统计口径已确认，可重叠，申诉与整改独立" show-icon />
         <ul class="assumptions">
-          <li v-for="assumption in analysis.assumptions" :key="assumption">{{ assumption }}</li>
+          <li v-for="assumption in analysis.assumptions" :key="assumption">
+            {{ assumption }}
+          </li>
         </ul>
         <div class="label-counts">
-          <button :class="{ active: !label }" @click="selectLabel()">全部保存缺陷</button
+          <button class="mq-btn" :class="{ active: !label }" @click="selectLabel()">
+            全部保存缺陷</button
           ><button
             v-for="item in analysis.labels"
             :key="item.key"
+            class="mq-btn"
             :class="{ active: label === item.key }"
             @click="selectLabel(item.key)"
           >
@@ -30,6 +34,7 @@
           <button
             v-for="(value, key) in analysis.state_counts"
             :key="key"
+            class="mq-btn"
             :class="{ active: label === key }"
             @click="selectLabel(String(key))"
           >
@@ -38,7 +43,7 @@
         </div>
         <p>当前筛选 {{ analysis.total }} 条保存缺陷；七标签只统计完整冻结来源，缺失来源单列。</p>
         <div class="table-scroll">
-          <table>
+          <table class="mq-table">
             <thead>
               <tr>
                 <th>病例 / 科室 / 医生</th>
@@ -66,7 +71,9 @@
                   ><small>{{ row.labels.map(labelName).join('、') || '未纳入七标签' }}</small
                   ><small>受领医生：{{ row.assignee_name || '未知' }}</small>
                 </td>
-                <td><a-button @click="selected = row">查看历史</a-button></td>
+                <td>
+                  <a-button @click="selected = row"> 查看历史 </a-button>
+                </td>
               </tr>
               <tr v-if="!analysis.items.length">
                 <td colspan="4">暂无匹配的保存缺陷</td>
@@ -88,11 +95,12 @@
     <a-drawer
       :open="!!selected"
       title="保存缺陷与整改历史"
-      :width="680"
+      width="min(680px, 100vw)"
+      :root-style="{ zIndex: 1100 }"
       @close="selected = undefined"
     >
-      <template v-if="selected"
-        ><h3>{{ selected.target_label }}</h3>
+      <template v-if="selected">
+        <h3>{{ selected.target_label }}</h3>
         <p>
           {{ selected.patient_name || '姓名未知' }} · {{ selected.visit_id }} ·
           {{ selected.scene === 'running' ? '运行病历' : '终末病历' }}
@@ -108,7 +116,9 @@
           <dt>提交时有效催办</dt>
           <dd>{{ selected.submission_urge_ids.join('、') || '无或尚未核实' }}</dd>
         </dl>
-        <p v-if="selected.source_reason">{{ sourceReason(selected.source_reason) }}</p>
+        <p v-if="selected.source_reason">
+          {{ sourceReason(selected.source_reason) }}
+        </p>
         <h4>整改事件</h4>
         <p v-if="!selected.events.length">无已派发整改历史，不能据此认定未整改。</p>
         <ol>
@@ -281,73 +291,4 @@ onBeforeUnmount(() => {
   generation += 1
 })
 </script>
-<style scoped>
-.remediation-analysis {
-  padding: 20px 0;
-  border-top: 1px solid #e6eaf0;
-}
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-h2 {
-  font-size: 18px;
-}
-.label-counts,
-.other-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
-}
-.label-counts button,
-.other-counts button {
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 8px 12px;
-  background: #fff;
-  color: #334155;
-  cursor: pointer;
-}
-.label-counts .active,
-.other-counts .active {
-  border-color: #1677ff;
-  background: #eff6ff;
-}
-small {
-  display: block;
-  margin-top: 4px;
-  color: #64748b;
-  overflow-wrap: anywhere;
-}
-.table-scroll {
-  overflow-x: auto;
-}
-table {
-  width: 100%;
-  min-width: 680px;
-  border-collapse: collapse;
-}
-th,
-td {
-  padding: 12px;
-  border-bottom: 1px solid #edf0f4;
-  text-align: left;
-  vertical-align: top;
-}
-th {
-  background: #f8fafc;
-}
-dd,
-li p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.assumptions {
-  padding-left: 20px;
-  color: #596579;
-  line-height: 1.7;
-}
-</style>
+<style scoped src="@/views/qc/reports/styles/record-remediation-analysis.css"></style>

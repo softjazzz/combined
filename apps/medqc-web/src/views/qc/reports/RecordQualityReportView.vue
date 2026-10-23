@@ -1,97 +1,146 @@
 <template>
-  <main class="report-page">
-    <a-tabs v-model:active-key="reportTab">
-      <a-tab-pane key="quality" tab="病历质量分析" />
-      <a-tab-pane key="core" tab="18项核心制度" />
-    </a-tabs>
+  <main class="mq-page report-page">
+    <header class="page-head mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
+        <h1 class="mq-page-title">病历质量分析</h1>
+        <p>
+          {{
+            scene === 'running'
+              ? '当前在院病历的已完成质控结果'
+              : '已出院且有已完成质控结果的病历（未核验归档）'
+          }}
+        </p>
+      </div>
+      <div class="head-actions mq-page-head__actions">
+        <div class="mq-segmented" role="tablist" aria-label="报表专题">
+          <button
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': reportTab === 'quality' }"
+            role="tab"
+            :aria-selected="reportTab === 'quality'"
+            @click="reportTab = 'quality'"
+          >
+            病历质量分析
+          </button>
+          <button
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': reportTab === 'core' }"
+            role="tab"
+            :aria-selected="reportTab === 'core'"
+            data-testid="core-tab"
+            @click="reportTab = 'core'"
+          >
+            18项核心制度
+          </button>
+        </div>
+        <button
+          v-if="reportTab === 'quality'"
+          class="secondary mq-btn"
+          type="button"
+          :disabled="loading"
+          @click="loadReport"
+        >
+          <MqIcon name="sync" :size="16" />刷新
+        </button>
+        <button
+          v-if="reportTab === 'quality'"
+          class="secondary mq-btn"
+          type="button"
+          :disabled="!report || exporting !== null"
+          @click="download('departments')"
+        >
+          <MqIcon name="download" :size="16" />科室 CSV
+        </button>
+        <button
+          v-if="reportTab === 'quality'"
+          class="secondary mq-btn"
+          type="button"
+          :disabled="!report || exporting !== null"
+          @click="download('doctors')"
+        >
+          <MqIcon name="download" :size="16" />医生 CSV
+        </button>
+      </div>
+    </header>
     <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
     <div v-show="reportTab === 'quality'">
-      <header class="page-head">
-        <div>
-          <h1>病历质量分析</h1>
-          <p>
-            {{
-              scene === 'running'
-                ? '当前在院病历的已完成质控结果'
-                : '已出院且有已完成质控结果的病历（未核验归档）'
-            }}
-          </p>
-        </div>
-        <div class="head-actions">
-          <button class="secondary" type="button" :disabled="loading" @click="loadReport">
-            <RefreshCw :size="16" />刷新
-          </button>
-          <button
-            class="secondary"
-            type="button"
-            :disabled="!report || exporting !== null"
-            @click="download('departments')"
-          >
-            <Download :size="16" />科室 CSV
-          </button>
-          <button
-            class="secondary"
-            type="button"
-            :disabled="!report || exporting !== null"
-            @click="download('doctors')"
-          >
-            <Download :size="16" />医生 CSV
-          </button>
-        </div>
-      </header>
-
-      <section class="filters" aria-label="报表筛选">
-        <div class="field scene-field">
+      <section class="filters mq-card mq-card--padded" aria-label="报表筛选">
+        <div class="field mq-field scene-field">
           <label>场景</label>
-          <div class="segmented">
+          <div class="segmented mq-segmented">
             <button
               type="button"
-              :class="{ active: scene === 'running' }"
+              class="mq-segmented__item"
+              :class="{ active: scene === 'running', 'is-active': scene === 'running' }"
               @click="setScene('running')"
             >
               运行病历</button
             ><button
               type="button"
-              :class="{ active: scene === 'final' }"
+              class="mq-segmented__item"
+              :class="{ active: scene === 'final', 'is-active': scene === 'final' }"
               @click="setScene('final')"
             >
               终末病历
             </button>
           </div>
         </div>
-        <div class="field">
+        <div class="field mq-field">
           <label for="report-department">科室</label
-          ><input id="report-department" v-model.trim="draft.department" placeholder="全部科室" />
+          ><input
+            id="report-department"
+            v-model.trim="draft.department"
+            class="mq-input"
+            placeholder="全部科室"
+          />
         </div>
-        <div class="field">
+        <div class="field mq-field">
           <label for="report-doctor">主治医师</label
-          ><input id="report-doctor" v-model.trim="draft.doctor" placeholder="全部医生" />
+          ><input
+            id="report-doctor"
+            v-model.trim="draft.doctor"
+            class="mq-input"
+            placeholder="全部医生"
+          />
         </div>
-        <div class="field">
+        <div class="field mq-field">
           <label for="report-from">完成时间起</label
-          ><input id="report-from" v-model="draft.completed_from" type="datetime-local" />
+          ><input
+            id="report-from"
+            v-model="draft.completed_from"
+            class="mq-input"
+            type="datetime-local"
+          />
         </div>
-        <div class="field">
+        <div class="field mq-field">
           <label for="report-to">完成时间止</label
-          ><input id="report-to" v-model="draft.completed_to" type="datetime-local" />
+          ><input
+            id="report-to"
+            v-model="draft.completed_to"
+            class="mq-input"
+            type="datetime-local"
+          />
         </div>
-        <div class="field">
+        <div class="field mq-field">
           <label for="report-source">质控类型</label
-          ><select id="report-source" v-model="draft.defect_source">
+          ><select id="report-source" v-model="draft.defect_source" class="mq-input">
             <option value="all">全部</option>
             <option value="auto">自动缺陷</option>
             <option value="manual">人工缺陷</option>
           </select>
         </div>
-        <button class="primary" type="button" @click="applyFilters">
-          <Search :size="16" />查询
+        <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+          <MqIcon name="search" :size="16" />查询
         </button>
-        <button class="secondary" type="button" @click="resetFilters">重置</button>
+        <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
       </section>
 
       <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
       <div v-else-if="loadError" class="status error" role="alert" data-testid="report-error">
-        <CircleAlert :size="18" />{{ loadError }}
+        <MqIcon name="issue" :size="18" />{{ loadError }}
       </div>
       <template v-else-if="report">
         <div
@@ -100,14 +149,22 @@
           role="note"
           data-testid="archive-unverified"
         >
-          <CircleAlert :size="16" />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
+          <MqIcon
+            name="issue"
+            :size="16"
+          />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
           统计范围未按“已归档”核验，可能包含尚未归档的病历。
         </div>
         <section class="overview" aria-label="总览">
           <h2>总览</h2>
           <div class="metrics">
-            <div v-for="item in kpiCards" :key="item.label" class="metric">
-              <span>{{ item.label }}</span
+            <div
+              v-for="item in kpiCards"
+              :key="item.label"
+              class="metric mq-card"
+              :class="{ 'metric--text': /[\u4e00-\u9fff]/.test(item.value) }"
+            >
+              <span class="metric-label"><MqIcon name="stats" :size="20" />{{ item.label }}</span
               ><strong>{{ item.value }}</strong
               ><small>{{ item.note }}</small>
             </div>
@@ -129,7 +186,7 @@
         <section class="distribution" aria-label="分布">
           <h2>分布</h2>
           <div class="distribution-grid">
-            <div v-if="report.score_standard.status === 'configured'" class="data-panel">
+            <div v-if="report.score_standard.status === 'configured'" class="data-panel mq-card">
               <h3>等级分布</h3>
               <div
                 v-for="item in report.grade_distribution || []"
@@ -141,7 +198,7 @@
               </div>
               <p v-if="!report.grade_distribution?.length" class="empty">暂无数据</p>
             </div>
-            <div v-if="report.score_standard.status === 'configured'" class="data-panel">
+            <div v-if="report.score_standard.status === 'configured'" class="data-panel mq-card">
               <h3>得分分布</h3>
               <div
                 v-for="item in report.score_distribution || []"
@@ -153,7 +210,7 @@
               </div>
               <p v-if="!report.score_distribution?.length" class="empty">暂无数据</p>
             </div>
-            <div class="data-panel">
+            <div class="data-panel mq-card">
               <h3>缺陷等级</h3>
               <template v-if="report.defect_level_distribution">
                 <div
@@ -168,7 +225,7 @@
               </template>
               <p v-else class="empty">不可用</p>
             </div>
-            <div class="data-panel">
+            <div class="data-panel mq-card">
               <h3>缺陷类型分布</h3>
               <template v-if="report.defect_type_distribution">
                 <button
@@ -185,7 +242,7 @@
               </template>
               <p v-else class="empty">不可用</p>
             </div>
-            <div class="data-panel">
+            <div class="data-panel mq-card">
               <h3>文书分布</h3>
               <template v-if="report.document_distribution">
                 <button
@@ -203,15 +260,16 @@
               <p v-else class="empty">不可用</p>
             </div>
           </div>
-          <div class="top-panel">
+          <div class="top-panel mq-card">
             <div class="top-head">
               <h3>缺陷 Top 20</h3>
-              <div class="segmented">
+              <div class="segmented mq-segmented">
                 <button
                   v-for="tab in topTabs"
                   :key="tab.key"
                   type="button"
-                  :class="{ active: activeTop === tab.key }"
+                  class="mq-segmented__item"
+                  :class="{ active: activeTop === tab.key, 'is-active': activeTop === tab.key }"
                   @click="activeTop = tab.key"
                 >
                   {{ tab.label }}
@@ -261,10 +319,11 @@
         <section class="details" aria-label="明细">
           <div class="section-head">
             <h2>明细</h2>
-            <div class="head-actions">
+            <div class="head-actions mq-page-head__actions">
               <label class="column-picker"
-                ><Columns3 :size="16" />显示列<select
+                ><MqIcon name="settings" :size="16" />显示列<select
                   v-model="columnPreset"
+                  class="mq-input"
                   @change="applyColumnPreset"
                 >
                   <option value="all">全部</option>
@@ -278,19 +337,20 @@
             <label v-for="column in optionalColumns" :key="column.key"
               ><input
                 v-model="visibleColumns"
+                class="mq-input"
                 type="checkbox"
                 :value="column.key"
                 @change="saveColumns"
               />{{ column.label }}</label
             >
           </div>
-          <div class="table-panel">
+          <div class="table-panel mq-card">
             <div class="table-head">
               <h3>科室明细</h3>
               <span>{{ report.department_rows.length }} 个科室</span>
             </div>
             <div class="table-scroll">
-              <table>
+              <table class="mq-table">
                 <thead>
                   <tr>
                     <th>科室</th>
@@ -321,13 +381,13 @@
               </table>
             </div>
           </div>
-          <div class="table-panel">
+          <div class="table-panel mq-card">
             <div class="table-head">
               <h3>医生明细</h3>
               <span>{{ report.doctor_rows.length }} 位医生</span>
             </div>
             <div class="table-scroll">
-              <table>
+              <table class="mq-table">
                 <thead>
                   <tr>
                     <th>主治医师</th>
@@ -360,7 +420,7 @@
           </div>
         </section>
         <RecordRemediationAnalysisPanel :filters="filters" />
-        <section class="unavailable">
+        <section class="unavailable mq-card">
           <h2>暂未接入的维度</h2>
           <p v-for="item in report.unavailable_dimensions" :key="item.key">
             {{ item.label }}：{{ unavailableReason(item.reason_code) }}
@@ -381,12 +441,12 @@
         <div class="drawer-actions">
           <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
           ><button
-            class="secondary"
+            class="secondary mq-btn"
             type="button"
             :disabled="!recordsPage || exporting !== null"
             @click="download('records')"
           >
-            <Download :size="16" />导出病例 CSV
+            <MqIcon name="download" :size="16" />导出病例 CSV
           </button>
         </div>
         <p v-if="recordsError" class="status error" role="alert">
@@ -394,7 +454,7 @@
         </p>
         <p v-else-if="recordsLoading" class="status">正在读取病例…</p>
         <div v-else-if="recordsPage" class="table-scroll">
-          <table>
+          <table class="mq-table">
             <thead>
               <tr>
                 <th>患者 / 就诊号</th>
@@ -433,7 +493,7 @@
         </div>
         <div v-if="recordsPage && recordsPage.total > recordsPage.page_size" class="pager">
           <button
-            class="secondary"
+            class="secondary mq-btn"
             type="button"
             :disabled="recordsPage.page <= 1 || recordsLoading"
             @click="changePage(recordsPage.page - 1)"
@@ -443,7 +503,7 @@
             >{{ recordsPage.page }} /
             {{ Math.ceil(recordsPage.total / recordsPage.page_size) }}</span
           ><button
-            class="secondary"
+            class="secondary mq-btn"
             type="button"
             :disabled="
               recordsPage.page * recordsPage.page_size >= recordsPage.total || recordsLoading
@@ -462,7 +522,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { CircleAlert, Columns3, Download, RefreshCw, Search } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import CoreSystemReportPanel from './CoreSystemReportPanel.vue'
 import RecordRemediationAnalysisPanel from './RecordRemediationAnalysisPanel.vue'

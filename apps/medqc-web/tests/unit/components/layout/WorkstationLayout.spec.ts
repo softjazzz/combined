@@ -94,8 +94,10 @@ const SubMenuStub = defineComponent({
 function mountLayout() {
   return shallowMount(WorkstationLayout, {
     global: {
+      renderStubDefaultSlot: true,
       stubs: {
         'a-layout': PassThroughStub,
+        ConfigProvider: PassThroughStub,
         'a-layout-sider': SiderStub,
         'a-layout-header': PassThroughStub,
         'a-layout-content': PassThroughStub,
@@ -125,10 +127,10 @@ describe('WorkstationLayout 门急诊入口', () => {
     mediaChange = undefined
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
-      value: vi.fn(() => ({
-        matches: mobileMatches,
+      value: vi.fn((query: string) => ({
+        matches: query.includes('767') ? mobileMatches : false,
         addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
-          mediaChange = listener
+          if (query.includes('767')) mediaChange = listener
         },
         removeEventListener: vi.fn(),
       })),
@@ -185,10 +187,10 @@ describe('WorkstationLayout 窄屏导航', () => {
     mediaChange = undefined
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
-      value: vi.fn(() => ({
-        matches: mobileMatches,
+      value: vi.fn((query: string) => ({
+        matches: query.includes('767') ? mobileMatches : false,
         addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
-          mediaChange = listener
+          if (query.includes('767')) mediaChange = listener
         },
         removeEventListener: vi.fn(),
       })),
@@ -236,7 +238,7 @@ describe('WorkstationLayout 窄屏导航', () => {
     expect(wrapper.find('.mobile-menu-trigger').exists()).toBe(false)
     expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
     expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(false)
-    await wrapper.find('.desktop-menu-trigger').trigger('click')
+    await wrapper.find('.sidebar-collapse-control').trigger('click')
     expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(true)
   })
 })
@@ -323,6 +325,34 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
 })
 
 describe('WorkstationLayout V5 报表导航', () => {
+  it('V7.1 无顶栏，账号和版本放在侧栏底部', () => {
+    const wrapper = mountLayout()
+    expect(wrapper.find('.header').exists()).toBe(false)
+    expect(wrapper.find('.workstation-account-footer').exists()).toBe(true)
+    expect(wrapper.find('.workstation-account-footer runtime-build-status-stub').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('.sidebar-collapse-control').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('1280 以下桌面宽度自动折叠为紧凑侧栏，仍可手动展开', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        matches: query.includes('1279'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    })
+    const wrapper = mountLayout()
+    await nextTick()
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(true)
+    await wrapper.find('.sidebar-collapse-control').trigger('click')
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(false)
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     routerPush.mockReset()
     authState.userRoles = ['qc_manager']
@@ -350,7 +380,8 @@ describe('WorkstationLayout V5 报表导航', () => {
     await nextTick()
     expect(wrapper.findComponent(MenuStub).props('selectedKeys')).toEqual([path])
     expect(wrapper.findComponent(MenuStub).props('openKeys')).toContain('statistics-sub')
-    expect(wrapper.find('.header').text()).toContain(title)
+    expect(wrapper.find('.header').exists()).toBe(false)
+    expect(wrapper.find('.workstation-account-footer').exists()).toBe(true)
     wrapper.unmount()
   })
 })

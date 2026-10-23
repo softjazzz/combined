@@ -92,6 +92,17 @@ function render() {
 }
 
 describe('RecordQualityReportView', () => {
+  it('使用 V7.1 公共页头、分段、玻璃卡和胶囊按钮', async () => {
+    const wrapper = render()
+    await flush()
+    expect(wrapper.classes()).toContain('mq-page')
+    expect(wrapper.get('.mq-page-title').text()).toBe('病历质量分析')
+    expect(wrapper.get('[role="tablist"]').classes()).toContain('mq-segmented')
+    expect(wrapper.get('.filters').classes()).toContain('mq-card')
+    expect(wrapper.get('.filters .primary').classes()).toContain('mq-btn--primary')
+    expect(wrapper.get('#report-department').classes()).toContain('mq-input')
+  })
+
   it('下钻抽屉宽度不超过窄窗口', async () => {
     const wrapper = render()
     await flush()
@@ -219,7 +230,8 @@ describe('RecordQualityReportView', () => {
     await flush()
     await wrapper.get('[data-testid="core-tab"]').trigger('click')
     expect(wrapper.find('[data-testid="core-panel"]').exists()).toBe(true)
-    expect(wrapper.get('.page-head').isVisible()).toBe(false)
+    expect(wrapper.get('.page-head').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="core-tab"]').attributes('aria-selected')).toBe('true')
   })
   beforeEach(() => {
     vi.clearAllMocks()
@@ -279,7 +291,7 @@ describe('RecordQualityReportView', () => {
       )
       .mockResolvedValueOnce({ success: false, code: 'range_too_large', message: '范围过大' })
     const wrapper = render()
-    await wrapper.get('.page-head button').trigger('click')
+    await wrapper.get('.page-head .secondary').trigger('click')
     await flush()
     resolveOld?.({ success: true, data: report })
     await flush()
