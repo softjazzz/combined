@@ -103,16 +103,18 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
   let detailText = ''
   let detailTone: TaskHistoryRow['detailTone'] = 'muted'
   if (status === 'failed' && !base.isRunning) {
-    detailText = '未全部完成，可打开查看原因和已有结果'
+    detailText = '查看原因及已有结果'
     detailTone = 'warning'
   } else if (status === 'canceled') {
     detailText = '任务已取消，已返回的结果仍可查看'
   } else if (status === 'completed') {
     const seconds =
       finished && started ? (finished.getTime() - started.getTime()) / 1000 : Number.NaN
+    const waitingSeconds = created && started ? (started.getTime() - created.getTime()) / 1000 : 0
     detailText = [
       finished ? `${clockText(finished)} 完成` : '已完成',
-      Number.isFinite(seconds) && seconds >= 0 ? `用时 ${formatDuration(seconds)}` : '',
+      waitingSeconds >= 60 ? `等待 ${formatDuration(waitingSeconds)}` : '',
+      Number.isFinite(seconds) && seconds >= 0 ? `执行 ${formatDuration(seconds)}` : '',
     ]
       .filter(Boolean)
       .join(' · ')

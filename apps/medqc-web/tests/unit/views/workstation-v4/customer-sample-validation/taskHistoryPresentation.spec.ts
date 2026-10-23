@@ -52,7 +52,7 @@ describe('质控记录列表展示模型', () => {
     )
     expect(row).not.toHaveProperty('counts')
     expect(row).not.toHaveProperty('countTotal')
-    expect(row.detailText).toBe('08:29 完成 · 用时 2 分 5 秒')
+    expect(row.detailText).toBe('08:29 完成 · 执行 2 分 5 秒')
     expect(row.statusLabel).toBe('已完成')
     expect(row.statusTone).toBe('success')
     expect(row.canExport).toBe(true)
@@ -73,7 +73,7 @@ describe('质控记录列表展示模型', () => {
     )
     expect(row.statusLabel).toBe('未全部完成')
     expect(row.statusTone).toBe('warning')
-    expect(row.detailText).toBe('未全部完成，可打开查看原因和已有结果')
+    expect(row.detailText).toBe('查看原因及已有结果')
     expect(row.canExport).toBe(true)
     expect(row.isCompleted).toBe(false)
   })
@@ -82,7 +82,7 @@ describe('质控记录列表展示模型', () => {
     const row = buildTaskHistoryRow(job({ status: 'failed', summary: null, has_results: false }))
     expect(row.statusLabel).toBe('未全部完成')
     expect(row.detailText).not.toContain('未形成可交付')
-    expect(row.detailText).toContain('可打开查看')
+    expect(row.detailText).toContain('查看原因')
   })
 
   it('轻量列表的进度只取病历计数', () => {
@@ -96,6 +96,14 @@ describe('质控记录列表展示模型', () => {
     expect(buildTaskHistoryRow(job({ summary: null })).detailText).toBe('已完成')
     expect(formatDuration(0)).toBe('0 秒')
     expect(formatDuration(3600)).toBe('1 小时')
+  })
+
+  it('有排队等待时与实际执行时长分别显示', () => {
+    const row = buildTaskHistoryRow(job({
+      created_at: '2026-10-23T05:24:24', started_at: '2026-10-23T05:29:28',
+      finished_at: '2026-10-23T05:33:09',
+    }))
+    expect(row.detailText).toBe('05:33 完成 · 等待 5 分 4 秒 · 执行 3 分 41 秒')
   })
 
   it('执行中显示病历进度', () => {

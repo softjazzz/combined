@@ -68,24 +68,16 @@
                 }}</span>
                 <strong class="task-history__title" :title="row.title">{{ row.title }}</strong>
               </div>
-              <span class="task-history__meta">{{ row.metaText }}</span>
-            </div>
-
-            <div class="task-history__result">
-              <template v-if="row.isRunning">
-                <span class="task-history__bar">
+              <div class="task-history__metadata">
+                <span class="task-history__meta">{{ row.metaText }}</span>
+                <span v-if="row.detailText" class="task-history__sub">{{ row.detailText }}</span>
+              </div>
+              <div v-if="row.isRunning" class="task-history__progress">
+                <span class="task-history__bar" aria-hidden="true">
                   <span class="is-info" :style="{ width: `${row.progressPercent}%` }" />
                 </span>
-                <span class="task-history__sub">{{ row.progressText }}</span>
-              </template>
-              <template v-else>
-                <span
-                  v-if="row.detailText"
-                  class="task-history__sub"
-                  :class="{ 'is-warning': row.detailTone === 'warning' }"
-                  >{{ row.detailText }}</span
-                >
-              </template>
+                <span class="task-history__meta">{{ row.progressText }}</span>
+              </div>
             </div>
 
             <div class="task-history__actions">
