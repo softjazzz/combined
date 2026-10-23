@@ -14,7 +14,10 @@ def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "LUXIAN_0609_OPINION_FREEZE_DIR", str(tmp_path / "opinion-freeze")
     )
-    # 06-01-05 分析核验冻结同样按用例隔离。
+    # 会诊族第二阶段应答冻结、06-01-05 分析核验冻结同样按用例隔离。
+    monkeypatch.setenv(
+        "LUXIAN_0609_CONSULTATION_RESPONSE_FREEZE_DIR", str(tmp_path / "consultation-response-freeze")
+    )
     monkeypatch.setenv(
         "LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR", str(tmp_path / "exam-analysis-freeze")
     )

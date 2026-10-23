@@ -44,6 +44,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.shared import _parse_datetime
+from .consultation_response_freeze import FrozenResponseClient
 from .judgement_examples import CONSULTATION_SCOPE_EXAMPLES
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
@@ -6273,7 +6274,41 @@ async def _execute_consultation_episode_rules(
     )
 
 
+_DELIVERABLE_FREEZE_STATUSES = frozenset({"compliant", "non_compliant", "not_applicable", "data_gap"})
+
+
 async def execute_luxian_0609_native_consultation_episode_rules(
+    *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
+    source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (), opinion_freeze_dir: str | Path | None = None,
+    opinion_freeze_rebuild: bool = False,
+) -> NativeConsultationEpisodeExecutionResult:
+    """会诊族模型应答按病历版本冻结复用（用户决定 2026-10-22，见 consultation_response_freeze）。"""
+    if llm_client is None:
+        return await _execute_luxian_0609_native_consultation_episode_rules_uncached(
+            rule_ids=rule_ids, institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+            source_schema=source_schema, llm_client=None, evidence_materials=evidence_materials,
+            evidence_snapshot=evidence_snapshot, decision_rule_ids=decision_rule_ids,
+            opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild,
+        )
+    frozen_client = FrozenResponseClient(llm_client, visit_id=visit_id)
+    result = await _execute_luxian_0609_native_consultation_episode_rules_uncached(
+        rule_ids=rule_ids, institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        source_schema=source_schema, llm_client=frozen_client, evidence_materials=evidence_materials,
+        evidence_snapshot=evidence_snapshot, decision_rule_ids=decision_rule_ids,
+        opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild,
+    )
+    if result.results and all(item.get("status") in _DELIVERABLE_FREEZE_STATUSES for item in result.results):
+        # 只冻结全部结论可交付的运行；技术错误、无法判定的下次重新调用模型。
+        frozen_client.commit()
+    if frozen_client.reused_calls:
+        result = replace(result, llm_call_count=max(0, result.llm_call_count - frozen_client.reused_calls))
+    return result
+
+
+async def _execute_luxian_0609_native_consultation_episode_rules_uncached(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,

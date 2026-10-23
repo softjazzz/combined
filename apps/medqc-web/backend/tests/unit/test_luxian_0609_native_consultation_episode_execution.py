@@ -10046,3 +10046,49 @@ async def test_persistent_inconsistent_opinion_state_is_data_gap_and_not_frozen(
     }
     assert result.llm_call_count == 2
     assert not freeze_dir.exists() or not list(freeze_dir.glob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_stage_two_responses_are_frozen_and_reused_without_model(monkeypatch):
+    """用户决定（2026-10-22）：会诊第二阶段应答在可交付运行后冻结，同一病历重跑不再调用模型、结论不变。"""
+
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows("会诊意见：建议复查血常规。", hour_start=1, action_suffix=False)
+    source_rows["senior_course_record"] = _rows("已按会诊意见复查血常规。", hour_start=2, action_suffix=False)
+    session = _window_session(rows_by_source=source_rows)
+
+    def client():
+        return _SequentialClient(
+            _payload(episodes=[_episode(
+                "consultation_record-1", ["consultation_record-1"],
+                recommendations=[{
+                    "recommendation_ref": "consultation_record-1#r1", "action_type": "test",
+                    "source_quote": "复查血常规",
+                }],
+            )]),
+            _execution({
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace", "trace_refs": ["senior_course_record-1"],
+                "execution_state": "absent", "structured_action_refs": [], "confidence": "high",
+                "recommendation_coverage_state": "complete", "coverage_confidence": "high",
+                "uncovered_source_quotes": [],
+            }),
+        )
+
+    async def run(llm_client, freeze_dir):
+        return await episode.execute_luxian_0609_native_consultation_episode_rules(
+            rule_ids=("LX0609-03-01-01", "LX0609-03-01-04"), institute_id="I", patient_id="P",
+            visit_id="V", source_schema=None, llm_client=llm_client,
+            evidence_materials=session.materials, evidence_snapshot=session.snapshot,
+            opinion_freeze_dir=freeze_dir,
+        )
+
+    import tempfile
+
+    first = await run(client(), tempfile.mkdtemp())
+    assert first.llm_call_count == 2
+    empty = _SequentialClient()
+    # 第一阶段冻结换新目录强制重抽：第二阶段与第一阶段应答都应由应答冻结复用。
+    second = await run(empty, tempfile.mkdtemp())
+    assert [item["status"] for item in second.results] == [item["status"] for item in first.results]
+    assert second.llm_call_count == 0 and not empty.prompts
