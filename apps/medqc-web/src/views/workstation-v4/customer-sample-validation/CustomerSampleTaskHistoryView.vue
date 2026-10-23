@@ -21,7 +21,7 @@
       <input
         v-model.trim="query.keyword"
         class="task-history__search mq-input"
-        placeholder="搜索任务名称、住院号或质控点"
+        placeholder="搜索任务名称或质控点"
         data-testid="task-history-search"
         @keyup.enter="handleSearch"
       />
@@ -79,26 +79,12 @@
                 <span class="task-history__sub">{{ row.progressText }}</span>
               </template>
               <template v-else>
-                <span v-if="row.countTotal" class="task-history__counts">
-                  <span :class="{ 'is-danger': row.counts.issue > 0 }"
-                    >{{ row.counts.issue }} 项问题</span
-                  >
-                  <span :class="{ 'is-warning': row.counts.dataGap > 0 }"
-                    >{{ row.counts.dataGap }} 项需补资料</span
-                  >
-                  <span :class="{ 'is-success': row.counts.compliant > 0 }"
-                    >{{ row.counts.compliant }} 合格</span
-                  >
-                </span>
-                <span v-if="row.countTotal && !row.noticeText" class="task-history__bar">
-                  <span
-                    v-for="segment in countSegments(row)"
-                    :key="segment.key"
-                    :class="segment.className"
-                    :style="{ width: `${segment.width}%` }"
-                  />
-                </span>
-                <span v-if="row.noticeText" class="task-history__sub">{{ row.noticeText }}</span>
+                <span
+                  v-if="row.detailText"
+                  class="task-history__sub"
+                  :class="{ 'is-warning': row.detailTone === 'warning' }"
+                  >{{ row.detailText }}</span
+                >
               </template>
             </div>
 
@@ -187,7 +173,6 @@ import {
 } from './batchJobPresentation'
 import {
   buildTaskHistoryRow,
-  countSegments,
   groupTaskHistoryRows,
   type TaskHistoryTone,
 } from './taskHistoryPresentation'
@@ -253,6 +238,7 @@ async function loadJobs() {
   loading.value = true
   try {
     const result = await listSichuanWorkspaceBatchJobs({
+      view: 'overview',
       page: query.page,
       page_size: query.pageSize,
       q: query.keyword || undefined,

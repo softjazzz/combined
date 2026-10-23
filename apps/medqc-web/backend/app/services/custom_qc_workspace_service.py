@@ -976,6 +976,53 @@ def _safe_review_report(
     }
 
 
+def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
+    """质控记录列表的一行：任务元数据、范围与病历进度，不含任何结果计数、结论或证据。
+
+    只白名单输出；filters 原始对象不透传。
+    ``has_results`` 只表示失败任务是否已有可打开查看的结果，不代表结果条数。
+    """
+
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    # 与完整投影同一取法（选定规则优先，其次规则范围），列表“选定 N 个质控点”口径不变。
+    raw_rule_ids = filters.get("selected_rule_ids") or filters.get("rule_ids") or []
+    rule_ids = [
+        _safe_text(value)
+        for value in (raw_rule_ids if isinstance(raw_rule_ids, list) else [])
+        if _safe_text(value)
+    ]
+    total_records = _to_int(job.get("total_records"))
+    success_count = _to_int(job.get("success_count"))
+    customer_rule_count = _to_int(filters.get("customer_rule_count"))
+    return {
+        "schema_version": "customer-qc-job-overview-v1",
+        "id": _safe_text(job.get("id")),
+        "status": _safe_text(job.get("status")).lower(),
+        "job_kind": _safe_text(job.get("job_kind")),
+        "rule_code": _safe_text(job.get("rule_code")).upper(),
+        "rule_name": _safe_text(job.get("rule_name")),
+        "rule_set_key": _safe_text(filters.get("rule_set_key")),
+        "rule_set_name": _safe_text(filters.get("rule_set_name")),
+        "scene": _safe_text(job.get("scene")),
+        "scope": _safe_text(job.get("scope")),
+        "created_at": _safe_text(job.get("created_at")),
+        "started_at": _safe_text(job.get("started_at")),
+        "finished_at": _safe_text(job.get("finished_at")),
+        "updated_at": _safe_text(job.get("updated_at")),
+        "total_records": total_records,
+        "success_count": success_count,
+        "failed_count": _to_int(job.get("failed_count")),
+        "customer_rule_count": customer_rule_count,
+        "draft_ids": rule_ids,
+        "has_results": bool(job.get("has_results")),
+        "summary": {
+            "total_records": total_records,
+            "success_count": success_count,
+            "customer_rule_count": customer_rule_count,
+        },
+    }
+
+
 def project_customer_safe_batch_job(
     job: Dict[str, Any],
     *,
@@ -3206,6 +3253,165 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def _batch_job_list_where(
+        self,
+        *,
+        created_by: str,
+        draft_id: Optional[str] = None,
+        status: Optional[str] = None,
+        scope: Optional[str] = None,
+        query: Optional[str] = None,
+        created_start_date: Optional[str] = None,
+        created_end_date: Optional[str] = None,
+        record_id: Optional[str] = None,
+        include_children: bool = False,
+    ):
+        """任务列表的筛选条件；完整列表与概览列表共用，保证两者筛选口径一致。"""
+
+        clauses = [self._batch_job_table.c.created_by == created_by]
+        if not include_children:
+            clauses.append(
+                or_(
+                    self._batch_job_table.c.parent_job_id.is_(None),
+                    self._batch_job_table.c.parent_job_id == "",
+                )
+            )
+        if draft_id:
+            clauses.append(self._batch_job_table.c.draft_id == draft_id)
+        status_value = _safe_text(status).lower()
+        if status_value:
+            clauses.append(self._batch_job_table.c.status == status_value)
+        scope_value = _safe_text(scope).lower()
+        if scope_value:
+            clauses.append(self._batch_job_table.c.scope == _normalize_scope(scope_value))
+        query_value = _safe_text(query)
+        if query_value:
+            clauses.append(
+                or_(
+                    self._batch_job_table.c.rule_code.ilike(f"%{query_value}%"),
+                    self._batch_job_table.c.rule_name.ilike(f"%{query_value}%"),
+                )
+            )
+        start = _as_date(created_start_date)
+        end = _as_date(created_end_date)
+        if start:
+            clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
+        if end:
+            clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
+        record_id_value = _safe_text(record_id)
+        if record_id_value:
+            escaped_record_id = (
+                record_id_value
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+                .replace('"', '\\"')
+            )
+            clauses.append(
+                self._batch_job_table.c.record_ids_json.ilike(
+                    f'%"{escaped_record_id}"%',
+                    escape="\\",
+                )
+            )
+        return and_(*clauses)
+
+    def list_batch_job_overviews(
+        self,
+        *,
+        created_by: str,
+        status: Optional[str] = None,
+        scope: Optional[str] = None,
+        query: Optional[str] = None,
+        created_start_date: Optional[str] = None,
+        created_end_date: Optional[str] = None,
+        record_id: Optional[str] = None,
+        page: int = 1,
+        page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
+    ) -> WorkspaceBatchJobListResult:
+        """质控记录页的轻量任务列表：只读任务元数据，不读取结果明细与完整摘要。
+
+        完整摘要（含全部规则结果）单个可达数十 MB；仅读取或在库内解析一次就要数秒，
+        列表逐行做客户安全投影要十余秒。概览因此完全不读 summary_json / items_json，
+        进度取自病历计数列；失败任务只用结果计数列判断“是否已有结果”，不返回计数本身。
+        """
+
+        table = self._batch_job_table
+        where_clause = self._batch_job_list_where(
+            created_by=created_by,
+            status=status,
+            scope=scope,
+            query=query,
+            created_start_date=created_start_date,
+            created_end_date=created_end_date,
+            record_id=record_id,
+        )
+        columns = (
+            table.c.id,
+            table.c.draft_id,
+            table.c.rule_code,
+            table.c.rule_name,
+            table.c.scene,
+            table.c.scope,
+            table.c.status,
+            table.c.job_kind,
+            table.c.filters_json,
+            table.c.created_at,
+            table.c.started_at,
+            table.c.finished_at,
+            table.c.updated_at,
+            table.c.total_records,
+            table.c.success_count,
+            table.c.failed_count,
+            table.c.issue_records,
+            table.c.compliant_records,
+        )
+        session = _session()
+        try:
+            total = int(
+                session.execute(select(func.count()).select_from(table).where(where_clause)).scalar()
+                or 0
+            )
+            rows = (
+                session.execute(
+                    select(*columns)
+                    .where(where_clause)
+                    .order_by(desc(table.c.created_at))
+                    .offset(max(page - 1, 0) * page_size)
+                    .limit(page_size)
+                )
+                .mappings()
+                .all()
+            )
+        finally:
+            session.close()
+        items: List[Dict[str, Any]] = []
+        for raw_row in rows:
+            row = dict(raw_row)
+            filters = _safe_json_loads(row.get("filters_json"), {})
+            items.append(
+                {
+                    "id": _safe_text(row.get("id")),
+                    "draft_id": _safe_text(row.get("draft_id")),
+                    "rule_code": _safe_text(row.get("rule_code")),
+                    "rule_name": _safe_text(row.get("rule_name")),
+                    "scene": _safe_text(row.get("scene")),
+                    "scope": _safe_text(row.get("scope")),
+                    "status": _safe_text(row.get("status"), "queued").lower(),
+                    "job_kind": _safe_text(row.get("job_kind")),
+                    "filters": filters if isinstance(filters, dict) else {},
+                    "has_results": _to_int(row.get("issue_records")) > 0
+                    or _to_int(row.get("compliant_records")) > 0,
+                    "created_at": row.get("created_at"),
+                    "started_at": row.get("started_at"),
+                    "finished_at": row.get("finished_at"),
+                    "updated_at": row.get("updated_at"),
+                    "total_records": _to_int(row.get("total_records")),
+                    "success_count": _to_int(row.get("success_count")),
+                    "failed_count": _to_int(row.get("failed_count")),
+                }
+            )
+        return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
+
     def list_batch_jobs(
         self,
         *,
@@ -3225,52 +3431,17 @@ class CustomQCWorkspaceService:
     ) -> WorkspaceBatchJobListResult:
         session = _session()
         try:
-            clauses = [self._batch_job_table.c.created_by == created_by]
-            if not include_children:
-                clauses.append(
-                    or_(
-                        self._batch_job_table.c.parent_job_id.is_(None),
-                        self._batch_job_table.c.parent_job_id == "",
-                    )
-                )
-            if draft_id:
-                clauses.append(self._batch_job_table.c.draft_id == draft_id)
-            status_value = _safe_text(status).lower()
-            if status_value:
-                clauses.append(self._batch_job_table.c.status == status_value)
-            scope_value = _safe_text(scope).lower()
-            if scope_value:
-                clauses.append(self._batch_job_table.c.scope == _normalize_scope(scope_value))
-            query_value = _safe_text(query)
-            if query_value:
-                clauses.append(
-                    or_(
-                        self._batch_job_table.c.rule_code.ilike(f"%{query_value}%"),
-                        self._batch_job_table.c.rule_name.ilike(f"%{query_value}%"),
-                    )
-                )
-            start = _as_date(created_start_date)
-            end = _as_date(created_end_date)
-            if start:
-                clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
-            if end:
-                clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
-            record_id_value = _safe_text(record_id)
-            if record_id_value:
-                escaped_record_id = (
-                    record_id_value
-                    .replace("\\", "\\\\")
-                    .replace("%", "\\%")
-                    .replace("_", "\\_")
-                    .replace('"', '\\"')
-                )
-                clauses.append(
-                    self._batch_job_table.c.record_ids_json.ilike(
-                        f'%"{escaped_record_id}"%',
-                        escape="\\",
-                    )
-                )
-            where_clause = and_(*clauses)
+            where_clause = self._batch_job_list_where(
+                created_by=created_by,
+                draft_id=draft_id,
+                status=status,
+                scope=scope,
+                query=query,
+                created_start_date=created_start_date,
+                created_end_date=created_end_date,
+                record_id=record_id,
+                include_children=include_children,
+            )
             executor_value = _safe_text(executor_type).lower()
             enable_runtime_filter = executor_value in {"program", "llm"} or cache_hit is not None
 

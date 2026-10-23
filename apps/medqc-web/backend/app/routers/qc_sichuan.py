@@ -49,6 +49,7 @@ from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
     customer_safe_projection_key,
+    project_batch_job_overview,
     project_customer_safe_batch_job,
 )
 from ..services.luxian_0609_result_export_service import (
@@ -2350,11 +2351,40 @@ async def list_workspace_batch_jobs(
     created_start_date: Optional[str] = Query(None),
     created_end_date: Optional[str] = Query(None),
     record_id: Optional[str] = Query(None),
+    view: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
+    if str(view or "").strip().lower() == "overview":
+        # 质控记录页：只要任务元数据与进度，不读结果明细，也不返回结果计数。
+        overview = await run_in_threadpool(
+            workspace.list_batch_job_overviews,
+            created_by=_current_user_id(current_user),
+            status=status,
+            scope=scope,
+            query=q,
+            created_start_date=created_start_date,
+            created_end_date=created_end_date,
+            record_id=record_id,
+            page=page,
+            page_size=page_size,
+        )
+        return success_response(
+            data={
+                "items": [
+                    project_batch_job_overview(item)
+                    for item in overview.items
+                    if _is_workspace_batch_job(item)
+                ],
+                "total": overview.total,
+                "page": overview.page,
+                "page_size": overview.page_size,
+            },
+            message="获取四川规则批量任务成功",
+            trace_id=get_trace_id(request),
+        )
     executor_filter = str(executor_type or "").strip().lower() or None
     cache_hit_filter: Optional[bool] = None
     cache_hit_value = str(cache_hit or "").strip().lower()

@@ -121,26 +121,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.task-history__counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-13);
-  font-variant-numeric: tabular-nums;
-}
-
-.task-history__counts .is-danger {
-  color: var(--mq-danger-text);
-  font-weight: 600;
-}
-
-.task-history__counts .is-warning {
+.task-history__sub.is-warning {
   color: var(--mq-warning-text);
-}
-
-.task-history__counts .is-success {
-  color: var(--mq-success-text);
 }
 
 .task-history__bar {
@@ -156,24 +138,8 @@
   height: 100%;
 }
 
-.task-history__bar .is-danger {
-  background: var(--mq-danger-icon);
-}
-
-.task-history__bar .is-warning {
-  background: var(--mq-warning-icon);
-}
-
-.task-history__bar .is-success {
-  background: var(--mq-success-icon);
-}
-
 .task-history__bar .is-info {
   background: var(--mq-info-icon);
-}
-
-.task-history__bar .is-muted {
-  background: var(--mq-border-strong);
 }
 
 .task-history__actions {
