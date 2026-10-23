@@ -77,6 +77,10 @@ async def test_protocol_violation_retries_once_with_hint_then_fails_closed():
     assert outcome.llm_call_count == 2
     assert client.prompts[1].index("上一次输出未通过校验") < client.prompts[1].index("REPORTS_JSON=")
 
+    # 同一份病历换一组应答重跑前清空冻结（2026-10-22 起相关性判定按输入冻结复用）。
+    import shutil
+    from app.services.luxian_0609.exam_analysis_freeze import default_store_dir
+    shutil.rmtree(default_store_dir(), ignore_errors=True)
     client = _Client([_answer(e1="no_abnormal"), _answer(e1="no_abnormal")])  # 漏掉事件2
     outcome = await classify_exam_finding_relevance(projection, client)
     assert outcome.state == "failed" and outcome.hints == {} and outcome.llm_call_count == 2
@@ -114,3 +118,13 @@ def test_first_course_prefix_matches_projection_source_order():
     projection = build_exam_lab_text_projection(rows_by_source={"first_course_record": (
         {"record_time": "2026-08-18 10:00:00", "record_content": "首次病程。"},)})
     assert list(projection.course_candidates) == ["D05-01"]
+
+
+
+@pytest.mark.asyncio
+async def test_relevance_is_frozen_and_reused_without_model():
+    projection = _projection()
+    first = await classify_exam_finding_relevance(projection, _Client([_answer(e1="no_abnormal", e2="uncertain")]))
+    flipped = _Client([_answer(e1="uncertain", e2="no_abnormal")])
+    reused = await classify_exam_finding_relevance(projection, flipped)
+    assert reused.hints == first.hints and reused.llm_call_count == 0 and not flipped.prompts

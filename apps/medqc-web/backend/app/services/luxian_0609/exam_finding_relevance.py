@@ -13,6 +13,7 @@ import json
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from .exam_analysis_freeze import freeze_key, load_payload, save_payload
 from .exam_lab_fact_extraction import ExamLabTextProjection, events_for_family
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
@@ -193,6 +194,16 @@ async def classify_exam_finding_relevance(
     if not reports or llm_client is None:
         return FindingRelevanceOutcome("skipped", {})
     prompt = _prompt(reports, _visit_context(projection))
+    # 用户决定（2026-10-22）：相关性判定决定主抽取的事件阳性提示，首次判定后按输入指纹冻结复用。
+    key = freeze_key(prompt)
+    frozen = load_payload("relevance", key)
+    if frozen is not None:
+        try:
+            hints = {int(position): str(hint) for position, hint in frozen["hints"].items()}
+        except (KeyError, TypeError, ValueError, AttributeError):
+            hints = None
+        if hints is not None and set(hints) == set(reports):
+            return FindingRelevanceOutcome("ready", hints)
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     attempt_prompt = prompt
@@ -222,6 +233,8 @@ async def classify_exam_finding_relevance(
             attempt_prompt = _retry_prompt(prompt, error, response)
 
     hints = {position: RELEVANCE_TO_HINT[value] for position, value in relevance.items()}
+    if set(hints) == set(reports):
+        save_payload("relevance", key, {"hints": {str(position): hint for position, hint in hints.items()}})
     return FindingRelevanceOutcome("ready", hints, calls, prompt_tokens, completion_tokens, total_tokens,
                                    api_time or perf_counter() - started)
 

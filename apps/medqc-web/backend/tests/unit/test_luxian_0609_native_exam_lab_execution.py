@@ -7175,3 +7175,42 @@ def test_finding_analysis_rule_never_closes_by_keyword_fast_path():
         }
     )
     assert exam_lab._strong_semantic_fact(rule_id="LX0609-06-01-05", projection=projection) is None
+
+
+@pytest.mark.asyncio
+async def test_main_extraction_conclusion_is_frozen_and_reused_without_model(monkeypatch):
+    """用户决定（2026-10-22）：主抽取结论首次全部核定后冻结，同一病历重跑不再调用模型。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=({
+            "labtest_subject": "尿培养及药敏",
+            "report_time": "2026-04-26 12:00:00",
+            "result": "大肠埃希菌阳性，药敏结果已报告。",
+        },),
+        course_rows=({
+            "record_time": "2026-04-26 13:00:00",
+            "record_content": "已查看尿培养报告，结果为大肠埃希菌阳性，药敏结果已回报。",
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
+    )
+    rule_ids = ("LX0609-06-03-03", "LX0609-06-03-04")
+
+    async def run(client):
+        return await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+            rule_ids=rule_ids,
+            wrapper_rules=[_wrapper(rule_id) for rule_id in rule_ids],
+            evidence_payload={},
+            llm_client=client,
+            evidence_snapshot=snapshot,
+            evidence_materials=materials,
+            decision_rule_ids=rule_ids,
+        )
+
+    first = await run(_Client([
+        _fact_response(("LX0609-06-03-04",), semantic_state="absent", positive_state="positive")
+    ]))
+    assert first.llm_call_count == 1
+    second_client = _Client([])
+    second = await run(second_client)
+    assert second.llm_call_count == 0 and not second_client.prompts
+    assert [item.qc_direction for item in second.decisions] == [item.qc_direction for item in first.decisions]

@@ -33,6 +33,7 @@ from .exam_lab_projection_batching import (
     build_exam_lab_projection_batches,
     select_exam_lab_projection_batch,
 )
+from .exam_analysis_freeze import freeze_key, load_payload, save_payload
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
@@ -2076,7 +2077,73 @@ class _ExamLabBatchResult:
     transport_rule_ids: frozenset[str] = frozenset()
 
 
+def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str]) -> str:
+    return freeze_key(build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection))
+
+
+def _load_frozen_exam_lab_batch(key: str) -> _ExamLabBatchResult | None:
+    payload = load_payload("main", key)
+    if payload is None:
+        return None
+    try:
+        facts = tuple(
+            ExamLabEventFact(
+                rule_id=str(item["rule_id"]), applicability=str(item["applicability"]),
+                semantic_state=str(item["semantic_state"]), positive_state=str(item["positive_state"]),
+                course_doc_refs=tuple(str(ref) for ref in item["course_doc_refs"]),
+                evidence_refs=tuple(str(ref) for ref in item["evidence_refs"]),
+                event_position=int(item["event_position"]),
+            )
+            for item in payload["facts"]
+        )
+        conflicts = {int(position): tuple(str(ref) for ref in refs) for position, refs in payload["result_conflicts"].items()}
+        gaps = {
+            int(position): tuple((str(ref), str(kind)) for ref, kind in items)
+            for position, items in payload["analysis_gaps"].items()
+        }
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    return _ExamLabBatchResult(facts=facts, result_conflicts=conflicts, analysis_gaps=gaps)
+
+
+def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
+    if result.facts is None or result.rule_failures:
+        # 只冻结全部规则均已核定的批次；有失败规则时下次重新抽取。
+        return
+    save_payload("main", key, {
+        "facts": [
+            {
+                "rule_id": fact.rule_id, "applicability": fact.applicability,
+                "semantic_state": fact.semantic_state, "positive_state": fact.positive_state,
+                "course_doc_refs": list(fact.course_doc_refs), "evidence_refs": list(fact.evidence_refs),
+                "event_position": fact.event_position,
+            }
+            for fact in result.facts
+        ],
+        "result_conflicts": {str(position): list(refs) for position, refs in result.result_conflicts.items()},
+        "analysis_gaps": {
+            str(position): [list(item) for item in items] for position, items in result.analysis_gaps.items()
+        },
+    })
+
+
 async def _extract_exam_lab_batch(
+    *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
+) -> _ExamLabBatchResult:
+    """主抽取结论按病历版本冻结复用（用户决定 2026-10-22）：首次全部规则核定后固定，
+    避免模型挑选证据病程、报告与病程关联逐次出入（C08、C02、C04）。"""
+    key = _main_freeze_key(projection, eligible_rule_ids)
+    frozen = _load_frozen_exam_lab_batch(key)
+    if frozen is not None:
+        return frozen
+    result = await _extract_exam_lab_batch_uncached(
+        projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+    )
+    _save_frozen_exam_lab_batch(key, result)
+    return result
+
+
+async def _extract_exam_lab_batch_uncached(
     *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
 ) -> _ExamLabBatchResult:
     """复用原单批语义抽取、受控恢复及专项核验；不在此处作规则判定。"""
