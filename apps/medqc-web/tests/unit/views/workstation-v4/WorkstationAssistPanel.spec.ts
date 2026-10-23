@@ -94,4 +94,28 @@ describe('智能助手面板外壳', () => {
     expect(wrapper.get('.assist-panel').classes()).toContain('assist-panel--wide')
     wrapper.unmount()
   })
+
+  it('分析面板样式：入口为“分析面板”常驻展开，标题为“智能分析面板”，不响应 Ctrl+/', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountPanel({
+      variant: 'analysis',
+      messageCount: 12,
+      availableTabs: ['content', 'form', 'message'],
+    })
+    const trigger = wrapper.get('.assist-trigger')
+    expect(trigger.attributes('aria-label')).toBe('分析面板')
+    expect(trigger.get('.assist-trigger__text').text()).toBe('分析面板')
+    expect(trigger.get('.assist-trigger__badge').text()).toBe('12')
+    vi.advanceTimersByTime(5000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.assist-trigger').classes()).not.toContain('assist-trigger--collapsed')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.assist-panel').exists()).toBe(false)
+    await wrapper.get('.assist-trigger').trigger('click')
+    expect(wrapper.get('.assist-panel__title').text()).toBe('智能分析面板')
+    expect(wrapper.find('[data-testid="chat-slot"]').exists()).toBe(false)
+    expect(wrapper.get('.assist-panel').classes()).not.toContain('assist-panel--wide')
+    wrapper.unmount()
+  })
 })

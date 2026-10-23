@@ -113,6 +113,7 @@ function hostProps(record: unknown) {
   return {
     visible: true,
     assistTab: 'chat',
+    chatEnabled: true,
     activeDocType: '',
     contentQCCount: 0,
     assistBadgeCount: 0,

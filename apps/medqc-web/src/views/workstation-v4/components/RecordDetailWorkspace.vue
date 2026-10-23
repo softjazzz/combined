@@ -4,7 +4,7 @@
       v-if="selectedRecord"
       class="mq-btn"
       data-testid="business-agent-record-entry"
-      @click="emit('open-assist-chat')"
+      @click="emit('open-content-qc')"
     >
       查看质控问题与依据
     </a-button>
@@ -224,8 +224,8 @@ const emit = defineEmits<{
   'toggle-expand-all-sections': []
   'toggle-section': [index: number]
   'select-document': [key: string]
-  // 打开智能助手面板的“对话”页签（面板由宿主统一持有）。
-  'open-assist-chat': []
+  // 打开分析面板的“内涵质控”页签（面板由宿主统一持有）。
+  'open-content-qc': []
 }>()
 
 const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRViewer.vue'))

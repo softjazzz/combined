@@ -7,8 +7,8 @@
         'assist-trigger',
         { 'assist-trigger--collapsed': !triggerExpanded, 'assist-trigger--pulse': pulsing },
       ]"
-      aria-label="智能助手"
-      title="智能助手（Ctrl+/）"
+      :aria-label="triggerLabel"
+      :title="isAnalysis ? panelTitle : `${triggerLabel}（Ctrl+/）`"
       @click="setVisible(true)"
       @mouseenter="expandTrigger"
       @mouseleave="scheduleCollapse(1500)"
@@ -16,10 +16,13 @@
       @blur="scheduleCollapse(1500)"
     >
       <span class="assist-trigger__icon">
-        <RobotOutlined />
+        <AppstoreOutlined v-if="isAnalysis" />
+        <RobotOutlined v-else />
       </span>
-      <span class="assist-trigger__text">&#x667A;&#x80FD;&#x52A9;&#x624B;</span>
-      <span v-if="totalBadgeCount > 0" class="assist-trigger__badge">{{ badgeText }}</span>
+      <span class="assist-trigger__text">{{ triggerLabel }}</span>
+      <span v-if="totalBadgeCount > 0" class="assist-trigger__badge">{{
+        isAnalysis ? totalBadgeCount : badgeText
+      }}</span>
     </button>
 
     <Transition name="assist-slide">
@@ -32,7 +35,9 @@
           <div class="assist-panel__title-wrap">
             <RobotOutlined class="assist-panel__title-icon" />
             <div>
-              <div class="assist-panel__title">&#x667A;&#x80FD;&#x52A9;&#x624B;</div>
+              <div class="assist-panel__title">
+                {{ panelTitle }}
+              </div>
             </div>
           </div>
           <div class="assist-panel__actions">
@@ -118,6 +123,7 @@
 
           <div class="assist-panel__content">
             <div
+              v-if="hasChatTab"
               v-show="currentTab === 'chat'"
               class="assist-panel__slot assist-panel__slot--contained"
             >
@@ -192,6 +198,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  AppstoreOutlined,
   CheckCircleOutlined,
   CloseOutlined,
   CodeOutlined,
@@ -224,6 +231,8 @@ const props = withDefaults(
     // 只显示这些页签（缺省为全部）；用于没有病例上下文的页面，仅保留对话。
     availableTabs?: AssistTabKey[]
     chatLabel?: string
+    // assistant：智能助手（对话、胶囊入口、Ctrl+/）；analysis：医生病历页原“智能分析面板”弹窗样式。
+    variant?: 'assistant' | 'analysis'
     contentCount?: number
     qcCount?: number
     codingCount?: number
@@ -236,6 +245,7 @@ const props = withDefaults(
     visible: undefined,
     defaultVisible: false,
     defaultTab: 'content',
+    variant: 'assistant',
     patientInfo: null,
     contentCount: 0,
     qcCount: 0,
@@ -252,6 +262,10 @@ const emit = defineEmits<{
   (e: 'tab-change', value: AssistTabKey): void
   (e: 'refresh-tab', tab: AssistTabKey): void
 }>()
+
+const isAnalysis = computed(() => props.variant === 'analysis')
+const triggerLabel = computed(() => (isAnalysis.value ? '分析面板' : '智能助手'))
+const panelTitle = computed(() => (isAnalysis.value ? '智能分析面板' : '智能助手'))
 
 const innerVisible = ref(props.defaultVisible)
 // 宿主限定了可用页签时，初始/外部指定的页签落在不可用项上，则回到第一个可用页签。
@@ -297,6 +311,8 @@ const tabs = computed(() =>
   ),
 )
 
+const hasChatTab = computed(() => tabs.value.some((tab) => tab.key === 'chat'))
+
 const totalBadgeCount = computed(
   () =>
     props.contentCount +
@@ -328,6 +344,8 @@ let collapseTimer: ReturnType<typeof setTimeout> | undefined
 let pulseTimer: ReturnType<typeof setTimeout> | undefined
 function scheduleCollapse(delay = 3000) {
   clearTimeout(collapseTimer)
+  // 分析面板入口保持原样常驻展开，不收起、不扩散。
+  if (isAnalysis.value) return
   collapseTimer = setTimeout(() => (triggerExpanded.value = false), delay)
 }
 function expandTrigger() {
@@ -335,7 +353,7 @@ function expandTrigger() {
   triggerExpanded.value = true
 }
 watch(totalBadgeCount, (next, previous) => {
-  if (next <= previous) return
+  if (isAnalysis.value || next <= previous) return
   expandTrigger()
   pulsing.value = true
   clearTimeout(pulseTimer)
@@ -348,6 +366,7 @@ watch(totalBadgeCount, (next, previous) => {
 // Ctrl+/ 开关面板；Esc 仅在焦点位于面板内且没有打开的下拉时收起。
 const panelEl = ref<HTMLElement | null>(null)
 function onKeydown(event: KeyboardEvent) {
+  if (isAnalysis.value) return
   if ((event.ctrlKey || event.metaKey) && event.key === '/') {
     event.preventDefault()
     setVisible(!mergedVisible.value)
