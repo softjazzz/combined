@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
 
-OUTPUT_PROTOCOL_VERSION = 'exam-doc-output-batches-v2'
+OUTPUT_PROTOCOL_VERSION = 'exam-doc-output-batches-v3'
 MAX_CHECK_CALLS = 8
 OUTPUT_HEADROOM_TOKENS = 256
 ESTIMATED_PAIR_TOKENS = 400
@@ -25,8 +25,10 @@ class CallBudget:
 def partition_targets(
     targets: Mapping[int, Any], *, refs: Callable, subset: Callable, prompt: Callable,
     max_completion_tokens: int, max_prompt_chars: int,
+    pair_tokens: int = ESTIMATED_PAIR_TOKENS, reserved_tokens: int = OUTPUT_HEADROOM_TOKENS,
 ) -> list[dict[int, Any]]:
-    pair_limit = max(1, (max_completion_tokens - OUTPUT_HEADROOM_TOKENS) // ESTIMATED_PAIR_TOKENS)
+    """pair_tokens 为单个配对的平均输出估算（截断时二分兜底）；reserved_tokens 含 JSON 外壳与思考预留。"""
+    pair_limit = max(1, (max_completion_tokens - reserved_tokens) // pair_tokens)
 
     def fits(items):
         return sum(len(refs(value)) for value in items.values()) <= pair_limit and len(prompt(items)) <= max_prompt_chars

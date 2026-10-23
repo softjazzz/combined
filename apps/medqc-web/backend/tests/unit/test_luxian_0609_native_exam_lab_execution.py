@@ -471,7 +471,9 @@ class _SameCourseBasisClient(_Client):
                 ],
             }
         else:
-            events = json.loads(prompt.split("EVENTS_JSON=", 1)[1])
+            from finding_selection_test_support import prompt_events
+
+            events = prompt_events(prompt)
             course_ref = events[0]["course_docs"][0]["course_doc_ref"]
             event_position = events[0]["event_position"]
             if "核对整份病程的上下文" in prompt and "连续多句或同一逻辑段" in prompt:
@@ -5047,9 +5049,9 @@ async def test_six_ct_mri_events_keep_main_facts_when_bounded_record_checks_have
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 3  # 主抽取 1 次、按输出量拆开的结果核验 2 次；替身未作答，保留主抽取。
+    assert result.llm_call_count == 2  # 主抽取 1 次、结果核验 1 次（按输出量一批装下）；替身未作答，保留主抽取。
     assert result.total_tokens == 110
-    assert len(client.prompts) == 3
+    assert len(client.prompts) == 2
     assert "event_position" in client.prompts[0]
     assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]

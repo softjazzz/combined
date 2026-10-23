@@ -125,15 +125,16 @@ async def test_unicode_identity_is_decoded_before_previous_output_redaction(site
 
 @pytest.mark.asyncio
 async def test_truncation_uses_short_output_hint_without_previous_output(site):
-    if site.module is record:
-        # 06-01-04（2026-10-23 C02）：截断后不原样加提示重发，而是把配对二分后分别核验。
+    if site.module in (record, analysis):
+        # 06-01-04/05（2026-10-23 C02）：截断后不原样加提示重发，而是把配对二分后分别核验。
         def only(ref):
             return {**site.good, "docs": [item for item in site.good["docs"] if item["course_doc_ref"] == ref]}
 
         client = Client([(json.dumps(site.bad), "length"), only("D1"), only("D2")])
         result = await site.function(site.projection, client)
         assert result.state == "ready" and result.llm_call_count == 3
-        assert result.recorded_refs == {1: ("D1", "D2")}
+        refs = result.recorded_refs if site.module is record else result.analysed_refs
+        assert refs == {1: ("D1", "D2")}
         assert all("截断" not in prompt and "PREVIOUS_OUTPUT=" not in prompt for prompt in client.prompts[1:])
         return
     client = Client([(json.dumps(site.bad), "length"), site.good])
@@ -192,7 +193,7 @@ async def test_analysis_collects_fragment_fields_and_preserves_completed_event(m
     assert all(value in prompt for value in ("错误正文编号", "错误依据编号", "错误报告编号", "PREVIOUS_OUTPUT="))
     previous = prompt.split("PREVIOUS_OUTPUT=", 1)[1].split("\nEVENTS_JSON=", 1)[0]
     assert '"event_position": 1' not in previous
-    assert [event["event_position"] for event in json.loads(prompt.split("EVENTS_JSON=", 1)[1])] == [2]
+    assert [event["event_position"] for event in json.loads(prompt.split("EVENTS_JSON=", 1)[1])["events"]] == [2]
 
 
 def test_retry_details_are_bounded_and_previous_output_has_size_limit(site):
@@ -260,3 +261,28 @@ def test_empty_issue_violation_keeps_original_coverage_reason():
     for module in (exam_reason_check, exam_result_record_check, exam_finding_analysis, exam_finding_relevance):
         error = module._RetryViolation([])
         assert str(error) == "invalid doc coverage" and error.issues == ()
+
+
+def test_analysis_split_event_is_absent_only_when_every_part_is_complete():
+    # 2026-10-23：同一次检查拆到多批时，任一批核出分析即已分析；有分批未核完则不判未分析。
+    batches = [{1: ("报告", ("D1",))}, {1: ("报告", ("D2",))}]
+
+    def part(ready, analysed=None, gaps=None):
+        return analysis._BatchResult(ready, analysed or {}, gaps or {}, 1, 0, 0, 0, 0.0)
+
+    merged, _ = analysis._merge_batch_results(batches, [part(True, {1: ()}), part(True, {1: ("D2",)})])
+    assert merged == {1: ("D2",)}
+    merged, _ = analysis._merge_batch_results(batches, [part(True, {1: ()}), part(False)])
+    assert merged == {}
+    merged, gaps = analysis._merge_batch_results(
+        batches, [part(True, {1: ()}, {1: (("D1", "listing_only"),)}), part(True, {1: ()})])
+    assert merged == {1: ()} and gaps == {1: (("D1", "listing_only"),)}
+
+
+def test_shared_course_is_listed_once_in_both_check_prompts():
+    projection = SimpleNamespace(course_candidates={"D1": ("胸部CT提示肺部感染。",)})
+    targets = {1: ("肺部感染。", ("D1",)), 2: ("肺部感染。", ("D1",))}
+    for module in (analysis, record):
+        payload = json.loads(module._prompt(projection, targets).split("EVENTS_JSON=", 1)[1])
+        assert [doc["course_doc_ref"] for doc in payload["course_docs"]] == ["D1"]
+        assert [event["course_doc_refs"] for event in payload["events"]] == [["D1"], ["D1"]]
