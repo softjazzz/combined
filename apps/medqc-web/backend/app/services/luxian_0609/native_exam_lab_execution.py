@@ -2078,7 +2078,13 @@ class _ExamLabBatchResult:
 
 
 def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str]) -> str:
-    return freeze_key(build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection))
+    from .exam_output_batching import OUTPUT_PROTOCOL_VERSION
+
+    prompt = build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection)
+    # 只有 06-01-04 结果记录核验改为拆批（2026-10-23）；不含该规则的冻结结论不受影响。
+    if 'LX0609-06-01-04' in eligible_rule_ids:
+        prompt = OUTPUT_PROTOCOL_VERSION + '\x1e' + prompt
+    return freeze_key(prompt)
 
 
 def _load_frozen_exam_lab_batch(key: str) -> _ExamLabBatchResult | None:

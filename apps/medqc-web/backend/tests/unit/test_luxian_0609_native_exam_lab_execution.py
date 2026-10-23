@@ -4966,7 +4966,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
+async def test_six_ct_mri_events_keep_main_facts_when_bounded_record_checks_have_no_answer(
     monkeypatch,
 ):
     """同次住院的多次检查必须逐事件核对，不能合并成时间冲突。"""
@@ -5047,9 +5047,9 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert result.llm_call_count == 3  # 主抽取 1 次、按输出量拆开的结果核验 2 次；替身未作答，保留主抽取。
     assert result.total_tokens == 110
-    assert len(client.prompts) == 2  # 第 2 次为 06-01-04 结果记录核对
+    assert len(client.prompts) == 3
     assert "event_position" in client.prompts[0]
     assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]

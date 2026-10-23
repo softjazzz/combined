@@ -587,6 +587,13 @@ class _Luxian0609PrivacyRedactingLLMClient:
             except Exception as error:
                 if not _is_transient_transport_error(error):
                     raise
+                from .execution_time_budget import model_timeout_seconds, retry_fits
+
+                if not retry_fits(
+                    delay_seconds=TRANSPORT_RETRY_DELAY_SECONDS,
+                    attempt_seconds=model_timeout_seconds(self.delegate),
+                ):
+                    raise
             await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
         return await self.delegate.generate(redacted, **kwargs)
 

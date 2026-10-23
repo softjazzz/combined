@@ -57,6 +57,70 @@ def _answer(*docs):
 
 
 @pytest.mark.asyncio
+async def test_truncation_splits_pairs_instead_of_repeating_same_oversized_request():
+    class Client:
+        def __init__(self):
+            self.pairs = []
+
+        async def generate(self, prompt, **kwargs):
+            events = json.loads(prompt.split('EVENTS_JSON=', 1)[1])
+            pairs = [(event['event_position'], doc['course_doc_ref'])
+                     for event in events for doc in event['course_docs']]
+            self.pairs.append(pairs)
+            if len(pairs) > 3:
+                return {'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]}
+            answer = _answer(*[{**_doc(ref), 'event_position': position} for position, ref in pairs])
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(answer)}}]}
+
+    client = Client()
+    outcome = await check_exam_result_record(_projection(*([PLAN_ONLY] * 6)), client)
+    assert outcome.state == 'ready' and outcome.recorded_refs == {1: ()}
+    assert all(pairs != client.pairs[0] for pairs in client.pairs[1:])
+    assert all(len(pairs) <= 3 for pairs in client.pairs[1:])
+    assert len(client.pairs) <= 8
+
+
+@pytest.mark.asyncio
+async def test_batch_failure_preserves_other_complete_events_and_never_fixes_incomplete_as_absent(monkeypatch):
+    from app.services.luxian_0609 import exam_result_record_check as module
+
+    projection = _projection(RECORDED, RECORDED)
+    first, second = _post_report_refs(projection)
+    monkeypatch.setattr(module, 'MAX_COMPLETION_TOKENS', 656)
+    monkeypatch.setattr(module, '_targets', lambda projection: {
+        1: ('右肺下叶占位', (first, second)), 2: ('右肺下叶占位', (first,)),
+    })
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            [event] = json.loads(prompt.split('EVENTS_JSON=', 1)[1])
+            [doc] = event['course_docs']
+            if event['event_position'] == 1 and doc['course_doc_ref'] == second:
+                return {'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]}
+            answer = _answer({**_doc(doc['course_doc_ref']), 'event_position': event['event_position']})
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(answer)}}]}
+
+    outcome = await check_exam_result_record(projection, Client())
+    assert outcome.state == 'ready' and outcome.recorded_refs == {2: ()}
+    assert outcome.llm_call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_repeated_truncation_obeys_total_call_limit():
+    class Client:
+        calls = 0
+
+        async def generate(self, prompt, **kwargs):
+            self.calls += 1
+            return {'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]}
+
+    client = Client()
+    outcome = await check_exam_result_record(_projection(*([PLAN_ONLY] * 8)), client)
+    assert outcome.state == 'failed' and outcome.recorded_refs == {}
+    assert outcome.llm_call_count == client.calls == 8
+
+
+@pytest.mark.asyncio
 async def test_first_course_restating_this_ct_conclusion_counts_and_pre_report_note_is_excluded():
     """真实样本：首次病程写“今于我院急诊完善胸部CT提示……”与本次报告一致，一轮漏引即误判超时。"""
     projection = _projection(RECORDED)

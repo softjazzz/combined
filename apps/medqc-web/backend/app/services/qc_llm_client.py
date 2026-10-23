@@ -375,11 +375,13 @@ class SichuanQCLLMClient:
             logical_call_id=logical_call_id, attempt_no=attempt_no, payload=payload,
         )
         try:
+            from .luxian_0609.execution_time_budget import request_timeout
+
             result = await safe_post_json(
                 url=f"{self.api_endpoint}/chat/completions",
                 headers=headers,
                 payload=payload,
-                timeout_seconds=self.timeout_seconds,
+                timeout_seconds=request_timeout(self.timeout_seconds),
             )
             finish_diagnostic_attempt(diagnostic_attempt, result=result)
             usage = observed_usage(result)

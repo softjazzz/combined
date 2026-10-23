@@ -37,6 +37,7 @@ from .exam_lab_fact_extraction import (
 )
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
+from .exam_output_batching import CallBudget, partition_targets, bisect_targets
 from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-06-01-04"
@@ -52,7 +53,7 @@ MAX_REPORT_CHARS = 2000
 MAX_COURSE_CHARS = 6000
 MAX_PROMPT_CHARS = 60000
 MAX_QUOTE_CHARS = 200
-MAX_COMPLETION_TOKENS = 2048
+MAX_COMPLETION_TOKENS = 4096
 
 
 
@@ -301,8 +302,7 @@ _RETRY_HINTS = {
 }
 
 
-async def check_exam_result_record(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
-    targets = _targets(projection)
+async def _check_result_batch(projection, llm_client, targets, budget: CallBudget) -> ResultRecordOutcome:
     if not targets or llm_client is None:
         return ResultRecordOutcome("skipped", {})
     # 报告后没有可读病程的事件：已核对、未见记录，无需调用。
@@ -322,6 +322,9 @@ async def check_exam_result_record(projection: ExamLabTextProjection, llm_client
     attempt_prompt = prompt
     started = perf_counter()
     for attempt in range(PROTOCOL_ATTEMPTS):
+        if len(attempt_prompt) > MAX_PROMPT_CHARS or not budget.take():
+            return ResultRecordOutcome('failed', {}, calls, prompt_tokens, completion_tokens,
+                                       total_tokens, api_time or perf_counter() - started)
         calls += 1
         try:
             response = await llm_client.generate(
@@ -341,6 +344,9 @@ async def check_exam_result_record(projection: ExamLabTextProjection, llm_client
                                          allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+            if isinstance(error, _TruncatedResponse):
+                return ResultRecordOutcome('truncated', {}, calls, prompt_tokens, completion_tokens,
+                                           total_tokens, api_time or perf_counter() - started)
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return ResultRecordOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                            total_tokens, api_time or perf_counter() - started)
@@ -348,6 +354,52 @@ async def check_exam_result_record(projection: ExamLabTextProjection, llm_client
     recorded_refs.update(recorded)
     return ResultRecordOutcome("ready", recorded_refs, calls, prompt_tokens, completion_tokens, total_tokens,
                                api_time or perf_counter() - started, conflict_refs=conflicts)
+
+
+async def check_exam_result_record(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
+    targets = _targets(projection)
+    if not targets or llm_client is None:
+        return ResultRecordOutcome('skipped', {})
+    recorded = {position: () for position, (_, refs) in targets.items() if not refs}
+    model_targets = {position: target for position, target in targets.items() if target[1]}
+    if not model_targets:
+        return ResultRecordOutcome('ready', recorded)
+    subset = lambda target, refs: (target[0], refs)
+    try:
+        pending = partition_targets(model_targets, refs=lambda target: target[1], subset=subset,
+                                    prompt=lambda batch: _prompt(projection, batch),
+                                    max_completion_tokens=MAX_COMPLETION_TOKENS, max_prompt_chars=MAX_PROMPT_CHARS)
+    except ValueError:
+        return ResultRecordOutcome('failed', {})
+    budget = CallBudget()
+    pieces = []
+    covered = set()
+    accepted = {}
+    conflicts = {}
+    while pending and budget.used < budget.maximum:
+        batch = pending.pop(0)
+        outcome = await _check_result_batch(projection, llm_client, batch, budget)
+        pieces.append(outcome)
+        if outcome.state == 'truncated':
+            pending[:0] = bisect_targets(batch, refs=lambda target: target[1], subset=subset)
+        elif outcome.state == 'ready':
+            for position, values in outcome.recorded_refs.items():
+                accepted.setdefault(position, set()).update(values)
+                covered.update((position, ref) for ref in batch[position][1])
+            for position, values in outcome.conflict_refs.items():
+                conflicts.setdefault(position, set()).update(values)
+    # 一个事件拆成多批后必须核完整，未核完的事件不固定“未记录”。
+    complete = {position for position, (_, refs) in model_targets.items()
+                if all((position, ref) in covered for ref in refs)}
+    recorded.update({position: tuple(sorted(accepted.get(position, ()))) for position in complete})
+    ready = bool(recorded) or any(item.state == 'ready' for item in pieces)
+    return ResultRecordOutcome(
+        'ready' if ready else 'failed', recorded,
+        sum(item.llm_call_count for item in pieces), sum(item.prompt_tokens for item in pieces),
+        sum(item.completion_tokens for item in pieces), sum(item.total_tokens for item in pieces),
+        sum(item.api_time for item in pieces),
+        conflict_refs={position: tuple(sorted(values)) for position, values in conflicts.items() if position in complete},
+    )
 
 
 def apply_result_record(

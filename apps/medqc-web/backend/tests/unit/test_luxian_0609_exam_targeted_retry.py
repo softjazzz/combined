@@ -125,6 +125,17 @@ async def test_unicode_identity_is_decoded_before_previous_output_redaction(site
 
 @pytest.mark.asyncio
 async def test_truncation_uses_short_output_hint_without_previous_output(site):
+    if site.module is record:
+        # 06-01-04（2026-10-23 C02）：截断后不原样加提示重发，而是把配对二分后分别核验。
+        def only(ref):
+            return {**site.good, "docs": [item for item in site.good["docs"] if item["course_doc_ref"] == ref]}
+
+        client = Client([(json.dumps(site.bad), "length"), only("D1"), only("D2")])
+        result = await site.function(site.projection, client)
+        assert result.state == "ready" and result.llm_call_count == 3
+        assert result.recorded_refs == {1: ("D1", "D2")}
+        assert all("截断" not in prompt and "PREVIOUS_OUTPUT=" not in prompt for prompt in client.prompts[1:])
+        return
     client = Client([(json.dumps(site.bad), "length"), site.good])
     result = await site.function(site.projection, client)
     assert result.state == "ready" and result.llm_call_count == 2
