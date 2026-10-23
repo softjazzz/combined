@@ -21,6 +21,10 @@ def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR", str(tmp_path / "exam-analysis-freeze")
     )
+    # 抗菌药族事实冻结（054/055/057/058）同样按用例隔离。
+    monkeypatch.setenv(
+        "LUXIAN_0609_ANTIMICROBIAL_FREEZE_DIR", str(tmp_path / "antimicrobial-freeze")
+    )
 
 
 @pytest.fixture

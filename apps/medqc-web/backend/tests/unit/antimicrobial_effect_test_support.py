@@ -161,6 +161,14 @@ MANUAL_EFFECT_FACTS = {
             _dimension("unknown", "该药安全性评价归属不明确"),
         ),
     },
+    # 2026-10-23 C08：一药评价不确定、另一药窗口内确定无评价。
+    "美罗培南疗效评价：有效；安全性评价归属不明确。": {
+        "美罗培南": _fact(
+            _dimension("present", "美罗培南疗效评价：有效", "美罗培南"),
+            _dimension("unknown", "安全性评价归属不明确"),
+        ),
+        "万古霉素": _fact(_ABSENT, _ABSENT),
+    },
     "美罗培南安全性评价归属不明确。": {
         "美罗培南": _fact(
             _ABSENT,

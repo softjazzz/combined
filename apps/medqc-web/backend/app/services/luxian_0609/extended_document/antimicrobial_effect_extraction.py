@@ -18,6 +18,7 @@ from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object, _usage
 from ..model_failure import classify_model_failure, log_model_failure
+from ..antimicrobial_freeze import freeze_key, load_payload, save_payload
 
 
 SCHEMA_VERSION = "lx0609-antimicrobial-effect-safety-facts-v2"
@@ -247,7 +248,48 @@ def _assertion(item: Any, originals: Sequence[str], bodies: Sequence[str],
     )
 
 
+_ASSERTION_FIELDS = ("row_index", "target_index", "effect_state", "safety_state", "quote", "target_quote")
+
+
 async def extract_antimicrobial_effects(
+    documents: Sequence[Mapping[str, Any]], targets: Sequence[str], llm_client: Any,
+    *, max_prompt_bytes: int, max_completion_tokens: int,
+) -> AntimicrobialEffectResult:
+    """已核验的疗效事实按提示词冻结复用（用户决定 2026-10-23，见 antimicrobial_freeze）。"""
+    key = None
+    try:
+        originals, bodies = _sources(documents, targets)
+        full_prompt = _prompt(bodies, targets) if bodies and targets else ""
+        # 容量上限照常先核：超限的输入不得借冻结绕过资料不足判定。
+        if (full_prompt and type(max_prompt_bytes) is int and type(max_completion_tokens) is int
+                and len(full_prompt.encode("utf-8")) <= max_prompt_bytes
+                and _completion_bound(bodies, targets) <= max_completion_tokens):
+            key = freeze_key(full_prompt)
+    except (ValueError, TypeError, OverflowError):
+        key = None
+    if key is not None and (payload := load_payload("effect", key)) is not None:
+        try:
+            # 复用前按原文重新核验引文，冻结内容异常时重新调用模型。
+            frozen = tuple(
+                _assertion({field: item[field] for field in _ASSERTION_FIELDS}, originals, bodies, targets)
+                for item in payload["assertions"]
+            )
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
+            frozen = None
+        if frozen is not None and len(frozen) == len(bodies) * len(targets):
+            return AntimicrobialEffectResult("ready", frozen)
+    result = await _extract_antimicrobial_effects_uncached(
+        documents, targets, llm_client,
+        max_prompt_bytes=max_prompt_bytes, max_completion_tokens=max_completion_tokens,
+    )
+    if key is not None and result.state == "ready" and result.assertions:
+        save_payload("effect", key, {"assertions": [
+            {field: getattr(assertion, field) for field in _ASSERTION_FIELDS} for assertion in result.assertions
+        ]})
+    return result
+
+
+async def _extract_antimicrobial_effects_uncached(
     documents: Sequence[Mapping[str, Any]], targets: Sequence[str], llm_client: Any,
     *, max_prompt_bytes: int, max_completion_tokens: int,
 ) -> AntimicrobialEffectResult:

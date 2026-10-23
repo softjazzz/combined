@@ -35,6 +35,8 @@ from ..llm_prompt_privacy import (
     redact_luxian_0609_patient_privacy,
 )
 from ..structured_output import structured_output_kwargs
+from ..antimicrobial_freeze import freeze_key, load_payload, save_payload
+from ..judgement_examples import ANTIMICROBIAL_SELECTION_REASON_EXAMPLES
 from ..consultation_disposition_record import _split_into_source_segments
 from .shared import _clean, _parse_datetime, _row_time, order_repeat_kind, row_time_upper_bound
 
@@ -354,6 +356,7 @@ def _prompt(events: Sequence[AntimicrobialUseEvent], documents: Sequence[WindowD
         "selection_reason_quote：为什么选择或换成该药（覆盖某类病原、原方案无效、过敏、根据药敏、"
         "经验性用药、按指南首选等，一句话即可；写明“经验性使用抗生素”“经验性抗感染”等经验性用药表述也算，"
         "须摘录含“经验性”字样的原文），只有感染判断而未说明为何选此药、也未写经验性用药时留空；"
+        + ANTIMICROBIAL_SELECTION_REASON_EXAMPLES +
         "prophylaxis_quote：写明该药用于围术期或预防感染的原文；"
         "specimen_quote：已送或拟送病原学标本（痰/血/尿培养等），或写明无法采样原因的原文；"
         "planned_duration_quote：仅 start/combine/switch 事件，写明该药计划疗程的原文（如“拟用3天”"
@@ -527,6 +530,51 @@ async def _run_extraction(
     raise AssertionError("unreachable")
 
 
+def _facts_payload(facts: Sequence[EventReasonFacts]) -> dict[str, Any]:
+    return {"facts": [
+        {"event_id": item.event_id, "documented_use": item.documented_use,
+         "quotes": {kind: [ref, quote] for kind, (ref, quote) in item.quotes.items()}}
+        for item in facts
+    ]}
+
+
+def _facts_from_payload(payload: Mapping[str, Any], expected: Sequence[str]) -> tuple[EventReasonFacts, ...] | None:
+    try:
+        facts = tuple(
+            EventReasonFacts(
+                str(item["event_id"]), str(item["documented_use"]),
+                {str(kind): (str(value[0]), str(value[1])) for kind, value in item["quotes"].items()},
+            )
+            for item in payload["facts"]
+        )
+    except (KeyError, TypeError, IndexError, AttributeError):
+        return None
+    return facts if [item.event_id for item in facts] == list(expected) else None
+
+
+async def _run_frozen_extraction(
+    namespace: str,
+    prompt: str,
+    parse: Any,
+    llm_client: AntimicrobialReasonLLMClient | None,
+    *,
+    expected_event_ids: Sequence[str],
+    label: str,
+) -> AntimicrobialReasonExtraction:
+    """同一提示词的已核验事实冻结复用（用户决定 2026-10-23，见 antimicrobial_freeze）。"""
+
+    key = freeze_key(prompt)
+    payload = load_payload(namespace, key)
+    if payload is not None:
+        facts = _facts_from_payload(payload, expected_event_ids)
+        if facts is not None:
+            return AntimicrobialReasonExtraction("ready", "reason_facts_extracted", facts)
+    result = await _run_extraction(prompt, parse, llm_client, label=label)
+    if result.state == "ready":
+        save_payload(namespace, key, _facts_payload(result.facts))
+    return result
+
+
 async def extract_antimicrobial_reasons(
     events: Sequence[AntimicrobialUseEvent],
     documents: Sequence[WindowDocument],
@@ -538,10 +586,11 @@ async def extract_antimicrobial_reasons(
         return AntimicrobialReasonExtraction("ready", "trigger_absent_complete")
     if len(targets) > MAX_EVENTS or len(documents) > MAX_DOCUMENTS:
         return AntimicrobialReasonExtraction("data_gap", "candidate_scope_incomplete")
-    return await _run_extraction(
+    return await _run_frozen_extraction(
+        "order_reason",
         _prompt(targets, documents, per_event),
         lambda content: _parse(content, targets, documents, per_event),
-        llm_client, label="抗菌药理由",
+        llm_client, expected_event_ids=[event.event_id for event in targets], label="抗菌药理由",
     )
 
 
@@ -596,13 +645,14 @@ async def extract_special_antimicrobial_approvals(
         return AntimicrobialReasonExtraction("ready", "trigger_absent_complete")
     if len(targets) > MAX_EVENTS or len(documents) > MAX_DOCUMENTS:
         return AntimicrobialReasonExtraction("data_gap", "candidate_scope_incomplete")
-    return await _run_extraction(
+    return await _run_frozen_extraction(
+        "special_approval",
         _special_prompt(targets, documents, per_event),
         lambda content: _parse(
             content, targets, documents, per_event,
             schema_version=SPECIAL_SCHEMA_VERSION, quote_fields=("approval", "emergency_indication"),
         ),
-        llm_client, label="特殊级抗菌药专家同意",
+        llm_client, expected_event_ids=[event.event_id for event in targets], label="特殊级抗菌药专家同意",
     )
 
 

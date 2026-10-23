@@ -7311,3 +7311,23 @@ def test_canonical_projection_keeps_023_opinion_time_and_missing_measures():
     for extra in ({"opinion_time": "昨天"}, {"missing_measures": []}, {"unexpected": 1}):
         with pytest.raises(ValueError, match="invalid recommendation evidence"):
             envelope_item_from_rule_result(_023_canonical_item(**extra))
+
+
+def test_canonical_store_accepts_every_023_projected_evidence_source_type():
+    # 2026-10-22 客户包：投影层新增转出/转入/术后首次病程证据，保存层未同步，整批任务保存失败。
+    from app.services.luxian_0609.consultation_customer_projection import (
+        _RECOMMENDATION_EVIDENCE_SOURCE_TYPES as projected_types,
+    )
+    from app.services.qc_workspace.canonical_result_store import (
+        _RECOMMENDATION_EVIDENCE_SOURCE_TYPES as stored_types,
+    )
+
+    assert projected_types <= stored_types
+    for index, source_type in enumerate(sorted(projected_types)):
+        envelope_item_from_rule_result(
+            _023_canonical_item(
+                execution_evidence=[
+                    {"source_type": source_type, "source_ref": f"src_{index:024x}"}
+                ]
+            )
+        )

@@ -184,15 +184,20 @@ def test_only_stop_completion_is_accepted(finish):
     assert len(client.calls) == 2
 
 
-def test_whole_json_fence_allowed_but_explanation_and_duplicate_json_keys_rejected():
+def test_whole_json_fence_allowed_but_explanation_and_duplicate_json_keys_rejected(tmp_path, monkeypatch):
+    # 同一输入换不同应答：每次运行用空冻结目录，避免复用上一次已核验的事实。
+    def run_fresh(client, name):
+        monkeypatch.setenv("LUXIAN_0609_ANTIMICROBIAL_FREEZE_DIR", str(tmp_path / name))
+        return run(client)
+
     payload = json.dumps({"schema_version": SCHEMA_VERSION, "assertions": [
         dict(row_index=0, target_index=0,
              effect_state="unknown", safety_state="absent",
              quote="", target_quote="")]})
-    assert run(Client(content="```json\n" + payload + "\n```")).state == "ready"
-    assert run(Client(content="说明：" + payload)).state == "technical_error"
+    assert run_fresh(Client(content="```json\n" + payload + "\n```"), "fence").state == "ready"
+    assert run_fresh(Client(content="说明：" + payload), "explanation").state == "technical_error"
     duplicate = payload.replace('"row_index": 0', '"row_index": 0, "row_index": 0')
-    assert run(Client(content=duplicate)).state == "technical_error"
+    assert run_fresh(Client(content=duplicate), "duplicate").state == "technical_error"
 
 
 def test_exact_prompt_and_completion_budget_boundaries():
@@ -297,3 +302,29 @@ def test_capable_client_extracts_with_thinking_disabled():
     assert client.calls[0][1] == {
         "max_completion_tokens": 1_000_000, "allow_length_retry": False, "enable_thinking": False,
     }
+
+
+def test_ready_effect_facts_are_frozen_and_reused_without_model_call():
+    # 用户决定（2026-10-23）：同一输入的已核验疗效事实固定复用，避免逐次翻转。
+    first = Client({(0, 0): fact(("present", BODY, TARGET))})
+    assert run(first).state == "ready" and first.calls
+    second = Client()
+    result = run(second)
+    assert result.state == "ready" and not second.calls and result.llm_call_count == 0
+    assert result.assertions[0].effect_state == "present"
+    # 超出容量上限时照常判资料不足，不借冻结结果。
+    capped = run(Client(), max_prompt_bytes=10)
+    assert capped.reason_code == "source_capacity_exceeded"
+
+
+def test_ready_effect_facts_are_frozen_and_reused_without_model_call():
+    # 用户决定（2026-10-23）：同一输入的已核验疗效事实固定复用，避免逐次翻转。
+    first = Client({(0, 0): fact(("present", BODY, TARGET))})
+    assert run(first).state == "ready" and first.calls
+    second = Client()
+    result = run(second)
+    assert result.state == "ready" and not second.calls and result.llm_call_count == 0
+    assert result.assertions[0].effect_state == "present"
+    # 超出容量上限时照常判资料不足，不借冻结结果。
+    capped = run(Client(), max_prompt_bytes=10)
+    assert capped.reason_code == "source_capacity_exceeded"

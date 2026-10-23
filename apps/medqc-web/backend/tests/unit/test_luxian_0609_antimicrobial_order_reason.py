@@ -258,7 +258,7 @@ async def test_057_prophylaxis_is_not_empiric_use() -> None:
 
 
 @pytest.mark.asyncio
-async def test_057_empiric_use_needs_infection_judgment_and_selection_reason() -> None:
+async def test_057_empiric_use_needs_infection_judgment_and_selection_reason(tmp_path, monkeypatch) -> None:
     # 用户口径（2026-10-22）：经验用药须同时写感染判断和选药理由，选药理由一句话即可。
     rows = {"daily_course_record": (_course(
         "D-1", "2026-01-01 20:00:00", "考虑肺部感染，经验性覆盖社区获得性肺炎常见菌，予头孢曲松抗感染。"),),
@@ -269,7 +269,8 @@ async def test_057_empiric_use_needs_infection_judgment_and_selection_reason() -
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-05-01-05"]["empiric_use_confirmed"] is True
 
-    # 只有感染判断、未写为何选此药：不合规；054 仍算已写理由。
+    # 只有感染判断、未写为何选此药：不合规；054 仍算已写理由。同一病历换应答，须换空冻结目录。
+    monkeypatch.setenv("LUXIAN_0609_ANTIMICROBIAL_FREEZE_DIR", str(tmp_path / "second"))
     client = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}})
     _, reduced = await _run("LX0609-05-01-05", rows, client)
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -556,3 +557,24 @@ def test_ellipsis_spliced_quote_is_verified_segment_by_segment(quote, expected) 
 
     text = "患者今日复查白细胞较前升高，体温发热，予退热处理。目前考虑肺部感染控制差，不排除血流感染。"
     assert _restore_spliced_quote(quote, text) == expected
+
+
+@pytest.mark.asyncio
+async def test_057_ready_reason_facts_are_frozen_and_failures_are_not() -> None:
+    # 用户决定（2026-10-23，C11）：同一病历的已核验理由事实固定复用；技术错误不冻结。
+    rows = {"daily_course_record": (_course(
+        "D-1", "2026-01-01 20:00:00", "考虑肺部感染，经验性覆盖社区获得性肺炎常见菌，予头孢曲松抗感染。"),),
+            "labtest_master": (), "labtest_item_report": ()}
+    broken = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}}, broken=True)
+    await _run("LX0609-05-01-05", rows, broken)
+    assert len(broken.calls) == 2  # 引文核验失败重试一次后技术错误
+
+    first = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染",
+                                        "selection_reason": "经验性覆盖社区获得性肺炎常见菌"}})
+    _, reduced = await _run("LX0609-05-01-05", rows, first)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT and len(first.calls) == 1
+
+    again = _ReasonClient({"头孢曲松": {"infection_judgment": "考虑肺部感染"}})
+    result, reduced = await _run("LX0609-05-01-05", rows, again)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert again.calls == [] and result.llm_call_count == 0
