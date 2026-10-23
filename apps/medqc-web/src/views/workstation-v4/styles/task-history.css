@@ -1,252 +1,212 @@
-/* v7.1：页面布局保留，视觉值引用公共 Token。 */
-.customer-task-history-page {
+/* 质控记录（v7.1 液态玻璃，2026-10-23 客户视图改版）：只引用 --mq-* Token 与公共类。 */
+.task-history {
   box-sizing: border-box;
   width: 100%;
-
   overflow-x: hidden;
-
   color: var(--mq-text-primary);
 }
 
-.customer-task-history-hero,
-.customer-task-history-filters,
-.customer-task-history-table {
-}
-
-.customer-task-history-hero {
+.task-history__head {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: var(--mq-space-5);
 }
 
-.customer-task-history-back {
+.task-history__back {
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--mq-brand-600);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 0;
 }
 
-.customer-task-history-hero h1 {
-  margin: 12px 0 8px;
+.task-history__head h1 {
+  margin: var(--mq-space-3) 0 var(--mq-space-2);
 }
 
-.customer-task-history-hero p {
+.task-history__desc {
   margin: 0;
   color: var(--mq-text-secondary);
-  font-size: 14px;
+  font-size: var(--mq-font-14);
   line-height: 22px;
 }
 
-.customer-task-history-hero-actions {
+/* ---------- 筛选栏 ---------- */
+.task-history__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mq-space-3);
+  margin-top: var(--mq-space-4);
+  padding: 12px 16px;
+}
+
+.task-history__search {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.task-history__total {
+  margin-left: auto;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- 任务列表 ---------- */
+.task-history__list {
+  margin-top: var(--mq-space-4);
+  overflow: hidden;
+}
+
+.task-history__date {
+  padding: 8px 20px;
+  border-top: 1px solid var(--mq-border);
+  background: var(--mq-bg-subtle);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.task-history__date:first-child {
+  border-top: 0;
+}
+
+.task-history__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr) auto;
+  gap: var(--mq-space-5);
+  align-items: center;
+  padding: 14px 20px;
+  border-top: 1px solid var(--mq-border);
+}
+
+.task-history__row:hover {
+  background: var(--mq-glass-bg-strong);
+}
+
+.task-history__main,
+.task-history__result {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.task-history__title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--mq-space-2);
+  min-width: 0;
+}
+
+.task-history__title-line .mq-status {
   flex-shrink: 0;
 }
 
-.customer-task-history-filters {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-}
-
-.customer-task-history-search,
-.customer-task-history-select {
-  height: 36px;
-  border: 1px solid var(--mq-border-strong);
-  border-radius: var(--mq-radius-control);
-  background: var(--mq-bg-surface);
-  color: var(--mq-text-primary);
-  font-size: 13px;
-  outline: none;
-  padding: 0 12px;
-}
-
-.customer-task-history-search {
-  min-width: 280px;
-  flex: 1;
-}
-
-.customer-task-history-select {
-  min-width: 132px;
-}
-
-.customer-task-history-total {
-  margin-left: auto;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.customer-task-history-table {
-  margin-top: 14px;
+.task-history__title {
   overflow: hidden;
-  width: 100%;
-  max-width: 100%;
-}
-
-.customer-task-history-head-row,
-.customer-task-history-row {
-  display: grid;
-  grid-template-columns:
-    minmax(142px, 0.72fr)
-    minmax(220px, 1.08fr)
-    minmax(92px, 0.5fr)
-    minmax(280px, 1.7fr)
-    minmax(128px, 142px);
-  gap: 12px;
-  align-items: center;
-  min-width: 0;
-}
-
-.customer-task-history-head-row {
-  min-height: 48px;
-  background: var(--mq-glass-bg-strong);
-  padding: 0 18px;
-  color: var(--mq-text-tertiary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.customer-task-history-row {
-  border-top: 1px solid var(--mq-border);
-  padding: 16px 18px;
-  min-width: 0;
-}
-
-.customer-task-history-row:hover {
-  background: color-mix(in srgb, var(--mq-brand-600) 2.5%, transparent);
-}
-
-.customer-task-history-time,
-.customer-task-history-scope,
-.customer-task-history-records,
-.customer-task-history-result {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.customer-task-history-time strong,
-.customer-task-history-scope strong,
-.customer-task-history-records strong,
-.customer-task-history-result strong {
-  color: var(--mq-text-primary);
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 20px;
-}
-
-.customer-task-history-time span,
-.customer-task-history-scope span,
-.customer-task-history-records span,
-.customer-task-history-result span {
-  color: var(--mq-text-secondary);
-  font-size: 12px;
+  font-size: var(--mq-font-14);
   font-weight: 600;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.customer-task-history-chips {
+.task-history__meta,
+.task-history__sub {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-history__counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 12px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-variant-numeric: tabular-nums;
 }
 
-.customer-task-history-chips em {
-  border-radius: var(--mq-radius-tag);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 18px;
-  padding: 3px 8px;
-}
-
-.customer-task-history-chips .is-danger {
-  background: color-mix(in srgb, var(--mq-danger-text) 8%, transparent);
+.task-history__counts .is-danger {
   color: var(--mq-danger-text);
+  font-weight: 600;
 }
 
-.customer-task-history-chips .is-warning {
-  background: color-mix(in srgb, var(--mq-warning-text) 10%, transparent);
+.task-history__counts .is-warning {
   color: var(--mq-warning-text);
 }
 
-.customer-task-history-chips .is-review {
-  background: color-mix(in srgb, var(--mq-brand-600) 9%, transparent);
-  color: var(--mq-brand-600);
-}
-
-.customer-task-history-chips .is-success {
-  background: color-mix(in srgb, var(--mq-success-text) 8%, transparent);
+.task-history__counts .is-success {
   color: var(--mq-success-text);
 }
 
-.customer-task-history-chips .is-muted {
-  background: var(--mq-border);
-  color: var(--mq-text-secondary);
-}
-
-.customer-task-history-actions {
+.task-history__bar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-bg-muted);
+}
+
+.task-history__bar span {
+  display: block;
+  height: 100%;
+}
+
+.task-history__bar .is-danger {
+  background: var(--mq-danger-icon);
+}
+
+.task-history__bar .is-warning {
+  background: var(--mq-warning-icon);
+}
+
+.task-history__bar .is-success {
+  background: var(--mq-success-icon);
+}
+
+.task-history__bar .is-info {
+  background: var(--mq-info-icon);
+}
+
+.task-history__bar .is-muted {
+  background: var(--mq-border-strong);
+}
+
+.task-history__actions {
+  display: flex;
   justify-content: flex-end;
-  min-width: 0;
+  gap: var(--mq-space-2);
+  white-space: nowrap;
 }
 
-.customer-task-history-actions :deep(.ant-btn) {
-  border-radius: var(--mq-radius-tag) !important;
-  min-width: 62px;
-  padding-inline: 10px;
-}
-
-.customer-task-history-empty {
-  padding: 46px 20px;
+.task-history__empty {
+  padding: var(--mq-space-8) 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
   text-align: center;
-  color: var(--mq-text-secondary);
-  font-size: 14px;
 }
 
-.customer-task-history-pagination {
+.task-history__pagination {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 14px;
-  color: var(--mq-text-secondary);
-  font-size: 13px;
+  margin-top: var(--mq-space-4);
 }
 
-@media (max-width: 1180px) {
-  .customer-task-history-head-row {
-    display: none;
+@media (max-width: 900px) {
+  .task-history__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mq-space-2);
   }
 
-  .customer-task-history-row {
-    grid-template-columns: 1fr;
-  }
-
-  .customer-task-history-actions {
+  .task-history__actions {
     justify-content: flex-start;
   }
 
-  .customer-task-history-filters {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .customer-task-history-total {
+  .task-history__total {
     margin-left: 0;
   }
-}
-
-:deep(.ant-btn) {
-  border-radius: var(--mq-radius-tag) !important;
-  min-height: var(--mq-control-height);
 }
