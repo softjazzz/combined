@@ -299,6 +299,31 @@ async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, A
     }
 
 
+@router.get("/review-todo-stats")
+async def get_review_todo_stats(
+    request: Request,
+    scene: DashboardScene = Query("all", description="审核待办场景"),
+    current_user: dict = Depends(get_current_user),
+):
+    """V5 审核待办只读各审核 owner，不依赖旧版全院统计表。"""
+    counts = await _get_review_todo_counts(current_user, scene)
+    record_stats = {
+        "pending_review": counts["record_initial"],
+        "pending_recheck": counts["record_recheck"],
+    }
+    if counts["record_unavailable_reason"]:
+        record_stats["unavailable_reason"] = counts["record_unavailable_reason"]
+    return success_response(
+        data={
+            "record_stats": record_stats,
+            "defect_stats": {"pending_review": counts["manual_defects"]},
+            "scene": scene,
+        },
+        message="获取审核待办统计成功",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.get("/todo-stats")
 async def get_todo_stats(
     request: Request,

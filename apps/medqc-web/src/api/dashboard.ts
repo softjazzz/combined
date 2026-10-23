@@ -5,10 +5,7 @@
  */
 
 import { ApiService } from '@/services/apiService'
-import {
-  extractApiErrorMessageFromError,
-  normalizeApiSuccess,
-} from '@/utils/api-envelope'
+import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
 const BASE_URL = '/api/v1/dashboard'
 export type DashboardScene = 'all' | 'outpatient_emergency' | 'running' | 'final'
@@ -114,7 +111,12 @@ export interface PerformanceData {
 }
 
 const PERFORMANCE_PERIODS: readonly PerformancePeriod[] = ['this_week', 'last_week', 'this_month']
-const DASHBOARD_SCENES: readonly DashboardScene[] = ['all', 'outpatient_emergency', 'running', 'final']
+const DASHBOARD_SCENES: readonly DashboardScene[] = [
+  'all',
+  'outpatient_emergency',
+  'running',
+  'final',
+]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -125,9 +127,10 @@ function isCount(value: unknown): value is number {
 }
 
 function normalizeRankingBase(raw: Record<string, unknown>): RankingItemBase | null {
-  const userId = typeof raw.user_id === 'number' && Number.isFinite(raw.user_id)
-    ? String(raw.user_id)
-    : raw.user_id
+  const userId =
+    typeof raw.user_id === 'number' && Number.isFinite(raw.user_id)
+      ? String(raw.user_id)
+      : raw.user_id
   if (typeof userId !== 'string' || !userId.trim()) return null
   if (raw.name !== null && typeof raw.name !== 'string') return null
   if (!isCount(raw.count) || !isCount(raw.rank) || raw.rank < 1) return null
@@ -175,10 +178,12 @@ export function normalizePerformanceData(raw: unknown): PerformanceData | null {
   if (!PERFORMANCE_PERIODS.includes(period) || !DASHBOARD_SCENES.includes(scene)) return null
   if (typeof raw.period_label !== 'string') return null
   const range = raw.range
-  if (!isRecord(range) || typeof range.start !== 'string' || typeof range.end !== 'string') return null
+  if (!isRecord(range) || typeof range.start !== 'string' || typeof range.end !== 'string')
+    return null
   const rawReason = raw.unavailable_reason
   if (rawReason !== null && rawReason !== 'scene_not_attributable') return null
-  const reason: PerformanceUnavailableReason | null = rawReason === null ? null : 'scene_not_attributable'
+  const reason: PerformanceUnavailableReason | null =
+    rawReason === null ? null : 'scene_not_attributable'
 
   const defectRanking = normalizeRankingList(raw.defect_ranking, normalizeDefectItem)
   const recordRanking = normalizeRankingList(raw.record_ranking, normalizeRecordItem)
@@ -225,7 +230,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 /**
  * V5 首页审核待办适配。
  *
- * 计数仍由 dashboard/todo-stats 的审核服务谓词给出；这里仅严格提取，避免缺字段、
+ * 计数由独立审核待办接口的审核服务谓词给出；这里仅严格提取，避免缺字段、
  * 无权限或请求失败时被前端当成 0。响应场景必须与请求场景一致，避免跨场景串数。
  */
 export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promise<{
@@ -233,16 +238,22 @@ export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promis
   data?: ReviewTodoCounts
   message?: string
 }> {
-  const result = await getTodoStats(scene)
+  const result = await request<unknown>({
+    method: 'GET',
+    url: `${BASE_URL}/review-todo-stats`,
+    params: { scene },
+  })
   if (!result.success || !result.data) {
     return { success: false, message: result.message }
   }
 
   const data = result.data as unknown
-  if (!isRecord(data)
-    || data.scene !== scene
-    || !isRecord(data.record_stats)
-    || !isRecord(data.defect_stats)) {
+  if (
+    !isRecord(data) ||
+    data.scene !== scene ||
+    !isRecord(data.record_stats) ||
+    !isRecord(data.defect_stats)
+  ) {
     return { success: false, message: '审核待办数据格式异常' }
   }
 
@@ -250,10 +261,12 @@ export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promis
   const recordRecheck = data.record_stats.pending_recheck
   const manualDefectReview = data.defect_stats.pending_review
   const recordUnavailable = data.record_stats.unavailable_reason === 'review_source_unavailable'
-  if ((recordUnavailable && (recordReview !== null || recordRecheck !== null))
-    || (!isNonNegativeInteger(recordReview) && !(recordUnavailable && recordReview === null))
-    || (!isNonNegativeInteger(recordRecheck) && !(recordUnavailable && recordRecheck === null))
-    || (manualDefectReview !== null && !isNonNegativeInteger(manualDefectReview))) {
+  if (
+    (recordUnavailable && (recordReview !== null || recordRecheck !== null)) ||
+    (!isNonNegativeInteger(recordReview) && !(recordUnavailable && recordReview === null)) ||
+    (!isNonNegativeInteger(recordRecheck) && !(recordUnavailable && recordRecheck === null)) ||
+    (manualDefectReview !== null && !isNonNegativeInteger(manualDefectReview))
+  ) {
     return { success: false, message: '审核待办数据格式异常' }
   }
 
@@ -262,8 +275,12 @@ export async function getReviewTodoCounts(scene: DashboardScene = 'all'): Promis
     data: {
       pending_record_review: isNonNegativeInteger(recordReview) ? recordReview : null,
       pending_record_recheck: isNonNegativeInteger(recordRecheck) ? recordRecheck : null,
-      pending_manual_defect_review: isNonNegativeInteger(manualDefectReview) ? manualDefectReview : null,
-      ...(recordUnavailable ? { record_unavailable_reason: 'review_source_unavailable' as const } : {}),
+      pending_manual_defect_review: isNonNegativeInteger(manualDefectReview)
+        ? manualDefectReview
+        : null,
+      ...(recordUnavailable
+        ? { record_unavailable_reason: 'review_source_unavailable' as const }
+        : {}),
       scene,
     },
   }
