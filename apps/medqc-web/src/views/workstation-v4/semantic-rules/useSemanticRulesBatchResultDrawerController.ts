@@ -13,8 +13,18 @@ import type {
 } from '@/views/workstation-v4/semantic-rules/types'
 import {
   evaluateSichuanRuleForVisit,
+  getSichuanWorkspaceBatchJobRecordIdentities,
   getSichuanWorkspaceBatchJobResultTrace,
+  type BatchJobRecordIdentity,
 } from '@/services/sichuan-rule-workspace-service'
+import {
+  buildReviewRecords,
+  buildTopIssueRules,
+  cleanRuleTitle,
+  reviewStatusOf,
+  ruleChapterName,
+  type ReviewItem,
+} from '@/views/workstation-v4/semantic-rules/batchRecordReviewModel'
 import type {
   StructuredQCFilterState,
   StructuredQCIssue,
@@ -105,6 +115,20 @@ export function useSemanticRulesBatchResultDrawerController(
       message.error('生成质控诊断包失败，请稍后重试')
     } finally {
       diagnosticPackageLoading.value = false
+    }
+  }
+
+  /** 页头“更多”菜单：明细导出、诊断包、复核与高级视图均为管理排查用途，不占客户主操作位。 */
+  function handleMoreMenuClick(event: { key?: unknown }) {
+    const key = String(event?.key || '')
+    if (key === 'xlsx' || key === 'csv' || key === 'html') {
+      handleExportMenuClick({ key })
+    } else if (key === 'diagnostic') {
+      void downloadBatchJobDiagnosticPackage()
+    } else if (key === 'review') {
+      void handleReviewBatchJobResult()
+    } else if (key === 'advanced') {
+      issueViewMode.value = issueViewMode.value === 'advanced' ? 'business' : 'advanced'
     }
   }
 
@@ -1937,8 +1961,86 @@ export function useSemanticRulesBatchResultDrawerController(
       outcomeText: resultReviewOutcomeText.value,
       scopeText: resultReviewScopeText.value,
       statusPills: resultReviewStatusPills.value,
+      issueRecordCount: customerReviewRecords.value.length
+        ? customerReviewRecords.value.filter((record) => record.counts.non_compliant > 0).length
+        : undefined,
     }
   })
+
+  // ---- 客户视图（2026-10-23 改版）：病历标识回查 + 按病历、按章节的结果模型 ----
+  const recordIdentities = ref<Map<string, BatchJobRecordIdentity>>(new Map())
+  let recordIdentityJobId = ''
+  watch(
+    () => [props.open, props.batchJobDetail?.id, isLuxian0609BatchJob.value] as const,
+    async ([open, jobId, isLuxian]) => {
+      const normalizedJobId = String(jobId || '')
+      if (!open || !normalizedJobId || !isLuxian || recordIdentityJobId === normalizedJobId) return
+      recordIdentityJobId = normalizedJobId
+      recordIdentities.value = new Map()
+      const result = await getSichuanWorkspaceBatchJobRecordIdentities(normalizedJobId)
+      if (recordIdentityJobId !== normalizedJobId) return
+      // 回查失败不影响结果查看：病历按序号展示。
+      const items = result.success ? result.data?.items || [] : []
+      recordIdentities.value = new Map(items.map((item) => [item.record_ref, item]))
+    },
+    { immediate: true },
+  )
+
+  function toCustomerReviewItem(item: SichuanBatchIssueItem): ReviewItem {
+    const card = enrichBusinessIssueCard(item)
+    const ruleCode = String(item.rule_code || item.rule_id || '').trim()
+    return {
+      key: resolveIssueStableKey(item),
+      ruleCode,
+      title: cleanRuleTitle(String(item.rule_name || '')),
+      status: reviewStatusOf(resolveIssueCanonicalStatus(item)),
+      chapter: ruleChapterName(ruleCode),
+      summary: String(card.customer_display?.conclusion || card.customer_findings_text || ''),
+      suggestion: String(card.customer_suggestion_text || ''),
+      evidence: resolveEvidenceChainItems(item, 600)
+        .slice(0, 4)
+        .map((evidence) => ({
+          key: evidence.key,
+          source: evidence.source,
+          time: evidence.recordTime,
+          quote: evidence.quote,
+        })),
+    }
+  }
+
+  const customerReviewRecords = computed(() =>
+    isLuxian0609BatchJob.value
+      ? buildReviewRecords(
+          canonicalLuxianIssueSourceItems.value.filter((item) => item.internal_only !== true),
+          {
+            recordKey: resolveIssueRecordKey,
+            toReviewItem: toCustomerReviewItem,
+            identities: recordIdentities.value,
+          },
+        )
+      : [],
+  )
+
+  const customerTopIssueRules = computed(() => buildTopIssueRules(customerReviewRecords.value))
+
+  /** 执行失败明细中的病历：有标识时显示“病历 NN · 住院号”，否则退回安全引用。 */
+  function failureRecordLabel(
+    failure: Partial<Pick<SichuanBatchIssueItem, 'record_ref' | 'visit_id' | 'record_id'>>,
+  ) {
+    const identity = recordIdentities.value.get(String(failure.record_ref || '').trim())
+    if (identity) {
+      const sequence = `病历 ${String(identity.sequence).padStart(2, '0')}`
+      return identity.inpatient_no ? `${sequence} · 住院号 ${identity.inpatient_no}` : sequence
+    }
+    return (
+      String(failure.record_ref || failure.visit_id || failure.record_id || '').trim() || '未知病历'
+    )
+  }
+
+  /** 多份病历的泸县 0609 任务默认用客户视图；“高级视图”仍保留给管理员排查。 */
+  const showCustomerReview = computed(
+    () => customerReviewRecords.value.length > 1 && issueViewMode.value === 'business',
+  )
 
   const luxianReviewReport = computed<Luxian0609ReviewReport | null>(() => {
     const report = props.batchJobDetail?.summary?.review_report
@@ -3024,6 +3126,12 @@ export function useSemanticRulesBatchResultDrawerController(
   })
 
   return {
+    failureRecordLabel,
+    handleMoreMenuClick,
+    customerReviewRecords,
+    customerTopIssueRules,
+    recordIdentities,
+    showCustomerReview,
     activeRuleFilterLabel,
     advancedSectionKeys,
     advancedSummaryCards,

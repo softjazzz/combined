@@ -21,15 +21,6 @@
         </div>
         <div class="drawer-actions">
           <a-button
-            v-if="batchJobDetail"
-            class="diagnostic-package-button"
-            :loading="diagnosticPackageLoading"
-            @click="downloadBatchJobDiagnosticPackage"
-          >
-            <MqIcon name="download" :size="16" />
-            下载质控诊断包
-          </a-button>
-          <a-button
             v-if="canCancelBatchJob"
             danger
             :loading="cancelBatchJobLoading"
@@ -37,23 +28,46 @@
           >
             停止任务
           </a-button>
-          <a-dropdown v-if="batchJobDetail?.status === 'completed'">
-            <a-button :loading="batchJobDetailLoading"> 导出 HTML 明细 </a-button>
+          <!-- 明细导出、诊断包、复核、高级视图属于管理排查操作，收进“更多”，主操作只留导出报告（2026-10-23） -->
+          <a-dropdown v-if="batchJobDetail" :trigger="['click']">
+            <a-button
+              :loading="diagnosticPackageLoading || reviewBatchJobLoading"
+              data-testid="batch-result-more"
+            >
+              更多
+            </a-button>
             <template #overlay>
-              <a-menu @click="handleExportMenuClick">
-                <a-menu-item key="html"> 导出 HTML 明细 </a-menu-item>
-                <a-menu-item key="xlsx"> 导出 Excel </a-menu-item>
-                <a-menu-item key="csv"> 导出 CSV </a-menu-item>
+              <a-menu @click="handleMoreMenuClick">
+                <template v-if="batchJobDetail?.status === 'completed'">
+                  <a-menu-item key="html" data-menu-key="html"> 导出 HTML 明细 </a-menu-item>
+                  <a-menu-item key="xlsx" data-menu-key="xlsx"> 导出 Excel 明细 </a-menu-item>
+                  <a-menu-item key="csv" data-menu-key="csv"> 导出 CSV 明细 </a-menu-item>
+                </template>
+                <a-menu-item key="diagnostic" data-menu-key="diagnostic">
+                  下载质控诊断包
+                </a-menu-item>
+                <a-menu-item
+                  v-if="batchJobDetail?.status === 'completed' && isLuxian0609BatchJob"
+                  key="review"
+                  data-menu-key="review"
+                >
+                  复核本次结果
+                </a-menu-item>
+                <a-menu-item key="advanced" data-menu-key="advanced">
+                  {{ issueViewMode === 'advanced' ? '返回结果视图' : '高级视图（排查用）' }}
+                </a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
           <a-button
-            v-if="batchJobDetail?.status === 'completed' && isLuxian0609BatchJob"
+            v-if="batchJobDetail?.status === 'completed'"
             type="primary"
-            :loading="reviewBatchJobLoading"
-            @click="handleReviewBatchJobResult"
+            :loading="batchJobDetailLoading"
+            data-testid="batch-result-export-report"
+            @click="handleExportMenuClick({ key: 'html' })"
           >
-            复核本次结果
+            <MqIcon name="download" :size="16" />
+            导出质控报告
           </a-button>
           <a-button type="text" @click="close"> 关闭 </a-button>
         </div>
@@ -62,7 +76,30 @@
       <div class="drawer-body">
         <BatchResultOverview :model="resultReviewOverviewModel" />
 
-        <section v-if="partialFailureItems.length" class="partial-failure-panel">
+        <div
+          v-if="partialFailureItems.length && isLuxian0609BatchJob"
+          class="partial-failure-notice mq-soft"
+          data-testid="partial-failure-notice"
+        >
+          <p>
+            有 {{ partialFailureSummary.failedCount }} 项质控点本次未能完成判定，系统会自动重试，
+            不影响已给出的 {{ partialFailureSummary.completedCount }} 项结果。
+            <button type="button" @click="showFailureDetail = !showFailureDetail">
+              {{ showFailureDetail ? '收起明细' : '查看明细' }}
+            </button>
+          </p>
+          <ul v-if="showFailureDetail">
+            <li
+              v-for="(failure, index) in partialFailureItems"
+              :key="`${failure.record_ref || failure.record_id || index}-${failure.rule_id || index}`"
+            >
+              <span class="mq-mono">{{ failure.rule_id || '未知规则' }}</span>
+              <span>{{ failureRecordLabel(failure) }}</span>
+              <span>模型输出失败，未形成质控结论</span>
+            </li>
+          </ul>
+        </div>
+        <section v-else-if="partialFailureItems.length" class="partial-failure-panel">
           <div class="partial-failure-head">
             <div>
               <strong>部分执行失败</strong>
@@ -211,7 +248,16 @@
           <div v-else class="luxian-review-empty">已完成复核，暂无高风险复核建议。</div>
         </div>
 
+        <!-- 多份病历的泸县 0609 任务：客户视图（问题排行 + 按病历查看）；高级视图保留原排查卡片 -->
+        <template v-if="showCustomerReview">
+          <TopIssueRulesCard
+            :rules="customerTopIssueRules"
+            :total-records="customerReviewRecords.length"
+          />
+          <BatchRecordReviewPanel :records="customerReviewRecords" />
+        </template>
         <div
+          v-else
           class="drawer-card issue-review-workbench-card"
           :class="{
             'issue-review-workbench-card--single': isSingleRecordIssueMode,
@@ -1531,7 +1577,12 @@
           </a-collapse-panel>
         </a-collapse>
 
-        <a-collapse v-if="canLoadDebugSnapshot" ghost class="drawer-advanced-collapse">
+        <!-- 调试快照属于排查信息：泸县 0609 任务只在高级视图出现 -->
+        <a-collapse
+          v-if="canLoadDebugSnapshot && (issueViewMode === 'advanced' || !isLuxian0609BatchJob)"
+          ghost
+          class="drawer-advanced-collapse"
+        >
           <a-collapse-panel key="debug" header="技术详情：调试快照">
             <div v-if="!batchJobDebugSnapshot" class="drawer-card drawer-card--nested">
               <a-spin :spinning="batchJobDebugLoading">
@@ -1947,7 +1998,10 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import BatchRecordReviewPanel from '@/views/workstation-v4/semantic-rules/components/BatchRecordReviewPanel.vue'
+import TopIssueRulesCard from '@/views/workstation-v4/semantic-rules/components/TopIssueRulesCard.vue'
 import QcRemediationSuggestion from '@/views/workstation-v4/components/qc/QcRemediationSuggestion.vue'
 import {
   useSemanticRulesBatchResultDrawerController,
@@ -1956,7 +2010,14 @@ import {
 
 const props = defineProps<SemanticRulesBatchResultDrawerProps>()
 
+const showFailureDetail = ref(false)
+
 const {
+  customerReviewRecords,
+  customerTopIssueRules,
+  failureRecordLabel,
+  handleMoreMenuClick,
+  showCustomerReview,
   activeRuleFilterLabel,
   advancedSectionKeys,
   advancedSummaryCards,

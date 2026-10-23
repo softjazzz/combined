@@ -18,6 +18,7 @@
             <span v-if="model.finishedAtText"> 完成时间：{{ model.finishedAtText }} </span>
             <span>规则集：泸县0609质控点验证 v1</span>
             <span>执行病历：{{ model.recordCount }} 份</span>
+            <span>客户质控点：{{ model.customerRuleCount }} 个</span>
           </div>
           <p class="result-review-overview-desc">
             {{ model.outcomeText }}
@@ -27,34 +28,17 @@
           </p>
         </div>
       </div>
-      <div class="result-review-overview-stats">
-        <div class="mq-soft">
-          <span>病历</span>
-          <strong>{{ model.recordCount }}</strong>
-          <small>份</small>
-        </div>
-        <div class="mq-soft">
-          <span>客户质控点</span>
-          <strong>{{ model.customerRuleCount }}</strong>
-          <small>个</small>
-        </div>
-        <div class="mq-soft">
-          <span>结果</span>
-          <strong>{{ model.resultCount }}</strong>
-          <small>条</small>
-        </div>
-      </div>
-      <div class="result-overview-status-block">
-        <span class="result-overview-status-label">状态分布</span>
-        <div class="result-review-status-pills">
-          <span
-            v-for="item in model.statusPills"
-            :key="item.key"
-            class="result-review-status-pill mq-status"
-            :class="[item.className, pillToneClass(item)]"
-          >
-            {{ item.label }} <strong>{{ item.value }}</strong>
-          </span>
+      <div class="result-review-overview-stats" data-testid="batch-result-metrics">
+        <div
+          v-for="metric in metrics"
+          :key="metric.key"
+          class="mq-soft"
+          :class="metric.value > 0 && metric.tone ? `is-${metric.tone}` : ''"
+        >
+          <span>{{ metric.label }}</span>
+          <strong>{{ metric.value }}</strong>
+          <small>{{ metric.unit }}</small>
+          <em v-if="metric.hint">{{ metric.hint }}</em>
         </div>
       </div>
     </div>
@@ -84,6 +68,8 @@ type BatchResultOverviewModel = {
   outcomeText: string
   scopeText: string
   statusPills: BatchResultOverviewStatusPill[]
+  /** 发现确定问题的病历数（客户视图模型提供；缺省时不显示该说明）。 */
+  issueRecordCount?: number
 }
 
 const props = defineProps<{
@@ -100,16 +86,52 @@ const statusTone = computed(() => {
   return 'warning'
 })
 
-const PILL_TONES: Record<string, string> = {
-  'is-danger': 'mq-status--danger',
-  'is-warning': 'mq-status--warning',
-  'is-success': 'mq-status--success',
+function pillValue(key: string): number {
+  return props.model?.statusPills.find((item) => item.key === key)?.value || 0
 }
 
-// 数值为 0 时回到中性色，不做强调（规范 §8）。
-function pillToneClass(item: BatchResultOverviewStatusPill): string {
-  return item.value > 0 ? PILL_TONES[item.className] || '' : 'is-zero'
-}
+// 客户只看四个结论性指标；数值为 0 时不着色（规范 §8）。
+const metrics = computed(() => {
+  const model = props.model
+  if (!model) return []
+  const issues = pillValue('non_compliant')
+  const records = Math.max(0, model.recordCount)
+  return [
+    {
+      key: 'records',
+      label: '质控病历',
+      value: records,
+      unit: '份',
+      tone: '',
+      hint:
+        typeof model.issueRecordCount === 'number' ? `${model.issueRecordCount} 份发现问题` : '',
+    },
+    {
+      key: 'issues',
+      label: '确定问题',
+      value: issues,
+      unit: '条',
+      tone: 'danger',
+      hint: records > 1 && issues > 0 ? `平均每份 ${(issues / records).toFixed(1)} 条` : '',
+    },
+    {
+      key: 'data-gap',
+      label: '需补充资料',
+      value: pillValue('data_gap'),
+      unit: '条',
+      tone: 'warning',
+      hint: '资料不全，暂无法判定',
+    },
+    {
+      key: 'compliant',
+      label: '合格',
+      value: pillValue('compliant'),
+      unit: '条',
+      tone: 'success',
+      hint: pillValue('not_applicable') > 0 ? `另 ${pillValue('not_applicable')} 条不适用` : '',
+    },
+  ]
+})
 </script>
 
 <style scoped>
@@ -120,7 +142,7 @@ function pillToneClass(item: BatchResultOverviewStatusPill): string {
 
 .result-overview-card-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   gap: var(--mq-space-6);
   align-items: center;
 }
@@ -179,24 +201,29 @@ function pillToneClass(item: BatchResultOverviewStatusPill): string {
 
 .result-review-overview-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(104px, auto));
+  grid-template-columns: repeat(4, minmax(112px, 1fr));
   gap: var(--mq-space-3);
 }
 
 .result-review-overview-stats > div {
   display: grid;
-  grid-template-columns: auto auto;
+  grid-template-columns: auto 1fr;
   align-items: baseline;
-  justify-content: start;
   column-gap: var(--mq-space-1);
-  padding: 14px 18px;
+  padding: 14px 16px;
 }
 
-.result-review-overview-stats span {
+.result-review-overview-stats span,
+.result-review-overview-stats em {
   grid-column: 1 / -1;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
+  font-style: normal;
   font-weight: 600;
+}
+
+.result-review-overview-stats em {
+  font-weight: 400;
 }
 
 .result-review-overview-stats strong {
@@ -214,52 +241,21 @@ function pillToneClass(item: BatchResultOverviewStatusPill): string {
   font-size: var(--mq-font-13);
 }
 
-.result-overview-status-block {
-  display: grid;
-  gap: var(--mq-space-2);
-  min-width: 0;
-  padding-left: var(--mq-space-6);
-  border-left: 0.5px solid var(--mq-border-strong);
+.result-review-overview-stats .is-danger strong {
+  color: var(--mq-danger-text);
 }
 
-.result-overview-status-label {
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-  font-weight: 600;
+.result-review-overview-stats .is-warning strong {
+  color: var(--mq-warning-text);
 }
 
-.result-review-status-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--mq-space-2);
-}
-
-.result-review-status-pill {
-  padding: 5px 12px;
-  font-size: var(--mq-font-13);
-  line-height: 20px;
-}
-
-.result-review-status-pill strong {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-.result-review-status-pill.is-zero {
-  color: var(--mq-text-tertiary);
+.result-review-overview-stats .is-success strong {
+  color: var(--mq-success-text);
 }
 
 @media (max-width: 1439px) {
   .result-overview-card-main {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .result-overview-status-block {
-    grid-column: 1 / -1;
-    padding-top: var(--mq-space-4);
-    padding-left: 0;
-    border-top: 0.5px solid var(--mq-border-strong);
-    border-left: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -273,7 +269,7 @@ function pillToneClass(item: BatchResultOverviewStatusPill): string {
   }
 
   .result-review-overview-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
