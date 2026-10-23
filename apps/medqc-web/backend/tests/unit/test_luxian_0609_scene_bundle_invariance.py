@@ -321,6 +321,10 @@ async def test_typed_native_prompt_and_canonical_are_invariant_to_scene_summary_
         "prompt_tokens": 37,
         "completion_tokens": 5,
     }
+    # 检查检验族结论按提示词冻结复用（2026-10-22）：本用例要比较两次实际发出的提示词，第二次换空冻结目录。
+    import tempfile
+
+    monkeypatch.setenv("LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR", tempfile.mkdtemp())
     second = await service.evaluate_running_final_bundle_input(
         bundle=_scene_bundle(variant="long"),
         rule_ids=["LX0609-06-01-05"],
