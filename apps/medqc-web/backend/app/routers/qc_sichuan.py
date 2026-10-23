@@ -2376,21 +2376,18 @@ async def list_workspace_batch_jobs(
         "page": page,
         "page_size": page_size,
     }
+    # 查询与逐行客户安全投影都是同步重活（一页可达数秒），放到线程池，避免阻塞其他请求。
     try:
-        result = workspace.list_batch_jobs(
-            **list_kwargs,
-            query=q,
-        )
+        result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, query=q)
     except TypeError:
-        result = workspace.list_batch_jobs(
-            **list_kwargs,
-            q=q,
-        )
-    items = [
-        _workspace_batch_list_item(item)
-        for item in result.items
-        if _is_workspace_batch_job(item)
-    ]
+        result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+    items = await run_in_threadpool(
+        lambda: [
+            _workspace_batch_list_item(item)
+            for item in result.items
+            if _is_workspace_batch_job(item)
+        ]
+    )
     return success_response(
         data={
             "items": items,
