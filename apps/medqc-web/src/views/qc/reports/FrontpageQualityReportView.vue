@@ -181,7 +181,13 @@
       </section>
     </template>
 
-    <a-drawer v-model:open="drawerOpen" :title="drilldownTitle" :width="900" destroy-on-close>
+    <a-drawer
+      v-model:open="drawerOpen"
+      :title="drilldownTitle"
+      width="min(900px, 100vw)"
+      :root-style="{ zIndex: 1100 }"
+      destroy-on-close
+    >
       <div class="drawer-actions">
         <span>{{ recordsPage ? `共 ${recordsPage.total} 份病案` : '病案明细' }}</span
         ><button

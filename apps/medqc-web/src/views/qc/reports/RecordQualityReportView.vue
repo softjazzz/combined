@@ -6,418 +6,454 @@
     </a-tabs>
     <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
     <div v-show="reportTab === 'quality'">
-    <header class="page-head">
-      <div>
-        <h1>病历质量分析</h1>
-        <p>
-          {{
-            scene === 'running'
-              ? '当前在院病历的已完成质控结果'
-              : '已出院且有已完成质控结果的病历（未核验归档）'
-          }}
-        </p>
-      </div>
-      <div class="head-actions">
-        <button class="secondary" type="button" :disabled="loading" @click="loadReport">
-          <RefreshCw :size="16" />刷新
-        </button>
-        <button
-          class="secondary"
-          type="button"
-          :disabled="!report || exporting !== null"
-          @click="download('departments')"
-        >
-          <Download :size="16" />科室 CSV
-        </button>
-        <button
-          class="secondary"
-          type="button"
-          :disabled="!report || exporting !== null"
-          @click="download('doctors')"
-        >
-          <Download :size="16" />医生 CSV
-        </button>
-      </div>
-    </header>
-
-    <section class="filters" aria-label="报表筛选">
-      <div class="field scene-field">
-        <label>场景</label>
-        <div class="segmented">
+      <header class="page-head">
+        <div>
+          <h1>病历质量分析</h1>
+          <p>
+            {{
+              scene === 'running'
+                ? '当前在院病历的已完成质控结果'
+                : '已出院且有已完成质控结果的病历（未核验归档）'
+            }}
+          </p>
+        </div>
+        <div class="head-actions">
+          <button class="secondary" type="button" :disabled="loading" @click="loadReport">
+            <RefreshCw :size="16" />刷新
+          </button>
           <button
+            class="secondary"
             type="button"
-            :class="{ active: scene === 'running' }"
-            @click="setScene('running')"
+            :disabled="!report || exporting !== null"
+            @click="download('departments')"
           >
-            运行病历</button
-          ><button type="button" :class="{ active: scene === 'final' }" @click="setScene('final')">
-            终末病历
+            <Download :size="16" />科室 CSV
+          </button>
+          <button
+            class="secondary"
+            type="button"
+            :disabled="!report || exporting !== null"
+            @click="download('doctors')"
+          >
+            <Download :size="16" />医生 CSV
           </button>
         </div>
-      </div>
-      <div class="field">
-        <label for="report-department">科室</label
-        ><input id="report-department" v-model.trim="draft.department" placeholder="全部科室" />
-      </div>
-      <div class="field">
-        <label for="report-doctor">主治医师</label
-        ><input id="report-doctor" v-model.trim="draft.doctor" placeholder="全部医生" />
-      </div>
-      <div class="field">
-        <label for="report-from">完成时间起</label
-        ><input id="report-from" v-model="draft.completed_from" type="datetime-local" />
-      </div>
-      <div class="field">
-        <label for="report-to">完成时间止</label
-        ><input id="report-to" v-model="draft.completed_to" type="datetime-local" />
-      </div>
-      <div class="field">
-        <label for="report-source">质控类型</label
-        ><select id="report-source" v-model="draft.defect_source">
-          <option value="all">全部</option>
-          <option value="auto">自动缺陷</option>
-          <option value="manual">人工缺陷</option>
-        </select>
-      </div>
-      <button class="primary" type="button" @click="applyFilters"><Search :size="16" />查询</button>
-      <button class="secondary" type="button" @click="resetFilters">重置</button>
-    </section>
+      </header>
 
-    <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
-    <div v-else-if="loadError" class="status error" role="alert" data-testid="report-error">
-      <CircleAlert :size="18" />{{ loadError }}
-    </div>
-    <template v-else-if="report">
-      <div
-        v-if="report.scope.archive_status === 'unverified'"
-        class="notice archive-notice"
-        role="note"
-        data-testid="archive-unverified"
-      >
-        <CircleAlert :size="16" />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
-        统计范围未按“已归档”核验，可能包含尚未归档的病历。
-      </div>
-      <section class="overview" aria-label="总览">
-        <h2>总览</h2>
-        <div class="metrics">
-          <div v-for="item in kpiCards" :key="item.label" class="metric">
-            <span>{{ item.label }}</span
-            ><strong>{{ item.value }}</strong
-            ><small>{{ item.note }}</small>
+      <section class="filters" aria-label="报表筛选">
+        <div class="field scene-field">
+          <label>场景</label>
+          <div class="segmented">
+            <button
+              type="button"
+              :class="{ active: scene === 'running' }"
+              @click="setScene('running')"
+            >
+              运行病历</button
+            ><button
+              type="button"
+              :class="{ active: scene === 'final' }"
+              @click="setScene('final')"
+            >
+              终末病历
+            </button>
           </div>
         </div>
-        <div v-if="report.kpis.qc_unavailable_total" class="notice">
-          {{ report.kpis.qc_unavailable_total }} 份病历的质控结果无法读取，未纳入已完成结果统计。
+        <div class="field">
+          <label for="report-department">科室</label
+          ><input id="report-department" v-model.trim="draft.department" placeholder="全部科室" />
         </div>
-        <div
-          v-if="
-            report.source_status?.manual_defect === 'unavailable' ||
-            report.source_status?.review === 'unavailable'
-          "
-          class="notice"
-        >
-          部分来源暂不可用，相关指标显示“不可用”。
+        <div class="field">
+          <label for="report-doctor">主治医师</label
+          ><input id="report-doctor" v-model.trim="draft.doctor" placeholder="全部医生" />
         </div>
+        <div class="field">
+          <label for="report-from">完成时间起</label
+          ><input id="report-from" v-model="draft.completed_from" type="datetime-local" />
+        </div>
+        <div class="field">
+          <label for="report-to">完成时间止</label
+          ><input id="report-to" v-model="draft.completed_to" type="datetime-local" />
+        </div>
+        <div class="field">
+          <label for="report-source">质控类型</label
+          ><select id="report-source" v-model="draft.defect_source">
+            <option value="all">全部</option>
+            <option value="auto">自动缺陷</option>
+            <option value="manual">人工缺陷</option>
+          </select>
+        </div>
+        <button class="primary" type="button" @click="applyFilters">
+          <Search :size="16" />查询
+        </button>
+        <button class="secondary" type="button" @click="resetFilters">重置</button>
       </section>
 
-      <section class="distribution" aria-label="分布">
-        <h2>分布</h2>
-        <div class="distribution-grid">
-          <div v-if="report.score_standard.status === 'configured'" class="data-panel">
-            <h3>等级分布</h3>
-            <div
-              v-for="item in report.grade_distribution || []"
-              :key="item.grade || 'unknown'"
-              class="data-row"
-            >
-              <span>{{ item.grade || '未分级' }}</span
-              ><strong>{{ item.count }}</strong>
+      <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
+      <div v-else-if="loadError" class="status error" role="alert" data-testid="report-error">
+        <CircleAlert :size="18" />{{ loadError }}
+      </div>
+      <template v-else-if="report">
+        <div
+          v-if="report.scope.archive_status === 'unverified'"
+          class="notice archive-notice"
+          role="note"
+          data-testid="archive-unverified"
+        >
+          <CircleAlert :size="16" />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
+          统计范围未按“已归档”核验，可能包含尚未归档的病历。
+        </div>
+        <section class="overview" aria-label="总览">
+          <h2>总览</h2>
+          <div class="metrics">
+            <div v-for="item in kpiCards" :key="item.label" class="metric">
+              <span>{{ item.label }}</span
+              ><strong>{{ item.value }}</strong
+              ><small>{{ item.note }}</small>
             </div>
-            <p v-if="!report.grade_distribution?.length" class="empty">暂无数据</p>
           </div>
-          <div v-if="report.score_standard.status === 'configured'" class="data-panel">
-            <h3>得分分布</h3>
-            <div
-              v-for="item in report.score_distribution || []"
-              :key="item.bucket"
-              class="data-row"
-            >
-              <span>{{ item.bucket }}</span
-              ><strong>{{ item.count }}</strong>
-            </div>
-            <p v-if="!report.score_distribution?.length" class="empty">暂无数据</p>
+          <div v-if="report.kpis.qc_unavailable_total" class="notice">
+            {{ report.kpis.qc_unavailable_total }} 份病历的质控结果无法读取，未纳入已完成结果统计。
           </div>
-          <div class="data-panel">
-            <h3>缺陷等级</h3>
-            <template v-if="report.defect_level_distribution">
+          <div
+            v-if="
+              report.source_status?.manual_defect === 'unavailable' ||
+              report.source_status?.review === 'unavailable'
+            "
+            class="notice"
+          >
+            部分来源暂不可用，相关指标显示“不可用”。
+          </div>
+        </section>
+
+        <section class="distribution" aria-label="分布">
+          <h2>分布</h2>
+          <div class="distribution-grid">
+            <div v-if="report.score_standard.status === 'configured'" class="data-panel">
+              <h3>等级分布</h3>
               <div
-                v-for="item in report.defect_level_distribution"
-                :key="item.name"
+                v-for="item in report.grade_distribution || []"
+                :key="item.grade || 'unknown'"
                 class="data-row"
               >
-                <span>{{ item.name }}</span
-                ><strong>{{ item.defect_total }}</strong>
+                <span>{{ item.grade || '未分级' }}</span
+                ><strong>{{ item.count }}</strong>
               </div>
-              <p v-if="!report.defect_level_distribution.length" class="empty">暂无数据</p>
-            </template>
-            <p v-else class="empty">不可用</p>
-          </div>
-          <div class="data-panel">
-            <h3>缺陷类型分布</h3>
-            <template v-if="report.defect_type_distribution">
-              <button v-for="item in report.defect_type_distribution" :key="item.name" class="data-row row-button" type="button"
-                @click="openDrilldown({ defect_type: item.name }, `缺陷类型：${item.name}`)">
-                <span>{{ item.name }}</span><strong>{{ item.defect_total }}</strong>
-              </button>
-              <p v-if="!report.defect_type_distribution.length" class="empty">暂无已分类缺陷</p>
-            </template>
-            <p v-else class="empty">不可用</p>
-          </div>
-          <div class="data-panel">
-            <h3>文书分布</h3>
-            <template v-if="report.document_distribution">
-              <button
-                v-for="item in report.document_distribution"
-                :key="item.name"
-                class="data-row row-button"
-                type="button"
-                @click="openDrilldown({ document: item.name }, `文书：${item.name}`)"
+              <p v-if="!report.grade_distribution?.length" class="empty">暂无数据</p>
+            </div>
+            <div v-if="report.score_standard.status === 'configured'" class="data-panel">
+              <h3>得分分布</h3>
+              <div
+                v-for="item in report.score_distribution || []"
+                :key="item.bucket"
+                class="data-row"
               >
-                <span>{{ item.name }}</span
+                <span>{{ item.bucket }}</span
+                ><strong>{{ item.count }}</strong>
+              </div>
+              <p v-if="!report.score_distribution?.length" class="empty">暂无数据</p>
+            </div>
+            <div class="data-panel">
+              <h3>缺陷等级</h3>
+              <template v-if="report.defect_level_distribution">
+                <div
+                  v-for="item in report.defect_level_distribution"
+                  :key="item.name"
+                  class="data-row"
+                >
+                  <span>{{ item.name }}</span
+                  ><strong>{{ item.defect_total }}</strong>
+                </div>
+                <p v-if="!report.defect_level_distribution.length" class="empty">暂无数据</p>
+              </template>
+              <p v-else class="empty">不可用</p>
+            </div>
+            <div class="data-panel">
+              <h3>缺陷类型分布</h3>
+              <template v-if="report.defect_type_distribution">
+                <button
+                  v-for="item in report.defect_type_distribution"
+                  :key="item.name"
+                  class="data-row row-button"
+                  type="button"
+                  @click="openDrilldown({ defect_type: item.name }, `缺陷类型：${item.name}`)"
+                >
+                  <span>{{ item.name }}</span
+                  ><strong>{{ item.defect_total }}</strong>
+                </button>
+                <p v-if="!report.defect_type_distribution.length" class="empty">暂无已分类缺陷</p>
+              </template>
+              <p v-else class="empty">不可用</p>
+            </div>
+            <div class="data-panel">
+              <h3>文书分布</h3>
+              <template v-if="report.document_distribution">
+                <button
+                  v-for="item in report.document_distribution"
+                  :key="item.name"
+                  class="data-row row-button"
+                  type="button"
+                  @click="openDrilldown({ document: item.name }, `文书：${item.name}`)"
+                >
+                  <span>{{ item.name }}</span
+                  ><strong>{{ item.defect_total }}</strong>
+                </button>
+                <p v-if="!report.document_distribution.length" class="empty">暂无数据</p>
+              </template>
+              <p v-else class="empty">不可用</p>
+            </div>
+          </div>
+          <div class="top-panel">
+            <div class="top-head">
+              <h3>缺陷 Top 20</h3>
+              <div class="segmented">
+                <button
+                  v-for="tab in topTabs"
+                  :key="tab.key"
+                  type="button"
+                  :class="{ active: activeTop === tab.key }"
+                  @click="activeTop = tab.key"
+                >
+                  {{ tab.label }}
+                </button>
+              </div>
+            </div>
+            <p v-if="activeTopRows === null" class="empty">不可用</p>
+            <p v-else-if="!activeTopRows.length" class="empty">暂无数据</p>
+            <div v-else class="top-grid">
+              <button
+                v-for="(item, index) in activeTopRows"
+                :key="`${item.name}-${index}`"
+                type="button"
+                class="top-row"
+                @click="openTop(item)"
+              >
+                <span class="rank">{{ index + 1 }}</span
+                ><span class="top-name">{{ item.rule_name || item.name }}</span
                 ><strong>{{ item.defect_total }}</strong>
               </button>
-              <p v-if="!report.document_distribution.length" class="empty">暂无数据</p>
-            </template>
-            <p v-else class="empty">不可用</p>
-          </div>
-        </div>
-        <div class="top-panel">
-          <div class="top-head">
-            <h3>缺陷 Top 20</h3>
-            <div class="segmented">
+            </div>
+            <p v-if="activeTop === 'veto'" class="notice">
+              单否按评分标准的自动缺陷计分结果统计；人工缺陷单否归属未知。
+            </p>
+            <div v-if="report.classification_unknown" class="notice">
               <button
-                v-for="tab in topTabs"
-                :key="tab.key"
+                v-for="dimension in classificationDimensions"
+                :key="dimension.key"
                 type="button"
-                :class="{ active: activeTop === tab.key }"
-                @click="activeTop = tab.key"
+                class="link"
+                :disabled="report.classification_unknown[dimension.key] == null"
+                @click="
+                  openDrilldown(
+                    { unknown_classification: dimension.key },
+                    `${dimension.label}未知的病例`,
+                  )
+                "
               >
-                {{ tab.label }}
+                {{ dimension.label }}未知：{{
+                  numberText(report.classification_unknown[dimension.key])
+                }}
               </button>
             </div>
           </div>
-          <p v-if="activeTopRows === null" class="empty">不可用</p>
-          <p v-else-if="!activeTopRows.length" class="empty">暂无数据</p>
-          <div v-else class="top-grid">
-            <button
-              v-for="(item, index) in activeTopRows"
-              :key="`${item.name}-${index}`"
-              type="button"
-              class="top-row"
-              @click="openTop(item)"
-            >
-              <span class="rank">{{ index + 1 }}</span
-              ><span class="top-name">{{ item.rule_name || item.name }}</span
-              ><strong>{{ item.defect_total }}</strong>
-            </button>
-          </div>
-          <p v-if="activeTop === 'veto'" class="notice">单否按评分标准的自动缺陷计分结果统计；人工缺陷单否归属未知。</p>
-          <div class="notice" v-if="report.classification_unknown">
-            <button v-for="dimension in classificationDimensions" :key="dimension.key" type="button" class="link"
-              :disabled="report.classification_unknown[dimension.key] == null"
-              @click="openDrilldown({ unknown_classification: dimension.key }, `${dimension.label}未知的病例`)">
-              {{ dimension.label }}未知：{{ numberText(report.classification_unknown[dimension.key]) }}
-            </button>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="details" aria-label="明细">
-        <div class="section-head">
-          <h2>明细</h2>
-          <div class="head-actions">
-            <label class="column-picker"
-              ><Columns3 :size="16" />显示列<select
-                v-model="columnPreset"
-                @change="applyColumnPreset"
+        <section class="details" aria-label="明细">
+          <div class="section-head">
+            <h2>明细</h2>
+            <div class="head-actions">
+              <label class="column-picker"
+                ><Columns3 :size="16" />显示列<select
+                  v-model="columnPreset"
+                  @change="applyColumnPreset"
+                >
+                  <option value="all">全部</option>
+                  <option value="quality">质量</option>
+                  <option value="defects">缺陷</option>
+                </select></label
               >
-                <option value="all">全部</option>
-                <option value="quality">质量</option>
-                <option value="defects">缺陷</option>
-              </select></label
+            </div>
+          </div>
+          <div class="column-options">
+            <label v-for="column in optionalColumns" :key="column.key"
+              ><input
+                v-model="visibleColumns"
+                type="checkbox"
+                :value="column.key"
+                @change="saveColumns"
+              />{{ column.label }}</label
             >
           </div>
-        </div>
-        <div class="column-options">
-          <label v-for="column in optionalColumns" :key="column.key"
-            ><input
-              v-model="visibleColumns"
-              type="checkbox"
-              :value="column.key"
-              @change="saveColumns"
-            />{{ column.label }}</label
-          >
-        </div>
-        <div class="table-panel">
-          <div class="table-head">
-            <h3>科室明细</h3>
-            <span>{{ report.department_rows.length }} 个科室</span>
+          <div class="table-panel">
+            <div class="table-head">
+              <h3>科室明细</h3>
+              <span>{{ report.department_rows.length }} 个科室</span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>科室</th>
+                    <th v-for="column in shownColumns" :key="column.key">
+                      {{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in report.department_rows" :key="row.name">
+                    <td>
+                      <button
+                        class="link"
+                        type="button"
+                        @click="openDrilldown({ department: row.name }, `科室：${row.name}`)"
+                      >
+                        {{ row.name }}
+                      </button>
+                    </td>
+                    <td v-for="column in shownColumns" :key="column.key">
+                      {{ cellValue(row, column.key) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!report.department_rows.length">
+                    <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>科室</th>
-                  <th v-for="column in shownColumns" :key="column.key">
-                    {{ column.label }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in report.department_rows" :key="row.name">
-                  <td>
-                    <button
-                      class="link"
-                      type="button"
-                      @click="openDrilldown({ department: row.name }, `科室：${row.name}`)"
-                    >
-                      {{ row.name }}
-                    </button>
-                  </td>
-                  <td v-for="column in shownColumns" :key="column.key">
-                    {{ cellValue(row, column.key) }}
-                  </td>
-                </tr>
-                <tr v-if="!report.department_rows.length">
-                  <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="table-panel">
+            <div class="table-head">
+              <h3>医生明细</h3>
+              <span>{{ report.doctor_rows.length }} 位医生</span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>主治医师</th>
+                    <th v-for="column in shownColumns" :key="column.key">
+                      {{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in report.doctor_rows" :key="row.name">
+                    <td>
+                      <button
+                        class="link"
+                        type="button"
+                        @click="openDrilldown({ doctor: row.name }, `医生：${row.name}`)"
+                      >
+                        {{ row.name }}
+                      </button>
+                    </td>
+                    <td v-for="column in shownColumns" :key="column.key">
+                      {{ cellValue(row, column.key) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!report.doctor_rows.length">
+                    <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-        <div class="table-panel">
-          <div class="table-head">
-            <h3>医生明细</h3>
-            <span>{{ report.doctor_rows.length }} 位医生</span>
-          </div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>主治医师</th>
-                  <th v-for="column in shownColumns" :key="column.key">
-                    {{ column.label }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in report.doctor_rows" :key="row.name">
-                  <td>
-                    <button
-                      class="link"
-                      type="button"
-                      @click="openDrilldown({ doctor: row.name }, `医生：${row.name}`)"
-                    >
-                      {{ row.name }}
-                    </button>
-                  </td>
-                  <td v-for="column in shownColumns" :key="column.key">
-                    {{ cellValue(row, column.key) }}
-                  </td>
-                </tr>
-                <tr v-if="!report.doctor_rows.length">
-                  <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-      <RecordRemediationAnalysisPanel :filters="filters" />
-      <section class="unavailable">
-        <h2>暂未接入的维度</h2>
-        <p v-for="item in report.unavailable_dimensions" :key="item.key">
-          {{ item.label }}：{{ unavailableReason(item.reason_code) }}
-        </p>
-        <button class="link" type="button" @click="reportTab = 'core'">核心制度自动缺陷分析</button>
-      </section>
-    </template>
+        </section>
+        <RecordRemediationAnalysisPanel :filters="filters" />
+        <section class="unavailable">
+          <h2>暂未接入的维度</h2>
+          <p v-for="item in report.unavailable_dimensions" :key="item.key">
+            {{ item.label }}：{{ unavailableReason(item.reason_code) }}
+          </p>
+          <button class="link" type="button" @click="reportTab = 'core'">
+            核心制度自动缺陷分析
+          </button>
+        </section>
+      </template>
 
-    <a-drawer v-model:open="drawerOpen" :title="drilldownTitle" :width="900" destroy-on-close>
-      <div class="drawer-actions">
-        <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
-        ><button
-          class="secondary"
-          type="button"
-          :disabled="!recordsPage || exporting !== null"
-          @click="download('records')"
-        >
-          <Download :size="16" />导出病例 CSV
-        </button>
-      </div>
-      <p v-if="recordsError" class="status error" role="alert">
-        {{ recordsError }}
-      </p>
-      <p v-else-if="recordsLoading" class="status">正在读取病例…</p>
-      <div v-else-if="recordsPage" class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>患者 / 就诊号</th>
-              <th>科室 / 医生</th>
-              <th>完成时间</th>
-              <th>得分 / 等级</th>
-              <th>自动 / 人工缺陷</th>
-              <th>审核状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in recordsPage.items"
-              :key="`${row.institute_id}/${row.patient_id}/${row.visit_id}`"
-            >
-              <td>
-                <strong>{{ row.patient_name || '姓名未知' }}</strong
-                ><small>{{ row.visit_id }}</small>
-              </td>
-              <td>
-                {{ row.department || '未知' }}<small>{{ row.doctor || '未知' }}</small>
-              </td>
-              <td>{{ formatTime(row.completed_at) }}</td>
-              <td>{{ scoreText(row.score) }} / {{ row.grade || '未分级' }}</td>
-              <td>
-                {{ numberText(row.auto_defect_total) }} / {{ numberText(row.manual_defect_total) }}
-              </td>
-              <td>{{ reviewText(row.review_state) }}</td>
-            </tr>
-            <tr v-if="!recordsPage.items.length">
-              <td colspan="6" class="empty">暂无病例</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-if="recordsPage && recordsPage.total > recordsPage.page_size" class="pager">
-        <button
-          class="secondary"
-          type="button"
-          :disabled="recordsPage.page <= 1 || recordsLoading"
-          @click="changePage(recordsPage.page - 1)"
-        >
-          上一页</button
-        ><span
-          >{{ recordsPage.page }} / {{ Math.ceil(recordsPage.total / recordsPage.page_size) }}</span
-        ><button
-          class="secondary"
-          type="button"
-          :disabled="
-            recordsPage.page * recordsPage.page_size >= recordsPage.total || recordsLoading
-          "
-          @click="changePage(recordsPage.page + 1)"
-        >
-          下一页
-        </button>
-      </div>
-    </a-drawer>
+      <a-drawer
+        v-model:open="drawerOpen"
+        :title="drilldownTitle"
+        width="min(900px, 100vw)"
+        :root-style="{ zIndex: 1100 }"
+        destroy-on-close
+      >
+        <div class="drawer-actions">
+          <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
+          ><button
+            class="secondary"
+            type="button"
+            :disabled="!recordsPage || exporting !== null"
+            @click="download('records')"
+          >
+            <Download :size="16" />导出病例 CSV
+          </button>
+        </div>
+        <p v-if="recordsError" class="status error" role="alert">
+          {{ recordsError }}
+        </p>
+        <p v-else-if="recordsLoading" class="status">正在读取病例…</p>
+        <div v-else-if="recordsPage" class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>患者 / 就诊号</th>
+                <th>科室 / 医生</th>
+                <th>完成时间</th>
+                <th>得分 / 等级</th>
+                <th>自动 / 人工缺陷</th>
+                <th>审核状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in recordsPage.items"
+                :key="`${row.institute_id}/${row.patient_id}/${row.visit_id}`"
+              >
+                <td>
+                  <strong>{{ row.patient_name || '姓名未知' }}</strong
+                  ><small>{{ row.visit_id }}</small>
+                </td>
+                <td>
+                  {{ row.department || '未知' }}<small>{{ row.doctor || '未知' }}</small>
+                </td>
+                <td>{{ formatTime(row.completed_at) }}</td>
+                <td>{{ scoreText(row.score) }} / {{ row.grade || '未分级' }}</td>
+                <td>
+                  {{ numberText(row.auto_defect_total) }} /
+                  {{ numberText(row.manual_defect_total) }}
+                </td>
+                <td>{{ reviewText(row.review_state) }}</td>
+              </tr>
+              <tr v-if="!recordsPage.items.length">
+                <td colspan="6" class="empty">暂无病例</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="recordsPage && recordsPage.total > recordsPage.page_size" class="pager">
+          <button
+            class="secondary"
+            type="button"
+            :disabled="recordsPage.page <= 1 || recordsLoading"
+            @click="changePage(recordsPage.page - 1)"
+          >
+            上一页</button
+          ><span
+            >{{ recordsPage.page }} /
+            {{ Math.ceil(recordsPage.total / recordsPage.page_size) }}</span
+          ><button
+            class="secondary"
+            type="button"
+            :disabled="
+              recordsPage.page * recordsPage.page_size >= recordsPage.total || recordsLoading
+            "
+            @click="changePage(recordsPage.page + 1)"
+          >
+            下一页
+          </button>
+        </div>
+      </a-drawer>
     </div>
   </main>
 </template>
@@ -496,12 +532,17 @@ const report = ref<RecordQualityReport | null>(null)
 const optionalColumns = computed<Array<{ key: ColumnKey; label: string }>>(() => [
   ...baseColumns.map((column) => ({
     ...column,
-    label: column.key === 'top_grade_total' && report.value?.kpis.top_grade_name
-      ? `${report.value.kpis.top_grade_name}病历数` : column.label,
+    label:
+      column.key === 'top_grade_total' && report.value?.kpis.top_grade_name
+        ? `${report.value.kpis.top_grade_name}病历数`
+        : column.label,
   })),
-  ...(report.value?.grade_distribution || []).filter((item) => item.grade !== null).map((item) => ({
-    key: `grade_rate:${item.grade}` as ColumnKey, label: `${item.grade}占比`,
-  })),
+  ...(report.value?.grade_distribution || [])
+    .filter((item) => item.grade !== null)
+    .map((item) => ({
+      key: `grade_rate:${item.grade}` as ColumnKey,
+      label: `${item.grade}占比`,
+    })),
 ])
 const loading = ref(false)
 const loadError = ref('')
@@ -515,7 +556,8 @@ const topTabs = [
   { key: 'rules', label: '规则' },
 ] as const
 const classificationDimensions = [
-  { key: 'defect_category', label: '大类' }, { key: 'defect_type', label: '类型' },
+  { key: 'defect_category', label: '大类' },
+  { key: 'defect_type', label: '类型' },
 ] as const
 const columnPreset = ref('all')
 const storageKey = computed(
@@ -586,9 +628,11 @@ function rateText(value: number | null | undefined, fallback = '不可用'): str
   return value == null ? fallback : `${(value * 100).toFixed(1)}%`
 }
 function cellValue(row: ReportGroupRow, key: ColumnKey): string {
-  if (key.startsWith('grade_rate:')) return rateText(row.grade_rates?.[key.slice('grade_rate:'.length)], scoreAvailability.value)
+  if (key.startsWith('grade_rate:'))
+    return rateText(row.grade_rates?.[key.slice('grade_rate:'.length)], scoreAvailability.value)
   const value = row[key as Exclude<ColumnKey, `grade_rate:${string}`>]
-  if (key === 'average_score' || key === 'average_defect_total') return value == null ? '不可用' : value.toFixed(2)
+  if (key === 'average_score' || key === 'average_defect_total')
+    return value == null ? '不可用' : value.toFixed(2)
   if (key === 'top_grade_rate') return rateText(value, scoreAvailability.value)
   return numberText(value)
 }
@@ -626,7 +670,8 @@ function unavailableReason(code: string): string {
     (
       {
         remediation_owner_undefined: '未接入（整改状态归属尚未定义）',
-        core_system_classification_missing: '人工缺陷未接入冻结制度归类；自动缺陷可查看核心制度专题',
+        core_system_classification_missing:
+          '人工缺陷未接入冻结制度归类；自动缺陷可查看核心制度专题',
       } as Record<string, string>
     )[code] || '未接入'
   )
@@ -648,8 +693,7 @@ async function loadReport(): Promise<void> {
   if (result.success && result.data) {
     report.value = result.data
     restoreColumns()
-  }
-  else loadError.value = result.message || '病历质量报表暂不可用'
+  } else loadError.value = result.message || '病历质量报表暂不可用'
 }
 function applyFilters(): void {
   if (
@@ -751,9 +795,15 @@ function openDrilldown(dimensions: Partial<RecordDrilldownFilters>, title: strin
 function openTop(item: ReportDistributionItem): void {
   if (activeTop.value === 'rules')
     openDrilldown({ rule_id: item.rule_id || item.name }, `规则：${item.rule_name || item.name}`)
-  else if (activeTop.value === 'categories') openDrilldown({ defect_category: item.name }, `大类：${item.name}`)
-  else if (activeTop.value === 'types') openDrilldown({ defect_type: item.name }, `类型：${item.name}`)
-  else if (activeTop.value === 'veto') openDrilldown({ defect_source: 'auto', rule_id: item.rule_id || item.name, has_veto: true }, `单否：${item.rule_name || item.name}`)
+  else if (activeTop.value === 'categories')
+    openDrilldown({ defect_category: item.name }, `大类：${item.name}`)
+  else if (activeTop.value === 'types')
+    openDrilldown({ defect_type: item.name }, `类型：${item.name}`)
+  else if (activeTop.value === 'veto')
+    openDrilldown(
+      { defect_source: 'auto', rule_id: item.rule_id || item.name, has_veto: true },
+      `单否：${item.rule_name || item.name}`,
+    )
   else openDrilldown({ document: item.name }, `文书：${item.name}`)
 }
 function changePage(page: number): void {
